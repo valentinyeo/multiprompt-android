@@ -39,6 +39,10 @@ class TerminalConnection(
     private val _status = MutableStateFlow<TerminalStatus>(TerminalStatus.Connecting)
     val status: StateFlow<TerminalStatus> = _status.asStateFlow()
 
+    /** Columns tmux reports for this window, so the UI can scale text to show all of them. */
+    private val _windowColumns = MutableStateFlow(0)
+    val windowColumns: StateFlow<Int> = _windowColumns.asStateFlow()
+
     private var client: SshClient? = null
     private var session: SshSession? = null
     private var connectionJob: Job? = null
@@ -59,6 +63,8 @@ class TerminalConnection(
             try {
                 val connectedClient = repository.connect(host)
                 client = connectedClient
+                _windowColumns.value = repository.windowColumns(connectedClient, tmuxSessionName)
+
                 val connectedSession = connectedClient.openSession()
                     ?: error("The SSH server refused a terminal channel")
                 session = connectedSession
