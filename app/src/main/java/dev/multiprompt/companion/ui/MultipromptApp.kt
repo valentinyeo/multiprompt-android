@@ -302,9 +302,13 @@ private fun SessionCard(session: TmuxSession, onClick: () -> Unit) {
         ) {
             Icon(Icons.Default.Terminal, null, tint = MaterialTheme.colorScheme.primary)
             Column(Modifier.weight(1f)) {
-                Text(session.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(session.displayName, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
-                    "${session.agent.label} · ${session.windows} windows · ${relativeTime(session.lastActivityEpochSeconds)}",
+                    if (session.title.isBlank()) {
+                        "${session.agent.label} · ${session.windows} windows · ${relativeTime(session.lastActivityEpochSeconds)}"
+                    } else {
+                        "${session.name} · ${session.agent.label} · ${relativeTime(session.lastActivityEpochSeconds)}"
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

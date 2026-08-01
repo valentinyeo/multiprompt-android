@@ -48,6 +48,38 @@ class TmuxParserTest {
     }
 
     @Test
+    fun prefersPaneTitleOverTmuxName() {
+        val s = TmuxParser.FIELD_SEPARATOR
+        val output = "hypertasks-10${s}1${s}1${s}200${s}vmi3202882${s}\u2733 Add feedback button\n"
+
+        val session = TmuxParser.parse("de", output).single()
+
+        assertEquals("\u2733 Add feedback button", session.displayName)
+        assertEquals("hypertasks-10", session.name)
+    }
+
+    @Test
+    fun ignoresDefaultPaneTitleThatIsJustTheHostname() {
+        // tmux leaves pane_title as the hostname when no agent set one; showing it would
+        // label every idle session with the same useless string.
+        val s = TmuxParser.FIELD_SEPARATOR
+        val output = "multiprompt-android${s}1${s}0${s}200${s}vmi3202882${s}vmi3202882\n"
+
+        val session = TmuxParser.parse("de", output).single()
+
+        assertEquals("multiprompt-android", session.displayName)
+        assertEquals("", session.title)
+    }
+
+    @Test
+    fun keepsSeparatorsInsidePaneTitle() {
+        val s = TmuxParser.FIELD_SEPARATOR
+        val output = "cl-1${s}1${s}0${s}200${s}box${s}fix a${s}b\n"
+
+        assertEquals("fix a${s}b", TmuxParser.parse("de", output).single().title)
+    }
+
+    @Test
     fun shellQuoteCannotInjectCommands() {
         assertEquals("'a'\"'\"'; reboot'", TmuxParser.shellQuote("a'; reboot"))
     }

@@ -14,6 +14,10 @@ object TmuxParser {
             "#{session_windows}",
             "#{session_attached}",
             "#{session_activity}",
+            "#{host}",
+            // Last field: agents set the pane title, and that is what ZigShell shows on its
+            // tabs. tmux leaves it as the machine hostname when nothing set one, hence #{host}.
+            "#{pane_title}",
         ).joinToString(FIELD_SEPARATOR)
         return "printf '${START_MARKER}\\n'; " +
             "if command -v tmux >/dev/null 2>&1; then " +
@@ -42,14 +46,18 @@ object TmuxParser {
                 !line.startsWith(ERROR_PREFIX)
         }
         .mapNotNull { line ->
-            val fields = line.split(FIELD_SEPARATOR)
-            if (fields.size != 4 || fields[0].isBlank()) return@mapNotNull null
+            // Limit 6 so a separator inside the pane title stays part of the title.
+            val fields = line.split(FIELD_SEPARATOR, limit = 6)
+            if (fields.size < 4 || fields[0].isBlank()) return@mapNotNull null
+            val serverHost = fields.getOrNull(4).orEmpty()
+            val title = fields.getOrNull(5)?.trim().orEmpty()
             TmuxSession(
                 hostId = hostId,
                 name = fields[0],
                 windows = fields[1].toIntOrNull() ?: return@mapNotNull null,
                 attachedClients = fields[2].toIntOrNull() ?: return@mapNotNull null,
                 lastActivityEpochSeconds = fields[3].toLongOrNull() ?: 0,
+                title = if (title == serverHost) "" else title,
             )
         }
         .sortedWith(compareByDescending<TmuxSession> { it.lastActivityEpochSeconds }.thenBy { it.name })
