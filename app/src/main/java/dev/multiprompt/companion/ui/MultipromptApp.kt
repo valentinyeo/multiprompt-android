@@ -1,0 +1,634 @@
+package dev.multiprompt.companion.ui
+
+import android.content.ClipboardManager
+import android.content.Context
+import android.net.Uri
+import android.text.format.DateUtils
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import dev.multiprompt.companion.AppSection
+import dev.multiprompt.companion.AppUiState
+import dev.multiprompt.companion.BuildConfig
+import dev.multiprompt.companion.MainViewModel
+import dev.multiprompt.companion.model.HostDraft
+import dev.multiprompt.companion.model.HostProfile
+import dev.multiprompt.companion.model.TmuxSession
+import dev.multiprompt.companion.terminal.TerminalConnection
+import dev.multiprompt.companion.terminal.TerminalStatus
+import dev.multiprompt.companion.update.UpdateRelease
+import dev.multiprompt.companion.update.UpdateState
+import org.connectbot.terminal.Terminal
+import java.io.ByteArrayOutputStream
+
+@Composable
+fun MultipromptApp(viewModel: MainViewModel) {
+    val state by viewModel.state.collectAsState()
+    val updateState by viewModel.updates.state.collectAsState()
+    val context = LocalContext.current
+    var permissionLaunchVersion by remember { mutableStateOf<Long?>(null) }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        val pending = viewModel.updates.state.value as? UpdateState.PermissionRequired
+        if (pending != null) viewModel.updates.resumeAfterPermission(pending.release)
+    }
+
+    LaunchedEffect(updateState) {
+        val required = updateState as? UpdateState.PermissionRequired ?: return@LaunchedEffect
+        if (permissionLaunchVersion != required.release.versionCode) {
+            permissionLaunchVersion = required.release.versionCode
+            permissionLauncher.launch(viewModel.updates.unknownSourcesSettingsIntent())
+        }
+    }
+
+    val terminal = state.terminal
+    if (terminal != null) {
+        TerminalScreen(terminal, viewModel::closeTerminal)
+        return
+    }
+
+    if (state.editorVisible) {
+        HostEditorScreen(
+            host = state.editorHost,
+            error = state.editorError,
+            onCancel = viewModel::hideHostEditor,
+            onSave = viewModel::saveHost,
+        )
+        return
+    }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            Column(Modifier.statusBarsPadding()) {
+                Header(
+                    refreshing = state.refreshing,
+                    onRefresh = viewModel::refresh,
+                )
+                val available = updateState as? UpdateState.Available
+                if (available != null) {
+                    UpdateBanner(available.release) { viewModel.installUpdate(available.release) }
+                }
+            }
+        },
+        bottomBar = {
+            NavigationBar(Modifier.navigationBarsPadding()) {
+                NavigationBarItem(
+                    selected = state.section == AppSection.SESSIONS,
+                    onClick = { viewModel.select(AppSection.SESSIONS) },
+                    icon = { Icon(Icons.Default.Terminal, null) },
+                    label = { Text("Sessions") },
+                )
+                NavigationBarItem(
+                    selected = state.section == AppSection.HOSTS,
+                    onClick = { viewModel.select(AppSection.HOSTS) },
+                    icon = { Icon(Icons.Default.Computer, null) },
+                    label = { Text("Hosts") },
+                )
+                NavigationBarItem(
+                    selected = state.section == AppSection.UPDATE,
+                    onClick = { viewModel.select(AppSection.UPDATE) },
+                    icon = { Icon(Icons.Default.SystemUpdate, null) },
+                    label = { Text("Update") },
+                )
+            }
+        },
+        floatingActionButton = {
+            if (state.section == AppSection.HOSTS) {
+                FloatingActionButton(onClick = { viewModel.showHostEditor() }) {
+                    Icon(Icons.Default.Add, "Add host")
+                }
+            }
+        },
+    ) { padding ->
+        Box(Modifier.padding(padding).fillMaxSize()) {
+            when (state.section) {
+                AppSection.SESSIONS -> SessionsScreen(state, viewModel::openTerminal) {
+                    viewModel.select(AppSection.HOSTS)
+                    viewModel.showHostEditor()
+                }
+                AppSection.HOSTS -> HostsScreen(
+                    state = state,
+                    onEdit = viewModel::showHostEditor,
+                    onDelete = viewModel::deleteHost,
+                    onTrust = viewModel::trustHostKey,
+                )
+                AppSection.UPDATE -> UpdateScreen(
+                    state = updateState,
+                    onCheck = { viewModel.updates.check(force = true) },
+                    onInstall = viewModel::installUpdate,
+                )
+            }
+        }
+    }
+
+    state.pendingHostKeys.entries.firstOrNull()?.let { (hostId, key) ->
+        val hostLabel = state.hosts.firstOrNull { it.id == hostId }?.label ?: "SSH host"
+        AlertDialog(
+            onDismissRequest = {},
+            title = {
+                Text(if (key.changed) "SSH host key changed" else "Trust $hostLabel?")
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        if (key.changed) {
+                            "The saved identity for $hostLabel no longer matches. Only continue if you intentionally changed the server key."
+                        } else {
+                            "$hostLabel presented this identity on the first connection:"
+                        },
+                    )
+                    Text(
+                        key.fingerprint,
+                        fontFamily = FontFamily.Monospace,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = { viewModel.trustHostKey(hostId) }) {
+                    Text(if (key.changed) "Replace trusted key" else "Trust and connect")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissHostKey(hostId) }) {
+                    Text("Not now")
+                }
+            },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun Header(refreshing: Boolean, onRefresh: () -> Unit) {
+    TopAppBar(
+        title = {
+            Column {
+                Text("multiprompt", fontWeight = FontWeight.Bold)
+                Text("mobile tmux companion", style = MaterialTheme.typography.labelSmall)
+            }
+        },
+        actions = {
+            if (refreshing) {
+                CircularProgressIndicator(Modifier.padding(12.dp).size(22.dp), strokeWidth = 2.dp)
+            } else {
+                IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, "Refresh") }
+            }
+        },
+    )
+}
+
+@Composable
+private fun UpdateBanner(release: UpdateRelease, onInstall: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer).padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("v${release.versionName} is ready", Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+        FilledTonalButton(onClick = onInstall) { Text("Update now") }
+    }
+}
+
+@Composable
+private fun SessionsScreen(
+    state: AppUiState,
+    onOpen: (TmuxSession) -> Unit,
+    onAddHost: () -> Unit,
+) {
+    if (state.hosts.isEmpty()) {
+        EmptyState("Connect your first VPS", "Import an SSH key, then the app will discover tmux sessions.", onAddHost)
+        return
+    }
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        state.hosts.forEach { host ->
+            item(key = "heading-${host.id}") {
+                Text(host.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
+            val error = state.hostErrors[host.id]
+            if (error != null) {
+                item(key = "error-${host.id}") { InlineError(error) }
+            }
+            val sessions = state.sessions.filter { it.hostId == host.id }
+            items(sessions, key = { "${it.hostId}:${it.name}" }) { session ->
+                SessionCard(session) { onOpen(session) }
+            }
+            if (sessions.isEmpty() && error == null && !state.refreshing) {
+                item(key = "empty-${host.id}") {
+                    Text("No tmux sessions", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SessionCard(session: TmuxSession, onClick: () -> Unit) {
+    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Row(
+            Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(Icons.Default.Terminal, null, tint = MaterialTheme.colorScheme.primary)
+            Column(Modifier.weight(1f)) {
+                Text(session.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "${session.agent.label} · ${session.windows} windows · ${relativeTime(session.lastActivityEpochSeconds)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (session.attachedClients > 0) {
+                Text("LIVE ${session.attachedClients}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+            }
+        }
+    }
+}
+
+@Composable
+private fun HostsScreen(
+    state: AppUiState,
+    onEdit: (HostProfile) -> Unit,
+    onDelete: (HostProfile) -> Unit,
+    onTrust: (String) -> Unit,
+) {
+    var deleting by remember { mutableStateOf<HostProfile?>(null) }
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        items(state.hosts, key = { it.id }) { host ->
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(host.label, fontWeight = FontWeight.Bold)
+                            Text(
+                                "${host.username}@${host.hostname}:${host.port}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                            )
+                        }
+                        IconButton(onClick = { onEdit(host) }) { Icon(Icons.Default.Edit, "Edit") }
+                        IconButton(onClick = { deleting = host }) { Icon(Icons.Default.Delete, "Delete") }
+                    }
+                    host.hostKeyFingerprint?.let {
+                        Text("Pinned $it", style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace)
+                    }
+                    state.pendingHostKeys[host.id]?.let { key ->
+                        HorizontalDivider()
+                        Text(
+                            if (key.changed) "WARNING: the SSH host key changed" else "First connection: verify this SSH host key",
+                            color = if (key.changed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(key.fingerprint, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                        Button(onClick = { onTrust(host.id) }) {
+                            Text(if (key.changed) "Replace trusted key" else "Trust this key")
+                        }
+                    }
+                    state.hostErrors[host.id]?.takeIf { state.pendingHostKeys[host.id] == null }?.let { InlineError(it) }
+                }
+            }
+        }
+    }
+    deleting?.let { host ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("Delete ${host.label}?") },
+            text = { Text("The encrypted private key stored for this host will also be removed.") },
+            confirmButton = {
+                TextButton(onClick = { onDelete(host); deleting = null }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HostEditorScreen(
+    host: HostProfile?,
+    error: String?,
+    onCancel: () -> Unit,
+    onSave: (HostDraft, ByteArray?) -> Unit,
+) {
+    val context = LocalContext.current
+    var label by remember(host?.id) { mutableStateOf(host?.label.orEmpty()) }
+    var hostname by remember(host?.id) { mutableStateOf(host?.hostname.orEmpty()) }
+    var port by remember(host?.id) { mutableStateOf((host?.port ?: 22).toString()) }
+    var username by remember(host?.id) { mutableStateOf(host?.username.orEmpty()) }
+    var passphrase by remember(host?.id) { mutableStateOf("") }
+    var importedKey by remember(host?.id) { mutableStateOf<ByteArray?>(null) }
+    var importedName by remember(host?.id) { mutableStateOf<String?>(null) }
+    var importError by remember(host?.id) { mutableStateOf<String?>(null) }
+    val keyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) {
+            runCatching { context.readSmallFile(uri, 256 * 1024) }
+                .onSuccess { bytes -> importedKey = bytes; importedName = uri.lastPathSegment; importError = null }
+                .onFailure { importError = it.message ?: "Could not read key" }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                modifier = Modifier.statusBarsPadding(),
+                title = { Text(if (host == null) "Add VPS" else "Edit ${host.label}") },
+                navigationIcon = {
+                    IconButton(onClick = onCancel) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                },
+            )
+        },
+    ) { padding ->
+        LazyColumn(
+            Modifier.padding(padding).fillMaxSize(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item { OutlinedTextField(label, { label = it }, Modifier.fillMaxWidth(), label = { Text("Label") }, singleLine = true) }
+            item { OutlinedTextField(hostname, { hostname = it }, Modifier.fillMaxWidth(), label = { Text("Hostname or IP") }, singleLine = true) }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(username, { username = it }, Modifier.weight(1f), label = { Text("Username") }, singleLine = true)
+                    OutlinedTextField(
+                        port,
+                        { port = it.filter(Char::isDigit) },
+                        Modifier.weight(0.55f),
+                        label = { Text("Port") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                }
+            }
+            item {
+                OutlinedButton(onClick = { keyPicker.launch(arrayOf("application/x-pem-file", "application/octet-stream", "text/plain", "*/*")) }) {
+                    Text(importedName?.let { "Key: $it" } ?: if (host == null) "Import private key" else "Replace private key")
+                }
+            }
+            item {
+                OutlinedTextField(
+                    passphrase,
+                    { passphrase = it },
+                    Modifier.fillMaxWidth(),
+                    label = { Text(if (host == null) "Key passphrase (optional)" else "New passphrase (leave blank to keep)") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                )
+            }
+            (error ?: importError)?.let { message -> item { InlineError(message) } }
+            item {
+                Button(
+                    onClick = {
+                        onSave(
+                            HostDraft(host?.id, label, hostname, port, username, passphrase),
+                            importedKey,
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Save and connect") }
+            }
+            item {
+                Text(
+                    "Private keys and passphrases are encrypted with a non-exportable Android Keystore key. The server fingerprint is pinned on first connection.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpdateScreen(
+    state: UpdateState,
+    onCheck: () -> Unit,
+    onInstall: (UpdateRelease) -> Unit,
+) {
+    Column(
+        Modifier.fillMaxSize().padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text("App updates", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("Installed: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+        when (state) {
+            UpdateState.Idle -> Text("Updates have not been checked yet.")
+            UpdateState.Checking -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                Text("Checking GitHub Releases…")
+            }
+            is UpdateState.Current -> Text("You have the latest version.", color = MaterialTheme.colorScheme.secondary)
+            is UpdateState.Available -> UpdateAvailableCard(state.release) { onInstall(state.release) }
+            is UpdateState.PermissionRequired -> Text("Waiting for Android's ‘install unknown apps’ permission…")
+            is UpdateState.Downloading -> {
+                Text("Downloading v${state.release.versionName}…")
+                LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth())
+                Text("${(state.progress * 100).toInt()}%", style = MaterialTheme.typography.labelMedium)
+            }
+            UpdateState.Installing -> Text("APK verified. Installing update…", color = MaterialTheme.colorScheme.secondary)
+            is UpdateState.Failed -> {
+                InlineError(state.message)
+                state.release?.let { release -> Button(onClick = { onInstall(release) }) { Text("Try update again") } }
+            }
+        }
+        OutlinedButton(onClick = onCheck, enabled = state !is UpdateState.Checking && state !is UpdateState.Downloading) {
+            Icon(Icons.Default.Refresh, null)
+            Spacer(Modifier.size(8.dp))
+            Text("Check now")
+        }
+        HorizontalDivider()
+        Text(
+            "The app downloads only the fixed android-latest release, verifies SHA-256, package name, version, and the installed signing certificate, then asks Android to update itself. Android may still require a final system confirmation.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun UpdateAvailableCard(release: UpdateRelease, onInstall: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("v${release.versionName} available", fontWeight = FontWeight.Bold)
+            if (release.notes.isNotBlank()) Text(release.notes)
+            Text("${release.sizeBytes / 1024 / 1024} MB", style = MaterialTheme.typography.labelMedium)
+            Button(onClick = onInstall) { Text("Download and update") }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TerminalScreen(connection: TerminalConnection, onBack: () -> Unit) {
+    val status by connection.status.collectAsState()
+    val context = LocalContext.current
+    BackHandler(onBack = onBack)
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                modifier = Modifier.statusBarsPadding(),
+                title = {
+                    Column {
+                        Text(connection.tmuxSessionName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(statusLabel(status), style = MaterialTheme.typography.labelSmall)
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Close terminal") }
+                },
+            )
+        },
+    ) { padding ->
+        Box(Modifier.padding(padding).fillMaxSize().background(Color(0xFF090B10))) {
+            Terminal(
+                terminalEmulator = connection.emulator,
+                modifier = Modifier.fillMaxSize(),
+                initialFontSize = 11.sp,
+                backgroundColor = Color(0xFF090B10),
+                foregroundColor = Color(0xFFE5E7EB),
+                keyboardEnabled = true,
+                showSoftKeyboard = true,
+                onPasteRequest = {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()?.let(connection::paste)
+                },
+            )
+            if (status is TerminalStatus.Connecting) {
+                CircularProgressIndicator(Modifier.align(Alignment.Center))
+            }
+            if (status is TerminalStatus.Failed) {
+                Card(Modifier.align(Alignment.Center).padding(24.dp)) {
+                    Column(Modifier.padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text((status as TerminalStatus.Failed).message, color = MaterialTheme.colorScheme.error)
+                        TextButton(onClick = onBack) { Text("Back") }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyState(title: String, body: String, action: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(Icons.Default.Computer, null, Modifier.size(52.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(16.dp))
+        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(20.dp))
+        Button(onClick = action) { Text("Add VPS") }
+    }
+}
+
+@Composable
+private fun InlineError(message: String) {
+    Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+}
+
+private fun relativeTime(epochSeconds: Long): String {
+    if (epochSeconds <= 0) return "unknown activity"
+    return DateUtils.getRelativeTimeSpanString(
+        epochSeconds * 1000,
+        System.currentTimeMillis(),
+        DateUtils.MINUTE_IN_MILLIS,
+    ).toString()
+}
+
+private fun statusLabel(status: TerminalStatus): String = when (status) {
+    TerminalStatus.Connecting -> "Connecting…"
+    TerminalStatus.Connected -> "SSH · tmux attached"
+    TerminalStatus.Closed -> "Closed"
+    is TerminalStatus.Failed -> "Connection failed"
+}
+
+private fun Context.readSmallFile(uri: Uri, maxBytes: Int): ByteArray {
+    val input = contentResolver.openInputStream(uri) ?: error("Could not open selected key")
+    return input.use {
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(8192)
+        while (true) {
+            val count = it.read(buffer)
+            if (count < 0) break
+            require(output.size() + count <= maxBytes) { "Selected key is too large" }
+            output.write(buffer, 0, count)
+        }
+        output.toByteArray()
+    }
+}
