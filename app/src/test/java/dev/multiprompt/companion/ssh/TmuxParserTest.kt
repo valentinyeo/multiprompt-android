@@ -35,7 +35,7 @@ class TmuxParserTest {
 
         assertEquals(
             listOf("#{session_name}", "#{session_windows}", "#{session_attached}",
-                "#{session_activity}", "#{window_width}", "#{host}", "#{pane_title}"),
+                "#{session_activity}", "#{window_width}", "#{window_height}", "#{host}", "#{pane_title}"),
             format.split(TmuxParser.FIELD_SEPARATOR),
         )
     }
@@ -60,20 +60,21 @@ class TmuxParserTest {
 
     @Test
     fun prefersPaneTitleOverTmuxName() {
-        val output = row("hypertasks-10", "1", "1", "200", "100", "vmi3202882", "\u2733 Add feedback button")
+        val output = row("hypertasks-10", "1", "1", "200", "100", "30", "vmi3202882", "\u2733 Add feedback button")
 
         val session = TmuxParser.parse("de", output).single()
 
         assertEquals("\u2733 Add feedback button", session.displayName)
         assertEquals("hypertasks-10", session.name)
         assertEquals(100, session.columns)
+        assertEquals(30, session.rows)
     }
 
     @Test
     fun ignoresDefaultPaneTitleThatIsJustTheHostname() {
         // tmux leaves pane_title as the hostname when no agent set one; showing it would
         // label every idle session with the same useless string.
-        val output = row("multiprompt-android", "1", "0", "200", "70", "vmi3202882", "vmi3202882")
+        val output = row("multiprompt-android", "1", "0", "200", "70", "50", "vmi3202882", "vmi3202882")
 
         val session = TmuxParser.parse("de", output).single()
 
@@ -85,7 +86,7 @@ class TmuxParserTest {
     @Test
     fun keepsSeparatorsInsidePaneTitle() {
         val s = TmuxParser.FIELD_SEPARATOR
-        val output = row("cl-1", "1", "0", "200", "98", "box", "fix a${s}b")
+        val output = row("cl-1", "1", "0", "200", "98", "51", "box", "fix a${s}b")
 
         assertEquals("fix a${s}b", TmuxParser.parse("de", output).single().title)
     }

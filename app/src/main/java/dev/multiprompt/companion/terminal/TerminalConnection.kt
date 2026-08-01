@@ -32,10 +32,23 @@ class TerminalConnection(
     private val repository: SshRepository,
     private val host: HostProfile,
     val tmuxSessionName: String,
+    windowColumns: Int = 0,
+    windowRows: Int = 0,
 ) : AutoCloseable {
+    /**
+     * When tmux reported the window's size, the PTY is pinned to exactly that. A client the
+     * same size as the window leaves tmux nothing to fill, so no dot padding on the phone,
+     * and with ignore-size the desktop stays the owner of the geometry.
+     */
+    private val fixedSize = if (windowColumns > 0 && windowRows > 0) {
+        TerminalDimensions(rows = windowRows, columns = windowColumns)
+    } else {
+        null
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val keyboard = Channel<ByteArray>(Channel.UNLIMITED)
-    private val resizes = MutableStateFlow(TerminalDimensions(rows = 24, columns = 80))
+    private val resizes = MutableStateFlow(fixedSize ?: TerminalDimensions(rows = 24, columns = 80))
     private val _status = MutableStateFlow<TerminalStatus>(TerminalStatus.Connecting)
     val status: StateFlow<TerminalStatus> = _status.asStateFlow()
 
@@ -49,7 +62,7 @@ class TerminalConnection(
         defaultForeground = Color(0xFFE5E7EB),
         defaultBackground = Color(0xFF090B10),
         onKeyboardInput = { data -> keyboard.trySend(data) },
-        onResize = { dimensions -> resizes.value = dimensions },
+        onResize = { dimensions -> if (fixedSize == null) resizes.value = dimensions },
         autoDetectUrls = true,
     )
 
@@ -84,14 +97,16 @@ class TerminalConnection(
                 launch {
                     for (data in keyboard) connectedSession.write(data)
                 }
-                launch {
-                    resizes.collectLatest { next ->
-                        connectedSession.resizeTerminal(
-                            widthChars = next.columns,
-                            heightRows = next.rows,
-                            widthPixels = 0,
-                            heightPixels = 0,
-                        )
+                if (fixedSize == null) {
+                    launch {
+                        resizes.collectLatest { next ->
+                            connectedSession.resizeTerminal(
+                                widthChars = next.columns,
+                                heightRows = next.rows,
+                                widthPixels = 0,
+                                heightPixels = 0,
+                            )
+                        }
                     }
                 }
                 launch {

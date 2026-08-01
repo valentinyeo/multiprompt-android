@@ -200,7 +200,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun openTerminal(session: TmuxSession) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
         _state.value.terminal?.close()
-        val terminal = TerminalConnection(ssh, host, session.name).also { it.start() }
+        val terminal = TerminalConnection(
+            repository = ssh,
+            host = host,
+            tmuxSessionName = session.name,
+            windowColumns = session.columns,
+            windowRows = session.rows,
+        ).also { it.start() }
         _state.update { it.copy(terminal = terminal, terminalSession = session) }
     }
 

@@ -8,6 +8,7 @@ data class TmuxSession(
     val lastActivityEpochSeconds: Long,
     /** Width the desktop gave this tmux window. The phone renders it without changing it. */
     val columns: Int = 0,
+    val rows: Int = 0,
     val title: String = "",
 ) {
     val agent: AgentKind
