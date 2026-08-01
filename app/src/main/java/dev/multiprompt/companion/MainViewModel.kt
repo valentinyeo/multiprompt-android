@@ -33,6 +33,7 @@ data class AppUiState(
     val editorVisible: Boolean = false,
     val editorError: String? = null,
     val terminal: TerminalConnection? = null,
+    val terminalSession: TmuxSession? = null,
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -200,12 +201,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
         _state.value.terminal?.close()
         val terminal = TerminalConnection(ssh, host, session.name).also { it.start() }
-        _state.update { it.copy(terminal = terminal) }
+        _state.update { it.copy(terminal = terminal, terminalSession = session) }
+    }
+
+    /** Swiping the terminal sideways attaches the neighbouring session, wrapping at both ends. */
+    fun openAdjacentSession(delta: Int) {
+        val current = _state.value.terminalSession ?: return
+        val sessions = _state.value.sessions
+        if (sessions.size < 2) return
+        val index = sessions.indexOfFirst { it.hostId == current.hostId && it.name == current.name }
+        if (index < 0) return
+        val next = Math.floorMod(index + delta, sessions.size)
+        openTerminal(sessions[next])
     }
 
     fun closeTerminal() {
         _state.value.terminal?.close()
-        _state.update { it.copy(terminal = null) }
+        _state.update { it.copy(terminal = null, terminalSession = null) }
         refresh()
     }
 

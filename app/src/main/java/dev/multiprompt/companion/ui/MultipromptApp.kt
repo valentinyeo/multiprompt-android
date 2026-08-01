@@ -13,10 +13,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -62,13 +65,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.AppSection
@@ -82,8 +92,8 @@ import dev.multiprompt.companion.terminal.TerminalConnection
 import dev.multiprompt.companion.terminal.TerminalStatus
 import dev.multiprompt.companion.update.UpdateRelease
 import dev.multiprompt.companion.update.UpdateState
-import org.connectbot.terminal.Terminal
 import java.io.ByteArrayOutputStream
+import org.connectbot.terminal.Terminal
 
 @Composable
 fun MultipromptApp(viewModel: MainViewModel) {
@@ -108,7 +118,7 @@ fun MultipromptApp(viewModel: MainViewModel) {
 
     val terminal = state.terminal
     if (terminal != null) {
-        TerminalScreen(terminal, viewModel::closeTerminal)
+        TerminalScreen(terminal, viewModel::closeTerminal, viewModel::openAdjacentSession)
         return
     }
 
@@ -535,9 +545,23 @@ private fun UpdateAvailableCard(release: UpdateRelease, onInstall: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TerminalScreen(connection: TerminalConnection, onBack: () -> Unit) {
+private fun TerminalScreen(
+    connection: TerminalConnection,
+    onBack: () -> Unit,
+    onSwitchSession: (Int) -> Unit,
+) {
     val status by connection.status.collectAsState()
     val context = LocalContext.current
+    val density = LocalDensity.current
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    // The desktop keeps the tmux window at its own width, so the phone can only see all of
+    // it by shrinking the glyphs. Size the font to fit TARGET_COLUMNS across the screen.
+    val fontSize = remember(screenWidthDp) {
+        (screenWidthDp / (TARGET_COLUMNS * MONOSPACE_WIDTH_RATIO)).coerceIn(5f, 11f).sp
+    }
+    // Pan the terminal up rather than shrinking it: resizing would renegotiate the PTY and
+    // drag the desktop pane down with it.
+    val keyboardHeightPx = WindowInsets.ime.getBottom(density)
     BackHandler(onBack = onBack)
     Scaffold(
         topBar = {
@@ -555,11 +579,14 @@ private fun TerminalScreen(connection: TerminalConnection, onBack: () -> Unit) {
             )
         },
     ) { padding ->
-        Box(Modifier.padding(padding).fillMaxSize().background(Color(0xFF090B10))) {
+        Box(Modifier.padding(padding).fillMaxSize().background(Color(0xFF090B10)).clipToBounds()) {
             Terminal(
                 terminalEmulator = connection.emulator,
-                modifier = Modifier.fillMaxSize(),
-                initialFontSize = 11.sp,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .offset { IntOffset(0, -keyboardHeightPx) }
+                    .horizontalSwipe(onSwitchSession),
+                initialFontSize = fontSize,
                 backgroundColor = Color(0xFF090B10),
                 foregroundColor = Color(0xFFE5E7EB),
                 keyboardEnabled = true,
@@ -614,6 +641,44 @@ private fun relativeTime(epochSeconds: Long): String {
         DateUtils.MINUTE_IN_MILLIS,
     ).toString()
 }
+
+/**
+ * Detects a sideways flick before the terminal sees it. The terminal consumes touches for
+ * scrolling and selection, so this watches the initial pass and only claims the gesture once
+ * the drag is clearly horizontal, leaving vertical scrolling untouched.
+ */
+private fun Modifier.horizontalSwipe(onSwipe: (Int) -> Unit) = pointerInput(onSwipe) {
+    val threshold = 72.dp.toPx()
+    awaitPointerEventScope {
+        while (true) {
+            val first = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.pressed }
+                ?: continue
+            var totalX = 0f
+            var totalY = 0f
+            var claimed = false
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val change = event.changes.firstOrNull { it.id == first.id } ?: break
+                if (!change.pressed) break
+                totalX += change.positionChange().x
+                totalY += change.positionChange().y
+                if (!claimed && kotlin.math.abs(totalX) > threshold &&
+                    kotlin.math.abs(totalX) > kotlin.math.abs(totalY) * 2
+                ) {
+                    claimed = true
+                    onSwipe(if (totalX < 0) 1 else -1)
+                }
+                if (claimed) change.consume()
+            }
+        }
+    }
+}
+
+/** Typical width of the tmux windows on the desktop, so the phone shows them whole. */
+private const val TARGET_COLUMNS = 100
+
+/** Advance width of the default monospace font as a fraction of its point size. */
+private const val MONOSPACE_WIDTH_RATIO = 0.6f
 
 private fun statusLabel(status: TerminalStatus): String = when (status) {
     TerminalStatus.Connecting -> "Connecting…"
