@@ -118,7 +118,12 @@ fun MultipromptApp(viewModel: MainViewModel) {
 
     val terminal = state.terminal
     if (terminal != null) {
-        TerminalScreen(terminal, viewModel::closeTerminal, viewModel::openAdjacentSession)
+        TerminalScreen(
+            connection = terminal,
+            columns = state.terminalSession?.columns ?: 0,
+            onBack = viewModel::closeTerminal,
+            onSwitchSession = viewModel::openAdjacentSession,
+        )
         return
     }
 
@@ -547,6 +552,7 @@ private fun UpdateAvailableCard(release: UpdateRelease, onInstall: () -> Unit) {
 @Composable
 private fun TerminalScreen(
     connection: TerminalConnection,
+    columns: Int,
     onBack: () -> Unit,
     onSwitchSession: (Int) -> Unit,
 ) {
@@ -554,10 +560,11 @@ private fun TerminalScreen(
     val context = LocalContext.current
     val density = LocalDensity.current
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    // The desktop keeps the tmux window at its own width, so the phone can only see all of
-    // it by shrinking the glyphs. Size the font to fit TARGET_COLUMNS across the screen.
-    val fontSize = remember(screenWidthDp) {
-        (screenWidthDp / (TARGET_COLUMNS * MONOSPACE_WIDTH_RATIO)).coerceIn(5f, 11f).sp
+    // The desktop owns the window width, so the phone shrinks its glyphs until that width
+    // fits instead of resizing anything.
+    val fontSize = remember(screenWidthDp, columns) {
+        val target = if (columns > 0) columns else FALLBACK_COLUMNS
+        (screenWidthDp / (target * MONOSPACE_WIDTH_RATIO)).coerceIn(4f, 14f).sp
     }
     // Pan the terminal up rather than shrinking it: resizing would renegotiate the PTY and
     // drag the desktop pane down with it.
@@ -674,11 +681,15 @@ private fun Modifier.horizontalSwipe(onSwipe: (Int) -> Unit) = pointerInput(onSw
     }
 }
 
-/** Typical width of the tmux windows on the desktop, so the phone shows them whole. */
-private const val TARGET_COLUMNS = 100
+/** Used only when tmux did not report a width for the session. */
+private const val FALLBACK_COLUMNS = 100
 
-/** Advance width of the default monospace font as a fraction of its point size. */
-private const val MONOSPACE_WIDTH_RATIO = 0.6f
+/**
+ * Advance width of the monospace font as a fraction of its point size. Calibrated against a
+ * device screenshot: at 0.6 the app rendered about 119 columns where 100 were asked for, which
+ * puts the real advance near half the point size.
+ */
+private const val MONOSPACE_WIDTH_RATIO = 0.5f
 
 private fun statusLabel(status: TerminalStatus): String = when (status) {
     TerminalStatus.Connecting -> "Connecting…"

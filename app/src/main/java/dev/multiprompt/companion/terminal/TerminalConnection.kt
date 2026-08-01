@@ -73,8 +73,11 @@ class TerminalConnection(
                 ) { "The SSH server refused a PTY" }
 
                 val target = TmuxParser.shellQuote(tmuxSessionName)
-                val command = "tmux set-window-option -t $target window-size largest >/dev/null 2>&1; " +
-                    "exec tmux attach-session -t $target"
+                // ignore-size keeps this client out of tmux's size calculation, so attaching
+                // from the phone never resizes the window the desktop is using. Setting
+                // window-size on the session did the opposite: it stuck, and left the desktop
+                // looking at a window sized for a phone.
+                val command = "exec tmux attach-session -f ignore-size -t $target"
                 check(connectedSession.requestExec(command)) { "tmux attach was refused" }
                 _status.value = TerminalStatus.Connected
 
