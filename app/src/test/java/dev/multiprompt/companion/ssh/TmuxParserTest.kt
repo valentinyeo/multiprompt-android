@@ -27,6 +27,14 @@ class TmuxParserTest {
     }
 
     @Test
+    fun commandKeepsStderrVisible() {
+        // Swallowing stderr turned every tmux failure into a silent empty list.
+        val command = TmuxParser.command()
+        assertTrue(command.startsWith("tmux list-sessions -F "))
+        assertTrue("2>/dev/null" !in command && "|| true" !in command)
+    }
+
+    @Test
     fun shellQuoteCannotInjectCommands() {
         assertEquals("'a'\"'\"'; reboot'", TmuxParser.shellQuote("a'; reboot"))
     }

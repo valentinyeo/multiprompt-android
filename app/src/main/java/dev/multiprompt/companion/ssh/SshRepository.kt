@@ -4,6 +4,9 @@ import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.security.SecretStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.connectbot.sshlib.AuthResult
@@ -39,8 +42,17 @@ class SshRepository(private val secrets: SecretStore) {
     suspend fun listSessions(host: HostProfile): List<TmuxSession> = withContext(Dispatchers.IO) {
         withTimeout(CONNECTION_TIMEOUT_MS) {
             withAuthenticatedClient(host) { client ->
-                val output = execute(client, TmuxParser.command())
-                TmuxParser.parse(host.id, output)
+                val result = execute(client, TmuxParser.command())
+                val sessions = TmuxParser.parse(host.id, result.stdout)
+                if (sessions.isEmpty()) {
+                    // tmux reports "no server running..." on stderr; without this the
+                    // screen is just blank and the real reason is invisible.
+                    val detail = result.stderr.trim().ifBlank { result.stdout.trim() }
+                    if (detail.isNotBlank()) {
+                        throw SshProblem.Connection("tmux: ${detail.lines().first().take(200)}")
+                    }
+                }
+                sessions
             }
         }
     }
@@ -91,25 +103,32 @@ class SshRepository(private val secrets: SecretStore) {
         }
     }
 
-    private suspend fun execute(client: SshClient, command: String): String {
+    private data class CommandResult(val stdout: String, val stderr: String)
+
+    private suspend fun execute(client: SshClient, command: String): CommandResult = coroutineScope {
         val session = client.openSession()
             ?: throw SshProblem.Connection("The SSH server refused a command channel")
-        return try {
+        try {
             if (!session.requestExec(command)) {
                 throw SshProblem.Connection("The SSH server refused the tmux query")
             }
-            val output = ByteArrayOutputStream()
-            while (true) {
-                val chunk = session.read() ?: break
-                if (output.size() + chunk.size > MAX_COMMAND_OUTPUT) {
-                    throw SshProblem.Connection("The tmux session list was unexpectedly large")
-                }
-                output.write(chunk)
-            }
-            output.toString(Charsets.UTF_8.name())
+            val out = async { session.stdout.drain() }
+            val err = async { session.stderr.drain() }
+            CommandResult(stdout = out.await(), stderr = err.await())
         } finally {
             session.close()
         }
+    }
+
+    private suspend fun ReceiveChannel<ByteArray>.drain(): String {
+        val buffer = ByteArrayOutputStream()
+        for (chunk in this) {
+            if (buffer.size() + chunk.size > MAX_COMMAND_OUTPUT) {
+                throw SshProblem.Connection("The tmux session list was unexpectedly large")
+            }
+            buffer.write(chunk)
+        }
+        return buffer.toString(Charsets.UTF_8.name())
     }
 
     private class PinningHostKeyVerifier(

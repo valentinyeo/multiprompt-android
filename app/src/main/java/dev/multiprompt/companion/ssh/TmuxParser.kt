@@ -12,7 +12,7 @@ object TmuxParser {
             "#{session_attached}",
             "#{session_activity}",
         ).joinToString(FIELD_SEPARATOR.toString())
-        return "tmux list-sessions -F ${shellQuote(format)} 2>/dev/null || true"
+        return "tmux list-sessions -F ${shellQuote(format)}"
     }
 
     fun parse(hostId: String, output: String): List<TmuxSession> = output
