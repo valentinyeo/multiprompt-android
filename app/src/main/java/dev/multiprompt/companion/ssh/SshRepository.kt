@@ -102,16 +102,6 @@ class SshRepository(private val secrets: SecretStore) {
         client
     }
 
-    /**
-     * Width tmux is giving this window right now. Read over the terminal's own connection at
-     * attach time so the phone scales to the size the desktop currently owns, not to whatever
-     * the session list last saw.
-     */
-    suspend fun windowColumns(client: SshClient, sessionName: String): Int {
-        val command = "tmux display-message -p -t ${TmuxParser.shellQuote(sessionName)} '#{window_width}'"
-        return runCatching { execute(client, command).stdout.trim().toIntOrNull() }.getOrNull() ?: 0
-    }
-
     private suspend fun <T> withAuthenticatedClient(
         host: HostProfile,
         block: suspend (SshClient) -> T,

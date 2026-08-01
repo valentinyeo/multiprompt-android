@@ -564,13 +564,8 @@ private fun TerminalScreen(
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     // The desktop owns the window width, so the phone shrinks its glyphs until that width
     // fits instead of resizing anything.
-    val liveColumns by connection.windowColumns.collectAsState()
-    val fontSize = remember(screenWidthDp, columns, liveColumns) {
-        val target = when {
-            liveColumns > 0 -> liveColumns
-            columns > 0 -> columns
-            else -> FALLBACK_COLUMNS
-        }
+    val fontSize = remember(screenWidthDp, columns) {
+        val target = if (columns > 0) columns else FALLBACK_COLUMNS
         (screenWidthDp / (target * MONOSPACE_WIDTH_RATIO)).coerceIn(4f, 14f).sp
     }
     // Pan the terminal up rather than shrinking it: resizing would renegotiate the PTY and
