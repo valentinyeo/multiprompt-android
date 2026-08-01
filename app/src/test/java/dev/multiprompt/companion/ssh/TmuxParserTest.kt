@@ -30,6 +30,17 @@ class TmuxParserTest {
     }
 
     @Test
+    fun commandAsksForSevenFieldsInTheOrderTheParserExpects() {
+        val format = TmuxParser.command().substringAfter("list-sessions -F '").substringBefore("'")
+
+        assertEquals(
+            listOf("#{session_name}", "#{session_windows}", "#{session_attached}",
+                "#{session_activity}", "#{window_width}", "#{host}", "#{pane_title}"),
+            format.split(TmuxParser.FIELD_SEPARATOR),
+        )
+    }
+
+    @Test
     fun commandFramesOutputAndKeepsStderrVisible() {
         val command = TmuxParser.command()
         assertTrue(command.contains("tmux list-sessions -F "))
@@ -49,35 +60,38 @@ class TmuxParserTest {
 
     @Test
     fun prefersPaneTitleOverTmuxName() {
-        val s = TmuxParser.FIELD_SEPARATOR
-        val output = "hypertasks-10${s}1${s}1${s}200${s}vmi3202882${s}\u2733 Add feedback button\n"
+        val output = row("hypertasks-10", "1", "1", "200", "100", "vmi3202882", "\u2733 Add feedback button")
 
         val session = TmuxParser.parse("de", output).single()
 
         assertEquals("\u2733 Add feedback button", session.displayName)
         assertEquals("hypertasks-10", session.name)
+        assertEquals(100, session.columns)
     }
 
     @Test
     fun ignoresDefaultPaneTitleThatIsJustTheHostname() {
         // tmux leaves pane_title as the hostname when no agent set one; showing it would
         // label every idle session with the same useless string.
-        val s = TmuxParser.FIELD_SEPARATOR
-        val output = "multiprompt-android${s}1${s}0${s}200${s}vmi3202882${s}vmi3202882\n"
+        val output = row("multiprompt-android", "1", "0", "200", "70", "vmi3202882", "vmi3202882")
 
         val session = TmuxParser.parse("de", output).single()
 
         assertEquals("multiprompt-android", session.displayName)
         assertEquals("", session.title)
+        assertEquals(70, session.columns)
     }
 
     @Test
     fun keepsSeparatorsInsidePaneTitle() {
         val s = TmuxParser.FIELD_SEPARATOR
-        val output = "cl-1${s}1${s}0${s}200${s}box${s}fix a${s}b\n"
+        val output = row("cl-1", "1", "0", "200", "98", "box", "fix a${s}b")
 
         assertEquals("fix a${s}b", TmuxParser.parse("de", output).single().title)
     }
+
+    /** Mirrors the field order in [TmuxParser.command], so a reordered format fails loudly here. */
+    private fun row(vararg fields: String) = fields.joinToString(TmuxParser.FIELD_SEPARATOR) + "\n"
 
     @Test
     fun shellQuoteCannotInjectCommands() {

@@ -120,6 +120,7 @@ fun MultipromptApp(viewModel: MainViewModel) {
     if (terminal != null) {
         TerminalScreen(
             connection = terminal,
+            title = state.terminalSession?.displayName ?: terminal.tmuxSessionName,
             columns = state.terminalSession?.columns ?: 0,
             onBack = viewModel::closeTerminal,
             onSwitchSession = viewModel::openAdjacentSession,
@@ -552,6 +553,7 @@ private fun UpdateAvailableCard(release: UpdateRelease, onInstall: () -> Unit) {
 @Composable
 private fun TerminalScreen(
     connection: TerminalConnection,
+    title: String,
     columns: Int,
     onBack: () -> Unit,
     onSwitchSession: (Int) -> Unit,
@@ -581,8 +583,13 @@ private fun TerminalScreen(
                 modifier = Modifier.statusBarsPadding(),
                 title = {
                     Column {
-                        Text(connection.tmuxSessionName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(statusLabel(status), style = MaterialTheme.typography.labelSmall)
+                        Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            "${connection.tmuxSessionName} · ${statusLabel(status)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 },
                 navigationIcon = {
