@@ -9,8 +9,10 @@ class TmuxParserTest {
     fun parsesStructuredTmuxRowsAndSortsNewestFirst() {
         val separator = TmuxParser.FIELD_SEPARATOR
         val output = buildString {
+            append("${TmuxParser.START_MARKER}\n")
             append("older${separator}1${separator}0${separator}100\n")
             append("codex-main${separator}3${separator}2${separator}200\n")
+            append("${TmuxParser.END_MARKER}\n")
         }
 
         val result = TmuxParser.parse("de", output)
@@ -18,20 +20,31 @@ class TmuxParserTest {
         assertEquals(listOf("codex-main", "older"), result.map { it.name })
         assertEquals(2, result.first().attachedClients)
         assertEquals("Codex", result.first().agent.label)
+        assertTrue(TmuxParser.hasEnvelope(output))
     }
 
     @Test
     fun ignoresMalformedRows() {
-        val result = TmuxParser.parse("de", "broken\nname\u001fnope\u001f0\u001f1\n")
+        val result = TmuxParser.parse("de", "broken\nname::MP_FIELD::nope::MP_FIELD::0::MP_FIELD::1\n")
         assertTrue(result.isEmpty())
     }
 
     @Test
-    fun commandKeepsStderrVisible() {
-        // Swallowing stderr turned every tmux failure into a silent empty list.
+    fun commandFramesOutputAndKeepsStderrVisible() {
         val command = TmuxParser.command()
-        assertTrue(command.startsWith("tmux list-sessions -F "))
+        assertTrue(command.contains("tmux list-sessions -F "))
+        assertTrue(command.contains(TmuxParser.START_MARKER))
+        assertTrue(command.contains(TmuxParser.END_MARKER))
         assertTrue("2>/dev/null" !in command && "|| true" !in command)
+    }
+
+    @Test
+    fun reportsMissingTmuxAndRejectsUnframedOutput() {
+        val output = "${TmuxParser.START_MARKER}\n${TmuxParser.ERROR_PREFIX}tmux_not_found\n${TmuxParser.END_MARKER}\n"
+
+        assertEquals("tmux_not_found", TmuxParser.error(output))
+        assertTrue(TmuxParser.hasEnvelope(output))
+        assertTrue(!TmuxParser.hasEnvelope(""))
     }
 
     @Test

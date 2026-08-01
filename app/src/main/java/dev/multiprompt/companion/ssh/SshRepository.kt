@@ -1,5 +1,6 @@
 package dev.multiprompt.companion.ssh
 
+import android.util.Log
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.security.SecretStore
@@ -44,13 +45,23 @@ class SshRepository(private val secrets: SecretStore) {
             withAuthenticatedClient(host) { client ->
                 val result = execute(client, TmuxParser.command())
                 val sessions = TmuxParser.parse(host.id, result.stdout)
-                if (sessions.isEmpty()) {
-                    // tmux reports "no server running..." on stderr; without this the
-                    // screen is just blank and the real reason is invisible.
+                Log.i(
+                    LOG_TAG,
+                    "tmux stdoutBytes=${result.stdout.toByteArray().size}, " +
+                        "stderrBytes=${result.stderr.toByteArray().size}, sessions=${sessions.size}",
+                )
+                TmuxParser.error(result.stdout)?.let { error ->
+                    throw SshProblem.Connection("The VPS cannot run tmux: $error")
+                }
+                if (!TmuxParser.hasEnvelope(result.stdout)) {
                     val detail = result.stderr.trim().ifBlank { result.stdout.trim() }
                     if (detail.isNotBlank()) {
                         throw SshProblem.Connection("tmux: ${detail.lines().first().take(200)}")
                     }
+                    throw SshProblem.Connection("The VPS returned an incomplete tmux response. Refresh to retry.")
+                }
+                if (sessions.isEmpty() && result.stderr.isNotBlank()) {
+                    throw SshProblem.Connection("tmux: ${result.stderr.trim().lines().first().take(200)}")
                 }
                 sessions
             }
@@ -156,8 +167,8 @@ class SshRepository(private val secrets: SecretStore) {
     }
 
     private companion object {
+        const val LOG_TAG = "MultipromptSSH"
         const val CONNECTION_TIMEOUT_MS = 20_000L
         const val MAX_COMMAND_OUTPUT = 2 * 1024 * 1024
     }
 }
-

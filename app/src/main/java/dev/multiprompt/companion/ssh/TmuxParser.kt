@@ -3,7 +3,10 @@ package dev.multiprompt.companion.ssh
 import dev.multiprompt.companion.model.TmuxSession
 
 object TmuxParser {
-    const val FIELD_SEPARATOR: Char = '\u001f'
+    const val FIELD_SEPARATOR: String = "::MP_FIELD::"
+    const val START_MARKER: String = "__MP_TMUX_BEGIN__"
+    const val END_MARKER: String = "__MP_TMUX_END__"
+    const val ERROR_PREFIX: String = "__MP_TMUX_ERROR__"
 
     fun command(): String {
         val format = listOf(
@@ -11,14 +14,33 @@ object TmuxParser {
             "#{session_windows}",
             "#{session_attached}",
             "#{session_activity}",
-        ).joinToString(FIELD_SEPARATOR.toString())
-        return "tmux list-sessions -F ${shellQuote(format)}"
+        ).joinToString(FIELD_SEPARATOR)
+        return "printf '${START_MARKER}\\n'; " +
+            "if command -v tmux >/dev/null 2>&1; then " +
+            "tmux list-sessions -F ${shellQuote(format)}; " +
+            "else printf '${ERROR_PREFIX}tmux_not_found\\n'; fi; " +
+            "printf '${END_MARKER}\\n'"
     }
+
+    fun hasEnvelope(output: String): Boolean =
+        output.lineSequence().any { it.trimEnd() == START_MARKER } &&
+            output.lineSequence().any { it.trimEnd() == END_MARKER }
+
+    fun error(output: String): String? = output
+        .lineSequence()
+        .map(String::trimEnd)
+        .firstOrNull { it.startsWith(ERROR_PREFIX) }
+        ?.removePrefix(ERROR_PREFIX)
 
     fun parse(hostId: String, output: String): List<TmuxSession> = output
         .lineSequence()
         .map(String::trimEnd)
-        .filter(String::isNotBlank)
+        .filter { line ->
+            line.isNotBlank() &&
+                line != START_MARKER &&
+                line != END_MARKER &&
+                !line.startsWith(ERROR_PREFIX)
+        }
         .mapNotNull { line ->
             val fields = line.split(FIELD_SEPARATOR)
             if (fields.size != 4 || fields[0].isBlank()) return@mapNotNull null
@@ -35,4 +57,3 @@ object TmuxParser {
 
     fun shellQuote(value: String): String = "'" + value.replace("'", "'\"'\"'") + "'"
 }
-
