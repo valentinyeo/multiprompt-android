@@ -73,7 +73,10 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -563,10 +566,19 @@ private fun TerminalScreen(
     val density = LocalDensity.current
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     // The desktop owns the window width, so the phone shrinks its glyphs until that width
-    // fits instead of resizing anything.
+    // fits instead of resizing anything. Measure the real monospace advance: a guessed ratio
+    // left the emulator a few columns narrower than tmux believed, so every full-width line
+    // wrapped and redraws of the status line stacked into ghost copies.
+    val textMeasurer = rememberTextMeasurer()
     val fontSize = remember(screenWidthDp, columns) {
         val target = if (columns > 0) columns else FALLBACK_COLUMNS
-        (screenWidthDp / (target * MONOSPACE_WIDTH_RATIO)).coerceIn(4f, 14f).sp
+        val pxPerCharAt100Sp = textMeasurer.measure(
+            AnnotatedString("0".repeat(20)),
+            TextStyle(fontFamily = FontFamily.Monospace, fontSize = 100.sp),
+        ).size.width / 20f
+        val screenPx = with(density) { screenWidthDp.dp.toPx() }
+        // 2% slack so rounding lands the emulator on target or slightly above, never below.
+        (100f * screenPx / (target * pxPerCharAt100Sp) * 0.98f).coerceIn(4f, 14f).sp
     }
     // Pan the terminal up rather than shrinking it: resizing would renegotiate the PTY and
     // drag the desktop pane down with it.
@@ -695,13 +707,6 @@ private fun Modifier.horizontalSwipe(onSwipe: (Int) -> Unit) = pointerInput(onSw
 
 /** Used only when tmux did not report a width for the session. */
 private const val FALLBACK_COLUMNS = 100
-
-/**
- * Advance width of the monospace font as a fraction of its point size. Calibrated against a
- * device screenshot: at 0.6 the app rendered about 119 columns where 100 were asked for, which
- * puts the real advance near half the point size.
- */
-private const val MONOSPACE_WIDTH_RATIO = 0.5f
 
 private fun statusLabel(status: TerminalStatus): String = when (status) {
     TerminalStatus.Connecting -> "Connecting…"
