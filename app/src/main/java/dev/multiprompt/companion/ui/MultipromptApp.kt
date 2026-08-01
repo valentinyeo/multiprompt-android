@@ -578,7 +578,12 @@ private fun TerminalScreen(
                 modifier = Modifier.statusBarsPadding(),
                 title = {
                     Column {
-                        Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            title,
+                            style = MaterialTheme.typography.labelLarge,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                         Text(
                             "${connection.tmuxSessionName} · ${statusLabel(status)}",
                             style = MaterialTheme.typography.labelSmall,
