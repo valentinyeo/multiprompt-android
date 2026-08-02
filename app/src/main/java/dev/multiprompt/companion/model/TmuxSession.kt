@@ -10,6 +10,7 @@ data class TmuxSession(
     val columns: Int = 0,
     val rows: Int = 0,
     val title: String = "",
+    val preview: String = "",
 ) {
     val agent: AgentKind
         get() = AgentKind.fromName(name)
@@ -37,4 +38,3 @@ enum class AgentKind(val label: String) {
         }
     }
 }
-

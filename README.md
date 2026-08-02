@@ -1,8 +1,8 @@
 # multiprompt Android companion
 
-A single Android app that connects straight to public SSH hosts, discovers the
-existing tmux sessions, and attaches an embedded terminal. It does not require
-Tailscale or a second Android app.
+A native Android app that connects directly to public SSH hosts and provides a
+mobile reader for existing tmux sessions. An embedded live terminal remains
+available as a fallback. The app does not require Tailscale or a second app.
 
 ## First-run flow
 
@@ -12,13 +12,14 @@ Tailscale or a second Android app.
 3. Refresh once, compare the displayed SHA-256 host fingerprint with
    `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server, then trust
    it. Changed host keys fail closed.
-4. Tap a tmux session to attach. The app first sets that tmux window to
-   `window-size largest`, preventing the phone from shrinking the desktop MP
-   pane.
+4. Tap a tmux session to read its recent output and send prompts. Use **Open
+   live terminal** only when the reader actions are insufficient; the phone
+   never changes the desktop tmux dimensions.
 
-The first version uses public-key authentication only. It intentionally does
-not accept an unverified host key, expose an arbitrary remote-command box, or
-copy MP's Windows-local credentials to Android.
+The app uses public-key authentication only. It does not accept an unverified
+host key, expose an arbitrary remote-command box, or copy MP's Windows-local
+credentials to Android. Prompt text reaches tmux through SSH stdin instead of
+shell interpolation.
 
 ## Build
 

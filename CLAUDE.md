@@ -4,14 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A single Android app (`dev.multiprompt.companion`) that SSHes straight into public VPS hosts, lists their tmux sessions, and attaches an embedded terminal. No Tailscale, no companion desktop app. Kotlin + Jetpack Compose, Gradle version catalog, ConnectBot `sshlib` + `termlib` for transport and emulation.
+A single Android app (`dev.multiprompt.companion`) that SSHes straight into public VPS hosts and provides a mobile reader for their tmux sessions. An embedded terminal remains an optional fallback. No Tailscale or companion desktop app. Kotlin + Jetpack Compose, Gradle version catalog, ConnectBot `sshlib` + `termlib` for transport and emulation.
 
 ## Build and test
 
 ```bash
 ./gradlew test              # JVM unit tests (app/src/test)
 ./gradlew lintDebug assembleDebug
-./gradlew test --tests '*TmuxParserTest*'   # single test class
+./gradlew testDebugUnitTest --tests '*TmuxParserTest*'   # single test class
 ```
 
 Requires JDK 17 and Android SDK 36. CI runs `gradle --no-daemon lintDebug test assembleRelease`.
@@ -20,20 +20,22 @@ Requires JDK 17 and Android SDK 36. CI runs `gradle --no-daemon lintDebug test a
 
 ## Architecture
 
-`MultipromptApplication` is the manual DI container (lazy singletons). `MainViewModel` holds one `AppUiState` `StateFlow`; `ui/MultipromptApp.kt` is the whole Compose tree (sessions / hosts / update sections plus a full-screen terminal overlay). There is no navigation library and no DI framework — keep it that way.
+`MultipromptApplication` is the manual DI container (lazy singletons). `MainViewModel` holds one `AppUiState` `StateFlow`; `ui/MultipromptApp.kt` is the whole Compose tree, including full-screen reader and terminal overlays. There is no navigation library and no DI framework — keep it that way.
 
 Data flow for the core feature:
 
 1. `HostStore` — host profiles in plain SharedPreferences (`hosts`), JSON-encoded. No secrets here, only a `keySecretId` / `passphraseSecretId` reference.
 2. `SecretStore` — private key bytes and passphrase, encrypted with a non-exportable Android Keystore AES key, stored in the `encrypted_secrets` prefs.
-3. `SshRepository.listSessions` — one short-lived connection, runs `TmuxParser.command()`, parses, disconnects.
-4. `TerminalConnection` — its own long-lived connection: PTY (`xterm-256color`), then `tmux set-window-option -t <session> window-size largest; exec tmux attach-session -t <session>`. The `window-size largest` part is deliberate: without it the phone shrinks the desktop pane.
+3. `SshRepository.listSessions` — one short-lived connection retrieves session metadata and encoded output previews through a fixed tmux command.
+4. `SessionReaderConnection` — one reusable authenticated connection captures recent output and runs only Send, Enter, Interrupt, and Refresh operations. Prompt content travels through SSH stdin into a tmux buffer, never through shell interpolation.
+5. `TerminalConnection` — its own long-lived PTY (`xterm-256color`) attaches with tmux `ignore-size`. The phone stays out of tmux's size calculation, so it cannot shrink the desktop pane.
 
 ### Security invariants — do not relax these
 
 - **Host keys fail closed.** `SshRepository.PinningHostKeyVerifier` pins type + SHA-256 fingerprint from `HostProfile`. An unknown or changed key throws `SshProblem.HostKeyRequired` and the UI makes the user compare and trust it explicitly. Never auto-accept.
 - **Public-key auth only.** No password auth, no arbitrary remote-command box in the UI.
 - **Everything interpolated into a remote command goes through `TmuxParser.shellQuote`.** There is a test asserting it blocks injection.
+- **Reader commands are allowlisted.** Prompt content must travel through SSH stdin and tmux buffer/paste operations, never inside a shell command.
 - **`UpdateManager` verifies before installing:** HTTPS-only transport, declared size and SHA-256, package name, strictly newer versionCode, and the installed APK's signing certificate digest. Every one of those checks is load-bearing; a downgrade or a differently-signed APK must be rejected.
 
 Cleartext traffic is off (`res/xml/network_security_config.xml`).

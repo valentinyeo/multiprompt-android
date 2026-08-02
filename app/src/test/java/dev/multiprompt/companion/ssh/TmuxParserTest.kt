@@ -30,8 +30,8 @@ class TmuxParserTest {
     }
 
     @Test
-    fun commandAsksForSevenFieldsInTheOrderTheParserExpects() {
-        val format = TmuxParser.command().substringAfter("list-sessions -F '").substringBefore("'")
+    fun commandAsksForEightFieldsInTheOrderTheParserExpects() {
+        val format = TmuxParser.command().substringAfter("display-message -p -t \"\$mp_session:\" -F '").substringBefore("'")
 
         assertEquals(
             listOf("#{session_name}", "#{session_windows}", "#{session_attached}",
@@ -44,9 +44,10 @@ class TmuxParserTest {
     fun commandFramesOutputAndKeepsStderrVisible() {
         val command = TmuxParser.command()
         assertTrue(command.contains("tmux list-sessions -F "))
+        assertTrue(command.contains("tmux capture-pane -p -J -S -12"))
         assertTrue(command.contains(TmuxParser.START_MARKER))
         assertTrue(command.contains(TmuxParser.END_MARKER))
-        assertTrue("2>/dev/null" !in command && "|| true" !in command)
+        assertTrue("tmux list-sessions -F '#{session_name}' 2>/dev/null" !in command)
     }
 
     @Test
@@ -89,6 +90,14 @@ class TmuxParserTest {
         val output = row("cl-1", "1", "0", "200", "98", "51", "box", "fix a${s}b")
 
         assertEquals("fix a${s}b", TmuxParser.parse("de", output).single().title)
+    }
+
+    @Test
+    fun decodesHexPreviewForThePrecedingSession() {
+        val output = row("cl-1", "1", "0", "200", "98", "51", "box", "work") +
+            "${TmuxParser.PREVIEW_PREFIX}68656c6c6f0a776f726c64\n"
+
+        assertEquals("hello\nworld", TmuxParser.parse("de", output).single().preview)
     }
 
     /** Mirrors the field order in [TmuxParser.command], so a reordered format fails loudly here. */

@@ -8,6 +8,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -91,6 +94,9 @@ import dev.multiprompt.companion.MainViewModel
 import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
+import dev.multiprompt.companion.reader.ReaderStatus
+import dev.multiprompt.companion.reader.SessionReaderConnection
+import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.terminal.TerminalConnection
 import dev.multiprompt.companion.terminal.TerminalStatus
 import dev.multiprompt.companion.update.UpdateRelease
@@ -127,6 +133,21 @@ fun MultipromptApp(viewModel: MainViewModel) {
             columns = state.terminalSession?.columns ?: 0,
             onBack = viewModel::closeTerminal,
             onSwitchSession = viewModel::openAdjacentSession,
+        )
+        return
+    }
+
+    val reader = state.reader
+    val readerSession = state.readerSession
+    if (reader != null && readerSession != null) {
+        ReaderScreen(
+            connection = reader,
+            session = readerSession,
+            hostLabel = state.hosts.firstOrNull { it.id == readerSession.hostId }?.label.orEmpty(),
+            unread = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.unreadSessionKeys,
+            onBack = viewModel::closeReader,
+            onMarkRead = viewModel::markReaderRead,
+            onOpenTerminal = { viewModel.openTerminal(readerSession) },
         )
         return
     }
@@ -187,7 +208,7 @@ fun MultipromptApp(viewModel: MainViewModel) {
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             when (state.section) {
-                AppSection.SESSIONS -> SessionsScreen(state, viewModel::openTerminal) {
+                AppSection.SESSIONS -> SessionsScreen(state, viewModel::openReader) {
                     viewModel.select(AppSection.HOSTS)
                     viewModel.showHostEditor()
                 }
@@ -300,7 +321,10 @@ private fun SessionsScreen(
             }
             val sessions = state.sessions.filter { it.hostId == host.id }
             items(sessions, key = { "${it.hostId}:${it.name}" }) { session ->
-                SessionCard(session) { onOpen(session) }
+                SessionCard(
+                    session = session,
+                    unread = SessionReadStore.key(session.hostId, session.name) in state.unreadSessionKeys,
+                ) { onOpen(session) }
             }
             if (sessions.isEmpty() && error == null && !state.refreshing) {
                 item(key = "empty-${host.id}") {
@@ -312,28 +336,155 @@ private fun SessionsScreen(
 }
 
 @Composable
-private fun SessionCard(session: TmuxSession, onClick: () -> Unit) {
+private fun SessionCard(session: TmuxSession, unread: Boolean, onClick: () -> Unit) {
     Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-        Row(
+        Column(
             Modifier.fillMaxWidth().padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(Icons.Default.Terminal, null, tint = MaterialTheme.colorScheme.primary)
-            Column(Modifier.weight(1f)) {
-                Text(session.displayName, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (unread) {
+                    Box(Modifier.size(9.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
+                }
+                Icon(Icons.Default.Terminal, null, tint = MaterialTheme.colorScheme.primary)
+                Column(Modifier.weight(1f)) {
+                    Text(session.displayName, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        if (session.title.isBlank()) {
+                            "${session.agent.label} · ${session.windows} windows · ${relativeTime(session.lastActivityEpochSeconds)}"
+                        } else {
+                            "${session.name} · ${session.agent.label} · ${relativeTime(session.lastActivityEpochSeconds)}"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (session.attachedClients > 0) {
+                    Text("LIVE ${session.attachedClients}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                }
+            }
+            if (session.preview.isNotBlank()) {
                 Text(
-                    if (session.title.isBlank()) {
-                        "${session.agent.label} · ${session.windows} windows · ${relativeTime(session.lastActivityEpochSeconds)}"
-                    } else {
-                        "${session.name} · ${session.agent.label} · ${relativeTime(session.lastActivityEpochSeconds)}"
-                    },
+                    session.preview,
                     style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (session.attachedClients > 0) {
-                Text("LIVE ${session.attachedClients}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReaderScreen(
+    connection: SessionReaderConnection,
+    session: TmuxSession,
+    hostLabel: String,
+    unread: Boolean,
+    onBack: () -> Unit,
+    onMarkRead: () -> Unit,
+    onOpenTerminal: () -> Unit,
+) {
+    val reader by connection.state.collectAsState()
+    val working = reader.status == ReaderStatus.Connecting || reader.status == ReaderStatus.Working
+    var prompt by remember(connection) { mutableStateOf("") }
+    BackHandler(onBack = onBack)
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                modifier = Modifier.statusBarsPadding(),
+                title = {
+                    Column {
+                        Text(session.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            "$hostLabel · ${session.agent.label}",
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to sessions") }
+                },
+            )
+        },
+        bottomBar = {
+            Column(
+                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp).navigationBarsPadding(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = prompt,
+                    onValueChange = { prompt = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Prompt") },
+                    minLines = 2,
+                    maxLines = 5,
+                    enabled = !working,
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            connection.sendPrompt(prompt)
+                            prompt = ""
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = prompt.isNotBlank() && !working,
+                    ) { Text("Send") }
+                    OutlinedButton(onClick = connection::sendEnter, enabled = !working) { Text("Enter") }
+                    OutlinedButton(onClick = connection::interrupt, enabled = !working) { Text("Interrupt") }
+                }
+            }
+        },
+    ) { padding ->
+        LazyColumn(
+            Modifier.padding(padding).fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item {
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = connection::refresh, enabled = !working) { Text("Refresh") }
+                        OutlinedButton(onClick = onMarkRead, enabled = unread) {
+                            Text(if (unread) "Mark read" else "Read")
+                        }
+                    }
+                    TextButton(onClick = onOpenTerminal) { Text("Open live terminal") }
+                }
+            }
+            if (working && reader.output.isBlank()) {
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                        Text("Reading recent output…")
+                    }
+                }
+            }
+            val failure = reader.status as? ReaderStatus.Failed
+            if (failure != null) {
+                item {
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(failure.message, color = MaterialTheme.colorScheme.onErrorContainer)
+                            TextButton(onClick = connection::refresh) { Text("Retry") }
+                        }
+                    }
+                }
+            }
+            item {
+                SelectionContainer {
+                    Text(
+                        reader.output.ifBlank { if (failure == null && !working) "No recent output" else "" },
+                        modifier = Modifier.fillMaxWidth(),
+                        fontFamily = FontFamily.Monospace,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
             }
         }
     }

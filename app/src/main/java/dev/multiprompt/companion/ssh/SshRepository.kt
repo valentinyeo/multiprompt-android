@@ -15,6 +15,7 @@ import org.connectbot.sshlib.ConnectResult
 import org.connectbot.sshlib.HostKeyVerifier
 import org.connectbot.sshlib.KeyFingerprint
 import org.connectbot.sshlib.PublicKey
+import org.connectbot.sshlib.SessionExit
 import org.connectbot.sshlib.SshClient
 import org.connectbot.sshlib.SshClientConfig
 import java.io.ByteArrayOutputStream
@@ -102,6 +103,30 @@ class SshRepository(private val secrets: SecretStore) {
         client
     }
 
+    suspend fun captureSession(client: SshClient, sessionName: String): String {
+        val result = execute(client, TmuxCommands.capture(sessionName))
+        result.requireSuccess("capture session output")
+        return result.stdout.trimEnd()
+    }
+
+    suspend fun sendPrompt(client: SshClient, sessionName: String, prompt: String) {
+        require(prompt.isNotBlank()) { "Enter a prompt first" }
+        val bytes = prompt.toByteArray(Charsets.UTF_8)
+        require(bytes.size <= MAX_PROMPT_BYTES) { "The prompt is too large" }
+        execute(client, TmuxCommands.pastePrompt(sessionName), stdin = bytes)
+            .requireSuccess("send the prompt")
+    }
+
+    suspend fun performAction(client: SshClient, sessionName: String, action: TmuxAction) {
+        execute(client, TmuxCommands.action(sessionName, action))
+            .requireSuccess(
+                when (action) {
+                    TmuxAction.ENTER -> "send Enter"
+                    TmuxAction.INTERRUPT -> "interrupt the session"
+                },
+            )
+    }
+
     private suspend fun <T> withAuthenticatedClient(
         host: HostProfile,
         block: suspend (SshClient) -> T,
@@ -114,9 +139,27 @@ class SshRepository(private val secrets: SecretStore) {
         }
     }
 
-    private data class CommandResult(val stdout: String, val stderr: String)
+    private data class CommandResult(
+        val stdout: String,
+        val stderr: String,
+        val exit: SessionExit?,
+    ) {
+        fun requireSuccess(operation: String) {
+            val status = exit as? SessionExit.Status
+            if (status == null || status.code != 0L) {
+                val detail = stderr.trim().lineSequence().firstOrNull().orEmpty().take(200)
+                throw SshProblem.Connection(
+                    if (detail.isBlank()) "Could not $operation" else "Could not $operation: $detail",
+                )
+            }
+        }
+    }
 
-    private suspend fun execute(client: SshClient, command: String): CommandResult = coroutineScope {
+    private suspend fun execute(
+        client: SshClient,
+        command: String,
+        stdin: ByteArray? = null,
+    ): CommandResult = coroutineScope {
         val session = client.openSession()
             ?: throw SshProblem.Connection("The SSH server refused a command channel")
         try {
@@ -125,7 +168,15 @@ class SshRepository(private val secrets: SecretStore) {
             }
             val out = async { session.stdout.drain() }
             val err = async { session.stderr.drain() }
-            CommandResult(stdout = out.await(), stderr = err.await())
+            if (stdin != null) {
+                session.write(stdin)
+                session.sendEof()
+            }
+            CommandResult(
+                stdout = out.await(),
+                stderr = err.await(),
+                exit = session.exitInfo.await(),
+            )
         } finally {
             session.close()
         }
@@ -170,5 +221,6 @@ class SshRepository(private val secrets: SecretStore) {
         const val LOG_TAG = "MultipromptSSH"
         const val CONNECTION_TIMEOUT_MS = 20_000L
         const val MAX_COMMAND_OUTPUT = 2 * 1024 * 1024
+        const val MAX_PROMPT_BYTES = 64 * 1024
     }
 }

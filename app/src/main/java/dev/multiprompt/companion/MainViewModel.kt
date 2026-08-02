@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
+import dev.multiprompt.companion.data.SessionReadStore
+import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.ssh.PresentedHostKey
 import dev.multiprompt.companion.ssh.SshProblem
 import dev.multiprompt.companion.terminal.TerminalConnection
@@ -34,12 +36,16 @@ data class AppUiState(
     val editorError: String? = null,
     val terminal: TerminalConnection? = null,
     val terminalSession: TmuxSession? = null,
+    val reader: SessionReaderConnection? = null,
+    val readerSession: TmuxSession? = null,
+    val unreadSessionKeys: Set<String> = emptySet(),
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as MultipromptApplication
     private val hosts = app.hostStore
     private val secrets = app.secretStore
+    private val sessionReads = app.sessionReadStore
     private val ssh = app.sshRepository
     val updates: UpdateManager = app.updateManager
 
@@ -123,6 +129,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         hosts.delete(host.id)
         secrets.remove(host.keySecretId)
         secrets.remove(host.passphraseSecretId)
+        sessionReads.removeHost(host.id)
         _state.update {
             it.copy(
                 hosts = hosts.load(),
@@ -183,23 +190,59 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }.awaitAll()
             _state.update { current ->
+                val sessions = results.flatMap { it.sessions }
                 current.copy(
-                    sessions = results.flatMap { it.sessions },
+                    sessions = sessions,
                     hostErrors = results.mapNotNull { result ->
                         result.error?.let { result.hostId to it }
                     }.toMap(),
                     pendingHostKeys = results.mapNotNull { result ->
                         result.hostKey?.let { result.hostId to it }
                     }.toMap(),
+                    unreadSessionKeys = sessions
+                        .filter(sessionReads::isUnread)
+                        .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) },
                     refreshing = false,
                 )
             }
         }
     }
 
+    fun openReader(session: TmuxSession) {
+        val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
+        _state.value.terminal?.close()
+        _state.value.reader?.close()
+        val reader = SessionReaderConnection(
+            repository = ssh,
+            host = host,
+            tmuxSessionName = session.name,
+        ).also { it.start() }
+        _state.update {
+            it.copy(
+                terminal = null,
+                terminalSession = null,
+                reader = reader,
+                readerSession = session,
+            )
+        }
+    }
+
+    fun markReaderRead() {
+        val session = _state.value.readerSession ?: return
+        sessionReads.markRead(session)
+        val key = SessionReadStore.key(session.hostId, session.name)
+        _state.update { it.copy(unreadSessionKeys = it.unreadSessionKeys - key) }
+    }
+
+    fun closeReader() {
+        _state.value.reader?.close()
+        _state.update { it.copy(reader = null, readerSession = null) }
+    }
+
     fun openTerminal(session: TmuxSession) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
         _state.value.terminal?.close()
+        _state.value.reader?.close()
         val terminal = TerminalConnection(
             repository = ssh,
             host = host,
@@ -207,7 +250,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             windowColumns = session.columns,
             windowRows = session.rows,
         ).also { it.start() }
-        _state.update { it.copy(terminal = terminal, terminalSession = session) }
+        _state.update {
+            it.copy(
+                terminal = terminal,
+                terminalSession = session,
+                reader = null,
+                readerSession = null,
+            )
+        }
     }
 
     /** Swiping the terminal sideways attaches the neighbouring session, wrapping at both ends. */
@@ -231,6 +281,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         _state.value.terminal?.close()
+        _state.value.reader?.close()
         super.onCleared()
     }
 
