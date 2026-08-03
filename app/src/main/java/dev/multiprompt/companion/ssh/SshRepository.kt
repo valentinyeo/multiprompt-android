@@ -212,6 +212,16 @@ class SshRepository(private val secrets: SecretStore) {
             }
         }
 
+    suspend fun dissolveSession(host: HostProfile, sessionName: String) =
+        withContext(Dispatchers.IO) {
+            withTimeout(CONNECTION_TIMEOUT_MS) {
+                withAuthenticatedClient(host) { client ->
+                    execute(client, TmuxCommands.dissolveSession(sessionName))
+                        .requireSuccess("dissolve the tmux session")
+                }
+            }
+        }
+
     private suspend fun <T> withAuthenticatedClient(
         host: HostProfile,
         block: suspend (SshClient) -> T,

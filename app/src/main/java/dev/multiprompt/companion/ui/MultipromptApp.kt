@@ -16,7 +16,6 @@ import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -53,8 +52,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.SystemUpdate
-import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -70,14 +67,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -139,6 +137,8 @@ import dev.multiprompt.companion.update.UpdateRelease
 import dev.multiprompt.companion.update.UpdateState
 import dev.multiprompt.companion.upload.ScreencastUploader
 import java.io.ByteArrayOutputStream
+import java.time.ZonedDateTime
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.connectbot.terminal.Terminal
 
@@ -199,6 +199,7 @@ fun MultipromptApp(viewModel: MainViewModel) {
             hostLabel = state.hosts.firstOrNull { it.id == readerSession.hostId }?.label.orEmpty(),
             unread = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.unreadSessionKeys,
             archived = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.archivedSessionKeys,
+            initialFontScale = viewModel.readerFontScale(readerSession),
             onBack = viewModel::closeReader,
             onMarkRead = viewModel::markReaderRead,
             onArchiveToggle = {
@@ -212,6 +213,8 @@ fun MultipromptApp(viewModel: MainViewModel) {
             },
             onOpenTerminal = { viewModel.openTerminal(readerSession) },
             onSwitchSession = viewModel::openAdjacentReaderSession,
+            onFontScaleChanged = { scale -> viewModel.saveReaderFontScale(readerSession, scale) },
+            onDissolve = { viewModel.dissolveSession(readerSession) },
         )
         return
     }
@@ -233,33 +236,13 @@ fun MultipromptApp(viewModel: MainViewModel) {
                 Header(
                     refreshing = state.refreshing,
                     onRefresh = viewModel::refresh,
+                    section = state.section,
+                    onSelect = viewModel::select,
                 )
                 val available = updateState as? UpdateState.Available
                 if (available != null) {
                     UpdateBanner(available.release) { viewModel.installUpdate(available.release) }
                 }
-            }
-        },
-        bottomBar = {
-            NavigationBar(Modifier.navigationBarsPadding()) {
-                NavigationBarItem(
-                    selected = state.section == AppSection.SESSIONS,
-                    onClick = { viewModel.select(AppSection.SESSIONS) },
-                    icon = { Icon(Icons.Default.Terminal, null) },
-                    label = { Text("Sessions") },
-                )
-                NavigationBarItem(
-                    selected = state.section == AppSection.HOSTS,
-                    onClick = { viewModel.select(AppSection.HOSTS) },
-                    icon = { Icon(Icons.Default.Computer, null) },
-                    label = { Text("Hosts") },
-                )
-                NavigationBarItem(
-                    selected = state.section == AppSection.UPDATE,
-                    onClick = { viewModel.select(AppSection.UPDATE) },
-                    icon = { Icon(Icons.Default.SystemUpdate, null) },
-                    label = { Text("Update") },
-                )
             }
         },
         floatingActionButton = {
@@ -290,11 +273,15 @@ fun MultipromptApp(viewModel: MainViewModel) {
                     state = state,
                     onOpen = viewModel::openReader,
                     onArchive = viewModel::archiveSession,
+                    onArchiveUntil = viewModel::archiveSessionUntil,
                     onRestore = viewModel::restoreSession,
+                    onDissolve = viewModel::dissolveSession,
                     onMarkUnread = viewModel::markSessionUnread,
                     onToggleArchived = viewModel::toggleArchivedSessions,
                     onSelectWorkspace = viewModel::selectWorkspace,
                     onSwitchWorkspace = viewModel::openAdjacentWorkspace,
+                    onMoveWorkspaceSplit = viewModel::moveWorkspaceSplit,
+                    onResetWorkspaceSplitOrder = viewModel::resetWorkspaceSplitOrder,
                     onCreateWorkspace = viewModel::createWorkspace,
                     onMoveSession = viewModel::moveSession,
                     onAddHost = {
@@ -386,12 +373,25 @@ fun MultipromptApp(viewModel: MainViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Header(refreshing: Boolean, onRefresh: () -> Unit) {
+private fun Header(
+    refreshing: Boolean,
+    onRefresh: () -> Unit,
+    section: AppSection,
+    onSelect: (AppSection) -> Unit,
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
     TopAppBar(
         title = {
             Column {
-                Text("multiprompt", fontWeight = FontWeight.Bold)
-                Text("mobile tmux companion", style = MaterialTheme.typography.labelSmall)
+                Text(
+                    when (section) {
+                        AppSection.SESSIONS -> "Inbox"
+                        AppSection.HOSTS -> "Hosts"
+                        AppSection.UPDATE -> "Update"
+                    },
+                    fontWeight = FontWeight.Bold,
+                )
+                Text("multiprompt", style = MaterialTheme.typography.labelSmall)
             }
         },
         actions = {
@@ -399,6 +399,29 @@ private fun Header(refreshing: Boolean, onRefresh: () -> Unit) {
                 CircularProgressIndicator(Modifier.padding(12.dp).size(22.dp), strokeWidth = 2.dp)
             } else {
                 IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, "Refresh") }
+            }
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(Icons.Default.MoreVert, "Open navigation")
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                ) {
+                    listOf(
+                        AppSection.SESSIONS to "Inbox",
+                        AppSection.HOSTS to "Hosts",
+                        AppSection.UPDATE to "Update",
+                    ).forEach { (destination, label) ->
+                        DropdownMenuItem(
+                            text = { Text(if (section == destination) "✓ $label" else label) },
+                            onClick = {
+                                menuExpanded = false
+                                onSelect(destination)
+                            },
+                        )
+                    }
+                }
             }
         },
     )
@@ -421,11 +444,15 @@ private fun SessionsScreen(
     state: AppUiState,
     onOpen: (TmuxSession) -> Unit,
     onArchive: (TmuxSession) -> Unit,
+    onArchiveUntil: (TmuxSession, Long?) -> Unit,
     onRestore: (TmuxSession) -> Unit,
+    onDissolve: (TmuxSession) -> Unit,
     onMarkUnread: (TmuxSession) -> Unit,
     onToggleArchived: () -> Unit,
     onSelectWorkspace: (String?) -> Unit,
     onSwitchWorkspace: (Int) -> Unit,
+    onMoveWorkspaceSplit: (String, Int) -> Unit,
+    onResetWorkspaceSplitOrder: () -> Unit,
     onCreateWorkspace: (String, String, String) -> String?,
     onMoveSession: (TmuxSession, Workspace) -> Unit,
     onAddHost: () -> Unit,
@@ -439,6 +466,109 @@ private fun SessionsScreen(
     var workspacePath by remember { mutableStateOf("") }
     var workspaceHostId by remember(state.hosts) { mutableStateOf(state.hosts.first().id) }
     var workspaceError by remember { mutableStateOf<String?>(null) }
+    var splitOrderDialogVisible by remember { mutableStateOf(false) }
+    var archivePromptSession by remember { mutableStateOf<TmuxSession?>(null) }
+    var dissolvePromptSession by remember { mutableStateOf<TmuxSession?>(null) }
+    archivePromptSession?.let { session ->
+        AlertDialog(
+            onDismissRequest = { archivePromptSession = null },
+            title = { Text("Archive until…") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        session.displayName,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Button(
+                        onClick = {
+                            archivePromptSession = null
+                            onArchiveUntil(session, null)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("When it updates") }
+                    OutlinedButton(
+                        onClick = {
+                            archivePromptSession = null
+                            onArchiveUntil(session, System.currentTimeMillis() / 1000 + 60 * 60)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("In one hour") }
+                    OutlinedButton(
+                        onClick = {
+                            archivePromptSession = null
+                            onArchiveUntil(session, tomorrowMorningEpochSeconds())
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Tomorrow morning") }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { archivePromptSession = null }) { Text("Cancel") }
+            },
+        )
+    }
+    dissolvePromptSession?.let { session ->
+        AlertDialog(
+            onDismissRequest = { dissolvePromptSession = null },
+            title = { Text("Dissolve ${session.displayName}?") },
+            text = { Text("This ends the coding agent and its tmux session. It cannot be undone here.") },
+            confirmButton = {
+                Button(onClick = {
+                    dissolvePromptSession = null
+                    onDissolve(session)
+                }) { Text("Dissolve") }
+            },
+            dismissButton = {
+                TextButton(onClick = { dissolvePromptSession = null }) { Text("Cancel") }
+            },
+        )
+    }
+    if (splitOrderDialogVisible) {
+        AlertDialog(
+            onDismissRequest = { splitOrderDialogVisible = false },
+            title = { Text("Arrange inbox splits") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "Swipe order follows this list.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    state.workspaces.forEachIndexed { index, workspace ->
+                        val sessionCount = state.sessionWorkspaceIds.values.count { it == workspace.id }
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(workspace.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                "$sessionCount",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            IconButton(
+                                onClick = { onMoveWorkspaceSplit(workspace.id, -1) },
+                                enabled = index > 0,
+                            ) { Text("↑") }
+                            IconButton(
+                                onClick = { onMoveWorkspaceSplit(workspace.id, 1) },
+                                enabled = index < state.workspaces.lastIndex,
+                            ) { Text("↓") }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { splitOrderDialogVisible = false }) { Text("Done") }
+            },
+            dismissButton = {
+                TextButton(onClick = onResetWorkspaceSplitOrder) { Text("Automatic order") }
+            },
+        )
+    }
     if (workspaceDialogVisible) {
         AlertDialog(
             onDismissRequest = { workspaceDialogVisible = false },
@@ -492,7 +622,7 @@ private fun SessionsScreen(
         }
         .sortedByDescending { it.lastActivityEpochSeconds }
     LazyColumn(
-        Modifier.fillMaxSize().horizontalSwipe(onSwitchWorkspace),
+        Modifier.fillMaxSize().horizontalSwipe(onSwitchWorkspace, PointerEventPass.Final),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -523,14 +653,17 @@ private fun SessionsScreen(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                val splits = listOf<Pair<String?, String>>(null to "All") +
-                    state.workspaces.map { it.id to it.name }
+                val splits = state.workspaces.map { it.id to it.name } +
+                    listOf<Pair<String?, String>>(null to "All")
                 splits.forEach { (id, name) ->
                     if (state.selectedWorkspaceId == id) {
                         FilledTonalButton(onClick = { onSelectWorkspace(id) }) { Text(name) }
                     } else {
                         TextButton(onClick = { onSelectWorkspace(id) }) { Text(name) }
                     }
+                }
+                IconButton(onClick = { splitOrderDialogVisible = true }) {
+                    Icon(Icons.Default.Edit, "Arrange splits")
                 }
                 TextButton(onClick = {
                     workspaceError = null
@@ -553,11 +686,13 @@ private fun SessionsScreen(
                 unread = key in state.unreadSessionKeys,
                 archived = key in state.archivedSessionKeys,
                 onClick = { onOpen(session) },
+                onSwipeArchive = { archivePromptSession = session },
                 onArchiveToggle = {
                     if (key in state.archivedSessionKeys) onRestore(session) else onArchive(session)
                 },
                 onMarkUnread = { onMarkUnread(session) },
                 onMove = { workspace -> onMoveSession(session, workspace) },
+                onDissolve = { dissolvePromptSession = session },
             )
         }
         if (visibleSessions.isEmpty() && !state.refreshing) {
@@ -579,83 +714,128 @@ private fun SessionCard(
     unread: Boolean,
     archived: Boolean,
     onClick: () -> Unit,
+    onSwipeArchive: () -> Unit,
     onArchiveToggle: () -> Unit,
     onMarkUnread: () -> Unit,
     onMove: (Workspace) -> Unit,
+    onDissolve: () -> Unit,
 ) {
     var menuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
-    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-        Column(
-            Modifier.fillMaxWidth().padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (unread) {
-                    Box(Modifier.size(9.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
-                }
-                Icon(Icons.Default.Terminal, null, tint = MaterialTheme.colorScheme.primary)
-                Column(Modifier.weight(1f)) {
-                    Text(session.displayName, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(
-                        if (session.title.isBlank()) {
-                            "$hostLabel · ${session.agent.label} · ${relativeTime(session.lastActivityEpochSeconds)}"
-                        } else {
-                            "$hostLabel · ${session.agent.label} · ${relativeTime(session.lastActivityEpochSeconds)}"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (session.attachedClients > 0) {
-                    Text("LIVE ${session.attachedClients}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-                }
-                Box {
-                    IconButton(onClick = { menuExpanded = true }) {
-                        Icon(Icons.Default.MoreVert, "Thread actions")
+    val dismissState = rememberSwipeToDismissBoxState()
+    LaunchedEffect(dismissState.settledValue, archived) {
+        if (dismissState.settledValue == SwipeToDismissBoxValue.EndToStart && !archived) {
+            onSwipeArchive()
+            dismissState.reset()
+        }
+    }
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = false,
+        enableDismissFromEndToStart = !archived,
+        backgroundContent = {
+            Row(
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Archive",
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        },
+    ) {
+        Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (unread) {
+                        Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
                     }
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(if (archived) "Return to inbox" else "Archive") },
-                            onClick = {
-                                menuExpanded = false
-                                onArchiveToggle()
-                            },
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            session.displayName,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                        if (!unread && !archived) {
+                        Text(
+                            "$hostLabel · ${session.agent.label} · ${relativeTime(session.lastActivityEpochSeconds)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (session.attachedClients > 0) {
+                        Text(
+                            "LIVE ${session.attachedClients}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.secondary,
+                        )
+                    }
+                    Box {
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(Icons.Default.MoreVert, "Thread actions")
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                        ) {
                             DropdownMenuItem(
-                                text = { Text("Mark unread") },
+                                text = { Text(if (archived) "Return to inbox" else "Archive") },
                                 onClick = {
                                     menuExpanded = false
-                                    onMarkUnread()
+                                    onArchiveToggle()
                                 },
                             )
-                        }
-                        if (!archived) {
-                            workspaces.filter { it.hostId == session.hostId }.forEach { workspace ->
+                            if (!unread && !archived) {
                                 DropdownMenuItem(
-                                    text = { Text("Move to ${workspace.name}") },
+                                    text = { Text("Mark unread") },
                                     onClick = {
                                         menuExpanded = false
-                                        onMove(workspace)
+                                        onMarkUnread()
                                     },
                                 )
                             }
+                            if (!archived) {
+                                workspaces.filter { it.hostId == session.hostId }.forEach { workspace ->
+                                    DropdownMenuItem(
+                                        text = { Text("Move to ${workspace.name}") },
+                                        onClick = {
+                                            menuExpanded = false
+                                            onMove(workspace)
+                                        },
+                                    )
+                                }
+                            }
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("Dissolve session", color = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onDissolve()
+                                },
+                            )
                         }
                     }
                 }
-            }
-            if (session.preview.isNotBlank()) {
-                Text(
-                    session.preview,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = ReaderFontFamily,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                if (session.preview.isNotBlank()) {
+                    Text(
+                        session.preview,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontFamily = ReaderFontFamily,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 18.sp,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }
@@ -671,11 +851,14 @@ private fun ReaderScreen(
     hostLabel: String,
     unread: Boolean,
     archived: Boolean,
+    initialFontScale: Float,
     onBack: () -> Unit,
     onMarkRead: () -> Unit,
     onArchiveToggle: () -> Unit,
     onOpenTerminal: () -> Unit,
     onSwitchSession: (Int) -> Unit,
+    onFontScaleChanged: (Float) -> Unit,
+    onDissolve: () -> Unit,
 ) {
     val reader by connection.state.collectAsState()
     val dictationState by dictation.state.collectAsState()
@@ -697,7 +880,10 @@ private fun ReaderScreen(
     var imageKeyError by remember(connection) { mutableStateOf<String?>(null) }
     var imageUploading by remember(connection) { mutableStateOf(false) }
     var imageUploadError by remember(connection) { mutableStateOf<String?>(null) }
-    var transcriptZoom by remember { mutableFloatStateOf(1f) }
+    var dissolveDialogVisible by remember(connection) { mutableStateOf(false) }
+    var transcriptZoom by remember(connection, session.hostId, session.name) {
+        mutableFloatStateOf(initialFontScale)
+    }
     val transcriptTransform = rememberTransformableState { _, zoomChange, _, _ ->
         transcriptZoom = (transcriptZoom * zoomChange).coerceIn(0.75f, 5f)
     }
@@ -746,6 +932,11 @@ private fun ReaderScreen(
         } else {
             microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
+    }
+
+    LaunchedEffect(session.hostId, session.name, transcriptZoom) {
+        delay(250)
+        onFontScaleChanged(transcriptZoom)
     }
 
     LaunchedEffect(connection, scrollState, density) {
@@ -825,6 +1016,22 @@ private fun ReaderScreen(
             DictationStatus.FAILED -> sendAfterDictation = false
             else -> Unit
         }
+    }
+    if (dissolveDialogVisible) {
+        AlertDialog(
+            onDismissRequest = { dissolveDialogVisible = false },
+            title = { Text("Dissolve ${session.displayName}?") },
+            text = { Text("This ends the coding agent and its tmux session. It cannot be undone here.") },
+            confirmButton = {
+                Button(onClick = {
+                    dissolveDialogVisible = false
+                    onDissolve()
+                }) { Text("Dissolve") }
+            },
+            dismissButton = {
+                TextButton(onClick = { dissolveDialogVisible = false }) { Text("Cancel") }
+            },
+        )
     }
     if (apiKeyDialogVisible) {
         AlertDialog(
@@ -995,6 +1202,14 @@ private fun ReaderScreen(
                                     onOpenTerminal()
                                 },
                             )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("Dissolve session", color = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    menuExpanded = false
+                                    dissolveDialogVisible = true
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text("Dictation API key") },
                                 onClick = {
@@ -1148,11 +1363,22 @@ private fun ReaderScreen(
             }
             val failure = reader.status as? ReaderStatus.Failed
             if (failure != null) {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(failure.message, color = MaterialTheme.colorScheme.onErrorContainer)
-                        Text("Reconnecting automatically…", style = MaterialTheme.typography.labelSmall)
-                    }
+                Row(
+                    Modifier
+                        .background(
+                            MaterialTheme.colorScheme.errorContainer,
+                            RoundedCornerShape(8.dp),
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    CircularProgressIndicator(Modifier.size(11.dp), strokeWidth = 1.5.dp)
+                    Text(
+                        "Disconnected · retrying",
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
                 }
             }
             BoxWithConstraints(
@@ -1542,22 +1768,33 @@ private fun relativeTime(epochSeconds: Long): String {
     ).toString()
 }
 
+private fun tomorrowMorningEpochSeconds(): Long = ZonedDateTime.now()
+    .plusDays(1)
+    .withHour(8)
+    .withMinute(0)
+    .withSecond(0)
+    .withNano(0)
+    .toEpochSecond()
+
 /**
  * Detects a sideways flick before the terminal sees it. The terminal consumes touches for
  * scrolling and selection, so this watches the initial pass and only claims the gesture once
  * the drag is clearly horizontal, leaving vertical scrolling untouched.
  */
-private fun Modifier.horizontalSwipe(onSwipe: (Int) -> Unit) = pointerInput(onSwipe) {
+private fun Modifier.horizontalSwipe(
+    onSwipe: (Int) -> Unit,
+    eventPass: PointerEventPass = PointerEventPass.Initial,
+) = pointerInput(onSwipe, eventPass) {
     val threshold = 72.dp.toPx()
     awaitPointerEventScope {
         while (true) {
-            val first = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.pressed }
+            val first = awaitPointerEvent(eventPass).changes.firstOrNull { it.pressed }
                 ?: continue
             var totalX = 0f
             var totalY = 0f
             var claimed = false
             while (true) {
-                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val event = awaitPointerEvent(eventPass)
                 val change = event.changes.firstOrNull { it.id == first.id } ?: break
                 if (!change.pressed) break
                 totalX += change.positionChange().x

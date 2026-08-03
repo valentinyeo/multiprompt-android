@@ -63,4 +63,16 @@ class TmuxCommandsTest {
         assertTrue(command.contains("tmux new-session -d -s 'shell-work' -c '/srv/work'"))
         assertFalse(command.contains("claude"))
     }
+
+    @Test
+    fun dissolveTargetsExactlyOneQuotedSession() {
+        assertEquals(
+            "tmux kill-session -t '=work'",
+            TmuxCommands.dissolveSession("work"),
+        )
+        assertEquals(
+            "tmux kill-session -t '=a'\"'\"'; reboot'",
+            TmuxCommands.dissolveSession("a'; reboot"),
+        )
+    }
 }

@@ -34,6 +34,31 @@ class WorkspaceStore(context: Context) {
         save(load().filterNot { it.id == workspace.id } + workspace)
     }
 
+    fun ordered(
+        workspaces: List<Workspace>,
+        sessionCounts: Map<String, Int>,
+    ): List<Workspace> = orderWorkspaces(workspaces, sessionCounts, loadSplitOrder())
+
+    fun moveSplit(workspaces: List<Workspace>, workspaceId: String, delta: Int): List<Workspace> {
+        val currentIndex = workspaces.indexOfFirst { it.id == workspaceId }
+        if (currentIndex < 0) return workspaces
+        val targetIndex = (currentIndex + delta).coerceIn(workspaces.indices)
+        if (targetIndex == currentIndex) return workspaces
+        val reordered = workspaces.toMutableList().apply {
+            add(targetIndex, removeAt(currentIndex))
+        }
+        saveSplitOrder(reordered.map { it.id })
+        return reordered
+    }
+
+    fun resetSplitOrder(
+        workspaces: List<Workspace>,
+        sessionCounts: Map<String, Int>,
+    ): List<Workspace> {
+        preferences.edit().remove(KEY_SPLIT_ORDER).apply()
+        return orderWorkspaces(workspaces, sessionCounts, null)
+    }
+
     fun discover(sessions: List<TmuxSession>): List<Workspace> {
         val current = load().toMutableList()
         var changed = false
@@ -82,7 +107,30 @@ class WorkspaceStore(context: Context) {
             .filterValues { it !in validIds }
             .keys
             .forEach(editor::remove)
+        loadSplitOrder()?.let { order ->
+            editor.putString(KEY_SPLIT_ORDER, encodeIds(order.filter { it in validIds }))
+        }
         editor.putString(KEY_WORKSPACES, encode(remaining)).apply()
+    }
+
+    private fun loadSplitOrder(): List<String>? {
+        val raw = preferences.getString(KEY_SPLIT_ORDER, null) ?: return null
+        return runCatching {
+            val array = JSONArray(raw)
+            buildList {
+                for (index in 0 until array.length()) add(array.getString(index))
+            }
+        }.getOrNull()
+    }
+
+    private fun saveSplitOrder(ids: List<String>) {
+        preferences.edit().putString(KEY_SPLIT_ORDER, encodeIds(ids)).apply()
+    }
+
+    private fun encodeIds(ids: List<String>): String {
+        val array = JSONArray()
+        ids.forEach(array::put)
+        return array.toString()
     }
 
     private fun save(workspaces: List<Workspace>) {
@@ -105,7 +153,23 @@ class WorkspaceStore(context: Context) {
 
     companion object {
         private const val KEY_WORKSPACES = "workspaces_json"
+        private const val KEY_SPLIT_ORDER = "split_order_json"
         private const val ASSIGNMENT_PREFIX = "assignment::"
+
+        internal fun orderWorkspaces(
+            workspaces: List<Workspace>,
+            sessionCounts: Map<String, Int>,
+            manualOrder: List<String>?,
+        ): List<Workspace> {
+            val automatic = compareByDescending<Workspace> { sessionCounts[it.id] ?: 0 }
+                .thenBy { it.name.lowercase() }
+            if (manualOrder == null) return workspaces.sortedWith(automatic)
+
+            val byId = workspaces.associateBy { it.id }
+            val manuallyOrdered = manualOrder.mapNotNull(byId::get)
+            val included = manuallyOrdered.mapTo(mutableSetOf()) { it.id }
+            return manuallyOrdered + workspaces.filterNot { it.id in included }.sortedWith(automatic)
+        }
 
         fun projectRoot(rawPath: String): String? {
             val path = rawPath.trim().trimEnd('/')

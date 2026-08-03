@@ -48,6 +48,7 @@ data class AppUiState(
     val showingArchivedSessions: Boolean = false,
     val workspaces: List<Workspace> = emptyList(),
     val selectedWorkspaceId: String? = null,
+    val workspaceSelectionInitialized: Boolean = false,
     val sessionWorkspaceIds: Map<String, String> = emptyMap(),
     val creatingSession: Boolean = false,
     val sessionActionError: String? = null,
@@ -65,7 +66,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val screencast: ScreencastUploader = app.screencastUploader
 
     private val _state = MutableStateFlow(
-        AppUiState(hosts = hosts.load(), workspaces = workspaceStore.load()),
+        AppUiState(
+            hosts = hosts.load(),
+            workspaces = workspaceStore.ordered(workspaceStore.load(), emptyMap()),
+        ),
     )
     val state: StateFlow<AppUiState> = _state.asStateFlow()
 
@@ -224,6 +228,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val archivedKeys = sessions
                     .filter(sessionReads::isArchived)
                     .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) }
+                val orderedWorkspaces = workspaceStore.ordered(
+                    workspaces,
+                    sessionWorkspaceIds.values.groupingBy { it }.eachCount(),
+                )
+                val selectedWorkspaceId = when {
+                    !current.workspaceSelectionInitialized -> orderedWorkspaces.firstOrNull()?.id
+                    current.selectedWorkspaceId == null -> null
+                    orderedWorkspaces.any { it.id == current.selectedWorkspaceId } ->
+                        current.selectedWorkspaceId
+                    else -> orderedWorkspaces.firstOrNull()?.id
+                }
                 current.copy(
                     sessions = sessions,
                     readerSession = current.readerSession?.let { open ->
@@ -243,7 +258,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         .filter(sessionReads::isUnread)
                         .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) },
                     archivedSessionKeys = archivedKeys,
-                    workspaces = workspaces,
+                    workspaces = orderedWorkspaces,
+                    selectedWorkspaceId = selectedWorkspaceId,
+                    workspaceSelectionInitialized = orderedWorkspaces.isNotEmpty() ||
+                        current.workspaceSelectionInitialized,
                     sessionWorkspaceIds = sessionWorkspaceIds,
                     refreshing = false,
                 )
@@ -297,6 +315,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun archiveSessionUntil(session: TmuxSession, resumeAtEpochSeconds: Long?) {
+        sessionReads.archiveUntil(session, resumeAtEpochSeconds)
+        val key = SessionReadStore.key(session.hostId, session.name)
+        _state.update {
+            it.copy(
+                archivedSessionKeys = it.archivedSessionKeys + key,
+                unreadSessionKeys = it.unreadSessionKeys - key,
+            )
+        }
+    }
+
     fun restoreSession(session: TmuxSession) {
         sessionReads.restore(session)
         val key = SessionReadStore.key(session.hostId, session.name)
@@ -308,11 +337,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectWorkspace(workspaceId: String?) {
-        _state.update { it.copy(selectedWorkspaceId = workspaceId) }
+        _state.update {
+            it.copy(selectedWorkspaceId = workspaceId, workspaceSelectionInitialized = true)
+        }
+    }
+
+    fun moveWorkspaceSplit(workspaceId: String, delta: Int) {
+        _state.update { current ->
+            current.copy(workspaces = workspaceStore.moveSplit(current.workspaces, workspaceId, delta))
+        }
+    }
+
+    fun resetWorkspaceSplitOrder() {
+        _state.update { current ->
+            current.copy(
+                workspaces = workspaceStore.resetSplitOrder(
+                    current.workspaces,
+                    current.sessionWorkspaceIds.values.groupingBy { it }.eachCount(),
+                ),
+            )
+        }
     }
 
     fun openAdjacentWorkspace(delta: Int) {
-        val splits = listOf<String?>(null) + _state.value.workspaces.map { it.id }
+        val splits = _state.value.workspaces.map { it.id as String? } + null
         if (splits.size < 2) return
         val current = splits.indexOf(_state.value.selectedWorkspaceId).coerceAtLeast(0)
         selectWorkspace(splits[Math.floorMod(current + delta, splits.size)])
@@ -332,8 +380,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         workspaceStore.upsert(workspace)
         _state.update {
             it.copy(
-                workspaces = workspaceStore.load(),
+                workspaces = workspaceStore.ordered(
+                    workspaceStore.load(),
+                    it.sessionWorkspaceIds.values.groupingBy { id -> id }.eachCount(),
+                ),
                 selectedWorkspaceId = workspace.id,
+                workspaceSelectionInitialized = true,
                 sessionActionError = null,
             )
         }
@@ -343,7 +395,68 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun moveSession(session: TmuxSession, workspace: Workspace) {
         workspaceStore.assign(session, workspace.id)
         val key = SessionReadStore.key(session.hostId, session.name)
-        _state.update { it.copy(sessionWorkspaceIds = it.sessionWorkspaceIds + (key to workspace.id)) }
+        _state.update {
+            val assignments = it.sessionWorkspaceIds + (key to workspace.id)
+            it.copy(
+                sessionWorkspaceIds = assignments,
+                workspaces = workspaceStore.ordered(
+                    it.workspaces,
+                    assignments.values.groupingBy { id -> id }.eachCount(),
+                ),
+            )
+        }
+    }
+
+    fun readerFontScale(session: TmuxSession): Float = sessionReads.fontScale(session)
+
+    fun saveReaderFontScale(session: TmuxSession, scale: Float) {
+        sessionReads.setFontScale(session, scale)
+    }
+
+    fun dissolveSession(session: TmuxSession) {
+        val host = _state.value.hosts.firstOrNull { it.id == session.hostId }
+        if (host == null) {
+            _state.update { it.copy(sessionActionError = "The session VPS is missing") }
+            return
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(sessionActionError = null) }
+            runCatching { ssh.dissolveSession(host, session.name) }
+                .onSuccess {
+                    val key = SessionReadStore.key(session.hostId, session.name)
+                    val readerWasOpen = _state.value.readerSession?.let {
+                        it.hostId == session.hostId && it.name == session.name
+                    } == true
+                    val terminalWasOpen = _state.value.terminalSession?.let {
+                        it.hostId == session.hostId && it.name == session.name
+                    } == true
+                    if (readerWasOpen) _state.value.reader?.close()
+                    if (terminalWasOpen) _state.value.terminal?.close()
+                    sessionReads.restore(session)
+                    _state.update {
+                        it.copy(
+                            sessions = it.sessions.filterNot { candidate ->
+                                candidate.hostId == session.hostId && candidate.name == session.name
+                            },
+                            reader = if (readerWasOpen) null else it.reader,
+                            readerSession = if (readerWasOpen) null else it.readerSession,
+                            terminal = if (terminalWasOpen) null else it.terminal,
+                            terminalSession = if (terminalWasOpen) null else it.terminalSession,
+                            unreadSessionKeys = it.unreadSessionKeys - key,
+                            archivedSessionKeys = it.archivedSessionKeys - key,
+                            sessionWorkspaceIds = it.sessionWorkspaceIds - key,
+                        )
+                    }
+                    refresh()
+                }
+                .onFailure { throwable ->
+                    _state.update {
+                        it.copy(
+                            sessionActionError = throwable.message ?: "Could not dissolve the session",
+                        )
+                    }
+                }
+        }
     }
 
     fun createClaudeSession(workspace: Workspace) {
