@@ -15,6 +15,9 @@ available as a fallback. The app does not require Tailscale or a second app.
 4. Tap a tmux session to read its recent output and send prompts. Use **Open
    live terminal** only when the reader actions are insufficient; the phone
    never changes the desktop tmux dimensions.
+5. Tap the microphone to enable Deepgram dictation. Paste the API key once;
+   the app encrypts it with Android Keystore and keeps it off GitHub and out of
+   release APK configuration.
 
 The app uses public-key authentication only. It does not accept an unverified
 host key, expose an arbitrary remote-command box, or copy MP's Windows-local

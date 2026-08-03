@@ -1,7 +1,9 @@
 package dev.multiprompt.companion.ui
 
+import android.Manifest
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
@@ -42,7 +44,9 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.AlertDialog
@@ -69,6 +73,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -86,6 +91,7 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -106,6 +112,8 @@ import dev.multiprompt.companion.MainViewModel
 import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
+import dev.multiprompt.companion.dictation.DeepgramDictation
+import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.data.SessionReadStore
@@ -154,6 +162,7 @@ fun MultipromptApp(viewModel: MainViewModel) {
     if (reader != null && readerSession != null) {
         ReaderScreen(
             connection = reader,
+            dictation = viewModel.dictation,
             session = readerSession,
             hostLabel = state.hosts.firstOrNull { it.id == readerSession.hostId }?.label.orEmpty(),
             unread = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.unreadSessionKeys,
@@ -393,6 +402,7 @@ private fun SessionCard(session: TmuxSession, unread: Boolean, onClick: () -> Un
 @Composable
 private fun ReaderScreen(
     connection: SessionReaderConnection,
+    dictation: DeepgramDictation,
     session: TmuxSession,
     hostLabel: String,
     unread: Boolean,
@@ -401,12 +411,43 @@ private fun ReaderScreen(
     onOpenTerminal: () -> Unit,
 ) {
     val reader by connection.state.collectAsState()
+    val dictationState by dictation.state.collectAsState()
     var prompt by remember(connection) { mutableStateOf("") }
     var pendingPromptAction by remember(connection) { mutableStateOf<Long?>(null) }
     var menuExpanded by remember(connection) { mutableStateOf(false) }
+    var apiKeyDialogVisible by remember(connection) { mutableStateOf(false) }
+    var apiKeyDraft by remember(connection) { mutableStateOf("") }
+    var apiKeyError by remember(connection) { mutableStateOf<String?>(null) }
+    var microphoneError by remember(connection) { mutableStateOf<String?>(null) }
+    var dictationPrefix by remember(connection) { mutableStateOf("") }
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
     var initialScrollComplete by remember(connection) { mutableStateOf(false) }
+    val context = LocalContext.current
+    val dictationActive = dictationState.status == DictationStatus.CONNECTING ||
+        dictationState.status == DictationStatus.LISTENING ||
+        dictationState.status == DictationStatus.FINISHING
+    val microphonePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            microphoneError = null
+            dictation.start()
+        } else {
+            microphoneError = "Microphone permission is required for dictation"
+        }
+    }
+    val startDictation = {
+        dictationPrefix = prompt.trimEnd()
+        microphoneError = null
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            dictation.start()
+        } else {
+            microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
 
     LaunchedEffect(reader.output) {
         val followBottom = !initialScrollComplete ||
@@ -425,13 +466,81 @@ private fun ReaderScreen(
     LaunchedEffect(reader.actionError) {
         if (reader.actionError != null) pendingPromptAction = null
     }
+    LaunchedEffect(dictationState.transcript) {
+        val spoken = dictationState.transcript.trim()
+        if (spoken.isNotBlank()) {
+            prompt = listOf(dictationPrefix, spoken)
+                .filter(String::isNotBlank)
+                .joinToString(" ")
+        }
+    }
+    DisposableEffect(connection) {
+        onDispose { dictation.stop() }
+    }
     val submitPrompt = {
-        if (prompt.isNotBlank() && !reader.sending && pendingPromptAction == null) {
+        if (prompt.isNotBlank() &&
+            !reader.sending &&
+            pendingPromptAction == null &&
+            !dictationActive
+        ) {
             val actionCount = reader.completedActions
             if (connection.sendPrompt(prompt)) {
                 pendingPromptAction = actionCount
             }
         }
+    }
+    if (apiKeyDialogVisible) {
+        AlertDialog(
+            onDismissRequest = {
+                apiKeyDialogVisible = false
+                apiKeyDraft = ""
+                apiKeyError = null
+            },
+            title = { Text("Deepgram dictation") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("The key is encrypted with Android Keystore and stays on this device.")
+                    OutlinedTextField(
+                        value = apiKeyDraft,
+                        onValueChange = {
+                            apiKeyDraft = it
+                            apiKeyError = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(if (dictationState.configured) "Replacement API key" else "API key") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        visualTransformation = PasswordVisualTransformation(),
+                        isError = apiKeyError != null,
+                        supportingText = apiKeyError?.let { message -> { Text(message) } },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = apiKeyDraft.isNotBlank(),
+                    onClick = {
+                        if (dictation.saveApiKey(apiKeyDraft)) {
+                            apiKeyDialogVisible = false
+                            apiKeyDraft = ""
+                            apiKeyError = null
+                            startDictation()
+                        } else {
+                            apiKeyError = "Enter a valid API key"
+                        }
+                    },
+                ) { Text("Save and dictate") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        apiKeyDialogVisible = false
+                        apiKeyDraft = ""
+                        apiKeyError = null
+                    },
+                ) { Text("Cancel") }
+            },
+        )
     }
     BackHandler(onBack = onBack)
     Scaffold(
@@ -500,6 +609,15 @@ private fun ReaderScreen(
                                     onOpenTerminal()
                                 },
                             )
+                            DropdownMenuItem(
+                                text = { Text("Dictation API key") },
+                                onClick = {
+                                    menuExpanded = false
+                                    apiKeyDraft = ""
+                                    apiKeyError = null
+                                    apiKeyDialogVisible = true
+                                },
+                            )
                         }
                     }
                 },
@@ -525,36 +643,72 @@ private fun ReaderScreen(
                     shape = RoundedCornerShape(24.dp),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = { submitPrompt() }),
+                    readOnly = dictationActive,
                     trailingIcon = {
                         val sendEnabled = prompt.isNotBlank() &&
                             !reader.sending &&
-                            pendingPromptAction == null
-                        IconButton(
-                            onClick = submitPrompt,
-                            enabled = sendEnabled,
-                            modifier = Modifier
-                                .padding(2.dp)
-                                .background(
-                                    if (sendEnabled) MaterialTheme.colorScheme.primary else {
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                    },
-                                    CircleShape,
-                                ),
-                        ) {
-                            if (reader.sending) {
-                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                            } else {
-                                Icon(
-                                    Icons.Default.Send,
-                                    "Send prompt",
-                                    tint = if (sendEnabled) MaterialTheme.colorScheme.onPrimary else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                )
+                            pendingPromptAction == null &&
+                            !dictationActive
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = {
+                                    if (dictationActive) {
+                                        dictation.stop()
+                                    } else if (dictationState.configured) {
+                                        startDictation()
+                                    } else {
+                                        apiKeyDialogVisible = true
+                                    }
+                                },
+                                enabled = !reader.sending,
+                            ) {
+                                when (dictationState.status) {
+                                    DictationStatus.CONNECTING, DictationStatus.FINISHING -> {
+                                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                    }
+                                    DictationStatus.LISTENING -> {
+                                        Icon(Icons.Default.Stop, "Stop dictation")
+                                    }
+                                    else -> {
+                                        Icon(Icons.Default.Mic, "Start dictation")
+                                    }
+                                }
+                            }
+                            IconButton(
+                                onClick = submitPrompt,
+                                enabled = sendEnabled,
+                                modifier = Modifier
+                                    .padding(2.dp)
+                                    .background(
+                                        if (sendEnabled) MaterialTheme.colorScheme.primary else {
+                                            MaterialTheme.colorScheme.surfaceVariant
+                                        },
+                                        CircleShape,
+                                    ),
+                            ) {
+                                if (reader.sending) {
+                                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(
+                                        Icons.Default.Send,
+                                        "Send prompt",
+                                        tint = if (sendEnabled) MaterialTheme.colorScheme.onPrimary else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                    )
+                                }
                             }
                         }
                     },
                 )
+                (microphoneError ?: dictationState.error)?.let { message ->
+                    Text(
+                        message,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                }
                 reader.actionError?.let { message ->
                     Text(
                         message,

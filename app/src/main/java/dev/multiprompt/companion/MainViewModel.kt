@@ -7,6 +7,7 @@ import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.data.SessionReadStore
+import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.ssh.PresentedHostKey
 import dev.multiprompt.companion.ssh.SshProblem
@@ -47,6 +48,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val secrets = app.secretStore
     private val sessionReads = app.sessionReadStore
     private val ssh = app.sshRepository
+    val dictation: DeepgramDictation = app.deepgramDictation
     val updates: UpdateManager = app.updateManager
 
     private val _state = MutableStateFlow(AppUiState(hosts = hosts.load()))

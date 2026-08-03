@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A single Android app (`dev.multiprompt.companion`) that SSHes straight into public VPS hosts and provides a mobile reader for their tmux sessions. An embedded terminal remains an optional fallback. No Tailscale or companion desktop app. Kotlin + Jetpack Compose, Gradle version catalog, ConnectBot `sshlib` + `termlib` for transport and emulation.
+A single Android app (`dev.multiprompt.companion`) that SSHes straight into public VPS hosts and provides a mobile reader for their tmux sessions. An embedded terminal remains an optional fallback. Deepgram WebSocket dictation can fill the native composer. No Tailscale or companion desktop app. Kotlin + Jetpack Compose, Gradle version catalog, ConnectBot `sshlib` + `termlib` for transport and emulation, and OkHttp for dictation.
 
 ## Build and test
 
@@ -29,6 +29,7 @@ Data flow for the core feature:
 3. `SshRepository.listSessions` — one short-lived connection retrieves session metadata and encoded output previews through a fixed tmux command.
 4. `SessionReaderConnection` — one long-lived authenticated connection streams framed tmux snapshots. Send, Enter, and Interrupt each use a fresh short-lived connection so an action cannot disrupt the reader stream. Prompt content travels through SSH stdin into a tmux buffer, never through shell interpolation.
 5. `TerminalConnection` — its own long-lived PTY (`xterm-256color`) attaches with tmux `ignore-size`. The phone stays out of tmux's size calculation, so it cannot shrink the desktop pane.
+6. `DeepgramDictation` — streams 16 kHz mono PCM from `AudioRecord` to Deepgram and exposes interim/final transcript state. Its API key is stored only through `SecretStore`; never add it to Git, Gradle properties, `BuildConfig`, or release assets.
 
 ### Security invariants — do not relax these
 

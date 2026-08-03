@@ -97,6 +97,7 @@ dependencies {
     implementation(libs.androidx.compose.icons)
     implementation(libs.connectbot.terminal)
     implementation(libs.connectbot.ssh)
+    implementation(libs.okhttp)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)
