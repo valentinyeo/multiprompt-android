@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -90,6 +91,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -423,6 +425,14 @@ private fun ReaderScreen(
     LaunchedEffect(reader.actionError) {
         if (reader.actionError != null) pendingPromptAction = null
     }
+    val submitPrompt = {
+        if (prompt.isNotBlank() && !reader.sending && pendingPromptAction == null) {
+            val actionCount = reader.completedActions
+            if (connection.sendPrompt(prompt)) {
+                pendingPromptAction = actionCount
+            }
+        }
+    }
     BackHandler(onBack = onBack)
     Scaffold(
         topBar = {
@@ -513,15 +523,14 @@ private fun ReaderScreen(
                     minLines = 1,
                     maxLines = 6,
                     shape = RoundedCornerShape(24.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { submitPrompt() }),
                     trailingIcon = {
-                        val sendEnabled = prompt.isNotBlank() && !reader.sending
+                        val sendEnabled = prompt.isNotBlank() &&
+                            !reader.sending &&
+                            pendingPromptAction == null
                         IconButton(
-                            onClick = {
-                                val actionCount = reader.completedActions
-                                if (connection.sendPrompt(prompt)) {
-                                    pendingPromptAction = actionCount
-                                }
-                            },
+                            onClick = submitPrompt,
                             enabled = sendEnabled,
                             modifier = Modifier
                                 .padding(2.dp)

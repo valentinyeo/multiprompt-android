@@ -134,7 +134,10 @@ class SshRepository(private val secrets: SecretStore) {
                         if (encoded.length > MAX_SNAPSHOT_HEX_CHARS) {
                             throw SshProblem.Connection("The tmux snapshot was unexpectedly large")
                         }
-                        onSnapshot(TmuxText.leftAligned(TmuxText.decodeHex(encoded)))
+                        val mobileOutput = TmuxText.withoutActiveComposer(
+                            TmuxText.leftAligned(TmuxText.decodeHex(encoded)),
+                        )
+                        onSnapshot(mobileOutput)
                     }
                 }
                 if (pending.length > MAX_SNAPSHOT_HEX_CHARS + TmuxCommands.SNAPSHOT_PREFIX.length) {
