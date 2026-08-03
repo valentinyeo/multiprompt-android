@@ -126,6 +126,13 @@ class DeepgramDictation(
     private fun startRecorder(activeSocket: WebSocket) {
         recordingJob?.cancel()
         recordingJob = scope.launch {
+            if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                fail("Microphone permission was removed")
+                activeSocket.cancel()
+                return@launch
+            }
             val minimum = AudioRecord.getMinBufferSize(
                 SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO,
@@ -136,13 +143,19 @@ class DeepgramDictation(
                 activeSocket.cancel()
                 return@launch
             }
-            val audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                maxOf(minimum, AUDIO_BUFFER_BYTES),
-            )
+            val audioRecord = try {
+                AudioRecord(
+                    MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                    SAMPLE_RATE,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    maxOf(minimum, AUDIO_BUFFER_BYTES),
+                )
+            } catch (_: SecurityException) {
+                fail("Microphone permission was removed")
+                activeSocket.cancel()
+                return@launch
+            }
             if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
                 audioRecord.release()
                 fail("The microphone could not be initialized")
