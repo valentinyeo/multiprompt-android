@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -166,9 +167,20 @@ fun MultipromptApp(viewModel: MainViewModel) {
             session = readerSession,
             hostLabel = state.hosts.firstOrNull { it.id == readerSession.hostId }?.label.orEmpty(),
             unread = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.unreadSessionKeys,
+            archived = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.archivedSessionKeys,
             onBack = viewModel::closeReader,
             onMarkRead = viewModel::markReaderRead,
+            onArchiveToggle = {
+                if (SessionReadStore.key(readerSession.hostId, readerSession.name) in
+                    state.archivedSessionKeys
+                ) {
+                    viewModel.restoreSession(readerSession)
+                } else {
+                    viewModel.archiveReaderAndOpenNext()
+                }
+            },
             onOpenTerminal = { viewModel.openTerminal(readerSession) },
+            onSwitchSession = viewModel::openAdjacentReaderSession,
         )
         return
     }
@@ -229,10 +241,18 @@ fun MultipromptApp(viewModel: MainViewModel) {
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             when (state.section) {
-                AppSection.SESSIONS -> SessionsScreen(state, viewModel::openReader) {
-                    viewModel.select(AppSection.HOSTS)
-                    viewModel.showHostEditor()
-                }
+                AppSection.SESSIONS -> SessionsScreen(
+                    state = state,
+                    onOpen = viewModel::openReader,
+                    onArchive = viewModel::archiveSession,
+                    onRestore = viewModel::restoreSession,
+                    onMarkUnread = viewModel::markSessionUnread,
+                    onToggleArchived = viewModel::toggleArchivedSessions,
+                    onAddHost = {
+                        viewModel.select(AppSection.HOSTS)
+                        viewModel.showHostEditor()
+                    },
+                )
                 AppSection.HOSTS -> HostsScreen(
                     state = state,
                     onEdit = viewModel::showHostEditor,
@@ -321,6 +341,10 @@ private fun UpdateBanner(release: UpdateRelease, onInstall: () -> Unit) {
 private fun SessionsScreen(
     state: AppUiState,
     onOpen: (TmuxSession) -> Unit,
+    onArchive: (TmuxSession) -> Unit,
+    onRestore: (TmuxSession) -> Unit,
+    onMarkUnread: (TmuxSession) -> Unit,
+    onToggleArchived: () -> Unit,
     onAddHost: () -> Unit,
 ) {
     if (state.hosts.isEmpty()) {
@@ -332,6 +356,28 @@ private fun SessionsScreen(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        item(key = "inbox-filter") {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    if (state.showingArchivedSessions) "Archived" else "Inbox",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onToggleArchived) {
+                    Text(
+                        if (state.showingArchivedSessions) {
+                            "Back to inbox"
+                        } else {
+                            "Archived (${state.archivedSessionKeys.size})"
+                        },
+                    )
+                }
+            }
+        }
         state.hosts.forEach { host ->
             item(key = "heading-${host.id}") {
                 Text(host.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -340,12 +386,23 @@ private fun SessionsScreen(
             if (error != null) {
                 item(key = "error-${host.id}") { InlineError(error) }
             }
-            val sessions = state.sessions.filter { it.hostId == host.id }
+            val sessions = state.sessions.filter { session ->
+                val key = SessionReadStore.key(session.hostId, session.name)
+                session.hostId == host.id &&
+                    (key in state.archivedSessionKeys) == state.showingArchivedSessions
+            }
             items(sessions, key = { "${it.hostId}:${it.name}" }) { session ->
+                val key = SessionReadStore.key(session.hostId, session.name)
                 SessionCard(
                     session = session,
-                    unread = SessionReadStore.key(session.hostId, session.name) in state.unreadSessionKeys,
-                ) { onOpen(session) }
+                    unread = key in state.unreadSessionKeys,
+                    archived = key in state.archivedSessionKeys,
+                    onClick = { onOpen(session) },
+                    onArchiveToggle = {
+                        if (key in state.archivedSessionKeys) onRestore(session) else onArchive(session)
+                    },
+                    onMarkUnread = { onMarkUnread(session) },
+                )
             }
             if (sessions.isEmpty() && error == null && !state.refreshing) {
                 item(key = "empty-${host.id}") {
@@ -357,7 +414,15 @@ private fun SessionsScreen(
 }
 
 @Composable
-private fun SessionCard(session: TmuxSession, unread: Boolean, onClick: () -> Unit) {
+private fun SessionCard(
+    session: TmuxSession,
+    unread: Boolean,
+    archived: Boolean,
+    onClick: () -> Unit,
+    onArchiveToggle: () -> Unit,
+    onMarkUnread: () -> Unit,
+) {
+    var menuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
         Column(
             Modifier.fillMaxWidth().padding(14.dp),
@@ -383,6 +448,32 @@ private fun SessionCard(session: TmuxSession, unread: Boolean, onClick: () -> Un
                 if (session.attachedClients > 0) {
                     Text("LIVE ${session.attachedClients}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
                 }
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(Icons.Default.MoreVert, "Thread actions")
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(if (archived) "Return to inbox" else "Archive") },
+                            onClick = {
+                                menuExpanded = false
+                                onArchiveToggle()
+                            },
+                        )
+                        if (!unread && !archived) {
+                            DropdownMenuItem(
+                                text = { Text("Mark unread") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onMarkUnread()
+                                },
+                            )
+                        }
+                    }
+                }
             }
             if (session.preview.isNotBlank()) {
                 Text(
@@ -406,9 +497,12 @@ private fun ReaderScreen(
     session: TmuxSession,
     hostLabel: String,
     unread: Boolean,
+    archived: Boolean,
     onBack: () -> Unit,
     onMarkRead: () -> Unit,
+    onArchiveToggle: () -> Unit,
     onOpenTerminal: () -> Unit,
+    onSwitchSession: (Int) -> Unit,
 ) {
     val reader by connection.state.collectAsState()
     val dictationState by dictation.state.collectAsState()
@@ -420,8 +514,10 @@ private fun ReaderScreen(
     var apiKeyError by remember(connection) { mutableStateOf<String?>(null) }
     var microphoneError by remember(connection) { mutableStateOf<String?>(null) }
     var dictationPrefix by remember(connection) { mutableStateOf("") }
+    var sendAfterDictation by remember(connection) { mutableStateOf(false) }
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
+    val readerTextMeasurer = rememberTextMeasurer()
     var initialScrollComplete by remember(connection) { mutableStateOf(false) }
     val context = LocalContext.current
     val dictationActive = dictationState.status == DictationStatus.CONNECTING ||
@@ -475,18 +571,52 @@ private fun ReaderScreen(
         }
     }
     DisposableEffect(connection) {
-        onDispose { dictation.stop() }
+        // Dictation belongs to this chat. Cancelling and clearing it prevents a late Deepgram
+        // result from becoming the draft of the next chat.
+        onDispose { dictation.discard() }
     }
-    val submitPrompt = {
+    val sendCurrentPrompt = {
         if (prompt.isNotBlank() &&
             !reader.sending &&
-            pendingPromptAction == null &&
-            !dictationActive
+            pendingPromptAction == null
         ) {
             val actionCount = reader.completedActions
             if (connection.sendPrompt(prompt)) {
                 pendingPromptAction = actionCount
             }
+        }
+    }
+    val submitPrompt = {
+        if (!reader.sending && pendingPromptAction == null) {
+            if (dictationActive) {
+                sendAfterDictation = true
+                dictation.stop()
+            } else {
+                sendCurrentPrompt()
+            }
+        }
+    }
+    LaunchedEffect(dictationState.status, sendAfterDictation) {
+        if (!sendAfterDictation) return@LaunchedEffect
+        when (dictationState.status) {
+            DictationStatus.IDLE -> {
+                val finalPrompt = listOf(dictationPrefix, dictationState.transcript.trim())
+                    .filter(String::isNotBlank)
+                    .joinToString(" ")
+                prompt = finalPrompt
+                sendAfterDictation = false
+                if (finalPrompt.isNotBlank() &&
+                    !reader.sending &&
+                    pendingPromptAction == null
+                ) {
+                    val actionCount = reader.completedActions
+                    if (connection.sendPrompt(finalPrompt)) {
+                        pendingPromptAction = actionCount
+                    }
+                }
+            }
+            DictationStatus.FAILED -> sendAfterDictation = false
+            else -> Unit
         }
     }
     if (apiKeyDialogVisible) {
@@ -544,6 +674,7 @@ private fun ReaderScreen(
     }
     BackHandler(onBack = onBack)
     Scaffold(
+        modifier = Modifier.horizontalSwipe(onSwitchSession),
         topBar = {
             TopAppBar(
                 modifier = Modifier.statusBarsPadding(),
@@ -603,6 +734,13 @@ private fun ReaderScreen(
                                 },
                             )
                             DropdownMenuItem(
+                                text = { Text(if (archived) "Return to inbox" else "Archive and open next") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onArchiveToggle()
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Open live terminal") },
                                 onClick = {
                                     menuExpanded = false
@@ -645,10 +783,10 @@ private fun ReaderScreen(
                     keyboardActions = KeyboardActions(onSend = { submitPrompt() }),
                     readOnly = dictationActive,
                     trailingIcon = {
-                        val sendEnabled = prompt.isNotBlank() &&
-                            !reader.sending &&
+                        val sendEnabled = !reader.sending &&
                             pendingPromptAction == null &&
-                            !dictationActive
+                            !sendAfterDictation &&
+                            (prompt.isNotBlank() || dictationActive)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(
                                 onClick = {
@@ -686,7 +824,7 @@ private fun ReaderScreen(
                                         CircleShape,
                                     ),
                             ) {
-                                if (reader.sending) {
+                                if (reader.sending || sendAfterDictation) {
                                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                                 } else {
                                     Icon(
@@ -744,18 +882,40 @@ private fun ReaderScreen(
                     }
                 }
             }
-            SelectionContainer {
-                Text(
-                    reader.output.ifBlank {
-                        if (failure == null && reader.status != ReaderStatus.Connecting) "No recent output" else ""
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    fontFamily = ReaderFontFamily,
-                    fontSize = 12.sp,
-                    lineHeight = 17.sp,
-                    textAlign = TextAlign.Start,
-                    softWrap = true,
-                )
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val paneColumns = session.columns.takeIf { it > 0 } ?: FALLBACK_COLUMNS
+                val availableWidth = maxWidth
+                val transcriptFontSize = remember(availableWidth, density, paneColumns) {
+                    val sampleSizeSp = 100f
+                    val sampleLength = 20
+                    val charWidthPx = readerTextMeasurer.measure(
+                        AnnotatedString("0".repeat(sampleLength)),
+                        TextStyle(fontFamily = ReaderFontFamily, fontSize = sampleSizeSp.sp),
+                    ).size.width / sampleLength.toFloat()
+                    val availableWidthPx = with(density) { availableWidth.toPx() }
+                    // Fit one complete tmux row. Without this, desktop-width rows wrap a
+                    // second time on Android and alternate between full and partial lines.
+                    (sampleSizeSp * availableWidthPx / (paneColumns * charWidthPx) * 0.97f)
+                        .coerceIn(4f, 12f)
+                        .sp
+                }
+                SelectionContainer {
+                    Text(
+                        reader.output.ifBlank {
+                            if (failure == null && reader.status != ReaderStatus.Connecting) {
+                                "No recent output"
+                            } else {
+                                ""
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        fontFamily = ReaderFontFamily,
+                        fontSize = transcriptFontSize,
+                        lineHeight = (transcriptFontSize.value * 1.3f).sp,
+                        textAlign = TextAlign.Start,
+                        softWrap = true,
+                    )
+                }
             }
         }
     }

@@ -123,6 +123,19 @@ class DeepgramDictation(
         }
     }
 
+    /** Drops an in-progress recording and its transcript when its owning chat closes. */
+    @Synchronized
+    fun discard() {
+        val configured = _state.value.configured
+        finishingJob?.cancel()
+        finishingJob = null
+        stopRecorder()
+        socket?.cancel()
+        socket = null
+        synchronized(finalSegments) { finalSegments.clear() }
+        _state.value = DictationState(configured = configured)
+    }
+
     private fun startRecorder(activeSocket: WebSocket) {
         recordingJob?.cancel()
         recordingJob = scope.launch {

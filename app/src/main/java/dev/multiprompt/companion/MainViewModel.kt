@@ -16,6 +16,7 @@ import dev.multiprompt.companion.update.UpdateManager
 import dev.multiprompt.companion.update.UpdateRelease
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,6 +41,8 @@ data class AppUiState(
     val reader: SessionReaderConnection? = null,
     val readerSession: TmuxSession? = null,
     val unreadSessionKeys: Set<String> = emptySet(),
+    val archivedSessionKeys: Set<String> = emptySet(),
+    val showingArchivedSessions: Boolean = false,
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -57,6 +60,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         updates.check()
         if (_state.value.hosts.isNotEmpty()) refresh()
+        viewModelScope.launch {
+            while (true) {
+                delay(SESSION_REFRESH_INTERVAL_MS)
+                if (_state.value.hosts.isNotEmpty()) refresh()
+            }
+        }
     }
 
     fun select(section: AppSection) {
@@ -193,6 +202,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }.awaitAll()
             _state.update { current ->
                 val sessions = results.flatMap { it.sessions }
+                val archivedKeys = sessions
+                    .filter(sessionReads::isArchived)
+                    .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) }
                 current.copy(
                     sessions = sessions,
                     hostErrors = results.mapNotNull { result ->
@@ -202,8 +214,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         result.hostKey?.let { result.hostId to it }
                     }.toMap(),
                     unreadSessionKeys = sessions
+                        .filter { SessionReadStore.key(it.hostId, it.name) !in archivedKeys }
                         .filter(sessionReads::isUnread)
                         .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) },
+                    archivedSessionKeys = archivedKeys,
                     refreshing = false,
                 )
             }
@@ -212,6 +226,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openReader(session: TmuxSession) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
+        sessionReads.markRead(session)
+        val key = SessionReadStore.key(session.hostId, session.name)
         _state.value.terminal?.close()
         _state.value.reader?.close()
         val reader = SessionReaderConnection(
@@ -225,6 +241,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 terminalSession = null,
                 reader = reader,
                 readerSession = session,
+                unreadSessionKeys = it.unreadSessionKeys - key,
             )
         }
     }
@@ -236,9 +253,69 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(unreadSessionKeys = it.unreadSessionKeys - key) }
     }
 
+    fun markSessionUnread(session: TmuxSession) {
+        sessionReads.markUnread(session)
+        val key = SessionReadStore.key(session.hostId, session.name)
+        _state.update { it.copy(unreadSessionKeys = it.unreadSessionKeys + key) }
+    }
+
+    fun archiveSession(session: TmuxSession) {
+        sessionReads.archive(session)
+        val key = SessionReadStore.key(session.hostId, session.name)
+        _state.update {
+            it.copy(
+                archivedSessionKeys = it.archivedSessionKeys + key,
+                unreadSessionKeys = it.unreadSessionKeys - key,
+            )
+        }
+    }
+
+    fun restoreSession(session: TmuxSession) {
+        sessionReads.restore(session)
+        val key = SessionReadStore.key(session.hostId, session.name)
+        _state.update { it.copy(archivedSessionKeys = it.archivedSessionKeys - key) }
+    }
+
+    fun toggleArchivedSessions() {
+        _state.update { it.copy(showingArchivedSessions = !it.showingArchivedSessions) }
+    }
+
     fun closeReader() {
         _state.value.reader?.close()
         _state.update { it.copy(reader = null, readerSession = null) }
+    }
+
+    /** Archives the current thread and immediately advances through the remaining inbox. */
+    fun archiveReaderAndOpenNext() {
+        val current = _state.value.readerSession ?: return
+        val visible = _state.value.sessions.filter {
+            SessionReadStore.key(it.hostId, it.name) !in _state.value.archivedSessionKeys
+        }
+        val currentIndex = visible.indexOfFirst {
+            it.hostId == current.hostId && it.name == current.name
+        }
+        archiveSession(current)
+        val remaining = visible.filterNot {
+            it.hostId == current.hostId && it.name == current.name
+        }
+        if (remaining.isEmpty()) {
+            closeReader()
+        } else {
+            val nextIndex = if (currentIndex in remaining.indices) currentIndex else 0
+            openReader(remaining[nextIndex])
+        }
+    }
+
+    /** Swiping the reader sideways opens the neighbouring visible inbox session. */
+    fun openAdjacentReaderSession(delta: Int) {
+        val current = _state.value.readerSession ?: return
+        val sessions = _state.value.sessions.filter {
+            SessionReadStore.key(it.hostId, it.name) !in _state.value.archivedSessionKeys
+        }
+        if (sessions.size < 2) return
+        val index = sessions.indexOfFirst { it.hostId == current.hostId && it.name == current.name }
+        if (index < 0) return
+        openReader(sessions[Math.floorMod(index + delta, sessions.size)])
     }
 
     fun openTerminal(session: TmuxSession) {
@@ -296,5 +373,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val MAX_PRIVATE_KEY_BYTES = 256 * 1024
+        const val SESSION_REFRESH_INTERVAL_MS = 10_000L
     }
 }
