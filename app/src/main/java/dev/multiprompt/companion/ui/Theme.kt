@@ -4,6 +4,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import dev.multiprompt.companion.R
+
+val ReaderFontFamily = FontFamily(
+    Font(R.font.hack_regular, FontWeight.Normal),
+)
 
 private val MultipromptColors = darkColorScheme(
     primary = Color(0xFF7DD3FC),
@@ -24,4 +32,3 @@ private val MultipromptColors = darkColorScheme(
 fun MultipromptTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = MultipromptColors, content = content)
 }
-

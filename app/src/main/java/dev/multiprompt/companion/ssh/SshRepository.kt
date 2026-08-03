@@ -109,6 +109,48 @@ class SshRepository(private val secrets: SecretStore) {
         return result.stdout.trimEnd()
     }
 
+    suspend fun streamSession(
+        client: SshClient,
+        sessionName: String,
+        onSnapshot: (String) -> Unit,
+    ) = coroutineScope {
+        val session = client.openSession()
+            ?: throw SshProblem.Connection("The SSH server refused a reader channel")
+        try {
+            if (!session.requestExec(TmuxCommands.stream(sessionName))) {
+                throw SshProblem.Connection("The SSH server refused the tmux reader")
+            }
+            val err = async { session.stderr.drain() }
+            val pending = StringBuilder()
+            for (chunk in session.stdout) {
+                pending.append(chunk.toString(Charsets.UTF_8))
+                while (true) {
+                    val end = pending.indexOf("\n")
+                    if (end < 0) break
+                    val line = pending.substring(0, end).trimEnd('\r')
+                    pending.delete(0, end + 1)
+                    if (line.startsWith(TmuxCommands.SNAPSHOT_PREFIX)) {
+                        val encoded = line.removePrefix(TmuxCommands.SNAPSHOT_PREFIX)
+                        if (encoded.length > MAX_SNAPSHOT_HEX_CHARS) {
+                            throw SshProblem.Connection("The tmux snapshot was unexpectedly large")
+                        }
+                        onSnapshot(TmuxText.leftAligned(TmuxText.decodeHex(encoded)))
+                    }
+                }
+                if (pending.length > MAX_SNAPSHOT_HEX_CHARS + TmuxCommands.SNAPSHOT_PREFIX.length) {
+                    throw SshProblem.Connection("The tmux snapshot was unexpectedly large")
+                }
+            }
+            CommandResult(
+                stdout = "",
+                stderr = err.await(),
+                exit = session.exitInfo.await(),
+            ).requireSuccess("keep the session reader connected")
+        } finally {
+            session.close()
+        }
+    }
+
     suspend fun sendPrompt(client: SshClient, sessionName: String, prompt: String) {
         require(prompt.isNotBlank()) { "Enter a prompt first" }
         val bytes = prompt.toByteArray(Charsets.UTF_8)
@@ -222,5 +264,6 @@ class SshRepository(private val secrets: SecretStore) {
         const val CONNECTION_TIMEOUT_MS = 20_000L
         const val MAX_COMMAND_OUTPUT = 2 * 1024 * 1024
         const val MAX_PROMPT_BYTES = 64 * 1024
+        const val MAX_SNAPSHOT_HEX_CHARS = 256 * 1024
     }
 }

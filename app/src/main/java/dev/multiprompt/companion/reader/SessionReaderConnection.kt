@@ -10,14 +10,19 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.connectbot.sshlib.SshClient
 
 sealed interface ReaderStatus {
     data object Connecting : ReaderStatus
-    data object Ready : ReaderStatus
-    data object Working : ReaderStatus
+    data object Live : ReaderStatus
     data object Closed : ReaderStatus
     data class Failed(val message: String) : ReaderStatus
 }
@@ -25,6 +30,10 @@ sealed interface ReaderStatus {
 data class ReaderState(
     val output: String = "",
     val status: ReaderStatus = ReaderStatus.Connecting,
+    val sending: Boolean = false,
+    val actionError: String? = null,
+    val lastUpdatedAtMillis: Long = 0,
+    val completedActions: Long = 0,
 )
 
 class SessionReaderConnection(
@@ -33,64 +42,29 @@ class SessionReaderConnection(
     val tmuxSessionName: String,
 ) : AutoCloseable {
     private sealed interface Request {
-        data object Refresh : Request
         data class Prompt(val text: String) : Request
         data class Action(val action: TmuxAction) : Request
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val requests = Channel<Request>(Channel.UNLIMITED)
-    private val _state = kotlinx.coroutines.flow.MutableStateFlow(ReaderState())
-    val state: kotlinx.coroutines.flow.StateFlow<ReaderState> = _state
+    private val _state = MutableStateFlow(ReaderState())
+    val state: StateFlow<ReaderState> = _state.asStateFlow()
 
-    private var client: SshClient? = null
-    private var worker: Job? = null
+    private var streamClient: SshClient? = null
+    private var streamJob: Job? = null
+    private var actionJob: Job? = null
 
     fun start() {
-        if (worker != null) return
-        worker = scope.launch {
-            requests.send(Request.Refresh)
-            for (request in requests) {
-                _state.value = _state.value.copy(status = ReaderStatus.Working)
-                try {
-                    withTimeout(REQUEST_TIMEOUT_MS) {
-                        when (request) {
-                            Request.Refresh -> refreshOutput()
-                            is Request.Prompt -> {
-                                withClient(retry = false) {
-                                    repository.sendPrompt(it, tmuxSessionName, request.text)
-                                }
-                                refreshOutput()
-                            }
-                            is Request.Action -> {
-                                withClient(retry = false) {
-                                    repository.performAction(it, tmuxSessionName, request.action)
-                                }
-                                refreshOutput()
-                            }
-                        }
-                    }
-                    _state.value = _state.value.copy(status = ReaderStatus.Ready)
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (throwable: Throwable) {
-                    _state.value = _state.value.copy(
-                        status = ReaderStatus.Failed(
-                            throwable.message ?: throwable::class.java.simpleName,
-                        ),
-                    )
-                }
+        if (actionJob == null) {
+            actionJob = scope.launch {
+                for (request in requests) runAction(request)
             }
         }
+        startStream()
     }
 
-    fun refresh() {
-        requests.trySend(Request.Refresh)
-    }
-
-    fun sendPrompt(text: String) {
-        requests.trySend(Request.Prompt(text))
-    }
+    fun sendPrompt(text: String): Boolean = requests.trySend(Request.Prompt(text)).isSuccess
 
     fun sendEnter() {
         requests.trySend(Request.Action(TmuxAction.ENTER))
@@ -100,39 +74,106 @@ class SessionReaderConnection(
         requests.trySend(Request.Action(TmuxAction.INTERRUPT))
     }
 
-    private suspend fun refreshOutput() {
-        val output = withClient { repository.captureSession(it, tmuxSessionName) }
-        _state.value = _state.value.copy(output = output)
+    private fun startStream() {
+        if (streamJob?.isActive == true) return
+        streamJob = scope.launch {
+            while (isActive) {
+                _state.update { it.copy(status = ReaderStatus.Connecting) }
+                try {
+                    val connectedClient = withTimeout(CONNECT_TIMEOUT_MS) {
+                        repository.connect(host)
+                    }
+                    streamClient = connectedClient
+                    repository.streamSession(connectedClient, tmuxSessionName) { snapshot ->
+                        _state.update { current ->
+                            if (snapshot == current.output) {
+                                current.copy(
+                                    status = ReaderStatus.Live,
+                                    lastUpdatedAtMillis = System.currentTimeMillis(),
+                                )
+                            } else {
+                                current.copy(
+                                    output = snapshot,
+                                    status = ReaderStatus.Live,
+                                    lastUpdatedAtMillis = System.currentTimeMillis(),
+                                )
+                            }
+                        }
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (throwable: Throwable) {
+                    _state.update {
+                        it.copy(
+                            status = ReaderStatus.Failed(
+                                throwable.message ?: throwable::class.java.simpleName,
+                            ),
+                        )
+                    }
+                } finally {
+                    val oldClient = streamClient
+                    streamClient = null
+                    runCatching { oldClient?.disconnect() }
+                }
+                delay(RECONNECT_DELAY_MS)
+            }
+        }
     }
 
-    private suspend fun <T> withClient(
-        retry: Boolean = true,
-        block: suspend (SshClient) -> T,
-    ): T {
-        val first = client ?: repository.connect(host).also { client = it }
+    private suspend fun runAction(request: Request) {
+        _state.update { it.copy(sending = true, actionError = null) }
+        try {
+            withTimeout(REQUEST_TIMEOUT_MS) {
+                withFreshClient { client ->
+                    when (request) {
+                        is Request.Prompt -> repository.sendPrompt(
+                            client,
+                            tmuxSessionName,
+                            request.text,
+                        )
+                        is Request.Action -> repository.performAction(
+                            client,
+                            tmuxSessionName,
+                            request.action,
+                        )
+                    }
+                }
+            }
+            _state.update { it.copy(completedActions = it.completedActions + 1) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (throwable: Throwable) {
+            _state.update {
+                it.copy(actionError = throwable.message ?: throwable::class.java.simpleName)
+            }
+        } finally {
+            _state.update { it.copy(sending = false) }
+        }
+    }
+
+    private suspend fun <T> withFreshClient(block: suspend (SshClient) -> T): T {
+        val client = repository.connect(host)
         return try {
-            block(first)
-        } catch (firstFailure: Throwable) {
-            runCatching { first.disconnect() }
-            client = null
-            if (firstFailure is CancellationException) throw firstFailure
-            if (!retry) throw firstFailure
-            val replacement = repository.connect(host).also { client = it }
-            block(replacement)
+            block(client)
+        } finally {
+            runCatching { client.disconnect() }
         }
     }
 
     override fun close() {
-        _state.value = _state.value.copy(status = ReaderStatus.Closed)
+        _state.update { it.copy(status = ReaderStatus.Closed) }
         requests.close()
-        worker?.cancel()
-        val oldClient = client
-        client = null
+        streamJob?.cancel()
+        actionJob?.cancel()
+        val oldClient = streamClient
+        streamClient = null
         CoroutineScope(Dispatchers.IO).launch { runCatching { oldClient?.disconnect() } }
         scope.cancel()
     }
 
     private companion object {
+        const val CONNECT_TIMEOUT_MS = 20_000L
         const val REQUEST_TIMEOUT_MS = 20_000L
+        const val RECONNECT_DELAY_MS = 3_000L
     }
 }

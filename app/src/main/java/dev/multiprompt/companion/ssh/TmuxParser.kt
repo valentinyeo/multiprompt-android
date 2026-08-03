@@ -48,7 +48,9 @@ object TmuxParser {
         val sessions = mutableListOf<TmuxSession>()
         output.lineSequence().map(String::trimEnd).forEach { line ->
             if (line.startsWith(PREVIEW_PREFIX)) {
-                val preview = decodeHex(line.removePrefix(PREVIEW_PREFIX))
+                val preview = TmuxText.leftAligned(
+                    TmuxText.decodeHex(line.removePrefix(PREVIEW_PREFIX)),
+                )
                 if (sessions.isNotEmpty()) {
                     sessions[sessions.lastIndex] = sessions.last().copy(preview = preview)
                 }
@@ -76,14 +78,6 @@ object TmuxParser {
         return sessions.sortedWith(
             compareByDescending<TmuxSession> { it.lastActivityEpochSeconds }.thenBy { it.name },
         )
-    }
-
-    private fun decodeHex(value: String): String {
-        if (value.length % 2 != 0 || value.any { it.digitToIntOrNull(16) == null }) return ""
-        val bytes = ByteArray(value.length / 2) { index ->
-            value.substring(index * 2, index * 2 + 2).toInt(16).toByte()
-        }
-        return bytes.toString(Charsets.UTF_8).trim()
     }
 
     fun shellQuote(value: String): String = "'" + value.replace("'", "'\"'\"'") + "'"

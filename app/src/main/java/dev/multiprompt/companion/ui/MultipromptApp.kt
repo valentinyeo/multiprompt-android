@@ -8,6 +8,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -27,6 +30,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -36,6 +40,8 @@ import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.AlertDialog
@@ -44,6 +50,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -66,6 +74,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -83,6 +92,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -367,7 +377,7 @@ private fun SessionCard(session: TmuxSession, unread: Boolean, onClick: () -> Un
                 Text(
                     session.preview,
                     style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = ReaderFontFamily,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
@@ -389,8 +399,30 @@ private fun ReaderScreen(
     onOpenTerminal: () -> Unit,
 ) {
     val reader by connection.state.collectAsState()
-    val working = reader.status == ReaderStatus.Connecting || reader.status == ReaderStatus.Working
     var prompt by remember(connection) { mutableStateOf("") }
+    var pendingPromptAction by remember(connection) { mutableStateOf<Long?>(null) }
+    var menuExpanded by remember(connection) { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+    val density = LocalDensity.current
+    var initialScrollComplete by remember(connection) { mutableStateOf(false) }
+
+    LaunchedEffect(reader.output) {
+        val followBottom = !initialScrollComplete ||
+            scrollState.maxValue - scrollState.value < with(density) { 56.dp.roundToPx() }
+        withFrameNanos { }
+        if (followBottom) scrollState.scrollTo(scrollState.maxValue)
+        initialScrollComplete = true
+    }
+    LaunchedEffect(reader.completedActions) {
+        val pending = pendingPromptAction
+        if (pending != null && reader.completedActions > pending) {
+            prompt = ""
+            pendingPromptAction = null
+        }
+    }
+    LaunchedEffect(reader.actionError) {
+        if (reader.actionError != null) pendingPromptAction = null
+    }
     BackHandler(onBack = onBack)
     Scaffold(
         topBar = {
@@ -400,7 +432,7 @@ private fun ReaderScreen(
                     Column {
                         Text(session.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(
-                            "$hostLabel · ${session.agent.label}",
+                            "$hostLabel · ${session.agent.label} · ${readerStatusLabel(reader.status)}",
                             style = MaterialTheme.typography.labelSmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -410,84 +442,167 @@ private fun ReaderScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to sessions") }
                 },
+                actions = {
+                    if (reader.status == ReaderStatus.Live) {
+                        Box(
+                            Modifier
+                                .padding(end = 4.dp)
+                                .size(9.dp)
+                                .background(MaterialTheme.colorScheme.secondary, CircleShape),
+                        )
+                    }
+                    Box {
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(Icons.Default.MoreVert, "Session actions")
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Enter / approve") },
+                                enabled = !reader.sending,
+                                onClick = {
+                                    menuExpanded = false
+                                    connection.sendEnter()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Interrupt session") },
+                                enabled = !reader.sending,
+                                onClick = {
+                                    menuExpanded = false
+                                    connection.interrupt()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (unread) "Mark read" else "Already read") },
+                                enabled = unread,
+                                onClick = {
+                                    menuExpanded = false
+                                    onMarkRead()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Open live terminal") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onOpenTerminal()
+                                },
+                            )
+                        }
+                    }
+                },
             )
         },
         bottomBar = {
             Column(
-                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp).navigationBarsPadding(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .imePadding()
+                    .navigationBarsPadding(),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 OutlinedTextField(
                     value = prompt,
                     onValueChange = { prompt = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Prompt") },
-                    minLines = 2,
-                    maxLines = 5,
-                    enabled = !working,
+                    placeholder = { Text("Message this session") },
+                    minLines = 1,
+                    maxLines = 6,
+                    shape = RoundedCornerShape(24.dp),
+                    trailingIcon = {
+                        val sendEnabled = prompt.isNotBlank() && !reader.sending
+                        IconButton(
+                            onClick = {
+                                val actionCount = reader.completedActions
+                                if (connection.sendPrompt(prompt)) {
+                                    pendingPromptAction = actionCount
+                                }
+                            },
+                            enabled = sendEnabled,
+                            modifier = Modifier
+                                .padding(2.dp)
+                                .background(
+                                    if (sendEnabled) MaterialTheme.colorScheme.primary else {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    },
+                                    CircleShape,
+                                ),
+                        ) {
+                            if (reader.sending) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(
+                                    Icons.Default.Send,
+                                    "Send prompt",
+                                    tint = if (sendEnabled) MaterialTheme.colorScheme.onPrimary else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                )
+                            }
+                        }
+                    },
                 )
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            connection.sendPrompt(prompt)
-                            prompt = ""
-                        },
-                        modifier = Modifier.weight(1f),
-                        enabled = prompt.isNotBlank() && !working,
-                    ) { Text("Send") }
-                    OutlinedButton(onClick = connection::sendEnter, enabled = !working) { Text("Enter") }
-                    OutlinedButton(onClick = connection::interrupt, enabled = !working) { Text("Interrupt") }
+                reader.actionError?.let { message ->
+                    Text(
+                        message,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
                 }
             }
         },
     ) { padding ->
-        LazyColumn(
-            Modifier.padding(padding).fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+        Column(
+            Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.Start,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            item {
-                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = connection::refresh, enabled = !working) { Text("Refresh") }
-                        OutlinedButton(onClick = onMarkRead, enabled = unread) {
-                            Text(if (unread) "Mark read" else "Read")
-                        }
-                    }
-                    TextButton(onClick = onOpenTerminal) { Text("Open live terminal") }
-                }
-            }
-            if (working && reader.output.isBlank()) {
-                item {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                        Text("Reading recent output…")
-                    }
+            if (reader.status == ReaderStatus.Connecting && reader.output.isBlank()) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Text("Connecting to live output…")
                 }
             }
             val failure = reader.status as? ReaderStatus.Failed
             if (failure != null) {
-                item {
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(failure.message, color = MaterialTheme.colorScheme.onErrorContainer)
-                            TextButton(onClick = connection::refresh) { Text("Retry") }
-                        }
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(failure.message, color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text("Reconnecting automatically…", style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
-            item {
-                SelectionContainer {
-                    Text(
-                        reader.output.ifBlank { if (failure == null && !working) "No recent output" else "" },
-                        modifier = Modifier.fillMaxWidth(),
-                        fontFamily = FontFamily.Monospace,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
+            SelectionContainer {
+                Text(
+                    reader.output.ifBlank {
+                        if (failure == null && reader.status != ReaderStatus.Connecting) "No recent output" else ""
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    fontFamily = ReaderFontFamily,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
+                    textAlign = TextAlign.Start,
+                    softWrap = true,
+                )
             }
         }
     }
+}
+
+private fun readerStatusLabel(status: ReaderStatus): String = when (status) {
+    ReaderStatus.Connecting -> "Connecting"
+    ReaderStatus.Live -> "Live"
+    ReaderStatus.Closed -> "Closed"
+    is ReaderStatus.Failed -> "Reconnecting"
 }
 
 @Composable

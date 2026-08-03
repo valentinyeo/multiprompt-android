@@ -27,7 +27,7 @@ Data flow for the core feature:
 1. `HostStore` — host profiles in plain SharedPreferences (`hosts`), JSON-encoded. No secrets here, only a `keySecretId` / `passphraseSecretId` reference.
 2. `SecretStore` — private key bytes and passphrase, encrypted with a non-exportable Android Keystore AES key, stored in the `encrypted_secrets` prefs.
 3. `SshRepository.listSessions` — one short-lived connection retrieves session metadata and encoded output previews through a fixed tmux command.
-4. `SessionReaderConnection` — one reusable authenticated connection captures recent output and runs only Send, Enter, Interrupt, and Refresh operations. Prompt content travels through SSH stdin into a tmux buffer, never through shell interpolation.
+4. `SessionReaderConnection` — one long-lived authenticated connection streams framed tmux snapshots. Send, Enter, and Interrupt each use a fresh short-lived connection so an action cannot disrupt the reader stream. Prompt content travels through SSH stdin into a tmux buffer, never through shell interpolation.
 5. `TerminalConnection` — its own long-lived PTY (`xterm-256color`) attaches with tmux `ignore-size`. The phone stays out of tmux's size calculation, so it cannot shrink the desktop pane.
 
 ### Security invariants — do not relax these

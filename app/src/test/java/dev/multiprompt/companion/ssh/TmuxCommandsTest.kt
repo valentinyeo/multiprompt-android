@@ -35,4 +35,14 @@ class TmuxCommandsTest {
             TmuxCommands.action("work", TmuxAction.INTERRUPT),
         )
     }
+
+    @Test
+    fun streamUsesOneFixedFramedCaptureLoop() {
+        val command = TmuxCommands.stream("work")
+
+        assertTrue(command.contains("while tmux has-session -t 'work:'"))
+        assertTrue(command.contains("tmux capture-pane -p -J -S -200 -t 'work:'"))
+        assertTrue(command.contains(TmuxCommands.SNAPSHOT_PREFIX))
+        assertTrue(command.contains("sleep 1"))
+    }
 }
