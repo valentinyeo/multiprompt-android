@@ -147,6 +147,7 @@ fun MultipromptApp(viewModel: MainViewModel) {
     val state by viewModel.state.collectAsState()
     val updateState by viewModel.updates.state.collectAsState()
     val context = LocalContext.current
+    var newSessionWorkspace by remember { mutableStateOf<Workspace?>(null) }
     var permissionLaunchVersion by remember { mutableStateOf<Long?>(null) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -272,7 +273,7 @@ fun MultipromptApp(viewModel: MainViewModel) {
             ) {
                 val workspace = state.workspaces.firstOrNull { it.id == state.selectedWorkspaceId }
                 if (workspace != null) {
-                    FloatingActionButton(onClick = { viewModel.createClaudeSession(workspace) }) {
+                    FloatingActionButton(onClick = { newSessionWorkspace = workspace }) {
                         if (state.creatingSession) {
                             CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
                         } else {
@@ -314,6 +315,36 @@ fun MultipromptApp(viewModel: MainViewModel) {
                 )
             }
         }
+    }
+
+    newSessionWorkspace?.let { workspace ->
+        AlertDialog(
+            onDismissRequest = { newSessionWorkspace = null },
+            title = { Text("New session in ${workspace.name}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("${workspace.remotePath}\nChoose how this tmux session should start.")
+                    Button(
+                        onClick = {
+                            newSessionWorkspace = null
+                            viewModel.createClaudeSession(workspace)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Claude Code") }
+                    OutlinedButton(
+                        onClick = {
+                            newSessionWorkspace = null
+                            viewModel.createShellSession(workspace)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Full terminal") }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { newSessionWorkspace = null }) { Text("Cancel") }
+            },
+        )
     }
 
     state.pendingHostKeys.entries.firstOrNull()?.let { (hostId, key) ->

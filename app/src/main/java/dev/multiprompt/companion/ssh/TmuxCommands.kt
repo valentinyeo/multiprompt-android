@@ -38,6 +38,14 @@ object TmuxCommands {
             "printf '$CREATED_PREFIX%s\\n' $name"
     }
 
+    fun createShellSession(sessionName: String, remotePath: String): String {
+        val path = TmuxParser.shellQuote(remotePath)
+        val name = TmuxParser.shellQuote(sessionName)
+        return "if [ ! -d $path ]; then printf 'Project directory not found\\n' >&2; exit 2; fi; " +
+            "tmux new-session -d -s $name -c $path && " +
+            "printf '$CREATED_PREFIX%s\\n' $name"
+    }
+
     fun stream(sessionName: String): String {
         val target = target(sessionName)
         return "if ! tmux has-session -t $target 2>/dev/null; then " +

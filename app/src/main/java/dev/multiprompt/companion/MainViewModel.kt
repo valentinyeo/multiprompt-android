@@ -390,6 +390,50 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun createShellSession(workspace: Workspace) {
+        if (_state.value.creatingSession) return
+        val host = _state.value.hosts.firstOrNull { it.id == workspace.hostId }
+        if (host == null) {
+            _state.update { it.copy(sessionActionError = "The workspace VPS is missing") }
+            return
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(creatingSession = true, sessionActionError = null) }
+            runCatching { ssh.createShellSession(host, workspace.remotePath) }
+                .onSuccess { sessionName ->
+                    val session = TmuxSession(
+                        hostId = host.id,
+                        name = sessionName,
+                        windows = 1,
+                        attachedClients = 0,
+                        lastActivityEpochSeconds = System.currentTimeMillis() / 1000,
+                        workingDirectory = workspace.remotePath,
+                    )
+                    workspaceStore.assign(session, workspace.id)
+                    val key = SessionReadStore.key(session.hostId, session.name)
+                    _state.update {
+                        it.copy(
+                            sessions = (it.sessions + session).distinctBy { item ->
+                                SessionReadStore.key(item.hostId, item.name)
+                            },
+                            sessionWorkspaceIds = it.sessionWorkspaceIds + (key to workspace.id),
+                            creatingSession = false,
+                        )
+                    }
+                    openTerminal(session)
+                    refresh()
+                }
+                .onFailure { throwable ->
+                    _state.update {
+                        it.copy(
+                            creatingSession = false,
+                            sessionActionError = throwable.message ?: "Could not create the terminal session",
+                        )
+                    }
+                }
+        }
+    }
+
     fun closeReader() {
         _state.value.reader?.close()
         _state.update { it.copy(reader = null, readerSession = null) }

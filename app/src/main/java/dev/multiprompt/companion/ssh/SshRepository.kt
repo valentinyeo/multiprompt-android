@@ -192,6 +192,26 @@ class SshRepository(private val secrets: SecretStore) {
             }
         }
 
+    suspend fun createShellSession(host: HostProfile, remotePath: String): String =
+        withContext(Dispatchers.IO) {
+            withTimeout(CONNECTION_TIMEOUT_MS) {
+                withAuthenticatedClient(host) { client ->
+                    val project = remotePath.substringAfterLast('/').lowercase()
+                        .replace(Regex("[^a-z0-9]+"), "-")
+                        .trim('-')
+                        .ifBlank { "workspace" }
+                        .take(24)
+                    val sessionName = "shell-$project-${System.currentTimeMillis().toString(36)}"
+                    val result = execute(client, TmuxCommands.createShellSession(sessionName, remotePath))
+                    result.requireSuccess("create the terminal session")
+                    require(result.stdout.lineSequence().any {
+                        it.trim() == "${TmuxCommands.CREATED_PREFIX}$sessionName"
+                    }) { "The VPS did not confirm the new tmux session" }
+                    sessionName
+                }
+            }
+        }
+
     private suspend fun <T> withAuthenticatedClient(
         host: HostProfile,
         block: suspend (SshClient) -> T,

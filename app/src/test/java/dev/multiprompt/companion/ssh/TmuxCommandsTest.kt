@@ -55,4 +55,12 @@ class TmuxCommandsTest {
         assertTrue(command.contains("exec claude --dangerously-skip-permissions"))
         assertTrue(command.contains(TmuxCommands.CREATED_PREFIX))
     }
+
+    @Test
+    fun fullShellSessionStartsWithoutAnAgentCommand() {
+        val command = TmuxCommands.createShellSession("shell-work", "/srv/work")
+
+        assertTrue(command.contains("tmux new-session -d -s 'shell-work' -c '/srv/work'"))
+        assertFalse(command.contains("claude"))
+    }
 }
