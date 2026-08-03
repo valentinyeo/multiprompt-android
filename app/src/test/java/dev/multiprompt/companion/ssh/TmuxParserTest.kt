@@ -30,12 +30,13 @@ class TmuxParserTest {
     }
 
     @Test
-    fun commandAsksForEightFieldsInTheOrderTheParserExpects() {
+    fun commandAsksForNineFieldsInTheOrderTheParserExpects() {
         val format = TmuxParser.command().substringAfter("display-message -p -t \"\$mp_session:\" -F '").substringBefore("'")
 
         assertEquals(
             listOf("#{session_name}", "#{session_windows}", "#{session_attached}",
-                "#{session_activity}", "#{window_width}", "#{window_height}", "#{host}", "#{pane_title}"),
+                "#{session_activity}", "#{window_width}", "#{window_height}", "#{session_path}",
+                "#{host}", "#{pane_title}"),
             format.split(TmuxParser.FIELD_SEPARATOR),
         )
     }
@@ -61,7 +62,8 @@ class TmuxParserTest {
 
     @Test
     fun prefersPaneTitleOverTmuxName() {
-        val output = row("hypertasks-10", "1", "1", "200", "100", "30", "vmi3202882", "\u2733 Add feedback button")
+        val output = row("hypertasks-10", "1", "1", "200", "100", "30",
+            "/home/valentin/projects/hypertasks", "vmi3202882", "\u2733 Add feedback button")
 
         val session = TmuxParser.parse("de", output).single()
 
@@ -69,13 +71,14 @@ class TmuxParserTest {
         assertEquals("hypertasks-10", session.name)
         assertEquals(100, session.columns)
         assertEquals(30, session.rows)
+        assertEquals("/home/valentin/projects/hypertasks", session.workingDirectory)
     }
 
     @Test
     fun ignoresDefaultPaneTitleThatIsJustTheHostname() {
         // tmux leaves pane_title as the hostname when no agent set one; showing it would
         // label every idle session with the same useless string.
-        val output = row("multiprompt-android", "1", "0", "200", "70", "50", "vmi3202882", "vmi3202882")
+        val output = row("multiprompt-android", "1", "0", "200", "70", "50", "/tmp", "vmi3202882", "vmi3202882")
 
         val session = TmuxParser.parse("de", output).single()
 
@@ -87,14 +90,14 @@ class TmuxParserTest {
     @Test
     fun keepsSeparatorsInsidePaneTitle() {
         val s = TmuxParser.FIELD_SEPARATOR
-        val output = row("cl-1", "1", "0", "200", "98", "51", "box", "fix a${s}b")
+        val output = row("cl-1", "1", "0", "200", "98", "51", "/tmp", "box", "fix a${s}b")
 
         assertEquals("fix a${s}b", TmuxParser.parse("de", output).single().title)
     }
 
     @Test
     fun decodesHexPreviewForThePrecedingSession() {
-        val output = row("cl-1", "1", "0", "200", "98", "51", "box", "work") +
+        val output = row("cl-1", "1", "0", "200", "98", "51", "/tmp", "box", "work") +
             "${TmuxParser.PREVIEW_PREFIX}68656c6c6f0a776f726c64\n"
 
         assertEquals("hello\nworld", TmuxParser.parse("de", output).single().preview)

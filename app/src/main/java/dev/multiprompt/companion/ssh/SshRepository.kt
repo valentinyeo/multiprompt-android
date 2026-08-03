@@ -172,6 +172,26 @@ class SshRepository(private val secrets: SecretStore) {
             )
     }
 
+    suspend fun createClaudeSession(host: HostProfile, remotePath: String): String =
+        withContext(Dispatchers.IO) {
+            withTimeout(CONNECTION_TIMEOUT_MS) {
+                withAuthenticatedClient(host) { client ->
+                    val project = remotePath.substringAfterLast('/').lowercase()
+                        .replace(Regex("[^a-z0-9]+"), "-")
+                        .trim('-')
+                        .ifBlank { "workspace" }
+                        .take(24)
+                    val sessionName = "claude-$project-${System.currentTimeMillis().toString(36)}"
+                    val result = execute(client, TmuxCommands.createClaudeSession(sessionName, remotePath))
+                    result.requireSuccess("create the Claude session")
+                    require(result.stdout.lineSequence().any {
+                        it.trim() == "${TmuxCommands.CREATED_PREFIX}$sessionName"
+                    }) { "The VPS did not confirm the new tmux session" }
+                    sessionName
+                }
+            }
+        }
+
     private suspend fun <T> withAuthenticatedClient(
         host: HostProfile,
         block: suspend (SshClient) -> T,

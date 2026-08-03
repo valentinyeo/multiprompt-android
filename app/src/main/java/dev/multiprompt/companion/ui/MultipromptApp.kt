@@ -5,12 +5,16 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
@@ -44,6 +48,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Mic
@@ -78,10 +83,13 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -94,15 +102,21 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -113,6 +127,7 @@ import dev.multiprompt.companion.MainViewModel
 import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
+import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.reader.ReaderStatus
@@ -122,7 +137,9 @@ import dev.multiprompt.companion.terminal.TerminalConnection
 import dev.multiprompt.companion.terminal.TerminalStatus
 import dev.multiprompt.companion.update.UpdateRelease
 import dev.multiprompt.companion.update.UpdateState
+import dev.multiprompt.companion.upload.ScreencastUploader
 import java.io.ByteArrayOutputStream
+import kotlinx.coroutines.launch
 import org.connectbot.terminal.Terminal
 
 @Composable
@@ -136,6 +153,18 @@ fun MultipromptApp(viewModel: MainViewModel) {
     ) {
         val pending = viewModel.updates.state.value as? UpdateState.PermissionRequired
         if (pending != null) viewModel.updates.resumeAfterPermission(pending.release)
+    }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     LaunchedEffect(updateState) {
@@ -164,6 +193,7 @@ fun MultipromptApp(viewModel: MainViewModel) {
         ReaderScreen(
             connection = reader,
             dictation = viewModel.dictation,
+            screencast = viewModel.screencast,
             session = readerSession,
             hostLabel = state.hosts.firstOrNull { it.id == readerSession.hostId }?.label.orEmpty(),
             unread = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.unreadSessionKeys,
@@ -236,6 +266,20 @@ fun MultipromptApp(viewModel: MainViewModel) {
                 FloatingActionButton(onClick = { viewModel.showHostEditor() }) {
                     Icon(Icons.Default.Add, "Add host")
                 }
+            } else if (state.section == AppSection.SESSIONS &&
+                !state.showingArchivedSessions &&
+                state.selectedWorkspaceId != null
+            ) {
+                val workspace = state.workspaces.firstOrNull { it.id == state.selectedWorkspaceId }
+                if (workspace != null) {
+                    FloatingActionButton(onClick = { viewModel.createClaudeSession(workspace) }) {
+                        if (state.creatingSession) {
+                            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Add, "New Claude session")
+                        }
+                    }
+                }
             }
         },
     ) { padding ->
@@ -248,6 +292,10 @@ fun MultipromptApp(viewModel: MainViewModel) {
                     onRestore = viewModel::restoreSession,
                     onMarkUnread = viewModel::markSessionUnread,
                     onToggleArchived = viewModel::toggleArchivedSessions,
+                    onSelectWorkspace = viewModel::selectWorkspace,
+                    onSwitchWorkspace = viewModel::openAdjacentWorkspace,
+                    onCreateWorkspace = viewModel::createWorkspace,
+                    onMoveSession = viewModel::moveSession,
                     onAddHost = {
                         viewModel.select(AppSection.HOSTS)
                         viewModel.showHostEditor()
@@ -345,14 +393,75 @@ private fun SessionsScreen(
     onRestore: (TmuxSession) -> Unit,
     onMarkUnread: (TmuxSession) -> Unit,
     onToggleArchived: () -> Unit,
+    onSelectWorkspace: (String?) -> Unit,
+    onSwitchWorkspace: (Int) -> Unit,
+    onCreateWorkspace: (String, String, String) -> String?,
+    onMoveSession: (TmuxSession, Workspace) -> Unit,
     onAddHost: () -> Unit,
 ) {
     if (state.hosts.isEmpty()) {
         EmptyState("Connect your first VPS", "Import an SSH key, then the app will discover tmux sessions.", onAddHost)
         return
     }
+    var workspaceDialogVisible by remember { mutableStateOf(false) }
+    var workspaceName by remember { mutableStateOf("") }
+    var workspacePath by remember { mutableStateOf("") }
+    var workspaceHostId by remember(state.hosts) { mutableStateOf(state.hosts.first().id) }
+    var workspaceError by remember { mutableStateOf<String?>(null) }
+    if (workspaceDialogVisible) {
+        AlertDialog(
+            onDismissRequest = { workspaceDialogVisible = false },
+            title = { Text("New workspace") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        workspaceName,
+                        { workspaceName = it; workspaceError = null },
+                        label = { Text("Name") },
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        workspacePath,
+                        { workspacePath = it; workspaceError = null },
+                        label = { Text("VPS project path") },
+                        placeholder = { Text("/home/valentin/projects/project") },
+                        singleLine = true,
+                    )
+                    Row(Modifier.horizontalScroll(rememberScrollState())) {
+                        state.hosts.forEach { host ->
+                            TextButton(onClick = { workspaceHostId = host.id }) {
+                                Text(if (workspaceHostId == host.id) "✓ ${host.label}" else host.label)
+                            }
+                        }
+                    }
+                    workspaceError?.let { InlineError(it) }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    workspaceError = onCreateWorkspace(workspaceName, workspaceHostId, workspacePath)
+                    if (workspaceError == null) {
+                        workspaceDialogVisible = false
+                        workspaceName = ""
+                        workspacePath = ""
+                    }
+                }) { Text("Create") }
+            },
+            dismissButton = {
+                TextButton(onClick = { workspaceDialogVisible = false }) { Text("Cancel") }
+            },
+        )
+    }
+    val visibleSessions = state.sessions
+        .filter { session ->
+            val key = SessionReadStore.key(session.hostId, session.name)
+            (key in state.archivedSessionKeys) == state.showingArchivedSessions &&
+                (state.selectedWorkspaceId == null ||
+                    state.sessionWorkspaceIds[key] == state.selectedWorkspaceId)
+        }
+        .sortedByDescending { it.lastActivityEpochSeconds }
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().horizontalSwipe(onSwitchWorkspace),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -378,36 +487,54 @@ private fun SessionsScreen(
                 }
             }
         }
-        state.hosts.forEach { host ->
-            item(key = "heading-${host.id}") {
-                Text(host.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
-            val error = state.hostErrors[host.id]
-            if (error != null) {
-                item(key = "error-${host.id}") { InlineError(error) }
-            }
-            val sessions = state.sessions.filter { session ->
-                val key = SessionReadStore.key(session.hostId, session.name)
-                session.hostId == host.id &&
-                    (key in state.archivedSessionKeys) == state.showingArchivedSessions
-            }
-            items(sessions, key = { "${it.hostId}:${it.name}" }) { session ->
-                val key = SessionReadStore.key(session.hostId, session.name)
-                SessionCard(
-                    session = session,
-                    unread = key in state.unreadSessionKeys,
-                    archived = key in state.archivedSessionKeys,
-                    onClick = { onOpen(session) },
-                    onArchiveToggle = {
-                        if (key in state.archivedSessionKeys) onRestore(session) else onArchive(session)
-                    },
-                    onMarkUnread = { onMarkUnread(session) },
-                )
-            }
-            if (sessions.isEmpty() && error == null && !state.refreshing) {
-                item(key = "empty-${host.id}") {
-                    Text("No tmux sessions", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        item(key = "workspace-splits") {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                val splits = listOf<Pair<String?, String>>(null to "All") +
+                    state.workspaces.map { it.id to it.name }
+                splits.forEach { (id, name) ->
+                    if (state.selectedWorkspaceId == id) {
+                        FilledTonalButton(onClick = { onSelectWorkspace(id) }) { Text(name) }
+                    } else {
+                        TextButton(onClick = { onSelectWorkspace(id) }) { Text(name) }
+                    }
                 }
+                TextButton(onClick = {
+                    workspaceError = null
+                    workspaceDialogVisible = true
+                }) { Text("+ Workspace") }
+            }
+        }
+        state.hostErrors.forEach { (hostId, error) ->
+            item(key = "error-$hostId") { InlineError(error) }
+        }
+        state.sessionActionError?.let { error ->
+            item(key = "session-action-error") { InlineError(error) }
+        }
+        items(visibleSessions, key = { "${it.hostId}:${it.name}" }) { session ->
+            val key = SessionReadStore.key(session.hostId, session.name)
+            SessionCard(
+                session = session,
+                hostLabel = state.hosts.firstOrNull { it.id == session.hostId }?.label.orEmpty(),
+                workspaces = state.workspaces,
+                unread = key in state.unreadSessionKeys,
+                archived = key in state.archivedSessionKeys,
+                onClick = { onOpen(session) },
+                onArchiveToggle = {
+                    if (key in state.archivedSessionKeys) onRestore(session) else onArchive(session)
+                },
+                onMarkUnread = { onMarkUnread(session) },
+                onMove = { workspace -> onMoveSession(session, workspace) },
+            )
+        }
+        if (visibleSessions.isEmpty() && !state.refreshing) {
+            item(key = "empty-inbox") {
+                Text(
+                    if (state.showingArchivedSessions) "No archived sessions" else "This inbox split is clear",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -416,11 +543,14 @@ private fun SessionsScreen(
 @Composable
 private fun SessionCard(
     session: TmuxSession,
+    hostLabel: String,
+    workspaces: List<Workspace>,
     unread: Boolean,
     archived: Boolean,
     onClick: () -> Unit,
     onArchiveToggle: () -> Unit,
     onMarkUnread: () -> Unit,
+    onMove: (Workspace) -> Unit,
 ) {
     var menuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
@@ -437,9 +567,9 @@ private fun SessionCard(
                     Text(session.displayName, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Text(
                         if (session.title.isBlank()) {
-                            "${session.agent.label} · ${session.windows} windows · ${relativeTime(session.lastActivityEpochSeconds)}"
+                            "$hostLabel · ${session.agent.label} · ${relativeTime(session.lastActivityEpochSeconds)}"
                         } else {
-                            "${session.name} · ${session.agent.label} · ${relativeTime(session.lastActivityEpochSeconds)}"
+                            "$hostLabel · ${session.agent.label} · ${relativeTime(session.lastActivityEpochSeconds)}"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -472,6 +602,17 @@ private fun SessionCard(
                                 },
                             )
                         }
+                        if (!archived) {
+                            workspaces.filter { it.hostId == session.hostId }.forEach { workspace ->
+                                DropdownMenuItem(
+                                    text = { Text("Move to ${workspace.name}") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onMove(workspace)
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -494,6 +635,7 @@ private fun SessionCard(
 private fun ReaderScreen(
     connection: SessionReaderConnection,
     dictation: DeepgramDictation,
+    screencast: ScreencastUploader,
     session: TmuxSession,
     hostLabel: String,
     unread: Boolean,
@@ -506,7 +648,11 @@ private fun ReaderScreen(
 ) {
     val reader by connection.state.collectAsState()
     val dictationState by dictation.state.collectAsState()
-    var prompt by remember(connection) { mutableStateOf("") }
+    var promptField by remember(connection) { mutableStateOf(TextFieldValue("")) }
+    val prompt = promptField.text
+    val setPrompt: (String) -> Unit = { value ->
+        promptField = TextFieldValue(value, selection = TextRange(value.length))
+    }
     var pendingPromptAction by remember(connection) { mutableStateOf<Long?>(null) }
     var menuExpanded by remember(connection) { mutableStateOf(false) }
     var apiKeyDialogVisible by remember(connection) { mutableStateOf(false) }
@@ -515,11 +661,37 @@ private fun ReaderScreen(
     var microphoneError by remember(connection) { mutableStateOf<String?>(null) }
     var dictationPrefix by remember(connection) { mutableStateOf("") }
     var sendAfterDictation by remember(connection) { mutableStateOf(false) }
+    var imageKeyDialogVisible by remember(connection) { mutableStateOf(false) }
+    var imageKeyDraft by remember(connection) { mutableStateOf("") }
+    var imageKeyError by remember(connection) { mutableStateOf<String?>(null) }
+    var imageUploading by remember(connection) { mutableStateOf(false) }
+    var imageUploadError by remember(connection) { mutableStateOf<String?>(null) }
+    var transcriptZoom by remember { mutableFloatStateOf(1f) }
+    val transcriptTransform = rememberTransformableState { _, zoomChange, _, _ ->
+        transcriptZoom = (transcriptZoom * zoomChange).coerceIn(0.75f, 5f)
+    }
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
     val readerTextMeasurer = rememberTextMeasurer()
-    var initialScrollComplete by remember(connection) { mutableStateOf(false) }
+    var previousScrollMax by remember(connection) { mutableIntStateOf(0) }
     val context = LocalContext.current
+    val readerScope = rememberCoroutineScope()
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            imageUploading = true
+            imageUploadError = null
+            readerScope.launch {
+                runCatching { screencast.upload(uri) }
+                    .onSuccess { url ->
+                        setPrompt(listOf(prompt.trimEnd(), url)
+                            .filter(String::isNotBlank)
+                            .joinToString("\n"))
+                    }
+                    .onFailure { imageUploadError = it.message ?: "Image upload failed" }
+                imageUploading = false
+            }
+        }
+    }
     val dictationActive = dictationState.status == DictationStatus.CONNECTING ||
         dictationState.status == DictationStatus.LISTENING ||
         dictationState.status == DictationStatus.FINISHING
@@ -545,17 +717,21 @@ private fun ReaderScreen(
         }
     }
 
-    LaunchedEffect(reader.output) {
-        val followBottom = !initialScrollComplete ||
-            scrollState.maxValue - scrollState.value < with(density) { 56.dp.roundToPx() }
-        withFrameNanos { }
-        if (followBottom) scrollState.scrollTo(scrollState.maxValue)
-        initialScrollComplete = true
+    LaunchedEffect(connection, scrollState, density) {
+        val bottomThresholdPx = with(density) { 56.dp.roundToPx() }
+        snapshotFlow { scrollState.maxValue }.collect { newMaximum ->
+            // Compare against the previous layout height. This keeps the transcript pinned
+            // while output arrives or the keyboard resizes the viewport, but preserves a
+            // deliberate scroll into history.
+            val wasAtBottom = previousScrollMax - scrollState.value <= bottomThresholdPx
+            previousScrollMax = newMaximum
+            if (wasAtBottom) scrollState.scrollTo(newMaximum)
+        }
     }
     LaunchedEffect(reader.completedActions) {
         val pending = pendingPromptAction
         if (pending != null && reader.completedActions > pending) {
-            prompt = ""
+            setPrompt("")
             pendingPromptAction = null
         }
     }
@@ -565,9 +741,9 @@ private fun ReaderScreen(
     LaunchedEffect(dictationState.transcript) {
         val spoken = dictationState.transcript.trim()
         if (spoken.isNotBlank()) {
-            prompt = listOf(dictationPrefix, spoken)
+            setPrompt(listOf(dictationPrefix, spoken)
                 .filter(String::isNotBlank)
-                .joinToString(" ")
+                .joinToString(" "))
         }
     }
     DisposableEffect(connection) {
@@ -603,7 +779,7 @@ private fun ReaderScreen(
                 val finalPrompt = listOf(dictationPrefix, dictationState.transcript.trim())
                     .filter(String::isNotBlank)
                     .joinToString(" ")
-                prompt = finalPrompt
+                setPrompt(finalPrompt)
                 sendAfterDictation = false
                 if (finalPrompt.isNotBlank() &&
                     !reader.sending &&
@@ -669,6 +845,47 @@ private fun ReaderScreen(
                         apiKeyError = null
                     },
                 ) { Text("Cancel") }
+            },
+        )
+    }
+    if (imageKeyDialogVisible) {
+        AlertDialog(
+            onDismissRequest = { imageKeyDialogVisible = false },
+            title = { Text("Screencast2 uploads") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("The upload key is encrypted with Android Keystore and stays on this device.")
+                    OutlinedTextField(
+                        value = imageKeyDraft,
+                        onValueChange = {
+                            imageKeyDraft = it
+                            imageKeyError = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Screencast2 upload key") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        isError = imageKeyError != null,
+                        supportingText = imageKeyError?.let { message -> { Text(message) } },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = imageKeyDraft.isNotBlank(),
+                    onClick = {
+                        if (screencast.saveSecret(imageKeyDraft)) {
+                            imageKeyDialogVisible = false
+                            imageKeyDraft = ""
+                            imagePicker.launch("image/*")
+                        } else {
+                            imageKeyError = "Enter a valid upload key"
+                        }
+                    },
+                ) { Text("Save and choose image") }
+            },
+            dismissButton = {
+                TextButton(onClick = { imageKeyDialogVisible = false }) { Text("Cancel") }
             },
         )
     }
@@ -756,6 +973,15 @@ private fun ReaderScreen(
                                     apiKeyDialogVisible = true
                                 },
                             )
+                            DropdownMenuItem(
+                                text = { Text("Screencast2 upload key") },
+                                onClick = {
+                                    menuExpanded = false
+                                    imageKeyDraft = ""
+                                    imageKeyError = null
+                                    imageKeyDialogVisible = true
+                                },
+                            )
                         }
                     }
                 },
@@ -772,8 +998,8 @@ private fun ReaderScreen(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 OutlinedTextField(
-                    value = prompt,
-                    onValueChange = { prompt = it },
+                    value = promptField,
+                    onValueChange = { promptField = it },
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text("Message this session") },
                     minLines = 1,
@@ -788,6 +1014,22 @@ private fun ReaderScreen(
                             !sendAfterDictation &&
                             (prompt.isNotBlank() || dictationActive)
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = {
+                                    if (screencast.configured) {
+                                        imagePicker.launch("image/*")
+                                    } else {
+                                        imageKeyDialogVisible = true
+                                    }
+                                },
+                                enabled = !reader.sending && !dictationActive && !imageUploading,
+                            ) {
+                                if (imageUploading) {
+                                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Default.Image, "Upload image")
+                                }
+                            }
                             IconButton(
                                 onClick = {
                                     if (dictationActive) {
@@ -839,7 +1081,7 @@ private fun ReaderScreen(
                         }
                     },
                 )
-                (microphoneError ?: dictationState.error)?.let { message ->
+                (microphoneError ?: dictationState.error ?: imageUploadError)?.let { message ->
                     Text(
                         message,
                         color = MaterialTheme.colorScheme.error,
@@ -882,10 +1124,14 @@ private fun ReaderScreen(
                     }
                 }
             }
-            BoxWithConstraints(Modifier.fillMaxWidth()) {
+            BoxWithConstraints(
+                Modifier
+                    .fillMaxWidth()
+                    .transformable(state = transcriptTransform, canPan = { false }),
+            ) {
                 val paneColumns = session.columns.takeIf { it > 0 } ?: FALLBACK_COLUMNS
                 val availableWidth = maxWidth
-                val transcriptFontSize = remember(availableWidth, density, paneColumns) {
+                val fittedFontSize = remember(availableWidth, density, paneColumns) {
                     val sampleSizeSp = 100f
                     val sampleLength = 20
                     val charWidthPx = readerTextMeasurer.measure(
@@ -899,15 +1145,18 @@ private fun ReaderScreen(
                         .coerceIn(4f, 12f)
                         .sp
                 }
+                val transcriptFontSize = (fittedFontSize.value * transcriptZoom).sp
+                val displayedOutput = reader.output.ifBlank {
+                    if (failure == null && reader.status != ReaderStatus.Connecting) {
+                        "No recent output"
+                    } else {
+                        ""
+                    }
+                }
+                val linkedOutput = remember(displayedOutput) { terminalLinks(displayedOutput) }
                 SelectionContainer {
                     Text(
-                        reader.output.ifBlank {
-                            if (failure == null && reader.status != ReaderStatus.Connecting) {
-                                "No recent output"
-                            } else {
-                                ""
-                            }
-                        },
+                        linkedOutput,
                         modifier = Modifier.fillMaxWidth(),
                         fontFamily = ReaderFontFamily,
                         fontSize = transcriptFontSize,
@@ -1318,3 +1567,28 @@ private fun Context.readSmallFile(uri: Uri, maxBytes: Int): ByteArray {
         output.toByteArray()
     }
 }
+
+private fun terminalLinks(value: String): AnnotatedString {
+    val builder = AnnotatedString.Builder(value)
+    TERMINAL_URL.findAll(value).forEach { match ->
+        val url = match.value.trimEnd('.', ',', ';', ':', '!', '?')
+        if (url.isNotEmpty()) {
+            builder.addLink(
+                LinkAnnotation.Url(
+                    url,
+                    TextLinkStyles(
+                        style = SpanStyle(
+                            color = Color(0xFF7DD3FC),
+                            textDecoration = TextDecoration.Underline,
+                        ),
+                    ),
+                ),
+                match.range.first,
+                match.range.first + url.length,
+            )
+        }
+    }
+    return builder.toAnnotatedString()
+}
+
+private val TERMINAL_URL = Regex("https?://[^\\s<>()\\[\\]{}]+")

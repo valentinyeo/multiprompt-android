@@ -98,6 +98,7 @@ dependencies {
     implementation(libs.connectbot.terminal)
     implementation(libs.connectbot.ssh)
     implementation(libs.okhttp)
+    implementation(libs.androidx.work)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)

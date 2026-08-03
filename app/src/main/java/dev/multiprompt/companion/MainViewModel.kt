@@ -7,6 +7,8 @@ import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.data.SessionReadStore
+import dev.multiprompt.companion.data.WorkspaceStore
+import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.ssh.PresentedHostKey
@@ -14,6 +16,7 @@ import dev.multiprompt.companion.ssh.SshProblem
 import dev.multiprompt.companion.terminal.TerminalConnection
 import dev.multiprompt.companion.update.UpdateManager
 import dev.multiprompt.companion.update.UpdateRelease
+import dev.multiprompt.companion.upload.ScreencastUploader
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
@@ -43,6 +46,11 @@ data class AppUiState(
     val unreadSessionKeys: Set<String> = emptySet(),
     val archivedSessionKeys: Set<String> = emptySet(),
     val showingArchivedSessions: Boolean = false,
+    val workspaces: List<Workspace> = emptyList(),
+    val selectedWorkspaceId: String? = null,
+    val sessionWorkspaceIds: Map<String, String> = emptyMap(),
+    val creatingSession: Boolean = false,
+    val sessionActionError: String? = null,
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -50,11 +58,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val hosts = app.hostStore
     private val secrets = app.secretStore
     private val sessionReads = app.sessionReadStore
+    private val workspaceStore = app.workspaceStore
     private val ssh = app.sshRepository
     val dictation: DeepgramDictation = app.deepgramDictation
     val updates: UpdateManager = app.updateManager
+    val screencast: ScreencastUploader = app.screencastUploader
 
-    private val _state = MutableStateFlow(AppUiState(hosts = hosts.load()))
+    private val _state = MutableStateFlow(
+        AppUiState(hosts = hosts.load(), workspaces = workspaceStore.load()),
+    )
     val state: StateFlow<AppUiState> = _state.asStateFlow()
 
     init {
@@ -141,6 +153,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         secrets.remove(host.keySecretId)
         secrets.remove(host.passphraseSecretId)
         sessionReads.removeHost(host.id)
+        workspaceStore.removeHost(host.id)
         _state.update {
             it.copy(
                 hosts = hosts.load(),
@@ -202,11 +215,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }.awaitAll()
             _state.update { current ->
                 val sessions = results.flatMap { it.sessions }
+                val workspaces = workspaceStore.discover(sessions)
+                val sessionWorkspaceIds = sessions.mapNotNull { session ->
+                    workspaceStore.workspaceIdFor(session, workspaces)?.let { workspaceId ->
+                        SessionReadStore.key(session.hostId, session.name) to workspaceId
+                    }
+                }.toMap()
                 val archivedKeys = sessions
                     .filter(sessionReads::isArchived)
                     .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) }
                 current.copy(
                     sessions = sessions,
+                    readerSession = current.readerSession?.let { open ->
+                        sessions.firstOrNull { it.hostId == open.hostId && it.name == open.name } ?: open
+                    },
+                    terminalSession = current.terminalSession?.let { open ->
+                        sessions.firstOrNull { it.hostId == open.hostId && it.name == open.name } ?: open
+                    },
                     hostErrors = results.mapNotNull { result ->
                         result.error?.let { result.hostId to it }
                     }.toMap(),
@@ -218,6 +243,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         .filter(sessionReads::isUnread)
                         .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) },
                     archivedSessionKeys = archivedKeys,
+                    workspaces = workspaces,
+                    sessionWorkspaceIds = sessionWorkspaceIds,
                     refreshing = false,
                 )
             }
@@ -280,6 +307,89 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(showingArchivedSessions = !it.showingArchivedSessions) }
     }
 
+    fun selectWorkspace(workspaceId: String?) {
+        _state.update { it.copy(selectedWorkspaceId = workspaceId) }
+    }
+
+    fun openAdjacentWorkspace(delta: Int) {
+        val splits = listOf<String?>(null) + _state.value.workspaces.map { it.id }
+        if (splits.size < 2) return
+        val current = splits.indexOf(_state.value.selectedWorkspaceId).coerceAtLeast(0)
+        selectWorkspace(splits[Math.floorMod(current + delta, splits.size)])
+    }
+
+    fun createWorkspace(name: String, hostId: String, remotePath: String): String? {
+        val cleanName = name.trim()
+        val cleanPath = remotePath.trim().trimEnd('/')
+        val error = when {
+            cleanName.isBlank() -> "Enter a workspace name"
+            _state.value.hosts.none { it.id == hostId } -> "Choose a VPS"
+            !cleanPath.startsWith('/') -> "Enter an absolute VPS project path"
+            else -> null
+        }
+        if (error != null) return error
+        val workspace = Workspace(name = cleanName, hostId = hostId, remotePath = cleanPath)
+        workspaceStore.upsert(workspace)
+        _state.update {
+            it.copy(
+                workspaces = workspaceStore.load(),
+                selectedWorkspaceId = workspace.id,
+                sessionActionError = null,
+            )
+        }
+        return null
+    }
+
+    fun moveSession(session: TmuxSession, workspace: Workspace) {
+        workspaceStore.assign(session, workspace.id)
+        val key = SessionReadStore.key(session.hostId, session.name)
+        _state.update { it.copy(sessionWorkspaceIds = it.sessionWorkspaceIds + (key to workspace.id)) }
+    }
+
+    fun createClaudeSession(workspace: Workspace) {
+        if (_state.value.creatingSession) return
+        val host = _state.value.hosts.firstOrNull { it.id == workspace.hostId }
+        if (host == null) {
+            _state.update { it.copy(sessionActionError = "The workspace VPS is missing") }
+            return
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(creatingSession = true, sessionActionError = null) }
+            runCatching { ssh.createClaudeSession(host, workspace.remotePath) }
+                .onSuccess { sessionName ->
+                    val session = TmuxSession(
+                        hostId = host.id,
+                        name = sessionName,
+                        windows = 1,
+                        attachedClients = 0,
+                        lastActivityEpochSeconds = System.currentTimeMillis() / 1000,
+                        workingDirectory = workspace.remotePath,
+                    )
+                    workspaceStore.assign(session, workspace.id)
+                    val key = SessionReadStore.key(session.hostId, session.name)
+                    _state.update {
+                        it.copy(
+                            sessions = (it.sessions + session).distinctBy { item ->
+                                SessionReadStore.key(item.hostId, item.name)
+                            },
+                            sessionWorkspaceIds = it.sessionWorkspaceIds + (key to workspace.id),
+                            creatingSession = false,
+                        )
+                    }
+                    openReader(session)
+                    refresh()
+                }
+                .onFailure { throwable ->
+                    _state.update {
+                        it.copy(
+                            creatingSession = false,
+                            sessionActionError = throwable.message ?: "Could not create the Claude session",
+                        )
+                    }
+                }
+        }
+    }
+
     fun closeReader() {
         _state.value.reader?.close()
         _state.update { it.copy(reader = null, readerSession = null) }
@@ -288,9 +398,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Archives the current thread and immediately advances through the remaining inbox. */
     fun archiveReaderAndOpenNext() {
         val current = _state.value.readerSession ?: return
-        val visible = _state.value.sessions.filter {
-            SessionReadStore.key(it.hostId, it.name) !in _state.value.archivedSessionKeys
-        }
+        val visible = visibleInboxSessions(_state.value)
         val currentIndex = visible.indexOfFirst {
             it.hostId == current.hostId && it.name == current.name
         }
@@ -309,9 +417,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Swiping the reader sideways opens the neighbouring visible inbox session. */
     fun openAdjacentReaderSession(delta: Int) {
         val current = _state.value.readerSession ?: return
-        val sessions = _state.value.sessions.filter {
-            SessionReadStore.key(it.hostId, it.name) !in _state.value.archivedSessionKeys
-        }
+        val sessions = visibleInboxSessions(_state.value)
         if (sessions.size < 2) return
         val index = sessions.indexOfFirst { it.hostId == current.hostId && it.name == current.name }
         if (index < 0) return
@@ -370,6 +476,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val error: String? = null,
         val hostKey: PresentedHostKey? = null,
     )
+
+    private fun visibleInboxSessions(state: AppUiState): List<TmuxSession> = state.sessions
+        .filter { SessionReadStore.key(it.hostId, it.name) !in state.archivedSessionKeys }
+        .filter { session ->
+            state.selectedWorkspaceId == null ||
+                state.sessionWorkspaceIds[SessionReadStore.key(session.hostId, session.name)] ==
+                state.selectedWorkspaceId
+        }
+        .sortedByDescending { it.lastActivityEpochSeconds }
 
     private companion object {
         const val MAX_PRIVATE_KEY_BYTES = 256 * 1024

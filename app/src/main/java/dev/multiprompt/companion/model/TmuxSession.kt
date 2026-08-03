@@ -9,6 +9,7 @@ data class TmuxSession(
     /** Width the desktop gave this tmux window. The phone renders it without changing it. */
     val columns: Int = 0,
     val rows: Int = 0,
+    val workingDirectory: String = "",
     val title: String = "",
     val preview: String = "",
 ) {

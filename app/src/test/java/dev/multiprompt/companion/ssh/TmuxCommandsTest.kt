@@ -45,4 +45,14 @@ class TmuxCommandsTest {
         assertTrue(command.contains(TmuxCommands.SNAPSHOT_PREFIX))
         assertTrue(command.contains("sleep 1"))
     }
+
+    @Test
+    fun claudeSessionCreationQuotesWorkspaceAndSession() {
+        val command = TmuxCommands.createClaudeSession("claude-work", "/tmp/a'; touch /bad")
+
+        assertTrue(command.contains("-s 'claude-work'"))
+        assertTrue(command.contains("-c '/tmp/a'\"'\"'; touch /bad'"))
+        assertTrue(command.contains("exec claude --dangerously-skip-permissions"))
+        assertTrue(command.contains(TmuxCommands.CREATED_PREFIX))
+    }
 }
