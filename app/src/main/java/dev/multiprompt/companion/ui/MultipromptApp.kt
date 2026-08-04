@@ -207,7 +207,6 @@ fun MultipromptApp(viewModel: MainViewModel) {
             dictation = viewModel.dictation,
             screencast = viewModel.screencast,
             session = readerSession,
-            hostLabel = state.hosts.firstOrNull { it.id == readerSession.hostId }?.label.orEmpty(),
             unread = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.unreadSessionKeys,
             archived = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.archivedSessionKeys,
             initialFontScale = viewModel.readerFontScale(readerSession),
@@ -225,6 +224,7 @@ fun MultipromptApp(viewModel: MainViewModel) {
             onOpenTerminal = { viewModel.openTerminal(readerSession) },
             onSwitchSession = viewModel::openAdjacentReaderSession,
             onFontScaleChanged = { scale -> viewModel.saveReaderFontScale(readerSession, scale) },
+            onRename = { name -> viewModel.renameSession(readerSession, name) },
             onDissolve = { viewModel.dissolveSession(readerSession) },
         )
         return
@@ -288,6 +288,7 @@ fun MultipromptApp(viewModel: MainViewModel) {
                     onSelectSection = viewModel::select,
                     onNewSession = { newSessionWorkspace = it },
                     onSetNewestSessionsAtBottom = viewModel::setNewestSessionsAtBottom,
+                    onSetAllSplitOnRight = viewModel::setAllSplitOnRight,
                     onAddHost = {
                         viewModel.select(AppSection.HOSTS)
                         viewModel.showHostEditor()
@@ -464,6 +465,7 @@ private fun SessionsScreen(
     onSelectSection: (AppSection) -> Unit,
     onNewSession: (Workspace) -> Unit,
     onSetNewestSessionsAtBottom: (Boolean) -> Unit,
+    onSetAllSplitOnRight: (Boolean) -> Unit,
     onAddHost: () -> Unit,
 ) {
     if (state.hosts.isEmpty()) {
@@ -488,8 +490,19 @@ private fun SessionsScreen(
     var settingsVisible by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
+    val splitScrollState = rememberScrollState()
+    val displayedWorkspaceSplitIds = if (state.allSplitOnRight) {
+        state.workspaceSplitIds.asReversed()
+    } else {
+        state.workspaceSplitIds
+    }
     LaunchedEffect(searchVisible) {
         if (searchVisible) searchFocusRequester.requestFocus()
+    }
+    LaunchedEffect(state.allSplitOnRight, state.workspaceSplitIds) {
+        snapshotFlow { splitScrollState.maxValue }.collect { maximum ->
+            splitScrollState.scrollTo(if (state.allSplitOnRight) maximum else 0)
+        }
     }
     renamePromptSession?.let { session ->
         AlertDialog(
@@ -536,16 +549,29 @@ private fun SessionsScreen(
             onDismissRequest = { settingsVisible = false },
             title = { Text("Session list settings") },
             text = {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text("Newest sessions at bottom", Modifier.weight(1f))
-                    Switch(
-                        checked = state.newestSessionsAtBottom,
-                        onCheckedChange = onSetNewestSessionsAtBottom,
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text("Newest sessions at bottom", Modifier.weight(1f))
+                        Switch(
+                            checked = state.newestSessionsAtBottom,
+                            onCheckedChange = onSetNewestSessionsAtBottom,
+                        )
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text("All split on right", Modifier.weight(1f))
+                        Switch(
+                            checked = state.allSplitOnRight,
+                            onCheckedChange = onSetAllSplitOnRight,
+                        )
+                    }
                 }
             },
             confirmButton = {
@@ -650,11 +676,15 @@ private fun SessionsScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        "Automatic order keeps All first, then the most recently active splits.",
+                        if (state.allSplitOnRight) {
+                            "Automatic order keeps All on the right, beside the most recently active splits."
+                        } else {
+                            "Automatic order keeps All on the left, then the most recently active splits."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    state.workspaceSplitIds.forEachIndexed { index, splitId ->
+                    displayedWorkspaceSplitIds.forEachIndexed { index, splitId ->
                         val workspace = splitId?.let { id ->
                             state.workspaces.firstOrNull { it.id == id }
                         }
@@ -675,12 +705,16 @@ private fun SessionsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             IconButton(
-                                onClick = { onMoveWorkspaceSplit(splitId, -1) },
+                                onClick = {
+                                    onMoveWorkspaceSplit(splitId, if (state.allSplitOnRight) 1 else -1)
+                                },
                                 enabled = index > 0,
                             ) { Text("↑") }
                             IconButton(
-                                onClick = { onMoveWorkspaceSplit(splitId, 1) },
-                                enabled = index < state.workspaceSplitIds.lastIndex,
+                                onClick = {
+                                    onMoveWorkspaceSplit(splitId, if (state.allSplitOnRight) -1 else 1)
+                                },
+                                enabled = index < displayedWorkspaceSplitIds.lastIndex,
                             ) { Text("↓") }
                         }
                     }
@@ -946,11 +980,11 @@ private fun SessionsScreen(
         ) {
             HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
             Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
+                Modifier.fillMaxWidth().horizontalScroll(splitScrollState).padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                state.workspaceSplitIds.forEach { id ->
+                displayedWorkspaceSplitIds.forEach { id ->
                     val name = id?.let { workspaceId ->
                         state.workspaces.firstOrNull { it.id == workspaceId }?.name
                     } ?: "All"
@@ -1100,7 +1134,6 @@ private fun ReaderScreen(
     dictation: DeepgramDictation,
     screencast: ScreencastUploader,
     session: TmuxSession,
-    hostLabel: String,
     unread: Boolean,
     archived: Boolean,
     initialFontScale: Float,
@@ -1110,6 +1143,7 @@ private fun ReaderScreen(
     onOpenTerminal: () -> Unit,
     onSwitchSession: (Int) -> Unit,
     onFontScaleChanged: (Float) -> Unit,
+    onRename: (String) -> String?,
     onDissolve: () -> Unit,
 ) {
     val reader by connection.state.collectAsState()
@@ -1133,6 +1167,9 @@ private fun ReaderScreen(
     var imageUploading by remember(connection) { mutableStateOf(false) }
     var imageUploadError by remember(connection) { mutableStateOf<String?>(null) }
     var dissolveDialogVisible by remember(connection) { mutableStateOf(false) }
+    var renameDialogVisible by remember(connection) { mutableStateOf(false) }
+    var renameDraft by remember(connection) { mutableStateOf(session.displayName) }
+    var renameError by remember(connection) { mutableStateOf<String?>(null) }
     var transcriptZoom by remember(connection, session.hostId, session.name) {
         mutableFloatStateOf(initialFontScale)
     }
@@ -1277,6 +1314,46 @@ private fun ReaderScreen(
             else -> Unit
         }
     }
+    if (renameDialogVisible) {
+        AlertDialog(
+            onDismissRequest = {
+                renameDialogVisible = false
+                renameError = null
+            },
+            title = { Text("Rename session") },
+            text = {
+                OutlinedTextField(
+                    value = renameDraft,
+                    onValueChange = {
+                        renameDraft = it
+                        renameError = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Name") },
+                    supportingText = renameError?.let { message -> { Text(message) } },
+                    isError = renameError != null,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = {
+                        renameError = onRename(renameDraft)
+                        if (renameError == null) renameDialogVisible = false
+                    }),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    renameError = onRename(renameDraft)
+                    if (renameError == null) renameDialogVisible = false
+                }) { Text("Rename") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    renameDialogVisible = false
+                    renameError = null
+                }) { Text("Cancel") }
+            },
+        )
+    }
     if (dissolveDialogVisible) {
         AlertDialog(
             onDismissRequest = { dissolveDialogVisible = false },
@@ -1394,28 +1471,9 @@ private fun ReaderScreen(
             TopAppBar(
                 modifier = Modifier.statusBarsPadding(),
                 title = {
-                    Column {
-                        Text(session.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            "$hostLabel · ${session.agent.label} · ${readerStatusLabel(reader.status)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to sessions") }
+                    Text(session.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 },
                 actions = {
-                    if (reader.status == ReaderStatus.Live) {
-                        Box(
-                            Modifier
-                                .padding(end = 4.dp)
-                                .size(9.dp)
-                                .background(MaterialTheme.colorScheme.secondary, CircleShape),
-                        )
-                    }
                     Box {
                         IconButton(onClick = { menuExpanded = true }) {
                             Icon(Icons.Default.MoreVert, "Session actions")
@@ -1448,6 +1506,17 @@ private fun ReaderScreen(
                                     onMarkRead()
                                 },
                             )
+                            if (session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {
+                                DropdownMenuItem(
+                                    text = { Text("Rename") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        renameDraft = session.displayName
+                                        renameError = null
+                                        renameDialogVisible = true
+                                    },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text(if (archived) "Return to active" else "Archive and open next") },
                                 onClick = {
@@ -1688,13 +1757,6 @@ private fun ReaderScreen(
             }
         }
     }
-}
-
-private fun readerStatusLabel(status: ReaderStatus): String = when (status) {
-    ReaderStatus.Connecting -> "Connecting"
-    ReaderStatus.Live -> "Live"
-    ReaderStatus.Closed -> "Closed"
-    is ReaderStatus.Failed -> "Reconnecting"
 }
 
 @Composable

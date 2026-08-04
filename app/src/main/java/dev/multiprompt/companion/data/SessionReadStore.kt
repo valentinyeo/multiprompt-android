@@ -80,6 +80,12 @@ class SessionReadStore(context: Context) {
         preferences.edit().putBoolean(NEWEST_SESSIONS_AT_BOTTOM, enabled).apply()
     }
 
+    fun allSplitOnRight(): Boolean = preferences.getBoolean(ALL_SPLIT_ON_RIGHT, true)
+
+    fun setAllSplitOnRight(enabled: Boolean) {
+        preferences.edit().putBoolean(ALL_SPLIT_ON_RIGHT, enabled).apply()
+    }
+
     fun displayName(session: TmuxSession): String? =
         preferences.getString(displayNameKey(session.hostId, session.name), null)
             ?.takeIf(String::isNotBlank)
@@ -110,6 +116,7 @@ class SessionReadStore(context: Context) {
         private const val ARCHIVE_UNTIL_PREFIX = "archive_until::"
         private const val FONT_SCALE_PREFIX = "font_scale::"
         private const val NEWEST_SESSIONS_AT_BOTTOM = "newest_sessions_at_bottom"
+        private const val ALL_SPLIT_ON_RIGHT = "all_split_on_right"
         private const val DISPLAY_NAME_PREFIX = "display_name::"
         private const val DEFAULT_FONT_SCALE = 1.4f
         private const val MIN_FONT_SCALE = 0.75f

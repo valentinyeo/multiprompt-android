@@ -55,6 +55,7 @@ data class AppUiState(
     val creatingSession: Boolean = false,
     val sessionActionError: String? = null,
     val newestSessionsAtBottom: Boolean = true,
+    val allSplitOnRight: Boolean = true,
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -75,6 +76,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             workspaces = initialWorkspaces,
             workspaceSplitIds = workspaceStore.splitIds(initialWorkspaces, emptyMap()),
             newestSessionsAtBottom = sessionReads.newestSessionsAtBottom(),
+            allSplitOnRight = sessionReads.allSplitOnRight(),
         ),
     )
     val state: StateFlow<AppUiState> = _state.asStateFlow()
@@ -97,6 +99,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setNewestSessionsAtBottom(enabled: Boolean) {
         sessionReads.setNewestSessionsAtBottom(enabled)
         _state.update { it.copy(newestSessionsAtBottom = enabled) }
+    }
+
+    fun setAllSplitOnRight(enabled: Boolean) {
+        sessionReads.setAllSplitOnRight(enabled)
+        _state.update { it.copy(allSplitOnRight = enabled) }
     }
 
     fun showHostEditor(host: HostProfile? = null) {
@@ -390,9 +397,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openAdjacentWorkspace(delta: Int) {
-        val splits = _state.value.workspaceSplitIds
+        val state = _state.value
+        val splits = if (state.allSplitOnRight) {
+            state.workspaceSplitIds.asReversed()
+        } else {
+            state.workspaceSplitIds
+        }
         if (splits.size < 2) return
-        val current = splits.indexOf(_state.value.selectedWorkspaceId).coerceAtLeast(0)
+        val current = splits.indexOf(state.selectedWorkspaceId).coerceAtLeast(0)
         selectWorkspace(splits[Math.floorMod(current + delta, splits.size)])
     }
 
@@ -472,6 +484,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                     candidate.copy(title = displayName)
                                 } else {
                                     candidate
+                                }
+                            },
+                            readerSession = current.readerSession?.let { open ->
+                                if (open.hostId == session.hostId && open.name == session.name) {
+                                    open.copy(title = displayName)
+                                } else {
+                                    open
+                                }
+                            },
+                            terminalSession = current.terminalSession?.let { open ->
+                                if (open.hostId == session.hostId && open.name == session.name) {
+                                    open.copy(title = displayName)
+                                } else {
+                                    open
                                 }
                             },
                         )
