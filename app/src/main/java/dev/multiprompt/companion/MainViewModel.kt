@@ -660,12 +660,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Archives the current thread and immediately advances through the remaining inbox. */
     fun archiveReaderAndOpenNext() {
+        archiveReaderUntilAndOpenNext(null)
+    }
+
+    /** Snoozes the current thread and immediately advances through the remaining inbox. */
+    fun archiveReaderUntilAndOpenNext(resumeAtEpochSeconds: Long?) {
         val current = _state.value.readerSession ?: return
         val visible = visibleInboxSessions(_state.value)
         val currentIndex = visible.indexOfFirst {
             it.hostId == current.hostId && it.name == current.name
         }
-        archiveSession(current)
+        archiveSessionUntil(current, resumeAtEpochSeconds)
         val remaining = visible.filterNot {
             it.hostId == current.hostId && it.name == current.name
         }

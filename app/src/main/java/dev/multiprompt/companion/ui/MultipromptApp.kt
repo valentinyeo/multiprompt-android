@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -45,12 +46,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Mic
@@ -140,6 +143,7 @@ import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
+import dev.multiprompt.companion.data.ReminderTimeParser
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.SessionSearch
 import dev.multiprompt.companion.terminal.TerminalConnection
@@ -221,6 +225,7 @@ fun MultipromptApp(viewModel: MainViewModel) {
                     viewModel.archiveReaderAndOpenNext()
                 }
             },
+            onRemind = viewModel::archiveReaderUntilAndOpenNext,
             onOpenTerminal = { viewModel.openTerminal(readerSession) },
             onSwitchSession = viewModel::openAdjacentReaderSession,
             onFontScaleChanged = { scale -> viewModel.saveReaderFontScale(readerSession, scale) },
@@ -478,7 +483,7 @@ private fun SessionsScreen(
     var workspaceHostId by remember(state.hosts) { mutableStateOf(state.hosts.first().id) }
     var workspaceError by remember { mutableStateOf<String?>(null) }
     var splitOrderDialogVisible by remember { mutableStateOf(false) }
-    var archivePromptSession by remember { mutableStateOf<TmuxSession?>(null) }
+    var reminderPromptSession by remember { mutableStateOf<TmuxSession?>(null) }
     var dissolvePromptSession by remember { mutableStateOf<TmuxSession?>(null) }
     var renamePromptSession by remember { mutableStateOf<TmuxSession?>(null) }
     var renameDraft by remember { mutableStateOf("") }
@@ -612,44 +617,13 @@ private fun SessionsScreen(
             },
         )
     }
-    archivePromptSession?.let { session ->
-        AlertDialog(
-            onDismissRequest = { archivePromptSession = null },
-            title = { Text("Archive until…") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        session.displayName,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Button(
-                        onClick = {
-                            archivePromptSession = null
-                            onArchiveUntil(session, null)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("When it updates") }
-                    OutlinedButton(
-                        onClick = {
-                            archivePromptSession = null
-                            onArchiveUntil(session, System.currentTimeMillis() / 1000 + 60 * 60)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("In one hour") }
-                    OutlinedButton(
-                        onClick = {
-                            archivePromptSession = null
-                            onArchiveUntil(session, tomorrowMorningEpochSeconds())
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Tomorrow morning") }
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { archivePromptSession = null }) { Text("Cancel") }
+    reminderPromptSession?.let { session ->
+        ReminderDialog(
+            session = session,
+            onDismiss = { reminderPromptSession = null },
+            onRemind = { dueAt ->
+                reminderPromptSession = null
+                onArchiveUntil(session, dueAt)
             },
         )
     }
@@ -945,7 +919,8 @@ private fun SessionsScreen(
                     unread = key in state.unreadSessionKeys,
                     archived = key in state.archivedSessionKeys,
                     onClick = { onOpen(session) },
-                    onSwipeArchive = { archivePromptSession = session },
+                    onArchive = { onArchive(session) },
+                    onRemind = { reminderPromptSession = session },
                     onArchiveToggle = {
                         if (key in state.archivedSessionKeys) onRestore(session) else onArchive(session)
                     },
@@ -1000,13 +975,93 @@ private fun SessionsScreen(
 }
 
 @Composable
+private fun ReminderDialog(
+    session: TmuxSession,
+    onDismiss: () -> Unit,
+    onRemind: (Long) -> Unit,
+) {
+    val now = remember(session.hostId, session.name) { ZonedDateTime.now() }
+    var customTime by remember(session.hostId, session.name) { mutableStateOf("") }
+    var customError by remember(session.hostId, session.name) { mutableStateOf<String?>(null) }
+    val later = remember(now) { ReminderTimeParser.laterToday(now) }
+    val presets = remember(now) {
+        listOf(
+            "Later today · ${ReminderTimeParser.format(later)}" to later,
+            "In 30 minutes" to now.plusMinutes(30),
+            "In 1 hour" to now.plusHours(1),
+            "In 2 hours" to now.plusHours(2),
+            "In 5 hours" to now.plusHours(5),
+            "Tomorrow · 9:00 AM" to ReminderTimeParser.tomorrowMorning(now),
+            "In 2 days · 9:00 AM" to ReminderTimeParser.inDaysMorning(2, now),
+        )
+    }
+    val submitCustom = {
+        val parsed = ReminderTimeParser.parse(customTime, ZonedDateTime.now())
+        if (parsed == null) {
+            customError = "Try “in 30 minutes”, “tomorrow at 3pm”, or “Friday 9:30”."
+        } else {
+            onRemind(parsed.toEpochSecond())
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Remind me") },
+        text = {
+            Column(
+                Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    session.displayName,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+                presets.forEach { (label, dueAt) ->
+                    TextButton(
+                        onClick = { onRemind(dueAt.toEpochSecond()) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(label, Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
+                    }
+                }
+                OutlinedTextField(
+                    value = customTime,
+                    onValueChange = {
+                        customTime = it
+                        customError = null
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    label = { Text("Custom time") },
+                    placeholder = { Text("tomorrow at 3pm") },
+                    supportingText = customError?.let { message -> { Text(message) } },
+                    isError = customError != null,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { submitCustom() }),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = submitCustom, enabled = customTime.isNotBlank()) {
+                Text("Set reminder")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
 private fun SessionCard(
     session: TmuxSession,
     workspaces: List<Workspace>,
     unread: Boolean,
     archived: Boolean,
     onClick: () -> Unit,
-    onSwipeArchive: () -> Unit,
+    onArchive: () -> Unit,
+    onRemind: () -> Unit,
     onArchiveToggle: () -> Unit,
     onMarkUnread: () -> Unit,
     onMove: (Workspace) -> Unit,
@@ -1016,26 +1071,37 @@ private fun SessionCard(
     var menuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     val dismissState = rememberSwipeToDismissBoxState()
     LaunchedEffect(dismissState.settledValue, archived) {
-        if (dismissState.settledValue == SwipeToDismissBoxValue.EndToStart && !archived) {
-            onSwipeArchive()
+        if (!archived) {
+            when (dismissState.settledValue) {
+                SwipeToDismissBoxValue.EndToStart -> onArchive()
+                SwipeToDismissBoxValue.StartToEnd -> onRemind()
+                SwipeToDismissBoxValue.Settled -> return@LaunchedEffect
+            }
             dismissState.reset()
         }
     }
     SwipeToDismissBox(
         state = dismissState,
-        enableDismissFromStartToEnd = false,
+        enableDismissFromStartToEnd = !archived,
         enableDismissFromEndToStart = !archived,
         backgroundContent = {
+            val reminding = dismissState.targetValue == SwipeToDismissBoxValue.StartToEnd
             Row(
                 Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.primaryContainer)
                     .padding(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = if (reminding) Arrangement.Start else Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                Icon(
+                    if (reminding) Icons.Default.Schedule else Icons.Default.Archive,
+                    null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                Spacer(Modifier.size(8.dp))
                 Text(
-                    "Archive",
+                    if (reminding) "Remind me" else "Archive",
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -1082,6 +1148,15 @@ private fun SessionCard(
                                 onArchiveToggle()
                             },
                         )
+                        if (!archived) {
+                            DropdownMenuItem(
+                                text = { Text("Remind me") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onRemind()
+                                },
+                            )
+                        }
                         if (!unread && !archived) {
                             DropdownMenuItem(
                                 text = { Text("Mark unread") },
@@ -1140,6 +1215,7 @@ private fun ReaderScreen(
     onBack: () -> Unit,
     onMarkRead: () -> Unit,
     onArchiveToggle: () -> Unit,
+    onRemind: (Long?) -> Unit,
     onOpenTerminal: () -> Unit,
     onSwitchSession: (Int) -> Unit,
     onFontScaleChanged: (Float) -> Unit,
@@ -1168,6 +1244,7 @@ private fun ReaderScreen(
     var imageUploadError by remember(connection) { mutableStateOf<String?>(null) }
     var dissolveDialogVisible by remember(connection) { mutableStateOf(false) }
     var renameDialogVisible by remember(connection) { mutableStateOf(false) }
+    var reminderDialogVisible by remember(connection) { mutableStateOf(false) }
     var renameDraft by remember(connection) { mutableStateOf(session.displayName) }
     var renameError by remember(connection) { mutableStateOf<String?>(null) }
     var transcriptZoom by remember(connection, session.hostId, session.name) {
@@ -1367,6 +1444,16 @@ private fun ReaderScreen(
             },
             dismissButton = {
                 TextButton(onClick = { dissolveDialogVisible = false }) { Text("Cancel") }
+            },
+        )
+    }
+    if (reminderDialogVisible) {
+        ReminderDialog(
+            session = session,
+            onDismiss = { reminderDialogVisible = false },
+            onRemind = { dueAt ->
+                reminderDialogVisible = false
+                onRemind(dueAt)
             },
         )
     }
@@ -1572,6 +1659,27 @@ private fun ReaderScreen(
                     .navigationBarsPadding(),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FilledTonalButton(
+                        onClick = { reminderDialogVisible = true },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Default.Schedule, null, Modifier.size(18.dp))
+                        Spacer(Modifier.size(6.dp))
+                        Text("Remind me")
+                    }
+                    OutlinedButton(
+                        onClick = onArchiveToggle,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Default.Archive, null, Modifier.size(18.dp))
+                        Spacer(Modifier.size(6.dp))
+                        Text(if (archived) "Return" else "Archive")
+                    }
+                }
                 OutlinedTextField(
                     value = promptField,
                     onValueChange = { promptField = it },
