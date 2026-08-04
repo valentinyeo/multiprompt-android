@@ -11,7 +11,7 @@ object TmuxCommands {
     const val CREATED_PREFIX = "__MP_TMUX_CREATED__"
 
     fun capture(sessionName: String): String =
-        "tmux capture-pane -p -J -S -200 -t ${target(sessionName)}"
+        "tmux capture-pane -p -J -S -2000 -t ${target(sessionName)}"
 
     fun action(sessionName: String, action: TmuxAction): String {
         val key = when (action) {
@@ -53,11 +53,18 @@ object TmuxCommands {
         val target = target(sessionName)
         return "if ! tmux has-session -t $target 2>/dev/null; then " +
             "printf 'tmux session is no longer available\\n' >&2; exit 1; fi; " +
+            "mp_snapshot=\$(mktemp) || exit 2; " +
+            "trap 'rm -f \"\$mp_snapshot\"' EXIT HUP INT TERM; " +
+            "mp_previous=''; " +
             "while tmux has-session -t $target 2>/dev/null; do " +
+            "tmux capture-pane -p -J -S -2000 -t $target 2>/dev/null | " +
+            "tail -c 524288 > \"\$mp_snapshot\"; " +
+            "mp_current=\$(cksum < \"\$mp_snapshot\"); " +
+            "if [ \"\$mp_current\" != \"\$mp_previous\" ]; then " +
             "printf '$SNAPSHOT_PREFIX'; " +
-            "tmux capture-pane -p -J -S -200 -t $target 2>/dev/null | " +
-            "tail -c 131072 | od -An -v -tx1 | tr -d ' \\n'; " +
-            "printf '\\n'; sleep 1; done; " +
+            "od -An -v -tx1 < \"\$mp_snapshot\" | tr -d ' \\n'; " +
+            "printf '\\n'; mp_previous=\$mp_current; fi; " +
+            "sleep 1; done; " +
             "printf 'tmux session ended\\n' >&2; exit 1"
     }
 

@@ -39,24 +39,29 @@ class WorkspaceStore(context: Context) {
         sessionCounts: Map<String, Int>,
     ): List<Workspace> = orderWorkspaces(workspaces, sessionCounts, loadSplitOrder())
 
-    fun moveSplit(workspaces: List<Workspace>, workspaceId: String, delta: Int): List<Workspace> {
-        val currentIndex = workspaces.indexOfFirst { it.id == workspaceId }
-        if (currentIndex < 0) return workspaces
-        val targetIndex = (currentIndex + delta).coerceIn(workspaces.indices)
-        if (targetIndex == currentIndex) return workspaces
-        val reordered = workspaces.toMutableList().apply {
+    fun splitIds(
+        workspaces: List<Workspace>,
+        latestActivityByWorkspace: Map<String, Long>,
+    ): List<String?> = orderSplitIds(workspaces, latestActivityByWorkspace, loadSplitOrder())
+
+    fun moveSplit(splitIds: List<String?>, splitId: String?, delta: Int): List<String?> {
+        val currentIndex = splitIds.indexOf(splitId)
+        if (currentIndex < 0) return splitIds
+        val targetIndex = (currentIndex + delta).coerceIn(splitIds.indices)
+        if (targetIndex == currentIndex) return splitIds
+        val reordered = splitIds.toMutableList().apply {
             add(targetIndex, removeAt(currentIndex))
         }
-        saveSplitOrder(reordered.map { it.id })
+        saveSplitOrder(reordered.map { it ?: ALL_SPLIT_ID })
         return reordered
     }
 
     fun resetSplitOrder(
         workspaces: List<Workspace>,
-        sessionCounts: Map<String, Int>,
-    ): List<Workspace> {
+        latestActivityByWorkspace: Map<String, Long>,
+    ): List<String?> {
         preferences.edit().remove(KEY_SPLIT_ORDER).apply()
-        return orderWorkspaces(workspaces, sessionCounts, null)
+        return orderSplitIds(workspaces, latestActivityByWorkspace, null)
     }
 
     fun discover(sessions: List<TmuxSession>): List<Workspace> {
@@ -108,7 +113,10 @@ class WorkspaceStore(context: Context) {
             .keys
             .forEach(editor::remove)
         loadSplitOrder()?.let { order ->
-            editor.putString(KEY_SPLIT_ORDER, encodeIds(order.filter { it in validIds }))
+            editor.putString(
+                KEY_SPLIT_ORDER,
+                encodeIds(order.filter { it == ALL_SPLIT_ID || it in validIds }),
+            )
         }
         editor.putString(KEY_WORKSPACES, encode(remaining)).apply()
     }
@@ -155,6 +163,36 @@ class WorkspaceStore(context: Context) {
         private const val KEY_WORKSPACES = "workspaces_json"
         private const val KEY_SPLIT_ORDER = "split_order_json"
         private const val ASSIGNMENT_PREFIX = "assignment::"
+        private const val ALL_SPLIT_ID = "__all_sessions__"
+
+        internal fun orderSplitIds(
+            workspaces: List<Workspace>,
+            latestActivityByWorkspace: Map<String, Long>,
+            manualOrder: List<String>?,
+        ): List<String?> {
+            val workspacesById = workspaces.associateBy { it.id }
+            val automaticWorkspaceIds = workspaces
+                .sortedWith(
+                    compareByDescending<Workspace> { latestActivityByWorkspace[it.id] ?: 0L }
+                        .thenBy { it.name.lowercase() },
+                )
+                .map { it.id }
+            val automatic = listOf(ALL_SPLIT_ID) + automaticWorkspaceIds
+            if (manualOrder == null) return automatic.map { it.takeUnless { id -> id == ALL_SPLIT_ID } }
+
+            // v0.1.21 stored workspace IDs only. Prepending All migrates that order while
+            // preserving the new default that All starts first.
+            val migrated = if (ALL_SPLIT_ID in manualOrder) {
+                manualOrder
+            } else {
+                listOf(ALL_SPLIT_ID) + manualOrder
+            }
+            val valid = migrated
+                .filter { it == ALL_SPLIT_ID || it in workspacesById }
+                .distinct()
+            val complete = valid + automatic.filterNot { it in valid }
+            return complete.map { it.takeUnless { id -> id == ALL_SPLIT_ID } }
+        }
 
         internal fun orderWorkspaces(
             workspaces: List<Workspace>,

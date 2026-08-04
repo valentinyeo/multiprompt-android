@@ -10,8 +10,16 @@ import androidx.compose.ui.text.font.FontWeight
 import dev.multiprompt.companion.R
 
 val ReaderFontFamily = FontFamily(
-    Font(R.font.hack_regular, FontWeight.Normal),
+    Font(R.font.ibm_plex_mono_regular, FontWeight.Normal),
 )
+
+val TerminalBackground = Color(0xFF161616)
+val TerminalSurface = Color(0xFF1F1F1F)
+val TerminalForeground = Color(0xFFF4F4F4)
+val TerminalBlue = Color(0xFF78A9FF)
+val TerminalGreen = Color(0xFF42BE65)
+val TerminalYellow = Color(0xFFF1C21B)
+val TerminalRed = Color(0xFFFA4D56)
 
 private val MultipromptColors = darkColorScheme(
     primary = Color(0xFF7DD3FC),

@@ -317,6 +317,6 @@ class SshRepository(private val secrets: SecretStore) {
         const val CONNECTION_TIMEOUT_MS = 20_000L
         const val MAX_COMMAND_OUTPUT = 2 * 1024 * 1024
         const val MAX_PROMPT_BYTES = 64 * 1024
-        const val MAX_SNAPSHOT_HEX_CHARS = 256 * 1024
+        const val MAX_SNAPSHOT_HEX_CHARS = 1024 * 1024
     }
 }

@@ -10,7 +10,7 @@ class TmuxCommandsTest {
     fun captureQuotesTheCompleteTarget() {
         val command = TmuxCommands.capture("a'; reboot")
 
-        assertEquals("tmux capture-pane -p -J -S -200 -t 'a'\"'\"'; reboot:'", command)
+        assertEquals("tmux capture-pane -p -J -S -2000 -t 'a'\"'\"'; reboot:'", command)
     }
 
     @Test
@@ -41,7 +41,10 @@ class TmuxCommandsTest {
         val command = TmuxCommands.stream("work")
 
         assertTrue(command.contains("while tmux has-session -t 'work:'"))
-        assertTrue(command.contains("tmux capture-pane -p -J -S -200 -t 'work:'"))
+        assertTrue(command.contains("tmux capture-pane -p -J -S -2000 -t 'work:'"))
+        assertTrue(command.contains("tail -c 524288"))
+        assertTrue(command.contains("mp_current=\$(cksum"))
+        assertTrue(command.contains("mp_previous=\$mp_current"))
         assertTrue(command.contains(TmuxCommands.SNAPSHOT_PREFIX))
         assertTrue(command.contains("sleep 1"))
     }

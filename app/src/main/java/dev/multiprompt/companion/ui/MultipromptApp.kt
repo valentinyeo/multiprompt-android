@@ -4,13 +4,14 @@ import android.Manifest
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
-import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.rememberScrollState
@@ -45,10 +46,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
@@ -98,7 +101,11 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.core.content.ContextCompat
+import androidx.core.content.res.ResourcesCompat
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -122,6 +129,7 @@ import dev.multiprompt.companion.AppSection
 import dev.multiprompt.companion.AppUiState
 import dev.multiprompt.companion.BuildConfig
 import dev.multiprompt.companion.MainViewModel
+import dev.multiprompt.companion.R
 import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
@@ -131,6 +139,7 @@ import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.data.SessionReadStore
+import dev.multiprompt.companion.data.SessionSearch
 import dev.multiprompt.companion.terminal.TerminalConnection
 import dev.multiprompt.companion.terminal.TerminalStatus
 import dev.multiprompt.companion.update.UpdateRelease
@@ -233,12 +242,14 @@ fun MultipromptApp(viewModel: MainViewModel) {
         modifier = Modifier.fillMaxSize(),
         topBar = {
             Column(Modifier.statusBarsPadding()) {
-                Header(
-                    refreshing = state.refreshing,
-                    onRefresh = viewModel::refresh,
-                    section = state.section,
-                    onSelect = viewModel::select,
-                )
+                if (state.section != AppSection.SESSIONS) {
+                    Header(
+                        refreshing = state.refreshing,
+                        onRefresh = viewModel::refresh,
+                        section = state.section,
+                        onSelect = viewModel::select,
+                    )
+                }
                 val available = updateState as? UpdateState.Available
                 if (available != null) {
                     UpdateBanner(available.release) { viewModel.installUpdate(available.release) }
@@ -284,6 +295,8 @@ fun MultipromptApp(viewModel: MainViewModel) {
                     onResetWorkspaceSplitOrder = viewModel::resetWorkspaceSplitOrder,
                     onCreateWorkspace = viewModel::createWorkspace,
                     onMoveSession = viewModel::moveSession,
+                    onRefresh = viewModel::refresh,
+                    onSelectSection = viewModel::select,
                     onAddHost = {
                         viewModel.select(AppSection.HOSTS)
                         viewModel.showHostEditor()
@@ -385,7 +398,7 @@ private fun Header(
             Column {
                 Text(
                     when (section) {
-                        AppSection.SESSIONS -> "Inbox"
+                        AppSection.SESSIONS -> "Sessions"
                         AppSection.HOSTS -> "Hosts"
                         AppSection.UPDATE -> "Update"
                     },
@@ -409,7 +422,7 @@ private fun Header(
                     onDismissRequest = { menuExpanded = false },
                 ) {
                     listOf(
-                        AppSection.SESSIONS to "Inbox",
+                        AppSection.SESSIONS to "Sessions",
                         AppSection.HOSTS to "Hosts",
                         AppSection.UPDATE to "Update",
                     ).forEach { (destination, label) ->
@@ -451,10 +464,12 @@ private fun SessionsScreen(
     onToggleArchived: () -> Unit,
     onSelectWorkspace: (String?) -> Unit,
     onSwitchWorkspace: (Int) -> Unit,
-    onMoveWorkspaceSplit: (String, Int) -> Unit,
+    onMoveWorkspaceSplit: (String?, Int) -> Unit,
     onResetWorkspaceSplitOrder: () -> Unit,
     onCreateWorkspace: (String, String, String) -> String?,
     onMoveSession: (TmuxSession, Workspace) -> Unit,
+    onRefresh: () -> Unit,
+    onSelectSection: (AppSection) -> Unit,
     onAddHost: () -> Unit,
 ) {
     if (state.hosts.isEmpty()) {
@@ -469,6 +484,14 @@ private fun SessionsScreen(
     var splitOrderDialogVisible by remember { mutableStateOf(false) }
     var archivePromptSession by remember { mutableStateOf<TmuxSession?>(null) }
     var dissolvePromptSession by remember { mutableStateOf<TmuxSession?>(null) }
+    var searchVisible by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var overflowExpanded by remember { mutableStateOf(false) }
+    val searchFocusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(searchVisible) {
+        if (searchVisible) searchFocusRequester.requestFocus()
+    }
     archivePromptSession?.let { session ->
         AlertDialog(
             onDismissRequest = { archivePromptSession = null },
@@ -529,33 +552,41 @@ private fun SessionsScreen(
     if (splitOrderDialogVisible) {
         AlertDialog(
             onDismissRequest = { splitOrderDialogVisible = false },
-            title = { Text("Arrange inbox splits") },
+            title = { Text("Arrange splits") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        "Swipe order follows this list.",
+                        "Automatic order keeps All first, then the most recently active splits.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    state.workspaces.forEachIndexed { index, workspace ->
-                        val sessionCount = state.sessionWorkspaceIds.values.count { it == workspace.id }
+                    state.workspaceSplitIds.forEachIndexed { index, splitId ->
+                        val workspace = splitId?.let { id ->
+                            state.workspaces.firstOrNull { it.id == id }
+                        }
+                        val splitName = workspace?.name ?: "All"
+                        val sessionCount = if (splitId == null) {
+                            state.sessions.size
+                        } else {
+                            state.sessionWorkspaceIds.values.count { it == splitId }
+                        }
                         Row(
                             Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(workspace.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(splitName, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
                                 "$sessionCount",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             IconButton(
-                                onClick = { onMoveWorkspaceSplit(workspace.id, -1) },
+                                onClick = { onMoveWorkspaceSplit(splitId, -1) },
                                 enabled = index > 0,
                             ) { Text("↑") }
                             IconButton(
-                                onClick = { onMoveWorkspaceSplit(workspace.id, 1) },
-                                enabled = index < state.workspaces.lastIndex,
+                                onClick = { onMoveWorkspaceSplit(splitId, 1) },
+                                enabled = index < state.workspaceSplitIds.lastIndex,
                             ) { Text("↓") }
                         }
                     }
@@ -613,62 +644,158 @@ private fun SessionsScreen(
             },
         )
     }
-    val visibleSessions = state.sessions
+    val normalizedQuery = searchQuery.trim()
+    val hostLabels = state.hosts.associate { it.id to it.label }
+    val workspaceNames = state.workspaces.associate { it.id to it.name }
+    val visibleSessions = SessionSearch.newestFirst(state.sessions
         .filter { session ->
             val key = SessionReadStore.key(session.hostId, session.name)
             (key in state.archivedSessionKeys) == state.showingArchivedSessions &&
-                (state.selectedWorkspaceId == null ||
-                    state.sessionWorkspaceIds[key] == state.selectedWorkspaceId)
-        }
-        .sortedByDescending { it.lastActivityEpochSeconds }
+                (normalizedQuery.isNotBlank() ||
+                    state.selectedWorkspaceId == null ||
+                    state.sessionWorkspaceIds[key] == state.selectedWorkspaceId) &&
+                SessionSearch.matches(
+                    session = session,
+                    query = normalizedQuery,
+                    hostLabel = hostLabels[session.hostId].orEmpty(),
+                    workspaceName = workspaceNames[state.sessionWorkspaceIds[key]].orEmpty(),
+                )
+        })
     LazyColumn(
-        Modifier.fillMaxSize().horizontalSwipe(onSwitchWorkspace, PointerEventPass.Final),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        Modifier
+            .fillMaxSize()
+            .horizontalSwipe(onSwitchWorkspace, PointerEventPass.Final),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
     ) {
-        item(key = "inbox-filter") {
+        item(key = "workspace-splits") {
             Row(
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    if (state.showingArchivedSessions) "Archived" else "Inbox",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = onToggleArchived) {
-                    Text(
-                        if (state.showingArchivedSessions) {
-                            "Back to inbox"
+                Row(
+                    Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    state.workspaceSplitIds.forEach { id ->
+                        val name = id?.let { workspaceId ->
+                            state.workspaces.firstOrNull { it.id == workspaceId }?.name
+                        } ?: "All"
+                        if (state.selectedWorkspaceId == id) {
+                            FilledTonalButton(onClick = { onSelectWorkspace(id) }) { Text(name) }
                         } else {
-                            "Archived (${state.archivedSessionKeys.size})"
-                        },
-                    )
+                            TextButton(onClick = { onSelectWorkspace(id) }) { Text(name) }
+                        }
+                    }
+                }
+                if (state.refreshing) {
+                    CircularProgressIndicator(Modifier.padding(12.dp).size(20.dp), strokeWidth = 2.dp)
+                }
+                Box {
+                    IconButton(onClick = { overflowExpanded = true }) {
+                        Icon(Icons.Default.MoreVert, "Session list actions")
+                    }
+                    DropdownMenu(
+                        expanded = overflowExpanded,
+                        onDismissRequest = { overflowExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Search sessions") },
+                            leadingIcon = { Icon(Icons.Default.Search, null) },
+                            onClick = {
+                                overflowExpanded = false
+                                searchVisible = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    if (state.showingArchivedSessions) "Show active sessions"
+                                    else "Archived (${state.archivedSessionKeys.size})",
+                                )
+                            },
+                            onClick = {
+                                overflowExpanded = false
+                                onToggleArchived()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Arrange splits") },
+                            onClick = {
+                                overflowExpanded = false
+                                splitOrderDialogVisible = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("New workspace") },
+                            onClick = {
+                                overflowExpanded = false
+                                workspaceError = null
+                                workspaceDialogVisible = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Refresh") },
+                            leadingIcon = { Icon(Icons.Default.Refresh, null) },
+                            onClick = {
+                                overflowExpanded = false
+                                onRefresh()
+                            },
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Hosts") },
+                            onClick = {
+                                overflowExpanded = false
+                                onSelectSection(AppSection.HOSTS)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Update") },
+                            onClick = {
+                                overflowExpanded = false
+                                onSelectSection(AppSection.UPDATE)
+                            },
+                        )
+                    }
                 }
             }
         }
-        item(key = "workspace-splits") {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                val splits = state.workspaces.map { it.id to it.name } +
-                    listOf<Pair<String?, String>>(null to "All")
-                splits.forEach { (id, name) ->
-                    if (state.selectedWorkspaceId == id) {
-                        FilledTonalButton(onClick = { onSelectWorkspace(id) }) { Text(name) }
-                    } else {
-                        TextButton(onClick = { onSelectWorkspace(id) }) { Text(name) }
+        if (searchVisible) {
+            item(key = "session-search") {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.fillMaxWidth().focusRequester(searchFocusRequester),
+                        placeholder = { Text("Search all sessions") },
+                        leadingIcon = { Icon(Icons.Default.Search, null) },
+                        trailingIcon = {
+                            IconButton(onClick = {
+                                if (searchQuery.isNotEmpty()) {
+                                    searchQuery = ""
+                                } else {
+                                    searchVisible = false
+                                    focusManager.clearFocus()
+                                }
+                            }) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    if (searchQuery.isNotEmpty()) "Clear search" else "Close search",
+                                )
+                            }
+                        },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                    )
+                    if (normalizedQuery.isNotBlank()) {
+                        Text(
+                            "${visibleSessions.size} ${if (visibleSessions.size == 1) "result" else "results"} across all splits",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
-                IconButton(onClick = { splitOrderDialogVisible = true }) {
-                    Icon(Icons.Default.Edit, "Arrange splits")
-                }
-                TextButton(onClick = {
-                    workspaceError = null
-                    workspaceDialogVisible = true
-                }) { Text("+ Workspace") }
             }
         }
         state.hostErrors.forEach { (hostId, error) ->
@@ -681,7 +808,6 @@ private fun SessionsScreen(
             val key = SessionReadStore.key(session.hostId, session.name)
             SessionCard(
                 session = session,
-                hostLabel = state.hosts.firstOrNull { it.id == session.hostId }?.label.orEmpty(),
                 workspaces = state.workspaces,
                 unread = key in state.unreadSessionKeys,
                 archived = key in state.archivedSessionKeys,
@@ -698,7 +824,11 @@ private fun SessionsScreen(
         if (visibleSessions.isEmpty() && !state.refreshing) {
             item(key = "empty-inbox") {
                 Text(
-                    if (state.showingArchivedSessions) "No archived sessions" else "This inbox split is clear",
+                    when {
+                        normalizedQuery.isNotBlank() -> "No sessions match “$normalizedQuery”"
+                        state.showingArchivedSessions -> "No archived sessions"
+                        else -> "This split is clear"
+                    },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -709,7 +839,6 @@ private fun SessionsScreen(
 @Composable
 private fun SessionCard(
     session: TmuxSession,
-    hostLabel: String,
     workspaces: List<Workspace>,
     unread: Boolean,
     archived: Boolean,
@@ -749,94 +878,82 @@ private fun SessionCard(
             }
         },
     ) {
-        Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onClick)
+                    .padding(start = 12.dp, end = 2.dp, top = 3.dp, bottom = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(9.dp),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (unread) {
-                        Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
+                Box(
+                    Modifier
+                        .size(7.dp)
+                        .background(
+                            when {
+                                unread -> MaterialTheme.colorScheme.primary
+                                session.attachedClients > 0 -> MaterialTheme.colorScheme.secondary
+                                else -> Color.Transparent
+                            },
+                            CircleShape,
+                        ),
+                )
+                Text(
+                    session.displayName,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (unread) FontWeight.Bold else FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(Icons.Default.MoreVert, "Session actions")
                     }
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            session.displayName,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(if (archived) "Return to active" else "Archive") },
+                            onClick = {
+                                menuExpanded = false
+                                onArchiveToggle()
+                            },
                         )
-                        Text(
-                            "$hostLabel · ${session.agent.label} · ${relativeTime(session.lastActivityEpochSeconds)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (session.attachedClients > 0) {
-                        Text(
-                            "LIVE ${session.attachedClients}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.secondary,
-                        )
-                    }
-                    Box {
-                        IconButton(onClick = { menuExpanded = true }) {
-                            Icon(Icons.Default.MoreVert, "Thread actions")
-                        }
-                        DropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false },
-                        ) {
+                        if (!unread && !archived) {
                             DropdownMenuItem(
-                                text = { Text(if (archived) "Return to inbox" else "Archive") },
+                                text = { Text("Mark unread") },
                                 onClick = {
                                     menuExpanded = false
-                                    onArchiveToggle()
+                                    onMarkUnread()
                                 },
                             )
-                            if (!unread && !archived) {
+                        }
+                        if (!archived) {
+                            workspaces.filter { it.hostId == session.hostId }.forEach { workspace ->
                                 DropdownMenuItem(
-                                    text = { Text("Mark unread") },
+                                    text = { Text("Move to ${workspace.name}") },
                                     onClick = {
                                         menuExpanded = false
-                                        onMarkUnread()
+                                        onMove(workspace)
                                     },
                                 )
                             }
-                            if (!archived) {
-                                workspaces.filter { it.hostId == session.hostId }.forEach { workspace ->
-                                    DropdownMenuItem(
-                                        text = { Text("Move to ${workspace.name}") },
-                                        onClick = {
-                                            menuExpanded = false
-                                            onMove(workspace)
-                                        },
-                                    )
-                                }
-                            }
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text("Dissolve session", color = MaterialTheme.colorScheme.error) },
-                                onClick = {
-                                    menuExpanded = false
-                                    onDissolve()
-                                },
-                            )
                         }
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Dissolve session", color = MaterialTheme.colorScheme.error) },
+                            onClick = {
+                                menuExpanded = false
+                                onDissolve()
+                            },
+                        )
                     }
                 }
-                if (session.preview.isNotBlank()) {
-                    Text(
-                        session.preview,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontFamily = ReaderFontFamily,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 18.sp,
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
             }
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
         }
     }
 }
@@ -1189,7 +1306,7 @@ private fun ReaderScreen(
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text(if (archived) "Return to inbox" else "Archive and open next") },
+                                text = { Text(if (archived) "Return to active" else "Archive and open next") },
                                 onClick = {
                                     menuExpanded = false
                                     onArchiveToggle()
@@ -1384,6 +1501,8 @@ private fun ReaderScreen(
             BoxWithConstraints(
                 Modifier
                     .fillMaxWidth()
+                    .background(TerminalSurface, RoundedCornerShape(10.dp))
+                    .padding(10.dp)
                     .transformable(state = transcriptTransform, canPan = { false }),
             ) {
                 val paneColumns = session.columns.takeIf { it > 0 } ?: FALLBACK_COLUMNS
@@ -1418,6 +1537,7 @@ private fun ReaderScreen(
                         fontFamily = ReaderFontFamily,
                         fontSize = transcriptFontSize,
                         lineHeight = (transcriptFontSize.value * 1.3f).sp,
+                        color = TerminalForeground,
                         textAlign = TextAlign.Start,
                         softWrap = true,
                     )
@@ -1660,6 +1780,9 @@ private fun TerminalScreen(
     val context = LocalContext.current
     val density = LocalDensity.current
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val terminalTypeface = remember(context) {
+        ResourcesCompat.getFont(context, R.font.ibm_plex_mono_regular) ?: Typeface.MONOSPACE
+    }
     // The desktop owns the window width, so the phone shrinks its glyphs until that width
     // fits instead of resizing anything. Measure the real monospace advance: a guessed ratio
     // left the emulator a few columns narrower than tmux believed, so every full-width line
@@ -1669,7 +1792,7 @@ private fun TerminalScreen(
         val target = if (columns > 0) columns else FALLBACK_COLUMNS
         val pxPerCharAt100Sp = textMeasurer.measure(
             AnnotatedString("0".repeat(20)),
-            TextStyle(fontFamily = FontFamily.Monospace, fontSize = 100.sp),
+            TextStyle(fontFamily = ReaderFontFamily, fontSize = 100.sp),
         ).size.width / 20f
         val screenPx = with(density) { screenWidthDp.dp.toPx() }
         // 2% slack so rounding lands the emulator on target or slightly above, never below.
@@ -1705,7 +1828,7 @@ private fun TerminalScreen(
             )
         },
     ) { padding ->
-        Box(Modifier.padding(padding).fillMaxSize().background(Color(0xFF090B10)).clipToBounds()) {
+        Box(Modifier.padding(padding).fillMaxSize().background(TerminalBackground).clipToBounds()) {
             Terminal(
                 terminalEmulator = connection.emulator,
                 modifier = Modifier
@@ -1713,8 +1836,9 @@ private fun TerminalScreen(
                     .offset { IntOffset(0, -keyboardHeightPx) }
                     .horizontalSwipe(onSwitchSession),
                 initialFontSize = fontSize,
-                backgroundColor = Color(0xFF090B10),
-                foregroundColor = Color(0xFFE5E7EB),
+                typeface = terminalTypeface,
+                backgroundColor = TerminalBackground,
+                foregroundColor = TerminalForeground,
                 keyboardEnabled = true,
                 showSoftKeyboard = true,
                 onPasteRequest = {
@@ -1757,15 +1881,6 @@ private fun EmptyState(title: String, body: String, action: () -> Unit) {
 @Composable
 private fun InlineError(message: String) {
     Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-}
-
-private fun relativeTime(epochSeconds: Long): String {
-    if (epochSeconds <= 0) return "unknown activity"
-    return DateUtils.getRelativeTimeSpanString(
-        epochSeconds * 1000,
-        System.currentTimeMillis(),
-        DateUtils.MINUTE_IN_MILLIS,
-    ).toString()
 }
 
 private fun tomorrowMorningEpochSeconds(): Long = ZonedDateTime.now()
@@ -1838,6 +1953,20 @@ private fun Context.readSmallFile(uri: Uri, maxBytes: Int): ByteArray {
 
 private fun terminalLinks(value: String): AnnotatedString {
     val builder = AnnotatedString.Builder(value)
+    value.lineSequence().fold(0) { offset, line ->
+        val trimmed = line.trimStart()
+        val color = when {
+            TERMINAL_ERROR.containsMatchIn(trimmed) -> TerminalRed
+            TERMINAL_WARNING.containsMatchIn(trimmed) -> TerminalYellow
+            TERMINAL_SUCCESS.containsMatchIn(trimmed) -> TerminalGreen
+            TERMINAL_PROMPT.containsMatchIn(trimmed) -> TerminalBlue
+            else -> null
+        }
+        if (color != null && line.isNotEmpty()) {
+            builder.addStyle(SpanStyle(color = color), offset, offset + line.length)
+        }
+        offset + line.length + 1
+    }
     TERMINAL_URL.findAll(value).forEach { match ->
         val url = match.value.trimEnd('.', ',', ';', ':', '!', '?')
         if (url.isNotEmpty()) {
@@ -1846,7 +1975,7 @@ private fun terminalLinks(value: String): AnnotatedString {
                     url,
                     TextLinkStyles(
                         style = SpanStyle(
-                            color = Color(0xFF7DD3FC),
+                            color = TerminalBlue,
                             textDecoration = TextDecoration.Underline,
                         ),
                     ),
@@ -1860,3 +1989,7 @@ private fun terminalLinks(value: String): AnnotatedString {
 }
 
 private val TERMINAL_URL = Regex("https?://[^\\s<>()\\[\\]{}]+")
+private val TERMINAL_ERROR = Regex("(?i)(^|\\b)(error|failed|failure|fatal|exception|denied)(\\b|:)")
+private val TERMINAL_WARNING = Regex("(?i)(^|\\b)(warning|warn)(\\b|:)")
+private val TERMINAL_SUCCESS = Regex("(?i)(^|\\b)(success|successful|passed|complete|completed)(\\b|:)")
+private val TERMINAL_PROMPT = Regex("^[>$❯›#]")

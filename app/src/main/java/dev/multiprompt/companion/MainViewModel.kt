@@ -47,6 +47,7 @@ data class AppUiState(
     val archivedSessionKeys: Set<String> = emptySet(),
     val showingArchivedSessions: Boolean = false,
     val workspaces: List<Workspace> = emptyList(),
+    val workspaceSplitIds: List<String?> = listOf(null),
     val selectedWorkspaceId: String? = null,
     val workspaceSelectionInitialized: Boolean = false,
     val sessionWorkspaceIds: Map<String, String> = emptyMap(),
@@ -65,10 +66,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val updates: UpdateManager = app.updateManager
     val screencast: ScreencastUploader = app.screencastUploader
 
+    private val initialWorkspaces = workspaceStore.ordered(workspaceStore.load(), emptyMap())
     private val _state = MutableStateFlow(
         AppUiState(
             hosts = hosts.load(),
-            workspaces = workspaceStore.ordered(workspaceStore.load(), emptyMap()),
+            workspaces = initialWorkspaces,
+            workspaceSplitIds = workspaceStore.splitIds(initialWorkspaces, emptyMap()),
         ),
     )
     val state: StateFlow<AppUiState> = _state.asStateFlow()
@@ -232,12 +235,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     workspaces,
                     sessionWorkspaceIds.values.groupingBy { it }.eachCount(),
                 )
+                val workspaceSplitIds = workspaceStore.splitIds(
+                    orderedWorkspaces,
+                    latestWorkspaceActivity(sessions, sessionWorkspaceIds),
+                )
                 val selectedWorkspaceId = when {
-                    !current.workspaceSelectionInitialized -> orderedWorkspaces.firstOrNull()?.id
+                    !current.workspaceSelectionInitialized -> workspaceSplitIds.firstOrNull()
                     current.selectedWorkspaceId == null -> null
                     orderedWorkspaces.any { it.id == current.selectedWorkspaceId } ->
                         current.selectedWorkspaceId
-                    else -> orderedWorkspaces.firstOrNull()?.id
+                    else -> workspaceSplitIds.firstOrNull()
                 }
                 current.copy(
                     sessions = sessions,
@@ -259,6 +266,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) },
                     archivedSessionKeys = archivedKeys,
                     workspaces = orderedWorkspaces,
+                    workspaceSplitIds = workspaceSplitIds,
                     selectedWorkspaceId = selectedWorkspaceId,
                     workspaceSelectionInitialized = orderedWorkspaces.isNotEmpty() ||
                         current.workspaceSelectionInitialized,
@@ -342,25 +350,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun moveWorkspaceSplit(workspaceId: String, delta: Int) {
+    fun moveWorkspaceSplit(workspaceId: String?, delta: Int) {
         _state.update { current ->
-            current.copy(workspaces = workspaceStore.moveSplit(current.workspaces, workspaceId, delta))
+            current.copy(
+                workspaceSplitIds = workspaceStore.moveSplit(
+                    current.workspaceSplitIds,
+                    workspaceId,
+                    delta,
+                ),
+            )
         }
     }
 
     fun resetWorkspaceSplitOrder() {
         _state.update { current ->
             current.copy(
-                workspaces = workspaceStore.resetSplitOrder(
+                workspaceSplitIds = workspaceStore.resetSplitOrder(
                     current.workspaces,
-                    current.sessionWorkspaceIds.values.groupingBy { it }.eachCount(),
+                    latestWorkspaceActivity(current.sessions, current.sessionWorkspaceIds),
                 ),
             )
         }
     }
 
     fun openAdjacentWorkspace(delta: Int) {
-        val splits = _state.value.workspaces.map { it.id as String? } + null
+        val splits = _state.value.workspaceSplitIds
         if (splits.size < 2) return
         val current = splits.indexOf(_state.value.selectedWorkspaceId).coerceAtLeast(0)
         selectWorkspace(splits[Math.floorMod(current + delta, splits.size)])
@@ -379,10 +393,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val workspace = Workspace(name = cleanName, hostId = hostId, remotePath = cleanPath)
         workspaceStore.upsert(workspace)
         _state.update {
+            val workspaces = workspaceStore.ordered(
+                workspaceStore.load(),
+                it.sessionWorkspaceIds.values.groupingBy { id -> id }.eachCount(),
+            )
             it.copy(
-                workspaces = workspaceStore.ordered(
-                    workspaceStore.load(),
-                    it.sessionWorkspaceIds.values.groupingBy { id -> id }.eachCount(),
+                workspaces = workspaces,
+                workspaceSplitIds = workspaceStore.splitIds(
+                    workspaces,
+                    latestWorkspaceActivity(it.sessions, it.sessionWorkspaceIds),
                 ),
                 selectedWorkspaceId = workspace.id,
                 workspaceSelectionInitialized = true,
@@ -397,11 +416,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val key = SessionReadStore.key(session.hostId, session.name)
         _state.update {
             val assignments = it.sessionWorkspaceIds + (key to workspace.id)
+            val workspaces = workspaceStore.ordered(
+                it.workspaces,
+                assignments.values.groupingBy { id -> id }.eachCount(),
+            )
             it.copy(
                 sessionWorkspaceIds = assignments,
-                workspaces = workspaceStore.ordered(
-                    it.workspaces,
-                    assignments.values.groupingBy { id -> id }.eachCount(),
+                workspaces = workspaces,
+                workspaceSplitIds = workspaceStore.splitIds(
+                    workspaces,
+                    latestWorkspaceActivity(it.sessions, assignments),
                 ),
             )
         }
@@ -642,6 +666,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 state.selectedWorkspaceId
         }
         .sortedByDescending { it.lastActivityEpochSeconds }
+
+    private fun latestWorkspaceActivity(
+        sessions: List<TmuxSession>,
+        assignments: Map<String, String>,
+    ): Map<String, Long> = sessions
+        .mapNotNull { session ->
+            val key = SessionReadStore.key(session.hostId, session.name)
+            assignments[key]?.let { workspaceId -> workspaceId to session.lastActivityEpochSeconds }
+        }
+        .groupingBy { it.first }
+        .fold(0L) { latest, entry -> maxOf(latest, entry.second) }
 
     private companion object {
         const val MAX_PRIVATE_KEY_BYTES = 256 * 1024

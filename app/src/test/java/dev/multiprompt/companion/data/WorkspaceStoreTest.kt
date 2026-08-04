@@ -48,6 +48,51 @@ class WorkspaceStoreTest {
         )
     }
 
+    @Test
+    fun automaticSplitOrderStartsWithAllThenUsesLatestActivity() {
+        val stale = workspace("stale", "Stale")
+        val recent = workspace("recent", "Recent")
+
+        assertEquals(
+            listOf(null, "recent", "stale"),
+            WorkspaceStore.orderSplitIds(
+                listOf(stale, recent),
+                mapOf("recent" to 200L, "stale" to 100L),
+                manualOrder = null,
+            ),
+        )
+    }
+
+    @Test
+    fun manualSplitOrderCanMoveAll() {
+        val quiet = workspace("quiet", "Quiet")
+        val busy = workspace("busy", "Busy")
+
+        assertEquals(
+            listOf("quiet", null, "busy"),
+            WorkspaceStore.orderSplitIds(
+                listOf(quiet, busy),
+                mapOf("busy" to 200L, "quiet" to 100L),
+                manualOrder = listOf("quiet", "__all_sessions__", "busy"),
+            ),
+        )
+    }
+
+    @Test
+    fun legacyManualOrderMigratesWithAllFirst() {
+        val quiet = workspace("quiet", "Quiet")
+        val busy = workspace("busy", "Busy")
+
+        assertEquals(
+            listOf(null, "quiet", "busy"),
+            WorkspaceStore.orderSplitIds(
+                listOf(quiet, busy),
+                emptyMap(),
+                manualOrder = listOf("quiet", "busy"),
+            ),
+        )
+    }
+
     private fun workspace(id: String, name: String) = Workspace(
         id = id,
         name = name,
