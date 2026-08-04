@@ -38,7 +38,7 @@ class SessionReadStore(context: Context) {
         editor.apply()
     }
 
-    fun isArchived(session: TmuxSession): Boolean {
+    fun isArchived(session: TmuxSession, needsAttention: Boolean): Boolean {
         val archiveKey = archiveKey(session.hostId, session.name)
         if (!preferences.contains(archiveKey)) return false
         val archivedAt = preferences.getLong(archiveKey, Long.MAX_VALUE)
@@ -49,6 +49,7 @@ class SessionReadStore(context: Context) {
                 archivedAtEpochSeconds = archivedAt,
                 resumeAtEpochSeconds = resumeAt,
                 nowEpochSeconds = System.currentTimeMillis() / 1000,
+                needsAttention = needsAttention,
             )
         ) return true
         restore(session)
@@ -72,6 +73,23 @@ class SessionReadStore(context: Context) {
             .apply()
     }
 
+    fun newestSessionsAtBottom(): Boolean =
+        preferences.getBoolean(NEWEST_SESSIONS_AT_BOTTOM, true)
+
+    fun setNewestSessionsAtBottom(enabled: Boolean) {
+        preferences.edit().putBoolean(NEWEST_SESSIONS_AT_BOTTOM, enabled).apply()
+    }
+
+    fun displayName(session: TmuxSession): String? =
+        preferences.getString(displayNameKey(session.hostId, session.name), null)
+            ?.takeIf(String::isNotBlank)
+
+    fun setDisplayName(session: TmuxSession, name: String) {
+        preferences.edit()
+            .putString(displayNameKey(session.hostId, session.name), name)
+            .apply()
+    }
+
     fun removeHost(hostId: String) {
         val prefix = "$hostId::"
         val editor = preferences.edit()
@@ -80,7 +98,8 @@ class SessionReadStore(context: Context) {
                 it.startsWith(prefix) ||
                     it.startsWith("$ARCHIVE_PREFIX$prefix") ||
                     it.startsWith("$ARCHIVE_UNTIL_PREFIX$prefix") ||
-                    it.startsWith("$FONT_SCALE_PREFIX$prefix")
+                    it.startsWith("$FONT_SCALE_PREFIX$prefix") ||
+                    it.startsWith("$DISPLAY_NAME_PREFIX$prefix")
             }
             .forEach(editor::remove)
         editor.apply()
@@ -90,6 +109,8 @@ class SessionReadStore(context: Context) {
         private const val ARCHIVE_PREFIX = "archive::"
         private const val ARCHIVE_UNTIL_PREFIX = "archive_until::"
         private const val FONT_SCALE_PREFIX = "font_scale::"
+        private const val NEWEST_SESSIONS_AT_BOTTOM = "newest_sessions_at_bottom"
+        private const val DISPLAY_NAME_PREFIX = "display_name::"
         private const val DEFAULT_FONT_SCALE = 1.4f
         private const val MIN_FONT_SCALE = 0.75f
         private const val MAX_FONT_SCALE = 5f
@@ -105,6 +126,9 @@ class SessionReadStore(context: Context) {
         private fun fontScaleKey(hostId: String, sessionName: String): String =
             "$FONT_SCALE_PREFIX${key(hostId, sessionName)}"
 
+        private fun displayNameKey(hostId: String, sessionName: String): String =
+            "$DISPLAY_NAME_PREFIX${key(hostId, sessionName)}"
+
         internal fun normalizeFontScale(scale: Float): Float =
             if (scale.isFinite()) scale.coerceIn(MIN_FONT_SCALE, MAX_FONT_SCALE) else DEFAULT_FONT_SCALE
 
@@ -113,7 +137,11 @@ class SessionReadStore(context: Context) {
             archivedAtEpochSeconds: Long,
             resumeAtEpochSeconds: Long?,
             nowEpochSeconds: Long,
-        ): Boolean = lastActivityEpochSeconds <= archivedAtEpochSeconds &&
-            (resumeAtEpochSeconds == null || nowEpochSeconds < resumeAtEpochSeconds)
+            needsAttention: Boolean,
+        ): Boolean = if (resumeAtEpochSeconds != null) {
+            nowEpochSeconds < resumeAtEpochSeconds
+        } else {
+            lastActivityEpochSeconds <= archivedAtEpochSeconds || !needsAttention
+        }
     }
 }

@@ -1,6 +1,8 @@
 package dev.multiprompt.companion.ssh
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TmuxTextTest {
@@ -58,5 +60,17 @@ class TmuxTextTest {
         val captured = "build complete\nuser@host:${'$'}"
 
         assertEquals(captured, TmuxText.withoutActiveComposer(captured))
+    }
+
+    @Test
+    fun detectsClaudeAndCodexIdleComposers() {
+        assertTrue(TmuxText.isWaitingForInput("Finished the task.\n❯"))
+        assertTrue(TmuxText.isWaitingForInput("Completed the change.\n› Ask Codex"))
+        assertTrue(TmuxText.isWaitingForInput("Press up to edit queued messages"))
+    }
+
+    @Test
+    fun activeOutputDoesNotNeedInput() {
+        assertFalse(TmuxText.isWaitingForInput("Building the APK…\nRunning tests"))
     }
 }

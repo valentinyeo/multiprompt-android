@@ -78,4 +78,16 @@ class TmuxCommandsTest {
             TmuxCommands.dissolveSession("a'; reboot"),
         )
     }
+
+    @Test
+    fun renameChangesTheVisibleWindowButKeepsTheStableSessionId() {
+        assertEquals(
+            "tmux rename-window -t 'work:' 'New name'",
+            TmuxCommands.renameWindow("work", "New name"),
+        )
+        assertEquals(
+            "tmux rename-window -t 'a'\"'\"'; reboot:' 'It'\"'\"'s safe'",
+            TmuxCommands.renameWindow("a'; reboot", "It's safe"),
+        )
+    }
 }

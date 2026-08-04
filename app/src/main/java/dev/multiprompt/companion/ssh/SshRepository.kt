@@ -222,6 +222,17 @@ class SshRepository(private val secrets: SecretStore) {
             }
         }
 
+    suspend fun renameSession(host: HostProfile, sessionName: String, displayName: String) =
+        withContext(Dispatchers.IO) {
+            withTimeout(CONNECTION_TIMEOUT_MS) {
+                withAuthenticatedClient(host) { client ->
+                    sendPrompt(client, sessionName, "/rename $displayName")
+                    execute(client, TmuxCommands.renameWindow(sessionName, displayName))
+                        .requireSuccess("rename the tmux window")
+                }
+            }
+        }
+
     private suspend fun <T> withAuthenticatedClient(
         host: HostProfile,
         block: suspend (SshClient) -> T,

@@ -13,6 +13,7 @@ import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.ssh.PresentedHostKey
 import dev.multiprompt.companion.ssh.SshProblem
+import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.terminal.TerminalConnection
 import dev.multiprompt.companion.update.UpdateManager
 import dev.multiprompt.companion.update.UpdateRelease
@@ -53,6 +54,7 @@ data class AppUiState(
     val sessionWorkspaceIds: Map<String, String> = emptyMap(),
     val creatingSession: Boolean = false,
     val sessionActionError: String? = null,
+    val newestSessionsAtBottom: Boolean = true,
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -72,6 +74,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             hosts = hosts.load(),
             workspaces = initialWorkspaces,
             workspaceSplitIds = workspaceStore.splitIds(initialWorkspaces, emptyMap()),
+            newestSessionsAtBottom = sessionReads.newestSessionsAtBottom(),
         ),
     )
     val state: StateFlow<AppUiState> = _state.asStateFlow()
@@ -89,6 +92,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun select(section: AppSection) {
         _state.update { it.copy(section = section) }
+    }
+
+    fun setNewestSessionsAtBottom(enabled: Boolean) {
+        sessionReads.setNewestSessionsAtBottom(enabled)
+        _state.update { it.copy(newestSessionsAtBottom = enabled) }
     }
 
     fun showHostEditor(host: HostProfile? = null) {
@@ -221,7 +229,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }.awaitAll()
             _state.update { current ->
-                val sessions = results.flatMap { it.sessions }
+                val sessions = results.flatMap { it.sessions }.map { session ->
+                    sessionReads.displayName(session)?.let { session.copy(title = it) } ?: session
+                }
                 val workspaces = workspaceStore.discover(sessions)
                 val sessionWorkspaceIds = sessions.mapNotNull { session ->
                     workspaceStore.workspaceIdFor(session, workspaces)?.let { workspaceId ->
@@ -229,7 +239,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }.toMap()
                 val archivedKeys = sessions
-                    .filter(sessionReads::isArchived)
+                    .filter { session ->
+                        sessionReads.isArchived(
+                            session,
+                            needsAttention = TmuxText.isWaitingForInput(session.preview),
+                        )
+                    }
                     .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) }
                 val orderedWorkspaces = workspaceStore.ordered(
                     workspaces,
@@ -262,6 +277,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }.toMap(),
                     unreadSessionKeys = sessions
                         .filter { SessionReadStore.key(it.hostId, it.name) !in archivedKeys }
+                        .filter { TmuxText.isWaitingForInput(it.preview) }
                         .filter(sessionReads::isUnread)
                         .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) },
                     archivedSessionKeys = archivedKeys,
@@ -429,6 +445,46 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 ),
             )
         }
+    }
+
+    fun renameSession(session: TmuxSession, requestedName: String): String? {
+        val displayName = requestedName.trim()
+        val error = when {
+            displayName.isBlank() -> "Enter a session name"
+            displayName.length > MAX_DISPLAY_NAME_LENGTH ->
+                "Use $MAX_DISPLAY_NAME_LENGTH characters or fewer"
+            displayName.any { it == '\n' || it == '\r' || it.code < 32 } ->
+                "The name contains unsupported characters"
+            else -> null
+        }
+        if (error != null) return error
+        val host = _state.value.hosts.firstOrNull { it.id == session.hostId }
+            ?: return "The session VPS is missing"
+        viewModelScope.launch {
+            _state.update { it.copy(sessionActionError = null) }
+            runCatching { ssh.renameSession(host, session.name, displayName) }
+                .onSuccess {
+                    sessionReads.setDisplayName(session, displayName)
+                    _state.update { current ->
+                        current.copy(
+                            sessions = current.sessions.map { candidate ->
+                                if (candidate.hostId == session.hostId && candidate.name == session.name) {
+                                    candidate.copy(title = displayName)
+                                } else {
+                                    candidate
+                                }
+                            },
+                        )
+                    }
+                    refresh()
+                }
+                .onFailure { throwable ->
+                    _state.update {
+                        it.copy(sessionActionError = throwable.message ?: "Could not rename the session")
+                    }
+                }
+        }
+        return null
     }
 
     fun readerFontScale(session: TmuxSession): Float = sessionReads.fontScale(session)
@@ -680,6 +736,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val MAX_PRIVATE_KEY_BYTES = 256 * 1024
+        const val MAX_DISPLAY_NAME_LENGTH = 63
         const val SESSION_REFRESH_INTERVAL_MS = 10_000L
     }
 }

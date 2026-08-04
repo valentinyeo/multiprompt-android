@@ -28,11 +28,32 @@ object TmuxText {
         return lines.take(dividerIndex ?: promptIndex).joinToString("\n").trimEnd()
     }
 
+    /** Best-effort Android equivalent of ZigShell's agent DONE event. */
+    fun isWaitingForInput(value: String): Boolean {
+        val tail = value.lineSequence()
+            .map(String::trimStart)
+            .filter(String::isNotBlank)
+            .toList()
+            .takeLast(INPUT_SEARCH_LINES)
+        return tail.any { line ->
+            line.startsWith("❯") ||
+                line.startsWith("›") ||
+                IDLE_INPUT_MARKERS.any { marker -> line.contains(marker, ignoreCase = true) }
+        }
+    }
+
     private fun isDivider(value: String): Boolean {
         val compact = value.filterNot(Char::isWhitespace)
         return compact.length >= 8 && compact.all { it in DIVIDER_CHARACTERS }
     }
 
     private const val COMPOSER_SEARCH_LINES = 18
+    private const val INPUT_SEARCH_LINES = 24
     private const val DIVIDER_CHARACTERS = "─━═╌╍-_▔▁"
+    private val IDLE_INPUT_MARKERS = listOf(
+        "new task? /clear to save",
+        "press up to edit queued messages",
+        "do you want to proceed?",
+        "would you like to proceed?",
+    )
 }

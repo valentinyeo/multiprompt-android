@@ -49,6 +49,9 @@ object TmuxCommands {
     fun dissolveSession(sessionName: String): String =
         "tmux kill-session -t ${TmuxParser.shellQuote("=$sessionName")}"
 
+    fun renameWindow(sessionName: String, displayName: String): String =
+        "tmux rename-window -t ${target(sessionName)} ${TmuxParser.shellQuote(displayName)}"
+
     fun stream(sessionName: String): String {
         val target = target(sessionName)
         return "if ! tmux has-session -t $target 2>/dev/null; then " +

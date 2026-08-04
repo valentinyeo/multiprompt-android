@@ -13,18 +13,22 @@ class SessionReadStoreTest {
     }
 
     @Test
-    fun archivedSessionReturnsAtDeadlineOrNewActivity() {
+    fun archivedSessionReturnsAtDeadlineOrAttentionReadyOutput() {
         assertEquals(
             true,
-            SessionReadStore.shouldRemainArchived(100, 100, 500, 499),
+            SessionReadStore.shouldRemainArchived(100, 100, 500, 499, needsAttention = true),
         )
         assertEquals(
             false,
-            SessionReadStore.shouldRemainArchived(100, 100, 500, 500),
+            SessionReadStore.shouldRemainArchived(100, 100, 500, 500, needsAttention = false),
         )
         assertEquals(
             false,
-            SessionReadStore.shouldRemainArchived(101, 100, null, 101),
+            SessionReadStore.shouldRemainArchived(101, 100, null, 101, needsAttention = true),
+        )
+        assertEquals(
+            true,
+            SessionReadStore.shouldRemainArchived(101, 100, null, 101, needsAttention = false),
         )
     }
 }
