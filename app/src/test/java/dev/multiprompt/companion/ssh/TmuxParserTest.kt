@@ -67,12 +67,32 @@ class TmuxParserTest {
 
         val session = TmuxParser.parse("de", output).single()
 
-        assertEquals("\u2733 Add feedback button", session.displayName)
+        assertEquals("Add feedback button", session.displayName)
         assertEquals("hypertasks-10", session.name)
         assertEquals(100, session.columns)
         assertEquals(30, session.rows)
         assertEquals("/home/valentin/projects/hypertasks", session.workingDirectory)
         assertEquals("Claude", session.agent.label)
+    }
+
+    @Test
+    fun removesAgentStatusGlyphsButKeepsShellTitlePunctuation() {
+        val claude = TmuxParser.parse(
+            "de",
+            row("cl-1", "1", "0", "200", "98", "51", "/tmp", "box", "claude", "· Debug image picker"),
+        ).single()
+        val codex = TmuxParser.parse(
+            "de",
+            row("cx-1", "1", "0", "200", "98", "51", "/tmp", "box", "codex", "⬡ Review changes"),
+        ).single()
+        val shell = TmuxParser.parse(
+            "de",
+            row("shell", "1", "0", "200", "98", "51", "/tmp", "box", "bash", "* important shell"),
+        ).single()
+
+        assertEquals("Debug image picker", claude.displayName)
+        assertEquals("Review changes", codex.displayName)
+        assertEquals("* important shell", shell.displayName)
     }
 
     @Test

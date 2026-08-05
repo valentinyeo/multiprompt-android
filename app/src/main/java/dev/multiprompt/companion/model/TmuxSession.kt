@@ -17,9 +17,21 @@ data class TmuxSession(
     val agent: AgentKind
         get() = AgentKind.detect(name, title, preview, paneCommand)
 
-    /** What ZigShell shows on its tabs: the agent's pane title, falling back to the tmux name. */
+    /**
+     * What ZigShell shows on its tabs: the agent's pane title, falling back to the tmux name.
+     * Agent TUIs prefix some pane titles with their own monochrome status glyph. The Android UI
+     * already renders a colored agent icon, so suppress that duplicate decoration here.
+     */
     val displayName: String
-        get() = title.ifBlank { name }
+        get() {
+            val rawName = title.ifBlank { name }
+            if (agent == AgentKind.OTHER) return rawName
+            return AGENT_TITLE_PREFIX.replaceFirst(rawName, "").ifBlank { rawName }
+        }
+
+    private companion object {
+        private val AGENT_TITLE_PREFIX = Regex("""^\s*[✳✱✢✦✶✻＊*·•●○◉⬡⬢⬣☾☽π›]\s+""")
+    }
 }
 
 enum class AgentKind(val label: String) {
