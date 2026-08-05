@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import dev.multiprompt.companion.security.SecretStore
 import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.security.SecureRandom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -69,14 +70,18 @@ class ScreencastUploader(
 
     private fun imageAsPng(uri: Uri): ByteArray {
         val resolver = appContext.contentResolver
+        val source = resolver.openInputStream(uri)?.use { input ->
+            input.readBounded(MAX_SOURCE_IMAGE_BYTES)
+        } ?: error("Could not read the selected image")
+        require(source.isNotEmpty()) { "The selected image is empty" }
+
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-            ?: error("Could not read the selected image")
+        BitmapFactory.decodeByteArray(source, 0, source.size, bounds)
         require(bounds.outWidth > 0 && bounds.outHeight > 0) { "The selected file is not an image" }
         require(bounds.outWidth.toLong() * bounds.outHeight <= MAX_IMAGE_PIXELS) {
             "The selected image is too large"
         }
-        val bitmap = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+        val bitmap = BitmapFactory.decodeByteArray(source, 0, source.size)
             ?: error("Could not decode the selected image")
         return bitmap.useBitmap {
             ByteArrayOutputStream().use { output ->
@@ -107,9 +112,25 @@ class ScreencastUploader(
         const val SECRET_ID = "screencast2_upload_secret"
         const val MAX_SECRET_CHARACTERS = 512
         const val MAX_IMAGE_PIXELS = 16_000_000L
+        const val MAX_SOURCE_IMAGE_BYTES = 25 * 1024 * 1024
         const val MAX_PNG_BYTES = 25 * 1024 * 1024
         const val MAX_RESPONSE_CHARACTERS = 64 * 1024
         const val ID_LENGTH = 5
         const val ID_ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     }
+}
+
+internal fun InputStream.readBounded(maxBytes: Int): ByteArray {
+    require(maxBytes > 0)
+    val output = ByteArrayOutputStream(minOf(maxBytes, 64 * 1024))
+    val buffer = ByteArray(16 * 1024)
+    var total = 0
+    while (true) {
+        val count = read(buffer, 0, minOf(buffer.size, maxBytes - total + 1))
+        if (count < 0) break
+        total += count
+        require(total <= maxBytes) { "The selected image is too large" }
+        output.write(buffer, 0, count)
+    }
+    return output.toByteArray()
 }

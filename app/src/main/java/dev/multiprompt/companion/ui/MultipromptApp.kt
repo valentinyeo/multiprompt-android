@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -1284,7 +1285,7 @@ private fun ReaderScreen(
     var previousScrollMax by remember(connection) { mutableIntStateOf(0) }
     val context = LocalContext.current
     val readerScope = rememberCoroutineScope()
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
             imageUploading = true
             imageUploadError = null
@@ -1564,7 +1565,9 @@ private fun ReaderScreen(
                         if (screencast.saveSecret(imageKeyDraft)) {
                             imageKeyDialogVisible = false
                             imageKeyDraft = ""
-                            imagePicker.launch("image/*")
+                            imagePicker.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                            )
                         } else {
                             imageKeyError = "Enter a valid upload key"
                         }
@@ -1736,7 +1739,9 @@ private fun ReaderScreen(
                             IconButton(
                                 onClick = {
                                     if (screencast.configured) {
-                                        imagePicker.launch("image/*")
+                                        imagePicker.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                        )
                                     } else {
                                         imageKeyDialogVisible = true
                                     }
