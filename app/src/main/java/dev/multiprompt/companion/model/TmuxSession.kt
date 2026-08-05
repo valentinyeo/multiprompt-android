@@ -12,9 +12,10 @@ data class TmuxSession(
     val workingDirectory: String = "",
     val title: String = "",
     val preview: String = "",
+    val paneCommand: String = "",
 ) {
     val agent: AgentKind
-        get() = AgentKind.fromName(name)
+        get() = AgentKind.detect(name, title, preview, paneCommand)
 
     /** What ZigShell shows on its tabs: the agent's pane title, falling back to the tmux name. */
     val displayName: String
@@ -24,18 +25,41 @@ data class TmuxSession(
 enum class AgentKind(val label: String) {
     CLAUDE("Claude"),
     CODEX("Codex"),
+    PI("Pi"),
     KIMI("Kimi"),
     OTHER("Shell");
 
     companion object {
-        fun fromName(name: String): AgentKind {
+        fun detect(name: String, title: String = "", preview: String = "", paneCommand: String = ""): AgentKind {
+            val command = paneCommand.lowercase().substringAfterLast('/').substringAfterLast('\\')
+            when {
+                command == "codex" || command.startsWith("codex-") -> return CODEX
+                command == "claude" || command.startsWith("claude-") -> return CLAUDE
+                command == "pi" || command.startsWith("pi-") -> return PI
+                command == "kimi" || command.startsWith("kimi-") -> return KIMI
+            }
+
             val normalized = name.lowercase()
-            return when {
+            val namedAgent = when {
                 "codex" in normalized || normalized.startsWith("cx-") -> CODEX
                 "kimi" in normalized -> KIMI
                 "claude" in normalized || normalized.startsWith("cl-") -> CLAUDE
+                PI_NAME.containsMatchIn(normalized) -> PI
+                else -> OTHER
+            }
+            if (namedAgent != OTHER) return namedAgent
+
+            val terminalText = "$title\n$preview".lowercase()
+            return when {
+                "openai codex" in terminalText || "codex>" in terminalText -> CODEX
+                "claude code" in terminalText || "shift+tab to cycle" in terminalText ||
+                    "bypass permissions" in terminalText -> CLAUDE
+                "kimi code" in terminalText || "kimi cli" in terminalText -> KIMI
+                "pi coding agent" in terminalText -> PI
                 else -> OTHER
             }
         }
+
+        private val PI_NAME = Regex("(^|[-_])pi($|[-_])")
     }
 }

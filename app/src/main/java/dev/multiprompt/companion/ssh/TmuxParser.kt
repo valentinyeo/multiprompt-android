@@ -19,6 +19,7 @@ object TmuxParser {
             "#{window_height}",
             "#{session_path}",
             "#{host}",
+            "#{pane_current_command}",
             // Last field: agents set the pane title, and that is what ZigShell shows on its
             // tabs. tmux leaves it as the machine hostname when nothing set one, hence #{host}.
             "#{pane_title}",
@@ -60,11 +61,14 @@ object TmuxParser {
             if (line.isBlank() || line == START_MARKER || line == END_MARKER || line.startsWith(ERROR_PREFIX)) {
                 return@forEach
             }
-            // Limit 9 so a separator inside the pane title stays part of the title.
-            val fields = line.split(FIELD_SEPARATOR, limit = 9)
+            // Limit 10 so a separator inside the pane title stays part of the title.
+            // Nine-field rows remain readable for compatibility with old output.
+            val fields = line.split(FIELD_SEPARATOR, limit = 10)
             if (fields.size < 4 || fields[0].isBlank()) return@forEach
             val serverHost = fields.getOrNull(7).orEmpty()
-            val title = fields.getOrNull(8)?.trim().orEmpty()
+            val hasPaneCommand = fields.size >= 10
+            val paneCommand = if (hasPaneCommand) fields[8].trim() else ""
+            val title = fields.getOrNull(if (hasPaneCommand) 9 else 8)?.trim().orEmpty()
             sessions += TmuxSession(
                 hostId = hostId,
                 name = fields[0],
@@ -75,6 +79,7 @@ object TmuxParser {
                 rows = fields.getOrNull(5)?.toIntOrNull() ?: 0,
                 workingDirectory = fields.getOrNull(6).orEmpty(),
                 title = if (title == serverHost) "" else title,
+                paneCommand = paneCommand,
             )
         }
         return sessions.sortedWith(

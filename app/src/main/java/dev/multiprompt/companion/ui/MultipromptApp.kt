@@ -135,6 +135,7 @@ import dev.multiprompt.companion.AppUiState
 import dev.multiprompt.companion.BuildConfig
 import dev.multiprompt.companion.MainViewModel
 import dev.multiprompt.companion.R
+import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
@@ -1054,6 +1055,29 @@ private fun ReminderDialog(
 }
 
 @Composable
+private fun AgentIcon(
+    agent: AgentKind,
+    modifier: Modifier = Modifier.size(20.dp),
+) {
+    val (glyph, color) = when (agent) {
+        AgentKind.CLAUDE -> "✳" to Color(0xFFD97757)
+        AgentKind.CODEX -> "⬡" to Color(0xFF10A37F)
+        AgentKind.PI -> "π" to Color(0xFFA78BFA)
+        AgentKind.KIMI -> "☾" to Color(0xFF4C8DFF)
+        AgentKind.OTHER -> "›" to MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Text(
+            glyph,
+            color = color,
+            fontFamily = FontFamily.SansSerif,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
 private fun SessionCard(
     session: TmuxSession,
     workspaces: List<Workspace>,
@@ -1125,6 +1149,7 @@ private fun SessionCard(
                             CircleShape,
                         ),
                 )
+                AgentIcon(session.agent)
                 Text(
                     session.displayName,
                     modifier = Modifier.weight(1f),
@@ -1558,7 +1583,18 @@ private fun ReaderScreen(
             TopAppBar(
                 modifier = Modifier.statusBarsPadding(),
                 title = {
-                    Text(session.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        AgentIcon(session.agent, Modifier.size(22.dp))
+                        Text(
+                            session.displayName,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 },
                 actions = {
                     Box {
