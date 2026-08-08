@@ -76,14 +76,14 @@ class TmuxParserTest {
     }
 
     @Test
-    fun prefersAUsefulCodexWindowNameWhenThePaneTitleIsOnlyItsProject() {
-        val codex = TmuxParser.parse(
+    fun prefersAUsefulWindowNameWhenThePaneTitleIsOnlyItsProject() {
+        val session = TmuxParser.parse(
             "de",
-            row("cx-1", "1", "0", "200", "98", "51", "/tmp", "box", "codex", "Fix login flow", "project"),
+            row("agent-1", "1", "0", "200", "98", "51", "/tmp", "box", "node", "Fix login flow", "project"),
         ).single()
 
-        assertEquals("Fix login flow", codex.displayName)
-        assertEquals("Fix login flow", codex.windowName)
+        assertEquals("Fix login flow", session.displayName)
+        assertEquals("Fix login flow", session.windowName)
     }
 
     @Test

@@ -11,7 +11,7 @@ data class TmuxSession(
     val rows: Int = 0,
     val workingDirectory: String = "",
     val title: String = "",
-    /** The tmux window label, which some Codex launchers use for the named session. */
+    /** The tmux window label, which desktop launchers use for the named session. */
     val windowName: String = "",
     val preview: String = "",
     val paneCommand: String = "",
@@ -27,7 +27,7 @@ data class TmuxSession(
     val displayName: String
         get() {
             val rawName = when {
-                agent == AgentKind.CODEX && usefulWindowName(windowName) -> windowName
+                usefulWindowName(windowName) -> windowName
                 title.isNotBlank() -> title
                 else -> name
             }
