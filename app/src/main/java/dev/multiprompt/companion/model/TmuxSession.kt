@@ -11,6 +11,8 @@ data class TmuxSession(
     val rows: Int = 0,
     val workingDirectory: String = "",
     val title: String = "",
+    /** The tmux window label, which some Codex launchers use for the named session. */
+    val windowName: String = "",
     val preview: String = "",
     val paneCommand: String = "",
 ) {
@@ -24,13 +26,23 @@ data class TmuxSession(
      */
     val displayName: String
         get() {
-            val rawName = title.ifBlank { name }
+            val rawName = when {
+                agent == AgentKind.CODEX && usefulWindowName(windowName) -> windowName
+                title.isNotBlank() -> title
+                else -> name
+            }
             if (agent == AgentKind.OTHER) return rawName
             return AGENT_TITLE_PREFIX.replaceFirst(rawName, "").ifBlank { rawName }
         }
 
     private companion object {
+        private val GENERIC_WINDOW_NAMES = setOf(
+            "bash", "codex", "fish", "ksh", "nu", "pwsh", "sh", "zsh", "node",
+        )
         private val AGENT_TITLE_PREFIX = Regex("""^\s*[✳✱✢✦✶✻＊*·•●○◉⬡⬢⬣☾☽π›]\s+""")
+
+        private fun usefulWindowName(value: String): Boolean =
+            value.isNotBlank() && value.trim().lowercase() !in GENERIC_WINDOW_NAMES
     }
 }
 

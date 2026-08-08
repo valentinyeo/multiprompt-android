@@ -36,7 +36,7 @@ class TmuxParserTest {
         assertEquals(
             listOf("#{session_name}", "#{session_windows}", "#{session_attached}",
                 "#{session_activity}", "#{window_width}", "#{window_height}", "#{session_path}",
-                "#{host}", "#{pane_current_command}", "#{pane_title}"),
+                "#{host}", "#{pane_current_command}", "#{window_name}", "#{pane_title}"),
             format.split(TmuxParser.FIELD_SEPARATOR),
         )
     }
@@ -76,6 +76,17 @@ class TmuxParserTest {
     }
 
     @Test
+    fun prefersAUsefulCodexWindowNameWhenThePaneTitleIsOnlyItsProject() {
+        val codex = TmuxParser.parse(
+            "de",
+            row("cx-1", "1", "0", "200", "98", "51", "/tmp", "box", "codex", "Fix login flow", "project"),
+        ).single()
+
+        assertEquals("Fix login flow", codex.displayName)
+        assertEquals("Fix login flow", codex.windowName)
+    }
+
+    @Test
     fun removesAgentStatusGlyphsButKeepsShellTitlePunctuation() {
         val claude = TmuxParser.parse(
             "de",
@@ -109,9 +120,19 @@ class TmuxParserTest {
     }
 
     @Test
+    fun ignoresACommandNameAsTheWindowFallback() {
+        val session = TmuxParser.parse(
+            "de",
+            row("cx-1", "1", "0", "200", "98", "51", "/tmp", "box", "codex", "codex", ""),
+        ).single()
+
+        assertEquals("cx-1", session.displayName)
+    }
+
+    @Test
     fun keepsSeparatorsInsidePaneTitle() {
         val s = TmuxParser.FIELD_SEPARATOR
-        val output = row("cl-1", "1", "0", "200", "98", "51", "/tmp", "box", "claude", "fix a${s}b")
+        val output = row("cl-1", "1", "0", "200", "98", "51", "/tmp", "box", "claude", "named", "fix a${s}b")
 
         assertEquals("fix a${s}b", TmuxParser.parse("de", output).single().title)
     }
