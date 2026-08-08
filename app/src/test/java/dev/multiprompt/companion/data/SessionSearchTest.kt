@@ -46,4 +46,18 @@ class SessionSearchTest {
                 listOf(newest, middle, old),
         )
     }
+
+    @Test
+    fun localInteractionMovesSessionAheadOfBackgroundPaneActivity() {
+        val backgroundAgent = session.copy(name = "background", lastActivityEpochSeconds = 300)
+        val workedHere = session.copy(name = "worked-here", lastActivityEpochSeconds = 100)
+
+        assertEquals(
+            listOf(workedHere, backgroundAgent),
+            SessionSearch.newestFirst(
+                listOf(backgroundAgent, workedHere),
+                mapOf(SessionReadStore.key("host-1", "worked-here") to 400L),
+            ),
+        )
+    }
 }

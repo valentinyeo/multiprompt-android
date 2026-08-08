@@ -8,6 +8,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import androidx.core.content.ContextCompat
 import dev.multiprompt.companion.security.SecretStore
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -64,6 +65,11 @@ class DeepgramDictation(
     private var recorder: AudioRecord? = null
     private var recordingJob: Job? = null
     private var finishingJob: Job? = null
+    private val audioLock = Any()
+    private val pendingAudio = ByteArrayOutputStream()
+    private var socketOpen = false
+    private var finalizeWhenOpen = false
+    private var closeWhenOpen = false
 
     fun saveApiKey(value: String): Boolean {
         val key = value.trim()
@@ -98,6 +104,12 @@ class DeepgramDictation(
 
         finishingJob?.cancel()
         finalSegments.clear()
+        synchronized(audioLock) {
+            pendingAudio.reset()
+            socketOpen = false
+            finalizeWhenOpen = false
+            closeWhenOpen = false
+        }
         _state.value = DictationState(
             status = DictationStatus.CONNECTING,
             configured = true,
@@ -106,7 +118,10 @@ class DeepgramDictation(
             .url(DEEPGRAM_LISTEN_URL)
             .header("Authorization", "Token $apiKey")
             .build()
+        // Start recording immediately around the websocket handshake. Audio is buffered until
+        // Deepgram is ready, so the first words are not lost during network setup.
         socket = client.newWebSocket(request, Listener())
+        startRecorder()
     }
 
     @Synchronized
@@ -114,12 +129,26 @@ class DeepgramDictation(
         val activeSocket = socket ?: return
         stopRecorder()
         _state.update { it.copy(status = DictationStatus.FINISHING) }
-        activeSocket.send("""{"type":"Finalize"}""")
+        synchronized(audioLock) {
+            if (socketOpen) {
+                flushPendingAudioLocked(activeSocket)
+                activeSocket.send("""{"type":"Finalize"}""")
+            } else {
+                // Keep Finalize behind the opening audio when the user stops during the handshake.
+                finalizeWhenOpen = true
+            }
+        }
         finishingJob?.cancel()
         finishingJob = scope.launch {
             delay(FINAL_RESULT_WAIT_MS)
-            activeSocket.send("""{"type":"CloseStream"}""")
-            activeSocket.close(1000, "Dictation complete")
+            synchronized(audioLock) {
+                if (socketOpen) {
+                    activeSocket.send("""{"type":"CloseStream"}""")
+                    activeSocket.close(1000, "Dictation complete")
+                } else {
+                    closeWhenOpen = true
+                }
+            }
         }
     }
 
@@ -132,18 +161,23 @@ class DeepgramDictation(
         stopRecorder()
         socket?.cancel()
         socket = null
+        synchronized(audioLock) {
+            pendingAudio.reset()
+            socketOpen = false
+            finalizeWhenOpen = false
+            closeWhenOpen = false
+        }
         synchronized(finalSegments) { finalSegments.clear() }
         _state.value = DictationState(configured = configured)
     }
 
-    private fun startRecorder(activeSocket: WebSocket) {
+    private fun startRecorder() {
         recordingJob?.cancel()
         recordingJob = scope.launch {
             if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) !=
                 PackageManager.PERMISSION_GRANTED
             ) {
-                fail("Microphone permission was removed")
-                activeSocket.cancel()
+                failAndCancelSocket("Microphone permission was removed")
                 return@launch
             }
             val minimum = AudioRecord.getMinBufferSize(
@@ -152,8 +186,7 @@ class DeepgramDictation(
                 AudioFormat.ENCODING_PCM_16BIT,
             )
             if (minimum <= 0) {
-                fail("The microphone could not be initialized")
-                activeSocket.cancel()
+                failAndCancelSocket("The microphone could not be initialized")
                 return@launch
             }
             val audioRecord = try {
@@ -165,14 +198,12 @@ class DeepgramDictation(
                     maxOf(minimum, AUDIO_BUFFER_BYTES),
                 )
             } catch (_: SecurityException) {
-                fail("Microphone permission was removed")
-                activeSocket.cancel()
+                failAndCancelSocket("Microphone permission was removed")
                 return@launch
             }
             if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
                 audioRecord.release()
-                fail("The microphone could not be initialized")
-                activeSocket.cancel()
+                failAndCancelSocket("The microphone could not be initialized")
                 return@launch
             }
             recorder = audioRecord
@@ -182,7 +213,7 @@ class DeepgramDictation(
             try {
                 while (isActive && recorder === audioRecord) {
                     val count = audioRecord.read(buffer, 0, buffer.size)
-                    if (count > 0 && !activeSocket.send(buffer.toByteString(0, count))) break
+                    if (count > 0 && !sendOrBufferAudio(buffer, count)) break
                 }
             } finally {
                 if (recorder === audioRecord) recorder = null
@@ -216,7 +247,40 @@ class DeepgramDictation(
     private fun fail(message: String) {
         stopRecorder()
         socket = null
+        synchronized(audioLock) {
+            pendingAudio.reset()
+            socketOpen = false
+            finalizeWhenOpen = false
+            closeWhenOpen = false
+        }
         _state.update { it.copy(status = DictationStatus.FAILED, error = message) }
+    }
+
+    private fun failAndCancelSocket(message: String) {
+        val activeSocket = socket
+        fail(message)
+        activeSocket?.cancel()
+    }
+
+    private fun sendOrBufferAudio(buffer: ByteArray, count: Int): Boolean {
+        val activeSocket = socket
+        synchronized(audioLock) {
+            if (activeSocket != null && socketOpen) {
+                return activeSocket.send(buffer.toByteString(0, count))
+            }
+            // Keep the beginning of the utterance. A normal handshake is far below this limit,
+            // but refusing newer samples is safer than evicting the words already spoken.
+            if (pendingAudio.size() + count <= MAX_PENDING_AUDIO_BYTES) {
+                pendingAudio.write(buffer, 0, count)
+            }
+            return true
+        }
+    }
+
+    private fun flushPendingAudioLocked(activeSocket: WebSocket) {
+        if (pendingAudio.size() == 0) return
+        activeSocket.send(pendingAudio.toByteArray().toByteString())
+        pendingAudio.reset()
     }
 
     override fun close() {
@@ -224,6 +288,12 @@ class DeepgramDictation(
         stopRecorder()
         socket?.cancel()
         socket = null
+        synchronized(audioLock) {
+            pendingAudio.reset()
+            socketOpen = false
+            finalizeWhenOpen = false
+            closeWhenOpen = false
+        }
         client.dispatcher.executorService.shutdown()
         client.connectionPool.evictAll()
         scope.cancel()
@@ -231,7 +301,24 @@ class DeepgramDictation(
 
     private inner class Listener : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
-            if (socket === webSocket) startRecorder(webSocket) else webSocket.cancel()
+            if (socket !== webSocket) {
+                webSocket.cancel()
+                return
+            }
+            synchronized(audioLock) {
+                socketOpen = true
+                flushPendingAudioLocked(webSocket)
+                if (finalizeWhenOpen) {
+                    finalizeWhenOpen = false
+                    webSocket.send("""{"type":"Finalize"}""")
+                }
+                if (closeWhenOpen) {
+                    closeWhenOpen = false
+                    webSocket.send("""{"type":"CloseStream"}""")
+                    webSocket.close(1000, "Dictation complete")
+                }
+            }
+            _state.update { it.copy(status = DictationStatus.LISTENING, error = null) }
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
@@ -243,6 +330,12 @@ class DeepgramDictation(
             if (socket !== webSocket) return
             stopRecorder()
             socket = null
+            synchronized(audioLock) {
+                pendingAudio.reset()
+                socketOpen = false
+                finalizeWhenOpen = false
+                closeWhenOpen = false
+            }
             _state.update { it.copy(status = DictationStatus.IDLE) }
         }
 
@@ -261,6 +354,7 @@ class DeepgramDictation(
         const val MAX_API_KEY_CHARACTERS = 512
         const val SAMPLE_RATE = 16_000
         const val AUDIO_BUFFER_BYTES = 3_200
+        const val MAX_PENDING_AUDIO_BYTES = SAMPLE_RATE * 2 * 8
         const val FINAL_RESULT_WAIT_MS = 1_200L
         const val DEEPGRAM_LISTEN_URL =
             "wss://api.deepgram.com/v1/listen" +

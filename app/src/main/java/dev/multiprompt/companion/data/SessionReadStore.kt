@@ -20,6 +20,15 @@ class SessionReadStore(context: Context) {
             .apply()
     }
 
+    fun lastInteractedAt(session: TmuxSession): Long =
+        preferences.getLong(interactionKey(session.hostId, session.name), 0L)
+
+    fun markInteracted(session: TmuxSession, atEpochSeconds: Long = System.currentTimeMillis() / 1000) {
+        preferences.edit()
+            .putLong(interactionKey(session.hostId, session.name), atEpochSeconds)
+            .apply()
+    }
+
     /** Hides a session until tmux reports activity newer than this archive action. */
     fun archive(session: TmuxSession) {
         archiveUntil(session, null)
@@ -106,6 +115,7 @@ class SessionReadStore(context: Context) {
                     it.startsWith("$ARCHIVE_UNTIL_PREFIX$prefix") ||
                     it.startsWith("$FONT_SCALE_PREFIX$prefix") ||
                     it.startsWith("$DISPLAY_NAME_PREFIX$prefix")
+                    || it.startsWith("$INTERACTION_PREFIX$prefix")
             }
             .forEach(editor::remove)
         editor.apply()
@@ -118,6 +128,7 @@ class SessionReadStore(context: Context) {
         private const val NEWEST_SESSIONS_AT_BOTTOM = "newest_sessions_at_bottom"
         private const val ALL_SPLIT_ON_RIGHT = "all_split_on_right"
         private const val DISPLAY_NAME_PREFIX = "display_name::"
+        private const val INTERACTION_PREFIX = "interaction::"
         private const val DEFAULT_FONT_SCALE = 1.4f
         private const val MIN_FONT_SCALE = 0.75f
         private const val MAX_FONT_SCALE = 5f
@@ -135,6 +146,9 @@ class SessionReadStore(context: Context) {
 
         private fun displayNameKey(hostId: String, sessionName: String): String =
             "$DISPLAY_NAME_PREFIX${key(hostId, sessionName)}"
+
+        private fun interactionKey(hostId: String, sessionName: String): String =
+            "$INTERACTION_PREFIX${key(hostId, sessionName)}"
 
         internal fun normalizeFontScale(scale: Float): Float =
             if (scale.isFinite()) scale.coerceIn(MIN_FONT_SCALE, MAX_FONT_SCALE) else DEFAULT_FONT_SCALE

@@ -4,8 +4,15 @@ import dev.multiprompt.companion.model.TmuxSession
 import java.util.Locale
 
 object SessionSearch {
-    fun newestFirst(sessions: List<TmuxSession>): List<TmuxSession> =
-        sessions.sortedByDescending { it.lastActivityEpochSeconds }
+    fun newestFirst(
+        sessions: List<TmuxSession>,
+        interactionEpochSeconds: Map<String, Long> = emptyMap(),
+    ): List<TmuxSession> = sessions.sortedByDescending { session ->
+        maxOf(
+            session.lastActivityEpochSeconds,
+            interactionEpochSeconds[SessionReadStore.key(session.hostId, session.name)] ?: 0L,
+        )
+    }
 
     fun matches(
         session: TmuxSession,

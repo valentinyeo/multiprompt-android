@@ -233,6 +233,7 @@ fun MultipromptApp(viewModel: MainViewModel) {
             onFontScaleChanged = { scale -> viewModel.saveReaderFontScale(readerSession, scale) },
             onRename = { name -> viewModel.renameSession(readerSession, name) },
             onDissolve = { viewModel.dissolveSession(readerSession) },
+            onSessionInteraction = { viewModel.noteSessionInteraction(readerSession) },
         )
         return
     }
@@ -764,7 +765,7 @@ private fun SessionsScreen(
                     hostLabel = hostLabels[session.hostId].orEmpty(),
                     workspaceName = workspaceNames[state.sessionWorkspaceIds[key]].orEmpty(),
                 )
-        })
+        }, state.sessionInteractionEpochSeconds)
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
@@ -1258,6 +1259,7 @@ private fun ReaderScreen(
     onFontScaleChanged: (Float) -> Unit,
     onRename: (String) -> String?,
     onDissolve: () -> Unit,
+    onSessionInteraction: () -> Unit,
 ) {
     val reader by connection.state.collectAsState()
     val dictationState by dictation.state.collectAsState()
@@ -1391,6 +1393,7 @@ private fun ReaderScreen(
         ) {
             val actionCount = reader.completedActions
             if (connection.sendPrompt(prompt)) {
+                onSessionInteraction()
                 pendingPromptAction = actionCount
             }
         }
@@ -1420,6 +1423,7 @@ private fun ReaderScreen(
                 ) {
                     val actionCount = reader.completedActions
                     if (connection.sendPrompt(finalPrompt)) {
+                        onSessionInteraction()
                         pendingPromptAction = actionCount
                     }
                 }
@@ -1624,6 +1628,7 @@ private fun ReaderScreen(
                                 enabled = !reader.sending,
                                 onClick = {
                                     menuExpanded = false
+                                    onSessionInteraction()
                                     connection.sendEnter()
                                 },
                             )
@@ -1632,6 +1637,7 @@ private fun ReaderScreen(
                                 enabled = !reader.sending,
                                 onClick = {
                                     menuExpanded = false
+                                    onSessionInteraction()
                                     connection.interrupt()
                                 },
                             )

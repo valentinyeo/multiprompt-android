@@ -7,6 +7,7 @@ import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.data.SessionReadStore
+import dev.multiprompt.companion.data.SessionSearch
 import dev.multiprompt.companion.data.WorkspaceStore
 import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
@@ -53,6 +54,7 @@ data class AppUiState(
     val selectedWorkspaceId: String? = null,
     val workspaceSelectionInitialized: Boolean = false,
     val sessionWorkspaceIds: Map<String, String> = emptyMap(),
+    val sessionInteractionEpochSeconds: Map<String, Long> = emptyMap(),
     val creatingSession: Boolean = false,
     val sessionActionError: String? = null,
     val newestSessionsAtBottom: Boolean = true,
@@ -267,6 +269,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         SessionReadStore.key(session.hostId, session.name) to workspaceId
                     }
                 }.toMap()
+                val interactionEpochSeconds = current.sessionInteractionEpochSeconds + sessions
+                    .mapNotNull { session ->
+                        sessionReads.lastInteractedAt(session).takeIf { it > 0 }?.let {
+                            SessionReadStore.key(session.hostId, session.name) to it
+                        }
+                    }
+                    .toMap()
                 val archivedKeys = sessions
                     .filter { session ->
                         sessionReads.isArchived(
@@ -281,7 +290,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 val workspaceSplitIds = workspaceStore.splitIds(
                     orderedWorkspaces,
-                    latestWorkspaceActivity(sessions, sessionWorkspaceIds),
+                    latestWorkspaceActivity(sessions, sessionWorkspaceIds, interactionEpochSeconds),
                 )
                 val selectedWorkspaceId = when {
                     !current.workspaceSelectionInitialized -> workspaceSplitIds.firstOrNull()
@@ -317,6 +326,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     workspaceSelectionInitialized = orderedWorkspaces.isNotEmpty() ||
                         current.workspaceSelectionInitialized,
                     sessionWorkspaceIds = sessionWorkspaceIds,
+                    sessionInteractionEpochSeconds = interactionEpochSeconds,
                     refreshing = false,
                 )
             }
@@ -325,6 +335,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openReader(session: TmuxSession) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
+        noteSessionInteraction(session)
         sessionReads.markRead(session)
         val key = SessionReadStore.key(session.hostId, session.name)
         _state.value.terminal?.close()
@@ -396,6 +407,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun noteSessionInteraction(session: TmuxSession) {
+        val key = SessionReadStore.key(session.hostId, session.name)
+        val at = System.currentTimeMillis() / 1000
+        sessionReads.markInteracted(session, at)
+        _state.update { current ->
+            val interactions = current.sessionInteractionEpochSeconds + (key to at)
+            current.copy(
+                sessionInteractionEpochSeconds = interactions,
+                workspaceSplitIds = workspaceStore.splitIds(
+                    current.workspaces,
+                    latestWorkspaceActivity(current.sessions, current.sessionWorkspaceIds, interactions),
+                ),
+            )
+        }
+    }
+
     fun moveWorkspaceSplit(workspaceId: String?, delta: Int) {
         _state.update { current ->
             current.copy(
@@ -413,7 +440,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             current.copy(
                 workspaceSplitIds = workspaceStore.resetSplitOrder(
                     current.workspaces,
-                    latestWorkspaceActivity(current.sessions, current.sessionWorkspaceIds),
+                    latestWorkspaceActivity(
+                        current.sessions,
+                        current.sessionWorkspaceIds,
+                        current.sessionInteractionEpochSeconds,
+                    ),
                 ),
             )
         }
@@ -445,14 +476,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         workspaceStore.upsert(workspace)
         _state.update {
             val workspaces = workspaceStore.ordered(
-                workspaceStore.load(),
+                workspaceStore.discover(it.sessions),
                 it.sessionWorkspaceIds.values.groupingBy { id -> id }.eachCount(),
             )
             it.copy(
                 workspaces = workspaces,
                 workspaceSplitIds = workspaceStore.splitIds(
                     workspaces,
-                    latestWorkspaceActivity(it.sessions, it.sessionWorkspaceIds),
+                    latestWorkspaceActivity(
+                        it.sessions,
+                        it.sessionWorkspaceIds,
+                        it.sessionInteractionEpochSeconds,
+                    ),
                 ),
                 selectedWorkspaceId = workspace.id,
                 workspaceSelectionInitialized = true,
@@ -476,7 +511,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 workspaces = workspaces,
                 workspaceSplitIds = workspaceStore.splitIds(
                     workspaces,
-                    latestWorkspaceActivity(it.sessions, assignments),
+                    latestWorkspaceActivity(it.sessions, assignments, it.sessionInteractionEpochSeconds),
                 ),
             )
         }
@@ -717,6 +752,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openTerminal(session: TmuxSession) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
+        noteSessionInteraction(session)
         _state.value.terminal?.close()
         _state.value.reader?.close()
         val terminal = TerminalConnection(
@@ -775,15 +811,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 state.sessionWorkspaceIds[SessionReadStore.key(session.hostId, session.name)] ==
                 state.selectedWorkspaceId
         }
-        .sortedByDescending { it.lastActivityEpochSeconds }
+        .let { sessions -> SessionSearch.newestFirst(sessions, state.sessionInteractionEpochSeconds) }
 
     private fun latestWorkspaceActivity(
         sessions: List<TmuxSession>,
         assignments: Map<String, String>,
+        interactions: Map<String, Long> = emptyMap(),
     ): Map<String, Long> = sessions
         .mapNotNull { session ->
             val key = SessionReadStore.key(session.hostId, session.name)
-            assignments[key]?.let { workspaceId -> workspaceId to session.lastActivityEpochSeconds }
+            assignments[key]?.let { workspaceId ->
+                workspaceId to maxOf(
+                    session.lastActivityEpochSeconds,
+                    interactions[key] ?: 0L,
+                )
+            }
         }
         .groupingBy { it.first }
         .fold(0L) { latest, entry -> maxOf(latest, entry.second) }

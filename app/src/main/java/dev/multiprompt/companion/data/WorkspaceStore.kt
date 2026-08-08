@@ -80,12 +80,17 @@ class WorkspaceStore(context: Context) {
             }
         }
         if (changed) save(current)
-        return current.sortedBy { it.name.lowercase() }
+        val hasOther = sessions.any { session ->
+            workspaceIdFor(session, current) == null
+        }
+        return (current + if (hasOther) listOf(otherWorkspace()) else emptyList())
+            .sortedBy { it.name.lowercase() }
     }
 
     fun workspaceIdFor(session: TmuxSession, workspaces: List<Workspace>): String? {
         val sessionKey = SessionReadStore.key(session.hostId, session.name)
         preferences.getString("$ASSIGNMENT_PREFIX$sessionKey", null)?.let { assigned ->
+            if (assigned == OTHER_WORKSPACE_ID) return assigned
             if (workspaces.any { it.id == assigned }) return assigned
         }
         return workspaces
@@ -97,6 +102,7 @@ class WorkspaceStore(context: Context) {
             }
             .maxByOrNull { it.remotePath.length }
             ?.id
+            ?: workspaces.firstOrNull { it.id == OTHER_WORKSPACE_ID }?.id
     }
 
     fun assign(session: TmuxSession, workspaceId: String) {
@@ -164,6 +170,14 @@ class WorkspaceStore(context: Context) {
         private const val KEY_SPLIT_ORDER = "split_order_json"
         private const val ASSIGNMENT_PREFIX = "assignment::"
         private const val ALL_SPLIT_ID = "__all_sessions__"
+        const val OTHER_WORKSPACE_ID = "__other_workspace__"
+
+        private fun otherWorkspace() = Workspace(
+            id = OTHER_WORKSPACE_ID,
+            name = "Other",
+            hostId = "",
+            remotePath = "",
+        )
 
         internal fun orderSplitIds(
             workspaces: List<Workspace>,
