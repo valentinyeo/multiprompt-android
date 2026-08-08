@@ -907,8 +907,19 @@ private fun SessionsScreen(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
             reverseLayout = state.newestSessionsAtBottom,
         ) {
+            if (state.cachedHostIds.isNotEmpty()) {
+                item(key = "cached-sessions-notice") {
+                    CachedSessionsNotice(
+                        hostLabels = state.cachedHostIds.mapNotNull { hostLabels[it] },
+                        onRetry = onRefresh,
+                        retryEnabled = !state.refreshing,
+                    )
+                }
+            }
             state.hostErrors.forEach { (hostId, error) ->
-                item(key = "error-$hostId") { InlineError(error) }
+                if (hostId !in state.cachedHostIds) {
+                    item(key = "error-$hostId") { InlineError(error) }
+                }
             }
             state.sessionActionError?.let { error ->
                 item(key = "session-action-error") { InlineError(error) }
@@ -2235,6 +2246,43 @@ private fun EmptyState(title: String, body: String, action: () -> Unit) {
 @Composable
 private fun InlineError(message: String) {
     Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+}
+
+@Composable
+private fun CachedSessionsNotice(
+    hostLabels: List<String>,
+    onRetry: () -> Unit,
+    retryEnabled: Boolean,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 12.dp, top = 10.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Showing cached sessions", fontWeight = FontWeight.SemiBold)
+                val hosts = hostLabels.joinToString(", ").ifBlank { "your VPS" }
+                val connectionMessage = when {
+                    hostLabels.size == 1 -> "$hosts is unreachable."
+                    hostLabels.size > 1 -> "$hosts are unreachable."
+                    else -> "Your VPS is unreachable."
+                }
+                Text(
+                    "$connectionMessage Last known sessions are shown until the connection returns.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            TextButton(onClick = onRetry, enabled = retryEnabled) {
+                Icon(Icons.Default.Refresh, contentDescription = "Retry connection")
+                Spacer(Modifier.size(4.dp))
+                Text("Retry")
+            }
+        }
+    }
 }
 
 private fun tomorrowMorningEpochSeconds(): Long = ZonedDateTime.now()

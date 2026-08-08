@@ -35,6 +35,7 @@ data class AppUiState(
     val hosts: List<HostProfile> = emptyList(),
     val sessions: List<TmuxSession> = emptyList(),
     val hostErrors: Map<String, String> = emptyMap(),
+    val cachedHostIds: Set<String> = emptySet(),
     val pendingHostKeys: Map<String, PresentedHostKey> = emptyMap(),
     val refreshing: Boolean = false,
     val editorHost: HostProfile? = null,
@@ -63,6 +64,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val hosts = app.hostStore
     private val secrets = app.secretStore
     private val sessionReads = app.sessionReadStore
+    private val sessionCache = app.sessionCacheStore
     private val workspaceStore = app.workspaceStore
     private val ssh = app.sshRepository
     val dictation: DeepgramDictation = app.deepgramDictation
@@ -181,9 +183,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 hosts = hosts.load(),
                 sessions = it.sessions.filterNot { session -> session.hostId == host.id },
                 hostErrors = it.hostErrors - host.id,
+                cachedHostIds = it.cachedHostIds - host.id,
                 pendingHostKeys = it.pendingHostKeys - host.id,
             )
         }
+        sessionCache.removeHost(host.id)
     }
 
     fun trustHostKey(hostId: String) {
@@ -220,6 +224,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (snapshot.isEmpty()) return
         viewModelScope.launch {
             _state.update { it.copy(refreshing = true) }
+            val cachedByHost = snapshot.associate { host -> host.id to sessionCache.load(host.id) }
             val results = snapshot.map { host ->
                 async {
                     runCatching { ssh.listSessions(host) }
@@ -235,8 +240,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         )
                 }
             }.awaitAll()
+            results.filter { it.error == null }.forEach { result ->
+                sessionCache.save(result.hostId, result.sessions)
+            }
             _state.update { current ->
-                val sessions = results.flatMap { it.sessions }.map { session ->
+                val currentByHost = current.sessions.groupBy { it.hostId }
+                val cachedHostIds = results.filter { result ->
+                    result.error != null &&
+                        (cachedByHost[result.hostId].orEmpty().isNotEmpty() ||
+                            currentByHost[result.hostId].orEmpty().isNotEmpty())
+                }.mapTo(mutableSetOf()) { it.hostId }
+                val sessions = results.flatMap { result ->
+                    if (result.error == null) {
+                        result.sessions
+                    } else {
+                        cachedByHost[result.hostId].orEmpty().ifEmpty {
+                            currentByHost[result.hostId].orEmpty()
+                        }
+                    }
+                }.map { session ->
                     sessionReads.displayName(session)?.let { session.copy(title = it) } ?: session
                 }
                 val workspaces = workspaceStore.discover(sessions)
@@ -279,6 +301,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     hostErrors = results.mapNotNull { result ->
                         result.error?.let { result.hostId to it }
                     }.toMap(),
+                    cachedHostIds = cachedHostIds,
                     pendingHostKeys = results.mapNotNull { result ->
                         result.hostKey?.let { result.hostId to it }
                     }.toMap(),
