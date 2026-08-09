@@ -9,7 +9,7 @@ class SessionReadStoreTest {
         assertEquals(0.75f, SessionReadStore.normalizeFontScale(0.1f))
         assertEquals(2f, SessionReadStore.normalizeFontScale(2f))
         assertEquals(5f, SessionReadStore.normalizeFontScale(20f))
-        assertEquals(1.4f, SessionReadStore.normalizeFontScale(Float.NaN))
+        assertEquals(1f, SessionReadStore.normalizeFontScale(Float.NaN))
     }
 
     @Test

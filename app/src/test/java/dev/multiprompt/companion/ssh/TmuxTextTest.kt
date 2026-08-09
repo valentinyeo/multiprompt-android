@@ -91,12 +91,17 @@ class TmuxTextTest {
 
         assertEquals(
             listOf(
-                TmuxText.ReaderBlock(TmuxText.ReaderBlockKind.CODE, """
+                TmuxText.ReaderBlock(
+                    TmuxText.ReaderBlockKind.CODE,
+                    """
                     diff --git a/app.kt b/app.kt
                     @@ -1 +1 @@
                     -old()
                     +new()
-                """.trimIndent()),
+                """.trimIndent(),
+                    language = "diff",
+                    filePath = "app.kt",
+                ),
                 TmuxText.ReaderBlock(TmuxText.ReaderBlockKind.USER_PROMPT, "Explain the change"),
                 TmuxText.ReaderBlock(TmuxText.ReaderBlockKind.PROSE, "The change updates the reader."),
                 TmuxText.ReaderBlock(TmuxText.ReaderBlockKind.PROGRESS, "Working"),
@@ -108,7 +113,13 @@ class TmuxTextTest {
     @Test
     fun readerBlocksRemoveFenceMarkers() {
         assertEquals(
-            listOf(TmuxText.ReaderBlock(TmuxText.ReaderBlockKind.CODE, "val answer = 42")),
+            listOf(
+                TmuxText.ReaderBlock(
+                    TmuxText.ReaderBlockKind.CODE,
+                    "val answer = 42",
+                    language = "kotlin",
+                ),
+            ),
             TmuxText.readerBlocks("```kotlin\nval answer = 42\n```")
         )
     }
