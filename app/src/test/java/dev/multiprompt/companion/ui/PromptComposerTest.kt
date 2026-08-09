@@ -39,4 +39,15 @@ class PromptComposerTest {
             ),
         )
     }
+
+    @Test
+    fun attachmentsAreKeptOutsideTheVisibleMessageTextUntilSend() {
+        assertEquals(
+            "https://screencast2.com/example.png\nDescribe the screenshot",
+            PromptComposer.composeMessage(
+                "Describe the screenshot",
+                listOf("https://screencast2.com/example.png"),
+            ),
+        )
+    }
 }

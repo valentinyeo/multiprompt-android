@@ -2,6 +2,7 @@ package dev.multiprompt.companion.ui
 
 import android.Manifest
 import android.content.ClipboardManager
+import android.content.ClipData
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Typeface
@@ -146,6 +147,7 @@ import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.model.DissolvedSession
+import dev.multiprompt.companion.data.CrashReport
 import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.dictation.DictationStatus
@@ -326,6 +328,8 @@ fun MultipromptApp(viewModel: MainViewModel) {
                     onSetAllSplitOnRight = viewModel::setAllSplitOnRight,
                     onSetReaderDefaultFontScale = viewModel::setReaderDefaultFontScale,
                     readerDefaultFontScale = state.readerDefaultFontScale,
+                    crashReport = state.crashReport,
+                    onClearCrashReport = viewModel::clearCrashReport,
                     onAddHost = {
                         viewModel.select(AppSection.HOSTS)
                         viewModel.showHostEditor()
@@ -519,6 +523,8 @@ private fun SessionsScreen(
     onSetAllSplitOnRight: (Boolean) -> Unit,
     readerDefaultFontScale: Float,
     onSetReaderDefaultFontScale: (Float) -> Unit,
+    crashReport: CrashReport?,
+    onClearCrashReport: () -> Unit,
     onAddHost: () -> Unit,
 ) {
     if (state.hosts.isEmpty()) {
@@ -543,8 +549,10 @@ private fun SessionsScreen(
     var bucketMenuExpanded by remember { mutableStateOf(false) }
     var newSessionWorkspacePickerVisible by remember { mutableStateOf(false) }
     var settingsVisible by remember { mutableStateOf(false) }
+    var crashReportVisible by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
     val splitScrollState = rememberScrollState()
     val displayedWorkspaceSplitIds = if (state.allSplitOnRight) {
         state.workspaceSplitIds.asReversed()
@@ -646,12 +654,56 @@ private fun SessionsScreen(
                             }
                         }
                     }
+                    crashReport?.let {
+                        HorizontalDivider()
+                        Text(
+                            "A crash report from the previous launch is available.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            OutlinedButton(onClick = { crashReportVisible = true }) {
+                                Text("View report")
+                            }
+                            TextButton(onClick = onClearCrashReport) { Text("Dismiss") }
+                        }
+                    }
                 }
             },
             confirmButton = {
                 TextButton(onClick = { settingsVisible = false }) { Text("Done") }
             },
         )
+    }
+    if (crashReportVisible) {
+        crashReport?.let { report ->
+            AlertDialog(
+                onDismissRequest = { crashReportVisible = false },
+                title = { Text("Crash report") },
+                text = {
+                    SelectionContainer {
+                        Text(
+                            report.asText(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 360.dp)
+                                .verticalScroll(rememberScrollState()),
+                            fontSize = 11.sp,
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("multiprompt crash report", report.asText()))
+                        crashReportVisible = false
+                    }) { Text("Copy report") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { crashReportVisible = false }) { Text("Close") }
+                },
+            )
+        }
     }
     if (newSessionWorkspacePickerVisible) {
         AlertDialog(
@@ -1476,19 +1528,28 @@ private fun ReaderScreen(
     val setPrompt: (String) -> Unit = { value ->
         promptField = TextFieldValue(value, selection = TextRange(value.length))
     }
+    var dictationPrefix by remember(connection) { mutableStateOf("") }
+    fun appendCurrentDictation(transcript: String): String {
+        if (dictationPrefix.isBlank() && prompt.isNotBlank()) {
+            // Recover safely if a state update raced the microphone button. Never let a
+            // transcript replace an existing draft, including a pasted image URL.
+            dictationPrefix = prompt.trimEnd()
+        }
+        return PromptComposer.appendDictation(dictationPrefix, transcript)
+    }
     var pendingPromptAction by remember(connection) { mutableStateOf<Long?>(null) }
     var menuExpanded by remember(connection) { mutableStateOf(false) }
     var apiKeyDialogVisible by remember(connection) { mutableStateOf(false) }
     var apiKeyDraft by remember(connection) { mutableStateOf("") }
     var apiKeyError by remember(connection) { mutableStateOf<String?>(null) }
     var microphoneError by remember(connection) { mutableStateOf<String?>(null) }
-    var dictationPrefix by remember(connection) { mutableStateOf("") }
     var sendAfterDictation by remember(connection) { mutableStateOf(false) }
     var imageKeyDialogVisible by remember(connection) { mutableStateOf(false) }
     var imageKeyDraft by remember(connection) { mutableStateOf("") }
     var imageKeyError by remember(connection) { mutableStateOf<String?>(null) }
     var imageUploading by remember(connection) { mutableStateOf(false) }
     var imageUploadError by remember(connection) { mutableStateOf<String?>(null) }
+    var imageAttachments by remember(connection) { mutableStateOf(emptyList<String>()) }
     var dissolveDialogVisible by remember(connection) { mutableStateOf(false) }
     var endDialogVisible by remember(connection) { mutableStateOf(false) }
     var renameDialogVisible by remember(connection) { mutableStateOf(false) }
@@ -1523,7 +1584,7 @@ private fun ReaderScreen(
                     }
                 }
                 if (uploadedUrls.isNotEmpty()) {
-                    setPrompt(PromptComposer.appendImageUrls(prompt, uploadedUrls))
+                    imageAttachments = imageAttachments + uploadedUrls
                 }
                 imageUploading = false
             }
@@ -1577,6 +1638,7 @@ private fun ReaderScreen(
         val pending = pendingPromptAction
         if (pending != null && reader.completedActions > pending) {
             setPrompt("")
+            imageAttachments = emptyList()
             pendingPromptAction = null
         }
     }
@@ -1586,7 +1648,7 @@ private fun ReaderScreen(
     LaunchedEffect(dictationState.transcript) {
         val spoken = dictationState.transcript.trim()
         if (spoken.isNotBlank()) {
-            setPrompt(PromptComposer.appendDictation(dictationPrefix, spoken))
+            setPrompt(appendCurrentDictation(spoken))
         }
     }
     DisposableEffect(connection) {
@@ -1595,12 +1657,13 @@ private fun ReaderScreen(
         onDispose { dictation.discard() }
     }
     val sendCurrentPrompt = {
-        if (prompt.isNotBlank() &&
+        val composedPrompt = PromptComposer.composeMessage(prompt, imageAttachments)
+        if (composedPrompt.isNotBlank() &&
             !reader.sending &&
             pendingPromptAction == null
         ) {
             val actionCount = reader.completedActions
-            if (connection.sendPrompt(prompt)) {
+            if (connection.sendPrompt(composedPrompt)) {
                 onSessionInteraction()
                 pendingPromptAction = actionCount
             }
@@ -1620,18 +1683,16 @@ private fun ReaderScreen(
         if (!sendAfterDictation) return@LaunchedEffect
         when (dictationState.status) {
             DictationStatus.IDLE -> {
-                val finalPrompt = PromptComposer.appendDictation(
-                    dictationPrefix,
-                    dictationState.transcript,
-                )
+                val finalPrompt = appendCurrentDictation(dictationState.transcript)
                 setPrompt(finalPrompt)
                 sendAfterDictation = false
-                if (finalPrompt.isNotBlank() &&
+                val composedPrompt = PromptComposer.composeMessage(finalPrompt, imageAttachments)
+                if (composedPrompt.isNotBlank() &&
                     !reader.sending &&
                     pendingPromptAction == null
                 ) {
                     val actionCount = reader.completedActions
-                    if (connection.sendPrompt(finalPrompt)) {
+                    if (connection.sendPrompt(composedPrompt)) {
                         onSessionInteraction()
                         pendingPromptAction = actionCount
                     }
@@ -1974,7 +2035,7 @@ private fun ReaderScreen(
                         Spacer(Modifier.size(4.dp))
                         Text("Archive", maxLines = 1, softWrap = false)
                     }
-                    FilledTonalButton(
+                    OutlinedButton(
                         onClick = { reminderDialogVisible = true },
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
@@ -1993,6 +2054,44 @@ private fun ReaderScreen(
                         Text(if (archived) "Open" else "Wait", maxLines = 1, softWrap = false)
                     }
                 }
+                if (imageAttachments.isNotEmpty()) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        imageAttachments.forEachIndexed { index, url ->
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                ),
+                            ) {
+                                Row(
+                                    Modifier.padding(start = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(Icons.Default.Image, "Image attachment", Modifier.size(18.dp))
+                                    Text(
+                                        "Image ${index + 1}",
+                                        modifier = Modifier.padding(horizontal = 5.dp),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        maxLines = 1,
+                                    )
+                                    IconButton(
+                                        onClick = {
+                                            imageAttachments = imageAttachments.filterNot { it == url }
+                                        },
+                                        modifier = Modifier.size(30.dp),
+                                    ) {
+                                        Icon(Icons.Default.Close, "Remove image ${index + 1}")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 OutlinedTextField(
                     value = promptField,
                     onValueChange = { promptField = it },
@@ -2008,7 +2107,7 @@ private fun ReaderScreen(
                         val sendEnabled = !reader.sending &&
                             pendingPromptAction == null &&
                             !sendAfterDictation &&
-                            (prompt.isNotBlank() || dictationActive)
+                            (prompt.isNotBlank() || imageAttachments.isNotEmpty() || dictationActive)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(
                                 onClick = {
@@ -2147,8 +2246,10 @@ private fun ReaderScreen(
                 block.kind == TmuxText.ReaderBlockKind.PROGRESS && isTransientProgress(block.text)
             }
             val visibleReaderBlocks = readerBlocks.filterNot { block ->
-                !technicalMode && block.kind == TmuxText.ReaderBlockKind.PROGRESS &&
-                    isTransientProgress(block.text)
+                !technicalMode && block.kind in setOf(
+                    TmuxText.ReaderBlockKind.CODE,
+                    TmuxText.ReaderBlockKind.PROGRESS,
+                )
             }
             var expandedReaderBlocks by remember(connection) { mutableStateOf(emptySet<String>()) }
             val transcriptFontSize = (14f * transcriptZoom).sp

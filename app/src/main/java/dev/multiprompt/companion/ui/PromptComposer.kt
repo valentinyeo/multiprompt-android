@@ -17,4 +17,9 @@ internal object PromptComposer {
         prompt.trimEnd(),
         transcript.trim(),
     ).filter(String::isNotBlank).joinToString(" ")
+
+    fun composeMessage(prompt: String, imageUrls: List<String>): String = listOf(
+        imageUrls.joinToString("\n") { it.trim() }.trim(),
+        prompt.trim(),
+    ).filter(String::isNotBlank).joinToString("\n")
 }

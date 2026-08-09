@@ -10,6 +10,7 @@ import dev.multiprompt.companion.model.DissolvedSession
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.SessionSearch
 import dev.multiprompt.companion.data.WorkspaceStore
+import dev.multiprompt.companion.data.CrashReport
 import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.reader.SessionReaderConnection
@@ -53,6 +54,7 @@ data class AppUiState(
     val archivedSessionKeys: Set<String> = emptySet(),
     val sessionBucket: SessionBucket = SessionBucket.OPEN,
     val dissolvedSessions: List<DissolvedSession> = emptyList(),
+    val crashReport: CrashReport? = null,
     val workspaces: List<Workspace> = emptyList(),
     val workspaceSplitIds: List<String?> = listOf(null),
     val selectedWorkspaceId: String? = null,
@@ -74,6 +76,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val sessionReads = app.sessionReadStore
     private val sessionCache = app.sessionCacheStore
     private val dissolvedStore = app.dissolvedSessionStore
+    private val crashReportStore = app.crashReportStore
     private val workspaceStore = app.workspaceStore
     private val ssh = app.sshRepository
     val dictation: DeepgramDictation = app.deepgramDictation
@@ -91,6 +94,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             readerDefaultFontScale = sessionReads.readerDefaultFontScale(),
             readerTechnicalMode = sessionReads.readerTechnicalMode(),
             dissolvedSessions = dissolvedStore.load(),
+            crashReport = crashReportStore.load(),
         ),
     )
     val state: StateFlow<AppUiState> = _state.asStateFlow()
@@ -108,6 +112,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun select(section: AppSection) {
         _state.update { it.copy(section = section) }
+    }
+
+    fun clearCrashReport() {
+        crashReportStore.clear()
+        _state.update { it.copy(crashReport = null) }
     }
 
     fun setNewestSessionsAtBottom(enabled: Boolean) {

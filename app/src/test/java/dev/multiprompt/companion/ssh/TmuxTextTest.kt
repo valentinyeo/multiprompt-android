@@ -76,6 +76,38 @@ class TmuxTextTest {
     }
 
     @Test
+    fun newestCodexCompletionBeatsAnOlderPromptInTheCaptureTail() {
+        assertTrue(TmuxText.isWaitingForInput("› Previous prompt\nWorked for 17m 43s"))
+        assertFalse(TmuxText.isWaitingForInput("› Previous prompt\n• Working on the next task"))
+    }
+
+    @Test
+    fun readerDropsTerminalSeparatorsAndGroupsGenericCommandActivity() {
+        val blocks = TmuxText.readerBlocks(
+            """
+            The useful answer.
+            ──────────────────────────────
+            • Ran git status --short
+            command output that belongs to the tool call
+            ──────────────────────────────
+            Another useful answer.
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            listOf(
+                TmuxText.ReaderBlock(TmuxText.ReaderBlockKind.PROSE, "The useful answer."),
+                TmuxText.ReaderBlock(
+                    TmuxText.ReaderBlockKind.PROGRESS,
+                    "• Ran git status --short\ncommand output that belongs to the tool call",
+                ),
+                TmuxText.ReaderBlock(TmuxText.ReaderBlockKind.PROSE, "Another useful answer."),
+            ),
+            blocks,
+        )
+    }
+
+    @Test
     fun readerBlocksSeparatePromptsCodeAndProgress() {
         val blocks = TmuxText.readerBlocks(
             """

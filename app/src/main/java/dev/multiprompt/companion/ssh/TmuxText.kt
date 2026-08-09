@@ -89,6 +89,10 @@ object TmuxText {
         lines.forEach { rawLine ->
             val line = rawLine.trimEnd()
             val trimmed = line.trim()
+            if (isDivider(trimmed)) {
+                if (current.isNotEmpty()) flush()
+                return@forEach
+            }
             if (trimmed.startsWith("``")) {
                 if (current.isNotEmpty()) flush()
                 if (fencedCode) {
@@ -130,10 +134,10 @@ object TmuxText {
                     // blank row or a new semantic marker appears.
                     ReaderBlockKind.CODE
                 }
-                agent == AgentKind.CODEX && currentKind == ReaderBlockKind.PROGRESS -> {
-                    // Codex renders command output as a bullet followed by unmarked wrapped
-                    // lines. Keep that output in the same collapsed activity section until the
-                    // next blank line or a new semantic block.
+                currentKind == ReaderBlockKind.PROGRESS -> {
+                    // Agent TUIs render command output as a marker followed by unmarked wrapped
+                    // lines. Keep that output in one activity section until a blank line or a
+                    // new semantic block.
                     ReaderBlockKind.PROGRESS
                 }
                 else -> ReaderBlockKind.PROSE
@@ -151,10 +155,20 @@ object TmuxText {
             .filter(String::isNotBlank)
             .toList()
             .takeLast(INPUT_SEARCH_LINES)
+        val latestCompletion = tail.indexOfLast { line ->
+            COMPLETION_MARKERS.any { marker -> line.contains(marker, ignoreCase = true) }
+        }
+        val latestActivity = tail.indexOfLast(::looksLikeActivity)
+        val latestPrompt = tail.indexOfLast { line ->
+            line.startsWith("❯") || line.startsWith("›")
+        }
+        if (latestCompletion >= 0 && latestCompletion >= latestActivity && latestCompletion >= latestPrompt) {
+            return true
+        }
+        if (latestActivity > latestPrompt) return false
+        if (latestPrompt >= 0) return true
         return tail.any { line ->
-            line.startsWith("❯") ||
-                line.startsWith("›") ||
-                IDLE_INPUT_MARKERS.any { marker -> line.contains(marker, ignoreCase = true) }
+            IDLE_INPUT_MARKERS.any { marker -> line.contains(marker, ignoreCase = true) }
         }
     }
 
@@ -199,17 +213,33 @@ object TmuxText {
             line.startsWith("Searching", ignoreCase = true) ||
             line.startsWith("Esc to cancel", ignoreCase = true) ||
             line.startsWith("Tool:", ignoreCase = true) ||
-            (agent == AgentKind.CODEX && (
-                line.startsWith("•") ||
-                    line.startsWith("└") ||
-                    line.startsWith("│") ||
-                    line.startsWith("… +") ||
-                    line.startsWith("... +") ||
-                    line.startsWith("ctrl + t", ignoreCase = true) ||
-                    line.startsWith("esc to interrupt", ignoreCase = true)
-                )) ||
+            line.startsWith("•") ||
+            line.startsWith("└") ||
+            line.startsWith("│") ||
+            line.startsWith("… +") ||
+            line.startsWith("... +") ||
+            line.startsWith("Ran ", ignoreCase = true) ||
+            line.startsWith("Explored", ignoreCase = true) ||
+            line.startsWith("ctrl + t", ignoreCase = true) ||
+            line.startsWith("esc to interrupt", ignoreCase = true) ||
             (agent == AgentKind.PI && (line.startsWith("→") || line.startsWith("←"))) ||
-            TOOL_CALL_MARKERS.any { line.startsWith(it) }
+                TOOL_CALL_MARKERS.any { line.startsWith(it) }
+    }
+
+    private fun looksLikeActivity(value: String): Boolean {
+        val line = value.trimStart()
+        return line.startsWith("Working", ignoreCase = true) ||
+            line.startsWith("Running", ignoreCase = true) ||
+            line.startsWith("Thinking", ignoreCase = true) ||
+            line.startsWith("Reading", ignoreCase = true) ||
+            line.startsWith("Searching", ignoreCase = true) ||
+            line.startsWith("Esc to cancel", ignoreCase = true) ||
+            line.startsWith("Tool:", ignoreCase = true) ||
+            line.startsWith("•") ||
+            line.startsWith("⏺") ||
+            line.startsWith("⎿") ||
+            line.startsWith("└") ||
+            line.startsWith("│")
     }
 
     private fun inferLanguage(value: String): String? {
@@ -269,5 +299,10 @@ object TmuxText {
         "press up to edit queued messages",
         "do you want to proceed?",
         "would you like to proceed?",
+    )
+    private val COMPLETION_MARKERS = listOf(
+        "worked for ",
+        "session complete",
+        "task complete",
     )
 }
