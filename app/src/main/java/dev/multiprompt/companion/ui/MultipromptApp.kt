@@ -134,6 +134,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.AppSection
 import dev.multiprompt.companion.AppUiState
+import dev.multiprompt.companion.SessionBucket
 import dev.multiprompt.companion.BuildConfig
 import dev.multiprompt.companion.MainViewModel
 import dev.multiprompt.companion.R
@@ -141,6 +142,7 @@ import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
+import dev.multiprompt.companion.model.DissolvedSession
 import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.dictation.DictationStatus
@@ -246,6 +248,7 @@ fun MultipromptApp(viewModel: MainViewModel) {
             onFontScaleChanged = { scale -> viewModel.saveReaderFontScale(readerSession, scale) },
             onRename = { name -> viewModel.renameSession(readerSession, name) },
             onDissolve = { viewModel.dissolveSession(readerSession) },
+            onEnd = { viewModel.endSession(readerSession) },
             onSessionInteraction = { viewModel.noteSessionInteraction(readerSession) },
             technicalMode = state.readerTechnicalMode,
             onTechnicalModeChanged = viewModel::setReaderTechnicalMode,
@@ -300,8 +303,12 @@ fun MultipromptApp(viewModel: MainViewModel) {
                     onArchiveUntil = viewModel::archiveSessionUntil,
                     onRestore = viewModel::restoreSession,
                     onDissolve = viewModel::dissolveSession,
+                    onEnd = viewModel::endSession,
+                    onRestoreDissolved = viewModel::restoreDissolvedSession,
+                    onForgetDissolved = viewModel::forgetDissolvedSession,
                     onMarkUnread = viewModel::markSessionUnread,
                     onToggleArchived = viewModel::toggleArchivedSessions,
+                    onSelectSessionBucket = viewModel::selectSessionBucket,
                     onSelectWorkspace = viewModel::selectWorkspace,
                     onSwitchWorkspace = viewModel::openAdjacentWorkspace,
                     onMoveWorkspaceSplit = viewModel::moveWorkspaceSplit,
@@ -489,8 +496,12 @@ private fun SessionsScreen(
     onArchiveUntil: (TmuxSession, Long?) -> Unit,
     onRestore: (TmuxSession) -> Unit,
     onDissolve: (TmuxSession) -> Unit,
+    onEnd: (TmuxSession) -> Unit,
+    onRestoreDissolved: (DissolvedSession) -> Unit,
+    onForgetDissolved: (DissolvedSession) -> Unit,
     onMarkUnread: (TmuxSession) -> Unit,
     onToggleArchived: () -> Unit,
+    onSelectSessionBucket: (SessionBucket) -> Unit,
     onSelectWorkspace: (String?) -> Unit,
     onSwitchWorkspace: (Int) -> Unit,
     onMoveWorkspaceSplit: (String?, Int) -> Unit,
@@ -519,6 +530,7 @@ private fun SessionsScreen(
     var splitOrderDialogVisible by remember { mutableStateOf(false) }
     var reminderPromptSession by remember { mutableStateOf<TmuxSession?>(null) }
     var dissolvePromptSession by remember { mutableStateOf<TmuxSession?>(null) }
+    var endPromptSession by remember { mutableStateOf<TmuxSession?>(null) }
     var renamePromptSession by remember { mutableStateOf<TmuxSession?>(null) }
     var renameDraft by remember { mutableStateOf("") }
     var renameError by remember { mutableStateOf<String?>(null) }
@@ -683,17 +695,31 @@ private fun SessionsScreen(
     dissolvePromptSession?.let { session ->
         AlertDialog(
             onDismissRequest = { dissolvePromptSession = null },
-            title = { Text("Dissolve ${session.displayName}?") },
-            text = { Text("This ends the coding agent and its tmux session. It cannot be undone here.") },
+            title = { Text("Archive ${session.displayName}?") },
+            text = { Text("This ends its tmux session but saves the name and resume command so it can be restored later.") },
             confirmButton = {
                 Button(onClick = {
                     dissolvePromptSession = null
                     onDissolve(session)
-                }) { Text("Dissolve") }
+                }) { Text("Archive") }
             },
             dismissButton = {
                 TextButton(onClick = { dissolvePromptSession = null }) { Text("Cancel") }
             },
+        )
+    }
+    endPromptSession?.let { session ->
+        AlertDialog(
+            onDismissRequest = { endPromptSession = null },
+            title = { Text("End ${session.displayName} completely?") },
+            text = { Text("This kills the coding agent and tmux session without saving a restore record.") },
+            confirmButton = {
+                Button(onClick = {
+                    endPromptSession = null
+                    onEnd(session)
+                }) { Text("End session") }
+            },
+            dismissButton = { TextButton(onClick = { endPromptSession = null }) { Text("Cancel") } },
         )
     }
     if (splitOrderDialogVisible) {
@@ -805,7 +831,8 @@ private fun SessionsScreen(
     val visibleSessions = SessionSearch.newestFirst(state.sessions
         .filter { session ->
             val key = SessionReadStore.key(session.hostId, session.name)
-            (key in state.archivedSessionKeys) == state.showingArchivedSessions &&
+            state.sessionBucket != SessionBucket.ARCHIVE &&
+                (key in state.archivedSessionKeys) == (state.sessionBucket == SessionBucket.WAITING) &&
                 (normalizedQuery.isNotBlank() ||
                     state.selectedWorkspaceId == null ||
                     state.sessionWorkspaceIds[key] == state.selectedWorkspaceId) &&
@@ -816,6 +843,16 @@ private fun SessionsScreen(
                     workspaceName = workspaceNames[state.sessionWorkspaceIds[key]].orEmpty(),
                 )
         }, state.sessionInteractionEpochSeconds)
+    val visibleDissolvedSessions = if (state.sessionBucket == SessionBucket.ARCHIVE) {
+        state.dissolvedSessions.filter { session ->
+            normalizedQuery.isBlank() ||
+                session.displayName.contains(normalizedQuery, ignoreCase = true) ||
+                session.tmuxSessionName.contains(normalizedQuery, ignoreCase = true) ||
+                session.workspaceName.contains(normalizedQuery, ignoreCase = true)
+        }
+    } else {
+        emptyList()
+    }
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
@@ -868,15 +905,24 @@ private fun SessionsScreen(
                         },
                     )
                     DropdownMenuItem(
-                        text = {
-                            Text(
-                                if (state.showingArchivedSessions) "Show active sessions"
-                                else "Archived (${state.archivedSessionKeys.size})",
-                            )
-                        },
+                        text = { Text("Open sessions (${state.sessions.count { SessionReadStore.key(it.hostId, it.name) !in state.archivedSessionKeys }})") },
                         onClick = {
                             overflowExpanded = false
-                            onToggleArchived()
+                            onSelectSessionBucket(SessionBucket.OPEN)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Waiting sessions (${state.archivedSessionKeys.size})") },
+                        onClick = {
+                            overflowExpanded = false
+                            onSelectSessionBucket(SessionBucket.WAITING)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Archive (${state.dissolvedSessions.size})") },
+                        onClick = {
+                            overflowExpanded = false
+                            onSelectSessionBucket(SessionBucket.ARCHIVE)
                         },
                     )
                     DropdownMenuItem(
@@ -996,14 +1042,23 @@ private fun SessionsScreen(
                         renamePromptSession = session
                     },
                     onDissolve = { dissolvePromptSession = session },
+                    onEnd = { endPromptSession = session },
                 )
             }
-            if (visibleSessions.isEmpty() && !state.refreshing) {
+            items(visibleDissolvedSessions, key = { "dissolved:${it.key}" }) { session ->
+                DissolvedSessionCard(
+                    session = session,
+                    onRestore = { onRestoreDissolved(session) },
+                    onForget = { onForgetDissolved(session) },
+                )
+            }
+            if (visibleSessions.isEmpty() && visibleDissolvedSessions.isEmpty() && !state.refreshing) {
                 item(key = "empty-sessions") {
                     Text(
                         when {
                             normalizedQuery.isNotBlank() -> "No sessions match “$normalizedQuery”"
-                            state.showingArchivedSessions -> "No archived sessions"
+                            state.sessionBucket == SessionBucket.ARCHIVE -> "No archived sessions"
+                            state.sessionBucket == SessionBucket.WAITING -> "No waiting sessions"
                             else -> "This split is clear"
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1018,6 +1073,23 @@ private fun SessionsScreen(
                 .navigationBarsPadding(),
         ) {
             HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                listOf(
+                    SessionBucket.OPEN to "Open",
+                    SessionBucket.WAITING to "Waiting",
+                    SessionBucket.ARCHIVE to "Archive",
+                ).forEach { (bucket, label) ->
+                    if (state.sessionBucket == bucket) {
+                        FilledTonalButton(onClick = { onSelectSessionBucket(bucket) }) { Text(label) }
+                    } else {
+                        TextButton(onClick = { onSelectSessionBucket(bucket) }) { Text(label) }
+                    }
+                }
+            }
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(splitScrollState).padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1184,6 +1256,7 @@ private fun SessionCard(
     onMove: (Workspace) -> Unit,
     onRename: () -> Unit,
     onDissolve: () -> Unit,
+    onEnd: () -> Unit,
 ) {
     var menuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     val dismissState = rememberSwipeToDismissBoxState()
@@ -1260,7 +1333,7 @@ private fun SessionCard(
                         onDismissRequest = { menuExpanded = false },
                     ) {
                         DropdownMenuItem(
-                            text = { Text(if (archived) "Return to active" else "Archive") },
+                            text = { Text(if (archived) "Return to open" else "Waiting") },
                             onClick = {
                                 menuExpanded = false
                                 onArchiveToggle()
@@ -1275,6 +1348,13 @@ private fun SessionCard(
                                 },
                             )
                         }
+                        DropdownMenuItem(
+                            text = { Text("End session", color = MaterialTheme.colorScheme.error) },
+                            onClick = {
+                                menuExpanded = false
+                                onEnd()
+                            },
+                        )
                         if (!unread && !archived) {
                             DropdownMenuItem(
                                 text = { Text("Mark unread") },
@@ -1306,7 +1386,7 @@ private fun SessionCard(
                         }
                         HorizontalDivider()
                         DropdownMenuItem(
-                            text = { Text("Dissolve session", color = MaterialTheme.colorScheme.error) },
+                            text = { Text("Archive session", color = MaterialTheme.colorScheme.error) },
                             onClick = {
                                 menuExpanded = false
                                 onDissolve()
@@ -1316,6 +1396,48 @@ private fun SessionCard(
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun DissolvedSessionCard(
+    session: DissolvedSession,
+    onRestore: () -> Unit,
+    onForget: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AgentIcon(session.agent)
+                Spacer(Modifier.size(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(session.displayName, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        listOfNotNull(session.agent.label, session.workspaceName.takeIf(String::isNotBlank), "Archived")
+                            .joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Text(
+                if (session.resumeCommand.isBlank()) {
+                    "Resume command unavailable for this agent"
+                } else {
+                    "Ready to resume with ${session.resumeCommand}"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onForget) { Text("Forget") }
+                TextButton(onClick = onRestore, enabled = session.resumeCommand.isNotBlank()) { Text("Resume") }
+            }
         }
     }
 }
@@ -1339,6 +1461,7 @@ private fun ReaderScreen(
     onFontScaleChanged: (Float) -> Unit,
     onRename: (String) -> String?,
     onDissolve: () -> Unit,
+    onEnd: () -> Unit,
     onSessionInteraction: () -> Unit,
     technicalMode: Boolean,
     onTechnicalModeChanged: (Boolean) -> Unit,
@@ -1365,6 +1488,7 @@ private fun ReaderScreen(
     var imageUploading by remember(connection) { mutableStateOf(false) }
     var imageUploadError by remember(connection) { mutableStateOf<String?>(null) }
     var dissolveDialogVisible by remember(connection) { mutableStateOf(false) }
+    var endDialogVisible by remember(connection) { mutableStateOf(false) }
     var renameDialogVisible by remember(connection) { mutableStateOf(false) }
     var reminderDialogVisible by remember(connection) { mutableStateOf(false) }
     var renameDraft by remember(connection) { mutableStateOf(session.displayName) }
@@ -1382,18 +1506,23 @@ private fun ReaderScreen(
     var previousScrollMax by remember(connection) { mutableIntStateOf(0) }
     val context = LocalContext.current
     val readerScope = rememberCoroutineScope()
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) {
+    val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(maxItems = MAX_IMAGE_SELECTION),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
             imageUploading = true
             imageUploadError = null
             readerScope.launch {
-                runCatching { screencast.upload(uri) }
-                    .onSuccess { url ->
-                        setPrompt(listOf(prompt.trimEnd(), url)
-                            .filter(String::isNotBlank)
-                            .joinToString("\n"))
+                val uploadedUrls = buildList {
+                    uris.forEach { uri ->
+                        runCatching { screencast.upload(uri) }
+                            .onSuccess(::add)
+                            .onFailure { imageUploadError = it.message ?: "Image upload failed" }
                     }
-                    .onFailure { imageUploadError = it.message ?: "Image upload failed" }
+                }
+                if (uploadedUrls.isNotEmpty()) {
+                    setPrompt(PromptComposer.appendImageUrls(prompt, uploadedUrls))
+                }
                 imageUploading = false
             }
         }
@@ -1455,9 +1584,7 @@ private fun ReaderScreen(
     LaunchedEffect(dictationState.transcript) {
         val spoken = dictationState.transcript.trim()
         if (spoken.isNotBlank()) {
-            setPrompt(listOf(dictationPrefix, spoken)
-                .filter(String::isNotBlank)
-                .joinToString(" "))
+            setPrompt(PromptComposer.appendDictation(dictationPrefix, spoken))
         }
     }
     DisposableEffect(connection) {
@@ -1491,9 +1618,10 @@ private fun ReaderScreen(
         if (!sendAfterDictation) return@LaunchedEffect
         when (dictationState.status) {
             DictationStatus.IDLE -> {
-                val finalPrompt = listOf(dictationPrefix, dictationState.transcript.trim())
-                    .filter(String::isNotBlank)
-                    .joinToString(" ")
+                val finalPrompt = PromptComposer.appendDictation(
+                    dictationPrefix,
+                    dictationState.transcript,
+                )
                 setPrompt(finalPrompt)
                 sendAfterDictation = false
                 if (finalPrompt.isNotBlank() &&
@@ -1554,17 +1682,31 @@ private fun ReaderScreen(
     if (dissolveDialogVisible) {
         AlertDialog(
             onDismissRequest = { dissolveDialogVisible = false },
-            title = { Text("Dissolve ${session.displayName}?") },
-            text = { Text("This ends the coding agent and its tmux session. It cannot be undone here.") },
+            title = { Text("Archive ${session.displayName}?") },
+            text = { Text("This ends its tmux session but saves the name and resume command so it can be restored later.") },
             confirmButton = {
                 Button(onClick = {
                     dissolveDialogVisible = false
                     onDissolve()
-                }) { Text("Dissolve") }
+                }) { Text("Archive") }
             },
             dismissButton = {
                 TextButton(onClick = { dissolveDialogVisible = false }) { Text("Cancel") }
             },
+        )
+    }
+    if (endDialogVisible) {
+        AlertDialog(
+            onDismissRequest = { endDialogVisible = false },
+            title = { Text("End ${session.displayName} completely?") },
+            text = { Text("This kills the coding agent and tmux session without saving a restore record.") },
+            confirmButton = {
+                Button(onClick = {
+                    endDialogVisible = false
+                    onEnd()
+                }) { Text("End session") }
+            },
+            dismissButton = { TextButton(onClick = { endDialogVisible = false }) { Text("Cancel") } },
         )
     }
     if (reminderDialogVisible) {
@@ -1740,7 +1882,7 @@ private fun ReaderScreen(
                                 )
                             }
                             DropdownMenuItem(
-                                text = { Text(if (archived) "Return to active" else "Archive and open next") },
+                                text = { Text(if (archived) "Return to open" else "Waiting and open next") },
                                 onClick = {
                                     menuExpanded = false
                                     onArchiveToggle()
@@ -1771,10 +1913,17 @@ private fun ReaderScreen(
                             )
                             HorizontalDivider()
                             DropdownMenuItem(
-                                text = { Text("Dissolve session", color = MaterialTheme.colorScheme.error) },
+                                text = { Text("Archive session", color = MaterialTheme.colorScheme.error) },
                                 onClick = {
                                     menuExpanded = false
                                     dissolveDialogVisible = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("End session", color = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    menuExpanded = false
+                                    endDialogVisible = true
                                 },
                             )
                             DropdownMenuItem(
@@ -1814,6 +1963,14 @@ private fun ReaderScreen(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    OutlinedButton(
+                        onClick = onDissolve,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Default.Archive, null, Modifier.size(18.dp))
+                        Spacer(Modifier.size(4.dp))
+                        Text("Archive")
+                    }
                     FilledTonalButton(
                         onClick = { reminderDialogVisible = true },
                         modifier = Modifier.weight(1f),
@@ -1827,8 +1984,8 @@ private fun ReaderScreen(
                         modifier = Modifier.weight(1f),
                     ) {
                         Icon(Icons.Default.Archive, null, Modifier.size(18.dp))
-                        Spacer(Modifier.size(6.dp))
-                        Text(if (archived) "Return" else "Archive")
+                        Spacer(Modifier.size(4.dp))
+                        Text(if (archived) "Open" else "Waiting")
                     }
                 }
                 OutlinedTextField(
@@ -1988,7 +2145,7 @@ private fun ReaderScreen(
                 !technicalMode && block.kind == TmuxText.ReaderBlockKind.PROGRESS &&
                     isTransientProgress(block.text)
             }
-            var expandedReaderBlocks by remember(connection) { mutableStateOf(emptySet<Int>()) }
+            var expandedReaderBlocks by remember(connection) { mutableStateOf(emptySet<String>()) }
             val transcriptFontSize = (14f * transcriptZoom).sp
             Column(
                 Modifier
@@ -2035,6 +2192,7 @@ private fun ReaderScreen(
                     )
                 }
                 visibleReaderBlocks.forEachIndexed { index, block ->
+                    val blockKey = readerBlockKey(block)
                     when (block.kind) {
                         TmuxText.ReaderBlockKind.PROSE -> Card(
                             colors = CardDefaults.cardColors(
@@ -2070,13 +2228,13 @@ private fun ReaderScreen(
                         TmuxText.ReaderBlockKind.PROGRESS -> {
                             ReaderCollapsibleBlock(
                                 block = block,
-                                expanded = index in expandedReaderBlocks,
+                                expanded = blockKey in expandedReaderBlocks,
                                 fontScale = transcriptZoom,
                                 onToggle = {
-                                    expandedReaderBlocks = if (index in expandedReaderBlocks) {
-                                        expandedReaderBlocks - index
+                                    expandedReaderBlocks = if (blockKey in expandedReaderBlocks) {
+                                        expandedReaderBlocks - blockKey
                                     } else {
-                                        expandedReaderBlocks + index
+                                        expandedReaderBlocks + blockKey
                                     }
                                 },
                             )
@@ -2173,6 +2331,15 @@ private fun isTransientProgress(value: String): Boolean = value.lineSequence().a
         "working", "running", "thinking", "reading", "searching", "esc to cancel",
     ).any { trimmed.startsWith(it, ignoreCase = true) }
 }
+
+private fun readerBlockKey(block: TmuxText.ReaderBlock): String = listOf(
+    block.kind.name,
+    block.language.orEmpty(),
+    block.filePath.orEmpty(),
+    block.text,
+).joinToString("\u0000")
+
+private const val MAX_IMAGE_SELECTION = 8
 
 private fun syntaxHighlightCode(block: TmuxText.ReaderBlock): AnnotatedString = buildAnnotatedString {
     block.text.lineSequence().forEachIndexed { index, line ->

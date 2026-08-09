@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
+import dev.multiprompt.companion.model.DissolvedSession
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.SessionSearch
 import dev.multiprompt.companion.data.WorkspaceStore
@@ -31,6 +32,8 @@ import java.util.UUID
 
 enum class AppSection { SESSIONS, HOSTS, UPDATE }
 
+enum class SessionBucket { OPEN, WAITING, ARCHIVE }
+
 data class AppUiState(
     val section: AppSection = AppSection.SESSIONS,
     val hosts: List<HostProfile> = emptyList(),
@@ -48,7 +51,8 @@ data class AppUiState(
     val readerSession: TmuxSession? = null,
     val unreadSessionKeys: Set<String> = emptySet(),
     val archivedSessionKeys: Set<String> = emptySet(),
-    val showingArchivedSessions: Boolean = false,
+    val sessionBucket: SessionBucket = SessionBucket.OPEN,
+    val dissolvedSessions: List<DissolvedSession> = emptyList(),
     val workspaces: List<Workspace> = emptyList(),
     val workspaceSplitIds: List<String?> = listOf(null),
     val selectedWorkspaceId: String? = null,
@@ -69,6 +73,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val secrets = app.secretStore
     private val sessionReads = app.sessionReadStore
     private val sessionCache = app.sessionCacheStore
+    private val dissolvedStore = app.dissolvedSessionStore
     private val workspaceStore = app.workspaceStore
     private val ssh = app.sshRepository
     val dictation: DeepgramDictation = app.deepgramDictation
@@ -85,6 +90,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             allSplitOnRight = sessionReads.allSplitOnRight(),
             readerDefaultFontScale = sessionReads.readerDefaultFontScale(),
             readerTechnicalMode = sessionReads.readerTechnicalMode(),
+            dissolvedSessions = dissolvedStore.load(),
         ),
     )
     val state: StateFlow<AppUiState> = _state.asStateFlow()
@@ -193,6 +199,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         secrets.remove(host.keySecretId)
         secrets.remove(host.passphraseSecretId)
         sessionReads.removeHost(host.id)
+        dissolvedStore.removeHost(host.id)
         workspaceStore.removeHost(host.id)
         _state.update {
             it.copy(
@@ -200,6 +207,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 sessions = it.sessions.filterNot { session -> session.hostId == host.id },
                 hostErrors = it.hostErrors - host.id,
                 cachedHostIds = it.cachedHostIds - host.id,
+                dissolvedSessions = it.dissolvedSessions.filterNot { session -> session.hostId == host.id },
                 pendingHostKeys = it.pendingHostKeys - host.id,
             )
         }
@@ -413,7 +421,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleArchivedSessions() {
-        _state.update { it.copy(showingArchivedSessions = !it.showingArchivedSessions) }
+        _state.update {
+            it.copy(
+                sessionBucket = when (it.sessionBucket) {
+                    SessionBucket.OPEN -> SessionBucket.WAITING
+                    SessionBucket.WAITING -> SessionBucket.ARCHIVE
+                    SessionBucket.ARCHIVE -> SessionBucket.OPEN
+                },
+            )
+        }
+    }
+
+    fun selectSessionBucket(bucket: SessionBucket) {
+        _state.update { it.copy(sessionBucket = bucket) }
     }
 
     fun selectWorkspace(workspaceId: String?) {
@@ -598,6 +618,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun dissolveSession(session: TmuxSession) {
+        val current = _state.value
+        val key = SessionReadStore.key(session.hostId, session.name)
+        val dissolved = DissolvedSession.from(
+            session = session,
+            workspaceId = current.sessionWorkspaceIds[key],
+            workspaceName = current.sessionWorkspaceIds[key]
+                ?.let { id -> current.workspaces.firstOrNull { it.id == id }?.name }
+                .orEmpty(),
+        )
+        destroySession(session, dissolved)
+    }
+
+    fun endSession(session: TmuxSession) {
+        destroySession(session, dissolved = null)
+    }
+
+    private fun destroySession(session: TmuxSession, dissolved: DissolvedSession?) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId }
         if (host == null) {
             _state.update { it.copy(sessionActionError = "The session VPS is missing") }
@@ -616,6 +653,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     } == true
                     if (readerWasOpen) _state.value.reader?.close()
                     if (terminalWasOpen) _state.value.terminal?.close()
+                    dissolved?.let(dissolvedStore::upsert)
                     sessionReads.restore(session)
                     _state.update {
                         it.copy(
@@ -629,6 +667,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             unreadSessionKeys = it.unreadSessionKeys - key,
                             archivedSessionKeys = it.archivedSessionKeys - key,
                             sessionWorkspaceIds = it.sessionWorkspaceIds - key,
+                            dissolvedSessions = dissolved?.let { record ->
+                                it.dissolvedSessions.filterNot { old -> old.key == record.key } + record
+                            } ?: it.dissolvedSessions,
                         )
                     }
                     refresh()
@@ -636,11 +677,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 .onFailure { throwable ->
                     _state.update {
                         it.copy(
-                            sessionActionError = throwable.message ?: "Could not dissolve the session",
+                            sessionActionError = throwable.message ?: "Could not end the session",
                         )
                     }
                 }
         }
+    }
+
+    fun restoreDissolvedSession(session: DissolvedSession) {
+        val host = _state.value.hosts.firstOrNull { it.id == session.hostId }
+        if (host == null) {
+            _state.update { it.copy(sessionActionError = "The session VPS is missing") }
+            return
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(sessionActionError = null) }
+            runCatching { ssh.resurrectSession(host, session) }
+                .onSuccess {
+                    dissolvedStore.remove(session)
+                    _state.update { it.copy(dissolvedSessions = it.dissolvedSessions.filterNot { item -> item.key == session.key }) }
+                    refresh()
+                }
+                .onFailure { throwable ->
+                    _state.update {
+                        it.copy(sessionActionError = throwable.message ?: "Could not restore the archived session")
+                    }
+                }
+        }
+    }
+
+    fun forgetDissolvedSession(session: DissolvedSession) {
+        dissolvedStore.remove(session)
+        _state.update { it.copy(dissolvedSessions = it.dissolvedSessions.filterNot { item -> item.key == session.key }) }
     }
 
     fun createClaudeSession(workspace: Workspace) {

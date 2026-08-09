@@ -94,13 +94,25 @@ object TmuxText {
                 return@forEach
             }
             if (trimmed.isBlank()) {
-                if (current.isNotEmpty()) current.append('\n')
+                if (current.isNotEmpty()) {
+                    if (agent == AgentKind.CODEX && currentKind == ReaderBlockKind.PROGRESS) {
+                        flush()
+                    } else {
+                        current.append('\n')
+                    }
+                }
                 return@forEach
             }
             val kind = when {
-                fencedCode || looksLikeCode(line) -> ReaderBlockKind.CODE
                 looksLikeUserPrompt(line, agent) -> ReaderBlockKind.USER_PROMPT
+                fencedCode || looksLikeCode(line) -> ReaderBlockKind.CODE
                 looksLikeProgress(line, agent) -> ReaderBlockKind.PROGRESS
+                agent == AgentKind.CODEX && currentKind == ReaderBlockKind.PROGRESS -> {
+                    // Codex renders command output as a bullet followed by unmarked wrapped
+                    // lines. Keep that output in the same collapsed activity section until the
+                    // next blank line or a new semantic block.
+                    ReaderBlockKind.PROGRESS
+                }
                 else -> ReaderBlockKind.PROSE
             }
             append(kind, line)
@@ -164,6 +176,15 @@ object TmuxText {
             line.startsWith("Searching", ignoreCase = true) ||
             line.startsWith("Esc to cancel", ignoreCase = true) ||
             line.startsWith("Tool:", ignoreCase = true) ||
+            (agent == AgentKind.CODEX && (
+                line.startsWith("•") ||
+                    line.startsWith("└") ||
+                    line.startsWith("│") ||
+                    line.startsWith("… +") ||
+                    line.startsWith("... +") ||
+                    line.startsWith("ctrl + t", ignoreCase = true) ||
+                    line.startsWith("esc to interrupt", ignoreCase = true)
+                )) ||
             (agent == AgentKind.PI && (line.startsWith("→") || line.startsWith("←"))) ||
             TOOL_CALL_MARKERS.any { line.startsWith(it) }
     }
@@ -171,7 +192,8 @@ object TmuxText {
     private fun inferLanguage(value: String): String? {
         val firstLine = value.lineSequence().firstOrNull().orEmpty().trimStart()
         return when {
-            firstLine.startsWith("diff --git") || value.contains("@@ ") -> "diff"
+            firstLine.startsWith("diff --git") || value.contains("@@ ") ||
+                value.lineSequence().any { it.trimStart().matches(NUMBERED_DIFF_LINE) } -> "diff"
             firstLine.startsWith("#!/") -> "shell"
             value.contains("fun ") || value.contains("val ") || value.contains("package ") -> "kotlin"
             value.contains("const ") || value.contains("function ") || value.contains("=>") -> "javascript"
@@ -196,6 +218,7 @@ object TmuxText {
             line.startsWith("---") ||
             (line.length > 1 && (line.startsWith("+") || line.startsWith("-")) &&
                 line[1] != ' ') ||
+            line.matches(NUMBERED_DIFF_LINE) ||
             line.startsWith("package ") ||
             line.startsWith("import ") ||
             line.startsWith("#!/") ||
@@ -211,6 +234,7 @@ object TmuxText {
     private const val INPUT_SEARCH_LINES = 24
     private const val DIVIDER_CHARACTERS = "─━═╌╍-_▔▁"
     private val CODE_LINE = Regex("(?:fun|class|interface|object|const|val|var|return|if|for|while)\\b.*")
+    private val NUMBERED_DIFF_LINE = Regex("\\d+\\s+[+-](?:\\s|$).*")
     private val DIFF_PATH = Regex("diff --git a/\\S+ b/(\\S+)")
     private val FILE_PATH = Regex("(?:^|\\n)(?:\\+\\+\\+ b/|File: )([^\\s]+)")
     private val TOOL_CALL_MARKERS = listOf(

@@ -152,4 +152,42 @@ class TmuxTextTest {
             TmuxText.readerBlocks("› Codex prompt", AgentKind.CODEX).single().kind,
         )
     }
+
+    @Test
+    fun codexActivityAndNumberedDiffLinesStayOutOfProse() {
+        val blocks = TmuxText.readerBlocks(
+            """
+            • Ran git diff -- src/App.tsx
+            └ 29 +    assert.match(source)
+            30 +    expect(description).toBeTruthy()
+
+            The change is ready.
+            """.trimIndent(),
+            AgentKind.CODEX,
+        )
+
+        assertEquals(
+            listOf(
+                TmuxText.ReaderBlock(
+                    TmuxText.ReaderBlockKind.PROGRESS,
+                    """
+                    • Ran git diff -- src/App.tsx
+                    └ 29 +    assert.match(source)
+                    """.trimIndent(),
+                ),
+                TmuxText.ReaderBlock(
+                    TmuxText.ReaderBlockKind.CODE,
+                    """
+                    30 +    expect(description).toBeTruthy()
+                    """.trimIndent(),
+                    language = "diff",
+                ),
+                TmuxText.ReaderBlock(
+                    TmuxText.ReaderBlockKind.PROSE,
+                    "The change is ready.",
+                ),
+            ),
+            blocks,
+        )
+    }
 }

@@ -4,6 +4,7 @@ import android.util.Log
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.model.TmuxSession
+import dev.multiprompt.companion.model.DissolvedSession
 import dev.multiprompt.companion.security.SecretStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -221,6 +222,23 @@ class SshRepository(private val secrets: SecretStore) {
                 withAuthenticatedClient(host) { client ->
                     execute(client, TmuxCommands.dissolveSession(sessionName))
                         .requireSuccess("dissolve the tmux session")
+                }
+            }
+        }
+
+    suspend fun resurrectSession(host: HostProfile, session: DissolvedSession) =
+        withContext(Dispatchers.IO) {
+            require(session.resumeCommand.isNotBlank()) { "This agent does not expose a resume command" }
+            withTimeout(CONNECTION_TIMEOUT_MS) {
+                withAuthenticatedClient(host) { client ->
+                    execute(
+                        client,
+                        TmuxCommands.resurrectSession(
+                            sessionName = session.tmuxSessionName,
+                            workingDirectory = session.workingDirectory,
+                            resumeCommand = session.resumeCommand,
+                        ),
+                    ).requireSuccess("restore the archived session")
                 }
             }
         }

@@ -4,6 +4,7 @@ import android.app.Application
 import dev.multiprompt.companion.data.HostStore
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.SessionCacheStore
+import dev.multiprompt.companion.data.DissolvedSessionStore
 import dev.multiprompt.companion.data.WorkspaceStore
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.security.SecretStore
@@ -21,6 +22,7 @@ class MultipromptApplication : Application() {
     val hostStore by lazy { HostStore(this) }
     val sessionReadStore by lazy { SessionReadStore(this) }
     val sessionCacheStore by lazy { SessionCacheStore(this) }
+    val dissolvedSessionStore by lazy { DissolvedSessionStore(this) }
     val workspaceStore by lazy { WorkspaceStore(this) }
     val secretStore by lazy { SecretStore(this) }
     val sshRepository by lazy { SshRepository(secretStore) }

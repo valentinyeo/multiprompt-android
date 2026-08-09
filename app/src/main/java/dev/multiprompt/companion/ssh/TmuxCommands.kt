@@ -49,6 +49,22 @@ object TmuxCommands {
     fun dissolveSession(sessionName: String): String =
         "tmux kill-session -t ${TmuxParser.shellQuote("=$sessionName")}"
 
+    fun resurrectSession(sessionName: String, workingDirectory: String, resumeCommand: String): String {
+        val session = TmuxParser.shellQuote(sessionName)
+        val target = TmuxParser.shellQuote("$sessionName:")
+        val directory = TmuxParser.shellQuote(workingDirectory)
+        val command = TmuxParser.shellQuote(resumeCommand)
+        val create = if (workingDirectory.isBlank()) {
+            "tmux new-session -d -s $session"
+        } else {
+            "tmux new-session -d -s $session -c $directory"
+        }
+        return "if tmux has-session -t $session 2>/dev/null; then " +
+            "printf 'session_exists\\n' >&2; exit 2; fi; " +
+            "$create && tmux send-keys -t $target -l -- $command && " +
+            "tmux send-keys -t $target Enter"
+    }
+
     fun renameWindow(sessionName: String, displayName: String): String =
         "tmux rename-window -t ${target(sessionName)} ${TmuxParser.shellQuote(displayName)}"
 
