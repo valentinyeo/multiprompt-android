@@ -67,6 +67,7 @@ object TmuxText {
                 )
             }
             current.clear()
+            currentKind = ReaderBlockKind.PROSE
             fencedLanguage = null
             promptMayContinue = false
         }
