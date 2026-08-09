@@ -20,7 +20,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -148,6 +147,7 @@ import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.data.ReminderTimeParser
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.SessionSearch
+import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.terminal.TerminalConnection
 import dev.multiprompt.companion.terminal.TerminalStatus
 import dev.multiprompt.companion.update.UpdateRelease
@@ -1317,7 +1317,6 @@ private fun ReaderScreen(
     }
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
-    val readerTextMeasurer = rememberTextMeasurer()
     var previousScrollMax by remember(connection) { mutableIntStateOf(0) }
     val context = LocalContext.current
     val readerScope = rememberCoroutineScope()
@@ -1899,48 +1898,135 @@ private fun ReaderScreen(
                     )
                 }
             }
-            BoxWithConstraints(
+            val displayedOutput = reader.output.ifBlank {
+                if (failure == null && reader.status != ReaderStatus.Connecting) {
+                    "No recent output"
+                } else {
+                    ""
+                }
+            }
+            val readerBlocks = remember(displayedOutput) { TmuxText.readerBlocks(displayedOutput) }
+            var expandedReaderBlocks by remember(connection) { mutableStateOf(emptySet<Int>()) }
+            val transcriptFontSize = (12f * transcriptZoom).sp
+            Column(
                 Modifier
                     .fillMaxWidth()
-                    .background(TerminalSurface, RoundedCornerShape(10.dp))
-                    .padding(10.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp))
+                    .padding(12.dp)
                     .transformable(state = transcriptTransform, canPan = { false }),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                val paneColumns = session.columns.takeIf { it > 0 } ?: FALLBACK_COLUMNS
-                val availableWidth = maxWidth
-                val fittedFontSize = remember(availableWidth, density, paneColumns) {
-                    val sampleSizeSp = 100f
-                    val sampleLength = 20
-                    val charWidthPx = readerTextMeasurer.measure(
-                        AnnotatedString("0".repeat(sampleLength)),
-                        TextStyle(fontFamily = ReaderFontFamily, fontSize = sampleSizeSp.sp),
-                    ).size.width / sampleLength.toFloat()
-                    val availableWidthPx = with(density) { availableWidth.toPx() }
-                    // Fit one complete tmux row. Without this, desktop-width rows wrap a
-                    // second time on Android and alternate between full and partial lines.
-                    (sampleSizeSp * availableWidthPx / (paneColumns * charWidthPx) * 0.97f)
-                        .coerceIn(4f, 12f)
-                        .sp
+                if (readerBlocks.isEmpty()) {
+                    Text(
+                        "No recent output",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = transcriptFontSize,
+                    )
                 }
-                val transcriptFontSize = (fittedFontSize.value * transcriptZoom).sp
-                val displayedOutput = reader.output.ifBlank {
-                    if (failure == null && reader.status != ReaderStatus.Connecting) {
-                        "No recent output"
-                    } else {
-                        ""
+                readerBlocks.forEachIndexed { index, block ->
+                    when (block.kind) {
+                        TmuxText.ReaderBlockKind.PROSE -> SelectionContainer {
+                            Text(
+                                terminalLinks(block.text),
+                                modifier = Modifier.fillMaxWidth(),
+                                fontFamily = FontFamily.Default,
+                                fontSize = transcriptFontSize,
+                                lineHeight = (transcriptFontSize.value * 1.5f).sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        TmuxText.ReaderBlockKind.USER_PROMPT -> Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            ),
+                        ) {
+                            Text(
+                                terminalLinks(block.text),
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                fontFamily = FontFamily.Default,
+                                fontSize = transcriptFontSize,
+                                lineHeight = (transcriptFontSize.value * 1.45f).sp,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
+                        TmuxText.ReaderBlockKind.CODE,
+                        TmuxText.ReaderBlockKind.PROGRESS -> {
+                            ReaderCollapsibleBlock(
+                                block = block,
+                                expanded = index in expandedReaderBlocks,
+                                fontScale = transcriptZoom,
+                                onToggle = {
+                                    expandedReaderBlocks = if (index in expandedReaderBlocks) {
+                                        expandedReaderBlocks - index
+                                    } else {
+                                        expandedReaderBlocks + index
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
-                val linkedOutput = remember(displayedOutput) { terminalLinks(displayedOutput) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReaderCollapsibleBlock(
+    block: TmuxText.ReaderBlock,
+    expanded: Boolean,
+    fontScale: Float,
+    onToggle: () -> Unit,
+) {
+    val isCode = block.kind == TmuxText.ReaderBlockKind.CODE
+    val lineCount = block.text.lineSequence().count()
+    val preview = block.text.lineSequence().firstOrNull().orEmpty().trim()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+        ),
+    ) {
+        Column(Modifier.fillMaxWidth()) {
+            TextButton(
+                onClick = onToggle,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            ) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            if (isCode) {
+                                if (expanded) "Hide code" else "Show code"
+                            } else {
+                                if (expanded) "Hide activity" else "Show activity"
+                            },
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            "$lineCount lines · $preview",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Text(if (expanded) "▲" else "▼")
+                }
+            }
+            if (expanded) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
                 SelectionContainer {
                     Text(
-                        linkedOutput,
-                        modifier = Modifier.fillMaxWidth(),
-                        fontFamily = ReaderFontFamily,
-                        fontSize = transcriptFontSize,
-                        lineHeight = (transcriptFontSize.value * 1.3f).sp,
-                        color = TerminalForeground,
-                        textAlign = TextAlign.Start,
-                        softWrap = true,
+                        if (isCode) block.text else terminalLinks(block.text),
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        fontFamily = if (isCode) ReaderFontFamily else FontFamily.Default,
+                        fontSize = ((if (isCode) 10f else 12f) * fontScale).sp,
+                        lineHeight = ((if (isCode) 1.35f else 1.45f) *
+                            (if (isCode) 10f else 12f) * fontScale).sp,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
             }

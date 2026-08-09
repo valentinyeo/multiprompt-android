@@ -73,4 +73,42 @@ class TmuxTextTest {
     fun activeOutputDoesNotNeedInput() {
         assertFalse(TmuxText.isWaitingForInput("Building the APK…\nRunning tests"))
     }
+
+    @Test
+    fun readerBlocksSeparatePromptsCodeAndProgress() {
+        val blocks = TmuxText.readerBlocks(
+            """
+            diff --git a/app.kt b/app.kt
+            @@ -1 +1 @@
+            -old()
+            +new()
+            ❯ Explain the change
+            The change updates the reader.
+            Working
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            listOf(
+                TmuxText.ReaderBlock(TmuxText.ReaderBlockKind.CODE, """
+                    diff --git a/app.kt b/app.kt
+                    @@ -1 +1 @@
+                    -old()
+                    +new()
+                """.trimIndent()),
+                TmuxText.ReaderBlock(TmuxText.ReaderBlockKind.USER_PROMPT, "Explain the change"),
+                TmuxText.ReaderBlock(TmuxText.ReaderBlockKind.PROSE, "The change updates the reader."),
+                TmuxText.ReaderBlock(TmuxText.ReaderBlockKind.PROGRESS, "Working"),
+            ),
+            blocks,
+        )
+    }
+
+    @Test
+    fun readerBlocksRemoveFenceMarkers() {
+        assertEquals(
+            listOf(TmuxText.ReaderBlock(TmuxText.ReaderBlockKind.CODE, "val answer = 42")),
+            TmuxText.readerBlocks("```kotlin\nval answer = 42\n```")
+        )
+    }
 }
