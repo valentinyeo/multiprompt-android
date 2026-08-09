@@ -143,6 +143,8 @@ object TmuxText {
             line.startsWith("@@") ||
             line.startsWith("+++") ||
             line.startsWith("---") ||
+            (line.length > 1 && (line.startsWith("+") || line.startsWith("-")) &&
+                line[1] != ' ') ||
             line.startsWith("package ") ||
             line.startsWith("import ") ||
             line.startsWith("#!/") ||
