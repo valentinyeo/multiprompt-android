@@ -52,6 +52,7 @@ object TmuxText {
         var currentKind = ReaderBlockKind.PROSE
         var fencedCode = false
         var fencedLanguage: String? = null
+        var promptMayContinue = false
 
         fun flush() {
             val text = current.toString().trim()
@@ -67,6 +68,7 @@ object TmuxText {
             }
             current.clear()
             fencedLanguage = null
+            promptMayContinue = false
         }
 
         fun append(kind: ReaderBlockKind, line: String) {
@@ -76,6 +78,11 @@ object TmuxText {
             current.append(
                 if (kind == ReaderBlockKind.USER_PROMPT) removePromptMarker(line, agent) else line.trimEnd(),
             )
+            if (kind == ReaderBlockKind.USER_PROMPT) {
+                // A terminal-wrapped prompt usually fills the available row. A short prompt
+                // followed by ordinary prose is a completed prompt/response pair instead.
+                promptMayContinue = line.trim().length >= PROMPT_WRAP_THRESHOLD
+            }
         }
 
         lines.forEach { rawLine ->
@@ -109,7 +116,7 @@ object TmuxText {
             val kind = when {
                 looksLikeUserPrompt(line, agent) -> ReaderBlockKind.USER_PROMPT
                 looksLikeProgress(line, agent) -> ReaderBlockKind.PROGRESS
-                currentKind == ReaderBlockKind.USER_PROMPT -> {
+                currentKind == ReaderBlockKind.USER_PROMPT && promptMayContinue -> {
                     // Codex and Claude wrap a submitted prompt across terminal rows but only
                     // draw the prompt marker on the first row. Keep those wrapped rows in the
                     // same user bubble; an empty row or activity marker ends the prompt.
@@ -247,6 +254,7 @@ object TmuxText {
 
     private const val COMPOSER_SEARCH_LINES = 18
     private const val INPUT_SEARCH_LINES = 24
+    private const val PROMPT_WRAP_THRESHOLD = 64
     private const val DIVIDER_CHARACTERS = "─━═╌╍-_▔▁"
     private val CODE_LINE = Regex("(?:fun|class|interface|object|const|val|var)\\b.*(?:[({=]|\\s*$)")
     private val NUMBERED_DIFF_LINE = Regex("\\d+\\s+[+-](?:\\s|$).*")
