@@ -2019,15 +2019,25 @@ private fun ReaderCollapsibleBlock(
             if (expanded) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
                 SelectionContainer {
-                    Text(
-                        if (isCode) block.text else terminalLinks(block.text),
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        fontFamily = if (isCode) ReaderFontFamily else FontFamily.Default,
-                        fontSize = ((if (isCode) 10f else 12f) * fontScale).sp,
-                        lineHeight = ((if (isCode) 1.35f else 1.45f) *
-                            (if (isCode) 10f else 12f) * fontScale).sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
+                    if (isCode) {
+                        Text(
+                            block.text,
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            fontFamily = ReaderFontFamily,
+                            fontSize = (10f * fontScale).sp,
+                            lineHeight = (1.35f * 10f * fontScale).sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    } else {
+                        Text(
+                            terminalLinks(block.text),
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            fontFamily = FontFamily.Default,
+                            fontSize = (12f * fontScale).sp,
+                            lineHeight = (1.45f * 12f * fontScale).sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
                 }
             }
         }
