@@ -93,6 +93,18 @@ class WorkspaceStoreTest {
         )
     }
 
+    @Test
+    fun adjacentSplitIsSafeWhenSelectionChangedDuringRefresh() {
+        assertEquals(
+            "recent",
+            WorkspaceStore.adjacentSplit(listOf(null, "recent"), "removed", 1),
+        )
+        assertEquals(
+            null,
+            WorkspaceStore.adjacentSplit(emptyList(), null, -1),
+        )
+    }
+
     private fun workspace(id: String, name: String) = Workspace(
         id = id,
         name = name,

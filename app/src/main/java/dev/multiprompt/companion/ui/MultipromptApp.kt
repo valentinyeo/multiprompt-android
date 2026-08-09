@@ -105,7 +105,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -2860,7 +2859,7 @@ private fun tomorrowMorningEpochSeconds(): Long = ZonedDateTime.now()
 private fun Modifier.horizontalSwipe(
     onSwipe: (Int) -> Unit,
     eventPass: PointerEventPass = PointerEventPass.Initial,
-) = pointerInput(onSwipe, eventPass) {
+) = pointerInput(eventPass) {
     val threshold = 72.dp.toPx()
     awaitPointerEventScope {
         while (true) {
@@ -2868,13 +2867,16 @@ private fun Modifier.horizontalSwipe(
                 ?: continue
             var totalX = 0f
             var totalY = 0f
+            var lastPosition = first.position
             var claimed = false
             while (true) {
                 val event = awaitPointerEvent(eventPass)
                 val change = event.changes.firstOrNull { it.id == first.id } ?: break
                 if (!change.pressed) break
-                totalX += change.positionChange().x
-                totalY += change.positionChange().y
+                val positionDelta = change.position - lastPosition
+                lastPosition = change.position
+                totalX += positionDelta.x
+                totalY += positionDelta.y
                 if (!claimed && kotlin.math.abs(totalX) > threshold &&
                     kotlin.math.abs(totalX) > kotlin.math.abs(totalY) * 2
                 ) {

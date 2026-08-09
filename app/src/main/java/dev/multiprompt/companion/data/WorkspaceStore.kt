@@ -208,6 +208,17 @@ class WorkspaceStore(context: Context) {
             return complete.map { it.takeUnless { id -> id == ALL_SPLIT_ID } }
         }
 
+        internal fun adjacentSplit(
+            splitIds: List<String?>,
+            selectedSplitId: String?,
+            delta: Int,
+        ): String? {
+            if (splitIds.size < 2) return null
+            val selectedIndex = splitIds.indexOf(selectedSplitId).takeIf { it >= 0 } ?: 0
+            val targetIndex = Math.floorMod(selectedIndex + delta, splitIds.size)
+            return splitIds.getOrNull(targetIndex)
+        }
+
         internal fun orderWorkspaces(
             workspaces: List<Workspace>,
             sessionCounts: Map<String, Int>,

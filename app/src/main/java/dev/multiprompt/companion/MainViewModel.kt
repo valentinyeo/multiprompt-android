@@ -501,9 +501,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             state.workspaceSplitIds
         }
-        if (splits.size < 2) return
-        val current = splits.indexOf(state.selectedWorkspaceId).coerceAtLeast(0)
-        selectWorkspace(splits[Math.floorMod(current + delta, splits.size)])
+        WorkspaceStore.adjacentSplit(splits, state.selectedWorkspaceId, delta)?.let(::selectWorkspace)
     }
 
     fun createWorkspace(name: String, hostId: String, remotePath: String): String? {
