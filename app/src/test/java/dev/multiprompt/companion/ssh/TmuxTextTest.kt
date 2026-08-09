@@ -1,5 +1,6 @@
 package dev.multiprompt.companion.ssh
 
+import dev.multiprompt.companion.model.AgentKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -109,6 +110,35 @@ class TmuxTextTest {
         assertEquals(
             listOf(TmuxText.ReaderBlock(TmuxText.ReaderBlockKind.CODE, "val answer = 42")),
             TmuxText.readerBlocks("```kotlin\nval answer = 42\n```")
+        )
+    }
+
+    @Test
+    fun agentAdaptersRecognizePiPromptAndCodeMetadata() {
+        val blocks = TmuxText.readerBlocks(
+            """
+            > Fix the parser
+            ```kotlin
+            val answer = 42
+            ```
+            """.trimIndent(),
+            AgentKind.PI,
+        )
+
+        assertEquals(TmuxText.ReaderBlockKind.USER_PROMPT, blocks[0].kind)
+        assertEquals("Fix the parser", blocks[0].text)
+        assertEquals("kotlin", blocks[1].language)
+    }
+
+    @Test
+    fun agentAdaptersKeepClaudeAndCodexPromptMarkers() {
+        assertEquals(
+            TmuxText.ReaderBlockKind.USER_PROMPT,
+            TmuxText.readerBlocks("❯ Claude prompt", AgentKind.CLAUDE).single().kind,
+        )
+        assertEquals(
+            TmuxText.ReaderBlockKind.USER_PROMPT,
+            TmuxText.readerBlocks("› Codex prompt", AgentKind.CODEX).single().kind,
         )
     }
 }

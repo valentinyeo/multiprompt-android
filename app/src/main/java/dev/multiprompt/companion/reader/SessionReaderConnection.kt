@@ -1,6 +1,7 @@
 package dev.multiprompt.companion.reader
 
 import dev.multiprompt.companion.model.HostProfile
+import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.ssh.SshRepository
 import dev.multiprompt.companion.ssh.TmuxAction
 import kotlinx.coroutines.CancellationException
@@ -40,6 +41,7 @@ class SessionReaderConnection(
     private val repository: SshRepository,
     private val host: HostProfile,
     val tmuxSessionName: String,
+    private val agent: AgentKind = AgentKind.OTHER,
 ) : AutoCloseable {
     private sealed interface Request {
         data class Prompt(val text: String) : Request
@@ -84,7 +86,7 @@ class SessionReaderConnection(
                         repository.connect(host)
                     }
                     streamClient = connectedClient
-                    repository.streamSession(connectedClient, tmuxSessionName) { snapshot ->
+                    repository.streamSession(connectedClient, tmuxSessionName, agent) { snapshot ->
                         _state.update { current ->
                             if (snapshot == current.output) {
                                 current.copy(

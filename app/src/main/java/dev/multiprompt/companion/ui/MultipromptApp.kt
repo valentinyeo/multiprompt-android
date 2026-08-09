@@ -112,6 +112,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -127,6 +128,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -155,7 +157,6 @@ import dev.multiprompt.companion.update.UpdateState
 import dev.multiprompt.companion.upload.ScreencastUploader
 import java.io.ByteArrayOutputStream
 import java.time.ZonedDateTime
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.connectbot.terminal.Terminal
 
@@ -246,6 +247,9 @@ fun MultipromptApp(viewModel: MainViewModel) {
             onRename = { name -> viewModel.renameSession(readerSession, name) },
             onDissolve = { viewModel.dissolveSession(readerSession) },
             onSessionInteraction = { viewModel.noteSessionInteraction(readerSession) },
+            technicalMode = state.readerTechnicalMode,
+            onTechnicalModeChanged = viewModel::setReaderTechnicalMode,
+            onResetFontScale = { viewModel.resetReaderFontScale(readerSession) },
         )
         return
     }
@@ -310,6 +314,8 @@ fun MultipromptApp(viewModel: MainViewModel) {
                     onNewSession = { newSessionWorkspace = it },
                     onSetNewestSessionsAtBottom = viewModel::setNewestSessionsAtBottom,
                     onSetAllSplitOnRight = viewModel::setAllSplitOnRight,
+                    onSetReaderDefaultFontScale = viewModel::setReaderDefaultFontScale,
+                    readerDefaultFontScale = state.readerDefaultFontScale,
                     onAddHost = {
                         viewModel.select(AppSection.HOSTS)
                         viewModel.showHostEditor()
@@ -497,6 +503,8 @@ private fun SessionsScreen(
     onNewSession: (Workspace) -> Unit,
     onSetNewestSessionsAtBottom: (Boolean) -> Unit,
     onSetAllSplitOnRight: (Boolean) -> Unit,
+    readerDefaultFontScale: Float,
+    onSetReaderDefaultFontScale: (Float) -> Unit,
     onAddHost: () -> Unit,
 ) {
     if (state.hosts.isEmpty()) {
@@ -602,6 +610,25 @@ private fun SessionsScreen(
                             checked = state.allSplitOnRight,
                             onCheckedChange = onSetAllSplitOnRight,
                         )
+                    }
+                    Text("Default Reader font size")
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        listOf(0.9f to "Small", 1f to "Normal", 1.15f to "Large").forEach { (scale, label) ->
+                            if (kotlin.math.abs(readerDefaultFontScale - scale) < 0.01f) {
+                                FilledTonalButton(
+                                    onClick = { onSetReaderDefaultFontScale(scale) },
+                                    modifier = Modifier.weight(1f),
+                                ) { Text(label) }
+                            } else {
+                                OutlinedButton(
+                                    onClick = { onSetReaderDefaultFontScale(scale) },
+                                    modifier = Modifier.weight(1f),
+                                ) { Text(label) }
+                            }
+                        }
                     }
                 }
             },
@@ -1095,19 +1122,49 @@ private fun AgentIcon(
     agent: AgentKind,
     modifier: Modifier = Modifier.size(20.dp),
 ) {
-    val (glyph, color) = when (agent) {
-        AgentKind.CLAUDE -> "✳" to Color(0xFFD97757)
-        AgentKind.CODEX -> "⬡" to Color(0xFF10A37F)
-        AgentKind.PI -> "π" to Color(0xFFA78BFA)
-        AgentKind.KIMI -> "☾" to Color(0xFF4C8DFF)
-        AgentKind.OTHER -> "›" to MaterialTheme.colorScheme.onSurfaceVariant
+    val glyph = when (agent) {
+        AgentKind.CLAUDE -> "✳"
+        AgentKind.CODEX -> "⬡"
+        AgentKind.PI -> "π"
+        AgentKind.KIMI -> "☾"
+        AgentKind.OTHER -> "›"
     }
     Box(modifier, contentAlignment = Alignment.Center) {
         Text(
             glyph,
-            color = color,
+            color = agentAccent(agent),
             fontFamily = FontFamily.SansSerif,
             fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+private fun agentAccent(agent: AgentKind): Color = when (agent) {
+    AgentKind.CLAUDE -> Color(0xFFD97757)
+    AgentKind.CODEX -> Color(0xFF10A37F)
+    AgentKind.PI -> Color(0xFFA78BFA)
+    AgentKind.KIMI -> Color(0xFF4C8DFF)
+    AgentKind.OTHER -> Color(0xFFAFB8C8)
+}
+
+@Composable
+private fun AgentBadge(agent: AgentKind) {
+    Row(
+        Modifier
+            .background(
+                agentAccent(agent).copy(alpha = 0.16f),
+                RoundedCornerShape(percent = 50),
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        AgentIcon(agent, Modifier.size(18.dp))
+        Text(
+            agent.label,
+            modifier = Modifier.padding(end = 9.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = agentAccent(agent),
             fontWeight = FontWeight.SemiBold,
         )
     }
@@ -1283,6 +1340,9 @@ private fun ReaderScreen(
     onRename: (String) -> String?,
     onDissolve: () -> Unit,
     onSessionInteraction: () -> Unit,
+    technicalMode: Boolean,
+    onTechnicalModeChanged: (Boolean) -> Unit,
+    onResetFontScale: () -> Float,
 ) {
     val reader by connection.state.collectAsState()
     val dictationState by dictation.state.collectAsState()
@@ -1313,7 +1373,9 @@ private fun ReaderScreen(
         mutableFloatStateOf(initialFontScale)
     }
     val transcriptTransform = rememberTransformableState { _, zoomChange, _, _ ->
-        transcriptZoom = (transcriptZoom * zoomChange).coerceIn(0.75f, 5f)
+        val nextScale = (transcriptZoom * zoomChange).coerceIn(0.75f, 5f)
+        transcriptZoom = nextScale
+        onFontScaleChanged(nextScale)
     }
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
@@ -1367,11 +1429,6 @@ private fun ReaderScreen(
         } else {
             microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
-    }
-
-    LaunchedEffect(session.hostId, session.name, transcriptZoom) {
-        delay(250)
-        onFontScaleChanged(transcriptZoom)
     }
 
     LaunchedEffect(connection, scrollState, density) {
@@ -1696,6 +1753,22 @@ private fun ReaderScreen(
                                     onOpenTerminal()
                                 },
                             )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(if (technicalMode) "Reader: Clean chat" else "Reader: Technical detail")
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onTechnicalModeChanged(!technicalMode)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Use default font size") },
+                                onClick = {
+                                    menuExpanded = false
+                                    transcriptZoom = onResetFontScale()
+                                },
+                            )
                             HorizontalDivider()
                             DropdownMenuItem(
                                 text = { Text("Dissolve session", color = MaterialTheme.colorScheme.error) },
@@ -1905,35 +1978,79 @@ private fun ReaderScreen(
                     ""
                 }
             }
-            val readerBlocks = remember(displayedOutput) { TmuxText.readerBlocks(displayedOutput) }
+            val readerBlocks = remember(displayedOutput, session.agent) {
+                TmuxText.readerBlocks(displayedOutput, session.agent)
+            }
+            val working = reader.sending || readerBlocks.any { block ->
+                block.kind == TmuxText.ReaderBlockKind.PROGRESS && isTransientProgress(block.text)
+            }
+            val visibleReaderBlocks = readerBlocks.filterNot { block ->
+                !technicalMode && block.kind == TmuxText.ReaderBlockKind.PROGRESS &&
+                    isTransientProgress(block.text)
+            }
             var expandedReaderBlocks by remember(connection) { mutableStateOf(emptySet<Int>()) }
-            val transcriptFontSize = (12f * transcriptZoom).sp
+            val transcriptFontSize = (14f * transcriptZoom).sp
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
                     .padding(12.dp)
                     .transformable(state = transcriptTransform, canPan = { false }),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                if (readerBlocks.isEmpty()) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    AgentBadge(session.agent)
+                    Text(
+                        if (technicalMode) "Technical detail" else "Clean chat",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (working) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.tertiaryContainer, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                        Text(
+                            "Working…",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        )
+                    }
+                }
+                if (visibleReaderBlocks.isEmpty()) {
                     Text(
                         "No recent output",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = transcriptFontSize,
                     )
                 }
-                readerBlocks.forEachIndexed { index, block ->
+                visibleReaderBlocks.forEachIndexed { index, block ->
                     when (block.kind) {
-                        TmuxText.ReaderBlockKind.PROSE -> SelectionContainer {
-                            Text(
-                                terminalLinks(block.text),
-                                modifier = Modifier.fillMaxWidth(),
-                                fontFamily = FontFamily.Default,
-                                fontSize = transcriptFontSize,
-                                lineHeight = (transcriptFontSize.value * 1.5f).sp,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
+                        TmuxText.ReaderBlockKind.PROSE -> Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            ),
+                        ) {
+                            SelectionContainer {
+                                Text(
+                                    terminalLinks(block.text),
+                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                    fontFamily = FontFamily.Default,
+                                    fontSize = transcriptFontSize,
+                                    lineHeight = (transcriptFontSize.value * 1.5f).sp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
                         }
                         TmuxText.ReaderBlockKind.USER_PROMPT -> Card(
                             colors = CardDefaults.cardColors(
@@ -1981,6 +2098,12 @@ private fun ReaderCollapsibleBlock(
     val isCode = block.kind == TmuxText.ReaderBlockKind.CODE
     val lineCount = block.text.lineSequence().count()
     val preview = block.text.lineSequence().firstOrNull().orEmpty().trim()
+    val metadata = listOfNotNull(
+        if (isCode) "Code" else "Activity",
+        block.language,
+        block.filePath,
+        "$lineCount lines",
+    ).joinToString(" · ")
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -2006,7 +2129,7 @@ private fun ReaderCollapsibleBlock(
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            "$lineCount lines · $preview",
+                            "$metadata · $preview",
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.labelSmall,
@@ -2021,7 +2144,7 @@ private fun ReaderCollapsibleBlock(
                 SelectionContainer {
                     if (isCode) {
                         Text(
-                            block.text,
+                            syntaxHighlightCode(block),
                             modifier = Modifier.fillMaxWidth().padding(12.dp),
                             fontFamily = ReaderFontFamily,
                             fontSize = (10f * fontScale).sp,
@@ -2042,6 +2165,43 @@ private fun ReaderCollapsibleBlock(
             }
         }
     }
+}
+
+private fun isTransientProgress(value: String): Boolean = value.lineSequence().all { line ->
+    val trimmed = line.trim()
+    trimmed.isBlank() || listOf(
+        "working", "running", "thinking", "reading", "searching", "esc to cancel",
+    ).any { trimmed.startsWith(it, ignoreCase = true) }
+}
+
+private fun syntaxHighlightCode(block: TmuxText.ReaderBlock): AnnotatedString = buildAnnotatedString {
+    block.text.lineSequence().forEachIndexed { index, line ->
+        val color = when {
+            block.language == "diff" && line.startsWith("+") -> Color(0xFF86EFAC)
+            block.language == "diff" && line.startsWith("-") -> Color(0xFFFCA5A5)
+            block.language == "diff" && line.startsWith("@@") -> Color(0xFF93C5FD)
+            else -> null
+        }
+        if (color != null) {
+            withStyle(SpanStyle(color = color)) { append(line) }
+        } else {
+            appendHighlightedCodeLine(line)
+        }
+        if (index < block.text.lineSequence().count() - 1) append('\n')
+    }
+}
+
+private fun AnnotatedString.Builder.appendHighlightedCodeLine(line: String) {
+    val tokenPattern = Regex("\\b(fun|class|interface|object|val|var|const|return|if|else|for|while|import|package|true|false|null)\\b")
+    var cursor = 0
+    tokenPattern.findAll(line).forEach { match ->
+        append(line.substring(cursor, match.range.first))
+        withStyle(SpanStyle(color = Color(0xFF93C5FD), fontWeight = FontWeight.SemiBold)) {
+            append(match.value)
+        }
+        cursor = match.range.last + 1
+    }
+    append(line.substring(cursor))
 }
 
 @Composable

@@ -1,5 +1,7 @@
 package dev.multiprompt.companion.ssh
 
+import dev.multiprompt.companion.model.AgentKind
+
 object TmuxText {
     enum class ReaderBlockKind {
         PROSE,
@@ -11,6 +13,8 @@ object TmuxText {
     data class ReaderBlock(
         val kind: ReaderBlockKind,
         val text: String,
+        val language: String? = null,
+        val filePath: String? = null,
     )
 
     fun decodeHex(value: String): String {
@@ -28,12 +32,12 @@ object TmuxText {
         .trim()
 
     /** Hides the active terminal composer because Android provides its own native composer. */
-    fun withoutActiveComposer(value: String): String {
+    fun withoutActiveComposer(value: String, agent: AgentKind = AgentKind.OTHER): String {
         val lines = value.lines()
         val searchStart = (lines.size - COMPOSER_SEARCH_LINES).coerceAtLeast(0)
         val promptIndex = (lines.lastIndex downTo searchStart).firstOrNull { index ->
             val line = lines[index].trimStart()
-            line.startsWith("❯") || line.startsWith("›")
+            isPromptMarker(line, agent)
         } ?: return value
         val dividerIndex = ((promptIndex - 1) downTo (promptIndex - 4).coerceAtLeast(searchStart))
             .lastOrNull { index -> isDivider(lines[index]) }
@@ -41,17 +45,28 @@ object TmuxText {
     }
 
     /** Converts a terminal snapshot into conservative, display-only Reader sections. */
-    fun readerBlocks(value: String): List<ReaderBlock> {
+    fun readerBlocks(value: String, agent: AgentKind = AgentKind.OTHER): List<ReaderBlock> {
         val blocks = mutableListOf<ReaderBlock>()
         val lines = value.lines()
         val current = StringBuilder()
         var currentKind = ReaderBlockKind.PROSE
         var fencedCode = false
+        var fencedLanguage: String? = null
 
         fun flush() {
             val text = current.toString().trim()
-            if (text.isNotBlank()) blocks += ReaderBlock(currentKind, text)
+            if (text.isNotBlank()) {
+                blocks += ReaderBlock(
+                    kind = currentKind,
+                    text = text,
+                    language = fencedLanguage ?: text.takeIf { currentKind == ReaderBlockKind.CODE }
+                        ?.let(::inferLanguage),
+                    filePath = text.takeIf { currentKind == ReaderBlockKind.CODE }
+                        ?.let(::inferFilePath),
+                )
+            }
             current.clear()
+            fencedLanguage = null
         }
 
         fun append(kind: ReaderBlockKind, line: String) {
@@ -59,7 +74,7 @@ object TmuxText {
             currentKind = kind
             if (current.isNotEmpty()) current.append('\n')
             current.append(
-                if (kind == ReaderBlockKind.USER_PROMPT) removePromptMarker(line) else line.trimEnd(),
+                if (kind == ReaderBlockKind.USER_PROMPT) removePromptMarker(line, agent) else line.trimEnd(),
             )
         }
 
@@ -67,9 +82,15 @@ object TmuxText {
             val line = rawLine.trimEnd()
             val trimmed = line.trim()
             if (trimmed.startsWith("``")) {
-                if (fencedCode) flush()
-                fencedCode = !fencedCode
-                if (!fencedCode) currentKind = ReaderBlockKind.PROSE
+                if (current.isNotEmpty()) flush()
+                if (fencedCode) {
+                    fencedCode = false
+                    currentKind = ReaderBlockKind.PROSE
+                } else {
+                    fencedCode = true
+                    currentKind = ReaderBlockKind.CODE
+                    fencedLanguage = trimmed.removePrefix("```").trim().ifBlank { null }
+                }
                 return@forEach
             }
             if (trimmed.isBlank()) {
@@ -78,8 +99,8 @@ object TmuxText {
             }
             val kind = when {
                 fencedCode || looksLikeCode(line) -> ReaderBlockKind.CODE
-                looksLikeUserPrompt(line) -> ReaderBlockKind.USER_PROMPT
-                looksLikeProgress(line) -> ReaderBlockKind.PROGRESS
+                looksLikeUserPrompt(line, agent) -> ReaderBlockKind.USER_PROMPT
+                looksLikeProgress(line, agent) -> ReaderBlockKind.PROGRESS
                 else -> ReaderBlockKind.PROSE
             }
             append(kind, line)
@@ -107,23 +128,32 @@ object TmuxText {
         return compact.length >= 8 && compact.all { it in DIVIDER_CHARACTERS }
     }
 
-    private fun looksLikeUserPrompt(value: String): Boolean {
+    private fun looksLikeUserPrompt(value: String, agent: AgentKind): Boolean =
+        isPromptMarker(value.trimStart(), agent)
+
+    private fun isPromptMarker(value: String, agent: AgentKind): Boolean {
         val line = value.trimStart()
-        return line.startsWith("❯") || line.startsWith("›") ||
+        return when {
+            line.startsWith("❯") -> true
+            line.startsWith("›") -> true
+            agent == AgentKind.PI && line.startsWith("> ") -> true
+            else -> false
+        } ||
             line.startsWith("User:", ignoreCase = true) ||
             line.startsWith("You:", ignoreCase = true)
     }
 
-    private fun removePromptMarker(value: String): String = value.trimStart()
+    private fun removePromptMarker(value: String, agent: AgentKind): String = value.trimStart()
         .removePrefix("❯")
         .removePrefix("›")
+        .let { if (agent == AgentKind.PI) it.removePrefix("> ") else it }
         .removePrefix("User:")
         .removePrefix("user:")
         .removePrefix("You:")
         .removePrefix("you:")
         .trim()
 
-    private fun looksLikeProgress(value: String): Boolean {
+    private fun looksLikeProgress(value: String, agent: AgentKind): Boolean {
         val line = value.trimStart()
         return line.startsWith("⏺") || line.startsWith("⎿") ||
             line.startsWith("✓") || line.startsWith("✗") ||
@@ -133,7 +163,28 @@ object TmuxText {
             line.startsWith("Reading", ignoreCase = true) ||
             line.startsWith("Searching", ignoreCase = true) ||
             line.startsWith("Esc to cancel", ignoreCase = true) ||
+            line.startsWith("Tool:", ignoreCase = true) ||
+            (agent == AgentKind.PI && (line.startsWith("→") || line.startsWith("←"))) ||
             TOOL_CALL_MARKERS.any { line.startsWith(it) }
+    }
+
+    private fun inferLanguage(value: String): String? {
+        val firstLine = value.lineSequence().firstOrNull().orEmpty().trimStart()
+        return when {
+            firstLine.startsWith("diff --git") || value.contains("@@ ") -> "diff"
+            firstLine.startsWith("#!/") -> "shell"
+            value.contains("fun ") || value.contains("val ") || value.contains("package ") -> "kotlin"
+            value.contains("const ") || value.contains("function ") || value.contains("=>") -> "javascript"
+            value.contains("def ") || value.contains("import ") && value.contains(":") -> "python"
+            value.trimStart().startsWith("{") || value.trimStart().startsWith("[") -> "json"
+            else -> null
+        }
+    }
+
+    private fun inferFilePath(value: String): String? {
+        val diffPath = DIFF_PATH.find(value)?.groupValues?.getOrNull(1)
+        if (!diffPath.isNullOrBlank()) return diffPath
+        return FILE_PATH.find(value)?.groupValues?.getOrNull(1)
     }
 
     private fun looksLikeCode(value: String): Boolean {
@@ -160,6 +211,8 @@ object TmuxText {
     private const val INPUT_SEARCH_LINES = 24
     private const val DIVIDER_CHARACTERS = "─━═╌╍-_▔▁"
     private val CODE_LINE = Regex("(?:fun|class|interface|object|const|val|var|return|if|for|while)\\b.*")
+    private val DIFF_PATH = Regex("diff --git a/\\S+ b/(\\S+)")
+    private val FILE_PATH = Regex("(?:^|\\n)(?:\\+\\+\\+ b/|File: )([^\\s]+)")
     private val TOOL_CALL_MARKERS = listOf(
         "Read(", "Edit(", "Write(", "Bash(", "Glob(", "Grep(", "Task(", "WebFetch(",
     )

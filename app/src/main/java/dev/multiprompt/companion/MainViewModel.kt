@@ -59,6 +59,8 @@ data class AppUiState(
     val sessionActionError: String? = null,
     val newestSessionsAtBottom: Boolean = true,
     val allSplitOnRight: Boolean = true,
+    val readerDefaultFontScale: Float = 1f,
+    val readerTechnicalMode: Boolean = false,
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -81,6 +83,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             workspaceSplitIds = workspaceStore.splitIds(initialWorkspaces, emptyMap()),
             newestSessionsAtBottom = sessionReads.newestSessionsAtBottom(),
             allSplitOnRight = sessionReads.allSplitOnRight(),
+            readerDefaultFontScale = sessionReads.readerDefaultFontScale(),
+            readerTechnicalMode = sessionReads.readerTechnicalMode(),
         ),
     )
     val state: StateFlow<AppUiState> = _state.asStateFlow()
@@ -108,6 +112,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setAllSplitOnRight(enabled: Boolean) {
         sessionReads.setAllSplitOnRight(enabled)
         _state.update { it.copy(allSplitOnRight = enabled) }
+    }
+
+    fun setReaderDefaultFontScale(scale: Float) {
+        sessionReads.setReaderDefaultFontScale(scale)
+        _state.update { it.copy(readerDefaultFontScale = sessionReads.readerDefaultFontScale()) }
+    }
+
+    fun setReaderTechnicalMode(enabled: Boolean) {
+        sessionReads.setReaderTechnicalMode(enabled)
+        _state.update { it.copy(readerTechnicalMode = enabled) }
     }
 
     fun showHostEditor(host: HostProfile? = null) {
@@ -344,6 +358,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             repository = ssh,
             host = host,
             tmuxSessionName = session.name,
+            agent = session.agent,
         ).also { it.start() }
         _state.update {
             it.copy(
@@ -575,6 +590,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun saveReaderFontScale(session: TmuxSession, scale: Float) {
         sessionReads.setFontScale(session, scale)
+    }
+
+    fun resetReaderFontScale(session: TmuxSession): Float {
+        sessionReads.clearFontScale(session)
+        return sessionReads.fontScale(session)
     }
 
     fun dissolveSession(session: TmuxSession) {

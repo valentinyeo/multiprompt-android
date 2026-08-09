@@ -73,13 +73,37 @@ class SessionReadStore(context: Context) {
     }
 
     fun fontScale(session: TmuxSession): Float = normalizeFontScale(
-        preferences.getFloat(fontScaleKey(session.hostId, session.name), DEFAULT_FONT_SCALE),
+        preferences.getFloat(
+            manualFontScaleKey(session.hostId, session.name),
+            readerDefaultFontScale(),
+        ),
     )
 
     fun setFontScale(session: TmuxSession, scale: Float) {
         preferences.edit()
-            .putFloat(fontScaleKey(session.hostId, session.name), normalizeFontScale(scale))
+            .putFloat(manualFontScaleKey(session.hostId, session.name), normalizeFontScale(scale))
             .apply()
+    }
+
+    fun readerDefaultFontScale(): Float = normalizeFontScale(
+        preferences.getFloat(READER_DEFAULT_FONT_SCALE, DEFAULT_FONT_SCALE),
+    )
+
+    fun setReaderDefaultFontScale(scale: Float) {
+        preferences.edit()
+            .putFloat(READER_DEFAULT_FONT_SCALE, normalizeFontScale(scale))
+            .apply()
+    }
+
+    fun readerTechnicalMode(): Boolean =
+        preferences.getBoolean(READER_TECHNICAL_MODE, false)
+
+    fun setReaderTechnicalMode(enabled: Boolean) {
+        preferences.edit().putBoolean(READER_TECHNICAL_MODE, enabled).apply()
+    }
+
+    fun clearFontScale(session: TmuxSession) {
+        preferences.edit().remove(manualFontScaleKey(session.hostId, session.name)).apply()
     }
 
     fun newestSessionsAtBottom(): Boolean =
@@ -114,6 +138,7 @@ class SessionReadStore(context: Context) {
                     it.startsWith("$ARCHIVE_PREFIX$prefix") ||
                     it.startsWith("$ARCHIVE_UNTIL_PREFIX$prefix") ||
                     it.startsWith("$FONT_SCALE_PREFIX$prefix") ||
+                    it.startsWith("$MANUAL_FONT_SCALE_PREFIX$prefix") ||
                     it.startsWith("$DISPLAY_NAME_PREFIX$prefix")
                     || it.startsWith("$INTERACTION_PREFIX$prefix")
             }
@@ -125,11 +150,14 @@ class SessionReadStore(context: Context) {
         private const val ARCHIVE_PREFIX = "archive::"
         private const val ARCHIVE_UNTIL_PREFIX = "archive_until::"
         private const val FONT_SCALE_PREFIX = "font_scale::"
+        private const val MANUAL_FONT_SCALE_PREFIX = "manual_font_scale::"
+        private const val READER_DEFAULT_FONT_SCALE = "reader_default_font_scale"
+        private const val READER_TECHNICAL_MODE = "reader_technical_mode"
         private const val NEWEST_SESSIONS_AT_BOTTOM = "newest_sessions_at_bottom"
         private const val ALL_SPLIT_ON_RIGHT = "all_split_on_right"
         private const val DISPLAY_NAME_PREFIX = "display_name::"
         private const val INTERACTION_PREFIX = "interaction::"
-        private const val DEFAULT_FONT_SCALE = 1.4f
+        private const val DEFAULT_FONT_SCALE = 1f
         private const val MIN_FONT_SCALE = 0.75f
         private const val MAX_FONT_SCALE = 5f
 
@@ -141,8 +169,8 @@ class SessionReadStore(context: Context) {
         private fun archiveUntilKey(hostId: String, sessionName: String): String =
             "$ARCHIVE_UNTIL_PREFIX${key(hostId, sessionName)}"
 
-        private fun fontScaleKey(hostId: String, sessionName: String): String =
-            "$FONT_SCALE_PREFIX${key(hostId, sessionName)}"
+        private fun manualFontScaleKey(hostId: String, sessionName: String): String =
+            "$MANUAL_FONT_SCALE_PREFIX${key(hostId, sessionName)}"
 
         private fun displayNameKey(hostId: String, sessionName: String): String =
             "$DISPLAY_NAME_PREFIX${key(hostId, sessionName)}"

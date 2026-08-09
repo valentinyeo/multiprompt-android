@@ -2,6 +2,7 @@ package dev.multiprompt.companion.ssh
 
 import android.util.Log
 import dev.multiprompt.companion.model.HostProfile
+import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.security.SecretStore
 import kotlinx.coroutines.Dispatchers
@@ -112,6 +113,7 @@ class SshRepository(private val secrets: SecretStore) {
     suspend fun streamSession(
         client: SshClient,
         sessionName: String,
+        agent: AgentKind = AgentKind.OTHER,
         onSnapshot: (String) -> Unit,
     ) = coroutineScope {
         val session = client.openSession()
@@ -136,6 +138,7 @@ class SshRepository(private val secrets: SecretStore) {
                         }
                         val mobileOutput = TmuxText.withoutActiveComposer(
                             TmuxText.leftAligned(TmuxText.decodeHex(encoded)),
+                            agent,
                         )
                         onSnapshot(mobileOutput)
                     }
