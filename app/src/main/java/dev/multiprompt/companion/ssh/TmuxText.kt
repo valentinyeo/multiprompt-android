@@ -95,7 +95,10 @@ object TmuxText {
             }
             if (trimmed.isBlank()) {
                 if (current.isNotEmpty()) {
-                    if (agent == AgentKind.CODEX && currentKind == ReaderBlockKind.PROGRESS) {
+                    if (currentKind == ReaderBlockKind.USER_PROMPT ||
+                        currentKind == ReaderBlockKind.CODE ||
+                        (agent == AgentKind.CODEX && currentKind == ReaderBlockKind.PROGRESS)
+                    ) {
                         flush()
                     } else {
                         current.append('\n')
@@ -105,8 +108,20 @@ object TmuxText {
             }
             val kind = when {
                 looksLikeUserPrompt(line, agent) -> ReaderBlockKind.USER_PROMPT
-                fencedCode || looksLikeCode(line) -> ReaderBlockKind.CODE
                 looksLikeProgress(line, agent) -> ReaderBlockKind.PROGRESS
+                currentKind == ReaderBlockKind.USER_PROMPT -> {
+                    // Codex and Claude wrap a submitted prompt across terminal rows but only
+                    // draw the prompt marker on the first row. Keep those wrapped rows in the
+                    // same user bubble; an empty row or activity marker ends the prompt.
+                    ReaderBlockKind.USER_PROMPT
+                }
+                fencedCode || looksLikeCode(line) -> ReaderBlockKind.CODE
+                currentKind == ReaderBlockKind.CODE -> {
+                    // Code output commonly contains continuation lines that do not have a
+                    // reliable syntax marker. Keep the contiguous section together until a
+                    // blank row or a new semantic marker appears.
+                    ReaderBlockKind.CODE
+                }
                 agent == AgentKind.CODEX && currentKind == ReaderBlockKind.PROGRESS -> {
                     // Codex renders command output as a bullet followed by unmarked wrapped
                     // lines. Keep that output in the same collapsed activity section until the
@@ -233,7 +248,7 @@ object TmuxText {
     private const val COMPOSER_SEARCH_LINES = 18
     private const val INPUT_SEARCH_LINES = 24
     private const val DIVIDER_CHARACTERS = "─━═╌╍-_▔▁"
-    private val CODE_LINE = Regex("(?:fun|class|interface|object|const|val|var|return|if|for|while)\\b.*")
+    private val CODE_LINE = Regex("(?:fun|class|interface|object|const|val|var)\\b.*(?:[({=]|\\s*$)")
     private val NUMBERED_DIFF_LINE = Regex("\\d+\\s+[+-](?:\\s|$).*")
     private val DIFF_PATH = Regex("diff --git a/\\S+ b/(\\S+)")
     private val FILE_PATH = Regex("(?:^|\\n)(?:\\+\\+\\+ b/|File: )([^\\s]+)")

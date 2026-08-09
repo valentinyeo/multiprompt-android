@@ -190,4 +190,34 @@ class TmuxTextTest {
             blocks,
         )
     }
+
+    @Test
+    fun wrappedCodexPromptStaysInOneUserBubble() {
+        val blocks = TmuxText.readerBlocks(
+            """
+            › https://screencast2.com/AhOPZ.png And on the inbox view, move these buttons for open,
+            waiting, and archive to the top. Make the inbox a dropdown.
+            """.trimIndent(),
+            AgentKind.CODEX,
+        )
+
+        assertEquals(
+            listOf(
+                TmuxText.ReaderBlock(
+                    TmuxText.ReaderBlockKind.USER_PROMPT,
+                    "https://screencast2.com/AhOPZ.png And on the inbox view, move these buttons for open,\n" +
+                        "waiting, and archive to the top. Make the inbox a dropdown.",
+                ),
+            ),
+            blocks,
+        )
+    }
+
+    @Test
+    fun naturalLanguageForLineIsNotMisclassifiedAsCode() {
+        assertEquals(
+            TmuxText.ReaderBlockKind.PROSE,
+            TmuxText.readerBlocks("for the inbox, make this a dropdown", AgentKind.CODEX).single().kind,
+        )
+    }
 }

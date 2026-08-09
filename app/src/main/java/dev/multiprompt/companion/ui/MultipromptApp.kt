@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -58,6 +59,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -537,6 +540,7 @@ private fun SessionsScreen(
     var searchVisible by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var overflowExpanded by remember { mutableStateOf(false) }
+    var bucketMenuExpanded by remember { mutableStateOf(false) }
     var newSessionWorkspacePickerVisible by remember { mutableStateOf(false) }
     var settingsVisible by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
@@ -856,9 +860,45 @@ private fun SessionsScreen(
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.End,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            Box {
+                TextButton(
+                    onClick = { bucketMenuExpanded = true },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        when (state.sessionBucket) {
+                            SessionBucket.OPEN -> "Inbox"
+                            SessionBucket.WAITING -> "Waiting"
+                            SessionBucket.ARCHIVE -> "Archive"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Icon(Icons.Default.ExpandMore, "Switch session bucket")
+                }
+                DropdownMenu(
+                    expanded = bucketMenuExpanded,
+                    onDismissRequest = { bucketMenuExpanded = false },
+                ) {
+                    listOf(
+                        SessionBucket.OPEN to "Inbox",
+                        SessionBucket.WAITING to "Waiting",
+                        SessionBucket.ARCHIVE to "Archive",
+                    ).forEach { (bucket, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                bucketMenuExpanded = false
+                                onSelectSessionBucket(bucket)
+                            },
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.weight(1f))
             if (state.refreshing) {
                 CircularProgressIndicator(Modifier.padding(12.dp).size(20.dp), strokeWidth = 2.dp)
             }
@@ -902,27 +942,6 @@ private fun SessionsScreen(
                         onClick = {
                             overflowExpanded = false
                             settingsVisible = true
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Open sessions (${state.sessions.count { SessionReadStore.key(it.hostId, it.name) !in state.archivedSessionKeys }})") },
-                        onClick = {
-                            overflowExpanded = false
-                            onSelectSessionBucket(SessionBucket.OPEN)
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Waiting sessions (${state.archivedSessionKeys.size})") },
-                        onClick = {
-                            overflowExpanded = false
-                            onSelectSessionBucket(SessionBucket.WAITING)
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Archive (${state.dissolvedSessions.size})") },
-                        onClick = {
-                            overflowExpanded = false
-                            onSelectSessionBucket(SessionBucket.ARCHIVE)
                         },
                     )
                     DropdownMenuItem(
@@ -1073,23 +1092,6 @@ private fun SessionsScreen(
                 .navigationBarsPadding(),
         ) {
             HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                listOf(
-                    SessionBucket.OPEN to "Open",
-                    SessionBucket.WAITING to "Waiting",
-                    SessionBucket.ARCHIVE to "Archive",
-                ).forEach { (bucket, label) ->
-                    if (state.sessionBucket == bucket) {
-                        FilledTonalButton(onClick = { onSelectSessionBucket(bucket) }) { Text(label) }
-                    } else {
-                        TextButton(onClick = { onSelectSessionBucket(bucket) }) { Text(label) }
-                    }
-                }
-            }
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(splitScrollState).padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1966,26 +1968,29 @@ private fun ReaderScreen(
                     OutlinedButton(
                         onClick = onDissolve,
                         modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
                     ) {
                         Icon(Icons.Default.Archive, null, Modifier.size(18.dp))
                         Spacer(Modifier.size(4.dp))
-                        Text("Archive")
+                        Text("Archive", maxLines = 1, softWrap = false)
                     }
                     FilledTonalButton(
                         onClick = { reminderDialogVisible = true },
                         modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
                     ) {
                         Icon(Icons.Default.Schedule, null, Modifier.size(18.dp))
-                        Spacer(Modifier.size(6.dp))
-                        Text("Remind me")
+                        Spacer(Modifier.size(4.dp))
+                        Text("Remind me", maxLines = 1, softWrap = false)
                     }
                     OutlinedButton(
                         onClick = onArchiveToggle,
                         modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
                     ) {
-                        Icon(Icons.Default.Archive, null, Modifier.size(18.dp))
+                        Icon(Icons.Default.Sync, null, Modifier.size(18.dp))
                         Spacer(Modifier.size(4.dp))
-                        Text(if (archived) "Open" else "Waiting")
+                        Text(if (archived) "Open" else "Wait", maxLines = 1, softWrap = false)
                     }
                 }
                 OutlinedTextField(
