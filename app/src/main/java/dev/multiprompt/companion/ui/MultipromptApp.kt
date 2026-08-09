@@ -193,6 +193,18 @@ fun MultipromptApp(viewModel: MainViewModel) {
         }
     }
 
+    BackHandler(
+        enabled = state.editorVisible,
+        onBack = viewModel::hideHostEditor,
+    )
+    BackHandler(
+        enabled = state.terminal == null &&
+            state.reader == null &&
+            !state.editorVisible &&
+            state.section != AppSection.SESSIONS,
+        onBack = { viewModel.select(AppSection.SESSIONS) },
+    )
+
     val terminal = state.terminal
     if (terminal != null) {
         TerminalScreen(
@@ -258,6 +270,7 @@ fun MultipromptApp(viewModel: MainViewModel) {
                         onRefresh = viewModel::refresh,
                         section = state.section,
                         onSelect = viewModel::select,
+                        onBack = { viewModel.select(AppSection.SESSIONS) },
                     )
                 }
                 val available = updateState as? UpdateState.Available
@@ -391,9 +404,19 @@ private fun Header(
     onRefresh: () -> Unit,
     section: AppSection,
     onSelect: (AppSection) -> Unit,
+    onBack: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     TopAppBar(
+        navigationIcon = if (section != AppSection.SESSIONS) {
+            {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to sessions")
+                }
+            }
+        } else {
+            {}
+        },
         title = {
             Column {
                 Text(
@@ -1994,6 +2017,7 @@ private fun HostEditorScreen(
     onCancel: () -> Unit,
     onSave: (HostDraft, ByteArray?) -> Unit,
 ) {
+    BackHandler(onBack = onCancel)
     val context = LocalContext.current
     var label by remember(host?.id) { mutableStateOf(host?.label.orEmpty()) }
     var hostname by remember(host?.id) { mutableStateOf(host?.hostname.orEmpty()) }
