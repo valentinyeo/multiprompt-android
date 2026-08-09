@@ -29,7 +29,7 @@ class SessionReadStore(context: Context) {
             .apply()
     }
 
-    /** Hides a session until tmux reports activity newer than this archive action. */
+    /** Hides a session while the agent is still working; it returns when input is available. */
     fun archive(session: TmuxSession) {
         archiveUntil(session, null)
     }
@@ -190,7 +190,9 @@ class SessionReadStore(context: Context) {
         ): Boolean = if (resumeAtEpochSeconds != null) {
             nowEpochSeconds < resumeAtEpochSeconds
         } else {
-            lastActivityEpochSeconds <= archivedAtEpochSeconds || !needsAttention
+            // tmux's session_activity is not guaranteed to advance for agent output. The
+            // prompt state is the authoritative signal for the temporary Waiting bucket.
+            !needsAttention
         }
     }
 }

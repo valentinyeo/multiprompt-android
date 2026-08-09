@@ -13,7 +13,7 @@ class SessionReadStoreTest {
     }
 
     @Test
-    fun archivedSessionReturnsAtDeadlineOrAttentionReadyOutput() {
+    fun waitingSessionReturnsWhenAgentNeedsInput() {
         assertEquals(
             true,
             SessionReadStore.shouldRemainArchived(100, 100, 500, 499, needsAttention = true),
@@ -24,7 +24,7 @@ class SessionReadStoreTest {
         )
         assertEquals(
             false,
-            SessionReadStore.shouldRemainArchived(101, 100, null, 101, needsAttention = true),
+            SessionReadStore.shouldRemainArchived(100, 100, null, 101, needsAttention = true),
         )
         assertEquals(
             true,
