@@ -2101,20 +2101,29 @@ private fun ReaderScreen(
                     OutlinedButton(
                         onClick = { reminderDialogVisible = true },
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 8.dp),
                     ) {
                         Icon(Icons.Default.Schedule, null, Modifier.size(18.dp))
                         Spacer(Modifier.size(4.dp))
-                        Text("Remind me", maxLines = 1, softWrap = false)
+                        Text("Remind", maxLines = 1, softWrap = false)
                     }
                     OutlinedButton(
                         onClick = onArchiveToggle,
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 8.dp),
                     ) {
                         Icon(Icons.Default.Sync, null, Modifier.size(18.dp))
-                        Spacer(Modifier.size(4.dp))
+                        Spacer(Modifier.size(2.dp))
                         Text(if (archived) "Open" else "Wait", maxLines = 1, softWrap = false)
+                    }
+                    OutlinedButton(
+                        onClick = onBack,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 8.dp),
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, Modifier.size(18.dp))
+                        Spacer(Modifier.size(2.dp))
+                        Text("Back", maxLines = 1, softWrap = false)
                     }
                 }
                 if (imageAttachments.isNotEmpty()) {
