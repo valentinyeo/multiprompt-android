@@ -2275,10 +2275,8 @@ private fun ReaderScreen(
                 block.kind == TmuxText.ReaderBlockKind.PROGRESS && isTransientProgress(block.text)
             }
             val visibleReaderBlocks = readerBlocks.filterNot { block ->
-                !technicalMode && block.kind in setOf(
-                    TmuxText.ReaderBlockKind.CODE,
-                    TmuxText.ReaderBlockKind.PROGRESS,
-                )
+                !technicalMode && block.kind == TmuxText.ReaderBlockKind.PROGRESS &&
+                    isTransientProgress(block.text)
             }
             var expandedReaderBlocks by remember(connection) { mutableStateOf(emptySet<String>()) }
             val transcriptFontSize = (14f * transcriptZoom).sp

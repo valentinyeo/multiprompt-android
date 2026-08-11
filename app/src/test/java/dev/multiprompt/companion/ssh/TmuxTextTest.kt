@@ -92,6 +92,7 @@ class TmuxTextTest {
             ──────────────────────────────
             Another useful answer.
             """.trimIndent(),
+            AgentKind.CODEX,
         )
 
         assertEquals(

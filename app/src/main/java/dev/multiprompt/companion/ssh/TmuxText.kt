@@ -134,7 +134,7 @@ object TmuxText {
                     // blank row or a new semantic marker appears.
                     ReaderBlockKind.CODE
                 }
-                currentKind == ReaderBlockKind.PROGRESS -> {
+                agent == AgentKind.CODEX && currentKind == ReaderBlockKind.PROGRESS -> {
                     // Agent TUIs render command output as a marker followed by unmarked wrapped
                     // lines. Keep that output in one activity section until a blank line or a
                     // new semantic block.
