@@ -358,7 +358,7 @@ class DeepgramDictation(
         const val FINAL_RESULT_WAIT_MS = 1_200L
         const val DEEPGRAM_LISTEN_URL =
             "wss://api.deepgram.com/v1/listen" +
-                "?model=nova-3&language=multi&smart_format=true&punctuate=true" +
+                "?model=nova-3&language=en&smart_format=true&punctuate=true" +
                 "&interim_results=true&endpointing=300&encoding=linear16" +
                 "&sample_rate=$SAMPLE_RATE&channels=1"
         val ACTIVE_STATUSES = setOf(

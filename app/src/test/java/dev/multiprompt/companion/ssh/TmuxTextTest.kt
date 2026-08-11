@@ -105,6 +105,27 @@ class TmuxTextTest {
     }
 
     @Test
+    fun activityAfterPromptVetoesAStaleCompletionMarker() {
+        assertFalse(
+            TmuxText.isWaitingForInput(
+                "› Previous prompt\n• Working (1m 17s · esc to interrupt)\nWorked for 17m 43s",
+            ),
+        )
+    }
+
+    @Test
+    fun detectsModelAndEffortFromAgentFooter() {
+        assertEquals(
+            TmuxText.RuntimeDetails("gpt-5.6-sol", "high"),
+            TmuxText.runtimeDetails("gpt-5.6-sol high fast · project"),
+        )
+        assertEquals(
+            TmuxText.RuntimeDetails("Opus 5.4", "medium"),
+            TmuxText.runtimeDetails("Opus 5.4 medium | project"),
+        )
+    }
+
+    @Test
     fun readerDropsTerminalSeparatorsAndGroupsGenericCommandActivity() {
         val blocks = TmuxText.readerBlocks(
             """

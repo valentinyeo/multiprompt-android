@@ -1549,6 +1549,7 @@ private fun ReaderScreen(
     }
     var pendingPromptAction by remember(connection) { mutableStateOf<Long?>(null) }
     var menuExpanded by remember(connection) { mutableStateOf(false) }
+    var modelMenuExpanded by remember(connection) { mutableStateOf(false) }
     var apiKeyDialogVisible by remember(connection) { mutableStateOf(false) }
     var apiKeyDraft by remember(connection) { mutableStateOf("") }
     var apiKeyError by remember(connection) { mutableStateOf<String?>(null) }
@@ -1569,6 +1570,7 @@ private fun ReaderScreen(
     var transcriptZoom by remember(connection, session.hostId, session.name) {
         mutableFloatStateOf(initialFontScale)
     }
+    val runtimeDetails = remember(session.preview) { TmuxText.runtimeDetails(session.preview) }
     val transcriptTransform = rememberTransformableState { _, zoomChange, _, _ ->
         val nextScale = (transcriptZoom * zoomChange).coerceIn(0.75f, 5f)
         transcriptZoom = nextScale
@@ -1658,7 +1660,9 @@ private fun ReaderScreen(
     LaunchedEffect(dictationState.transcript) {
         val spoken = dictationState.transcript.trim()
         if (spoken.isNotBlank()) {
-            setPrompt(appendCurrentDictation(spoken))
+            // Deepgram emits cumulative interim/final transcripts. Rebuild from the
+            // original draft instead of appending the cumulative text on every update.
+            setPrompt(PromptComposer.appendDictation(dictationPrefix, spoken))
         }
     }
     DisposableEffect(connection) {
@@ -1900,12 +1904,63 @@ private fun ReaderScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         AgentIcon(session.agent, Modifier.size(22.dp))
-                        Text(
-                            session.displayName,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        Box(Modifier.weight(1f)) {
+                            Column(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { modelMenuExpanded = true },
+                            ) {
+                                Text(
+                                    session.displayName,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    runtimeDetails.label ?: "Model / effort",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = modelMenuExpanded,
+                                onDismissRequest = { modelMenuExpanded = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Open model picker (/model)") },
+                                    onClick = {
+                                        modelMenuExpanded = false
+                                        setPrompt("/model")
+                                    },
+                                )
+                                if (session.agent == AgentKind.CLAUDE) {
+                                    DropdownMenuItem(
+                                        text = { Text("Use Claude Opus") },
+                                        onClick = {
+                                            modelMenuExpanded = false
+                                            setPrompt("/model opus")
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Use Claude Sonnet") },
+                                        onClick = {
+                                            modelMenuExpanded = false
+                                            setPrompt("/model sonnet")
+                                        },
+                                    )
+                                    listOf("low", "medium", "high", "xhigh", "max").forEach { level ->
+                                        DropdownMenuItem(
+                                            text = { Text("Set effort: $level") },
+                                            onClick = {
+                                                modelMenuExpanded = false
+                                                setPrompt("/effort $level")
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 },
                 actions = {

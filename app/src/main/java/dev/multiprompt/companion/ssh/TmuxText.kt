@@ -3,6 +3,14 @@ package dev.multiprompt.companion.ssh
 import dev.multiprompt.companion.model.AgentKind
 
 object TmuxText {
+    data class RuntimeDetails(
+        val model: String? = null,
+        val effort: String? = null,
+    ) {
+        val label: String?
+            get() = model?.let { name -> listOfNotNull(name, effort).joinToString(" · ") }
+    }
+
     enum class ReaderBlockKind {
         PROSE,
         USER_PROMPT,
@@ -30,6 +38,20 @@ object TmuxText {
         .lineSequence()
         .joinToString("\n") { it.trimStart() }
         .trim()
+
+    /** Reads the compact model/effort footer printed by Codex and Claude TUIs. */
+    fun runtimeDetails(value: String): RuntimeDetails {
+        value.lineSequence().toList().asReversed().forEach { rawLine ->
+            val line = rawLine.trim()
+            CODEX_RUNTIME.find(line)?.let { match ->
+                return RuntimeDetails(match.groupValues[1], match.groupValues[2].lowercase())
+            }
+            CLAUDE_RUNTIME.find(line)?.let { match ->
+                return RuntimeDetails(match.groupValues[1], match.groupValues[2].lowercase())
+            }
+        }
+        return RuntimeDetails()
+    }
 
     /** Hides the active terminal composer because Android provides its own native composer. */
     fun withoutActiveComposer(value: String, agent: AgentKind = AgentKind.OTHER): String {
@@ -178,9 +200,12 @@ object TmuxText {
             IDLE_INPUT_MARKERS.any { marker -> line.contains(marker, ignoreCase = true) }
         }
 
-        // A visible activity marker or ordinary output after an old prompt is
-        // still working/unknown. The desktop does not turn this into a blue dot.
-        if (latestActivity >= 0 && meaningful[latestActivity].index == lastMeaningful) return false
+        // A visible activity marker after the latest prompt means the agent is
+        // still working, even if a stale completion/status line was painted
+        // below it. The desktop does not turn this into a blue dot.
+        val activityIndex = meaningful.getOrNull(latestActivity)?.index ?: -1
+        val promptIndex = meaningful.getOrNull(latestPrompt)?.index ?: -1
+        if (latestActivity >= 0 && (latestPrompt < 0 || activityIndex > promptIndex)) return false
 
         return when {
             latestIdleMarker >= 0 && meaningful[latestIdleMarker].index == lastMeaningful -> true
@@ -319,6 +344,13 @@ object TmuxText {
     private val NUMBERED_DIFF_LINE = Regex("\\d+\\s+[+-](?:\\s|$).*")
     private val DIFF_PATH = Regex("diff --git a/\\S+ b/(\\S+)")
     private val FILE_PATH = Regex("(?:^|\\n)(?:\\+\\+\\+ b/|File: )([^\\s]+)")
+    private val CODEX_RUNTIME = Regex(
+        "(?i)\\b((?:gpt|o)[a-z0-9.-]+)\\s+(none|minimal|low|medium|high|xhigh|max|ultra)\\b",
+    )
+    private val CLAUDE_RUNTIME = Regex(
+        "(?i)\\b((?:opus|sonnet|haiku|fable)(?:\\s+[0-9]+(?:\\.[0-9]+)*)?)\\s+" +
+            "(low|medium|high|xhigh|max|ultracode|auto)\\b",
+    )
     private val TOOL_CALL_MARKERS = listOf(
         "Read(", "Edit(", "Write(", "Bash(", "Glob(", "Grep(", "Task(", "WebFetch(",
     )
