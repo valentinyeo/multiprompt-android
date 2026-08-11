@@ -303,6 +303,7 @@ fun MultipromptApp(viewModel: MainViewModel) {
                 AppSection.SESSIONS -> SessionsScreen(
                     state = state,
                     onOpen = viewModel::openReader,
+                    onOpenTerminal = viewModel::openTerminal,
                     onArchive = viewModel::archiveSession,
                     onArchiveUntil = viewModel::archiveSessionUntil,
                     onRestore = viewModel::restoreSession,
@@ -498,6 +499,7 @@ private fun UpdateBanner(release: UpdateRelease, onInstall: () -> Unit) {
 private fun SessionsScreen(
     state: AppUiState,
     onOpen: (TmuxSession) -> Unit,
+    onOpenTerminal: (TmuxSession) -> Unit,
     onArchive: (TmuxSession) -> Unit,
     onArchiveUntil: (TmuxSession, Long?) -> Unit,
     onRestore: (TmuxSession) -> Unit,
@@ -1099,6 +1101,7 @@ private fun SessionsScreen(
                     unread = key in state.unreadSessionKeys,
                     archived = key in state.archivedSessionKeys,
                     onClick = { onOpen(session) },
+                    onOpenTerminal = { onOpenTerminal(session) },
                     onArchive = { onArchive(session) },
                     onRemind = { reminderPromptSession = session },
                     onArchiveToggle = {
@@ -1302,6 +1305,7 @@ private fun SessionCard(
     unread: Boolean,
     archived: Boolean,
     onClick: () -> Unit,
+    onOpenTerminal: () -> Unit,
     onArchive: () -> Unit,
     onRemind: () -> Unit,
     onArchiveToggle: () -> Unit,
@@ -1437,6 +1441,13 @@ private fun SessionCard(
                                 )
                             }
                         }
+                        DropdownMenuItem(
+                            text = { Text("Pure terminal output") },
+                            onClick = {
+                                menuExpanded = false
+                                onOpenTerminal()
+                            },
+                        )
                         HorizontalDivider()
                         DropdownMenuItem(
                             text = { Text("Archive session", color = MaterialTheme.colorScheme.error) },
@@ -1958,9 +1969,7 @@ private fun ReaderScreen(
                                 },
                             )
                             DropdownMenuItem(
-                                text = {
-                                    Text(if (technicalMode) "Reader: Clean chat" else "Reader: Technical detail")
-                                },
+                                text = { Text(if (technicalMode) "Hide terminal details" else "Show terminal details") },
                                 onClick = {
                                     menuExpanded = false
                                     onTechnicalModeChanged(!technicalMode)
@@ -2238,6 +2247,27 @@ private fun ReaderScreen(
                     ""
                 }
             }
+            val waitingForInput = TmuxText.isWaitingForInput(displayedOutput)
+            val connectionLabel = when {
+                failure != null -> "Disconnected · retrying"
+                reader.status == ReaderStatus.Connecting -> "Connecting"
+                reader.sending -> "Live · Sending"
+                reader.output.isBlank() -> "Live"
+                waitingForInput -> "Live · Ready"
+                else -> "Live · Working"
+            }
+            val connectionColor = when {
+                failure != null -> MaterialTheme.colorScheme.errorContainer
+                reader.status == ReaderStatus.Connecting -> MaterialTheme.colorScheme.surfaceVariant
+                waitingForInput -> MaterialTheme.colorScheme.secondaryContainer
+                else -> MaterialTheme.colorScheme.primaryContainer
+            }
+            val connectionTextColor = when {
+                failure != null -> MaterialTheme.colorScheme.onErrorContainer
+                reader.status == ReaderStatus.Connecting -> MaterialTheme.colorScheme.onSurfaceVariant
+                waitingForInput -> MaterialTheme.colorScheme.onSecondaryContainer
+                else -> MaterialTheme.colorScheme.onPrimaryContainer
+            }
             val readerBlocks = remember(displayedOutput, session.agent) {
                 TmuxText.readerBlocks(displayedOutput, session.agent)
             }
@@ -2267,10 +2297,38 @@ private fun ReaderScreen(
                 ) {
                     AgentBadge(session.agent)
                     Text(
-                        if (technicalMode) "Technical detail" else "Clean chat",
+                        if (technicalMode) "Terminal detail" else "Clean chat",
+                        modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    Row(
+                        Modifier
+                            .background(connectionColor, RoundedCornerShape(percent = 50))
+                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        if (reader.status == ReaderStatus.Connecting || reader.sending) {
+                            CircularProgressIndicator(
+                                Modifier.size(11.dp),
+                                strokeWidth = 1.5.dp,
+                                color = connectionTextColor,
+                            )
+                        } else {
+                            Box(
+                                Modifier
+                                    .size(7.dp)
+                                    .background(connectionTextColor, CircleShape),
+                            )
+                        }
+                        Text(
+                            connectionLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = connectionTextColor,
+                            maxLines = 1,
+                        )
+                    }
                 }
                 if (working) {
                     Row(
