@@ -1570,7 +1570,8 @@ private fun ReaderScreen(
     var transcriptZoom by remember(connection, session.hostId, session.name) {
         mutableFloatStateOf(initialFontScale)
     }
-    val runtimeDetails = remember(session.preview) { TmuxText.runtimeDetails(session.preview) }
+    val previewRuntimeDetails = remember(session.preview) { TmuxText.runtimeDetails(session.preview) }
+    val runtimeDetails = reader.runtimeDetails.takeIf { it.model != null } ?: previewRuntimeDetails
     val transcriptTransform = rememberTransformableState { _, zoomChange, _, _ ->
         val nextScale = (transcriptZoom * zoomChange).coerceIn(0.75f, 5f)
         transcriptZoom = nextScale
@@ -1678,6 +1679,17 @@ private fun ReaderScreen(
         ) {
             val actionCount = reader.completedActions
             if (connection.sendPrompt(composedPrompt)) {
+                onSessionInteraction()
+                pendingPromptAction = actionCount
+            }
+        }
+    }
+    val sendModelCommand: (String) -> Unit = { command ->
+        if (!reader.sending && pendingPromptAction == null) {
+            val actionCount = reader.completedActions
+            if (connection.sendPrompt(command)) {
+                setPrompt("")
+                imageAttachments = emptyList()
                 onSessionInteraction()
                 pendingPromptAction = actionCount
             }
@@ -1928,25 +1940,52 @@ private fun ReaderScreen(
                                 onDismissRequest = { modelMenuExpanded = false },
                             ) {
                                 DropdownMenuItem(
+                                    text = { Text("Current: ${runtimeDetails.label ?: "Unknown"}") },
+                                    enabled = false,
+                                    onClick = {},
+                                )
+                                DropdownMenuItem(
                                     text = { Text("Open model picker (/model)") },
                                     onClick = {
                                         modelMenuExpanded = false
-                                        setPrompt("/model")
+                                        sendModelCommand("/model")
                                     },
                                 )
+                                if (session.agent == AgentKind.CODEX) {
+                                    listOf(
+                                        "gpt-5.6-sol" to "Codex Sol",
+                                        "gpt-5.6-terra" to "Codex Terra",
+                                        "gpt-5.6-luna" to "Codex Luna",
+                                    ).forEach { (model, label) ->
+                                        DropdownMenuItem(
+                                            text = { Text("Use $label") },
+                                            onClick = {
+                                                modelMenuExpanded = false
+                                                sendModelCommand("/model $model")
+                                            },
+                                        )
+                                    }
+                                }
                                 if (session.agent == AgentKind.CLAUDE) {
                                     DropdownMenuItem(
                                         text = { Text("Use Claude Opus") },
                                         onClick = {
                                             modelMenuExpanded = false
-                                            setPrompt("/model opus")
+                                            sendModelCommand("/model opus")
                                         },
                                     )
                                     DropdownMenuItem(
                                         text = { Text("Use Claude Sonnet") },
                                         onClick = {
                                             modelMenuExpanded = false
-                                            setPrompt("/model sonnet")
+                                            sendModelCommand("/model sonnet")
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Use Claude Fable") },
+                                        onClick = {
+                                            modelMenuExpanded = false
+                                            sendModelCommand("/model fable")
                                         },
                                     )
                                     listOf("low", "medium", "high", "xhigh", "max").forEach { level ->
@@ -1954,7 +1993,7 @@ private fun ReaderScreen(
                                             text = { Text("Set effort: $level") },
                                             onClick = {
                                                 modelMenuExpanded = false
-                                                setPrompt("/effort $level")
+                                                sendModelCommand("/effort $level")
                                             },
                                         )
                                     }

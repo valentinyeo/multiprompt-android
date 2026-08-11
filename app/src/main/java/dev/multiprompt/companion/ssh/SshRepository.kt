@@ -115,7 +115,7 @@ class SshRepository(private val secrets: SecretStore) {
         client: SshClient,
         sessionName: String,
         agent: AgentKind = AgentKind.OTHER,
-        onSnapshot: (String) -> Unit,
+        onSnapshot: (String, TmuxText.RuntimeDetails) -> Unit,
     ) = coroutineScope {
         val session = client.openSession()
             ?: throw SshProblem.Connection("The SSH server refused a reader channel")
@@ -137,11 +137,12 @@ class SshRepository(private val secrets: SecretStore) {
                         if (encoded.length > MAX_SNAPSHOT_HEX_CHARS) {
                             throw SshProblem.Connection("The tmux snapshot was unexpectedly large")
                         }
+                        val rawOutput = TmuxText.leftAligned(TmuxText.decodeHex(encoded))
                         val mobileOutput = TmuxText.withoutActiveComposer(
-                            TmuxText.leftAligned(TmuxText.decodeHex(encoded)),
+                            rawOutput,
                             agent,
                         )
-                        onSnapshot(mobileOutput)
+                        onSnapshot(mobileOutput, TmuxText.runtimeDetails(rawOutput))
                     }
                 }
                 if (pending.length > MAX_SNAPSHOT_HEX_CHARS + TmuxCommands.SNAPSHOT_PREFIX.length) {

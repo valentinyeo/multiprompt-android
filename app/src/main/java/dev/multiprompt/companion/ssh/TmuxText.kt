@@ -39,15 +39,24 @@ object TmuxText {
         .joinToString("\n") { it.trimStart() }
         .trim()
 
-    /** Reads the compact model/effort footer printed by Codex and Claude TUIs. */
+    /** Reads model/effort metadata from Codex and Claude TUI or cloud-session status lines. */
     fun runtimeDetails(value: String): RuntimeDetails {
         value.lineSequence().toList().asReversed().forEach { rawLine ->
             val line = rawLine.trim()
             CODEX_RUNTIME.find(line)?.let { match ->
-                return RuntimeDetails(match.groupValues[1], match.groupValues[2].lowercase())
+                return RuntimeDetails(match.groupValues[1], match.groupValues[2].lowercase().ifBlank { null })
             }
             CLAUDE_RUNTIME.find(line)?.let { match ->
-                return RuntimeDetails(match.groupValues[1], match.groupValues[2].lowercase())
+                return RuntimeDetails(match.groupValues[1], match.groupValues[2].lowercase().ifBlank { null })
+            }
+            CODEX_MODEL_ONLY.find(line)?.let { match ->
+                return RuntimeDetails(match.groupValues[1])
+            }
+            CLAUDE_MODEL_ONLY.find(line)?.let { match ->
+                return RuntimeDetails(match.groupValues[1].trim())
+            }
+            CLAUDE_ALIAS_ONLY.find(line)?.let { match ->
+                return RuntimeDetails(match.groupValues[1].trim())
             }
         }
         return RuntimeDetails()
@@ -348,8 +357,19 @@ object TmuxText {
         "(?i)\\b((?:gpt|o)[a-z0-9.-]+)\\s+(none|minimal|low|medium|high|xhigh|max|ultra)\\b",
     )
     private val CLAUDE_RUNTIME = Regex(
-        "(?i)\\b((?:opus|sonnet|haiku|fable)(?:\\s+[0-9]+(?:\\.[0-9]+)*)?)\\s+" +
-            "(low|medium|high|xhigh|max|ultracode|auto)\\b",
+        "(?i)\\b((?:claude\\s+)?(?:opus|sonnet|haiku|fable)(?:\\s+[0-9]+(?:[.][0-9]+)*)?)\\s+" +
+            "(?:(?:effort|reasoning)[: ]+)?(low|medium|high|xhigh|max|ultracode|auto)\\b",
+    )
+    private val CODEX_MODEL_ONLY = Regex(
+        "(?i)\\b(?:model|current model|active model|selected model)\\s*[:=]\\s*" +
+            "((?:gpt|o)[a-z0-9.-]+)\\b",
+    )
+    private val CLAUDE_MODEL_ONLY = Regex(
+        "(?i)\\b(?:model|current model|active model|selected model)\\s*[:=]\\s*" +
+            "((?:claude[- ]+)?(?:opus|sonnet|haiku|fable)(?:[- ]+[0-9]+(?:[.-][0-9]+)*)?)\\b",
+    )
+    private val CLAUDE_ALIAS_ONLY = Regex(
+        "(?i)^(?:claude\\s+)?(opus|sonnet|haiku|fable)(?:[- ]+[0-9]+(?:[.-][0-9]+)*)?$",
     )
     private val TOOL_CALL_MARKERS = listOf(
         "Read(", "Edit(", "Write(", "Bash(", "Glob(", "Grep(", "Task(", "WebFetch(",

@@ -123,6 +123,18 @@ class TmuxTextTest {
             TmuxText.RuntimeDetails("Opus 5.4", "medium"),
             TmuxText.runtimeDetails("Opus 5.4 medium | project"),
         )
+        assertEquals(
+            TmuxText.RuntimeDetails("gpt-5.6-terra"),
+            TmuxText.runtimeDetails("Current model: gpt-5.6-terra"),
+        )
+        assertEquals(
+            TmuxText.RuntimeDetails("Claude Opus 4.7"),
+            TmuxText.runtimeDetails("Model: Claude Opus 4.7"),
+        )
+        assertEquals(
+            TmuxText.RuntimeDetails("Fable"),
+            TmuxText.runtimeDetails("Fable"),
+        )
     }
 
     @Test

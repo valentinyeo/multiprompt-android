@@ -4,6 +4,7 @@ import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.ssh.SshRepository
 import dev.multiprompt.companion.ssh.TmuxAction
+import dev.multiprompt.companion.ssh.TmuxText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +31,7 @@ sealed interface ReaderStatus {
 
 data class ReaderState(
     val output: String = "",
+    val runtimeDetails: TmuxText.RuntimeDetails = TmuxText.RuntimeDetails(),
     val status: ReaderStatus = ReaderStatus.Connecting,
     val sending: Boolean = false,
     val actionError: String? = null,
@@ -86,16 +88,23 @@ class SessionReaderConnection(
                         repository.connect(host)
                     }
                     streamClient = connectedClient
-                    repository.streamSession(connectedClient, tmuxSessionName, agent) { snapshot ->
+                    repository.streamSession(connectedClient, tmuxSessionName, agent) { snapshot, details ->
                         _state.update { current ->
+                            val liveDetails = if (details.model != null) {
+                                details
+                            } else {
+                                current.runtimeDetails
+                            }
                             if (snapshot == current.output) {
                                 current.copy(
+                                    runtimeDetails = liveDetails,
                                     status = ReaderStatus.Live,
                                     lastUpdatedAtMillis = System.currentTimeMillis(),
                                 )
                             } else {
                                 current.copy(
                                     output = snapshot,
+                                    runtimeDetails = liveDetails,
                                     status = ReaderStatus.Live,
                                     lastUpdatedAtMillis = System.currentTimeMillis(),
                                 )
