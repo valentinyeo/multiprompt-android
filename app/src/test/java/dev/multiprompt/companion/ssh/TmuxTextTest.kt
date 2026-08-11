@@ -82,6 +82,29 @@ class TmuxTextTest {
     }
 
     @Test
+    fun oldPromptFollowedByOrdinaryAgentOutputIsStillWorking() {
+        assertFalse(
+            TmuxText.isWaitingForInput(
+                "› Previous prompt\nI am still applying the requested changes.\nReviewing the next file",
+            ),
+        )
+    }
+
+    @Test
+    fun completionMustBeTheLatestMeaningfulTerminalState() {
+        assertFalse(
+            TmuxText.isWaitingForInput(
+                "› Previous prompt\nWorked for 17m 43s\nContinuing with another change",
+            ),
+        )
+        assertTrue(
+            TmuxText.isWaitingForInput(
+                "Completed the change.\nWorked for 17m 43s\ngpt-5.6-sol high fast · project",
+            ),
+        )
+    }
+
+    @Test
     fun readerDropsTerminalSeparatorsAndGroupsGenericCommandActivity() {
         val blocks = TmuxText.readerBlocks(
             """

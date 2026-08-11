@@ -148,27 +148,45 @@ object TmuxText {
         return blocks
     }
 
-    /** Best-effort Android equivalent of ZigShell's agent DONE event. */
+    /**
+     * Best-effort Android fallback for ZigShell's agent DONE event.
+     *
+     * The desktop gets an authoritative lifecycle hook. Android only has a pane
+     * snapshot, so an old prompt in the scrollback must never be enough to call a
+     * session idle: any meaningful line after the latest prompt means the agent
+     * may still be working. Only an explicit idle/completion marker at the end of
+     * the current terminal state is accepted.
+     */
     fun isWaitingForInput(value: String): Boolean {
         val tail = value.lineSequence()
             .map(String::trimStart)
             .filter(String::isNotBlank)
             .toList()
             .takeLast(INPUT_SEARCH_LINES)
-        val latestCompletion = tail.indexOfLast { line ->
+        val meaningful = tail.withIndex()
+            .filterNot { (_, line) -> isDivider(line) || isTerminalChrome(line) }
+            .toList()
+        val lastMeaningful = meaningful.lastOrNull()?.index ?: return false
+        val latestCompletion = meaningful.indexOfLast { (_, line) ->
             COMPLETION_MARKERS.any { marker -> line.contains(marker, ignoreCase = true) }
         }
-        val latestActivity = tail.indexOfLast(::looksLikeActivity)
-        val latestPrompt = tail.indexOfLast { line ->
+        val latestActivity = meaningful.indexOfLast { (_, line) -> looksLikeActivity(line) }
+        val latestPrompt = meaningful.indexOfLast { (_, line) ->
             line.startsWith("❯") || line.startsWith("›")
         }
-        if (latestCompletion >= 0 && latestCompletion >= latestActivity && latestCompletion >= latestPrompt) {
-            return true
-        }
-        if (latestActivity > latestPrompt) return false
-        if (latestPrompt >= 0) return true
-        return tail.any { line ->
+        val latestIdleMarker = meaningful.indexOfLast { (_, line) ->
             IDLE_INPUT_MARKERS.any { marker -> line.contains(marker, ignoreCase = true) }
+        }
+
+        // A visible activity marker or ordinary output after an old prompt is
+        // still working/unknown. The desktop does not turn this into a blue dot.
+        if (latestActivity >= 0 && meaningful[latestActivity].index == lastMeaningful) return false
+
+        return when {
+            latestIdleMarker >= 0 && meaningful[latestIdleMarker].index == lastMeaningful -> true
+            latestCompletion >= 0 && meaningful[latestCompletion].index == lastMeaningful -> true
+            latestPrompt >= 0 && meaningful[latestPrompt].index == lastMeaningful -> true
+            else -> false
         }
     }
 
@@ -240,6 +258,16 @@ object TmuxText {
             line.startsWith("⎿") ||
             line.startsWith("└") ||
             line.startsWith("│")
+    }
+
+    private fun isTerminalChrome(value: String): Boolean {
+        val line = value.trimStart().lowercase()
+        return line.startsWith("gpt-") ||
+            line.startsWith("opus ") ||
+            line.startsWith("sonnet ") ||
+            line.startsWith("haiku ") ||
+            line.startsWith("bypass permissions") ||
+            line.startsWith("shift+tab to cycle")
     }
 
     private fun inferLanguage(value: String): String? {

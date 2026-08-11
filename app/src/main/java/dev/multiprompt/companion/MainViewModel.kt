@@ -67,6 +67,8 @@ data class AppUiState(
     val allSplitOnRight: Boolean = true,
     val readerDefaultFontScale: Float = 1f,
     val readerTechnicalMode: Boolean = false,
+    /** Consecutive idle snapshots required before a Waiting session is released. */
+    val waitingIdleObservations: Map<String, Int> = emptyMap(),
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -307,11 +309,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                     .toMap()
+                val idleObservations = sessions.mapNotNull { session ->
+                    val key = SessionReadStore.key(session.hostId, session.name)
+                    val observations = if (TmuxText.isWaitingForInput(session.preview)) {
+                        (current.waitingIdleObservations[key] ?: 0) + 1
+                    } else {
+                        0
+                    }
+                    observations.takeIf { it > 0 }?.let { key to it }
+                }.toMap()
                 val archivedKeys = sessions
                     .filter { session ->
+                        val key = SessionReadStore.key(session.hostId, session.name)
                         sessionReads.isArchived(
                             session,
-                            needsAttention = TmuxText.isWaitingForInput(session.preview),
+                            // The first idle-looking snapshot can be a terminal redraw or
+                            // stale completion text. Match the desktop's stop-event semantics
+                            // by requiring the state to survive one more refresh.
+                            needsAttention = (idleObservations[key] ?: 0) >= IDLE_OBSERVATIONS_TO_RELEASE,
                         )
                     }
                     .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) }
@@ -358,6 +373,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         current.workspaceSelectionInitialized,
                     sessionWorkspaceIds = sessionWorkspaceIds,
                     sessionInteractionEpochSeconds = interactionEpochSeconds,
+                    waitingIdleObservations = idleObservations.filterKeys { it in archivedKeys },
                     refreshing = false,
                 )
             }
@@ -928,6 +944,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private companion object {
         const val MAX_PRIVATE_KEY_BYTES = 256 * 1024
         const val MAX_DISPLAY_NAME_LENGTH = 63
+        const val IDLE_OBSERVATIONS_TO_RELEASE = 2
         const val SESSION_REFRESH_INTERVAL_MS = 10_000L
     }
 }
