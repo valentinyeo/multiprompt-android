@@ -37,6 +37,16 @@ class TmuxCommandsTest {
     }
 
     @Test
+    fun modelPickerSelectionUsesOnlyAValidatedNumberKey() {
+        assertEquals(
+            "tmux send-keys -t 'work:' 3",
+            TmuxCommands.modelPickerOption("work", 3),
+        )
+        assertFalse(runCatching { TmuxCommands.modelPickerOption("work", 0) }.isSuccess)
+        assertFalse(runCatching { TmuxCommands.modelPickerOption("work", 10) }.isSuccess)
+    }
+
+    @Test
     fun streamUsesOneFixedFramedCaptureLoop() {
         val command = TmuxCommands.stream("work")
 

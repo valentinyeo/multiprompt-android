@@ -32,6 +32,7 @@ sealed interface ReaderStatus {
 data class ReaderState(
     val output: String = "",
     val runtimeDetails: TmuxText.RuntimeDetails = TmuxText.RuntimeDetails(),
+    val modelPickerOptions: List<TmuxText.ModelPickerOption> = emptyList(),
     val status: ReaderStatus = ReaderStatus.Connecting,
     val sending: Boolean = false,
     val actionError: String? = null,
@@ -48,6 +49,7 @@ class SessionReaderConnection(
     private sealed interface Request {
         data class Prompt(val text: String) : Request
         data class Action(val action: TmuxAction) : Request
+        data class ModelPickerOption(val index: Int) : Request
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -78,6 +80,9 @@ class SessionReaderConnection(
         requests.trySend(Request.Action(TmuxAction.INTERRUPT))
     }
 
+    fun selectModelPickerOption(index: Int): Boolean =
+        requests.trySend(Request.ModelPickerOption(index)).isSuccess
+
     private fun startStream() {
         if (streamJob?.isActive == true) return
         streamJob = scope.launch {
@@ -88,7 +93,7 @@ class SessionReaderConnection(
                         repository.connect(host)
                     }
                     streamClient = connectedClient
-                    repository.streamSession(connectedClient, tmuxSessionName, agent) { snapshot, details ->
+                    repository.streamSession(connectedClient, tmuxSessionName, agent) { snapshot, details, pickerOptions ->
                         _state.update { current ->
                             val liveDetails = if (details.model != null) {
                                 details
@@ -98,6 +103,7 @@ class SessionReaderConnection(
                             if (snapshot == current.output) {
                                 current.copy(
                                     runtimeDetails = liveDetails,
+                                    modelPickerOptions = pickerOptions,
                                     status = ReaderStatus.Live,
                                     lastUpdatedAtMillis = System.currentTimeMillis(),
                                 )
@@ -105,6 +111,7 @@ class SessionReaderConnection(
                                 current.copy(
                                     output = snapshot,
                                     runtimeDetails = liveDetails,
+                                    modelPickerOptions = pickerOptions,
                                     status = ReaderStatus.Live,
                                     lastUpdatedAtMillis = System.currentTimeMillis(),
                                 )
@@ -146,6 +153,11 @@ class SessionReaderConnection(
                             client,
                             tmuxSessionName,
                             request.action,
+                        )
+                        is Request.ModelPickerOption -> repository.selectModelPickerOption(
+                            client,
+                            tmuxSessionName,
+                            request.index,
                         )
                     }
                 }

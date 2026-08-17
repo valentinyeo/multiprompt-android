@@ -115,7 +115,7 @@ class SshRepository(private val secrets: SecretStore) {
         client: SshClient,
         sessionName: String,
         agent: AgentKind = AgentKind.OTHER,
-        onSnapshot: (String, TmuxText.RuntimeDetails) -> Unit,
+        onSnapshot: (String, TmuxText.RuntimeDetails, List<TmuxText.ModelPickerOption>) -> Unit,
     ) = coroutineScope {
         val session = client.openSession()
             ?: throw SshProblem.Connection("The SSH server refused a reader channel")
@@ -142,7 +142,11 @@ class SshRepository(private val secrets: SecretStore) {
                             rawOutput,
                             agent,
                         )
-                        onSnapshot(mobileOutput, TmuxText.runtimeDetails(rawOutput))
+                        onSnapshot(
+                            mobileOutput,
+                            TmuxText.runtimeDetails(rawOutput),
+                            TmuxText.modelPickerOptions(rawOutput),
+                        )
                     }
                 }
                 if (pending.length > MAX_SNAPSHOT_HEX_CHARS + TmuxCommands.SNAPSHOT_PREFIX.length) {
@@ -265,6 +269,11 @@ class SshRepository(private val secrets: SecretStore) {
         } finally {
             runCatching { client.disconnect() }
         }
+    }
+
+    suspend fun selectModelPickerOption(client: SshClient, sessionName: String, index: Int) {
+        execute(client, TmuxCommands.modelPickerOption(sessionName, index))
+            .requireSuccess("select the model picker option")
     }
 
     private data class CommandResult(

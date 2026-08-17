@@ -138,6 +138,24 @@ class TmuxTextTest {
     }
 
     @Test
+    fun readsNumberedOptionsFromTheCodexModelPicker() {
+        assertEquals(
+            listOf(
+                TmuxText.ModelPickerOption(1, "gpt-5.4", current = true),
+                TmuxText.ModelPickerOption(2, "gpt-5.3-codex"),
+            ),
+            TmuxText.modelPickerOptions(
+                """
+                Select Model and Effort
+                › 1. gpt-5.4 (current)
+                  2. gpt-5.3-codex
+                """.trimIndent(),
+            ),
+        )
+        assertTrue(TmuxText.modelPickerOptions("› 1. not a picker").isEmpty())
+    }
+
+    @Test
     fun readerDropsTerminalSeparatorsAndGroupsGenericCommandActivity() {
         val blocks = TmuxText.readerBlocks(
             """

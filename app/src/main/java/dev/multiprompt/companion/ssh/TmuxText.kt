@@ -11,6 +11,12 @@ object TmuxText {
             get() = model?.let { name -> listOfNotNull(name, effort).joinToString(" · ") }
     }
 
+    data class ModelPickerOption(
+        val index: Int,
+        val label: String,
+        val current: Boolean = false,
+    )
+
     enum class ReaderBlockKind {
         PROSE,
         USER_PROMPT,
@@ -60,6 +66,30 @@ object TmuxText {
             }
         }
         return RuntimeDetails()
+    }
+
+    /** Reads the numbered model/effort choices from Codex's interactive picker. */
+    fun modelPickerOptions(value: String): List<ModelPickerOption> {
+        val lines = value.lines()
+        val headerIndex = lines.indexOfLast(::isModelPickerHeader)
+        if (headerIndex < 0 || headerIndex < lines.size - MODEL_PICKER_SEARCH_LINES) {
+            return emptyList()
+        }
+        return lines.asSequence()
+            .drop(headerIndex + 1)
+            .mapNotNull { rawLine ->
+                val match = MODEL_PICKER_OPTION.find(rawLine) ?: return@mapNotNull null
+                var label = match.groupValues[2].trim()
+                val current = label.endsWith(" (current)", ignoreCase = true)
+                label = label.removeSuffix(" (current)").removeSuffix(" (default)").trim()
+                ModelPickerOption(
+                    index = match.groupValues[1].toInt(),
+                    label = label,
+                    current = current,
+                )
+            }
+            .distinctBy(ModelPickerOption::index)
+            .toList()
     }
 
     /** Hides the active terminal composer because Android provides its own native composer. */
@@ -229,6 +259,12 @@ object TmuxText {
         return compact.length >= 8 && compact.all { it in DIVIDER_CHARACTERS }
     }
 
+    private fun isModelPickerHeader(value: String): Boolean {
+        val line = value.trim()
+        return line.startsWith("Select Model", ignoreCase = true) ||
+            line.startsWith("Select Reasoning", ignoreCase = true)
+    }
+
     private fun looksLikeUserPrompt(value: String, agent: AgentKind): Boolean =
         isPromptMarker(value.trimStart(), agent)
 
@@ -346,6 +382,7 @@ object TmuxText {
     }
 
     private const val COMPOSER_SEARCH_LINES = 18
+    private const val MODEL_PICKER_SEARCH_LINES = 80
     private const val INPUT_SEARCH_LINES = 24
     private const val PROMPT_WRAP_THRESHOLD = 64
     private const val DIVIDER_CHARACTERS = "─━═╌╍-_▔▁"
@@ -371,6 +408,7 @@ object TmuxText {
     private val CLAUDE_ALIAS_ONLY = Regex(
         "(?i)^(?:claude\\s+)?(opus|sonnet|haiku|fable)(?:[- ]+[0-9]+(?:[.-][0-9]+)*)?$",
     )
+    private val MODEL_PICKER_OPTION = Regex("^\\s*(?:[›>]\\s+)?([1-9])\\.\\s+(.+?)\\s*$")
     private val TOOL_CALL_MARKERS = listOf(
         "Read(", "Edit(", "Write(", "Bash(", "Glob(", "Grep(", "Task(", "WebFetch(",
     )

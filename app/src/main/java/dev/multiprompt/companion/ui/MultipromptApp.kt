@@ -163,6 +163,7 @@ import dev.multiprompt.companion.update.UpdateState
 import dev.multiprompt.companion.upload.ScreencastUploader
 import java.io.ByteArrayOutputStream
 import java.time.ZonedDateTime
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.launch
 import org.connectbot.terminal.Terminal
 
@@ -1539,14 +1540,7 @@ private fun ReaderScreen(
         promptField = TextFieldValue(value, selection = TextRange(value.length))
     }
     var dictationPrefix by remember(connection) { mutableStateOf("") }
-    fun appendCurrentDictation(transcript: String): String {
-        if (dictationPrefix.isBlank() && prompt.isNotBlank()) {
-            // Recover safely if a state update raced the microphone button. Never let a
-            // transcript replace an existing draft, including a pasted image URL.
-            dictationPrefix = prompt.trimEnd()
-        }
-        return PromptComposer.appendDictation(dictationPrefix, transcript)
-    }
+    val dictationSubmissionStarted = remember(connection) { AtomicBoolean(false) }
     var pendingPromptAction by remember(connection) { mutableStateOf<Long?>(null) }
     var menuExpanded by remember(connection) { mutableStateOf(false) }
     var modelMenuExpanded by remember(connection) { mutableStateOf(false) }
@@ -1626,6 +1620,7 @@ private fun ReaderScreen(
     }
     val startDictation = {
         dictationPrefix = prompt.trimEnd()
+        dictationSubmissionStarted.set(false)
         microphoneError = null
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
@@ -1698,8 +1693,10 @@ private fun ReaderScreen(
     val submitPrompt = {
         if (!reader.sending && pendingPromptAction == null) {
             if (dictationActive) {
-                sendAfterDictation = true
-                dictation.stop()
+                if (dictationSubmissionStarted.compareAndSet(false, true)) {
+                    sendAfterDictation = true
+                    dictation.stop()
+                }
             } else {
                 sendCurrentPrompt()
             }
@@ -1709,7 +1706,11 @@ private fun ReaderScreen(
         if (!sendAfterDictation) return@LaunchedEffect
         when (dictationState.status) {
             DictationStatus.IDLE -> {
-                val finalPrompt = appendCurrentDictation(dictationState.transcript)
+                if (!dictationSubmissionStarted.compareAndSet(true, false)) return@LaunchedEffect
+                val finalPrompt = PromptComposer.appendDictation(
+                    dictationPrefix,
+                    dictationState.transcript,
+                )
                 setPrompt(finalPrompt)
                 sendAfterDictation = false
                 val composedPrompt = PromptComposer.composeMessage(finalPrompt, imageAttachments)
@@ -1724,7 +1725,10 @@ private fun ReaderScreen(
                     }
                 }
             }
-            DictationStatus.FAILED -> sendAfterDictation = false
+            DictationStatus.FAILED -> {
+                dictationSubmissionStarted.set(false)
+                sendAfterDictation = false
+            }
             else -> Unit
         }
     }
@@ -1951,21 +1955,6 @@ private fun ReaderScreen(
                                         sendModelCommand("/model")
                                     },
                                 )
-                                if (session.agent == AgentKind.CODEX) {
-                                    listOf(
-                                        "gpt-5.6-sol" to "Codex Sol",
-                                        "gpt-5.6-terra" to "Codex Terra",
-                                        "gpt-5.6-luna" to "Codex Luna",
-                                    ).forEach { (model, label) ->
-                                        DropdownMenuItem(
-                                            text = { Text("Use $label") },
-                                            onClick = {
-                                                modelMenuExpanded = false
-                                                sendModelCommand("/model $model")
-                                            },
-                                        )
-                                    }
-                                }
                                 if (session.agent == AgentKind.CLAUDE) {
                                     DropdownMenuItem(
                                         text = { Text("Use Claude Opus") },
@@ -2446,6 +2435,52 @@ private fun ReaderScreen(
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onTertiaryContainer,
                         )
+                    }
+                }
+                if (reader.modelPickerOptions.isNotEmpty()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        ),
+                    ) {
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                "Choose model or effort",
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                            Text(
+                                "Select an option from the active agent picker.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                            reader.modelPickerOptions.forEach { option ->
+                                OutlinedButton(
+                                    onClick = {
+                                        if (connection.selectModelPickerOption(option.index)) {
+                                            onSessionInteraction()
+                                        }
+                                    },
+                                    enabled = !reader.sending,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        buildString {
+                                            append(option.label)
+                                            if (option.current) append(" · current")
+                                        },
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
                 if (visibleReaderBlocks.isEmpty()) {

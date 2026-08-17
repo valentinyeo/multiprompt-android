@@ -21,6 +21,11 @@ object TmuxCommands {
         return "tmux send-keys -t ${target(sessionName)} $key"
     }
 
+    fun modelPickerOption(sessionName: String, index: Int): String {
+        require(index in 1..9) { "Model picker option must be between 1 and 9" }
+        return "tmux send-keys -t ${target(sessionName)} $index"
+    }
+
     fun pastePrompt(sessionName: String): String =
         "mp_buffer=mp-android-\$\$; " +
             "trap 'tmux delete-buffer -b \"\$mp_buffer\" 2>/dev/null || true' EXIT HUP INT TERM; " +
