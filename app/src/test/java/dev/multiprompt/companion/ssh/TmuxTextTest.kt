@@ -124,6 +124,10 @@ class TmuxTextTest {
             TmuxText.runtimeDetails("Opus 5.4 medium | project"),
         )
         assertEquals(
+            TmuxText.RuntimeDetails("Opus 5", "medium"),
+            TmuxText.runtimeDetails("Opus 5 \u26a1medium | multiprompt-android | 9% | 87.2kin"),
+        )
+        assertEquals(
             TmuxText.RuntimeDetails("gpt-5.6-terra"),
             TmuxText.runtimeDetails("Current model: gpt-5.6-terra"),
         )

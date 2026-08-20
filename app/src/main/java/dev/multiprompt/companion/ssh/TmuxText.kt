@@ -428,11 +428,14 @@ object TmuxText {
     private val NUMBERED_DIFF_LINE = Regex("\\d+\\s+[+-](?:\\s|$).*")
     private val DIFF_PATH = Regex("diff --git a/\\S+ b/(\\S+)")
     private val FILE_PATH = Regex("(?:^|\\n)(?:\\+\\+\\+ b/|File: )([^\\s]+)")
+    // Status lines decorate the gap between model and effort ("Opus 5 ⚡medium"), so plain
+    // whitespace is not enough to bridge it.
+    private const val RUNTIME_GAP = "[\\s\u26a1·•|:]+"
     private val CODEX_RUNTIME = Regex(
-        "(?i)\\b((?:gpt|o)[a-z0-9.-]+)\\s+(none|minimal|low|medium|high|xhigh|max|ultra)\\b",
+        "(?i)\\b((?:gpt|o)[a-z0-9.-]+)$RUNTIME_GAP(none|minimal|low|medium|high|xhigh|max|ultra)\\b",
     )
     private val CLAUDE_RUNTIME = Regex(
-        "(?i)\\b((?:claude\\s+)?(?:opus|sonnet|haiku|fable)(?:\\s+[0-9]+(?:[.][0-9]+)*)?)\\s+" +
+        "(?i)\\b((?:claude\\s+)?(?:opus|sonnet|haiku|fable)(?:\\s+[0-9]+(?:[.][0-9]+)*)?)$RUNTIME_GAP" +
             "(?:(?:effort|reasoning)[: ]+)?(low|medium|high|xhigh|max|ultracode|auto)\\b",
     )
     private val CODEX_MODEL_ONLY = Regex(
