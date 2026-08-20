@@ -280,7 +280,7 @@ class UpdateManager(private val context: Context) {
     private companion object {
         const val TAG = "MultipromptUpdate"
         const val KEY_LAST_CHECK = "last_check_ms"
-        const val CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L
+        const val CHECK_INTERVAL_MS = 15 * 60 * 1000L
         const val NETWORK_TIMEOUT_MS = 30_000
         const val MAX_MANIFEST_BYTES = 64 * 1024
     }

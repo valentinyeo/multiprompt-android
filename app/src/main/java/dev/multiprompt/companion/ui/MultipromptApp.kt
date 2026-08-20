@@ -81,6 +81,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
@@ -160,8 +161,10 @@ import dev.multiprompt.companion.data.SessionSearch
 import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.terminal.TerminalConnection
 import dev.multiprompt.companion.terminal.TerminalStatus
+import dev.multiprompt.companion.update.UpdateManager
 import dev.multiprompt.companion.update.UpdateRelease
 import dev.multiprompt.companion.update.UpdateState
+import kotlinx.coroutines.delay
 import dev.multiprompt.companion.upload.ScreencastUploader
 import java.io.ByteArrayOutputStream
 import java.time.ZonedDateTime
@@ -171,6 +174,62 @@ import org.connectbot.terminal.Terminal
 
 @Composable
 fun MultipromptApp(viewModel: MainViewModel) {
+    val updateState by viewModel.updates.state.collectAsState()
+    LaunchedEffect(Unit) {
+        while (true) {
+            viewModel.updates.check()
+            delay(UpdateManager.CHECK_INTERVAL_MS)
+        }
+    }
+    Column(Modifier.fillMaxSize()) {
+        // A new build must announce itself; nobody opens the Update screen to look.
+        UpdateBanner(
+            state = updateState,
+            onInstall = { release -> viewModel.updates.install(release) },
+        )
+        Box(Modifier.weight(1f)) { AppScreens(viewModel) }
+    }
+}
+
+@Composable
+private fun UpdateBanner(state: UpdateState, onInstall: (UpdateRelease) -> Unit) {
+    val release = when (state) {
+        is UpdateState.Available -> state.release
+        is UpdateState.PermissionRequired -> state.release
+        is UpdateState.Downloading -> state.release
+        else -> null
+    } ?: return
+    Surface(color = MaterialTheme.colorScheme.primaryContainer) {
+        Row(
+            Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                when (state) {
+                    is UpdateState.Downloading -> "Downloading v${release.versionName}… " +
+                        "${(state.progress * 100).toInt()}%"
+                    is UpdateState.PermissionRequired -> "Allow installs to update to v${release.versionName}"
+                    else -> "Version ${release.versionName} available"
+                },
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+            if (state is UpdateState.Available) {
+                Button(
+                    onClick = { onInstall(release) },
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                ) {
+                    Text("Install")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppScreens(viewModel: MainViewModel) {
     val state by viewModel.state.collectAsState()
     val updateState by viewModel.updates.state.collectAsState()
     val context = LocalContext.current
