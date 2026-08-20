@@ -59,6 +59,9 @@ object TmuxText {
             CLAUDE_RUNTIME.find(line)?.let { match ->
                 return RuntimeDetails(match.groupValues[1], match.groupValues[2].lowercase().ifBlank { null })
             }
+            CLAUDE_ALIAS_ONLY.find(line)?.let { match ->
+                return RuntimeDetails(match.groupValues[1].trim())
+            }
         }
         // Cloud sessions print an explicit "Model: x" line instead of a footer. That label
         // is unambiguous, so it is safe to look for anywhere in the capture.
@@ -68,9 +71,6 @@ object TmuxText {
                 return RuntimeDetails(match.groupValues[1])
             }
             CLAUDE_MODEL_ONLY.find(line)?.let { match ->
-                return RuntimeDetails(match.groupValues[1].trim())
-            }
-            CLAUDE_ALIAS_ONLY.find(line)?.let { match ->
                 return RuntimeDetails(match.groupValues[1].trim())
             }
         }
@@ -411,6 +411,7 @@ object TmuxText {
             line.startsWith("#include ") ||
             line.startsWith("git diff ") ||
             line.matches(CODE_LINE) ||
+            line.matches(ASSIGNMENT_LINE) ||
             line.endsWith(" {") ||
             line.endsWith("}") ||
             line.endsWith(";")
@@ -425,6 +426,8 @@ object TmuxText {
     private const val DIVIDER_LABEL_LIMIT = 32
     private const val WRAPPED_ROW_LENGTH = 55
     private val PARAGRAPH_START = Regex("^(?:[-*•·>❯›#|+]|\\d+[.)]\\s)")
+    // A heredoc body pasted into a shell call reads as ordinary text otherwise.
+    private val ASSIGNMENT_LINE = Regex("[A-Za-z_][A-Za-z0-9_]*\\s*=\\s*\\S.*")
     private val CODE_LINE = Regex("(?:fun|class|interface|object|const|val|var)\\b.*(?:[({=]|\\s*$)")
     private val NUMBERED_DIFF_LINE = Regex("\\d+\\s+[+-](?:\\s|$).*")
     private val DIFF_PATH = Regex("diff --git a/\\S+ b/(\\S+)")

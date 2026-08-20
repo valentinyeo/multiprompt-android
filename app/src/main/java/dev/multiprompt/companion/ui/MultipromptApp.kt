@@ -2369,10 +2369,13 @@ private fun ReaderScreen(
             val working = reader.sending || readerBlocks.any { block ->
                 block.kind == TmuxText.ReaderBlockKind.PROGRESS && isTransientProgress(block.text)
             }
-            // Activity sections are terminal bookkeeping, not conversation. Clean chat drops
-            // them outright; terminal detail still shows them collapsed.
+            // Activity sections and pasted command bodies are terminal bookkeeping, not
+            // conversation. Clean chat drops them; terminal detail still shows them collapsed.
             val visibleReaderBlocks = readerBlocks.filterNot { block ->
-                !technicalMode && block.kind == TmuxText.ReaderBlockKind.PROGRESS
+                !technicalMode && (
+                    block.kind == TmuxText.ReaderBlockKind.PROGRESS ||
+                        block.kind == TmuxText.ReaderBlockKind.CODE
+                    )
             }
             var expandedReaderBlocks by remember(connection) { mutableStateOf(emptySet<String>()) }
             val transcriptFontSize = (14f * transcriptZoom).sp

@@ -152,6 +152,20 @@ class TmuxTextTest {
     }
 
     @Test
+    fun aBareModelAliasInTheTranscriptDoesNotOverrideTheFooter() {
+        val captured = buildString {
+            appendLine("Fable")
+            repeat(20) { appendLine("more transcript output") }
+            appendLine("Opus 5 medium | multiprompt-android")
+        }
+
+        assertEquals(
+            TmuxText.RuntimeDetails("Opus 5", "medium"),
+            TmuxText.runtimeDetails(captured),
+        )
+    }
+
+    @Test
     fun readsNumberedOptionsFromTheCodexModelPicker() {
         assertEquals(
             listOf(
@@ -213,6 +227,19 @@ class TmuxTextTest {
             ),
             blocks.map { it.kind },
         )
+    }
+
+    @Test
+    fun heredocBodiesAreCodeNotConversation() {
+        val blocks = TmuxText.readerBlocks(
+            """
+            p='app/src/main/java/Foo.kt'
+            s=open(p).read()
+            """.trimIndent(),
+            AgentKind.CLAUDE,
+        )
+
+        assertEquals(listOf(TmuxText.ReaderBlockKind.CODE), blocks.map { it.kind })
     }
 
     @Test
