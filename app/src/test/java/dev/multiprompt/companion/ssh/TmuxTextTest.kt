@@ -255,6 +255,24 @@ class TmuxTextTest {
     }
 
     @Test
+    fun aCodexReplyBulletIsNotActivity() {
+        val blocks = TmuxText.readerBlocks(
+            """
+            • Ran git status --short
+            • Listing all flow titles · 2s
+            • Yes, this session is working and I can reach the workspace.
+            """.trimIndent(),
+            AgentKind.CODEX,
+        )
+
+        assertEquals(
+            listOf(TmuxText.ReaderBlockKind.PROGRESS, TmuxText.ReaderBlockKind.PROSE),
+            blocks.map { it.kind },
+        )
+        assertTrue(blocks.last().text.startsWith("• Yes, this session is working"))
+    }
+
+    @Test
     fun claudeUserTurnsRenderAsPrompts() {
         val blocks = TmuxText.readerBlocks("> fix the reader padding", AgentKind.CLAUDE)
 

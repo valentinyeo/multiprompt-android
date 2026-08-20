@@ -206,10 +206,11 @@ object TmuxText {
                     // same user bubble; an empty row or activity marker ends the prompt.
                     ReaderBlockKind.USER_PROMPT
                 }
-                currentKind == ReaderBlockKind.PROGRESS -> {
+                currentKind == ReaderBlockKind.PROGRESS && !line.trimStart().startsWith("•") -> {
                     // Agent TUIs render command output as a marker followed by unmarked wrapped
                     // lines. Keep that output in one activity section until a blank line or a
-                    // new semantic block.
+                    // new semantic block. A fresh bullet is always a new block: Codex writes
+                    // its replies with one.
                     ReaderBlockKind.PROGRESS
                 }
                 fencedCode || looksLikeCode(line) -> ReaderBlockKind.CODE
@@ -279,6 +280,20 @@ object TmuxText {
         return line.isEmpty() || PARAGRAPH_START.containsMatchIn(line)
     }
 
+    /**
+     * Codex marks its own replies with the same bullet it marks tool calls with, so the
+     * bullet alone cannot mean activity: hiding every one of them hid the answers. A tool
+     * line either names a tool verb or carries the elapsed time it took.
+     */
+    private fun isActivityBullet(line: String): Boolean {
+        if (!line.startsWith("•")) return false
+        val body = line.removePrefix("•").trim()
+        return ACTIVITY_DURATION.containsMatchIn(body) ||
+            body.endsWith("(completed)") ||
+            body.contains("(failed") ||
+            ACTIVITY_VERBS.any { verb -> body.startsWith(verb, ignoreCase = true) }
+    }
+
     private fun isDivider(value: String): Boolean {
         val compact = value.filterNot(Char::isWhitespace)
         if (compact.length < 8) return false
@@ -333,7 +348,7 @@ object TmuxText {
             line.startsWith("Searching", ignoreCase = true) ||
             line.startsWith("Esc to cancel", ignoreCase = true) ||
             line.startsWith("Tool:", ignoreCase = true) ||
-            line.startsWith("•") ||
+            isActivityBullet(line) ||
             line.startsWith("└") ||
             line.startsWith("│") ||
             line.startsWith("… +") ||
@@ -450,6 +465,12 @@ object TmuxText {
         "(?i)^(?:claude\\s+)?(opus|sonnet|haiku|fable)(?:[- ]+[0-9]+(?:[.-][0-9]+)*)?$",
     )
     private val MODEL_PICKER_OPTION = Regex("^\\s*(?:[›>]\\s+)?([1-9])\\.\\s+(.+?)\\s*$")
+    private val ACTIVITY_DURATION = Regex("·\\s*(?:\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h)\\s*)+$")
+    private val ACTIVITY_VERBS = listOf(
+        "Ran ", "Read ", "Reading ", "Explored", "Exploring", "Searched", "Searching",
+        "Listing ", "Listed ", "Called ", "Running ", "Edited ", "Wrote ", "Applied ",
+        "Updated Plan", "Waiting ", "Fetched ", "Fetching ",
+    )
     private val TOOL_CALL_MARKERS = listOf(
         "Read(", "Edit(", "Write(", "Bash(", "Glob(", "Grep(", "Task(", "WebFetch(",
     )
