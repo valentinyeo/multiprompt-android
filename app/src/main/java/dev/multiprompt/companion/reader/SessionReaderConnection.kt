@@ -100,22 +100,16 @@ class SessionReaderConnection(
                             } else {
                                 current.runtimeDetails
                             }
-                            if (snapshot == current.output) {
-                                current.copy(
-                                    runtimeDetails = liveDetails,
-                                    modelPickerOptions = pickerOptions,
-                                    status = ReaderStatus.Live,
-                                    lastUpdatedAtMillis = System.currentTimeMillis(),
-                                )
-                            } else {
-                                current.copy(
-                                    output = snapshot,
-                                    runtimeDetails = liveDetails,
-                                    modelPickerOptions = pickerOptions,
-                                    status = ReaderStatus.Live,
-                                    lastUpdatedAtMillis = System.currentTimeMillis(),
-                                )
-                            }
+                            // The agent's screen is all tmux can give for an alternate-screen
+                            // TUI, so the transcript above it is grown here, screen by screen.
+                            val merged = TmuxText.mergeSnapshot(current.output, snapshot)
+                            current.copy(
+                                output = merged,
+                                runtimeDetails = liveDetails,
+                                modelPickerOptions = pickerOptions,
+                                status = ReaderStatus.Live,
+                                lastUpdatedAtMillis = System.currentTimeMillis(),
+                            )
                         }
                     }
                 } catch (cancelled: CancellationException) {

@@ -109,6 +109,33 @@ object TmuxText {
         return lines.take(dividerIndex ?: promptIndex).joinToString("\n").trimEnd()
     }
 
+    /**
+     * Grows a transcript from successive screens of an agent TUI.
+     *
+     * A full-screen agent draws on the alternate screen, which tmux keeps no history for,
+     * so a snapshot is only what fits on the pane right now. Each new screen is anchored
+     * against the transcript already collected: the anchor marks where this screen begins,
+     * everything from there is replaced, and anything above it survives as history.
+     */
+    fun mergeSnapshot(history: String, snapshot: String): String {
+        val collected = history.lines().dropLastWhile(String::isBlank)
+        val screen = snapshot.lines().dropLastWhile(String::isBlank)
+        if (collected.isEmpty()) return screen.joinToString("\n")
+        if (screen.isEmpty()) return collected.joinToString("\n")
+        ANCHOR_SIZES.forEach { size ->
+            val anchor = screen.take(size)
+            if (anchor.size < size || anchor.all(String::isBlank)) return@forEach
+            for (start in (collected.size - anchor.size) downTo 0) {
+                if (collected.subList(start, start + anchor.size) == anchor) {
+                    return (collected.subList(0, start) + screen)
+                        .takeLast(MAX_TRANSCRIPT_LINES)
+                        .joinToString("\n")
+                }
+            }
+        }
+        return (collected + screen).takeLast(MAX_TRANSCRIPT_LINES).joinToString("\n")
+    }
+
     /** Converts a terminal snapshot into conservative, display-only Reader sections. */
     fun readerBlocks(value: String, agent: AgentKind = AgentKind.OTHER): List<ReaderBlock> {
         val blocks = mutableListOf<ReaderBlock>()
@@ -433,6 +460,8 @@ object TmuxText {
     private const val COMPOSER_SEARCH_LINES = 18
     private const val MODEL_PICKER_SEARCH_LINES = 80
     private const val RUNTIME_SEARCH_LINES = 12
+    private val ANCHOR_SIZES = listOf(8, 5, 3)
+    private const val MAX_TRANSCRIPT_LINES = 3000
     private const val INPUT_SEARCH_LINES = 24
     private const val DIVIDER_CHARACTERS = "─━═╌╍-_▔▁"
     private const val DIVIDER_LABEL_LIMIT = 32

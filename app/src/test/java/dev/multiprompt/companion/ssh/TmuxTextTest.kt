@@ -273,6 +273,29 @@ class TmuxTextTest {
     }
 
     @Test
+    fun growsATranscriptFromAScrollingAgentScreen() {
+        val lines = (1..30).map { "line $it" }
+        var transcript = ""
+        for (top in 0..20) {
+            transcript = TmuxText.mergeSnapshot(
+                transcript,
+                lines.subList(top, top + 10).joinToString("\n"),
+            )
+        }
+
+        assertEquals(lines, transcript.lines())
+    }
+
+    @Test
+    fun aRedrawnScreenReplacesItselfRatherThanRepeating() {
+        val body = (1..12).map { "answer line $it" }
+        val first = (body + "Working 3s").joinToString("\n")
+        val second = (body + "Working 9s").joinToString("\n")
+
+        assertEquals(second, TmuxText.mergeSnapshot(first, second))
+    }
+
+    @Test
     fun claudeUserTurnsRenderAsPrompts() {
         val blocks = TmuxText.readerBlocks("> fix the reader padding", AgentKind.CLAUDE)
 
