@@ -114,6 +114,11 @@ object TmuxText {
         var fencedCode = false
         var fencedLanguage: String? = null
         var promptMayContinue = false
+        // tmux hard-wraps at the desktop pane width, so a paragraph arrives as several
+        // full rows. Rejoin them, otherwise the phone wraps the leftovers again and every
+        // paragraph reads as a stack of line-and-a-half fragments.
+        val wrapWidth = lines.maxOfOrNull { it.trimEnd().length } ?: 0
+        var lastLineFilledTheRow = false
 
         fun flush() {
             val text = current.toString().trim()
@@ -130,16 +135,22 @@ object TmuxText {
             current.clear()
             currentKind = ReaderBlockKind.PROSE
             fencedLanguage = null
+            lastLineFilledTheRow = false
             promptMayContinue = false
         }
 
         fun append(kind: ReaderBlockKind, line: String) {
             if (current.isNotEmpty() && currentKind != kind) flush()
             currentKind = kind
-            if (current.isNotEmpty()) current.append('\n')
+            val rejoin = lastLineFilledTheRow &&
+                kind != ReaderBlockKind.CODE &&
+                !startsNewParagraph(line)
+            if (current.isNotEmpty()) current.append(if (rejoin) ' ' else '\n')
             current.append(
                 if (kind == ReaderBlockKind.USER_PROMPT) removePromptMarker(line, agent) else line.trimEnd(),
             )
+            lastLineFilledTheRow = wrapWidth >= MIN_WRAP_WIDTH &&
+                line.trimEnd().length >= wrapWidth - WRAP_SLACK
             if (kind == ReaderBlockKind.USER_PROMPT) {
                 // A terminal-wrapped prompt usually fills the available row. A short prompt
                 // followed by ordinary prose is a completed prompt/response pair instead.
@@ -152,6 +163,7 @@ object TmuxText {
             val trimmed = line.trim()
             if (isDivider(trimmed)) {
                 if (current.isNotEmpty()) flush()
+                lastLineFilledTheRow = false
                 return@forEach
             }
             if (trimmed.startsWith("``")) {
@@ -167,6 +179,7 @@ object TmuxText {
                 return@forEach
             }
             if (trimmed.isBlank()) {
+                lastLineFilledTheRow = false
                 if (current.isNotEmpty()) {
                     if (currentKind == ReaderBlockKind.USER_PROMPT ||
                         currentKind == ReaderBlockKind.CODE ||
@@ -252,6 +265,13 @@ object TmuxText {
             latestPrompt >= 0 && meaningful[latestPrompt].index == lastMeaningful -> true
             else -> false
         }
+    }
+
+    /** A row the terminal did not wrap into: a bullet, a marker, or an indented block. */
+    private fun startsNewParagraph(value: String): Boolean {
+        if (value.startsWith("  ")) return true
+        val line = value.trim()
+        return line.isEmpty() || PARAGRAPH_START.containsMatchIn(line)
     }
 
     private fun isDivider(value: String): Boolean {
@@ -393,6 +413,9 @@ object TmuxText {
     private const val PROMPT_WRAP_THRESHOLD = 64
     private const val DIVIDER_CHARACTERS = "─━═╌╍-_▔▁"
     private const val DIVIDER_LABEL_LIMIT = 32
+    private const val MIN_WRAP_WIDTH = 40
+    private const val WRAP_SLACK = 2
+    private val PARAGRAPH_START = Regex("^(?:[-*•·>❯›#|+]|\\d+[.)]\\s)")
     private val CODE_LINE = Regex("(?:fun|class|interface|object|const|val|var)\\b.*(?:[({=]|\\s*$)")
     private val NUMBERED_DIFF_LINE = Regex("\\d+\\s+[+-](?:\\s|$).*")
     private val DIFF_PATH = Regex("diff --git a/\\S+ b/(\\S+)")

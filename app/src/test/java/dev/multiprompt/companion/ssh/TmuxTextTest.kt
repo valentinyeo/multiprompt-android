@@ -156,6 +156,25 @@ class TmuxTextTest {
     }
 
     @Test
+    fun rejoinsRowsTheTerminalHardWrapped() {
+        val text = TmuxText.readerBlocks(
+            """
+            Add a genuinely new agent when a domain is unowned and its backlog is
+            deep. If you want one anyway, tell me the domain.
+            - a bullet that must stay on its own row and is long enough to fill it
+            still part of the bullet
+            """.trimIndent(),
+            AgentKind.CLAUDE,
+        ).single().text
+
+        assertTrue(
+            text.contains("and its backlog is deep. If you want one anyway"),
+        )
+        assertTrue(text.contains("\n- a bullet"))
+        assertTrue(text.contains("fill it still part of the bullet"))
+    }
+
+    @Test
     fun readerDropsPaneBannerCarryingASessionName() {
         val blocks = TmuxText.readerBlocks(
             """
