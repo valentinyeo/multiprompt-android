@@ -76,6 +76,8 @@ data class AppUiState(
      * recomputing neighbours per swipe walked a list that moved under the swipe.
      */
     val readerSwipeOrder: List<String> = emptyList(),
+    /** The terminal was opened from a reader, so closing it returns to that conversation. */
+    val terminalFromReader: Boolean = false,
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -747,6 +749,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (terminalWasOpen) _state.value.terminal?.close()
                     dissolved?.let(dissolvedStore::upsert)
                     sessionReads.restore(session)
+                    // Ending a session should hand over to the one above it, the way the
+                    // inbox is read, and only fall back to the inbox when nothing is left.
+                    val successor = if (readerWasOpen) neighbourAfterRemoving(key) else null
                     _state.update {
                         it.copy(
                             sessions = it.sessions.filterNot { candidate ->
@@ -764,6 +769,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             } ?: it.dissolvedSessions,
                         )
                     }
+                    successor?.let(::openReader)
                     refresh()
                 }
                 .onFailure { throwable ->
@@ -922,6 +928,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** The session shown above the one being removed, or the one below if it was first. */
+    private fun neighbourAfterRemoving(key: String): TmuxSession? {
+        val state = _state.value
+        val live = visibleInboxSessions(state).associateBy { SessionReadStore.key(it.hostId, it.name) }
+        val order = state.readerSwipeOrder.ifEmpty { live.keys.toList() }
+        val index = order.indexOf(key)
+        if (index < 0) return null
+        val remaining = order.filterNot { it == key }
+        if (remaining.isEmpty()) return null
+        return live[remaining.getOrNull(index - 1) ?: remaining.getOrNull(index) ?: remaining.first()]
+    }
+
     /** Swiping the reader sideways opens the neighbouring visible inbox session. */
     fun openAdjacentReaderSession(delta: Int) {
         val state = _state.value
@@ -937,9 +955,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openTerminal(session: TmuxSession) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
+        val fromReader = _state.value.readerSession?.let {
+            it.hostId == session.hostId && it.name == session.name
+        } == true
         noteSessionInteraction(session)
         _state.value.terminal?.close()
-        _state.value.reader?.close()
         val terminal = TerminalConnection(
             repository = ssh,
             host = host,
@@ -951,6 +971,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             it.copy(
                 terminal = terminal,
                 terminalSession = session,
+                terminalFromReader = fromReader,
                 reader = null,
                 readerSession = null,
             )
@@ -969,8 +990,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun closeTerminal() {
-        _state.value.terminal?.close()
-        _state.update { it.copy(terminal = null, terminalSession = null) }
+        val state = _state.value
+        val session = state.terminalSession.takeIf { state.terminalFromReader }
+        state.terminal?.close()
+        _state.update { it.copy(terminal = null, terminalSession = null, terminalFromReader = false) }
+        // Leaving the terminal returns to the conversation it was opened from, not the inbox.
+        session?.let(::openReader)
         refresh()
     }
 
