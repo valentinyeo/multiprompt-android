@@ -21,6 +21,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -2936,10 +2937,15 @@ private fun TerminalScreen(
     // Pan the terminal up rather than shrinking it: resizing would renegotiate the PTY and
     // drag the desktop pane down with it.
     val keyboardHeightPx = WindowInsets.ime.getBottom(density)
-    // The emulator only holds the desktop's row count. Without a forced grid the widget
-    // lays out as many rows as the tall phone viewport fits, so the pane painted at the
-    // top and left dead space underneath it.
-    val forcedSize = if (columns > 0 && rows > 0) columns to rows else null
+    // The emulator only holds the desktop's row count, so a tall phone viewport leaves dead
+    // rows under the pane. Pan the content down to sit on the bottom edge instead. Forcing
+    // the grid to those rows is not an option: the widget then scales itself into a corner.
+    val lineHeightPx = remember(fontSize) {
+        textMeasurer.measure(
+            AnnotatedString("0"),
+            TextStyle(fontFamily = ReaderFontFamily, fontSize = fontSize),
+        ).size.height
+    }
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     BackHandler(onBack = onBack)
@@ -2969,15 +2975,24 @@ private fun TerminalScreen(
             )
         },
     ) { padding ->
-        Box(Modifier.padding(padding).fillMaxSize().background(TerminalBackground).clipToBounds()) {
+        BoxWithConstraints(
+            Modifier.padding(padding).fillMaxSize().background(TerminalBackground).clipToBounds(),
+        ) {
+            val viewportPx = with(density) { maxHeight.toPx() }
+            // 10% short of the measured slack: an overshoot would push the prompt row off
+            // the bottom edge, a small leftover gap above it costs nothing.
+            val slackPx = if (rows > 0 && lineHeightPx > 0) {
+                ((viewportPx - rows * lineHeightPx) * 0.9f).coerceAtLeast(0f).toInt()
+            } else {
+                0
+            }
             Terminal(
                 terminalEmulator = connection.emulator,
                 modifier = Modifier
                     .fillMaxSize()
-                    .offset { IntOffset(0, -keyboardHeightPx) }
+                    .offset { IntOffset(0, slackPx - keyboardHeightPx) }
                     .horizontalSwipe(onSwitchSession),
                 initialFontSize = fontSize,
-                forcedSize = forcedSize,
                 focusRequester = focusRequester,
                 // Dismissing the keyboard leaves the terminal unfocused, so a tap has to
                 // ask for it back; otherwise the keyboard can never be reopened.
