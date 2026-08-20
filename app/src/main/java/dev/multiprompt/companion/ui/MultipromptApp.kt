@@ -109,6 +109,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -219,6 +220,7 @@ fun MultipromptApp(viewModel: MainViewModel) {
             connection = terminal,
             title = state.terminalSession?.displayName ?: terminal.tmuxSessionName,
             columns = state.terminalSession?.columns ?: 0,
+            rows = state.terminalSession?.rows ?: 0,
             onBack = viewModel::closeTerminal,
             onSwitchSession = viewModel::openAdjacentSession,
         )
@@ -2890,6 +2892,7 @@ private fun TerminalScreen(
     connection: TerminalConnection,
     title: String,
     columns: Int,
+    rows: Int,
     onBack: () -> Unit,
     onSwitchSession: (Int) -> Unit,
 ) {
@@ -2918,6 +2921,12 @@ private fun TerminalScreen(
     // Pan the terminal up rather than shrinking it: resizing would renegotiate the PTY and
     // drag the desktop pane down with it.
     val keyboardHeightPx = WindowInsets.ime.getBottom(density)
+    // The emulator only holds the desktop's row count. Without a forced grid the widget
+    // lays out as many rows as the tall phone viewport fits, so the pane painted at the
+    // top and left dead space underneath it.
+    val forcedSize = if (columns > 0 && rows > 0) columns to rows else null
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
     BackHandler(onBack = onBack)
     Scaffold(
         topBar = {
@@ -2953,6 +2962,14 @@ private fun TerminalScreen(
                     .offset { IntOffset(0, -keyboardHeightPx) }
                     .horizontalSwipe(onSwitchSession),
                 initialFontSize = fontSize,
+                forcedSize = forcedSize,
+                focusRequester = focusRequester,
+                // Dismissing the keyboard leaves the terminal unfocused, so a tap has to
+                // ask for it back; otherwise the keyboard can never be reopened.
+                onTerminalTap = {
+                    focusRequester.requestFocus()
+                    keyboard?.show()
+                },
                 typeface = terminalTypeface,
                 backgroundColor = TerminalBackground,
                 foregroundColor = TerminalForeground,

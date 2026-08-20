@@ -20,6 +20,8 @@ class TmuxCommandsTest {
         assertTrue(command.contains("tmux load-buffer"))
         assertTrue(command.contains("tmux paste-buffer -dpr"))
         assertTrue(command.contains("-t 'codex-main:'"))
+        // Enter must not ride along in the same read chunk as the bracketed paste.
+        assertTrue(command.indexOf("sleep") in (command.indexOf("paste-buffer") + 1) until command.indexOf("send-keys"))
         assertFalse(command.contains("prompt text"))
         assertFalse(command.contains(" -S"))
     }

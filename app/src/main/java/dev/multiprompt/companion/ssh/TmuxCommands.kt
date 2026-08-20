@@ -31,6 +31,10 @@ object TmuxCommands {
             "trap 'tmux delete-buffer -b \"\$mp_buffer\" 2>/dev/null || true' EXIT HUP INT TERM; " +
             "tmux load-buffer -b \"\$mp_buffer\" - && " +
             "tmux paste-buffer -dpr -b \"\$mp_buffer\" -t ${target(sessionName)} && " +
+            // Agent TUIs read a bracketed paste asynchronously. An Enter that lands in the
+            // same read chunk is swallowed as part of the paste, which leaves the prompt
+            // sitting unsent in the composer.
+            "sleep 0.3 && " +
             "tmux send-keys -t ${target(sessionName)} Enter"
 
     fun createClaudeSession(sessionName: String, remotePath: String): String {
