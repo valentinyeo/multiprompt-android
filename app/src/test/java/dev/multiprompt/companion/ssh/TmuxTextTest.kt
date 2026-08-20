@@ -375,7 +375,7 @@ class TmuxTextTest {
             listOf(
                 TmuxText.ReaderBlock(
                     TmuxText.ReaderBlockKind.USER_PROMPT,
-                    "https://screencast2.com/AhOPZ.png And on the inbox view, move these buttons for open,\n" +
+                    "https://screencast2.com/AhOPZ.png And on the inbox view, move these buttons for open, " +
                         "waiting, and archive to the top. Make the inbox a dropdown.",
                 ),
             ),
