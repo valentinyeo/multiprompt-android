@@ -69,6 +69,12 @@ data class AppUiState(
     val readerTechnicalMode: Boolean = false,
     /** Consecutive idle snapshots required before a Waiting session is released. */
     val waitingIdleObservations: Map<String, Int> = emptyMap(),
+    /**
+     * Session keys in the order the inbox showed them when the reader opened. Opening a
+     * session marks it as the most recent interaction, which reorders the inbox, so
+     * recomputing neighbours per swipe walked a list that moved under the swipe.
+     */
+    val readerSwipeOrder: List<String> = emptyList(),
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -382,6 +388,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openReader(session: TmuxSession) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
+        val swipeOrder = _state.value.readerSwipeOrder.ifEmpty {
+            // The inbox draws the list reversed when newest sits at the bottom, so a swipe
+            // right has to follow what is on screen, not the underlying order.
+            visibleInboxSessions(_state.value)
+                .let { if (_state.value.newestSessionsAtBottom) it.asReversed() else it }
+                .map { SessionReadStore.key(it.hostId, it.name) }
+        }
         noteSessionInteraction(session)
         sessionReads.markRead(session)
         val key = SessionReadStore.key(session.hostId, session.name)
@@ -399,6 +412,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 terminalSession = null,
                 reader = reader,
                 readerSession = session,
+                readerSwipeOrder = swipeOrder,
                 unreadSessionKeys = it.unreadSessionKeys - key,
             )
         }
@@ -824,7 +838,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun closeReader() {
         _state.value.reader?.close()
-        _state.update { it.copy(reader = null, readerSession = null) }
+        _state.update { it.copy(reader = null, readerSession = null, readerSwipeOrder = emptyList()) }
     }
 
     /** Archives the current thread and immediately advances through the remaining inbox. */
@@ -853,8 +867,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Swiping the reader sideways opens the neighbouring visible inbox session. */
     fun openAdjacentReaderSession(delta: Int) {
-        val current = _state.value.readerSession ?: return
-        val sessions = visibleInboxSessions(_state.value)
+        val state = _state.value
+        val current = state.readerSession ?: return
+        val live = visibleInboxSessions(state).associateBy { SessionReadStore.key(it.hostId, it.name) }
+        val sessions = state.readerSwipeOrder.mapNotNull { live[it] }
+            .ifEmpty { visibleInboxSessions(state) }
         if (sessions.size < 2) return
         val index = sessions.indexOfFirst { it.hostId == current.hostId && it.name == current.name }
         if (index < 0) return
