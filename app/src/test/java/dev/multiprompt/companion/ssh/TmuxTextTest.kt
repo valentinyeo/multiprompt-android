@@ -234,7 +234,7 @@ class TmuxTextTest {
         val blocks = TmuxText.readerBlocks(
             """
             › Also, wanted to ask how many different flows do we have, and how
-            would you say is the coverage of the app? Like, are we
+            would you say is the coverage of the app? Like, are we really
             covering functions on the board?
 
             Twelve flows cover the board.

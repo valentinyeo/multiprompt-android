@@ -156,13 +156,10 @@ object TmuxText {
             )
             lastLineFilledTheRow = line.trimEnd().length >= WRAPPED_ROW_LENGTH
             if (kind == ReaderBlockKind.USER_PROMPT) {
-                // A wrapped prompt row either fills the terminal row or breaks mid-sentence.
-                // Dictated prompts wrap at odd widths, so row length alone cut bubbles off
-                // halfway. A row that ends a sentence ends the prompt; a blank row or an
-                // activity marker ends it in every case.
-                val trimmed = line.trim()
-                promptMayContinue = trimmed.length >= WRAPPED_ROW_LENGTH ||
-                    trimmed.lastOrNull() !in SENTENCE_END
+                // A terminal-wrapped prompt fills the row it wraps out of. The old 64-column
+                // threshold sat above the width agents actually wrap prose at, so long
+                // dictated prompts lost their tail into the agent's block.
+                promptMayContinue = line.trim().length >= WRAPPED_ROW_LENGTH
             }
         }
 
@@ -421,7 +418,6 @@ object TmuxText {
     private const val MODEL_PICKER_SEARCH_LINES = 80
     private const val RUNTIME_SEARCH_LINES = 12
     private const val INPUT_SEARCH_LINES = 24
-    private val SENTENCE_END = listOf('.', '!', '?', ':', ';', '"')
     private const val DIVIDER_CHARACTERS = "─━═╌╍-_▔▁"
     private const val DIVIDER_LABEL_LIMIT = 32
     private const val WRAPPED_ROW_LENGTH = 55
