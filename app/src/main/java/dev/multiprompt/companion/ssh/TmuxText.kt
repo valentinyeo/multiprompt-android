@@ -47,7 +47,11 @@ object TmuxText {
 
     /** Reads model/effort metadata from Codex and Claude TUI or cloud-session status lines. */
     fun runtimeDetails(value: String): RuntimeDetails {
-        value.lineSequence().toList().asReversed().forEach { rawLine ->
+        val lines = value.lineSequence().toList()
+        // The status line sits at the very bottom of the pane. Transcript prose above it
+        // routinely names other models ("run this on gpt-5.6-luna max"), so a whole-pane
+        // scan latched onto whatever was quoted and reported the wrong agent.
+        lines.takeLast(RUNTIME_SEARCH_LINES).asReversed().forEach { rawLine ->
             val line = rawLine.trim()
             CODEX_RUNTIME.find(line)?.let { match ->
                 return RuntimeDetails(match.groupValues[1], match.groupValues[2].lowercase().ifBlank { null })
@@ -55,6 +59,11 @@ object TmuxText {
             CLAUDE_RUNTIME.find(line)?.let { match ->
                 return RuntimeDetails(match.groupValues[1], match.groupValues[2].lowercase().ifBlank { null })
             }
+        }
+        // Cloud sessions print an explicit "Model: x" line instead of a footer. That label
+        // is unambiguous, so it is safe to look for anywhere in the capture.
+        lines.asReversed().forEach { rawLine ->
+            val line = rawLine.trim()
             CODEX_MODEL_ONLY.find(line)?.let { match ->
                 return RuntimeDetails(match.groupValues[1])
             }
@@ -409,6 +418,7 @@ object TmuxText {
 
     private const val COMPOSER_SEARCH_LINES = 18
     private const val MODEL_PICKER_SEARCH_LINES = 80
+    private const val RUNTIME_SEARCH_LINES = 12
     private const val INPUT_SEARCH_LINES = 24
     private const val PROMPT_WRAP_THRESHOLD = 64
     private const val DIVIDER_CHARACTERS = "─━═╌╍-_▔▁"

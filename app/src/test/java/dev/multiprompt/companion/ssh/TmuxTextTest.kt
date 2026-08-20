@@ -138,6 +138,20 @@ class TmuxTextTest {
     }
 
     @Test
+    fun ignoresModelNamesQuotedInTheTranscriptAboveTheFooter() {
+        val captured = buildString {
+            appendLine("Run this one on gpt-5.6-luna max instead.")
+            repeat(20) { appendLine("more transcript output") }
+            appendLine("Opus 5 medium | multiprompt-android")
+        }
+
+        assertEquals(
+            TmuxText.RuntimeDetails("Opus 5", "medium"),
+            TmuxText.runtimeDetails(captured),
+        )
+    }
+
+    @Test
     fun readsNumberedOptionsFromTheCodexModelPicker() {
         assertEquals(
             listOf(
