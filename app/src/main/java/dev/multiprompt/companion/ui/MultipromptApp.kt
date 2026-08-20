@@ -180,25 +180,31 @@ fun MultipromptApp(viewModel: MainViewModel) {
             delay(UPDATE_POLL_INTERVAL_MS)
         }
     }
-    Column(Modifier.fillMaxSize()) {
-        // A new build must announce itself; nobody opens the Update screen to look.
+    // The banner floats over the screens instead of wrapping them: making it a Column row
+    // resized every screen and the keyboard then pushed the whole reader off the top.
+    Box(Modifier.fillMaxSize()) {
+        AppScreens(viewModel)
         UpdateBanner(
             state = updateState,
             onInstall = { release -> viewModel.updates.install(release) },
+            modifier = Modifier.align(Alignment.TopCenter),
         )
-        Box(Modifier.weight(1f)) { AppScreens(viewModel) }
     }
 }
 
 @Composable
-private fun UpdateBanner(state: UpdateState, onInstall: (UpdateRelease) -> Unit) {
+private fun UpdateBanner(
+    state: UpdateState,
+    onInstall: (UpdateRelease) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val release = when (state) {
         is UpdateState.Available -> state.release
         is UpdateState.PermissionRequired -> state.release
         is UpdateState.Downloading -> state.release
         else -> null
     } ?: return
-    Surface(color = MaterialTheme.colorScheme.primaryContainer) {
+    Surface(modifier = modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primaryContainer) {
         Row(
             Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 14.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
