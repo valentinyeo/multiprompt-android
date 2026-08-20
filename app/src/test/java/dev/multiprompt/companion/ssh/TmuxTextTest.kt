@@ -230,6 +230,27 @@ class TmuxTextTest {
     }
 
     @Test
+    fun aPromptRowBreakingMidSentenceKeepsTheBubble() {
+        val blocks = TmuxText.readerBlocks(
+            """
+            › Also, wanted to ask how many different flows do we have, and how
+            would you say is the coverage of the app? Like, are we
+            covering functions on the board?
+
+            Twelve flows cover the board.
+            """.trimIndent(),
+            AgentKind.CODEX,
+        )
+
+        assertEquals(TmuxText.ReaderBlockKind.USER_PROMPT, blocks.first().kind)
+        assertTrue(blocks.first().text.endsWith("covering functions on the board?"))
+        assertEquals(
+            listOf(TmuxText.ReaderBlockKind.USER_PROMPT, TmuxText.ReaderBlockKind.PROSE),
+            blocks.map { it.kind },
+        )
+    }
+
+    @Test
     fun claudeUserTurnsRenderAsPrompts() {
         val blocks = TmuxText.readerBlocks("> fix the reader padding", AgentKind.CLAUDE)
 
