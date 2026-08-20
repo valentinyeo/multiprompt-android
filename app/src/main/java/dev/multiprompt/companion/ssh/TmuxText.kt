@@ -47,12 +47,12 @@ object TmuxText {
 
     /** Reads model/effort metadata from Codex and Claude TUI or cloud-session status lines. */
     fun runtimeDetails(value: String): RuntimeDetails {
-        val lines = value.lineSequence().toList()
+        val lines = value.lineSequence().map(String::trim).filter(String::isNotEmpty).toList()
         // Only the bottom rows carry the status line. Transcript prose above it routinely
         // names other models ("run this on gpt-5.6-luna max"), and a whole-pane scan
-        // latched onto whatever was quoted and reported the wrong agent.
-        lines.takeLast(RUNTIME_SEARCH_LINES).asReversed().forEach { rawLine ->
-            val line = rawLine.trim()
+        // latched onto whatever was quoted and reported the wrong agent. Blank rows are
+        // dropped first: a pane ending in empty lines would push the footer out of view.
+        lines.takeLast(RUNTIME_SEARCH_LINES).asReversed().forEach { line ->
             CODEX_RUNTIME.find(line)?.let { match ->
                 return RuntimeDetails(match.groupValues[1], match.groupValues[2].lowercase().ifBlank { null })
             }
