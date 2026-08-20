@@ -176,7 +176,10 @@ fun MultipromptApp(viewModel: MainViewModel) {
     val updateState by viewModel.updates.state.collectAsState()
     LaunchedEffect(Unit) {
         while (true) {
-            viewModel.updates.check()
+            // force: the manager throttles on its own clock too, and a tick landing a second
+            // early skipped a whole cycle, so a new build could sit unannounced for half an
+            // hour on a screen the user never leaves.
+            viewModel.updates.check(force = true)
             delay(UPDATE_POLL_INTERVAL_MS)
         }
     }
@@ -3229,7 +3232,7 @@ private fun Modifier.horizontalSwipe(
 
 /** Used only when tmux did not report a width for the session. */
 private const val FALLBACK_COLUMNS = 100
-private const val UPDATE_POLL_INTERVAL_MS = 15 * 60 * 1000L
+private const val UPDATE_POLL_INTERVAL_MS = 5 * 60 * 1000L
 
 private fun statusLabel(status: TerminalStatus): String = when (status) {
     TerminalStatus.Connecting -> "Connecting…"
