@@ -161,7 +161,6 @@ import dev.multiprompt.companion.data.SessionSearch
 import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.terminal.TerminalConnection
 import dev.multiprompt.companion.terminal.TerminalStatus
-import dev.multiprompt.companion.update.UpdateManager
 import dev.multiprompt.companion.update.UpdateRelease
 import dev.multiprompt.companion.update.UpdateState
 import kotlinx.coroutines.delay
@@ -178,7 +177,7 @@ fun MultipromptApp(viewModel: MainViewModel) {
     LaunchedEffect(Unit) {
         while (true) {
             viewModel.updates.check()
-            delay(UpdateManager.CHECK_INTERVAL_MS)
+            delay(UPDATE_POLL_INTERVAL_MS)
         }
     }
     Column(Modifier.fillMaxSize()) {
@@ -3224,6 +3223,7 @@ private fun Modifier.horizontalSwipe(
 
 /** Used only when tmux did not report a width for the session. */
 private const val FALLBACK_COLUMNS = 100
+private const val UPDATE_POLL_INTERVAL_MS = 15 * 60 * 1000L
 
 private fun statusLabel(status: TerminalStatus): String = when (status) {
     TerminalStatus.Connecting -> "Connecting…"

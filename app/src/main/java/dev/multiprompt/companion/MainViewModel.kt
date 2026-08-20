@@ -915,12 +915,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val hostKey: PresentedHostKey? = null,
     )
 
+    /**
+     * The list the inbox is showing, in the order it shows it. Swiping between sessions and
+     * "open the next one" both follow this, so they cannot land on a session the current
+     * bucket and workspace do not contain.
+     */
     private fun visibleInboxSessions(state: AppUiState): List<TmuxSession> = state.sessions
-        .filter { SessionReadStore.key(it.hostId, it.name) !in state.archivedSessionKeys }
         .filter { session ->
-            state.selectedWorkspaceId == null ||
-                state.sessionWorkspaceIds[SessionReadStore.key(session.hostId, session.name)] ==
-                state.selectedWorkspaceId
+            val key = SessionReadStore.key(session.hostId, session.name)
+            val archived = key in state.archivedSessionKeys
+            val bucketMatches = when (state.sessionBucket) {
+                SessionBucket.ARCHIVE -> archived
+                SessionBucket.WAITING -> archived
+                else -> !archived
+            }
+            bucketMatches && (
+                state.selectedWorkspaceId == null ||
+                    state.sessionWorkspaceIds[key] == state.selectedWorkspaceId
+                )
         }
         .let { sessions -> SessionSearch.newestFirst(sessions, state.sessionInteractionEpochSeconds) }
 
