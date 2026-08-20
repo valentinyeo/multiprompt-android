@@ -2305,7 +2305,7 @@ private fun ReaderScreen(
                 .padding(padding)
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = 4.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -2383,7 +2383,7 @@ private fun ReaderScreen(
                 Modifier
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
-                    .padding(12.dp)
+                    .padding(6.dp)
                     .transformable(state = transcriptTransform, canPan = { false }),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -2840,7 +2840,7 @@ private fun UpdateScreen(
     onInstall: (UpdateRelease) -> Unit,
 ) {
     Column(
-        Modifier.fillMaxSize().padding(20.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text("App updates", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -2872,6 +2872,36 @@ private fun UpdateScreen(
             Icon(Icons.Default.Refresh, null)
             Spacer(Modifier.size(8.dp))
             Text("Check now")
+        }
+        val history = when (state) {
+            is UpdateState.Current -> state.history
+            is UpdateState.Available -> state.release.history
+            is UpdateState.PermissionRequired -> state.release.history
+            is UpdateState.Downloading -> state.release.history
+            is UpdateState.Failed -> state.release?.history.orEmpty()
+            else -> emptyList()
+        }
+        if (history.isNotEmpty()) {
+            HorizontalDivider()
+            Text("Release history", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            history.forEach { entry ->
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        listOfNotNull("v${entry.versionName}", entry.date.ifBlank { null })
+                            .joinToString(" · "),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    entry.notes.lineSequence().map(String::trim).filter(String::isNotBlank)
+                        .forEach { line ->
+                            Text(
+                                line,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                }
+            }
         }
         HorizontalDivider()
         Text(

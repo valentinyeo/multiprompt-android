@@ -230,6 +230,21 @@ class TmuxTextTest {
     }
 
     @Test
+    fun claudeUserTurnsRenderAsPrompts() {
+        val blocks = TmuxText.readerBlocks("> fix the reader padding", AgentKind.CLAUDE)
+
+        assertEquals(
+            listOf(
+                TmuxText.ReaderBlock(
+                    TmuxText.ReaderBlockKind.USER_PROMPT,
+                    "fix the reader padding",
+                ),
+            ),
+            blocks,
+        )
+    }
+
+    @Test
     fun heredocBodiesAreCodeNotConversation() {
         val blocks = TmuxText.readerBlocks(
             """

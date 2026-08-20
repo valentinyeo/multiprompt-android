@@ -48,9 +48,9 @@ object TmuxText {
     /** Reads model/effort metadata from Codex and Claude TUI or cloud-session status lines. */
     fun runtimeDetails(value: String): RuntimeDetails {
         val lines = value.lineSequence().toList()
-        // The status line sits at the very bottom of the pane. Transcript prose above it
-        // routinely names other models ("run this on gpt-5.6-luna max"), so a whole-pane
-        // scan latched onto whatever was quoted and reported the wrong agent.
+        // Only the bottom rows carry the status line. Transcript prose above it routinely
+        // names other models ("run this on gpt-5.6-luna max"), and a whole-pane scan
+        // latched onto whatever was quoted and reported the wrong agent.
         lines.takeLast(RUNTIME_SEARCH_LINES).asReversed().forEach { rawLine ->
             val line = rawLine.trim()
             CODEX_RUNTIME.find(line)?.let { match ->
@@ -59,18 +59,13 @@ object TmuxText {
             CLAUDE_RUNTIME.find(line)?.let { match ->
                 return RuntimeDetails(match.groupValues[1], match.groupValues[2].lowercase().ifBlank { null })
             }
-            CLAUDE_ALIAS_ONLY.find(line)?.let { match ->
-                return RuntimeDetails(match.groupValues[1].trim())
-            }
-        }
-        // Cloud sessions print an explicit "Model: x" line instead of a footer. That label
-        // is unambiguous, so it is safe to look for anywhere in the capture.
-        lines.asReversed().forEach { rawLine ->
-            val line = rawLine.trim()
             CODEX_MODEL_ONLY.find(line)?.let { match ->
                 return RuntimeDetails(match.groupValues[1])
             }
             CLAUDE_MODEL_ONLY.find(line)?.let { match ->
+                return RuntimeDetails(match.groupValues[1].trim())
+            }
+            CLAUDE_ALIAS_ONLY.find(line)?.let { match ->
                 return RuntimeDetails(match.groupValues[1].trim())
             }
         }
@@ -308,7 +303,8 @@ object TmuxText {
         return when {
             line.startsWith("❯") -> true
             line.startsWith("›") -> true
-            agent == AgentKind.PI && line.startsWith("> ") -> true
+            // Claude renders a submitted message as "> text"; Pi does the same.
+            line.startsWith("> ") -> true
             else -> false
         } ||
             line.startsWith("User:", ignoreCase = true) ||
@@ -318,7 +314,7 @@ object TmuxText {
     private fun removePromptMarker(value: String, agent: AgentKind): String = value.trimStart()
         .removePrefix("❯")
         .removePrefix("›")
-        .let { if (agent == AgentKind.PI) it.removePrefix("> ") else it }
+        .removePrefix("> ")
         .removePrefix("User:")
         .removePrefix("user:")
         .removePrefix("You:")

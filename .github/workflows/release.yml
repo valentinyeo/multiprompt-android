@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 25
+          fetch-depth: 200
 
       - uses: actions/setup-java@v4
         with:
@@ -88,14 +88,35 @@ jobs:
           cp "$source_apk" "$release_dir/multiprompt-companion.apk"
           sha256=$(sha256sum "$release_dir/multiprompt-companion.apk" | cut -d' ' -f1)
           size=$(stat -c%s "$release_dir/multiprompt-companion.apk")
+
+          # The published manifest is the only changelog store. Read the last one, list the
+          # commits since the build it shipped, and carry its history forward.
+          previous=$(curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/download/android-latest/multiprompt-companion-update.json" || echo '{}')
+          previous_commit=$(jq -r '.commit // ""' <<<"$previous")
+          if [[ -n "$previous_commit" ]] && git cat-file -e "${previous_commit}^{commit}" 2>/dev/null; then
+            notes=$(git log --no-merges --pretty=format:'- %s' "${previous_commit}..HEAD")
+          else
+            notes=$(git log -10 --no-merges --pretty=format:'- %s')
+          fi
+          [[ -n "$notes" ]] || notes="- No source changes"
+          history=$(jq -c \
+            --arg versionName "$VERSION_NAME" \
+            --argjson versionCode "$VERSION_CODE" \
+            --arg date "$(date -u +%Y-%m-%d)" \
+            --arg notes "$notes" \
+            '[{versionName:$versionName, versionCode:$versionCode, date:$date, notes:$notes}] + (.history // []) | .[0:20]' \
+            <<<"$previous")
+
           jq -n \
             --arg versionName "$VERSION_NAME" \
             --argjson versionCode "$VERSION_CODE" \
             --arg apkUrl "https://github.com/${GITHUB_REPOSITORY}/releases/download/android-latest/multiprompt-companion.apk" \
             --arg sha256 "$sha256" \
             --argjson sizeBytes "$size" \
-            --arg notes "$(git log -10 --no-merges --pretty=format:'- %s')" \
-            '{schemaVersion:1, versionCode:$versionCode, versionName:$versionName, apkUrl:$apkUrl, sha256:$sha256, sizeBytes:$sizeBytes, notes:$notes}' \
+            --arg notes "$notes" \
+            --arg commit "$GITHUB_SHA" \
+            --argjson history "$history" \
+            '{schemaVersion:1, versionCode:$versionCode, versionName:$versionName, apkUrl:$apkUrl, sha256:$sha256, sizeBytes:$sizeBytes, notes:$notes, commit:$commit, history:$history}' \
             > "$release_dir/multiprompt-companion-update.json"
 
       - name: Publish fixed android-latest channel
