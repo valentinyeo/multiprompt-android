@@ -13,6 +13,7 @@ import dev.multiprompt.companion.data.WorkspaceStore
 import dev.multiprompt.companion.data.CrashReport
 import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
+import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.ssh.PresentedHostKey
 import dev.multiprompt.companion.ssh.SshProblem
@@ -113,6 +114,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             while (true) {
                 delay(SESSION_REFRESH_INTERVAL_MS)
+                sweepWarmReaders()
                 if (_state.value.hosts.isNotEmpty()) refresh()
             }
         }
@@ -386,6 +388,57 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Readers stay connected after they leave the screen so swiping back is instant. Each
+     * one holds an SSH stream, so only a few are kept and an untouched one is dropped
+     * after [READER_CACHE_TTL_MS].
+     */
+    private val warmReaders = LinkedHashMap<String, SessionReaderConnection>()
+    private val warmReaderTouchedAt = mutableMapOf<String, Long>()
+
+    private fun warmReader(key: String, create: () -> SessionReaderConnection): SessionReaderConnection {
+        sweepWarmReaders(except = key)
+        val existing = warmReaders[key]
+        val reader = if (existing != null && existing.state.value.status != ReaderStatus.Closed) {
+            existing
+        } else {
+            existing?.close()
+            create().also { it.start() }
+        }
+        warmReaders.remove(key)
+        warmReaders[key] = reader
+        warmReaderTouchedAt[key] = System.currentTimeMillis()
+        while (warmReaders.size > MAX_WARM_READERS) {
+            val oldest = warmReaders.keys.first()
+            if (oldest == key) break
+            warmReaders.remove(oldest)?.close()
+            warmReaderTouchedAt.remove(oldest)
+        }
+        return reader
+    }
+
+    private fun sweepWarmReaders(except: String? = null) {
+        val now = System.currentTimeMillis()
+        warmReaders.keys.toList().forEach { key ->
+            if (key == except || key == _state.value.readerSession?.let {
+                    SessionReadStore.key(it.hostId, it.name)
+                }
+            ) {
+                return@forEach
+            }
+            if (now - (warmReaderTouchedAt[key] ?: 0) >= READER_CACHE_TTL_MS) {
+                warmReaders.remove(key)?.close()
+                warmReaderTouchedAt.remove(key)
+            }
+        }
+    }
+
+    private fun closeWarmReaders() {
+        warmReaders.values.forEach { it.close() }
+        warmReaders.clear()
+        warmReaderTouchedAt.clear()
+    }
+
     fun openReader(session: TmuxSession) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
         val swipeOrder = _state.value.readerSwipeOrder.ifEmpty {
@@ -399,13 +452,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         sessionReads.markRead(session)
         val key = SessionReadStore.key(session.hostId, session.name)
         _state.value.terminal?.close()
-        _state.value.reader?.close()
-        val reader = SessionReaderConnection(
-            repository = ssh,
-            host = host,
-            tmuxSessionName = session.name,
-            agent = session.agent,
-        ).also { it.start() }
+        val reader = warmReader(key) {
+            SessionReaderConnection(
+                repository = ssh,
+                host = host,
+                tmuxSessionName = session.name,
+                agent = session.agent,
+            )
+        }
         _state.update {
             it.copy(
                 terminal = null,
@@ -688,7 +742,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val terminalWasOpen = _state.value.terminalSession?.let {
                         it.hostId == session.hostId && it.name == session.name
                     } == true
-                    if (readerWasOpen) _state.value.reader?.close()
+                    warmReaders.remove(key)?.close()
+                    warmReaderTouchedAt.remove(key)
                     if (terminalWasOpen) _state.value.terminal?.close()
                     dissolved?.let(dissolvedStore::upsert)
                     sessionReads.restore(session)
@@ -837,8 +892,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun closeReader() {
-        _state.value.reader?.close()
+        // The connection stays warm so reopening is instant; the sweep drops it if the
+        // session is not visited again.
         _state.update { it.copy(reader = null, readerSession = null, readerSwipeOrder = emptyList()) }
+        sweepWarmReaders()
     }
 
     /** Archives the current thread and immediately advances through the remaining inbox. */
@@ -921,7 +978,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         _state.value.terminal?.close()
-        _state.value.reader?.close()
+        closeWarmReaders()
         super.onCleared()
     }
 
@@ -971,6 +1028,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .fold(0L) { latest, entry -> maxOf(latest, entry.second) }
 
     private companion object {
+        const val MAX_WARM_READERS = 3
+        const val READER_CACHE_TTL_MS = 15 * 60 * 1000L
         const val MAX_PRIVATE_KEY_BYTES = 256 * 1024
         const val MAX_DISPLAY_NAME_LENGTH = 63
         const val IDLE_OBSERVATIONS_TO_RELEASE = 2
