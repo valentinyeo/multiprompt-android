@@ -10,8 +10,18 @@ object TmuxCommands {
     const val SNAPSHOT_PREFIX = "__MP_TMUX_SNAPSHOT__"
     const val CREATED_PREFIX = "__MP_TMUX_CREATED__"
 
-    fun capture(sessionName: String): String =
-        "tmux capture-pane -p -J -S -2000 -t ${target(sessionName)}"
+    fun capture(sessionName: String): String = captureCommand(target(sessionName))
+
+    /**
+     * Full-screen agent TUIs draw in the alternate screen, so the pane's scrollback holds
+     * whatever ran before they started, not their conversation. Mixing the two put
+     * hours-old output directly above the current turn. Take history only when the pane is
+     * on the normal screen.
+     */
+    private fun captureCommand(target: String): String =
+        "if [ \"\$(tmux display-message -p -t $target '#{alternate_on}' 2>/dev/null)\" = 1 ]; " +
+            "then tmux capture-pane -p -J -t $target; " +
+            "else tmux capture-pane -p -J -S -2000 -t $target; fi"
 
     fun action(sessionName: String, action: TmuxAction): String {
         val key = when (action) {
@@ -85,7 +95,7 @@ object TmuxCommands {
             "trap 'rm -f \"\$mp_snapshot\"' EXIT HUP INT TERM; " +
             "mp_previous=''; " +
             "while tmux has-session -t $target 2>/dev/null; do " +
-            "tmux capture-pane -p -J -S -2000 -t $target 2>/dev/null | " +
+            "{ ${captureCommand(target)} ; } 2>/dev/null | " +
             "tail -c 524288 > \"\$mp_snapshot\"; " +
             "mp_current=\$(cksum < \"\$mp_snapshot\"); " +
             "if [ \"\$mp_current\" != \"\$mp_previous\" ]; then " +

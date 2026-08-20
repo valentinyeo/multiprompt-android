@@ -10,7 +10,13 @@ class TmuxCommandsTest {
     fun captureQuotesTheCompleteTarget() {
         val command = TmuxCommands.capture("a'; reboot")
 
-        assertEquals("tmux capture-pane -p -J -S -2000 -t 'a'\"'\"'; reboot:'", command)
+        val target = "'a'\"'\"'; reboot:'"
+        assertTrue(command.contains("tmux capture-pane -p -J -S -2000 -t $target"))
+        // A full-screen agent TUI keeps its conversation on the alternate screen; the pane's
+        // scrollback then belongs to whatever ran before it and must stay out.
+        assertTrue(command.contains("#{alternate_on}"))
+        assertTrue(command.contains("then tmux capture-pane -p -J -t $target"))
+        assertFalse(command.contains("; reboot;"))
     }
 
     @Test
