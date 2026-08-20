@@ -291,7 +291,8 @@ object TmuxText {
         return ACTIVITY_DURATION.containsMatchIn(body) ||
             body.endsWith("(completed)") ||
             body.contains("(failed") ||
-            ACTIVITY_VERBS.any { verb -> body.startsWith(verb, ignoreCase = true) }
+            ACTIVITY_VERBS.any { verb -> body.startsWith(verb, ignoreCase = true) } ||
+            TOOL_CALL_MARKERS.any { marker -> body.startsWith(marker) }
     }
 
     private fun isDivider(value: String): Boolean {
