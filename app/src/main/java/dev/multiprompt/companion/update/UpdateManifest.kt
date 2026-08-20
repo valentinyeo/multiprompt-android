@@ -37,7 +37,7 @@ data class UpdateRelease(
 sealed interface UpdateState {
     data object Idle : UpdateState
     data object Checking : UpdateState
-    data class Current(val versionName: String) : UpdateState
+    data class Current(val versionName: String, val notes: String = "") : UpdateState
     data class Available(val release: UpdateRelease) : UpdateState
     data class PermissionRequired(val release: UpdateRelease) : UpdateState
     data class Downloading(val release: UpdateRelease, val progress: Float) : UpdateState

@@ -2846,7 +2846,10 @@ private fun UpdateScreen(
                 CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
                 Text("Checking GitHub Releases…")
             }
-            is UpdateState.Current -> Text("You have the latest version.", color = MaterialTheme.colorScheme.secondary)
+            is UpdateState.Current -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("You have the latest version.", color = MaterialTheme.colorScheme.secondary)
+                ChangelogNotes(state.notes)
+            }
             is UpdateState.Available -> UpdateAvailableCard(state.release) { onInstall(state.release) }
             is UpdateState.PermissionRequired -> Text("Waiting for Android's ‘install unknown apps’ permission…")
             is UpdateState.Downloading -> {
@@ -2875,11 +2878,22 @@ private fun UpdateScreen(
 }
 
 @Composable
+private fun ChangelogNotes(notes: String) {
+    if (notes.isBlank()) return
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("What's new", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+        notes.lineSequence().map(String::trim).filter(String::isNotBlank).forEach { line ->
+            Text(line, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
 private fun UpdateAvailableCard(release: UpdateRelease, onInstall: () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("v${release.versionName} available", fontWeight = FontWeight.Bold)
-            if (release.notes.isNotBlank()) Text(release.notes)
+            ChangelogNotes(release.notes)
             Text("${release.sizeBytes / 1024 / 1024} MB", style = MaterialTheme.typography.labelMedium)
             Button(onClick = onInstall) { Text("Download and update") }
         }

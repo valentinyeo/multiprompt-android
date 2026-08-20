@@ -44,7 +44,7 @@ class UpdateManager(private val context: Context) {
                 _state.value = if (release.versionCode > BuildConfig.VERSION_CODE.toLong()) {
                     UpdateState.Available(release)
                 } else {
-                    UpdateState.Current(BuildConfig.VERSION_NAME)
+                    UpdateState.Current(BuildConfig.VERSION_NAME, release.notes)
                 }
             } catch (throwable: Throwable) {
                 _state.value = UpdateState.Failed(throwable.userMessage())
