@@ -125,8 +125,9 @@ object TmuxText {
         var promptMayContinue = false
         // tmux hard-wraps at the desktop pane width, so a paragraph arrives as several
         // full rows. Rejoin them, otherwise the phone wraps the leftovers again and every
-        // paragraph reads as a stack of line-and-a-half fragments.
-        val wrapWidth = lines.maxOfOrNull { it.trimEnd().length } ?: 0
+        // paragraph reads as a stack of line-and-a-half fragments. A row long enough to be
+        // a wrap point is the signal: measuring the pane width instead fails, because the
+        // status bar is wider than the column the agent wraps its prose at.
         var lastLineFilledTheRow = false
 
         fun flush() {
@@ -158,8 +159,7 @@ object TmuxText {
             current.append(
                 if (kind == ReaderBlockKind.USER_PROMPT) removePromptMarker(line, agent) else line.trimEnd(),
             )
-            lastLineFilledTheRow = wrapWidth >= MIN_WRAP_WIDTH &&
-                line.trimEnd().length >= wrapWidth - WRAP_SLACK
+            lastLineFilledTheRow = line.trimEnd().length >= WRAPPED_ROW_LENGTH
             if (kind == ReaderBlockKind.USER_PROMPT) {
                 // A terminal-wrapped prompt usually fills the available row. A short prompt
                 // followed by ordinary prose is a completed prompt/response pair instead.
@@ -423,8 +423,7 @@ object TmuxText {
     private const val PROMPT_WRAP_THRESHOLD = 64
     private const val DIVIDER_CHARACTERS = "─━═╌╍-_▔▁"
     private const val DIVIDER_LABEL_LIMIT = 32
-    private const val MIN_WRAP_WIDTH = 40
-    private const val WRAP_SLACK = 2
+    private const val WRAPPED_ROW_LENGTH = 55
     private val PARAGRAPH_START = Regex("^(?:[-*•·>❯›#|+]|\\d+[.)]\\s)")
     private val CODE_LINE = Regex("(?:fun|class|interface|object|const|val|var)\\b.*(?:[({=]|\\s*$)")
     private val NUMBERED_DIFF_LINE = Regex("\\d+\\s+[+-](?:\\s|$).*")

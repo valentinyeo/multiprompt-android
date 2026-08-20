@@ -184,6 +184,8 @@ class TmuxTextTest {
         assertTrue(
             text.contains("and its backlog is deep. If you want one anyway"),
         )
+        // A row the agent did not fill ends the paragraph.
+        assertTrue(text.contains("tell me the domain.\n"))
         assertTrue(text.contains("\n- a bullet"))
         assertTrue(text.contains("fill it still part of the bullet"))
     }
