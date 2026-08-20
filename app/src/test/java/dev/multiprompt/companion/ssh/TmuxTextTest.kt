@@ -368,14 +368,8 @@ class TmuxTextTest {
                     """
                     • Ran git diff -- src/App.tsx
                     └ 29 +    assert.match(source)
-                    """.trimIndent(),
-                ),
-                TmuxText.ReaderBlock(
-                    TmuxText.ReaderBlockKind.CODE,
-                    """
                     30 +    expect(description).toBeTruthy()
                     """.trimIndent(),
-                    language = "diff",
                 ),
                 TmuxText.ReaderBlock(
                     TmuxText.ReaderBlockKind.PROSE,
