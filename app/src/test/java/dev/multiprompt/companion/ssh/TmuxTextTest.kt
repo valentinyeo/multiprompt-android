@@ -296,6 +296,26 @@ class TmuxTextTest {
     }
 
     @Test
+    fun theComposerBelowAStatusRowStillMeansWaiting() {
+        val idle = """
+            ● Pushed the fix.
+            ─────────────────────────────────── MULTIPROMPT ANDROID ─
+            ❯
+            ──────────────────────────────────────────────────────────
+            Opus 5 ⚡medium │ multiprompt-android │ 32%
+            ⏵⏵ bypass permissions on (shift+tab to cycle) · ← 1 agent
+            projects | shell-projects-x    182MB 21:57
+        """.trimIndent()
+
+        assertTrue(TmuxText.isWaitingForInput(idle))
+        assertFalse(
+            TmuxText.isWaitingForInput(
+                idle.replace("● Pushed the fix.", "✢ Tempering… (2m 11s · ↓ 4.9k tokens)"),
+            ),
+        )
+    }
+
+    @Test
     fun claudeUserTurnsRenderAsPrompts() {
         val blocks = TmuxText.readerBlocks("> fix the reader padding", AgentKind.CLAUDE)
 

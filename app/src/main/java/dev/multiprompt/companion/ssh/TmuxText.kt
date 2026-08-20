@@ -270,6 +270,9 @@ object TmuxText {
             .filter(String::isNotBlank)
             .toList()
             .takeLast(INPUT_SEARCH_LINES)
+        // The spinner row only exists while the agent is running, so its presence anywhere on
+        // the current screen settles the question. The composer stays drawn either way.
+        if (tail.any { line -> SPINNER_LINE.containsMatchIn(line) }) return false
         val meaningful = tail.withIndex()
             .filterNot { (_, line) -> isDivider(line) || isTerminalChrome(line) }
             .toList()
@@ -377,6 +380,7 @@ object TmuxText {
             line.startsWith("Esc to cancel", ignoreCase = true) ||
             line.startsWith("Tool:", ignoreCase = true) ||
             isActivityBullet(line) ||
+            SPINNER_MARKERS.any { marker -> line.startsWith(marker) } ||
             line.startsWith("└") ||
             line.startsWith("│") ||
             line.startsWith("… +") ||
@@ -406,8 +410,13 @@ object TmuxText {
     }
 
     private fun isTerminalChrome(value: String): Boolean {
-        val line = value.trimStart().lowercase()
-        return line.startsWith("gpt-") ||
+        // Status rows are decorated ("⏵⏵ bypass permissions on"), so the marker has to be
+        // read past the decoration or the row counts as conversation and the session never
+        // looks idle.
+        val line = value.trim().dropWhile { !it.isLetterOrDigit() && it != '/' }.lowercase()
+        return STATUS_BAR.containsMatchIn(value) ||
+            SLASH_HINT.matches(line) ||
+            line.startsWith("gpt-") ||
             line.startsWith("opus ") ||
             line.startsWith("sonnet ") ||
             line.startsWith("haiku ") ||
@@ -495,6 +504,15 @@ object TmuxText {
         "(?i)^(?:claude\\s+)?(opus|sonnet|haiku|fable)(?:[- ]+[0-9]+(?:[.-][0-9]+)*)?$",
     )
     private val MODEL_PICKER_OPTION = Regex("^\\s*(?:[›>]\\s+)?([1-9])\\.\\s+(.+?)\\s*$")
+    /** The host shell's own status bar, e.g. "projects | shell-projects-x   182MB 21:57". */
+    private val STATUS_BAR = Regex("\\d+MB\\s+\\d{1,2}:\\d{2}\\s*$")
+    private val SLASH_HINT = Regex("/[a-z-]{1,12}")
+    /** A running spinner: a glyph, a gerund, then the elapsed time. */
+    private val SPINNER_LINE = Regex(
+        "(?:^\\s*[●·✳✻✶✽✢✷∗✴*]\\s+\\S+…\\s*\\(\\s*\\d)|(?i)esc to interrupt",
+    )
+    /** Claude and Codex paint their spinner with these. */
+    private val SPINNER_MARKERS = listOf("●", "·", "✳", "✻", "✶", "✽", "✢", "✷", "∗", "✴")
     private val ACTIVITY_DURATION = Regex("·\\s*(?:\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h)\\s*)+$")
     private val ACTIVITY_VERBS = listOf(
         "Ran ", "Read ", "Reading ", "Explored", "Exploring", "Searched", "Searching",
