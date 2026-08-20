@@ -192,7 +192,7 @@ object TmuxText {
                 if (current.isNotEmpty()) {
                     if (currentKind == ReaderBlockKind.USER_PROMPT ||
                         currentKind == ReaderBlockKind.CODE ||
-                        (agent == AgentKind.CODEX && currentKind == ReaderBlockKind.PROGRESS)
+                        currentKind == ReaderBlockKind.PROGRESS
                     ) {
                         flush()
                     } else {
@@ -210,18 +210,18 @@ object TmuxText {
                     // same user bubble; an empty row or activity marker ends the prompt.
                     ReaderBlockKind.USER_PROMPT
                 }
+                currentKind == ReaderBlockKind.PROGRESS -> {
+                    // Agent TUIs render command output as a marker followed by unmarked wrapped
+                    // lines. Keep that output in one activity section until a blank line or a
+                    // new semantic block.
+                    ReaderBlockKind.PROGRESS
+                }
                 fencedCode || looksLikeCode(line) -> ReaderBlockKind.CODE
                 currentKind == ReaderBlockKind.CODE -> {
                     // Code output commonly contains continuation lines that do not have a
                     // reliable syntax marker. Keep the contiguous section together until a
                     // blank row or a new semantic marker appears.
                     ReaderBlockKind.CODE
-                }
-                agent == AgentKind.CODEX && currentKind == ReaderBlockKind.PROGRESS -> {
-                    // Agent TUIs render command output as a marker followed by unmarked wrapped
-                    // lines. Keep that output in one activity section until a blank line or a
-                    // new semantic block.
-                    ReaderBlockKind.PROGRESS
                 }
                 else -> ReaderBlockKind.PROSE
             }

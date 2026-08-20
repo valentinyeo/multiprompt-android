@@ -189,6 +189,31 @@ class TmuxTextTest {
     }
 
     @Test
+    fun toolOutputStaysWithItsActivityMarkerForClaudeToo() {
+        val blocks = TmuxText.readerBlocks(
+            """
+            Now removing the activity toggles:
+
+            • Bash(python3 - <<'PY')
+            p='app/src/main/java/Foo.kt'
+            s=open(p).read()
+
+            Done, the toggles are gone.
+            """.trimIndent(),
+            AgentKind.CLAUDE,
+        )
+
+        assertEquals(
+            listOf(
+                TmuxText.ReaderBlockKind.PROSE,
+                TmuxText.ReaderBlockKind.PROGRESS,
+                TmuxText.ReaderBlockKind.PROSE,
+            ),
+            blocks.map { it.kind },
+        )
+    }
+
+    @Test
     fun readerDropsPaneBannerCarryingASessionName() {
         val blocks = TmuxText.readerBlocks(
             """
