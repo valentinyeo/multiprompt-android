@@ -256,7 +256,13 @@ object TmuxText {
 
     private fun isDivider(value: String): Boolean {
         val compact = value.filterNot(Char::isWhitespace)
-        return compact.length >= 8 && compact.all { it in DIVIDER_CHARACTERS }
+        if (compact.length < 8) return false
+        if (compact.all { it in DIVIDER_CHARACTERS }) return true
+        // tmux pane borders and agent banners draw a rule with a title inside it
+        // ("---- HT AGENT MANAGER --"). Still chrome, not content.
+        if (compact.first() !in DIVIDER_CHARACTERS || compact.last() !in DIVIDER_CHARACTERS) return false
+        val rule = compact.count { it in DIVIDER_CHARACTERS }
+        return rule >= 8 && compact.length - rule <= DIVIDER_LABEL_LIMIT
     }
 
     private fun isModelPickerHeader(value: String): Boolean {
@@ -386,6 +392,7 @@ object TmuxText {
     private const val INPUT_SEARCH_LINES = 24
     private const val PROMPT_WRAP_THRESHOLD = 64
     private const val DIVIDER_CHARACTERS = "─━═╌╍-_▔▁"
+    private const val DIVIDER_LABEL_LIMIT = 32
     private val CODE_LINE = Regex("(?:fun|class|interface|object|const|val|var)\\b.*(?:[({=]|\\s*$)")
     private val NUMBERED_DIFF_LINE = Regex("\\d+\\s+[+-](?:\\s|$).*")
     private val DIFF_PATH = Regex("diff --git a/\\S+ b/(\\S+)")

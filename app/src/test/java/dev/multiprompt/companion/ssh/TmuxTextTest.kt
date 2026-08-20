@@ -156,6 +156,36 @@ class TmuxTextTest {
     }
 
     @Test
+    fun readerDropsPaneBannerCarryingASessionName() {
+        val blocks = TmuxText.readerBlocks(
+            """
+            Mustering...
+            ──────────────────────────────────── HT AGENT MANAGER ──
+            Back to work.
+            """.trimIndent(),
+            AgentKind.CLAUDE,
+        )
+
+        assertEquals(
+            listOf(
+                TmuxText.ReaderBlock(TmuxText.ReaderBlockKind.PROSE, "Mustering..."),
+                TmuxText.ReaderBlock(TmuxText.ReaderBlockKind.PROSE, "Back to work."),
+            ),
+            blocks,
+        )
+    }
+
+    @Test
+    fun keepsProseThatMerelyStartsAndEndsWithDashes() {
+        val blocks = TmuxText.readerBlocks(
+            "- the answer is that this line is real content and not a pane border -",
+            AgentKind.CLAUDE,
+        )
+
+        assertEquals(1, blocks.size)
+    }
+
+    @Test
     fun readerDropsTerminalSeparatorsAndGroupsGenericCommandActivity() {
         val blocks = TmuxText.readerBlocks(
             """
