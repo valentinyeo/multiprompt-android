@@ -273,6 +273,39 @@ class TmuxTextTest {
     }
 
     @Test
+    fun aClaudeReplyBulletAndItsLinkRenderAsProse() {
+        val blocks = TmuxText.readerBlocks(
+            """
+            ● Emergency ticket filed and handed to HT Desktop Developer:
+              https://app.hypertask.ai/detail/project-15/5618
+            """.trimIndent(),
+            AgentKind.CLAUDE,
+        )
+
+        assertEquals(TmuxText.ReaderBlockKind.PROSE, blocks.single().kind)
+        assertTrue(blocks.single().text.contains("https://app.hypertask.ai/detail/project-15/5618"))
+    }
+
+    @Test
+    fun spinnerStatusRowsRenderAsProgress() {
+        assertEquals(
+            TmuxText.ReaderBlockKind.PROGRESS,
+            TmuxText.readerBlocks("✳ Cooked for 1m 39s", AgentKind.CLAUDE).single().kind,
+        )
+        assertEquals(
+            TmuxText.ReaderBlockKind.PROGRESS,
+            TmuxText.readerBlocks("✢ Tempering… (2m 11s · ↓ 4.9k tokens)", AgentKind.CLAUDE).single().kind,
+        )
+    }
+
+    @Test
+    fun detectsLinksInReaderBlockText() {
+        assertTrue(TmuxText.containsLink("Result: https://example.com/ticket"))
+        assertTrue(TmuxText.containsLink("Open http://example.com locally"))
+        assertFalse(TmuxText.containsLink("No link in this reply"))
+    }
+
+    @Test
     fun growsATranscriptFromAScrollingAgentScreen() {
         val lines = (1..30).map { "line $it" }
         var transcript = ""
@@ -302,9 +335,8 @@ class TmuxTextTest {
             ─────────────────────────────────── MULTIPROMPT ANDROID ─
             ❯
             ──────────────────────────────────────────────────────────
-            Opus 5 ⚡medium │ multiprompt-android │ 32%
-            ⏵⏵ bypass permissions on (shift+tab to cycle) · ← 1 agent
-            projects | shell-projects-x    182MB 21:57
+            Opus 5 ⚡medium │ x
+            ⏵⏵ bypass permissions on (shift+tab to cycle)
         """.trimIndent()
 
         assertTrue(TmuxText.isWaitingForInput(idle))

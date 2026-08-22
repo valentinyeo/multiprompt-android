@@ -2436,10 +2436,10 @@ private fun ReaderScreen(
             val working = reader.sending || readerBlocks.any { block ->
                 block.kind == TmuxText.ReaderBlockKind.PROGRESS && isTransientProgress(block.text)
             }
-            // Activity sections and pasted command bodies are terminal bookkeeping, not
-            // conversation. Clean chat drops them; terminal detail still shows them collapsed.
+            // Links are worth preserving even when a terminal row looks like bookkeeping;
+            // hiding a handed-off result costs more than showing one extra technical block.
             val visibleReaderBlocks = readerBlocks.filterNot { block ->
-                !technicalMode && (
+                !technicalMode && !TmuxText.containsLink(block.text) && (
                     block.kind == TmuxText.ReaderBlockKind.PROGRESS ||
                         block.kind == TmuxText.ReaderBlockKind.CODE
                     )

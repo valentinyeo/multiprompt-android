@@ -39,6 +39,9 @@ object TmuxText {
         return bytes.toString(Charsets.UTF_8)
     }
 
+    /** Links handed back by an agent must survive clean-chat filtering. */
+    fun containsLink(value: String): Boolean = WEB_LINK.containsMatchIn(value)
+
     /** Removes desktop TUI margins so captured output reads like a mobile transcript. */
     fun leftAligned(value: String): String = value
         .lineSequence()
@@ -380,7 +383,8 @@ object TmuxText {
             line.startsWith("Esc to cancel", ignoreCase = true) ||
             line.startsWith("Tool:", ignoreCase = true) ||
             isActivityBullet(line) ||
-            SPINNER_MARKERS.any { marker -> line.startsWith(marker) } ||
+            SPINNER_LINE.containsMatchIn(line) ||
+            FINISHED_SPINNER_LINE.matches(line) ||
             line.startsWith("└") ||
             line.startsWith("│") ||
             line.startsWith("… +") ||
@@ -507,12 +511,18 @@ object TmuxText {
     /** The host shell's own status bar, e.g. "projects | shell-projects-x   182MB 21:57". */
     private val STATUS_BAR = Regex("\\d+MB\\s+\\d{1,2}:\\d{2}\\s*$")
     private val SLASH_HINT = Regex("/[a-z-]{1,12}")
+    /** Claude and Codex paint their spinner with these. */
+    private const val SPINNER_MARKERS = "●·✳✻✶✽✢✷∗✴*"
     /** A running spinner: a glyph, a gerund, then the elapsed time. */
     private val SPINNER_LINE = Regex(
-        "(?:^\\s*[●·✳✻✶✽✢✷∗✴*]\\s+\\S+…\\s*\\(\\s*\\d)|(?i)esc to interrupt",
+        "(?:^\\s*[$SPINNER_MARKERS]\\s+\\S+…\\s*\\(\\s*\\d)|(?i)esc to interrupt",
     )
-    /** Claude and Codex paint their spinner with these. */
-    private val SPINNER_MARKERS = listOf("●", "·", "✳", "✻", "✶", "✽", "✢", "✷", "∗", "✴")
+    /** Finished status rows are transcript chrome, but do not mean the agent is busy. */
+    private val FINISHED_SPINNER_LINE = Regex(
+        "(?i)^\\s*[$SPINNER_MARKERS]\\s+\\S+\\s+for\\s+" +
+            "\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h)(?:\\s+\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h))*\\s*$",
+    )
+    private val WEB_LINK = Regex("(?i)https?://")
     private val ACTIVITY_DURATION = Regex("·\\s*(?:\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h)\\s*)+$")
     private val ACTIVITY_VERBS = listOf(
         "Ran ", "Read ", "Reading ", "Explored", "Exploring", "Searched", "Searching",
