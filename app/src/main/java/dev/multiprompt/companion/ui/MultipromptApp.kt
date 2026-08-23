@@ -1176,6 +1176,13 @@ private fun SessionsScreen(
                 }
             }
         }
+        if (state.cachedHostIds.isNotEmpty()) {
+            CachedSessionsNotice(
+                hostLabels = state.cachedHostIds.mapNotNull { hostLabels[it] },
+                onRetry = onRefresh,
+                retryEnabled = !state.refreshing,
+            )
+        }
         LazyColumn(
             Modifier
                 .weight(1f)
@@ -1184,15 +1191,6 @@ private fun SessionsScreen(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
             reverseLayout = state.newestSessionsAtBottom,
         ) {
-            if (state.cachedHostIds.isNotEmpty()) {
-                item(key = "cached-sessions-notice") {
-                    CachedSessionsNotice(
-                        hostLabels = state.cachedHostIds.mapNotNull { hostLabels[it] },
-                        onRetry = onRefresh,
-                        retryEnabled = !state.refreshing,
-                    )
-                }
-            }
             state.hostErrors.forEach { (hostId, error) ->
                 if (hostId !in state.cachedHostIds) {
                     item(key = "error-$hostId") { InlineError(error) }
@@ -3216,33 +3214,28 @@ private fun CachedSessionsNotice(
     onRetry: () -> Unit,
     retryEnabled: Boolean,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = 12.dp, top = 10.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Showing cached sessions", fontWeight = FontWeight.SemiBold)
-                val hosts = hostLabels.joinToString(", ").ifBlank { "your VPS" }
-                val connectionMessage = when {
-                    hostLabels.size == 1 -> "$hosts is unreachable."
-                    hostLabels.size > 1 -> "$hosts are unreachable."
-                    else -> "Your VPS is unreachable."
-                }
-                Text(
-                    "$connectionMessage Last known sessions are shown until the connection returns.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            TextButton(onClick = onRetry, enabled = retryEnabled) {
-                Icon(Icons.Default.Refresh, contentDescription = "Retry connection")
-                Spacer(Modifier.size(4.dp))
-                Text("Retry")
-            }
+        val message = when {
+            hostLabels.size == 1 -> "Cached · ${hostLabels.first()} unreachable"
+            hostLabels.isEmpty() -> "Cached · your VPS is unreachable"
+            else -> "Cached · ${hostLabels.joinToString(", ")} unreachable"
+        }
+        Text(
+            message,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(onClick = onRetry, enabled = retryEnabled, modifier = Modifier.size(28.dp)) {
+            Icon(Icons.Default.Refresh, contentDescription = "Retry connection", modifier = Modifier.size(16.dp))
         }
     }
 }
