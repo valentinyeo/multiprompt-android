@@ -56,6 +56,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
@@ -296,7 +297,6 @@ private fun AppScreens(viewModel: MainViewModel) {
             title = state.terminalSession?.displayName ?: terminal.tmuxSessionName,
             columns = state.terminalSession?.columns ?: 0,
             rows = state.terminalSession?.rows ?: 0,
-            sunlight = sunlight,
             onBack = viewModel::closeTerminal,
             onSwitchSession = viewModel::openAdjacentSession,
         )
@@ -3085,7 +3085,6 @@ private fun TerminalScreen(
     title: String,
     columns: Int,
     rows: Int,
-    sunlight: Boolean,
     onBack: () -> Unit,
     onSwitchSession: (Int) -> Unit,
 ) {
@@ -3149,11 +3148,21 @@ private fun TerminalScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Close terminal") }
                 },
+                actions = {
+                    IconButton(
+                        onClick = {
+                            focusRequester.requestFocus()
+                            keyboard?.show()
+                        },
+                    ) {
+                        Icon(Icons.Default.Keyboard, contentDescription = "Show keyboard")
+                    }
+                },
             )
         },
     ) { padding ->
         BoxWithConstraints(
-            Modifier.padding(padding).fillMaxSize().background(terminalBackground(sunlight)).clipToBounds(),
+            Modifier.padding(padding).fillMaxSize().background(TerminalBackground).clipToBounds(),
         ) {
             val viewportPx = with(density) { maxHeight.toPx() }
             // 10% short of the measured slack: an overshoot would push the prompt row off
@@ -3178,8 +3187,8 @@ private fun TerminalScreen(
                     keyboard?.show()
                 },
                 typeface = terminalTypeface,
-                backgroundColor = terminalBackground(sunlight),
-                foregroundColor = terminalForeground(sunlight),
+                backgroundColor = TerminalBackground,
+                foregroundColor = TerminalForeground,
                 keyboardEnabled = true,
                 showSoftKeyboard = true,
                 onPasteRequest = {

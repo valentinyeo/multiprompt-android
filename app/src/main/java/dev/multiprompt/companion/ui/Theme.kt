@@ -26,8 +26,6 @@ val TerminalRed = Color(0xFFFA4D56)
 
 // Sunlight mode needs dark ink on white: pastel-on-dark colours wash out completely at
 // max brightness outdoors, so each hue is darkened until it keeps 7:1 contrast on white.
-val TerminalBackgroundLight = Color(0xFFFFFFFF)
-val TerminalForegroundLight = Color(0xFF111111)
 val TerminalBlueLight = Color(0xFF0043CE)
 val TerminalGreenLight = Color(0xFF0E6027)
 val TerminalYellowLight = Color(0xFF8E6A00)
@@ -41,12 +39,6 @@ val LinkOnDark = Color(0xFF8AB4F8)
 
 // Plain helpers (not @Composable) because the syntax highlighter builds AnnotatedStrings
 // outside composition; call sites pass the flag they already hold.
-fun terminalBackground(sunlight: Boolean): Color =
-    if (sunlight) TerminalBackgroundLight else TerminalBackground
-
-fun terminalForeground(sunlight: Boolean): Color =
-    if (sunlight) TerminalForegroundLight else TerminalForeground
-
 fun terminalBlue(sunlight: Boolean): Color =
     if (sunlight) TerminalBlueLight else TerminalBlue
 
