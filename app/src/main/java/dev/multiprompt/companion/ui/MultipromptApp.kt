@@ -2613,11 +2613,8 @@ private fun ReaderScreen(
                 visibleReaderBlocks.forEachIndexed { index, block ->
                     val blockKey = readerBlockKey(block)
                     when (block.kind) {
-                        TmuxText.ReaderBlockKind.PROSE -> Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            ),
-                        ) {
+                        TmuxText.ReaderBlockKind.PROSE -> if (sunlightMode) {
+                            // ChatGPT-style light transcript: prose sits directly on the page, no card.
                             SelectionContainer {
                                 Text(
                                     terminalLinks(block.text, sunlightMode),
@@ -2625,13 +2622,30 @@ private fun ReaderScreen(
                                     fontFamily = FontFamily.Default,
                                     fontSize = transcriptFontSize,
                                     lineHeight = (transcriptFontSize.value * 1.5f).sp,
-                                    color = MaterialTheme.colorScheme.onSurface,
+                                    color = MaterialTheme.colorScheme.onBackground,
                                 )
+                            }
+                        } else {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                ),
+                            ) {
+                                SelectionContainer {
+                                    Text(
+                                        terminalLinks(block.text, sunlightMode),
+                                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                        fontFamily = FontFamily.Default,
+                                        fontSize = transcriptFontSize,
+                                        lineHeight = (transcriptFontSize.value * 1.5f).sp,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                }
                             }
                         }
                         TmuxText.ReaderBlockKind.USER_PROMPT -> Card(
                             colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                containerColor = if (sunlightMode) PromptBubbleLight else MaterialTheme.colorScheme.primaryContainer,
                             ),
                         ) {
                             Text(
@@ -2640,7 +2654,7 @@ private fun ReaderScreen(
                                 fontFamily = FontFamily.Default,
                                 fontSize = transcriptFontSize,
                                 lineHeight = (transcriptFontSize.value * 1.45f).sp,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                color = if (sunlightMode) Color.White else MaterialTheme.colorScheme.onPrimaryContainer,
                             )
                         }
                         TmuxText.ReaderBlockKind.CODE,

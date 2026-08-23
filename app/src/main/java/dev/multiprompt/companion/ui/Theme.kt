@@ -33,6 +33,9 @@ val TerminalGreenLight = Color(0xFF0E6027)
 val TerminalYellowLight = Color(0xFF8E6A00)
 val TerminalRedLight = Color(0xFFA2191F)
 
+// A solid dark bubble is what separates the user's own words from the page when there are no grey panels.
+val PromptBubbleLight = Color(0xFF0D0D0D)
+
 // Plain helpers (not @Composable) because the syntax highlighter builds AnnotatedStrings
 // outside composition; call sites pass the flag they already hold.
 fun terminalBackground(sunlight: Boolean): Color =
@@ -79,7 +82,7 @@ private val SunlightColors = lightColorScheme(
     onTertiary = Color(0xFFFFFFFF),
     background = Color(0xFFFFFFFF),
     onBackground = Color(0xFF111111),
-    surface = Color(0xFFF7F7F7),
+    surface = Color(0xFFFFFFFF),
     onSurface = Color(0xFF111111),
     surfaceVariant = Color(0xFFE0E0E0),
     onSurfaceVariant = Color(0xFF222222),
