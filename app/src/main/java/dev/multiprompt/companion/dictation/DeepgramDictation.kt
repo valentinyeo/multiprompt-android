@@ -70,6 +70,10 @@ class DeepgramDictation(
     private var socketOpen = false
     private var finalizeWhenOpen = false
     private var closeWhenOpen = false
+    // Set while a deliberate stop() teardown is in flight so a failure delivered during
+    // that teardown does not surface as an error.
+    @Volatile
+    private var stopping = false
 
     fun saveApiKey(value: String): Boolean {
         val key = value.trim()
@@ -104,6 +108,7 @@ class DeepgramDictation(
 
         finishingJob?.cancel()
         finalSegments.clear()
+        stopping = false
         synchronized(audioLock) {
             pendingAudio.reset()
             socketOpen = false
@@ -127,6 +132,7 @@ class DeepgramDictation(
     @Synchronized
     fun stop() {
         val activeSocket = socket ?: return
+        stopping = true
         stopRecorder()
         _state.update { it.copy(status = DictationStatus.FINISHING) }
         synchronized(audioLock) {
@@ -158,6 +164,7 @@ class DeepgramDictation(
         val configured = _state.value.configured
         finishingJob?.cancel()
         finishingJob = null
+        stopping = false
         stopRecorder()
         socket?.cancel()
         socket = null
@@ -328,25 +335,40 @@ class DeepgramDictation(
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
             if (socket !== webSocket) return
-            stopRecorder()
-            socket = null
-            synchronized(audioLock) {
-                pendingAudio.reset()
-                socketOpen = false
-                finalizeWhenOpen = false
-                closeWhenOpen = false
-            }
-            _state.update { it.copy(status = DictationStatus.IDLE) }
+            finishWithoutError()
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             if (socket !== webSocket) return
+            // A deliberate stop tears the socket down and can still surface here as a
+            // failure; stay quiet about anything arriving after stop() was asked for.
+            if (stopping) {
+                finishWithoutError()
+                return
+            }
             val message = when (response?.code) {
                 401, 403 -> "Deepgram rejected the API key"
                 else -> "Dictation connection failed"
             }
             fail(message)
         }
+    }
+
+    /**
+     * Shared teardown for a socket that ended without an error: recorder stopped,
+     * buffers reset, flags cleared, back to idle.
+     */
+    private fun finishWithoutError() {
+        stopRecorder()
+        socket = null
+        synchronized(audioLock) {
+            pendingAudio.reset()
+            socketOpen = false
+            finalizeWhenOpen = false
+            closeWhenOpen = false
+        }
+        stopping = false
+        _state.update { it.copy(status = DictationStatus.IDLE) }
     }
 
     private companion object {

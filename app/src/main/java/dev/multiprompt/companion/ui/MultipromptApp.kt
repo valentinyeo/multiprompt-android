@@ -409,6 +409,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onSetAllSplitOnRight = viewModel::setAllSplitOnRight,
                     appTheme = state.appTheme,
                     onSetAppTheme = viewModel::setAppTheme,
+                    onClearSessionActionError = viewModel::clearSessionActionError,
                     onSetReaderDefaultFontScale = viewModel::setReaderDefaultFontScale,
                     readerDefaultFontScale = state.readerDefaultFontScale,
                     crashReport = state.crashReport,
@@ -607,6 +608,7 @@ private fun SessionsScreen(
     onSetAllSplitOnRight: (Boolean) -> Unit,
     appTheme: AppTheme,
     onSetAppTheme: (AppTheme) -> Unit,
+    onClearSessionActionError: () -> Unit,
     readerDefaultFontScale: Float,
     onSetReaderDefaultFontScale: (Float) -> Unit,
     crashReport: CrashReport?,
@@ -640,6 +642,7 @@ private fun SessionsScreen(
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
     val splitScrollState = rememberScrollState()
+    val hostLabels = state.hosts.associate { it.id to it.label }
     val displayedWorkspaceSplitIds = if (state.allSplitOnRight) {
         state.workspaceSplitIds.asReversed()
     } else {
@@ -819,24 +822,36 @@ private fun SessionsScreen(
             onDismissRequest = { newSessionWorkspacePickerVisible = false },
             title = { Text("New session") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(
+                    Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
                     Text(
                         "Choose a workspace.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    state.workspaces.forEach { workspace ->
-                        TextButton(
-                            onClick = {
-                                newSessionWorkspacePickerVisible = false
-                                onNewSession(workspace)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(
-                                workspace.name,
+                    // Two VPS hosts can share a folder name, so each group is labelled with
+                    // its host to keep the list unambiguous.
+                    state.workspaces.groupBy { it.hostId }.forEach { (hostId, workspaces) ->
+                        Text(
+                            hostLabels[hostId] ?: hostId,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        workspaces.forEach { workspace ->
+                            TextButton(
+                                onClick = {
+                                    newSessionWorkspacePickerVisible = false
+                                    onNewSession(workspace)
+                                },
                                 modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Start,
-                            )
+                            ) {
+                                Text(
+                                    workspace.name,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = TextAlign.Start,
+                                )
+                            }
                         }
                     }
                 }
@@ -991,7 +1006,6 @@ private fun SessionsScreen(
         )
     }
     val normalizedQuery = searchQuery.trim()
-    val hostLabels = state.hosts.associate { it.id to it.label }
     val workspaceNames = state.workspaces.associate { it.id to it.name }
     val visibleSessions = SessionSearch.newestFirst(state.sessions
         .filter { session ->
@@ -1183,6 +1197,9 @@ private fun SessionsScreen(
                 retryEnabled = !state.refreshing,
             )
         }
+        state.sessionActionError?.let { error ->
+            DismissibleError(message = error, onDismiss = onClearSessionActionError)
+        }
         LazyColumn(
             Modifier
                 .weight(1f)
@@ -1195,9 +1212,6 @@ private fun SessionsScreen(
                 if (hostId !in state.cachedHostIds) {
                     item(key = "error-$hostId") { InlineError(error) }
                 }
-            }
-            state.sessionActionError?.let { error ->
-                item(key = "session-action-error") { InlineError(error) }
             }
             items(visibleSessions, key = { "${it.hostId}:${it.name}" }) { session ->
                 val key = SessionReadStore.key(session.hostId, session.name)
@@ -2647,7 +2661,9 @@ private fun ReaderScreen(
                             ),
                         ) {
                             Text(
-                                terminalLinks(block.text, sunlightMode),
+                                // Links sit on the near-black prompt bubble in sunlight mode,
+                                // where the dark-on-white blue would vanish.
+                                terminalLinks(block.text, sunlightMode, onDark = sunlightMode),
                                 modifier = Modifier.fillMaxWidth().padding(12.dp),
                                 fontFamily = FontFamily.Default,
                                 fontSize = transcriptFontSize,
@@ -3209,6 +3225,32 @@ private fun InlineError(message: String) {
 }
 
 @Composable
+private fun DismissibleError(
+    message: String,
+    onDismiss: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            message,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+            Icon(Icons.Default.Close, contentDescription = "Dismiss error", modifier = Modifier.size(16.dp))
+        }
+    }
+}
+
+@Composable
 private fun CachedSessionsNotice(
     hostLabels: List<String>,
     onRetry: () -> Unit,
@@ -3312,7 +3354,8 @@ private fun Context.readSmallFile(uri: Uri, maxBytes: Int): ByteArray {
     }
 }
 
-private fun terminalLinks(value: String, sunlight: Boolean): AnnotatedString {
+private fun terminalLinks(value: String, sunlight: Boolean, onDark: Boolean = false): AnnotatedString {
+    val linkColor = if (onDark) LinkOnDark else terminalBlue(sunlight)
     val builder = AnnotatedString.Builder(value)
     value.lineSequence().fold(0) { offset, line ->
         val trimmed = line.trimStart()
@@ -3320,7 +3363,7 @@ private fun terminalLinks(value: String, sunlight: Boolean): AnnotatedString {
             TERMINAL_ERROR.containsMatchIn(trimmed) -> terminalRed(sunlight)
             TERMINAL_WARNING.containsMatchIn(trimmed) -> terminalYellow(sunlight)
             TERMINAL_SUCCESS.containsMatchIn(trimmed) -> terminalGreen(sunlight)
-            TERMINAL_PROMPT.containsMatchIn(trimmed) -> terminalBlue(sunlight)
+            TERMINAL_PROMPT.containsMatchIn(trimmed) -> if (onDark) LinkOnDark else terminalBlue(sunlight)
             else -> null
         }
         if (color != null && line.isNotEmpty()) {
@@ -3336,7 +3379,7 @@ private fun terminalLinks(value: String, sunlight: Boolean): AnnotatedString {
                     url,
                     TextLinkStyles(
                         style = SpanStyle(
-                            color = terminalBlue(sunlight),
+                            color = linkColor,
                             textDecoration = TextDecoration.Underline,
                         ),
                     ),

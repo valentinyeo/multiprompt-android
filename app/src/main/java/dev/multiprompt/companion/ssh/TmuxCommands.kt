@@ -50,10 +50,13 @@ object TmuxCommands {
     fun createClaudeSession(sessionName: String, remotePath: String): String {
         val path = TmuxParser.shellQuote(remotePath)
         val name = TmuxParser.shellQuote(sessionName)
+        // An SSH exec channel runs a non-login, non-interactive shell whose PATH omits
+        // ~/.local/bin (added by .profile, read only by login shells). The agent lookup and
+        // the launch must both go through a login shell or claude is never found.
         return "if [ ! -d $path ]; then printf 'Project directory not found\\n' >&2; exit 2; fi; " +
-            "if ! command -v claude >/dev/null 2>&1; then printf 'Claude Code is not installed\\n' >&2; exit 3; fi; " +
+            "if ! bash -lc 'command -v claude >/dev/null 2>&1'; then printf 'claude was not found on the VPS PATH\\n' >&2; exit 3; fi; " +
             "tmux new-session -d -s $name -c $path " +
-            "'exec claude --dangerously-skip-permissions' && " +
+            "'exec bash -lc \"exec claude --dangerously-skip-permissions\"' && " +
             "printf '$CREATED_PREFIX%s\\n' $name"
     }
 

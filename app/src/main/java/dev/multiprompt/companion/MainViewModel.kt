@@ -129,6 +129,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(section = section) }
     }
 
+    fun clearSessionActionError() {
+        _state.update { it.copy(sessionActionError = null) }
+    }
+
     fun clearCrashReport() {
         crashReportStore.clear()
         _state.update { it.copy(crashReport = null) }
