@@ -5,11 +5,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.multiprompt.companion.ui.MultipromptApp
+import dev.multiprompt.companion.ui.AppTheme
 import dev.multiprompt.companion.ui.MultipromptTheme
 
 class MainActivity : ComponentActivity() {
@@ -19,7 +21,13 @@ class MainActivity : ComponentActivity() {
         setContent {
             val viewModel: MainViewModel = viewModel()
             val state by viewModel.state.collectAsState()
-            MultipromptTheme(sunlight = state.sunlightMode) {
+            val systemDark = isSystemInDarkTheme()
+            val sunlight = when (state.appTheme) {
+                AppTheme.SYSTEM -> !systemDark
+                AppTheme.DARK -> false
+                AppTheme.SUNLIGHT -> true
+            }
+            MultipromptTheme(sunlight = sunlight) {
                 LaunchedEffect(Unit) {
                     if (intent.getBooleanExtra(EXTRA_OPEN_UPDATE, false)) {
                         viewModel.select(AppSection.UPDATE)

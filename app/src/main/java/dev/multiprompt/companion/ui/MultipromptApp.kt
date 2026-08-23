@@ -16,6 +16,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
@@ -241,6 +242,12 @@ private fun AppScreens(viewModel: MainViewModel) {
     val state by viewModel.state.collectAsState()
     val updateState by viewModel.updates.state.collectAsState()
     val context = LocalContext.current
+    val systemDark = isSystemInDarkTheme()
+    val sunlight = when (state.appTheme) {
+        AppTheme.SYSTEM -> !systemDark
+        AppTheme.DARK -> false
+        AppTheme.SUNLIGHT -> true
+    }
     var newSessionWorkspace by remember { mutableStateOf<Workspace?>(null) }
     var permissionLaunchVersion by remember { mutableStateOf<Long?>(null) }
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -289,7 +296,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             title = state.terminalSession?.displayName ?: terminal.tmuxSessionName,
             columns = state.terminalSession?.columns ?: 0,
             rows = state.terminalSession?.rows ?: 0,
-            sunlight = state.sunlightMode,
+            sunlight = sunlight,
             onBack = viewModel::closeTerminal,
             onSwitchSession = viewModel::openAdjacentSession,
         )
@@ -328,8 +335,8 @@ private fun AppScreens(viewModel: MainViewModel) {
             onSessionInteraction = { viewModel.noteSessionInteraction(readerSession) },
             technicalMode = state.readerTechnicalMode,
             onTechnicalModeChanged = viewModel::setReaderTechnicalMode,
-            sunlightMode = state.sunlightMode,
-            onSunlightModeChanged = viewModel::setSunlightMode,
+            sunlightMode = sunlight,
+            onSetAppTheme = viewModel::setAppTheme,
             onResetFontScale = { viewModel.resetReaderFontScale(readerSession) },
         )
         return
@@ -400,6 +407,8 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onNewSession = { newSessionWorkspace = it },
                     onSetNewestSessionsAtBottom = viewModel::setNewestSessionsAtBottom,
                     onSetAllSplitOnRight = viewModel::setAllSplitOnRight,
+                    appTheme = state.appTheme,
+                    onSetAppTheme = viewModel::setAppTheme,
                     onSetReaderDefaultFontScale = viewModel::setReaderDefaultFontScale,
                     readerDefaultFontScale = state.readerDefaultFontScale,
                     crashReport = state.crashReport,
@@ -596,6 +605,8 @@ private fun SessionsScreen(
     onNewSession: (Workspace) -> Unit,
     onSetNewestSessionsAtBottom: (Boolean) -> Unit,
     onSetAllSplitOnRight: (Boolean) -> Unit,
+    appTheme: AppTheme,
+    onSetAppTheme: (AppTheme) -> Unit,
     readerDefaultFontScale: Float,
     onSetReaderDefaultFontScale: (Float) -> Unit,
     crashReport: CrashReport?,
@@ -709,6 +720,29 @@ private fun SessionsScreen(
                             checked = state.allSplitOnRight,
                             onCheckedChange = onSetAllSplitOnRight,
                         )
+                    }
+                    Text("Theme")
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        listOf(
+                            AppTheme.SYSTEM to "System",
+                            AppTheme.DARK to "Dark",
+                            AppTheme.SUNLIGHT to "Sunlight",
+                        ).forEach { (theme, label) ->
+                            if (appTheme == theme) {
+                                FilledTonalButton(
+                                    onClick = { onSetAppTheme(theme) },
+                                    modifier = Modifier.weight(1f),
+                                ) { Text(label) }
+                            } else {
+                                OutlinedButton(
+                                    onClick = { onSetAppTheme(theme) },
+                                    modifier = Modifier.weight(1f),
+                                ) { Text(label) }
+                            }
+                        }
                     }
                     Text("Default Reader font size")
                     Row(
@@ -1604,7 +1638,7 @@ private fun ReaderScreen(
     technicalMode: Boolean,
     onTechnicalModeChanged: (Boolean) -> Unit,
     sunlightMode: Boolean,
-    onSunlightModeChanged: (Boolean) -> Unit,
+    onSetAppTheme: (AppTheme) -> Unit,
     onResetFontScale: () -> Float,
 ) {
     val reader by connection.state.collectAsState()
@@ -2137,7 +2171,7 @@ private fun ReaderScreen(
                                 text = { Text(if (sunlightMode) "Sunlight mode off" else "Sunlight mode on") },
                                 onClick = {
                                     menuExpanded = false
-                                    onSunlightModeChanged(!sunlightMode)
+                                    onSetAppTheme(if (sunlightMode) AppTheme.DARK else AppTheme.SUNLIGHT)
                                 },
                             )
                             DropdownMenuItem(

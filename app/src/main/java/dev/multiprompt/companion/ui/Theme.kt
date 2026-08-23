@@ -10,6 +10,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import dev.multiprompt.companion.R
 
+enum class AppTheme { SYSTEM, DARK, SUNLIGHT }
+
 val ReaderFontFamily = FontFamily(
     Font(R.font.ibm_plex_mono_regular, FontWeight.Normal),
 )

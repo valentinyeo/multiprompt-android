@@ -2,6 +2,7 @@ package dev.multiprompt.companion.data
 
 import android.content.Context
 import dev.multiprompt.companion.model.TmuxSession
+import dev.multiprompt.companion.ui.AppTheme
 
 class SessionReadStore(context: Context) {
     private val preferences = context.getSharedPreferences("session_read_state", Context.MODE_PRIVATE)
@@ -102,11 +103,19 @@ class SessionReadStore(context: Context) {
         preferences.edit().putBoolean(READER_TECHNICAL_MODE, enabled).apply()
     }
 
-    fun sunlightMode(): Boolean =
-        preferences.getBoolean(SUNLIGHT_MODE, false)
+    fun appTheme(): AppTheme {
+        if (!preferences.contains(APP_THEME)) {
+            val sunlight = runCatching { preferences.getBoolean(SUNLIGHT_MODE, false) }
+                .getOrDefault(false)
+            return if (sunlight) AppTheme.SUNLIGHT else AppTheme.SYSTEM
+        }
 
-    fun setSunlightMode(enabled: Boolean) {
-        preferences.edit().putBoolean(SUNLIGHT_MODE, enabled).apply()
+        val stored = runCatching { preferences.getString(APP_THEME, null) }.getOrNull()
+        return AppTheme.values().firstOrNull { it.name == stored } ?: AppTheme.SYSTEM
+    }
+
+    fun setAppTheme(theme: AppTheme) {
+        preferences.edit().putString(APP_THEME, theme.name).apply()
     }
 
     fun clearFontScale(session: TmuxSession) {
@@ -160,6 +169,7 @@ class SessionReadStore(context: Context) {
         private const val MANUAL_FONT_SCALE_PREFIX = "manual_font_scale::"
         private const val READER_DEFAULT_FONT_SCALE = "reader_default_font_scale"
         private const val READER_TECHNICAL_MODE = "reader_technical_mode"
+        private const val APP_THEME = "app_theme"
         private const val SUNLIGHT_MODE = "sunlight_mode"
         private const val NEWEST_SESSIONS_AT_BOTTOM = "newest_sessions_at_bottom"
         private const val ALL_SPLIT_ON_RIGHT = "all_split_on_right"

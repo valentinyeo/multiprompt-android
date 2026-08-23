@@ -22,6 +22,7 @@ import dev.multiprompt.companion.terminal.TerminalConnection
 import dev.multiprompt.companion.update.UpdateManager
 import dev.multiprompt.companion.update.UpdateRelease
 import dev.multiprompt.companion.upload.ScreencastUploader
+import dev.multiprompt.companion.ui.AppTheme
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
@@ -68,7 +69,7 @@ data class AppUiState(
     val allSplitOnRight: Boolean = true,
     val readerDefaultFontScale: Float = 1f,
     val readerTechnicalMode: Boolean = false,
-    val sunlightMode: Boolean = false,
+    val appTheme: AppTheme = AppTheme.SYSTEM,
     /** Consecutive idle snapshots required before a Waiting session is released. */
     val waitingIdleObservations: Map<String, Int> = emptyMap(),
     /**
@@ -105,7 +106,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             allSplitOnRight = sessionReads.allSplitOnRight(),
             readerDefaultFontScale = sessionReads.readerDefaultFontScale(),
             readerTechnicalMode = sessionReads.readerTechnicalMode(),
-            sunlightMode = sessionReads.sunlightMode(),
+            appTheme = sessionReads.appTheme(),
             dissolvedSessions = dissolvedStore.load(),
             crashReport = crashReportStore.load(),
         ),
@@ -153,9 +154,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(readerTechnicalMode = enabled) }
     }
 
-    fun setSunlightMode(enabled: Boolean) {
-        sessionReads.setSunlightMode(enabled)
-        _state.update { it.copy(sunlightMode = enabled) }
+    fun setAppTheme(theme: AppTheme) {
+        sessionReads.setAppTheme(theme)
+        _state.update { it.copy(appTheme = theme) }
     }
 
     fun showHostEditor(host: HostProfile? = null) {
