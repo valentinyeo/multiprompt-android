@@ -68,6 +68,7 @@ data class AppUiState(
     val allSplitOnRight: Boolean = true,
     val readerDefaultFontScale: Float = 1f,
     val readerTechnicalMode: Boolean = false,
+    val sunlightMode: Boolean = false,
     /** Consecutive idle snapshots required before a Waiting session is released. */
     val waitingIdleObservations: Map<String, Int> = emptyMap(),
     /**
@@ -104,6 +105,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             allSplitOnRight = sessionReads.allSplitOnRight(),
             readerDefaultFontScale = sessionReads.readerDefaultFontScale(),
             readerTechnicalMode = sessionReads.readerTechnicalMode(),
+            sunlightMode = sessionReads.sunlightMode(),
             dissolvedSessions = dissolvedStore.load(),
             crashReport = crashReportStore.load(),
         ),
@@ -149,6 +151,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setReaderTechnicalMode(enabled: Boolean) {
         sessionReads.setReaderTechnicalMode(enabled)
         _state.update { it.copy(readerTechnicalMode = enabled) }
+    }
+
+    fun setSunlightMode(enabled: Boolean) {
+        sessionReads.setSunlightMode(enabled)
+        _state.update { it.copy(sunlightMode = enabled) }
     }
 
     fun showHostEditor(host: HostProfile? = null) {

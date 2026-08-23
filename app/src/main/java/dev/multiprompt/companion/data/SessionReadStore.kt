@@ -102,6 +102,13 @@ class SessionReadStore(context: Context) {
         preferences.edit().putBoolean(READER_TECHNICAL_MODE, enabled).apply()
     }
 
+    fun sunlightMode(): Boolean =
+        preferences.getBoolean(SUNLIGHT_MODE, false)
+
+    fun setSunlightMode(enabled: Boolean) {
+        preferences.edit().putBoolean(SUNLIGHT_MODE, enabled).apply()
+    }
+
     fun clearFontScale(session: TmuxSession) {
         preferences.edit().remove(manualFontScaleKey(session.hostId, session.name)).apply()
     }
@@ -153,6 +160,7 @@ class SessionReadStore(context: Context) {
         private const val MANUAL_FONT_SCALE_PREFIX = "manual_font_scale::"
         private const val READER_DEFAULT_FONT_SCALE = "reader_default_font_scale"
         private const val READER_TECHNICAL_MODE = "reader_technical_mode"
+        private const val SUNLIGHT_MODE = "sunlight_mode"
         private const val NEWEST_SESSIONS_AT_BOTTOM = "newest_sessions_at_bottom"
         private const val ALL_SPLIT_ON_RIGHT = "all_split_on_right"
         private const val DISPLAY_NAME_PREFIX = "display_name::"

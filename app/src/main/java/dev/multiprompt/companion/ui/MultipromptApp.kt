@@ -289,6 +289,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             title = state.terminalSession?.displayName ?: terminal.tmuxSessionName,
             columns = state.terminalSession?.columns ?: 0,
             rows = state.terminalSession?.rows ?: 0,
+            sunlight = state.sunlightMode,
             onBack = viewModel::closeTerminal,
             onSwitchSession = viewModel::openAdjacentSession,
         )
@@ -327,6 +328,8 @@ private fun AppScreens(viewModel: MainViewModel) {
             onSessionInteraction = { viewModel.noteSessionInteraction(readerSession) },
             technicalMode = state.readerTechnicalMode,
             onTechnicalModeChanged = viewModel::setReaderTechnicalMode,
+            sunlightMode = state.sunlightMode,
+            onSunlightModeChanged = viewModel::setSunlightMode,
             onResetFontScale = { viewModel.resetReaderFontScale(readerSession) },
         )
         return
@@ -1600,6 +1603,8 @@ private fun ReaderScreen(
     onSessionInteraction: () -> Unit,
     technicalMode: Boolean,
     onTechnicalModeChanged: (Boolean) -> Unit,
+    sunlightMode: Boolean,
+    onSunlightModeChanged: (Boolean) -> Unit,
     onResetFontScale: () -> Float,
 ) {
     val reader by connection.state.collectAsState()
@@ -2129,6 +2134,13 @@ private fun ReaderScreen(
                                 },
                             )
                             DropdownMenuItem(
+                                text = { Text(if (sunlightMode) "Sunlight mode off" else "Sunlight mode on") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onSunlightModeChanged(!sunlightMode)
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Use default font size") },
                                 onClick = {
                                     menuExpanded = false
@@ -2574,7 +2586,7 @@ private fun ReaderScreen(
                         ) {
                             SelectionContainer {
                                 Text(
-                                    terminalLinks(block.text),
+                                    terminalLinks(block.text, sunlightMode),
                                     modifier = Modifier.fillMaxWidth().padding(12.dp),
                                     fontFamily = FontFamily.Default,
                                     fontSize = transcriptFontSize,
@@ -2589,7 +2601,7 @@ private fun ReaderScreen(
                             ),
                         ) {
                             Text(
-                                terminalLinks(block.text),
+                                terminalLinks(block.text, sunlightMode),
                                 modifier = Modifier.fillMaxWidth().padding(12.dp),
                                 fontFamily = FontFamily.Default,
                                 fontSize = transcriptFontSize,
@@ -2603,6 +2615,7 @@ private fun ReaderScreen(
                                 block = block,
                                 expanded = blockKey in expandedReaderBlocks,
                                 fontScale = transcriptZoom,
+                                sunlightMode = sunlightMode,
                                 onToggle = {
                                     expandedReaderBlocks = if (blockKey in expandedReaderBlocks) {
                                         expandedReaderBlocks - blockKey
@@ -2624,6 +2637,7 @@ private fun ReaderCollapsibleBlock(
     block: TmuxText.ReaderBlock,
     expanded: Boolean,
     fontScale: Float,
+    sunlightMode: Boolean,
     onToggle: () -> Unit,
 ) {
     val isCode = block.kind == TmuxText.ReaderBlockKind.CODE
@@ -2684,7 +2698,7 @@ private fun ReaderCollapsibleBlock(
                         )
                     } else {
                         Text(
-                            terminalLinks(block.text),
+                            terminalLinks(block.text, sunlightMode),
                             modifier = Modifier.fillMaxWidth().padding(12.dp),
                             fontFamily = FontFamily.Default,
                             fontSize = (12f * fontScale).sp,
@@ -3009,6 +3023,7 @@ private fun TerminalScreen(
     title: String,
     columns: Int,
     rows: Int,
+    sunlight: Boolean,
     onBack: () -> Unit,
     onSwitchSession: (Int) -> Unit,
 ) {
@@ -3076,7 +3091,7 @@ private fun TerminalScreen(
         },
     ) { padding ->
         BoxWithConstraints(
-            Modifier.padding(padding).fillMaxSize().background(TerminalBackground).clipToBounds(),
+            Modifier.padding(padding).fillMaxSize().background(terminalBackground(sunlight)).clipToBounds(),
         ) {
             val viewportPx = with(density) { maxHeight.toPx() }
             // 10% short of the measured slack: an overshoot would push the prompt row off
@@ -3101,8 +3116,8 @@ private fun TerminalScreen(
                     keyboard?.show()
                 },
                 typeface = terminalTypeface,
-                backgroundColor = TerminalBackground,
-                foregroundColor = TerminalForeground,
+                backgroundColor = terminalBackground(sunlight),
+                foregroundColor = terminalForeground(sunlight),
                 keyboardEnabled = true,
                 showSoftKeyboard = true,
                 onPasteRequest = {
@@ -3256,15 +3271,15 @@ private fun Context.readSmallFile(uri: Uri, maxBytes: Int): ByteArray {
     }
 }
 
-private fun terminalLinks(value: String): AnnotatedString {
+private fun terminalLinks(value: String, sunlight: Boolean): AnnotatedString {
     val builder = AnnotatedString.Builder(value)
     value.lineSequence().fold(0) { offset, line ->
         val trimmed = line.trimStart()
         val color = when {
-            TERMINAL_ERROR.containsMatchIn(trimmed) -> TerminalRed
-            TERMINAL_WARNING.containsMatchIn(trimmed) -> TerminalYellow
-            TERMINAL_SUCCESS.containsMatchIn(trimmed) -> TerminalGreen
-            TERMINAL_PROMPT.containsMatchIn(trimmed) -> TerminalBlue
+            TERMINAL_ERROR.containsMatchIn(trimmed) -> terminalRed(sunlight)
+            TERMINAL_WARNING.containsMatchIn(trimmed) -> terminalYellow(sunlight)
+            TERMINAL_SUCCESS.containsMatchIn(trimmed) -> terminalGreen(sunlight)
+            TERMINAL_PROMPT.containsMatchIn(trimmed) -> terminalBlue(sunlight)
             else -> null
         }
         if (color != null && line.isNotEmpty()) {
@@ -3280,7 +3295,7 @@ private fun terminalLinks(value: String): AnnotatedString {
                     url,
                     TextLinkStyles(
                         style = SpanStyle(
-                            color = TerminalBlue,
+                            color = terminalBlue(sunlight),
                             textDecoration = TextDecoration.Underline,
                         ),
                     ),

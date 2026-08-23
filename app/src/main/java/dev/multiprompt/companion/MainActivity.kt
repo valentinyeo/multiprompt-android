@@ -6,6 +6,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.multiprompt.companion.ui.MultipromptApp
 import dev.multiprompt.companion.ui.MultipromptTheme
@@ -15,8 +17,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MultipromptTheme {
-                val viewModel: MainViewModel = viewModel()
+            val viewModel: MainViewModel = viewModel()
+            val state by viewModel.state.collectAsState()
+            MultipromptTheme(sunlight = state.sunlightMode) {
                 LaunchedEffect(Unit) {
                     if (intent.getBooleanExtra(EXTRA_OPEN_UPDATE, false)) {
                         viewModel.select(AppSection.UPDATE)
