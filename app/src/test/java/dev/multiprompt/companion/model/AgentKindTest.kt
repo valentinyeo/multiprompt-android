@@ -10,6 +10,7 @@ class AgentKindTest {
         assertEquals(AgentKind.CODEX, AgentKind.detect("work", paneCommand = "/usr/bin/codex"))
         assertEquals(AgentKind.PI, AgentKind.detect("work", paneCommand = "pi"))
         assertEquals(AgentKind.KIMI, AgentKind.detect("work", paneCommand = "kimi-cli"))
+        assertEquals(AgentKind.HAX, AgentKind.detect("work", paneCommand = "hax"))
     }
 
     @Test
@@ -18,7 +19,9 @@ class AgentKindTest {
         assertEquals(AgentKind.CLAUDE, AgentKind.detect("cl-hypertasks"))
         assertEquals(AgentKind.PI, AgentKind.detect("hypertasks-pi-2"))
         assertEquals(AgentKind.KIMI, AgentKind.detect("kimi-hypertasks"))
+        assertEquals(AgentKind.HAX, AgentKind.detect("hax-hypertasks"))
         assertEquals(AgentKind.CODEX, AgentKind.detect("work", preview = "OpenAI Codex"))
+        assertEquals(AgentKind.HAX, AgentKind.detect("work", preview = "hax › codex · gpt-5.6-sol"))
     }
 
     @Test

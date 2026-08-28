@@ -554,6 +554,60 @@ class TmuxTextTest {
     }
 
     @Test
+    fun haxSeparatesUserPromptsAndToolDetailsFromReplies() {
+        val blocks = TmuxText.readerBlocks(
+            """
+            ▌ inspect the parser
+
+            I’ll check the current implementation.
+
+            [bash] git diff -- app/src/main/Foo.kt
+            ┌ diff --git a/app/src/main/Foo.kt b/app/src/main/Foo.kt
+            │ @@ -1 +1 @@
+            └ +val fixed = true
+
+            [read] app/src/main/Foo.kt:1-40
+            ┌ package dev.multiprompt
+            └ val fixed = true
+
+            The code hiding fix is ready.
+            """.trimIndent(),
+            AgentKind.HAX,
+        )
+
+        assertEquals(
+            listOf(
+                TmuxText.ReaderBlockKind.USER_PROMPT,
+                TmuxText.ReaderBlockKind.PROSE,
+                TmuxText.ReaderBlockKind.PROGRESS,
+                TmuxText.ReaderBlockKind.PROGRESS,
+                TmuxText.ReaderBlockKind.PROSE,
+            ),
+            blocks.map { it.kind },
+        )
+        assertEquals("inspect the parser", blocks.first().text)
+        assertEquals("The code hiding fix is ready.", blocks.last().text)
+    }
+
+    @Test
+    fun haxStatusAndTaskRowsAreTerminalDetails() {
+        val blocks = TmuxText.readerBlocks(
+            """
+            [task_wait] release-checks (up to 30m)
+            › [release-checks finished (exit 0) after 5m 46s; no new output]
+
+            11s · 22k / 266k (8%) · ${'$'}0.112
+            """.trimIndent(),
+            AgentKind.HAX,
+        )
+
+        assertEquals(
+            listOf(TmuxText.ReaderBlockKind.PROGRESS, TmuxText.ReaderBlockKind.PROGRESS),
+            blocks.map { it.kind },
+        )
+    }
+
+    @Test
     fun codexActivityAndNumberedDiffLinesStayOutOfProse() {
         val blocks = TmuxText.readerBlocks(
             """

@@ -394,7 +394,8 @@ object TmuxText {
         val line = value.trimStart()
         return when {
             line.startsWith("❯") -> true
-            line.startsWith("›") -> true
+            agent == AgentKind.HAX && isHaxUserPrompt(line) -> true
+            agent != AgentKind.HAX && line.startsWith("›") -> true
             // Claude renders a submitted message as "> text"; Pi does the same.
             line.startsWith("> ") -> true
             else -> false
@@ -406,6 +407,7 @@ object TmuxText {
     private fun removePromptMarker(value: String, agent: AgentKind): String = value.trimStart()
         .removePrefix("❯")
         .removePrefix("›")
+        .removePrefix("▌")
         .removePrefix("> ")
         .removePrefix("User:")
         .removePrefix("user:")
@@ -436,8 +438,20 @@ object TmuxText {
             line.startsWith("ctrl + t", ignoreCase = true) ||
             line.startsWith("esc to interrupt", ignoreCase = true) ||
             (agent == AgentKind.PI && (line.startsWith("→") || line.startsWith("←"))) ||
+            (agent == AgentKind.HAX && looksLikeHaxDetail(line)) ||
                 TOOL_CALL_MARKERS.any { line.startsWith(it) }
     }
+
+    private fun isHaxUserPrompt(value: String): Boolean =
+        value.startsWith("▌ ") && !HAX_CHROME_LINE.containsMatchIn(value)
+
+    private fun looksLikeHaxDetail(value: String): Boolean =
+        HAX_TOOL_LINE.containsMatchIn(value) ||
+            HAX_TASK_LINE.containsMatchIn(value) ||
+            HAX_STATUS_LINE.containsMatchIn(value) ||
+            HAX_CHROME_LINE.containsMatchIn(value) ||
+            value.startsWith("[paused ") ||
+            value.startsWith("› [")
 
     private fun looksLikeActivity(value: String): Boolean {
         val line = value.trimStart()
@@ -576,6 +590,13 @@ object TmuxText {
     private val TOOL_CALL_MARKERS = listOf(
         "Read(", "Edit(", "Write(", "Bash(", "Glob(", "Grep(", "Task(", "WebFetch(",
     )
+    private val HAX_TOOL_LINE = Regex("^\\[(?:bash|read|edit|write|task_wait)](?:\\s|$)")
+    private val HAX_TASK_LINE = Regex("^\\[task(?:_| )")
+    private val HAX_STATUS_LINE = Regex(
+        "^(?:\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h)\\s*)+·\\s*\\S+\\s*/\\s*\\S+\\s*" +
+            "\\(\\d+%\\)(?:\\s*·.*)?$",
+    )
+    private val HAX_CHROME_LINE = Regex("^▌\\s+(?:hax(?:\\s|$)|ctrl-[a-z])", RegexOption.IGNORE_CASE)
     private val IDLE_INPUT_MARKERS = listOf(
         "new task? /clear to save",
         "press up to edit queued messages",

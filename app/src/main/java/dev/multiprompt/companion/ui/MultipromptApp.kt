@@ -1375,6 +1375,7 @@ private fun AgentIcon(
         AgentKind.CODEX -> "⬡"
         AgentKind.PI -> "π"
         AgentKind.KIMI -> "☾"
+        AgentKind.HAX -> "▌"
         AgentKind.OTHER -> "›"
     }
     Box(modifier, contentAlignment = Alignment.Center) {
@@ -1393,6 +1394,7 @@ private fun agentAccent(agent: AgentKind): Color = when (agent) {
     AgentKind.CODEX -> Color(0xFF10A37F)
     AgentKind.PI -> Color(0xFFA78BFA)
     AgentKind.KIMI -> Color(0xFF4C8DFF)
+    AgentKind.HAX -> Color(0xFFE0A458)
     AgentKind.OTHER -> Color(0xFFAFB8C8)
 }
 

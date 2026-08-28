@@ -25,6 +25,7 @@ data class DissolvedSession(
                 resumeCommand = when (session.agent) {
                     AgentKind.CLAUDE -> "claude --continue"
                     AgentKind.CODEX -> "codex resume --last"
+                    AgentKind.HAX -> "hax --continue"
                     else -> ""
                 },
                 workspaceId = workspaceId,

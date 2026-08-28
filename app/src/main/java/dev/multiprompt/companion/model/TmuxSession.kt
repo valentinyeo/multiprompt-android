@@ -37,9 +37,9 @@ data class TmuxSession(
 
     private companion object {
         private val GENERIC_WINDOW_NAMES = setOf(
-            "bash", "codex", "fish", "ksh", "nu", "pwsh", "sh", "zsh", "node",
+            "bash", "codex", "fish", "hax", "ksh", "nu", "pwsh", "sh", "zsh", "node",
         )
-        private val AGENT_TITLE_PREFIX = Regex("""^\s*[✳✱✢✦✶✻＊*·•●○◉⬡⬢⬣☾☽π›]\s+""")
+        private val AGENT_TITLE_PREFIX = Regex("""^\s*[✳✱✢✦✶✻＊*·•●○◉⬡⬢⬣☾☽π›▌]\s+""")
 
         private fun usefulWindowName(value: String): Boolean =
             value.isNotBlank() && value.trim().lowercase() !in GENERIC_WINDOW_NAMES
@@ -51,6 +51,7 @@ enum class AgentKind(val label: String) {
     CODEX("Codex"),
     PI("Pi"),
     KIMI("Kimi"),
+    HAX("Hax"),
     OTHER("Shell");
 
     companion object {
@@ -61,12 +62,14 @@ enum class AgentKind(val label: String) {
                 command == "claude" || command.startsWith("claude-") -> return CLAUDE
                 command == "pi" || command.startsWith("pi-") -> return PI
                 command == "kimi" || command.startsWith("kimi-") -> return KIMI
+                command == "hax" || command.startsWith("hax-") -> return HAX
             }
 
             val normalized = name.lowercase()
             val namedAgent = when {
                 "codex" in normalized || normalized.startsWith("cx-") -> CODEX
                 "kimi" in normalized -> KIMI
+                HAX_NAME.containsMatchIn(normalized) -> HAX
                 "claude" in normalized || normalized.startsWith("cl-") -> CLAUDE
                 PI_NAME.containsMatchIn(normalized) -> PI
                 else -> OTHER
@@ -80,10 +83,12 @@ enum class AgentKind(val label: String) {
                     "bypass permissions" in terminalText -> CLAUDE
                 "kimi code" in terminalText || "kimi cli" in terminalText -> KIMI
                 "pi coding agent" in terminalText -> PI
+                "hax ›" in terminalText || "hax v0." in terminalText -> HAX
                 else -> OTHER
             }
         }
 
         private val PI_NAME = Regex("(^|[-_])pi($|[-_])")
+        private val HAX_NAME = Regex("(^|[-_])hax($|[-_])")
     }
 }
