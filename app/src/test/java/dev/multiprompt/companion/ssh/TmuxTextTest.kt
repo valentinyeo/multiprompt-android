@@ -329,6 +329,49 @@ class TmuxTextTest {
     }
 
     @Test
+    fun aRedrawnHeaderDoesNotRepeatTheUnchangedScreenBody() {
+        val body = (1..12).map { "stable answer line $it" }
+        val first = (listOf("Draft answer", "Working 3s", "1k tokens") + body).joinToString("\n")
+        val second = (listOf("Final answer", "Worked 9s", "2k tokens") + body).joinToString("\n")
+
+        assertEquals(second, TmuxText.mergeSnapshot(first, second))
+    }
+
+    @Test
+    fun successiveHeaderRedrawsDoNotMultiplyTheTranscript() {
+        val body = (1..12).map { "unchanged reply line $it" }
+        val screens = (1..4).map { update ->
+            (listOf("Reply revision $update", "Working ${update}s", "${update}k tokens") + body)
+                .joinToString("\n")
+        }
+
+        val transcript = screens.fold("") { history, screen ->
+            TmuxText.mergeSnapshot(history, screen)
+        }
+
+        assertEquals(screens.last(), transcript)
+    }
+
+    @Test
+    fun identicalSourceMessagesRemainSeparateTurns() {
+        val first = listOf(
+            "first turn",
+            "› Send the status",
+            "• Done",
+        ).joinToString("\n")
+        val second = listOf(
+            "second turn with no screen overlap",
+            "› Send the status",
+            "• Done",
+        ).joinToString("\n")
+
+        val transcript = TmuxText.mergeSnapshot(first, second)
+
+        assertEquals(2, transcript.lineSequence().count { it == "› Send the status" })
+        assertEquals(2, transcript.lineSequence().count { it == "• Done" })
+    }
+
+    @Test
     fun theComposerBelowAStatusRowStillMeansWaiting() {
         val idle = """
             ● Pushed the fix.

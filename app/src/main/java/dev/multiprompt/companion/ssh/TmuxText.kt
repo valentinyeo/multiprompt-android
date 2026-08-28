@@ -125,18 +125,60 @@ object TmuxText {
         val screen = snapshot.lines().dropLastWhile(String::isBlank)
         if (collected.isEmpty()) return screen.joinToString("\n")
         if (screen.isEmpty()) return collected.joinToString("\n")
-        ANCHOR_SIZES.forEach { size ->
-            val anchor = screen.take(size)
-            if (anchor.size < size || anchor.all(String::isBlank)) return@forEach
-            for (start in (collected.size - anchor.size) downTo 0) {
-                if (collected.subList(start, start + anchor.size) == anchor) {
-                    return (collected.subList(0, start) + screen)
-                        .takeLast(MAX_TRANSCRIPT_LINES)
-                        .joinToString("\n")
+        val screenStart = findScreenStart(collected, screen)
+        if (screenStart != null) {
+            return (collected.subList(0, screenStart) + screen)
+                .takeLast(MAX_TRANSCRIPT_LINES)
+                .joinToString("\n")
+        }
+        return (collected + screen).takeLast(MAX_TRANSCRIPT_LINES).joinToString("\n")
+    }
+
+    /**
+     * Finds where the current terminal screen begins in the transcript already collected.
+     *
+     * Agent TUIs redraw status and answer rows in place. Matching only the screen's first rows
+     * fails whenever those rows change, even if the rest of the screen is unchanged. Use the
+     * longest reliable overlap anywhere near the transcript tail so redraws replace the prior
+     * screen while a genuinely new, non-overlapping screen is still appended.
+     */
+    private fun findScreenStart(collected: List<String>, screen: List<String>): Int? {
+        val historyStart = (collected.size - ALIGNMENT_SEARCH_LINES).coerceAtLeast(0)
+        var bestStart = -1
+        var bestLength = 0
+
+        screen.indices.forEach { screenIndex ->
+            for (historyIndex in historyStart until collected.size) {
+                val candidateStart = historyIndex - screenIndex
+                if (candidateStart < 0 || collected[historyIndex] != screen[screenIndex]) continue
+
+                var length = 1
+                while (historyIndex + length < collected.size &&
+                    screenIndex + length < screen.size &&
+                    collected[historyIndex + length] == screen[screenIndex + length]
+                ) {
+                    length++
+                }
+                val matchingLines = screen.subList(screenIndex, screenIndex + length)
+                if (reliableScreenMatch(matchingLines) &&
+                    (length > bestLength || length == bestLength && candidateStart > bestStart)
+                ) {
+                    bestStart = candidateStart
+                    bestLength = length
                 }
             }
         }
-        return (collected + screen).takeLast(MAX_TRANSCRIPT_LINES).joinToString("\n")
+        return bestStart.takeIf { it >= 0 }
+    }
+
+    private fun reliableScreenMatch(lines: List<String>): Boolean {
+        val distinctive = lines.count { line ->
+            val trimmed = line.trim()
+            trimmed.length >= MIN_DISTINCTIVE_LINE_LENGTH &&
+                !isDivider(trimmed) &&
+                !isTerminalChrome(trimmed)
+        }
+        return lines.size >= MIN_ALIGNMENT_LINES && distinctive >= 1
     }
 
     /** Converts a terminal snapshot into conservative, display-only Reader sections. */
@@ -473,7 +515,9 @@ object TmuxText {
     private const val COMPOSER_SEARCH_LINES = 18
     private const val MODEL_PICKER_SEARCH_LINES = 80
     private const val RUNTIME_SEARCH_LINES = 12
-    private val ANCHOR_SIZES = listOf(8, 5, 3)
+    private const val ALIGNMENT_SEARCH_LINES = 512
+    private const val MIN_ALIGNMENT_LINES = 3
+    private const val MIN_DISTINCTIVE_LINE_LENGTH = 3
     private const val MAX_TRANSCRIPT_LINES = 3000
     private const val INPUT_SEARCH_LINES = 24
     private const val DIVIDER_CHARACTERS = "─━═╌╍-_▔▁"
