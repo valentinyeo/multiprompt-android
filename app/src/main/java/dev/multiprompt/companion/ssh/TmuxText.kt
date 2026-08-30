@@ -297,7 +297,25 @@ object TmuxText {
             append(kind, line)
         }
         flush()
-        return blocks
+        return withoutRepeatedReplies(blocks)
+    }
+
+    /** Drops an adjacent assistant copy even when terminal detail separates the two blocks. */
+    private fun withoutRepeatedReplies(blocks: List<ReaderBlock>): List<ReaderBlock> {
+        var previousReply: String? = null
+        return buildList {
+            blocks.forEach { block ->
+                if (block.kind == ReaderBlockKind.USER_PROMPT) previousReply = null
+                if (block.kind == ReaderBlockKind.PROSE) {
+                    val key = block.text.replace(WHITESPACE, " ").trim()
+                    if (key.length >= MIN_DUPLICATE_REPLY_LENGTH && key == previousReply) {
+                        return@forEach
+                    }
+                    previousReply = key
+                }
+                add(block)
+            }
+        }
     }
 
     /**
@@ -437,6 +455,7 @@ object TmuxText {
             line.startsWith("Explored", ignoreCase = true) ||
             line.startsWith("ctrl + t", ignoreCase = true) ||
             line.startsWith("esc to interrupt", ignoreCase = true) ||
+            BACKGROUND_ACTIVITY_LINE.containsMatchIn(line) ||
             (agent == AgentKind.PI && (line.startsWith("→") || line.startsWith("←"))) ||
             (agent == AgentKind.HAX && looksLikeHaxDetail(line)) ||
                 TOOL_CALL_MARKERS.any { line.startsWith(it) }
@@ -532,6 +551,7 @@ object TmuxText {
     private const val ALIGNMENT_SEARCH_LINES = 512
     private const val MIN_ALIGNMENT_LINES = 3
     private const val MIN_DISTINCTIVE_LINE_LENGTH = 3
+    private const val MIN_DUPLICATE_REPLY_LENGTH = 80
     private const val MAX_TRANSCRIPT_LINES = 3000
     private const val INPUT_SEARCH_LINES = 24
     private const val DIVIDER_CHARACTERS = "─━═╌╍-_▔▁"
@@ -578,8 +598,13 @@ object TmuxText {
     /** Finished status rows are transcript chrome, but do not mean the agent is busy. */
     private val FINISHED_SPINNER_LINE = Regex(
         "(?i)^\\s*[$SPINNER_MARKERS]\\s+\\S+\\s+for\\s+" +
-            "\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h)(?:\\s+\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h))*\\s*$",
+            "\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h)(?:\\s+\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h))*" +
+            "(?:\\s+·\\s+done\\b.*)?\\s*$",
     )
+    private val BACKGROUND_ACTIVITY_LINE = Regex(
+        "(?i)^●\\s+Background\\s+(?:command|task)\\b",
+    )
+    private val WHITESPACE = Regex("\\s+")
     private val WEB_LINK = Regex("(?i)https?://")
     private val ACTIVITY_DURATION = Regex("·\\s*(?:\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h)\\s*)+$")
     private val ACTIVITY_VERBS = listOf(

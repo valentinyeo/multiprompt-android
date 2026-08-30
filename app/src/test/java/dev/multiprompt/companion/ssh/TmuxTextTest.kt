@@ -296,6 +296,64 @@ class TmuxTextTest {
             TmuxText.ReaderBlockKind.PROGRESS,
             TmuxText.readerBlocks("✢ Tempering… (2m 11s · ↓ 4.9k tokens)", AgentKind.CLAUDE).single().kind,
         )
+        assertEquals(
+            TmuxText.ReaderBlockKind.PROGRESS,
+            TmuxText.readerBlocks(
+                "✻ Baked for 27s · done 8:54 PM · 1 monitor still running",
+                AgentKind.CLAUDE,
+            ).single().kind,
+        )
+        assertEquals(
+            TmuxText.ReaderBlockKind.PROGRESS,
+            TmuxText.readerBlocks(
+                "● Background command \"hax: add auto-park check\" completed (exit code 0)",
+                AgentKind.CLAUDE,
+            ).single().kind,
+        )
+    }
+
+    @Test
+    fun repeatedClaudeReplyWithoutANewPromptRendersOnce() {
+        val reply = """
+            ● Done and already proven: the auto-park check is live in the 15-minute cron, and its first run
+              caught a real case. The stuck ticket is now in Agent Blocked with an explanatory comment.
+
+              Tickets held without activity for 60 minutes are parked so the agent can take the next bug.
+        """.trimIndent()
+        val blocks = TmuxText.readerBlocks(
+            """
+            $reply
+
+            ✻ Baked for 27s · done 8:54 PM · 1 monitor still running
+
+            $reply
+            """.trimIndent(),
+            AgentKind.CLAUDE,
+        )
+
+        assertEquals(
+            listOf(TmuxText.ReaderBlockKind.PROSE, TmuxText.ReaderBlockKind.PROGRESS),
+            blocks.map { it.kind },
+        )
+        assertEquals(1, blocks.count { it.text.contains("Done and already proven") })
+    }
+
+    @Test
+    fun sameClaudeReplyAfterANewPromptRemainsASeparateTurn() {
+        val reply = "This deliberately repeated answer is long enough to qualify for duplicate protection in the reader."
+        val blocks = TmuxText.readerBlocks(
+            "$reply\n\n› repeat that answer\n\n$reply",
+            AgentKind.CLAUDE,
+        )
+
+        assertEquals(
+            listOf(
+                TmuxText.ReaderBlockKind.PROSE,
+                TmuxText.ReaderBlockKind.USER_PROMPT,
+                TmuxText.ReaderBlockKind.PROSE,
+            ),
+            blocks.map { it.kind },
+        )
     }
 
     @Test
