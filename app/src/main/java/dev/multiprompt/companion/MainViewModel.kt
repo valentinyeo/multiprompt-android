@@ -333,7 +333,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     .toMap()
                 val idleObservations = sessions.mapNotNull { session ->
                     val key = SessionReadStore.key(session.hostId, session.name)
-                    val observations = if (TmuxText.isWaitingForInput(session.preview)) {
+                    val observations = if (TmuxText.isWaitingForInput(session.preview, session.agent)) {
                         (current.waitingIdleObservations[key] ?: 0) + 1
                     } else {
                         0
@@ -384,7 +384,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }.toMap(),
                     unreadSessionKeys = sessions
                         .filter { SessionReadStore.key(it.hostId, it.name) !in archivedKeys }
-                        .filter { TmuxText.isWaitingForInput(it.preview) }
+                        .filter { TmuxText.isWaitingForInput(it.preview, it.agent) }
                         .filter(sessionReads::isUnread)
                         .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) },
                     archivedSessionKeys = archivedKeys,

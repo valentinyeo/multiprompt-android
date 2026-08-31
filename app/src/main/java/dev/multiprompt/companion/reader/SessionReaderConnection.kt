@@ -38,6 +38,7 @@ data class ReaderState(
     val actionError: String? = null,
     val lastUpdatedAtMillis: Long = 0,
     val completedActions: Long = 0,
+    val waitingForInput: Boolean = false,
 )
 
 class SessionReaderConnection(
@@ -93,7 +94,11 @@ class SessionReaderConnection(
                         repository.connect(host)
                     }
                     streamClient = connectedClient
-                    repository.streamSession(connectedClient, tmuxSessionName, agent) { snapshot, details, pickerOptions ->
+                    repository.streamSession(
+                        connectedClient,
+                        tmuxSessionName,
+                        agent,
+                    ) { snapshot, details, pickerOptions, waitingForInput ->
                         _state.update { current ->
                             val liveDetails = if (details.model != null) {
                                 details
@@ -109,6 +114,7 @@ class SessionReaderConnection(
                                 modelPickerOptions = pickerOptions,
                                 status = ReaderStatus.Live,
                                 lastUpdatedAtMillis = System.currentTimeMillis(),
+                                waitingForInput = waitingForInput,
                             )
                         }
                     }

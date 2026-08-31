@@ -50,8 +50,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -166,6 +169,9 @@ import dev.multiprompt.companion.terminal.TerminalConnection
 import dev.multiprompt.companion.terminal.TerminalStatus
 import dev.multiprompt.companion.update.UpdateRelease
 import dev.multiprompt.companion.update.UpdateState
+import dev.multiprompt.companion.voice.SpokenReply
+import dev.multiprompt.companion.voice.SpokenReplyStatus
+import dev.multiprompt.companion.voice.VoiceReplySelector
 import kotlinx.coroutines.delay
 import dev.multiprompt.companion.upload.ScreencastUploader
 import java.io.ByteArrayOutputStream
@@ -1692,8 +1698,15 @@ private fun ReaderScreen(
     var apiKeyDialogVisible by remember(connection) { mutableStateOf(false) }
     var apiKeyDraft by remember(connection) { mutableStateOf("") }
     var apiKeyError by remember(connection) { mutableStateOf<String?>(null) }
+    var startVoiceAfterApiKeySave by remember(connection) { mutableStateOf(false) }
     var microphoneError by remember(connection) { mutableStateOf<String?>(null) }
     var sendAfterDictation by remember(connection) { mutableStateOf(false) }
+    var voiceModeActive by remember(connection) { mutableStateOf(false) }
+    var voiceListeningTurn by remember(connection) { mutableStateOf(false) }
+    var voiceAwaitingReply by remember(connection) { mutableStateOf(false) }
+    var voiceResumeAfterSpeech by remember(connection) { mutableStateOf(false) }
+    var voiceReplyBeforePromptKey by remember(connection) { mutableStateOf<String?>(null) }
+    var voiceError by remember(connection) { mutableStateOf<String?>(null) }
     var imageKeyDialogVisible by remember(connection) { mutableStateOf(false) }
     var imageKeyDraft by remember(connection) { mutableStateOf("") }
     var imageKeyError by remember(connection) { mutableStateOf<String?>(null) }
@@ -1720,6 +1733,8 @@ private fun ReaderScreen(
     val density = LocalDensity.current
     var previousScrollMax by remember(connection) { mutableIntStateOf(0) }
     val context = LocalContext.current
+    val spokenReply = remember(connection, context) { SpokenReply(context) }
+    val spokenReplyState by spokenReply.state.collectAsState()
     val readerScope = rememberCoroutineScope()
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(maxItems = MAX_IMAGE_SELECTION),
@@ -1746,11 +1761,11 @@ private fun ReaderScreen(
         dictationState.status == DictationStatus.LISTENING ||
         dictationState.status == DictationStatus.FINISHING
     val readerView = LocalView.current
-    DisposableEffect(readerView, dictationActive) {
-        val keepScreenOnBeforeDictation = readerView.keepScreenOn
-        if (dictationActive) readerView.keepScreenOn = true
+    DisposableEffect(readerView, dictationActive, voiceModeActive) {
+        val previousKeepScreenOn = readerView.keepScreenOn
+        if (dictationActive || voiceModeActive) readerView.keepScreenOn = true
         onDispose {
-            if (dictationActive) readerView.keepScreenOn = keepScreenOnBeforeDictation
+            if (dictationActive || voiceModeActive) readerView.keepScreenOn = previousKeepScreenOn
         }
     }
     val microphonePermissionLauncher = rememberLauncherForActivityResult(
@@ -1758,9 +1773,16 @@ private fun ReaderScreen(
     ) { granted ->
         if (granted) {
             microphoneError = null
-            dictation.start()
+            if (voiceModeActive) {
+                voiceListeningTurn = true
+                dictation.start(stopOnSpeechFinal = true)
+            } else {
+                dictation.start()
+            }
         } else {
-            microphoneError = "Microphone permission is required for dictation"
+            microphoneError = "Microphone permission is required for voice input"
+            voiceModeActive = false
+            voiceListeningTurn = false
         }
     }
     val startDictation = {
@@ -1774,6 +1796,38 @@ private fun ReaderScreen(
         } else {
             microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
+    }
+    val startVoiceMode = {
+        voiceModeActive = true
+        voiceListeningTurn = false
+        voiceAwaitingReply = false
+        voiceResumeAfterSpeech = false
+        voiceReplyBeforePromptKey = VoiceReplySelector.completedReply(
+            reader.output,
+            session.agent,
+            reader.waitingForInput,
+        )?.key
+        voiceError = null
+        microphoneError = null
+        setPrompt("")
+        dictationPrefix = ""
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            voiceListeningTurn = true
+            dictation.start(stopOnSpeechFinal = true)
+        } else {
+            microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+    val stopVoiceMode = {
+        voiceModeActive = false
+        voiceListeningTurn = false
+        voiceAwaitingReply = false
+        voiceResumeAfterSpeech = false
+        dictation.discard()
+        spokenReply.stop()
+        setPrompt("")
     }
 
     LaunchedEffect(connection, scrollState, density) {
@@ -1806,10 +1860,13 @@ private fun ReaderScreen(
             setPrompt(PromptComposer.appendDictation(dictationPrefix, spoken))
         }
     }
-    DisposableEffect(connection) {
+    DisposableEffect(connection, spokenReply) {
         // Dictation belongs to this chat. Cancelling and clearing it prevents a late Deepgram
         // result from becoming the draft of the next chat.
-        onDispose { dictation.discard() }
+        onDispose {
+            dictation.discard()
+            spokenReply.close()
+        }
     }
     val sendCurrentPrompt = {
         val composedPrompt = PromptComposer.composeMessage(prompt, imageAttachments)
@@ -1876,6 +1933,97 @@ private fun ReaderScreen(
             }
             else -> Unit
         }
+    }
+    LaunchedEffect(dictationState.status, voiceModeActive, voiceListeningTurn) {
+        if (!voiceModeActive || !voiceListeningTurn) return@LaunchedEffect
+        when (dictationState.status) {
+            DictationStatus.IDLE -> {
+                voiceListeningTurn = false
+                val spokenPrompt = dictationState.transcript.trim()
+                if (spokenPrompt.isBlank()) {
+                    voiceListeningTurn = true
+                    dictation.start(stopOnSpeechFinal = true)
+                    return@LaunchedEffect
+                }
+                setPrompt(spokenPrompt)
+                voiceReplyBeforePromptKey = VoiceReplySelector.completedReply(
+                    reader.output,
+                    session.agent,
+                    reader.waitingForInput,
+                )?.key
+                val actionCount = reader.completedActions
+                if (!reader.sending &&
+                    pendingPromptAction == null &&
+                    connection.sendPrompt(spokenPrompt)
+                ) {
+                    onSessionInteraction()
+                    pendingPromptAction = actionCount
+                    voiceAwaitingReply = true
+                } else {
+                    stopVoiceMode()
+                    voiceError = "The spoken prompt could not be sent"
+                }
+            }
+            DictationStatus.FAILED -> {
+                val message = dictationState.error ?: "Voice input stopped"
+                stopVoiceMode()
+                voiceError = message
+            }
+            else -> Unit
+        }
+    }
+    val completedVoiceReply = remember(reader.output, reader.waitingForInput, session.agent) {
+        VoiceReplySelector.completedReply(reader.output, session.agent, reader.waitingForInput)
+    }
+    LaunchedEffect(
+        completedVoiceReply,
+        spokenReplyState.status,
+        voiceModeActive,
+        voiceAwaitingReply,
+    ) {
+        val reply = completedVoiceReply ?: return@LaunchedEffect
+        if (!voiceModeActive ||
+            !voiceAwaitingReply ||
+            spokenReplyState.status != SpokenReplyStatus.READY ||
+            reply.key == voiceReplyBeforePromptKey
+        ) {
+            return@LaunchedEffect
+        }
+        voiceAwaitingReply = false
+        voiceResumeAfterSpeech = true
+        voiceReplyBeforePromptKey = reply.key
+        if (!spokenReply.speak(reply.text)) {
+            val message = spokenReply.state.value.error ?: "The reply could not be spoken"
+            stopVoiceMode()
+            voiceError = message
+        }
+    }
+    LaunchedEffect(spokenReplyState.status, voiceModeActive, voiceResumeAfterSpeech) {
+        when {
+            voiceModeActive && spokenReplyState.status == SpokenReplyStatus.FAILED -> {
+                val message = spokenReplyState.error ?: "Speech output stopped"
+                stopVoiceMode()
+                voiceError = message
+            }
+            voiceModeActive &&
+                voiceResumeAfterSpeech &&
+                spokenReplyState.status == SpokenReplyStatus.READY -> {
+                voiceResumeAfterSpeech = false
+                setPrompt("")
+                dictationPrefix = ""
+                voiceListeningTurn = true
+                dictation.start(stopOnSpeechFinal = true)
+            }
+        }
+    }
+    val voiceStatusLabel = when {
+        !voiceModeActive -> null
+        spokenReplyState.status == SpokenReplyStatus.SPEAKING -> "Speaking reply"
+        voiceAwaitingReply -> "Waiting for reply"
+        dictationState.status == DictationStatus.FINISHING -> "Sending what you said"
+        dictationState.status == DictationStatus.CONNECTING -> "Starting microphone"
+        dictationState.status == DictationStatus.LISTENING -> "Listening"
+        else -> "Starting voice mode"
     }
     if (renameDialogVisible) {
         AlertDialog(
@@ -1963,8 +2111,9 @@ private fun ReaderScreen(
                 apiKeyDialogVisible = false
                 apiKeyDraft = ""
                 apiKeyError = null
+                startVoiceAfterApiKeySave = false
             },
-            title = { Text("Deepgram dictation") },
+            title = { Text(if (startVoiceAfterApiKeySave) "Deepgram voice input" else "Deepgram dictation") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("The key is encrypted with Android Keystore and stays on this device.")
@@ -1992,12 +2141,17 @@ private fun ReaderScreen(
                             apiKeyDialogVisible = false
                             apiKeyDraft = ""
                             apiKeyError = null
-                            startDictation()
+                            if (startVoiceAfterApiKeySave) {
+                                startVoiceAfterApiKeySave = false
+                                startVoiceMode()
+                            } else {
+                                startDictation()
+                            }
                         } else {
                             apiKeyError = "Enter a valid API key"
                         }
                     },
-                ) { Text("Save and dictate") }
+                ) { Text(if (startVoiceAfterApiKeySave) "Save and start voice" else "Save and dictate") }
             },
             dismissButton = {
                 TextButton(
@@ -2005,6 +2159,7 @@ private fun ReaderScreen(
                         apiKeyDialogVisible = false
                         apiKeyDraft = ""
                         apiKeyError = null
+                        startVoiceAfterApiKeySave = false
                     },
                 ) { Text("Cancel") }
             },
@@ -2137,6 +2292,32 @@ private fun ReaderScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            if (voiceModeActive) {
+                                stopVoiceMode()
+                            } else if (dictationState.configured) {
+                                startVoiceMode()
+                            } else {
+                                startVoiceAfterApiKeySave = true
+                                apiKeyDraft = ""
+                                apiKeyError = null
+                                apiKeyDialogVisible = true
+                            }
+                        },
+                        enabled = voiceModeActive ||
+                            !reader.sending && !dictationActive && reader.waitingForInput,
+                    ) {
+                        Icon(
+                            if (voiceModeActive) Icons.Default.CallEnd else Icons.Default.Call,
+                            if (voiceModeActive) "End voice mode" else "Start voice mode",
+                            tint = if (voiceModeActive) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        )
+                    }
                     Box {
                         IconButton(onClick = { menuExpanded = true }) {
                             Icon(Icons.Default.MoreVert, "Session actions")
@@ -2236,6 +2417,7 @@ private fun ReaderScreen(
                                 text = { Text("Dictation API key") },
                                 onClick = {
                                     menuExpanded = false
+                                    startVoiceAfterApiKeySave = false
                                     apiKeyDraft = ""
                                     apiKeyError = null
                                     apiKeyDialogVisible = true
@@ -2306,6 +2488,34 @@ private fun ReaderScreen(
                         Text("Back", maxLines = 1, softWrap = false)
                     }
                 }
+                voiceStatusLabel?.let { label ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(
+                                MaterialTheme.colorScheme.secondaryContainer,
+                                RoundedCornerShape(12.dp),
+                            )
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        if (spokenReplyState.status == SpokenReplyStatus.SPEAKING) {
+                            Icon(Icons.AutoMirrored.Filled.VolumeUp, null, Modifier.size(18.dp))
+                        } else {
+                            Icon(Icons.Default.Mic, null, Modifier.size(18.dp))
+                        }
+                        Text(
+                            label,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                        TextButton(onClick = stopVoiceMode) {
+                            Text("End")
+                        }
+                    }
+                }
                 if (imageAttachments.isNotEmpty()) {
                     Row(
                         Modifier
@@ -2348,15 +2558,18 @@ private fun ReaderScreen(
                     value = promptField,
                     onValueChange = { promptField = it },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Message this session") },
+                    placeholder = {
+                        Text(if (voiceModeActive) "Voice mode is active" else "Message this session")
+                    },
                     minLines = 1,
                     maxLines = 6,
                     shape = RoundedCornerShape(24.dp),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = { submitPrompt() }),
-                    readOnly = dictationActive,
+                    readOnly = dictationActive || voiceModeActive,
                     trailingIcon = {
                         val sendEnabled = !reader.sending &&
+                            !voiceModeActive &&
                             pendingPromptAction == null &&
                             !sendAfterDictation &&
                             (prompt.isNotBlank() || imageAttachments.isNotEmpty() || dictationActive)
@@ -2371,7 +2584,10 @@ private fun ReaderScreen(
                                         imageKeyDialogVisible = true
                                     }
                                 },
-                                enabled = !reader.sending && !dictationActive && !imageUploading,
+                                enabled = !reader.sending &&
+                                    !dictationActive &&
+                                    !voiceModeActive &&
+                                    !imageUploading,
                             ) {
                                 if (imageUploading) {
                                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -2386,10 +2602,11 @@ private fun ReaderScreen(
                                     } else if (dictationState.configured) {
                                         startDictation()
                                     } else {
+                                        startVoiceAfterApiKeySave = false
                                         apiKeyDialogVisible = true
                                     }
                                 },
-                                enabled = !reader.sending,
+                                enabled = !reader.sending && !voiceModeActive,
                             ) {
                                 when (dictationState.status) {
                                     DictationStatus.CONNECTING, DictationStatus.FINISHING -> {
@@ -2430,7 +2647,7 @@ private fun ReaderScreen(
                         }
                     },
                 )
-                (microphoneError ?: dictationState.error ?: imageUploadError)?.let { message ->
+                (voiceError ?: microphoneError ?: dictationState.error ?: imageUploadError)?.let { message ->
                     Text(
                         message,
                         color = MaterialTheme.colorScheme.error,
@@ -2491,7 +2708,7 @@ private fun ReaderScreen(
                     ""
                 }
             }
-            val waitingForInput = TmuxText.isWaitingForInput(displayedOutput)
+            val waitingForInput = reader.waitingForInput
             val connectionLabel = when {
                 failure != null -> "Disconnected · retrying"
                 reader.status == ReaderStatus.Connecting -> "Connecting"

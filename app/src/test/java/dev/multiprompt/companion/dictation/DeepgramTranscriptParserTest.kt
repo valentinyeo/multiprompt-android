@@ -11,12 +11,13 @@ class DeepgramTranscriptParserTest {
             {
               "type": "Results",
               "is_final": true,
+              "speech_final": true,
               "channel": {"alternatives": [{"transcript": "Send the prompt."}]}
             }
         """.trimIndent()
 
         assertEquals(
-            DeepgramTranscript("Send the prompt.", isFinal = true),
+            DeepgramTranscript("Send the prompt.", isFinal = true, speechFinal = true),
             DeepgramTranscriptParser.parse(message),
         )
     }

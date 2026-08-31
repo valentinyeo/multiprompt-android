@@ -5,6 +5,7 @@ import org.json.JSONObject
 data class DeepgramTranscript(
     val text: String,
     val isFinal: Boolean,
+    val speechFinal: Boolean = false,
 )
 
 object DeepgramTranscriptParser {
@@ -21,6 +22,7 @@ object DeepgramTranscriptParser {
         DeepgramTranscript(
             text = text,
             isFinal = root.optBoolean("is_final", false),
+            speechFinal = root.optBoolean("speech_final", false),
         )
     }.getOrNull()
 }

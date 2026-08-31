@@ -327,7 +327,7 @@ object TmuxText {
      * may still be working. Only an explicit idle/completion marker at the end of
      * the current terminal state is accepted.
      */
-    fun isWaitingForInput(value: String): Boolean {
+    fun isWaitingForInput(value: String, agent: AgentKind = AgentKind.OTHER): Boolean {
         val tail = value.lineSequence()
             .map(String::trimStart)
             .filter(String::isNotBlank)
@@ -345,7 +345,7 @@ object TmuxText {
         }
         val latestActivity = meaningful.indexOfLast { (_, line) -> looksLikeActivity(line) }
         val latestPrompt = meaningful.indexOfLast { (_, line) ->
-            line.startsWith("❯") || line.startsWith("›")
+            isPromptMarker(line, agent)
         }
         val latestIdleMarker = meaningful.indexOfLast { (_, line) ->
             IDLE_INPUT_MARKERS.any { marker -> line.contains(marker, ignoreCase = true) }

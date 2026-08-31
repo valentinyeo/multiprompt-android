@@ -70,6 +70,8 @@ class DeepgramDictation(
     private var socketOpen = false
     private var finalizeWhenOpen = false
     private var closeWhenOpen = false
+    @Volatile
+    private var stopOnSpeechFinal = false
     // Set while a deliberate stop() teardown is in flight so a failure delivered during
     // that teardown does not surface as an error.
     @Volatile
@@ -90,7 +92,7 @@ class DeepgramDictation(
     }
 
     @Synchronized
-    fun start() {
+    fun start(stopOnSpeechFinal: Boolean = false) {
         if (_state.value.status in ACTIVE_STATUSES) return
         if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED
@@ -109,6 +111,7 @@ class DeepgramDictation(
         finishingJob?.cancel()
         finalSegments.clear()
         stopping = false
+        this.stopOnSpeechFinal = stopOnSpeechFinal
         synchronized(audioLock) {
             pendingAudio.reset()
             socketOpen = false
@@ -165,6 +168,7 @@ class DeepgramDictation(
         finishingJob?.cancel()
         finishingJob = null
         stopping = false
+        stopOnSpeechFinal = false
         stopRecorder()
         socket?.cancel()
         socket = null
@@ -231,6 +235,7 @@ class DeepgramDictation(
     }
 
     private fun acceptTranscript(result: DeepgramTranscript) {
+        var shouldStop = false
         synchronized(finalSegments) {
             if (result.isFinal) finalSegments += result.text
             val finalText = finalSegments.joinToString(" ")
@@ -240,6 +245,11 @@ class DeepgramDictation(
                 listOf(finalText, result.text).filter(String::isNotBlank).joinToString(" ")
             }
             _state.update { it.copy(transcript = combined) }
+            shouldStop = stopOnSpeechFinal && result.speechFinal && combined.isNotBlank()
+        }
+        if (shouldStop) {
+            stopOnSpeechFinal = false
+            stop()
         }
     }
 
@@ -252,6 +262,7 @@ class DeepgramDictation(
     }
 
     private fun fail(message: String) {
+        stopOnSpeechFinal = false
         stopRecorder()
         socket = null
         synchronized(audioLock) {
@@ -359,6 +370,7 @@ class DeepgramDictation(
      * buffers reset, flags cleared, back to idle.
      */
     private fun finishWithoutError() {
+        stopOnSpeechFinal = false
         stopRecorder()
         socket = null
         synchronized(audioLock) {

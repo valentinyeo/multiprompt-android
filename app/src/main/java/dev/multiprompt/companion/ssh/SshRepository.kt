@@ -115,7 +115,12 @@ class SshRepository(private val secrets: SecretStore) {
         client: SshClient,
         sessionName: String,
         agent: AgentKind = AgentKind.OTHER,
-        onSnapshot: (String, TmuxText.RuntimeDetails, List<TmuxText.ModelPickerOption>) -> Unit,
+        onSnapshot: (
+            String,
+            TmuxText.RuntimeDetails,
+            List<TmuxText.ModelPickerOption>,
+            Boolean,
+        ) -> Unit,
     ) = coroutineScope {
         val session = client.openSession()
             ?: throw SshProblem.Connection("The SSH server refused a reader channel")
@@ -146,6 +151,7 @@ class SshRepository(private val secrets: SecretStore) {
                             mobileOutput,
                             TmuxText.runtimeDetails(rawOutput),
                             TmuxText.modelPickerOptions(rawOutput),
+                            TmuxText.isWaitingForInput(rawOutput, agent),
                         )
                     }
                 }

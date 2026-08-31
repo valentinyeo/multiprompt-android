@@ -71,6 +71,16 @@ class TmuxTextTest {
     }
 
     @Test
+    fun detectsHaxIdleComposer() {
+        assertTrue(
+            TmuxText.isWaitingForInput(
+                "▌ inspect the parser\nThe fix is ready.\n▌ ",
+                AgentKind.HAX,
+            ),
+        )
+    }
+
+    @Test
     fun activeOutputDoesNotNeedInput() {
         assertFalse(TmuxText.isWaitingForInput("Building the APK…\nRunning tests"))
     }
