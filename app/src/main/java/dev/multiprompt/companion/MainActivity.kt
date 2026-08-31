@@ -7,8 +7,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.multiprompt.companion.ui.MultipromptApp
 import dev.multiprompt.companion.ui.AppTheme
@@ -26,6 +28,12 @@ class MainActivity : ComponentActivity() {
                 AppTheme.SYSTEM -> !systemDark
                 AppTheme.DARK -> false
                 AppTheme.SUNLIGHT -> true
+            }
+            SideEffect {
+                WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = sunlight
+                    isAppearanceLightNavigationBars = sunlight
+                }
             }
             MultipromptTheme(sunlight = sunlight) {
                 LaunchedEffect(Unit) {

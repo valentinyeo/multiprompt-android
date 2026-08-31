@@ -1704,6 +1704,7 @@ private fun ReaderScreen(
     var voiceModeActive by remember(connection) { mutableStateOf(false) }
     var voiceListeningTurn by remember(connection) { mutableStateOf(false) }
     var voiceAwaitingReply by remember(connection) { mutableStateOf(false) }
+    var voicePendingPrompt by remember(connection) { mutableStateOf<String?>(null) }
     var voiceResumeAfterSpeech by remember(connection) { mutableStateOf(false) }
     var voiceReplyBeforePromptKey by remember(connection) { mutableStateOf<String?>(null) }
     var voiceError by remember(connection) { mutableStateOf<String?>(null) }
@@ -1801,6 +1802,7 @@ private fun ReaderScreen(
         voiceModeActive = true
         voiceListeningTurn = false
         voiceAwaitingReply = false
+        voicePendingPrompt = null
         voiceResumeAfterSpeech = false
         voiceReplyBeforePromptKey = VoiceReplySelector.completedReply(
             reader.output,
@@ -1824,6 +1826,7 @@ private fun ReaderScreen(
         voiceModeActive = false
         voiceListeningTurn = false
         voiceAwaitingReply = false
+        voicePendingPrompt = null
         voiceResumeAfterSpeech = false
         dictation.discard()
         spokenReply.stop()
@@ -1951,17 +1954,18 @@ private fun ReaderScreen(
                     session.agent,
                     reader.waitingForInput,
                 )?.key
-                val actionCount = reader.completedActions
-                if (!reader.sending &&
-                    pendingPromptAction == null &&
-                    connection.sendPrompt(spokenPrompt)
-                ) {
-                    onSessionInteraction()
-                    pendingPromptAction = actionCount
-                    voiceAwaitingReply = true
+                if (!reader.sending && pendingPromptAction == null && reader.waitingForInput) {
+                    val actionCount = reader.completedActions
+                    if (connection.sendPrompt(spokenPrompt)) {
+                        onSessionInteraction()
+                        pendingPromptAction = actionCount
+                        voiceAwaitingReply = true
+                    } else {
+                        stopVoiceMode()
+                        voiceError = "The spoken prompt could not be sent"
+                    }
                 } else {
-                    stopVoiceMode()
-                    voiceError = "The spoken prompt could not be sent"
+                    voicePendingPrompt = spokenPrompt
                 }
             }
             DictationStatus.FAILED -> {
@@ -1970,6 +1974,37 @@ private fun ReaderScreen(
                 voiceError = message
             }
             else -> Unit
+        }
+    }
+    LaunchedEffect(
+        voicePendingPrompt,
+        voiceModeActive,
+        reader.waitingForInput,
+        reader.sending,
+        pendingPromptAction,
+    ) {
+        val pending = voicePendingPrompt ?: return@LaunchedEffect
+        if (!voiceModeActive ||
+            !reader.waitingForInput ||
+            reader.sending ||
+            pendingPromptAction != null
+        ) {
+            return@LaunchedEffect
+        }
+        voiceReplyBeforePromptKey = VoiceReplySelector.completedReply(
+            reader.output,
+            session.agent,
+            reader.waitingForInput,
+        )?.key
+        val actionCount = reader.completedActions
+        if (connection.sendPrompt(pending)) {
+            voicePendingPrompt = null
+            voiceAwaitingReply = true
+            pendingPromptAction = actionCount
+            onSessionInteraction()
+        } else {
+            stopVoiceMode()
+            voiceError = "The spoken prompt could not be sent"
         }
     }
     val completedVoiceReply = remember(reader.output, reader.waitingForInput, session.agent) {
@@ -2020,6 +2055,7 @@ private fun ReaderScreen(
         !voiceModeActive -> null
         spokenReplyState.status == SpokenReplyStatus.SPEAKING -> "Speaking reply"
         voiceAwaitingReply -> "Waiting for reply"
+        voicePendingPrompt != null -> "Waiting for session"
         dictationState.status == DictationStatus.FINISHING -> "Sending what you said"
         dictationState.status == DictationStatus.CONNECTING -> "Starting microphone"
         dictationState.status == DictationStatus.LISTENING -> "Listening"
@@ -2305,8 +2341,7 @@ private fun ReaderScreen(
                                 apiKeyDialogVisible = true
                             }
                         },
-                        enabled = voiceModeActive ||
-                            !reader.sending && !dictationActive && reader.waitingForInput,
+                        enabled = voiceModeActive || !reader.sending && !dictationActive,
                     ) {
                         Icon(
                             if (voiceModeActive) Icons.Default.CallEnd else Icons.Default.Call,
