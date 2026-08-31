@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -1218,6 +1219,8 @@ private fun SessionsScreen(
                 SessionCard(
                     session = session,
                     workspaces = state.workspaces,
+                    workspaceName = workspaceNames[state.sessionWorkspaceIds[key]]
+                        .takeIf { state.selectedWorkspaceId == null },
                     unread = key in state.unreadSessionKeys,
                     archived = key in state.archivedSessionKeys,
                     onClick = { onOpen(session) },
@@ -1424,6 +1427,7 @@ private fun AgentBadge(agent: AgentKind) {
 private fun SessionCard(
     session: TmuxSession,
     workspaces: List<Workspace>,
+    workspaceName: String?,
     unread: Boolean,
     archived: Boolean,
     onClick: () -> Unit,
@@ -1503,6 +1507,24 @@ private fun SessionCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                workspaceName?.let { name ->
+                    Text(
+                        name,
+                        modifier = Modifier
+                            .widthIn(max = 88.dp)
+                            .background(
+                                MaterialTheme.colorScheme.surfaceVariant,
+                                RoundedCornerShape(percent = 50),
+                            )
+                            .padding(horizontal = 5.dp, vertical = 2.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 9.sp,
+                        lineHeight = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Box {
                     IconButton(onClick = { menuExpanded = true }) {
                         Icon(Icons.Default.MoreVert, "Session actions")
