@@ -1,4 +1,5 @@
 -keep class org.connectbot.terminal.** { *; }
 -keep class org.connectbot.sshlib.** { *; }
 -dontwarn org.slf4j.**
-
+-keep class org.bouncycastle.** { *; }
+-dontwarn org.bouncycastle.**

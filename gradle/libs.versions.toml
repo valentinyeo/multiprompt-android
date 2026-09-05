@@ -7,6 +7,7 @@ lifecycle = "2.10.0"
 coreKtx = "1.18.0"
 termlib = "0.1.0"
 sshlib = "0.4.2"
+bouncycastle = "1.85.2"
 junit = "4.13.2"
 json = "20250517"
 okhttp = "5.3.0"
@@ -26,6 +27,7 @@ androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
 androidx-compose-icons = { module = "androidx.compose.material:material-icons-extended" }
 connectbot-terminal = { module = "org.connectbot:termlib", version.ref = "termlib" }
 connectbot-ssh = { module = "org.connectbot.sshlib:sshlib", version.ref = "sshlib" }
+bouncycastle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 junit = { module = "junit:junit", version.ref = "junit" }
 json = { module = "org.json:json", version.ref = "json" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
