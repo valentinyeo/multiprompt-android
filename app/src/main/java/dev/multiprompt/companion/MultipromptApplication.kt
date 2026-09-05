@@ -13,15 +13,10 @@ import dev.multiprompt.companion.ssh.SshRepository
 import dev.multiprompt.companion.update.UpdateManager
 import dev.multiprompt.companion.upload.ScreencastUploader
 import dev.multiprompt.companion.update.UpdateNotifier
-import org.connectbot.sshlib.crypto.ed25519.Ed25519Provider
 
 class MultipromptApplication : Application() {
     override fun onCreate() {
         super.onCreate()
-        // Android 16 registers an AndroidKeyStore KeyFactory for "Ed25519" that rejects raw key
-        // specs. sshlib only installs its own provider when parsing user keys, so Ed25519 host-key
-        // verification fails first. Install it at process start so it wins provider lookup.
-        Ed25519Provider.insertIfNeeded()
         crashReportStore.install()
         UpdateNotifier.initialize(this)
     }
