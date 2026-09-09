@@ -18,6 +18,12 @@ Requires JDK 17 and Android SDK 36. CI runs `gradle --no-daemon lintDebug test a
 
 **VPS-first workflow:** normal development does not compile locally. Edit, commit, push `main`; GitHub Actions (`.github/workflows/release.yml`) lints, tests, signs, and republishes the fixed `android-latest` release. The installed app pulls the new build from its Update screen. Only reach for a local Gradle build when you specifically need one.
 
+## Git workflow
+
+- **Commit directly to `main` and push `main` to `origin` in the same change.** No topic, feature, or side branches: work that is not on `main` is work that never shipped, because CI only publishes pushes to `main`.
+- Never finish a task with changes parked in a branch, in the stash, or as untracked files. Delete a scratch branch instead of leaving it behind.
+- Before reporting a task done, verify `git status --porcelain` is empty, `HEAD` is on `main`, no other local branch exists, and `origin/main` points at the same commit as `HEAD`.
+
 ## Architecture
 
 `MultipromptApplication` is the manual DI container (lazy singletons). `MainViewModel` holds one `AppUiState` `StateFlow`; `ui/MultipromptApp.kt` is the whole Compose tree, including full-screen reader and terminal overlays. There is no navigation library and no DI framework — keep it that way.
