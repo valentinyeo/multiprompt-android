@@ -125,6 +125,8 @@ class SkillStore(context: Context) {
     companion object {
         const val INDEX_PATH = "skills/index.json"
         const val DEFAULT_REPOS_KEY = "repos"
+        private const val KEY_CACHE = "cache_json"
+        private const val KEY_FETCHED_AT = "fetched_at"
 
         /** Temporary default: multiprompt's own skills repo (owner/repo). */
         val DEFAULT_REPOS: List<String> = listOf("valentinyeo/multiprompt-skills")

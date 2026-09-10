@@ -2455,6 +2455,7 @@ private fun ReaderScreen(
                                         }
                                     },
                                 )
+                            }
                             IconButton(
                                 onClick = {
                                     if (dictationActive) {
