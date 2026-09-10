@@ -120,12 +120,13 @@ never leave the device.
 
 ## Record ids (v1)
 
-- `hosts` — host profiles (no private key material; see key hierarchy if key sync is enabled later).
+- `hosts` — host profiles. **Never contains private key or passphrase material** — only the profile fields (label, hostname, port, username, host key type/fingerprint) and a local-only `keySecretId` reference that stays meaningless outside the originating device.
 - `workspaces` — workspace definitions.
 - `sessionState` — per-session read/unread, archive, and display state.
 
-Adding a record id is not a breaking change; renaming or removing one is. Key material, if
-synced in a later phase, gets its own record id and follows the same vault-key sealing.
+**v1 ships without SSH private-key/passphrase sync.** Phase 1 syncs non-secret logical state only. SSH key material sync is a separate **Phase 2** feature that requires its own threat model before implementation; when it arrives it gets a dedicated record id (e.g. `keys`) sealed with the same vault key and the envelope-wrapping scheme from the key hierarchy. Until then the server never sees, in any form, the contents of `SecretStore`.
+
+Adding a record id is not a breaking change; renaming or removing one is.
 
 ## Versioning
 
