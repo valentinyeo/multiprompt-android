@@ -1,0 +1,716 @@
+{
+ "skills": [
+  {
+   "name": "ai-council",
+   "description": "Run a question through a real multi-model \"AI council\" via OpenRouter that debates, peer-reviews, and synthesizes a final answer (Karpathy's LLM Council pattern, popularized by Ole",
+   "file": "skills-harness/ai-council/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "autoresearch",
+   "description": "\"Autonomous Goal-directed Iteration. Apply Karpathy's autoresearch principles to ANY task. Loops autonomously — modify, verify, keep/discard, repeat. Supports bounded iteration via",
+   "file": "skills-harness/autoresearch/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "browse",
+   "description": "Execute web browser tasks autonomously via the lh play (Local Helper Playwriter on Windows) escalation chain. Use when asked to check, open, interact with, or verify anything on th",
+   "file": "skills-harness/browse/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "bug-loop",
+   "description": "'Risk-first autonomous bug-drain loop for the Hypertask Bugs board (project 1534). Picks the lowest-risk, easiest, most-likely-real bug; VERIFIES it actually reproduces in the live",
+   "file": "skills-harness/bug-loop/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "cf-cache-bust",
+   "description": "After any deploy to a Cloudflare-fronted site, purge the CF edge, prewarm Valentin's actual POP from his Windows box, and hand him a cache-busted URL so he sees the new version wit",
+   "file": "skills-harness/cf-cache-bust/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "claude-history",
+   "description": "\"Reference for the claude-history CLI: list/render/search/delete/resume session transcripts, context-mode integration flags. Use when digging up what a past session did.\"",
+   "file": "skills-harness/claude-history/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "shorts",
+   "description": ">",
+   "file": "skills-harness/claude-shorts/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "codebase-health",
+   "description": "Analyze codebase quality through an AI-first lens. Scores 6 dimensions (token efficiency, AI agent friendliness + multi-agent readiness, TDD readiness, readability, dev speed, stab",
+   "file": "skills-harness/codebase-health/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "company-values",
+   "description": "Help define company values and culture for a minimalist business. Use when someone is setting up their company culture, preparing to hire, or wanting to codify what their company s",
+   "file": "skills-harness/company-values/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "create-agent",
+   "description": "Scaffold a new Hypertask @mention bot (agent) using hypertask-agent-kit. Creates an AgentMail-backed, Gemini-driven bot that listens for @mentions on a Hypertask board and replies ",
+   "file": "skills-harness/create-agent/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "cro",
+   "description": ">",
+   "file": "skills-harness/cro/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "cro-audit",
+   "description": ">",
+   "file": "skills-harness/cro-audit/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "cro-benchmark",
+   "description": ">",
+   "file": "skills-harness/cro-benchmark/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "cro-copy",
+   "description": ">",
+   "file": "skills-harness/cro-copy/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "cro-ecommerce",
+   "description": ">",
+   "file": "skills-harness/cro-ecommerce/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "cro-forms",
+   "description": ">",
+   "file": "skills-harness/cro-forms/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "cro-funnel",
+   "description": ">",
+   "file": "skills-harness/cro-funnel/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "cro-page",
+   "description": ">",
+   "file": "skills-harness/cro-page/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "cro-plan",
+   "description": ">",
+   "file": "skills-harness/cro-plan/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "cro-testing",
+   "description": ">",
+   "file": "skills-harness/cro-testing/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "cro-tracking",
+   "description": ">",
+   "file": "skills-harness/cro-tracking/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "cro-trust",
+   "description": ">",
+   "file": "skills-harness/cro-trust/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "cro-ux",
+   "description": ">",
+   "file": "skills-harness/cro-ux/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "deep-work-planner",
+   "description": "This skill should be used when the user wants to front-load an exhaustive interview about ONE project so a long autonomous agent session can run on it without interruption, freeing",
+   "file": "skills-harness/deep-work-planner/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "doc-artifacts",
+   "description": "\"Author and share HTML/markdown document artifacts for Valentin: format decision rule (HTML-first), rich-HTML requirements, hosting rules, and the mdview/htmlshare/repo-docs CLI re",
+   "file": "skills-harness/doc-artifacts/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "find-community",
+   "description": "Help identify and evaluate communities to build a minimalist business around. Use when someone is looking for a business idea, trying to find their community, or wondering where to",
+   "file": "skills-harness/find-community/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "first-customers",
+   "description": "Create a strategy for selling to your first 100 customers using the minimalist entrepreneur playbook. Use when someone has a product and needs to find customers, or is struggling w",
+   "file": "skills-harness/first-customers/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "grow-sustainably",
+   "description": "Evaluate business decisions through the lens of sustainable, profitable growth. Use when someone is making decisions about spending, hiring, fundraising, or scaling their business.",
+   "file": "skills-harness/grow-sustainably/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "human-review",
+   "description": "Open an HTML file, Markdown file, or localhost page in the browser so the user can edit text directly and leave comments on specific parts, then send all edits and comments back to",
+   "file": "skills-harness/human-review/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "humanizer",
+   "description": "|",
+   "file": "skills-harness/humanizer/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "intensity",
+   "description": "Recommend which LLM (Opus/Sonnet/Haiku) and which effort level to use for the current task, based on what this thread already knows about the problem. Use when Valentin asks \"/inte",
+   "file": "skills-harness/intensity/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "karpathy-guidelines",
+   "description": "Behavioral guidelines to reduce common LLM coding mistakes. Use when writing, reviewing, or refactoring code to avoid overcomplication, make surgical changes, surface assumptions, ",
+   "file": "skills-harness/karpathy-guidelines/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "land",
+   "description": "Take a fix or feature all the way to live without checking back. Invoke when Valentin says \"/land\", pastes a bug report, screenshot, or one-line feature ask with no other instructi",
+   "file": "skills-harness/land/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "lean",
+   "description": "Plan tasks with optimal model routing to minimize token usage. Breaks work into steps, assigns each the right model (Haiku/Sonnet/Opus), adds quality gates, persists the plan to fi",
+   "file": "skills-harness/lean/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "marketing-plan",
+   "description": "Create a minimalist marketing plan focused on building an audience through content, not ads. Use when someone has product-market fit (~100 customers) and wants to scale with market",
+   "file": "skills-harness/marketing-plan/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "merge-monitor",
+   "description": "Watch a GitHub PR until it lands. Checks the reviewer's verdict on a cron pinned to the reviewer's working hours, auto-merges on approval (never with --admin), and on changes-reque",
+   "file": "skills-harness/merge-monitor/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "minimalist-review",
+   "description": "Review any business decision, plan, or strategy through the minimalist entrepreneur lens. Use when someone wants a gut-check on a business decision, wants to simplify their approac",
+   "file": "skills-harness/minimalist-review/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "mvp",
+   "description": "Guide building a minimum viable product the minimalist entrepreneur way — manual first, then processized, then productized. Use when someone is ready to build their first product o",
+   "file": "skills-harness/mvp/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "next",
+   "description": "Surface the single most important next action across project board, inbox, Slack, email, and other channels — hybrid urgency + Deep Work scoring with client-contact boost and a lea",
+   "file": "skills-harness/next/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "officecli",
+   "description": "Create, analyze, proofread, and modify Office documents (.docx, .xlsx, .pptx) using the officecli CLI tool. Use when the user wants to create, inspect, check formatting, find issue",
+   "file": "skills-harness/officecli/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "open-case",
+   "description": "Put the full context of the current thread's case on screen in the zsb browser pane — always the associated Hypertask ticket, plus related pages (PR, dashboards, docs) and any rele",
+   "file": "skills-harness/open-case/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "pospeak",
+   "description": "Rewrite the last reply (or any text) for a product owner who is not a senior dev, then pass it through unslop and i-have-adhd, and post it again. Persistent for the session. Use wh",
+   "file": "skills-harness/pospeak/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "pr-check",
+   "description": "Report how many PRs went live (merged to staging = production) in the last 1h/2h/12h/24h with a short performance assessment. Invoke on /pr-check.",
+   "file": "skills-harness/pr-check/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "pricing",
+   "description": "Help figure out pricing for a product or service using minimalist entrepreneur principles. Use when someone is setting prices, considering price changes, or struggling with what to",
+   "file": "skills-harness/pricing/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "processize",
+   "description": "Turn a product idea into a manual-first process you can start delivering today. Use when you have an idea and want to figure out how to deliver value by hand before writing any cod",
+   "file": "skills-harness/processize/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "prompt-master",
+   "description": "Generates optimized prompts for any AI tool. Use when writing, fixing, improving, or adapting a prompt for LLM, Cursor, Midjourney, image AI, video AI, coding agents, or any other ",
+   "file": "skills-harness/prompt-master/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "prototype",
+   "description": "Build a clickable HTML prototype of a Hypertask UI change, grounded in screenshots of the live product, using the app's real styles, published on hypertask.app and attached to the ",
+   "file": "skills-harness/prototype/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "qa",
+   "description": "|",
+   "file": "skills-harness/qa/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "qa-only",
+   "description": "|",
+   "file": "skills-harness/qa-only/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "researcher",
+   "description": ">-",
+   "file": "skills-harness/researcher/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "say-no",
+   "description": "Invert the backlog — walk every open ticket through a Minimalist Entrepreneur filter and surface what to kill, defer, or shrink. Use when the board feels heavy, before planning cyc",
+   "file": "skills-harness/say-no/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "security-audit",
+   "description": "\"Security audit with Semgrep, CodeQL, SARIF parsing, variant analysis, supply chain risk, and differential review. Run automated vulnerability scanning on any codebase.\"",
+   "file": "skills-harness/security-audit/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "self-healing",
+   "description": "\"A learning system that gets better over time by learning from errors.\"",
+   "file": "skills-harness/self-healing/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo",
+   "description": "\"Comprehensive SEO analysis for any website or business type. Full site audits, single-page analysis, technical SEO (crawlability, indexability, Core Web Vitals with INP), schema m",
+   "file": "skills-harness/seo/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-ahrefs",
+   "description": "Ahrefs API analyst (extension). Reads referring domains, backlinks, organic keywords, and content explorer data via the tested @ahrefs/mcp@0.0.11 server. Pairs with seo-backlinks f",
+   "file": "skills-harness/seo-ahrefs/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-audit",
+   "description": "\"Full website SEO audit with parallel subagent delegation. Crawls up to 500 pages, detects business type, delegates to up to 15 specialists (8 always + 7 conditional), generates he",
+   "file": "skills-harness/seo-audit/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-backlinks",
+   "description": "\"Backlink profile analysis: referring domains, anchor text distribution, toxic link detection, competitor gap analysis. Works with free APIs (Moz, Bing Webmaster, Common Crawl) and",
+   "file": "skills-harness/seo-backlinks/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-bing",
+   "description": "Bing Webmaster Tools + IndexNow extension. Microsoft Copilot citations are fed by the Bing index; this skill makes Bing visibility, link data, and IndexNow URL submission first-cla",
+   "file": "skills-harness/seo-bing/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-cluster",
+   "description": ">",
+   "file": "skills-harness/seo-cluster/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-competitor-pages",
+   "description": ">",
+   "file": "skills-harness/seo-competitor-pages/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-content",
+   "description": ">",
+   "file": "skills-harness/seo-content/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-content-brief",
+   "description": ">",
+   "file": "skills-harness/seo-content-brief/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-dataforseo",
+   "description": ">",
+   "file": "skills-harness/seo-dataforseo/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-drift",
+   "description": ">",
+   "file": "skills-harness/seo-drift/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-ecommerce",
+   "description": ">",
+   "file": "skills-harness/seo-ecommerce/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-firecrawl",
+   "description": ">",
+   "file": "skills-harness/seo-firecrawl/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-flow",
+   "description": ">",
+   "file": "skills-harness/seo-flow/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-geo",
+   "description": ">",
+   "file": "skills-harness/seo-geo/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-google",
+   "description": ">",
+   "file": "skills-harness/seo-google/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-hreflang",
+   "description": ">",
+   "file": "skills-harness/seo-hreflang/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-image-gen",
+   "description": "\"AI image generation for SEO assets: OG/social preview images, blog hero images, schema images, product photography, infographics. Powered by Gemini via nanobanana-mcp. Requires ba",
+   "file": "skills-harness/seo-image-gen/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-images",
+   "description": ">",
+   "file": "skills-harness/seo-images/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-local",
+   "description": ">",
+   "file": "skills-harness/seo-local/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-maps",
+   "description": ">",
+   "file": "skills-harness/seo-maps/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-page",
+   "description": ">",
+   "file": "skills-harness/seo-page/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-plan",
+   "description": ">",
+   "file": "skills-harness/seo-plan/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-profound",
+   "description": "Profound LLM citation tracker (extension). Time-series brand citation rates across ChatGPT, Perplexity, and other LLMs. Pairs with seo-seranking for triangulated AI visibility cove",
+   "file": "skills-harness/seo-profound/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-programmatic",
+   "description": ">",
+   "file": "skills-harness/seo-programmatic/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-schema",
+   "description": ">",
+   "file": "skills-harness/seo-schema/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-seranking",
+   "description": "SE Ranking AI visibility analyst (extension). Tracks AI Share-of-Voice across ChatGPT, Gemini, Perplexity, AI Overviews, and AI Mode in a single query.",
+   "file": "skills-harness/seo-seranking/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-sitemap",
+   "description": ">",
+   "file": "skills-harness/seo-sitemap/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-sxo",
+   "description": ">",
+   "file": "skills-harness/seo-sxo/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-technical",
+   "description": ">",
+   "file": "skills-harness/seo-technical/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "seo-unlighthouse",
+   "description": "Multi-page Lighthouse audit via the MIT-licensed Unlighthouse CLI. Free-tier alternative to running PageSpeed against every URL on a site, no API quota burn, runs locally.",
+   "file": "skills-harness/seo-unlighthouse/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "ship",
+   "description": "The hypertasks PR + merge + preview protocol (formerly /pr-protocol). Invoke when a session is about to open a PR, is wondering whether it may merge/deploy, needs to show Valentin ",
+   "file": "skills-harness/ship/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "site-teardown",
+   "description": "Fetch a website's HTML/CSS/JS, deconstruct design patterns, explain techniques, and adapt elements into new projects. Use when cloning, analyzing, or learning from existing sites.",
+   "file": "skills-harness/site-teardown/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "skill-creator",
+   "description": "Create or update Claude skills. Use for new skills, skill references, skill scripts, optimizing existing skills, extending Claude's capabilities.",
+   "file": "skills-harness/skill-creator/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "ticket",
+   "description": "Onboard a Hypertask ticket into this session and start working it, OR create a new ticket from free-form text, OR (when invoked with NO arguments in a thread already on a ticket) j",
+   "file": "skills-harness/ticket/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "tooling",
+   "description": "Inventory all available CLIs, MCP servers, comms channels, and browser tools with live connectivity status. Run with /tooling.",
+   "file": "skills-harness/tooling/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "triage-board",
+   "description": "Systematically triage a Hypertask board's bug/ticket backlog — fan out parallel code-verified reviewers, post a verdict comment on every ticket, tag the unclear ones `needs-info`, ",
+   "file": "skills-harness/triage-board/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "unjargon",
+   "description": "Remove AI tells, empty jargon, and unnecessary technical detail from writing while preserving meaning. Always apply to explanatory prose, especially software-development explanatio",
+   "file": "skills-harness/unjargon/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "unslop",
+   "description": "Cut AI tells from any writing. Must always apply.",
+   "file": "skills-harness/unslop/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "validate-idea",
+   "description": "Validate a business idea using the minimalist entrepreneur framework. Use when someone has a business idea and wants to test if it's worth pursuing before building anything.",
+   "file": "skills-harness/validate-idea/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "verify",
+   "description": "Force self-verification of changes using browser cascade (Playwriter/dev-browser/agent-browser/Playwright), curl, and test runs. Never let user QA.",
+   "file": "skills-harness/verify/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "video-brief",
+   "description": "Hand a just-shipped feature to the video pipeline. Invoke as /video-brief in the session that BUILT the feature (it has the richest context). Drafts the announcement-video script +",
+   "file": "skills-harness/video-brief/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "vwo-disable-review",
+   "description": "Review all running VWO tests across clients (inne, Baybella, vetsak) and execute disables + winner declarations against proper thresholds. Includes client-specific sales-metric saf",
+   "file": "skills-harness/vwo-disable-review/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "vwo-spot-check",
+   "description": "QA spot-check — verifies admin report accuracy against live VWO, Hypertask, and D1 data. Checks test counts, cross-system title consistency, variation status, action log integrity,",
+   "file": "skills-harness/vwo-spot-check/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "warm-claude",
+   "description": "\"Reference for the warm-claude CLI: orchestrate/exec/status/overdrive/reset commands, JSON reporting requirements (overdrive levels, cache hit rate, savings), rebuild instructions.",
+   "file": "skills-harness/warm-claude/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "web-testing",
+   "description": "Web testing with Playwright, Vitest, k6. E2E/unit/integration/load/security/visual/a11y testing. Use for test automation, flakiness, Core Web Vitals, mobile gestures, cross-browser",
+   "file": "skills-harness/web-testing/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "webapp-testing",
+   "description": "Toolkit for interacting with and testing local web applications using Playwright. Supports verifying frontend functionality, debugging UI behavior, capturing browser screenshots, a",
+   "file": "skills-harness/webapp-testing/SKILL.md",
+   "source": "harness",
+   "ref": "main"
+  },
+  {
+   "name": "unslop",
+   "description": "Cut AI tells from any writing. Must always apply.",
+   "file": "skills/unslop/SKILL.md",
+   "source": "multiprompt"
+  },
+  {
+   "name": "i-have-adhd",
+   "description": "Shape output for a reader with ADHD: next action first, numbered steps, short lines, visible progress.",
+   "file": "skills/i-have-adhd/SKILL.md",
+   "source": "multiprompt"
+  }
+ ]
+}

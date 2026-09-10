@@ -56,6 +56,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -163,6 +164,9 @@ import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
+import dev.multiprompt.companion.skills.Skill
+import dev.multiprompt.companion.skills.SkillModel
+import dev.multiprompt.companion.skills.SkillStore
 import dev.multiprompt.companion.data.ReminderTimeParser
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.SessionSearch
@@ -317,6 +321,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             connection = reader,
             dictation = viewModel.dictation,
             screencast = viewModel.screencast,
+            skills = viewModel.skills,
             session = readerSession,
             unread = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.unreadSessionKeys,
             archived = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.archivedSessionKeys,
@@ -1662,6 +1667,7 @@ private fun ReaderScreen(
     connection: SessionReaderConnection,
     dictation: DeepgramDictation,
     screencast: ScreencastUploader,
+    skills: SkillStore,
     session: TmuxSession,
     unread: Boolean,
     archived: Boolean,
@@ -1706,6 +1712,10 @@ private fun ReaderScreen(
     var imageUploading by remember(connection) { mutableStateOf(false) }
     var imageUploadError by remember(connection) { mutableStateOf<String?>(null) }
     var imageAttachments by remember(connection) { mutableStateOf(emptyList<String>()) }
+    var skillMenuExpanded by remember(connection) { mutableStateOf(false) }
+    var attachMenuExpanded by remember(connection) { mutableStateOf(false) }
+    var skillSnapshot by remember(connection) { mutableStateOf(skills.loadFromCache()) }
+    var attachedSkill by remember(connection) { mutableStateOf<Skill?>(null) }
     var dissolveDialogVisible by remember(connection) { mutableStateOf(false) }
     var endDialogVisible by remember(connection) { mutableStateOf(false) }
     var renameDialogVisible by remember(connection) { mutableStateOf(false) }
@@ -1813,14 +1823,22 @@ private fun ReaderScreen(
         }
     }
     DisposableEffect(connection) {
-        // Dictation belongs to this chat. Cancelling and clearing it prevents a late Deepgram
-        // result from becoming the draft of the next chat.
+        skills.refresh(readerScope) { fresh ->
+            if (fresh != null) skillSnapshot = fresh
+        }
         onDispose {
             dictation.discard()
         }
     }
     val sendCurrentPrompt = {
-        val composedPrompt = PromptComposer.composeMessage(prompt, imageAttachments)
+        val attached = attachedSkill
+        val composedPrompt = if (attached != null) {
+            // Strip the /name marker from the draft; the full skill body is injected.
+            val draft = prompt.removePrefix("/${attached.name} ").trim()
+            SkillModel.composeMessage(draft, attached)
+        } else {
+            PromptComposer.composeMessage(prompt, imageAttachments)
+        }
         if (composedPrompt.isNotBlank() &&
             !reader.sending &&
             pendingPromptAction == null
@@ -1829,6 +1847,7 @@ private fun ReaderScreen(
             if (connection.sendPrompt(composedPrompt)) {
                 onSessionInteraction()
                 pendingPromptAction = actionCount
+                attachedSkill = null
             }
         }
     }
@@ -2373,28 +2392,69 @@ private fun ReaderScreen(
                         val sendEnabled = !reader.sending &&
                             pendingPromptAction == null &&
                             !sendAfterDictation &&
-                            (prompt.isNotBlank() || imageAttachments.isNotEmpty() || dictationActive)
+                            (prompt.isNotBlank() || attachedSkill != null || imageAttachments.isNotEmpty() || dictationActive)
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
-                                onClick = {
-                                    if (screencast.configured) {
-                                        imagePicker.launch(
-                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                                        )
+                            Box {
+                                IconButton(
+                                    onClick = { attachMenuExpanded = true },
+                                    enabled = !reader.sending && !dictationActive && !imageUploading,
+                                ) {
+                                    if (imageUploading) {
+                                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                                     } else {
-                                        imageKeyDialogVisible = true
+                                        Icon(Icons.Default.Add, "Attach")
                                     }
-                                },
-                                enabled = !reader.sending &&
-                                    !dictationActive &&
-                                    !imageUploading,
-                            ) {
-                                if (imageUploading) {
-                                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                                } else {
-                                    Icon(Icons.Default.Image, "Upload image")
                                 }
-                            }
+                                DropdownMenu(
+                                    expanded = attachMenuExpanded,
+                                    onDismissRequest = { attachMenuExpanded = false },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Add image") },
+                                        leadingIcon = { Icon(Icons.Default.Image, null, Modifier.size(18.dp)) },
+                                        onClick = {
+                                            attachMenuExpanded = false
+                                            if (screencast.configured) {
+                                                imagePicker.launch(
+                                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                                )
+                                            } else {
+                                                imageKeyDialogVisible = true
+                                            }
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Use skill") },
+                                        leadingIcon = { Icon(Icons.Default.Build, null, Modifier.size(18.dp)) },
+                                        onClick = {
+                                            attachMenuExpanded = false
+                                            skillMenuExpanded = true
+                                        },
+                                    )
+                                }
+                                SkillPickerMenu(
+                                    expanded = skillMenuExpanded,
+                                    snapshot = skillSnapshot,
+                                    onDismiss = { skillMenuExpanded = false },
+                                    onSelect = { skill ->
+                                        skillMenuExpanded = false
+                                        attachedSkill = skill
+                                        val marker = "/${skill.name} "
+                                        promptField = if (promptField.text.startsWith("/")) {
+                                            // Replace an existing /marker with the new skill's.
+                                            val rest = promptField.text.substringAfter(' ', "")
+                                            TextFieldValue(
+                                                marker + rest,
+                                                selection = TextRange(marker.length + rest.length),
+                                            )
+                                        } else {
+                                            TextFieldValue(
+                                                marker + promptField.text,
+                                                selection = TextRange(marker.length),
+                                            )
+                                        }
+                                    },
+                                )
                             IconButton(
                                 onClick = {
                                     if (dictationActive) {
@@ -3474,5 +3534,86 @@ private suspend fun PointerInputScope.detectPassiveDoubleTap(onDoubleTap: () -> 
         } ?: return@awaitEachGesture
         waitForUpOrCancellation() ?: return@awaitEachGesture
         onDoubleTap()
+    }
+}
+
+/**
+ * The skill picker under the plus button: two groups — multiprompt-native skills first
+ * (shipped/curated), then the skills bundled from the coding harness — each marked so
+ * Valentin can tell them apart. Selecting one inserts "/name " into the composer; the
+ * full skill body is injected when the prompt is sent.
+ */
+@Composable
+private fun SkillPickerMenu(
+    expanded: Boolean,
+    snapshot: SkillSnapshot?,
+    onDismiss: () -> Unit,
+    onSelect: (Skill) -> Unit,
+) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        val skills = snapshot?.skills.orEmpty()
+        if (skills.isEmpty()) {
+            DropdownMenuItem(
+                text = { Text("No skills yet — pulling from GitHub…") },
+                enabled = false,
+                onClick = {},
+            )
+            return@DropdownMenu
+        }
+        val multiprompt = skills.filter { it.source == "multiprompt" }
+        val harness = skills.filter { it.source == "harness" }
+        if (multiprompt.isNotEmpty()) {
+            DropdownMenuItem(
+                text = { Text("multiprompt skills", style = MaterialTheme.typography.labelSmall) },
+                enabled = false,
+                onClick = {},
+            )
+            multiprompt.forEach { skill ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text("/${skill.name}", style = MaterialTheme.typography.bodyMedium)
+                            if (skill.description.isNotBlank()) {
+                                Text(
+                                    skill.description,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    },
+                    onClick = { onSelect(skill) },
+                )
+            }
+            if (harness.isNotEmpty()) HorizontalDivider()
+        }
+        if (harness.isNotEmpty()) {
+            DropdownMenuItem(
+                text = { Text("from the coding harness", style = MaterialTheme.typography.labelSmall) },
+                enabled = false,
+                onClick = {},
+            )
+            harness.forEach { skill ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text("/${skill.name}", style = MaterialTheme.typography.bodyMedium)
+                            if (skill.description.isNotBlank()) {
+                                Text(
+                                    skill.description,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    },
+                    onClick = { onSelect(skill) },
+                )
+            }
+        }
     }
 }

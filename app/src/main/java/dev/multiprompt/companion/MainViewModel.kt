@@ -15,6 +15,7 @@ import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
+import dev.multiprompt.companion.skills.SkillStore
 import dev.multiprompt.companion.ssh.PresentedHostKey
 import dev.multiprompt.companion.ssh.SshProblem
 import dev.multiprompt.companion.ssh.TmuxText
@@ -95,6 +96,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val dictation: DeepgramDictation = app.deepgramDictation
     val updates: UpdateManager = app.updateManager
     val screencast: ScreencastUploader = app.screencastUploader
+    val skills: SkillStore = app.skillStore
 
     private val initialWorkspaces = workspaceStore.ordered(workspaceStore.load(), emptyMap())
     private val _state = MutableStateFlow(
