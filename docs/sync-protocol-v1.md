@@ -129,6 +129,48 @@ never leave the device.
 
 Adding a record id is not a breaking change; renaming or removing one is.
 
+## sessionState semantics (normative for both apps)
+
+Sync semantics must hold identically on Android and zigshell. The session-state record for
+`<hostUuid>--<tmuxSessionName>` carries only the logical, device-independent state:
+
+### lastRead — a monotonic remote activity watermark
+
+`lastReadAt` is the highest remote activity timestamp the account has consumed, and it may
+only move forward: writers store `max(existing, lastActivityEpochSeconds)` and sync the
+watermark, never an absolute "read" moment. A read on an old snapshot can never mark newer
+output as read, and two devices cannot regress each other's watermark. `isUnread` is
+always **derived**: `lastActivity > lastReadAt` — it is never synced as a boolean, and
+never stored per device.
+
+### archive — tombstoned intent with archivedAt + optional resumeAt
+
+An archive is `{ archivedAt, resumeAt? }`: `archivedAt` = the activity watermark at
+archive time; `resumeAt`, when present, is an epoch-seconds instant after which the
+session returns ("resume at"). Restore clears the record. Archives sync as their own
+sessionState fields; absence = not archived.
+
+### needsAttention — device-derived, never a synced bool
+
+`needsAttention` is **derived on each device** from its own view of the session (prompt
+state, activity watermark, focused-ness). It is not a synced boolean. What syncs, if
+anything, is the *underlying remote signal* (e.g. the tmux prompt/waiting state) as
+remote-sourced data; each device keeps its own attention UI. Two devices may legitimately
+disagree at an instant; that is correct behaviour, not a conflict.
+
+### fontScale — device/form-factor scoped unless explicitly universal
+
+Font scale is a device preference, not account state. It syncs **only** under an explicit
+user request for a universal value; otherwise the `sessionState` record omits it and every
+device keeps its own. When the user does opt in, the record gains an explicit
+`fontScaleScope: "universal"` marker plus the value — never an implicit copy.
+
+### Rebase rules per state key
+
+`sessionState` merges per state key (`union`/`max` per the optimistic-concurrency rules):
+`lastReadAt` = max; `archivedAt`/`resumeAt` = latest archive intent wins by revision (and
+restore is a tombstone of the archive state); font scale follows the scoping rule above.
+
 ## Storage and sync semantics (Cloudflare D1)
 
 Storage is **D1, not KV**: the sync model needs per-row revisions, uniqueness, and
