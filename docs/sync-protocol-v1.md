@@ -101,21 +101,56 @@ the wrap tag as `WRONG_PASSPHRASE`. A record whose wrap opened but whose tag fai
 `TAMPERED` — the vault key was correct, so the record body was modified or its id/IV
 substituted (the record id is inside the AAD, so renaming a record also fails).
 
-## Kotlin reference implementation
-
-`app/src/main/java/dev/multiprompt/companion/sync/SyncProtocol.kt` — `seal()`/`open()` for
-the vault/bootstrap envelope and `sealEntity()`/`openEntity()` for per-entity transport
-records, with an injectable-free deterministic core so tests can reproduce every byte.
-Verified against every vector in
+## Golden fixtures — the cross-language contract
 
 ```text
 app/src/test/resources/sync/sync-protocol-v1-fixtures.json
 ```
 
-Each vector fixes the passphrase, salt, vault key, and all IVs, and states the expected
-KEK, wrap ciphertext, per-record ciphertexts, the exact canonical envelope JSON, and its
-SHA-256. A language implements protocol v1 correctly if and only if it reproduces the
-envelope bytes and SHA-256 for every vector, and opens them back to the plaintexts.
+One committed file is the single source of truth for both implementations. It contains
+
+- **crypto golden vectors** (`vectors`): full vault envelopes — passphrase, salt, vault
+  key and every IV pinned; expected KEK, wrap ciphertext, per-record ciphertexts, the
+  exact canonical envelope JSON, and its SHA-256;
+- **entity golden vectors** (`entityVectors`): per-entity D1 payloads with account and
+  revision pinned in the AAD;
+- **schema golden vectors** (`schemaVectors`): plaintext record bodies for `hosts`,
+  `workspaces`, and `sessionState` — the exact canonical JSON a mapper must emit for a
+  fixed logical input, so the two languages agree on field names, order, types, and
+  omitted-field handling *before* encryption. A schema mismatch is as fatal as a crypto
+  mismatch.
+
+Determinism rules: the generator (`scripts/gen-sync-fixtures.py`) is committed; every
+random input is pinned; re-running it must reproduce the committed file bit-for-bit — if
+it does not, the generator drifted and the diff is a bug, not new data.
+
+### The gate before production
+
+**Neither the Android app nor zigshell may talk to the production Worker until its own
+suite passes every vector in the committed fixture file byte-for-byte.** For Kotlin this
+is `SyncProtocolFixtureTest` (envelope + entity + schema vectors) in CI. For Zig it is the
+zigshell verifier against the same committed file — a later zigshell change; until that
+suite exists and passes, zigshell has no protocol implementation. Fixture updates are a
+reviewed, deliberate act: regenerate, inspect the diff, land both sides' verification in
+the same change.
+
+### Schema vectors
+
+Plaintext record bodies are canonical JSON with fixed field order (below). Types: host
+UUIDs and workspace ids as strings, ports as integers, timestamps as epoch-seconds
+integers, booleans as JSON booleans; optional fields are **omitted**, never null or
+empty-string placeholders (except `passphraseSecretId`, which serializes as `null`).
+
+- `hosts` record body: `{"hosts":[{"id","label","hostname","port","username",
+  "keySecretId","passphraseSecretId","hostKeyType","hostKeyFingerprint"}]}` sorted by
+  `label` (case-insensitive), then `id` — the same order `HostStore` persists.
+- `workspaces` record body: `{"workspaces":[{"id","name","hostId","remotePath"}]}`
+  sorted by `name` (case-insensitive).
+- `sessionState` record body: one entity per session, entity id `<hostUuid>--<tmuxSessionName>`;
+  body `{"lastReadAt":<int>,"archivedAt":<int|null>,"resumeAt":<int|null>,
+  "fontScaleScope":"universal"?}` — per the sessionState semantics section; keys present
+  only when meaningful, `archivedAt` present iff archived, `resumeAt` only with
+  `archivedAt`.
 
 ## Milestone M0 — Cloudflare Access on native Android (separate from this protocol)
 
@@ -284,6 +319,9 @@ explicitly forbidden: timestamps never decide a conflict.
 
 ## Versioning
 
-`v` is 1. Any breaking change (KDF defaults, canonical form, record layout) must bump `v`
-and ship new fixtures; parsers must reject unknown versions with `UNSUPPORTED_VERSION`
-rather than guessing. Adding a record id is not a breaking change.
+The protocol document is versioned in its filename: `sync-protocol-v1.md` is the normative
+spec for envelope `v: 1`. Any breaking change (KDF defaults, canonical form, record
+layout, AAD composition) must bump the version — a new doc file, a new fixture file, a new
+envelope version — never a silent edit of v1 material. Adding a record id or an optional
+field is not a breaking change. Parsers must reject unknown versions with
+`UNSUPPORTED_VERSION` rather than guessing.

@@ -146,6 +146,16 @@ def build_entity_vector(name, vault_key, record_id, entity_id, plaintext):
     }
 
 
+def build_schema_vector(name, record_id, input_description, canonical_body):
+    return {
+        "name": name,
+        "recordId": record_id,
+        "inputDescription": input_description,
+        "canonicalBodyJson": canonical_body,
+        "canonicalBodySha256": hashlib.sha256(canonical_body.encode("utf-8")).hexdigest(),
+    }
+
+
 def main():
     hosts = json.dumps(
         {
@@ -214,6 +224,72 @@ def main():
         ),
     ]
 
+    # Schema vectors: canonical plaintext record bodies mappers must emit — the two
+    # languages must agree on field names/order/types before encryption. See the
+    # "Schema vectors" section of docs/sync-protocol-v1.md.
+    schema_vectors = [
+        build_schema_vector(
+            "schema-hosts-sorted-by-label",
+            "hosts",
+            "two hosts whose labels differ only by case; sorted case-insensitively by label, then id",
+            json.dumps(
+                {
+                    "hosts": [
+                        {
+                            "id": "0aa1f4c2-5b8e-4d7f-9c3a-2e6b8d0f1a42",
+                            "label": "alpha",
+                            "hostname": "alpha.example.com",
+                            "port": 22,
+                            "username": "valentin",
+                            "keySecretId": "key-alpha",
+                            "passphraseSecretId": None,
+                            "hostKeyType": "ed25519",
+                            "hostKeyFingerprint": "SHA256:Aa1Bb2Cc3Dd4Ee5Ff6Gg7Hh8Ii9Jj0Kk1Ll2Mm3Nn4Oo",
+                        },
+                        {
+                            "id": "3f7c1b2e-8a4d-4c6e-9b2f-1d5a7c9e0b31",
+                            "label": "Beta",
+                            "hostname": "beta.example.com",
+                            "port": 2222,
+                            "username": "valentin",
+                            "keySecretId": "key-beta",
+                            "passphraseSecretId": None,
+                            "hostKeyType": "ed25519",
+                            "hostKeyFingerprint": "SHA256:Zk5tVQ8m5r4Ykqz9Xw2C1bN7vJ3hG8sD0aF6uT4iQ2o",
+                        },
+                    ]
+                },
+                separators=(",", ":"),
+            ),
+        ),
+        build_schema_vector(
+            "schema-workspaces-sorted-by-name",
+            "workspaces",
+            "two workspaces sorted case-insensitively by name",
+            json.dumps(
+                {
+                    "workspaces": [
+                        {"id": "ws-2", "name": "Archive stuff", "hostId": "0a4df4c2-8a4d-4d7f-9c3a-2e6b8d0f1a42", "remotePath": "~/archive"},
+                        {"id": "ws-1", "name": "multiprompt", "hostId": "3f7c1b2e-8a4d-4c6e-9b2f-1d5a7c9e0b31", "remotePath": "~/projects/multiprompt-android"},
+                    ]
+                },
+                separators=(",", ":"),
+            ),
+        ),
+        build_schema_vector(
+            "schema-session-state-archived-with-resume",
+            "sessionState",
+            "archived session with resumeAt and lastRead watermark; unread derived, never stored",
+            '{"lastReadAt":1757500000,"archivedAt":1757410000,"resumeAt":1757600000}',
+        ),
+        build_schema_vector(
+            "schema-session-state-active",
+            "sessionState",
+            "active session: archive keys null, optional fontScaleScope omitted",
+            '{"lastReadAt":1757500000,"archivedAt":null,"resumeAt":null}',
+        ),
+    ]
+
     json.dump(
         {
             "protocol": PROTOCOL,
@@ -222,6 +298,7 @@ def main():
             "note": "Stable cross-language vectors; Kotlin and zigshell must reproduce every envelope byte-for-byte.",
             "vectors": vectors,
             "entityVectors": entity_vectors,
+            "schemaVectors": schema_vectors,
         },
         sys.stdout,
         indent=2,

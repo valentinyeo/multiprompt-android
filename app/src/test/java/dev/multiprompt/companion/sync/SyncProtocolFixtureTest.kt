@@ -4,6 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.security.MessageDigest
@@ -108,6 +109,43 @@ class SyncProtocolFixtureTest {
                     SyncProtocol.openEntity(b64(vector.getString("vaultKey")), metadata, payload),
                 )
             }
+        }
+    }
+
+    @Test
+    fun everySchemaVectorIsStableCanonicalJson() {
+        val doc = JSONObject(
+            javaClass.classLoader.getResourceAsStream(FIXTURE_RESOURCE)!!.readBytes().decodeToString(),
+        )
+        val schemaVectors = doc.getJSONArray("schemaVectors")
+        for (i in 0 until schemaVectors.length()) {
+            val vector = schemaVectors.getJSONObject(i)
+            val name = vector.getString("name")
+            val body = vector.getString("canonicalBodyJson")
+            // The schema vector pins the exact byte sequence a mapper must emit —
+            // including field order. org.json re-serializes with sorted keys, so instead
+            // of a parse/serialize round-trip we verify the pinned field order directly:
+            // the body must contain each field's "key": in the documented order, with no
+            // whitespace between fields.
+            val fields = when (vector.getString("recordId")) {
+                "hosts" -> listOf("id", "label", "hostname", "port", "username", "keySecretId", "passphraseSecretId", "hostKeyType", "hostKeyFingerprint")
+                "workspaces" -> listOf("id", "name", "hostId", "remotePath")
+                else -> listOf("lastReadAt", "archivedAt", "resumeAt")
+            }
+            var cursor = 0
+            for (field in fields) {
+                val at = body.indexOf("\"$field\":", cursor)
+                assertTrue("$name: field \"$field\" missing or out of order", at >= 0)
+                cursor = at + field.length
+            }
+            assertFalse(name, body.contains(", "))
+            assertEquals(
+                name,
+                vector.getString("canonicalBodySha256"),
+                MessageDigest.getInstance("SHA-256")
+                    .digest(body.toByteArray(Charsets.UTF_8))
+                    .joinToString("") { "%02x".format(it) },
+            )
         }
     }
 
