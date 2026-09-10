@@ -736,4 +736,29 @@ class TmuxTextTest {
             TmuxText.readerBlocks("for the inbox, make this a dropdown", AgentKind.CODEX).single().kind,
         )
     }
+
+    @Test
+    fun piCommandEchoAndDurationFooterAreProgressChrome() {
+        val blocks = TmuxText.readerBlocks(
+            """
+            $ cat ~/.claude/settings.json | python3 -c "
+            \"version\": \"3b600518a637\",
+            \"installedAt\": \"2026-01-14T00:56:01.398Z\"
+
+            Took 0.2s
+
+            Done, the bundle is fixed.
+            """.trimIndent(),
+            AgentKind.PI,
+        )
+
+        assertEquals(
+            listOf(
+                TmuxText.ReaderBlockKind.PROGRESS,
+                TmuxText.ReaderBlockKind.PROGRESS,
+                TmuxText.ReaderBlockKind.PROSE,
+            ),
+            blocks.map { it.kind },
+        )
+    }
 }

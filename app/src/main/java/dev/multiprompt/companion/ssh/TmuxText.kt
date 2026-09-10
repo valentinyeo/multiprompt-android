@@ -457,6 +457,9 @@ object TmuxText {
             line.startsWith("esc to interrupt", ignoreCase = true) ||
             BACKGROUND_ACTIVITY_LINE.containsMatchIn(line) ||
             (agent == AgentKind.PI && (line.startsWith("→") || line.startsWith("←"))) ||
+            // pi echoes the executed command with a "$ " prompt and ends tool output with
+            // "Took <time>" — desktop chrome, not conversation (Android reader, ysEEF.png).
+            (agent == AgentKind.PI && (line.startsWith("$ ") || DURATION_LINE.matches(line))) ||
             (agent == AgentKind.HAX && looksLikeHaxDetail(line)) ||
                 TOOL_CALL_MARKERS.any { line.startsWith(it) }
     }
@@ -600,6 +603,10 @@ object TmuxText {
         "(?i)^\\s*[$SPINNER_MARKERS]\\s+\\S+\\s+for\\s+" +
             "\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h)(?:\\s+\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h))*" +
             "(?:\\s+·\\s+done\\b.*)?\\s*$",
+    )
+    /** pi's "Took 0.2s" / "Took 1m 30s" tool-output footer. */
+    private val DURATION_LINE = Regex(
+        "(?i)^took\\s+\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h)(?:\\s+\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h))*\\s*$",
     )
     private val BACKGROUND_ACTIVITY_LINE = Regex(
         "(?i)^●\\s+Background\\s+(?:command|task)\\b",
