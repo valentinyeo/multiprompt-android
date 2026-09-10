@@ -9,6 +9,11 @@ import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
+// Note: this file deliberately uses only java.security + BouncyCastle (already on the
+// classpath for sshlib). The entity-record API seals one entity per canonical JSON
+// payload; the per-row revision/tombstone/concurrency semantics live server-side (D1)
+// and in the sync client, not in the crypto envelope.
+
 /**
  * multiprompt sync protocol v1 — see docs/sync-protocol-v1.md.
  *
@@ -138,6 +143,47 @@ object SyncProtocol {
         return decrypted
     }
 
+    /**
+     * Seals one entity into a canonical entity-record payload for the sync transport
+     * (one D1 row per entity; see docs/sync-protocol-v1.md). The AAD binds recordId and
+     * entityId, so a row can never be re-keyed under another entity.
+     */
+    fun sealEntity(
+        vaultKey: ByteArray,
+        recordId: String,
+        entityId: String,
+        plaintext: ByteArray,
+        iv: ByteArray,
+    ): ByteArray {
+        require(vaultKey.size == VAULT_KEY_BYTES) { "vault key must be $VAULT_KEY_BYTES bytes" }
+        requireRecordId(recordId)
+        requireEntityId(entityId)
+        require(iv.size == IV_BYTES) { "iv must be $IV_BYTES bytes" }
+        val ct = gcmSeal(vaultKey, iv, plaintext, entityAad(recordId, entityId))
+        return canonicalEntityRecord(recordId, entityId, iv, ct)
+    }
+
+    /** Opens a canonical entity-record payload. Wrong entity id/record id = TAMPERED. */
+    fun openEntity(vaultKey: ByteArray, payload: ByteArray): Pair<String, ByteArray> {
+        val root = runCatching { JSONObject(String(payload, Charsets.UTF_8)) }
+            .getOrElse { malformed("entity record is not valid JSON") }
+        if (root.optInt("v", -1) != VERSION) {
+            throw SyncProtocolException(SyncProtocolException.Reason.UNSUPPORTED_VERSION, "entity record version ${root.optInt("v", -1)}")
+        }
+        val recordId = root.optString("recordId")
+        val entityId = root.optString("entityId")
+        requireRecordId(recordId)
+        requireEntityId(entityId)
+        val iv = decodeIv(root.optString("iv"))
+        val ct = decode(root.optString("ct"))
+        val plaintext = runCatching {
+            gcmOpen(vaultKey, iv, ct, entityAad(recordId, entityId))
+        }.getOrElse {
+            throw SyncProtocolException(SyncProtocolException.Reason.TAMPERED, "entity record failed the GCM tag")
+        }
+        return recordId to plaintext
+    }
+
     // --- key derivation -----------------------------------------------------------------
 
     private fun deriveKek(passphrase: CharArray, kdf: KdfParams): ByteArray {
@@ -180,6 +226,24 @@ object SyncProtocol {
 
     private fun recordAad(recordId: String): ByteArray =
         "mp-sync-v1/record/$recordId".toByteArray(Charsets.UTF_8)
+
+    private fun entityAad(recordId: String, entityId: String): ByteArray =
+        "mp-sync-v1/entity/$recordId/$entityId".toByteArray(Charsets.UTF_8)
+
+    private fun requireEntityId(entityId: String) {
+        require(Regex("^[A-Za-z0-9][A-Za-z0-9._-]*$").matches(entityId)) {
+            "entity id must match ^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        }
+    }
+
+    internal fun canonicalEntityRecord(recordId: String, entityId: String, iv: ByteArray, ct: ByteArray): ByteArray =
+        buildString {
+            append("{\"v\":").append(VERSION)
+            append(",\"recordId\":\"").append(recordId)
+            append("\",\"entityId\":\"").append(entityId)
+            append("\",\"iv\":\"").append(b64(iv))
+            append("\",\"ct\":\"").append(b64(ct)).append("\"}")
+        }.toByteArray(Charsets.UTF_8)
 
     // --- canonical JSON ---------------------------------------------------------------------
 

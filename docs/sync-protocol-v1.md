@@ -89,9 +89,10 @@ substituted (the record id is inside the AAD, so renaming a record also fails).
 
 ## Kotlin reference implementation
 
-`app/src/main/java/dev/multiprompt/companion/sync/SyncProtocol.kt` — `seal()` and `open()`
-with an injectable randomness source so tests can reproduce envelopes exactly. Verified
-against every fixture vector in
+`app/src/main/java/dev/multiprompt/companion/sync/SyncProtocol.kt` — `seal()`/`open()` for
+the vault/bootstrap envelope and `sealEntity()`/`openEntity()` for per-entity transport
+records, with an injectable-free deterministic core so tests can reproduce every byte.
+Verified against every vector in
 
 ```text
 app/src/test/resources/sync/sync-protocol-v1-fixtures.json
@@ -127,6 +128,72 @@ never leave the device.
 **v1 ships without SSH private-key/passphrase sync.** Phase 1 syncs non-secret logical state only. SSH key material sync is a separate **Phase 2** feature that requires its own threat model before implementation; when it arrives it gets a dedicated record id (e.g. `keys`) sealed with the same vault key and the envelope-wrapping scheme from the key hierarchy. Until then the server never sees, in any form, the contents of `SecretStore`.
 
 Adding a record id is not a breaking change; renaming or removing one is.
+
+## Storage and sync semantics (Cloudflare D1)
+
+Storage is **D1, not KV**: the sync model needs per-row revisions, uniqueness, and
+conditional writes. The unit of sync is the **per-entity encrypted record** — never one
+giant account blob, and never the multi-record envelope above. The envelope is the local
+vault/bootstrap format (passphrase → vault key); what travels to and from the server is
+one sealed row per entity.
+
+### Entity records
+
+An entity record is a canonical JSON object sealing one entity with the vault key:
+
+```json
+{
+  "v": 1,
+  "recordId": "hosts",
+  "entityId": "3f7c1b2e-8a4d-4c6e-9b2f-1d5a7c9e0b31",
+  "iv": "<b64, 12 bytes>",
+  "ct": "<b64>"
+}
+```
+
+- `ct` = AES-256-GCM(vaultKey, iv, plaintext, AAD = `UTF8("mp-sync-v1/entity/" + recordId
+  + "/" + entityId)`), tag included. The entity id is inside the AAD, so a row must never
+  be re-keyed under another entity id.
+- Field order, compact separators, and base64 rules are the same as for the envelope.
+- `entityId` must match `^[A-Za-z0-9][A-Za-z0-9._-]*$` (no `/`, no `:`). Mappers that have
+  composite keys (e.g. host + tmux session) must encode them into this alphabet; the
+  protocol does not prescribe the encoding.
+- Canonical field order: `v`, `recordId`, `entityId`, `iv`, `ct`.
+
+### D1 row shape (reference schema)
+
+```sql
+CREATE TABLE sync_entity (
+  account_id TEXT NOT NULL,
+  record_id  TEXT NOT NULL,
+  entity_id  TEXT NOT NULL,
+  revision   INTEGER NOT NULL,
+  tombstone  INTEGER NOT NULL DEFAULT 0,
+  payload    TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (account_id, record_id, entity_id)
+);
+```
+
+- `payload` is the sealed entity-record JSON above (for tombstones: a sealed empty body or
+  the last sealed body; clients must treat a tombstone as authoritative deletion).
+- `revision` is a **server-assigned, per-key monotonic counter**, starting at 1. It is the
+  only ordering authority. `updated_at` is metadata (debugging, retention) and is **never**
+  consulted for conflict resolution.
+- Deletions write a tombstone row at a new revision rather than deleting the row, so a
+  delayed write from another device cannot resurrect a deleted entity. Tombstones may be
+  compacted only after every device has acknowledged a revision past them.
+
+### Optimistic concurrency
+
+Every write names the revision it believes current (`expectedRevision`; `0` = create).
+The server accepts the write only when the stored revision equals it, bumping to a fresh
+revision on success; otherwise it responds `409 CONFLICT` carrying the current revision
+and payload. On conflict the client **re-reads the winning entity, re-applies its logical
+change on top, and retries** — rejection-and-rebase, not timestamped overwrite. Mappers
+own the merge semantics per record id: `hosts` and `workspaces` merge at the field level,
+`sessionState` resolves as union/max per state key. Wall-clock-only last-write-wins is
+explicitly forbidden: timestamps never decide a conflict.
 
 ## Versioning
 

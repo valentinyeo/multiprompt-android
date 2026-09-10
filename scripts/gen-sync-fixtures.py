@@ -113,6 +113,30 @@ def build_vector(name, passphrase, records_plaintexts):
     }
 
 
+def build_entity_vector(name, vault_key, record_id, entity_id, plaintext):
+    iv = secrets.token_bytes(IV_BYTES)
+    aad = f"mp-sync-v1/entity/{record_id}/{entity_id}".encode("utf-8")
+    ct = AESGCM(vault_key).encrypt(iv, plaintext.encode("utf-8"), aad)
+    payload = (
+        '{"v":1'
+        f',"recordId":"{record_id}"'
+        f',"entityId":"{entity_id}"'
+        f',"iv":"{b64(iv)}"'
+        f',"ct":"{b64(ct)}"}}'
+    )
+    return {
+        "name": name,
+        "recordId": record_id,
+        "entityId": entity_id,
+        "vaultKey": b64(vault_key),
+        "iv": b64(iv),
+        "plaintextUtf8": plaintext,
+        "ct": b64(ct),
+        "payloadJson": payload,
+        "payloadSha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+    }
+
+
 def main():
     hosts = json.dumps(
         {
@@ -161,6 +185,26 @@ def main():
         ),
     ]
 
+    # Entity-record vectors seal directly with a vault key (no passphrase in the loop):
+    # one D1 row per entity. Pinned keys keep the vectors deterministic.
+    entity_vault_key = bytes(range(32))
+    entity_vectors = [
+        build_entity_vector(
+            "entity-host-row",
+            entity_vault_key,
+            "hosts",
+            "3f7c1b2e-8a4d-4c6e-9b2f-1d5a7c9e0b31",
+            hosts,
+        ),
+        build_entity_vector(
+            "entity-session-state-encoded-key",
+            entity_vault_key,
+            "sessionState",
+            "3f7c1b2e-8a4d-4c6e-9b2f-1d5a7c9e0b31--my-session",
+            json.dumps({"unread": True, "lastReadAt": 1757500000}, separators=(",", ":")),
+        ),
+    ]
+
     json.dump(
         {
             "protocol": PROTOCOL,
@@ -168,6 +212,7 @@ def main():
             "generatedBy": "scripts/gen-sync-fixtures.py",
             "note": "Stable cross-language vectors; Kotlin and zigshell must reproduce every envelope byte-for-byte.",
             "vectors": vectors,
+            "entityVectors": entity_vectors,
         },
         sys.stdout,
         indent=2,

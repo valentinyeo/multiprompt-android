@@ -4,6 +4,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Base64
 
@@ -120,6 +121,52 @@ class SyncProtocolTest {
         val end = envelope.indexOf('"', start)
         val flipped = flipBase64(envelope.substring(start, end))
         return envelope.substring(0, start) + flipped + envelope.substring(end)
+    }
+
+    @Test
+    fun entityRecordRoundTripIsCanonical() {
+        val vaultKey = ByteArray(32) { (it * 5).toByte() }
+        val iv = ByteArray(12) { (it + 7).toByte() }
+        val plaintext = """{"unread":true}""".toByteArray(Charsets.UTF_8)
+        val payload = SyncProtocol.sealEntity(
+            vaultKey,
+            "sessionState",
+            "3f7c1b2e-8a4d-4c6e-9b2f-1d5a7c9e0b31--my-session",
+            plaintext,
+            iv,
+        )
+        // Canonical field order: v, recordId, entityId, iv, ct.
+        val text = payload.toString(Charsets.UTF_8)
+        assertTrue(text.startsWith("{\"v\":1,\"recordId\":\"sessionState\",\"entityId\":\""))
+        val (recordId, opened) = SyncProtocol.openEntity(vaultKey, payload)
+        assertEquals("sessionState", recordId)
+        assertArrayEquals(plaintext, opened)
+    }
+
+    @Test
+    fun entityRecordRejectsARowRekeyedUnderAnotherEntityId() {
+        val vaultKey = ByteArray(32) { (it * 5).toByte() }
+        val iv = ByteArray(12) { (it + 7).toByte() }
+        val payload = String(
+            SyncProtocol.sealEntity(vaultKey, "hosts", "host-one", "{}".toByteArray(), iv),
+            Charsets.UTF_8,
+        )
+        val rekeyed = payload.replace("\"host-one\"", "\"host-two\"")
+        val exception = assertThrows(SyncProtocol.SyncProtocolException::class.java) {
+            SyncProtocol.openEntity(vaultKey, rekeyed.toByteArray(Charsets.UTF_8))
+        }
+        assertEquals(SyncProtocol.SyncProtocolException.Reason.TAMPERED, exception.reason)
+    }
+
+    @Test
+    fun entityRecordRejectsInvalidEntityIds() {
+        val vaultKey = ByteArray(32) { (it * 5).toByte() }
+        assertThrows(IllegalArgumentException::class.java) {
+            SyncProtocol.sealEntity(vaultKey, "sessionState", "host::session", "{}".toByteArray(), ByteArray(12))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            SyncProtocol.sealEntity(vaultKey, "sessionState", "a/b", "{}".toByteArray(), ByteArray(12))
+        }
     }
 
     private fun flipBase64(value: String): String {
