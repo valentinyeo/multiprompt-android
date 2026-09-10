@@ -79,5 +79,6 @@ class VaultKeyStore(context: Context) {
         const val VAULT_KEY = "vault_key"
         const val TRANSFORMATION = "AES/GCM/NoPadding"
         const val IV_BYTES = 12
+        const val VAULT_KEY_BYTES = 32
     }
 }
