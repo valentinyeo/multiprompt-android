@@ -44,6 +44,7 @@ Data flow for the core feature:
 - **Everything interpolated into a remote command goes through `TmuxParser.shellQuote`.** There is a test asserting it blocks injection.
 - **Reader commands are allowlisted.** Prompt content must travel through SSH stdin and tmux buffer/paste operations, never inside a shell command.
 - **`UpdateManager` verifies before installing:** HTTPS-only transport, declared size and SHA-256, package name, strictly newer versionCode, and the installed APK's signing certificate digest. Every one of those checks is load-bearing; a downgrade or a differently-signed APK must be rejected.
+- **No Cloudflare service token or other long-lived secret is ever embedded in the APK.** The app authenticates through the Cloudflare Access login flow only and holds short-lived user tokens (sync account work, IGSH-223; protocol in `docs/sync-protocol-v1.md`).
 
 Cleartext traffic is off (`res/xml/network_security_config.xml`).
 
