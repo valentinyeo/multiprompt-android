@@ -63,7 +63,7 @@ class SyncProtocolFixtureTest {
             assertEquals(
                 name,
                 vector.getString("wrapCt"),
-                b64(JSONObject(envelopeText).getJSONObject("wrap").getString("ct")),
+                JSONObject(envelopeText).getJSONObject("wrap").getString("ct"),
             )
             for (j in 0 until recordArray.length()) {
                 val record = recordArray.getJSONObject(j)
