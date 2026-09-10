@@ -225,6 +225,29 @@ alternative provider behind the same OIDC shape — but the plan of record is Ca
 - M0 may proceed before the D1/Worker storage exists: the whoami endpoint can be a
   standalone Worker stub, so auth proof is not blocked on storage work.
 
+### Service tokens — machine auth only, never in the APK
+
+Cloudflare's service-token docs
+(developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/)
+describe the credential type for *automated systems*: a static Client ID / Client Secret
+pair sent as `CF-Access-Client-Id` / `CF-Access-Client-Secret` request headers (or one
+merged header), with rotation (grace-period dual-secret), renewal, disable, and revoke.
+This is built for CI/CD and server-to-server use — exactly what a distributed mobile app
+cannot safely be:
+
+- A secret shipped in the APK is extractable from the APK; it would be a single shared
+  credential for every installation, revocable only globally (revoke = break all devices
+  at once), with per-instance attribution impossible.
+- The `cfast_` secret prefix (August 2026 format) exists so credential scanners can find
+  leaked secrets — a shipped APK token is a leaked secret by construction.
+
+Standing rule, now grounded in the doc: **service tokens are for server-to-server and
+ops clients only.** They may authenticate CI (e.g. a deploy pipeline) and, if ever needed,
+the zigshell desktop's non-interactive mode via per-machine tokens stored in DPAPI — never
+the Android APK, never a shared fleet secret. User requests carry the user's own
+short-lived OIDC token from Candidate B, and Access service tokens stay out of the app's
+API path entirely.
+
 ## Desktop mapping (zigshell) — no wholesale file sync
 
 The desktop client is zigshell (Zig/Win32). Its durable state lives under
