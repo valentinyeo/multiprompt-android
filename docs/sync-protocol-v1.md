@@ -160,6 +160,29 @@ An entity record is a canonical JSON object sealing one entity with the vault ke
   protocol does not prescribe the encoding.
 - Canonical field order: `v`, `recordId`, `entityId`, `iv`, `ct`.
 
+## Stable logical IDs and the exclusion list
+
+Entity ids are **stable logical identities**, not machine state:
+
+- **Host**: the account-scoped host UUID (`HostProfile.id`, a UUIDv4). The same physical
+  VPS must keep one host UUID across every device; host profiles are created once and
+  synced, not re-invented per device.
+- **Workspace**: the workspace UUID (`Workspace.id`).
+- **Session**: the session identity is the pair **host UUID + tmux session name**, encoded
+  for the entity id as `<hostUuid>--<tmuxSessionName>` (`::` is reserved by legacy local
+  stores and `/` and `:` are outside the entity-id alphabet; `--` is safe because tmux
+  session names cannot contain `--`... when a name could, mappers must percent-encode the
+  tmux name portion). Session-derived fields like `windowName`, `title`, `paneCommand`,
+  `preview`, `columns`, `rows`, `attachedClients`, and `windows` are **live telemetry**:
+  they may appear in session records only as display hints, never as part of the identity,
+  and every consumer must tolerate them being absent or stale.
+- **Excluded from sync entirely** — machine-only, per-process, or transient fields:
+  local PIDs and window handles (PID/HWND), process executable paths, transient browser
+  URLs, tunnel/keep-alive state (e.g. zigshell's `127.0.0.1:19547` notification tunnel),
+  SSH agent socket paths, and any other value that exists only inside one machine or one
+  app run. Two devices with different PIDs/HWNDs/tunnels for the same logical session
+  produce identical sync records.
+
 ### D1 row shape (reference schema)
 
 ```sql
