@@ -115,7 +115,13 @@ def build_vector(name, passphrase, records_plaintexts):
 
 def build_entity_vector(name, vault_key, record_id, entity_id, plaintext):
     iv = secrets.token_bytes(IV_BYTES)
-    aad = f"mp-sync-v1/entity/{record_id}/{entity_id}".encode("utf-8")
+    account_id = "acc-test"
+    revision = 1
+    schema_version = 1
+    aad = (
+        f"mp-sync-v1/entity/{record_id}/{entity_id}"
+        f"/{account_id}/{revision}/{schema_version}"
+    ).encode("utf-8")
     ct = AESGCM(vault_key).encrypt(iv, plaintext.encode("utf-8"), aad)
     payload = (
         '{"v":1'
@@ -128,6 +134,9 @@ def build_entity_vector(name, vault_key, record_id, entity_id, plaintext):
         "name": name,
         "recordId": record_id,
         "entityId": entity_id,
+        "accountId": account_id,
+        "revision": revision,
+        "schemaVersion": schema_version,
         "vaultKey": b64(vault_key),
         "iv": b64(iv),
         "plaintextUtf8": plaintext,

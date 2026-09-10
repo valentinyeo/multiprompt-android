@@ -77,6 +77,40 @@ class SyncProtocolFixtureTest {
         }
     }
 
+    @Test
+    fun everyEntityVectorReproducesThePayloadByteForByte() {
+        val vectors = vectors()
+        for (i in 0 until vectors.length()) {
+            val doc = vectors.getJSONObject(i)
+            if (!doc.has("entityVectors")) continue
+            val entityVectors = doc.getJSONArray("entityVectors")
+            for (j in 0 until entityVectors.length()) {
+                val vector = entityVectors.getJSONObject(j)
+                val name = vector.getString("name")
+                val metadata = SyncProtocol.EntityMetadata(
+                    recordId = vector.getString("recordId"),
+                    entityId = vector.getString("entityId"),
+                    accountId = vector.getString("accountId"),
+                    revision = vector.getLong("revision"),
+                    schemaVersion = vector.optInt("schemaVersion", SyncProtocol.VERSION),
+                )
+                val payload = SyncProtocol.sealEntity(
+                    b64(vector.getString("vaultKey")),
+                    metadata,
+                    vector.getString("plaintextUtf8").toByteArray(Charsets.UTF_8),
+                    b64(vector.getString("iv")),
+                )
+                assertEquals(name, vector.getString("payloadJson"), payload.toString(Charsets.UTF_8))
+                assertEquals(name, vector.getString("payloadSha256"), sha256Hex(payload))
+                assertArrayEquals(
+                    name,
+                    vector.getString("plaintextUtf8").toByteArray(Charsets.UTF_8),
+                    SyncProtocol.openEntity(b64(vector.getString("vaultKey")), metadata, payload),
+                )
+            }
+        }
+    }
+
     private fun b64(value: String): ByteArray = Base64.getDecoder().decode(value)
 
     private fun sha256Hex(bytes: ByteArray): String =

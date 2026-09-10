@@ -33,10 +33,24 @@ KEK + AES-256-GCM --wrap--> sealed vault key (48 bytes = 32 key + 16 tag)
 vault key + AES-256-GCM --per record--> record ciphertext (plaintext + 16-byte tag)
 ```
 
-- Changing the account passphrase re-wraps the vault key only: records do not need to be
-  re-encrypted.
+vault key: 32 random bytes, generated once per vault account
+KEK + AES-256-GCM --wrap--> sealed vault key (48 bytes = 32 key + 16 tag)
+vault key + AES-256-GCM --per record--> record ciphertext (plaintext + 16-byte tag)
+```
+
+- Changing the account passphrase re-wraps the vault key only: **records never need
+  re-encryption on a passphrase change.**
 - Argon2id parameters are stored inside the envelope and are bound by AAD, so they cannot
-  be swapped without failing the wrap tag.
+  be swapped without failing the wrap tag. KDF parameters are **versioned**: the envelope
+  pins `argon2id v19, m=64 MiB, t=3, p=1` today; any future change ships as a new version
+  in the `kdf` block, never a silent edit of the defaults.
+- Random 12-byte nonces per encryption. GCM AAD always binds the authenticated metadata
+  (schema version, account, record id, entity id, revision — see the entity sections).
+- **Local vault-key storage:** after a successful unwrap the vault key lives in
+  **Android Keystore** on Android (a Keystore-wrapped AES key protects the stored vault
+  key, mirroring `SecretStore`; strongbox-backed when available). The later Windows
+  adapter (zigshell) stores it under **DPAPI**. The unwrapped vault key never persists in
+  plaintext and never leaves the device unsealed.
 
 ## Canonical envelope
 
@@ -194,13 +208,21 @@ An entity record is a canonical JSON object sealing one entity with the vault ke
 ```
 
 - `ct` = AES-256-GCM(vaultKey, iv, plaintext, AAD = `UTF8("mp-sync-v1/entity/" + recordId
-  + "/" + entityId)`), tag included. The entity id is inside the AAD, so a row must never
-  be re-keyed under another entity id.
+  + "/" + entityId + "/" + accountId + "/" + revision + "/" + schemaVersion)`), tag
+  included. The AAD is the **authenticated metadata**: schema version, record id, entity
+  id, account, and the row revision this payload seals. A payload therefore cannot be
+  replayed onto a different account, a different record/entity, or an older revision —
+  each attempt fails the GCM tag. The AAD components mirror the D1 row's indexed columns,
+  so the database cannot shuffle rows without detection.
 - Field order, compact separators, and base64 rules are the same as for the envelope.
 - `entityId` must match `^[A-Za-z0-9][A-Za-z0-9._-]*$` (no `/`, no `:`). Mappers that have
   composite keys (e.g. host + tmux session) must encode them into this alphabet; the
   protocol does not prescribe the encoding.
-- Canonical field order: `v`, `recordId`, `entityId`, `iv`, `ct`.
+- Canonical field order: `v`, `recordId`, `entityId`, `iv`, `ct`. The AAD (not the JSON
+  body) carries `accountId` and `revision` — the server indexes those columns and clients
+  must pass the row's revision when sealing so replay across revisions is detected.
+- `accountId` is the Access identity's stable identifier (e.g. the Access JWT `sub`),
+  bound as-is into the AAD.
 
 ## Stable logical IDs and the exclusion list
 

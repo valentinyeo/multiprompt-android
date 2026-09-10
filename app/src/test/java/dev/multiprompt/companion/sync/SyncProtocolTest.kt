@@ -127,33 +127,45 @@ class SyncProtocolTest {
     fun entityRecordRoundTripIsCanonical() {
         val vaultKey = ByteArray(32) { (it * 5).toByte() }
         val iv = ByteArray(12) { (it + 7).toByte() }
+        val metadata = entityMetadata("sessionState", "3f7c1b2e-8a4d-4c6e-9b2f-1d5a7c9e0b31--my-session")
         val plaintext = """{"unread":true}""".toByteArray(Charsets.UTF_8)
-        val payload = SyncProtocol.sealEntity(
-            vaultKey,
-            "sessionState",
-            "3f7c1b2e-8a4d-4c6e-9b2f-1d5a7c9e0b31--my-session",
-            plaintext,
-            iv,
-        )
+        val payload = SyncProtocol.sealEntity(vaultKey, metadata, plaintext, iv)
         // Canonical field order: v, recordId, entityId, iv, ct.
         val text = payload.toString(Charsets.UTF_8)
         assertTrue(text.startsWith("{\"v\":1,\"recordId\":\"sessionState\",\"entityId\":\""))
-        val (recordId, opened) = SyncProtocol.openEntity(vaultKey, payload)
-        assertEquals("sessionState", recordId)
+        val opened = SyncProtocol.openEntity(vaultKey, metadata, payload)
         assertArrayEquals(plaintext, opened)
+    }
+
+    @Test
+    fun entityRecordRejectsAReplayedPayloadOnAnotherRevisionOrAccount() {
+        val vaultKey = ByteArray(32) { (it * 5).toByte() }
+        val iv = ByteArray(12) { (it + 7).toByte() }
+        val metadata = entityMetadata("hosts", "host-one")
+        val payload = SyncProtocol.sealEntity(vaultKey, metadata, "{}".toByteArray(), iv)
+
+        val otherRevision = metadata.copy(revision = metadata.revision + 1)
+        val exception = assertThrows(SyncProtocol.SyncProtocolException::class.java) {
+            SyncProtocol.openEntity(vaultKey, otherRevision, payload)
+        }
+        assertEquals(SyncProtocol.SyncProtocolException.Reason.TAMPERED, exception.reason)
+
+        val otherAccount = metadata.copy(accountId = "someone-else")
+        val exception2 = assertThrows(SyncProtocol.SyncProtocolException::class.java) {
+            SyncProtocol.openEntity(vaultKey, otherAccount, payload)
+        }
+        assertEquals(SyncProtocol.SyncProtocolException.Reason.TAMPERED, exception2.reason)
     }
 
     @Test
     fun entityRecordRejectsARowRekeyedUnderAnotherEntityId() {
         val vaultKey = ByteArray(32) { (it * 5).toByte() }
         val iv = ByteArray(12) { (it + 7).toByte() }
-        val payload = String(
-            SyncProtocol.sealEntity(vaultKey, "hosts", "host-one", "{}".toByteArray(), iv),
-            Charsets.UTF_8,
-        )
+        val metadata = entityMetadata("hosts", "host-one")
+        val payload = String(SyncProtocol.sealEntity(vaultKey, metadata, "{}".toByteArray(), iv), Charsets.UTF_8)
         val rekeyed = payload.replace("\"host-one\"", "\"host-two\"")
         val exception = assertThrows(SyncProtocol.SyncProtocolException::class.java) {
-            SyncProtocol.openEntity(vaultKey, rekeyed.toByteArray(Charsets.UTF_8))
+            SyncProtocol.openEntity(vaultKey, entityMetadata("hosts", "host-two"), rekeyed.toByteArray(Charsets.UTF_8))
         }
         assertEquals(SyncProtocol.SyncProtocolException.Reason.TAMPERED, exception.reason)
     }
@@ -162,12 +174,19 @@ class SyncProtocolTest {
     fun entityRecordRejectsInvalidEntityIds() {
         val vaultKey = ByteArray(32) { (it * 5).toByte() }
         assertThrows(IllegalArgumentException::class.java) {
-            SyncProtocol.sealEntity(vaultKey, "sessionState", "host::session", "{}".toByteArray(), ByteArray(12))
+            SyncProtocol.sealEntity(vaultKey, entityMetadata("sessionState", "host::session"), "{}".toByteArray(), ByteArray(12))
         }
         assertThrows(IllegalArgumentException::class.java) {
-            SyncProtocol.sealEntity(vaultKey, "sessionState", "a/b", "{}".toByteArray(), ByteArray(12))
+            SyncProtocol.sealEntity(vaultKey, entityMetadata("sessionState", "a/b"), "{}".toByteArray(), ByteArray(12))
         }
     }
+
+    private fun entityMetadata(recordId: String, entityId: String) = SyncProtocol.EntityMetadata(
+        recordId = recordId,
+        entityId = entityId,
+        accountId = "acc-test",
+        revision = 1,
+    )
 
     private fun flipBase64(value: String): String {
         val decoded = Base64.getDecoder().decode(value)

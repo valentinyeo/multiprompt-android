@@ -144,44 +144,59 @@ object SyncProtocol {
     }
 
     /**
+     * Authenticated metadata bound into every entity record's GCM AAD: schema version,
+     * record id, entity id, account, and the row revision this payload seals. Mirrors the
+     * D1 row's indexed columns so the database cannot shuffle or replay rows undetected.
+     */
+    data class EntityMetadata(
+        val recordId: String,
+        val entityId: String,
+        val accountId: String,
+        val revision: Long,
+        val schemaVersion: Int = VERSION,
+    )
+
+    /**
      * Seals one entity into a canonical entity-record payload for the sync transport
-     * (one D1 row per entity; see docs/sync-protocol-v1.md). The AAD binds recordId and
-     * entityId, so a row can never be re-keyed under another entity.
+     * (one D1 row per entity; see docs/sync-protocol-v1.md). The AAD binds the full
+     * metadata — record id, entity id, account, revision, schema version — so a payload
+     * cannot be replayed onto another account, row, or an older revision.
      */
     fun sealEntity(
         vaultKey: ByteArray,
-        recordId: String,
-        entityId: String,
+        metadata: EntityMetadata,
         plaintext: ByteArray,
         iv: ByteArray,
     ): ByteArray {
         require(vaultKey.size == VAULT_KEY_BYTES) { "vault key must be $VAULT_KEY_BYTES bytes" }
-        requireRecordId(recordId)
-        requireEntityId(entityId)
+        requireRecordId(metadata.recordId)
+        requireEntityId(metadata.entityId)
+        require(metadata.accountId.isNotBlank()) { "account id must not be blank" }
+        require(metadata.revision >= 0) { "revision must be >= 0" }
         require(iv.size == IV_BYTES) { "iv must be $IV_BYTES bytes" }
-        val ct = gcmSeal(vaultKey, iv, plaintext, entityAad(recordId, entityId))
-        return canonicalEntityRecord(recordId, entityId, iv, ct)
+        val ct = gcmSeal(vaultKey, iv, plaintext, entityAad(metadata))
+        return canonicalEntityRecord(metadata, iv, ct)
     }
 
-    /** Opens a canonical entity-record payload. Wrong entity id/record id = TAMPERED. */
-    fun openEntity(vaultKey: ByteArray, payload: ByteArray): Pair<String, ByteArray> {
+    /**
+     * Opens a canonical entity-record payload, verifying it against the metadata of the
+     * row it was fetched into. Wrong row/account/revision = TAMPERED.
+     */
+    fun openEntity(vaultKey: ByteArray, metadata: EntityMetadata, payload: ByteArray): ByteArray {
         val root = runCatching { JSONObject(String(payload, Charsets.UTF_8)) }
             .getOrElse { malformed("entity record is not valid JSON") }
         if (root.optInt("v", -1) != VERSION) {
             throw SyncProtocolException(SyncProtocolException.Reason.UNSUPPORTED_VERSION, "entity record version ${root.optInt("v", -1)}")
         }
-        val recordId = root.optString("recordId")
-        val entityId = root.optString("entityId")
-        requireRecordId(recordId)
-        requireEntityId(entityId)
+        if (root.optString("recordId") != metadata.recordId) malformed("recordId mismatch")
+        if (root.optString("entityId") != metadata.entityId) malformed("entityId mismatch")
         val iv = decodeIv(root.optString("iv"))
         val ct = decode(root.optString("ct"))
-        val plaintext = runCatching {
-            gcmOpen(vaultKey, iv, ct, entityAad(recordId, entityId))
+        return runCatching {
+            gcmOpen(vaultKey, iv, ct, entityAad(metadata))
         }.getOrElse {
             throw SyncProtocolException(SyncProtocolException.Reason.TAMPERED, "entity record failed the GCM tag")
         }
-        return recordId to plaintext
     }
 
     // --- key derivation -----------------------------------------------------------------
@@ -227,8 +242,9 @@ object SyncProtocol {
     private fun recordAad(recordId: String): ByteArray =
         "mp-sync-v1/record/$recordId".toByteArray(Charsets.UTF_8)
 
-    private fun entityAad(recordId: String, entityId: String): ByteArray =
-        "mp-sync-v1/entity/$recordId/$entityId".toByteArray(Charsets.UTF_8)
+    private fun entityAad(metadata: EntityMetadata): ByteArray =
+        "mp-sync-v1/entity/${metadata.recordId}/${metadata.entityId}/${metadata.accountId}/${metadata.revision}/${metadata.schemaVersion}"
+            .toByteArray(Charsets.UTF_8)
 
     private fun requireEntityId(entityId: String) {
         require(Regex("^[A-Za-z0-9][A-Za-z0-9._-]*$").matches(entityId)) {
@@ -236,11 +252,11 @@ object SyncProtocol {
         }
     }
 
-    internal fun canonicalEntityRecord(recordId: String, entityId: String, iv: ByteArray, ct: ByteArray): ByteArray =
+    internal fun canonicalEntityRecord(metadata: EntityMetadata, iv: ByteArray, ct: ByteArray): ByteArray =
         buildString {
             append("{\"v\":").append(VERSION)
-            append(",\"recordId\":\"").append(recordId)
-            append("\",\"entityId\":\"").append(entityId)
+            append(",\"recordId\":\"").append(metadata.recordId)
+            append("\",\"entityId\":\"").append(metadata.entityId)
             append("\",\"iv\":\"").append(b64(iv))
             append("\",\"ct\":\"").append(b64(ct)).append("\"}")
         }.toByteArray(Charsets.UTF_8)
