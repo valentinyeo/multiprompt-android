@@ -167,45 +167,49 @@ SDK or cookie-handoff bridge. A custom tab could technically complete the login 
 cookie would sit in the browser, not the app — the app would then have no token for its
 own OkHttp calls.
 
-### Candidate A (prove-or-drop): Access for SaaS (OIDC) via Custom Tabs
+### Candidate A (dropped after source review): the Access authorization cookie is browser machinery
 
-Access for SaaS exposes standard OIDC endpoints (authorization, token, JWKS) and allows
-OIDC client applications. The native flow:
+Per Cloudflare's own docs (developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/):
 
-1. Custom Tabs opens the Access authorization endpoint; the user completes Access login
-   (email OTP / IdP) in the browser.
-2. Redirect to the app via AppLinks/deep link (`dev.multiprompt.companion://auth/callback`),
-   with authorization code.
+- `CF_Authorization` is **`HttpOnly` by default** — no client-side script (and no native
+  app inside a Custom Tab) can read it; there is no token endpoint or cookie-handoff
+  bridge for apps.
+- Even with HttpOnly disabled, the optional **`CF_Binding` cookie** is bound to the
+  application's `CF_Authorization` cookie and stripped at Cloudflare's edge: "The
+  `CF_Authorization` cookie cannot be used without the associated binding cookie" — a
+  request with a valid auth cookie but without the binding cookie is rejected. Exporting
+  the cookie into an app's HTTP client therefore does not work without also weakening the
+  binding-cookie protection.
+- Sessions default to 24 hours with no refresh-token concept and no per-device revocation
+  story for apps.
 
-A **supported OIDC library** (AppAuth-Android) exchanges the code at the token endpoint
-for ID/access tokens. Proof requirements for M0:
+Verdict: the cookie is a browser-session credential, not app API authorization. Candidate
+A fails the "clean and revocable" bar on Cloudflare's own documented behavior.
 
-- Short-lived **access token** the Worker can verify (Access for SaaS certs or the IdP's
-  JWKS); refresh handled by the library (refresh token rotation) → revocable: revoking a
-  user's session in Access/IdP stops refresh, and access tokens die within minutes.
-- The app requests an **offline-access refresh token**, stored in Android Keystore, never
-  exported. Service tokens: still never in the APK — M0 stands with the invariant.
-- Revocation check: can the account owner kill a device's refresh token from the Access
-  dashboard/IdP? If not cleanly, Access for SaaS fails the "revocable" bar → Candidate B.
+### Candidate B (adopted): direct OIDC / Better Auth for user login; Access stays in front of admin/ops
 
-### Candidate B (fallback, recommended if A is not clean): direct OIDC / Better Auth for users, Access stays in front of admin/ops
+Adopted recommendation: user login goes through a first-class OIDC provider (or Better
+Auth) that natively supports native apps — PKCE, system browser / Custom Tabs, refresh
+token rotation, and a revocation endpoint. The Worker validates the OIDC access/ID token
+against the provider's JWKS instead of Access JWTs. Cloudflare Access stays in front of
+admin/ops surfaces only (Zero Trust dashboard, D1 console, deploy pipeline) and is
+**removed from the app's API path**.
 
-If the Access-for-SaaS token handoff is not clean (cookie-only, no token endpoint,
-non-revocable), the recommendation flips: user login goes through a first-class OIDC
-provider (or Better Auth) that natively supports native apps (PKCE, system browser, refresh
-rotation, revocation endpoint); Cloudflare Access stays in front of admin/ops surfaces
-(dashboard, D1 console, deploy pipeline) and is **removed from the app's API path**. The
-Worker validates the OIDC access/ID token (JWKS) instead of Access JWTs. This is the
-**default recommendation** unless Candidate A proves clean and revocable in M0.\n
-### M0 acceptance (either candidate)
+If Access for SaaS is ever proven clean and revocable on-device, it can be revisited as an
+alternative provider behind the same OIDC shape — but the plan of record is Candidate B.
 
-- On-device demo: login → token → Worker `/sync/whoami` echoes the identity and expiry.
-- Revocation: killing the session/refresh token makes the next API call fail within the
+### M0 acceptance
+
+- On-device demo: OIDC login → token → Worker `/sync/whoami` echoes the identity and
+  expiry.
+- Revocation: killing the refresh token/session makes the next API call fail within the
   token TTL.
-- No Cloudflare secret in the APK (code review + string scan for `v1.1-` style service
-  token prefixes, `CF_Authorization` cookie handling, or any embedded credential).
+- No Cloudflare secret in the APK (code review plus a string scan for service-token
+  prefixes, `CF_Authorization` cookie handling, or any embedded credential).
 - Flow is a supported pattern: system browser / Custom Tabs + PKCE, no webview-in-app
   auth, no cookie scraping.
+- M0 may proceed before the D1/Worker storage exists: the whoami endpoint can be a
+  standalone Worker stub, so auth proof is not blocked on storage work.
 
 ## Desktop mapping (zigshell) — no wholesale file sync
 
