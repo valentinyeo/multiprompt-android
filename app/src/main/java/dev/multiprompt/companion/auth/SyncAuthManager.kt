@@ -8,7 +8,6 @@ import net.openid.appauth.AuthorizationRequest
 import net.openid.appauth.AuthorizationResponse
 import net.openid.appauth.AuthorizationService
 import net.openid.appauth.AuthorizationServiceConfiguration
-import net.openid.appauth.AuthorizationServiceConfiguration
 import net.openid.appauth.ResponseTypeValues
 import net.openid.appauth.TokenRequest
 import org.json.JSONObject
@@ -79,16 +78,21 @@ class SyncAuthManager(context: Context) {
             ?: return TokenResult.Failure("login was cancelled or the redirect did not match")
         val verifier = preferences.getString(KEY_CODE_VERIFIER, null)
             ?: return TokenResult.Failure("login session expired — try again")
-        val tokenRequest = codeExchange.createTokenExchangeRequest()
-            .toBuilder()
-            .setConfiguration(net.openid.appauth.AuthorizationServiceConfiguration(
+        val baseRequest = codeExchange.createTokenExchangeRequest()
+        val tokenRequest = TokenRequest.Builder(
+            AuthorizationServiceConfiguration(
                 android.net.Uri.parse(discovery.authorizationEndpoint),
                 android.net.Uri.parse(discovery.tokenEndpoint),
-            ))
+            ),
+            clientId,
+        )
+            .setGrantType(net.openid.appauth.GrantTypeValues.AUTHORIZATION_CODE)
+            .setAuthorizationCode(codeExchange.authorizationCode)
+            .setRedirectUri(redirectUri)
             .setCodeVerifier(verifier)
             .build()
 
-        val tokens = exchangeTokenRequest(request)
+        val tokens = exchangeTokenRequest(tokenRequest)
             ?: return TokenResult.Failure("token exchange failed — check the network and try again")
         preferences.edit()
             .putString(KEY_CURRENT_REFRESH, tokens.refreshToken ?: "")
@@ -127,7 +131,7 @@ class SyncAuthManager(context: Context) {
         if (refreshToken.isBlank()) return null
 
         val request = TokenRequest.Builder(
-            net.openid.appauth.AuthorizationServiceConfiguration(
+            AuthorizationServiceConfiguration(
                 android.net.Uri.parse(discovery.authorizationEndpoint),
                 android.net.Uri.parse(discovery.tokenEndpoint),
             ),
