@@ -162,6 +162,7 @@ import dev.multiprompt.companion.data.CrashReport
 import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.dictation.DictationStatus
+import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.skills.Skill
@@ -3623,4 +3624,34 @@ private fun SkillPickerMenu(
             }
         }
     }
+}
+
+/**
+ * Tiny one-line status strip above the Archive/Remind/Wait/Back row: the harness's own
+ * status-line data (model, effort, tokens, cost) pulled from the captured pane footer —
+ * the same line the desktop shows below its input box. Small font, dense, non-blocking.
+ */
+@Composable
+private fun HarnessStatusBar(
+    runtimeDetails: TmuxText.RuntimeDetails,
+    reader: ReaderState,
+    session: TmuxSession,
+) {
+    val parts = listOfNotNull(
+        session.agent.label.takeIf { it.isNotBlank() },
+        runtimeDetails.label,
+        reader.waitingForInput.takeIf { it }?.let { "waiting for input" },
+    )
+    Text(
+        parts.joinToString("  ·  "),
+        style = MaterialTheme.typography.labelSmall,
+        fontSize = 10.sp,
+        lineHeight = 12.sp,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 2.dp),
+    )
 }
