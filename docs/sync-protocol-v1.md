@@ -108,6 +108,25 @@ M0 proves the auth path before any storage ships: a custom-tab/browser Access lo
 device yields a short-lived Access token the Worker accepts. **No long-lived or service
 token may ever be embedded in the APK**; the APK carries no Cloudflare secret at all.
 
+## Desktop mapping (zigshell) — no wholesale file sync
+
+The desktop client is zigshell (Zig/Win32). Its durable state lives under
+`%APPDATA%\ZigShell` — chiefly `session.json` and `windows.json`, plus `commands.json`
+and the OS SSH configuration. **None of these files are synced wholesale.** Sync always
+happens at the level of this protocol's records: the desktop maps its own state into the
+record ids below and applies incoming records back explicitly. Raw config files, OS SSH
+config (`~/.ssh`, registry-stored agent config), and anything not modelled as a record
+never leave the device.
+
+## Record ids (v1)
+
+- `hosts` — host profiles (no private key material; see key hierarchy if key sync is enabled later).
+- `workspaces` — workspace definitions.
+- `sessionState` — per-session read/unread, archive, and display state.
+
+Adding a record id is not a breaking change; renaming or removing one is. Key material, if
+synced in a later phase, gets its own record id and follows the same vault-key sealing.
+
 ## Versioning
 
 `v` is 1. Any breaking change (KDF defaults, canonical form, record layout) must bump `v`
