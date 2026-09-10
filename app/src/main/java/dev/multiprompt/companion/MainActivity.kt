@@ -11,6 +11,8 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.multiprompt.companion.ui.MultipromptApp
 import dev.multiprompt.companion.auth.SyncAuthManager
@@ -18,6 +20,8 @@ import dev.multiprompt.companion.ui.AppTheme
 import dev.multiprompt.companion.ui.MultipromptTheme
 
 class MainActivity : ComponentActivity() {
+
+    private val syncAuth by lazy { SyncAuthManager(this) }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -53,7 +57,7 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         if (intent.getBooleanExtra(EXTRA_OPEN_UPDATE, false)) recreate()
         if (intent.data?.toString()?.startsWith(AUTH_REDIRECT_PREFIX) == true) {
-            viewModel.onAuthRedirect(intent)
+            lifecycleScope.launch { syncAuth.handleAuthorizationResponse(intent) }
         }
     }
 

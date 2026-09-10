@@ -5,7 +5,9 @@ import android.net.Uri
 import android.util.Base64
 import kotlinx.coroutines.Dispatchers
 import net.openid.appauth.AuthorizationRequest
+import net.openid.appauth.AuthorizationResponse
 import net.openid.appauth.AuthorizationService
+import net.openid.appauth.AuthorizationServiceConfiguration
 import net.openid.appauth.AuthorizationServiceConfiguration
 import net.openid.appauth.ResponseTypeValues
 import net.openid.appauth.TokenRequest
@@ -55,11 +57,12 @@ class SyncAuthManager(context: Context) {
             .putString(KEY_CODE_VERIFIER, codeVerifier)
             .apply()
 
+        val config = net.openid.appauth.AuthorizationServiceConfiguration(
+            android.net.Uri.parse(discovery.authorizationEndpoint),
+            android.net.Uri.parse(discovery.tokenEndpoint),
+        )
         val request = AuthorizationRequest.Builder(
-            net.openid.appauth.AuthorizationServiceConfiguration(
-                android.net.Uri.parse(discovery.authorizationEndpoint),
-                android.net.Uri.parse(discovery.tokenEndpoint),
-            ),
+            config,
             clientId,
             ResponseTypeValues.CODE,
             Uri.parse(redirectUri),
@@ -78,6 +81,10 @@ class SyncAuthManager(context: Context) {
             ?: return TokenResult.Failure("login session expired — try again")
         val tokenRequest = codeExchange.createTokenExchangeRequest()
             .toBuilder()
+            .setConfiguration(net.openid.appauth.AuthorizationServiceConfiguration(
+                android.net.Uri.parse(discovery.authorizationEndpoint),
+                android.net.Uri.parse(discovery.tokenEndpoint),
+            ))
             .setCodeVerifier(verifier)
             .build()
 
@@ -120,7 +127,10 @@ class SyncAuthManager(context: Context) {
         if (refreshToken.isBlank()) return null
 
         val request = TokenRequest.Builder(
-            android.net.Uri.parse(discovery.authorizationEndpoint),
+            net.openid.appauth.AuthorizationServiceConfiguration(
+                android.net.Uri.parse(discovery.authorizationEndpoint),
+                android.net.Uri.parse(discovery.tokenEndpoint),
+            ),
             clientId,
         )
             .setGrantType(net.openid.appauth.GrantTypeValues.REFRESH_TOKEN)
