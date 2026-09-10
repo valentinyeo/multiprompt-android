@@ -1,0 +1,12 @@
+# multiprompt sync — M0 auth-spike stub only.
+# Deploys a /sync/whoami endpoint that validates an Access JWT (Cf-Access-Jwt-Assertion)
+# and echoes the identity. This is NOT the production D1/Worker (M3) and touches no data.
+name = "multiprompt-sync-m0"
+main = "src/whoami.ts"
+compatibility_date = "2026-08-01"
+account_id = "7865043d9ae730882b77f3d5d670c158"
+[vars]
+# Zero Trust team domain + AUD tag. TEAM_DOMAIN needs the real team name;
+# POLICY_AUD is set once the Access application exists (see docs/sync-protocol-v1.md M0).
+TEAM_DOMAIN = "https://yeoux.cloudflareaccess.com"
+POLICY_AUD = ""

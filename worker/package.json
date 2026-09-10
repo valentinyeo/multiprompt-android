@@ -1,0 +1,12 @@
+{
+  "name": "multiprompt-sync-m0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "dependencies": {
+    "jose": "^6.0.0"
+  }
+}
