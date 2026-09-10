@@ -14,8 +14,12 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
@@ -109,6 +113,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -167,6 +172,7 @@ import dev.multiprompt.companion.terminal.TerminalStatus
 import dev.multiprompt.companion.update.UpdateRelease
 import dev.multiprompt.companion.update.UpdateState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import dev.multiprompt.companion.upload.ScreencastUploader
 import java.io.ByteArrayOutputStream
 import java.time.ZonedDateTime
@@ -2060,7 +2066,11 @@ private fun ReaderScreen(
         modifier = Modifier.horizontalSwipe(onSwitchSession),
         topBar = {
             TopAppBar(
-                modifier = Modifier.statusBarsPadding(),
+                modifier = Modifier
+                    .statusBarsPadding()
+                    .pointerInput(onOpenTerminal) {
+                        detectTapGestures(onDoubleTap = { onOpenTerminal() })
+                    },
                 title = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -2460,6 +2470,9 @@ private fun ReaderScreen(
                 .padding(padding)
                 .fillMaxSize()
                 .verticalScroll(scrollState)
+                .pointerInput(onOpenTerminal) {
+                    detectTapGestures(onDoubleTap = { onOpenTerminal() })
+                }
                 .padding(horizontal = 4.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -3158,7 +3171,9 @@ private fun TerminalScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                modifier = Modifier.statusBarsPadding(),
+                modifier = Modifier
+                    .statusBarsPadding()
+                    .pointerInput(onBack) { detectTapGestures(onDoubleTap = { onBack() }) },
                 title = {
                     Column {
                         Text(
@@ -3192,7 +3207,12 @@ private fun TerminalScreen(
         },
     ) { padding ->
         BoxWithConstraints(
-            Modifier.padding(padding).fillMaxSize().background(TerminalBackground).clipToBounds(),
+            Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .background(TerminalBackground)
+                .clipToBounds()
+                .pointerInput(onBack) { detectPassiveDoubleTap(onBack) },
         ) {
             val viewportPx = with(density) { maxHeight.toPx() }
             // 10% short of the measured slack: an overshoot would push the prompt row off
@@ -3369,6 +3389,9 @@ private fun Modifier.horizontalSwipe(
 
 /** Used only when tmux did not report a width for the session. */
 private const val FALLBACK_COLUMNS = 100
+// Long enough for a relaxed double tap, short enough that two deliberate taps are not read
+// as one gesture. Only used by the terminal's passive double-tap observer.
+private const val DOUBLE_TAP_TIMEOUT_MS = 320L
 private const val UPDATE_POLL_INTERVAL_MS = 5 * 60 * 1000L
 
 private fun statusLabel(status: TerminalStatus): String = when (status) {
@@ -3436,3 +3459,20 @@ private val TERMINAL_ERROR = Regex("(?i)(^|\\b)(error|failed|failure|fatal|excep
 private val TERMINAL_WARNING = Regex("(?i)(^|\\b)(warning|warn)(\\b|:)")
 private val TERMINAL_SUCCESS = Regex("(?i)(^|\\b)(success|successful|passed|complete|completed)(\\b|:)")
 private val TERMINAL_PROMPT = Regex("^[>$❯›#]")
+
+/**
+ * Watches for a double tap without consuming a single pointer event. The live terminal owns
+ * its own touch handling (tap to focus the keyboard, horizontal swipe to switch session),
+ * so this only observes: it never consumes a pointer event.
+ */
+private suspend fun PointerInputScope.detectPassiveDoubleTap(onDoubleTap: () -> Unit) {
+    awaitEachGesture {
+        awaitFirstDown(requireUnconsumed = false)
+        waitForUpOrCancellation() ?: return@awaitEachGesture
+        withTimeoutOrNull(DOUBLE_TAP_TIMEOUT_MS) {
+            awaitFirstDown(requireUnconsumed = false)
+        } ?: return@awaitEachGesture
+        waitForUpOrCancellation() ?: return@awaitEachGesture
+        onDoubleTap()
+    }
+}
