@@ -186,6 +186,20 @@ Per Cloudflare's own docs (developers.cloudflare.com/cloudflare-one/access-contr
 Verdict: the cookie is a browser-session credential, not app API authorization. Candidate
 A fails the "clean and revocable" bar on Cloudflare's own documented behavior.
 
+The companion page on validating JWTs
+(developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/)
+confirms the shape: the JWT travels as the edge-injected `Cf-Access-Jwt-Assertion`
+**header** on requests that already passed Access, and "requests made through a browser
+will also pass the token as a `CF_Authorization` cookie" — i.e. acquisition is
+browser-session-bound; the header is how the *origin* learns who the browser was, not how
+a native client authenticates. It also documents the validation pattern Access surfaces
+use (remote JWKS at `<team-domain>/cdn-cgi/access/certs`, match the JWT `kid` against
+`public_certs` rather than the cacheable `public_cert`, verify `iss` = team domain and
+`aud` = the application's stable AUD tag; signing keys rotate ~6 weeks with a 7-day
+overlap). Under Candidate B this is exactly how the Worker validates Access in front of
+admin/ops surfaces — and how it validates the app's OIDC token against the chosen IdP's
+JWKS instead.
+
 ### Candidate B (adopted): direct OIDC / Better Auth for user login; Access stays in front of admin/ops
 
 Adopted recommendation: user login goes through a first-class OIDC provider (or Better
