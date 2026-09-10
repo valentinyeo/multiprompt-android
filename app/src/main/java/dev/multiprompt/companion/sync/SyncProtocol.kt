@@ -247,8 +247,8 @@ object SyncProtocol {
             .toByteArray(Charsets.UTF_8)
 
     private fun requireEntityId(entityId: String) {
-        require(Regex("^[A-Za-z0-9][A-Za-z0-9._-]*$").matches(entityId)) {
-            "entity id must match ^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        require(Regex("^[A-Za-z0-9][A-Za-z0-9._%*-]*$").matches(entityId)) {
+            "entity id must match ^[A-Za-z0-9][A-Za-z0-9._%*-]*$"
         }
     }
 

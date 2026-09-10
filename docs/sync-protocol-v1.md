@@ -340,12 +340,20 @@ An entity record is a canonical JSON object sealing one entity with the vault ke
   each attempt fails the GCM tag. The AAD components mirror the D1 row's indexed columns,
   so the database cannot shuffle rows without detection.
 - Field order, compact separators, and base64 rules are the same as for the envelope.
-- `entityId` must match `^[A-Za-z0-9][A-Za-z0-9._-]*$` (no `/`, no `:`). Mappers that have
-  composite keys (e.g. host + tmux session) must encode them into this alphabet; the
-  protocol does not prescribe the encoding.
+- `entityId` must match `^[A-Za-z0-9][A-Za-z0-9._%*-]*$` (no `/` — the AAD separator — and
+  no `:` — reserved by legacy local stores). Mappers that have composite keys (e.g. host +
+  tmux session) must encode them into this alphabet; session identity encodes as
+  `<hostUuid>--<percentEncodedTmuxName>` (the `--` joiner, `+` never used, spaces as
+  `%20`).
 - Canonical field order: `v`, `recordId`, `entityId`, `iv`, `ct`. The AAD (not the JSON
-  body) carries `accountId` and `revision` — the server indexes those columns and clients
-  must pass the row's revision when sealing so replay across revisions is detected.
+  body) carries `accountId` and `revision` — the server indexes those columns. The
+  `revision` bound in the AAD is the **revision the payload occupies**: a client pushing
+  against expected revision N seals with `N + 1`, which is exactly the revision the server
+  assigns on success (the write is only accepted when the stored revision equals N). A
+  stale payload therefore never verifies against the row it would land on.
+- Canonical record bodies are written with **pinned field order by the mapper itself**
+  (manual serialization): JSON serializers like org.json re-order keys alphabetically and
+  must only be used for parsing.
 - `accountId` is the Access identity's stable identifier (e.g. the Access JWT `sub`),
   bound as-is into the AAD.
 
