@@ -16,6 +16,9 @@ import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.skills.SkillStore
+import dev.multiprompt.companion.auth.SyncAuthManager
+import android.content.Intent
+import kotlinx.coroutines.launch
 import dev.multiprompt.companion.ssh.PresentedHostKey
 import dev.multiprompt.companion.ssh.SshProblem
 import dev.multiprompt.companion.ssh.TmuxText
@@ -97,6 +100,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val updates: UpdateManager = app.updateManager
     val screencast: ScreencastUploader = app.screencastUploader
     val skills: SkillStore = app.skillStore
+    val syncAuth: SyncAuthManager = app.syncAuth
 
     private val initialWorkspaces = workspaceStore.ordered(workspaceStore.load(), emptyMap())
     private val _state = MutableStateFlow(
@@ -1014,6 +1018,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun installUpdate(release: UpdateRelease) = updates.install(release)
+
+    private val _authMessage = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    val authMessage: kotlinx.coroutines.flow.StateFlow<String?> = _authMessage
+
+    fun onAuthRedirect(intent: Intent) {
+        viewModelScope.launch {
+            when (val result = syncAuth.handleAuthorizationResponse(intent)) {
+                is SyncAuthManager.TokenResult.Success ->
+                    _authMessage.value = "Signed in — sync is ready"
+                is SyncAuthManager.TokenResult.Failure ->
+                    _authMessage.value = result.message
+            }
+        }
+    }
 
     override fun onCleared() {
         _state.value.terminal?.close()

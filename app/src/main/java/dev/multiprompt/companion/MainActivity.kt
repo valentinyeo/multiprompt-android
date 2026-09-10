@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.multiprompt.companion.ui.MultipromptApp
+import dev.multiprompt.companion.auth.SyncAuthManager
 import dev.multiprompt.companion.ui.AppTheme
 import dev.multiprompt.companion.ui.MultipromptTheme
 
@@ -51,9 +52,13 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         if (intent.getBooleanExtra(EXTRA_OPEN_UPDATE, false)) recreate()
+        if (intent.data?.toString()?.startsWith(AUTH_REDIRECT_PREFIX) == true) {
+            viewModel.onAuthRedirect(intent)
+        }
     }
 
     companion object {
         const val EXTRA_OPEN_UPDATE = "open_update"
+        private const val AUTH_REDIRECT_PREFIX = "dev.multiprompt.companion://auth/callback"
     }
 }

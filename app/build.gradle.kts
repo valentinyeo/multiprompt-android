@@ -99,6 +99,7 @@ dependencies {
     implementation(libs.connectbot.ssh)
     implementation(libs.bouncycastle)
     implementation(libs.okhttp)
+    implementation(libs.appauth)
     implementation(libs.androidx.work)
 
     debugImplementation(libs.androidx.compose.ui.tooling)

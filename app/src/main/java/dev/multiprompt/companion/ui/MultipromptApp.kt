@@ -59,6 +59,7 @@ import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
@@ -165,9 +166,13 @@ import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
+import dev.multiprompt.companion.auth.SyncAuthManager
 import dev.multiprompt.companion.skills.Skill
+import dev.multiprompt.companion.auth.SyncAuthManager
 import dev.multiprompt.companion.skills.SkillModel
+import dev.multiprompt.companion.auth.SyncAuthManager
 import dev.multiprompt.companion.skills.SkillSnapshot
+import dev.multiprompt.companion.auth.SyncAuthManager
 import dev.multiprompt.companion.skills.SkillStore
 import dev.multiprompt.companion.data.ReminderTimeParser
 import dev.multiprompt.companion.data.SessionReadStore
@@ -324,6 +329,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             dictation = viewModel.dictation,
             screencast = viewModel.screencast,
             skills = viewModel.skills,
+            syncAuth = viewModel.syncAuth,
             session = readerSession,
             unread = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.unreadSessionKeys,
             archived = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.archivedSessionKeys,
@@ -1670,6 +1676,7 @@ private fun ReaderScreen(
     dictation: DeepgramDictation,
     screencast: ScreencastUploader,
     skills: SkillStore,
+    syncAuth: dev.multiprompt.companion.auth.SyncAuthManager,
     session: TmuxSession,
     unread: Boolean,
     archived: Boolean,
@@ -1716,6 +1723,27 @@ private fun ReaderScreen(
     var imageAttachments by remember(connection) { mutableStateOf(emptyList<String>()) }
     var skillMenuExpanded by remember(connection) { mutableStateOf(false) }
     var attachMenuExpanded by remember(connection) { mutableStateOf(false) }
+    var signedIn by remember(connection) { mutableStateOf(syncAuth.hasSession()) }
+    var pendingAuthLaunch by remember(connection) { mutableStateOf(false) }
+    val authLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (pendingAuthLaunch) {
+            pendingAuthLaunch = false
+            val intent = result.data
+            readerScope.launch {
+                when (val r = syncAuth.handleAuthorizationResponse(intent)) {
+                    is dev.multiprompt.companion.auth.SyncAuthManager.TokenResult.Success -> {
+                        signedIn = true
+                        microphoneError = "Signed in — sync is ready"
+                    }
+                    is dev.multiprompt.companion.auth.SyncAuthManager.TokenResult.Failure -> {
+                        microphoneError = r.message
+                    }
+                }
+            }
+        }
+    }
     var skillSnapshot by remember(connection) { mutableStateOf(skills.loadFromCache()) }
     var attachedSkill by remember(connection) { mutableStateOf<Skill?>(null) }
     var dissolveDialogVisible by remember(connection) { mutableStateOf(false) }
@@ -2263,6 +2291,26 @@ private fun ReaderScreen(
                                 onClick = {
                                     menuExpanded = false
                                     endDialogVisible = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (signedIn) "Sync: signed in — sign out" else "Sign in to sync") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Cloud,
+                                        null,
+                                        Modifier.size(18.dp),
+                                        tint = if (signedIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    if (signedIn) {
+                                        syncAuth.signOut()
+                                    } else {
+                                        pendingAuthLaunch = true
+                                        authLauncher.launch(syncAuth.buildAuthorizationIntent())
+                                    }
                                 },
                             )
                             DropdownMenuItem(
