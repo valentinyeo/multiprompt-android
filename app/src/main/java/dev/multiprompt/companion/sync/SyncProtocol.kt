@@ -143,7 +143,8 @@ object SyncProtocol {
     private fun deriveKek(passphrase: CharArray, kdf: KdfParams): ByteArray {
         val generator = Argon2BytesGenerator()
         generator.init(
-            Argon2Parameters.Builder(Argon2Parameters.ARGON2_ID, kdf.salt)
+            Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
+                .withSalt(kdf.salt)
                 .withVersion(kdf.version)
                 .withIterations(kdf.iterations)
                 .withMemoryAsKB(kdf.memoryKiB)
