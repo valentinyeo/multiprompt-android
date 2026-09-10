@@ -2297,6 +2297,11 @@ private fun ReaderScreen(
                     .navigationBarsPadding(),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                HarnessStatusBar(
+                    runtimeDetails = runtimeDetails,
+                    reader = reader,
+                    session = session,
+                )
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
