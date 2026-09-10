@@ -200,6 +200,28 @@ overlap). Under Candidate B this is exactly how the Worker validates Access in f
 admin/ops surfaces — and how it validates the app's OIDC token against the chosen IdP's
 JWKS instead.
 
+### M0 spike result (API-verified): Access for SaaS OIDC WORKS for native apps
+
+Driven entirely via the API (2026-09-10): a SaaS-OIDC application ("multiprompt-android")
+was created on the Zero Trust team with One-Time-PIN as its login method, PKCE + refresh
+grants, and the app deep links registered. The **per-app OIDC discovery document is
+served and complete** (`/.well-known/openid-configuration` under
+`/cdn-cgi/access/sso/oidc/<client_id>/`: authorization, token, JWKS, userinfo endpoints),
+and the **authorize endpoint validates PKCE correctly**: a request without
+`code_challenge` is rejected with `error=invalid_request` ("code_challenge is required
+for this client"), while a correct S256 challenge 302s into the Access OTP login flow —
+i.e. the flow lands in "email me a code" and, on success, returns an authorization code
+to `dev.multiprompt.companion://auth/callback`, exchangeable at the token endpoint for
+ID/access/refresh tokens.
+
+That is the native-app contract the cookie path could never provide: **the app gets its
+own tokens (including a refresh token with rotation and a 720h lifetime), revocable via
+the Access session, with email-OTP as the login UX** — the simplest possible for the
+user. The OTP email step happens in the browser; everything after it is standard OAuth2.
+
+M0 remaining: run AppAuth-Android through this flow on the device (login → token →
+whoami → revoke → next call fails).
+
 ### Decision (M0 unblocked): Zero Trust One-Time-PIN on multiprompt.dev
 
 Valentin chose the account and login method: the sync stack lives under the yeo-ux.com

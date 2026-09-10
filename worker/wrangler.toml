@@ -8,5 +8,5 @@ account_id = "7865043d9ae730882b77f3d5d670c158"
 [vars]
 # Zero Trust team domain + AUD tag. TEAM_DOMAIN needs the real team name;
 # POLICY_AUD is set once the Access application exists (see docs/sync-protocol-v1.md M0).
-TEAM_DOMAIN = "https://yeoux.cloudflareaccess.com"
-POLICY_AUD = ""
+TEAM_DOMAIN = "https://vwo-analyzer.cloudflareaccess.com"
+POLICY_AUD = "33b12cd51388cc4f1419c9b60ba96cfd6ae6b73e414a51058af1cbb196029010"
