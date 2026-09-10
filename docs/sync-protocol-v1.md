@@ -200,7 +200,25 @@ overlap). Under Candidate B this is exactly how the Worker validates Access in f
 admin/ops surfaces — and how it validates the app's OIDC token against the chosen IdP's
 JWKS instead.
 
-### Candidate B (adopted): direct OIDC / Better Auth for user login; Access stays in front of admin/ops
+### Decision (M0 unblocked): Zero Trust One-Time-PIN on multiprompt.dev
+
+Valentin chose the account and login method: the sync stack lives under the yeo-ux.com
+Cloudflare account with `multiprompt.dev` as the app domain, and user login is the
+simplest possible — **Zero Trust One-Time-PIN**: enter the email address, Access emails a
+code, type the code, logged in. No third-party IdP, no Better Auth for v1.
+
+This re-opens Access as the *user authenticator* (the earlier verdict dropped only the
+cookie *mechanism*, which is browser-only). The M0 spike must therefore prove the flagged
+hard part: a native flow ending with **the app** — not just the browser — holding
+reusable, revocable API authorization. Preferred path: **Access for SaaS (Generic OIDC)**
+with email OTP as the login method (Custom Tabs + AppAuth + PKCE; Access-for-SaaS issues
+real OIDC ID/access/refresh tokens, giving first-class refresh/revocation). Fallback if
+the token handoff is not clean: a small first-party token-exchange Worker behind Access
+(browser completes the Access login; the app exchanges a one-time code for its own
+short-lived token). Standing invariants unchanged: no service tokens in the APK, supported
+patterns only, revocation must work per session.
+
+### Candidate B (fallback record): direct OIDC / Better Auth for user login; Access stays in front of admin/ops
 
 Adopted recommendation: user login goes through a first-class OIDC provider (or Better
 Auth) that natively supports native apps — PKCE, system browser / Custom Tabs, refresh
