@@ -152,11 +152,60 @@ empty-string placeholders (except `passphraseSecretId`, which serializes as `nul
   only when meaningful, `archivedAt` present iff archived, `resumeAt` only with
   `archivedAt`.
 
-## Milestone M0 — Cloudflare Access on native Android (separate from this protocol)
+## Milestone M0 — auth proof (gated, not an assumption)
 
-M0 proves the auth path before any storage ships: a custom-tab/browser Access login on the
-device yields a short-lived Access token the Worker accepts. **No long-lived or service
-token may ever be embedded in the APK**; the APK carries no Cloudflare secret at all.
+Auth is milestone 0 and must be **proven on a device** before any storage ships. M0's
+question: can a native Android app get **reusable, revocable app API authorization**
+through Cloudflare Access, cleanly?
+
+### The problem with the cookie
+
+Access normally authenticates **HTTP requests** with the `CF_Authorization` cookie (a
+JWT). On the web this is invisible; for a native app it is awkward: cookies live in the
+browser, are refreshed by Cloudflare's JS on page loads, and have no official Android
+SDK or cookie-handoff bridge. A custom tab could technically complete the login and the
+cookie would sit in the browser, not the app — the app would then have no token for its
+own OkHttp calls.
+
+### Candidate A (prove-or-drop): Access for SaaS (OIDC) via Custom Tabs
+
+Access for SaaS exposes standard OIDC endpoints (authorization, token, JWKS) and allows
+OIDC client applications. The native flow:
+
+1. Custom Tabs opens the Access authorization endpoint; the user completes Access login
+   (email OTP / IdP) in the browser.
+2. Redirect to the app via AppLinks/deep link (`dev.multiprompt.companion://auth/callback`),
+   with authorization code.
+
+A **supported OIDC library** (AppAuth-Android) exchanges the code at the token endpoint
+for ID/access tokens. Proof requirements for M0:
+
+- Short-lived **access token** the Worker can verify (Access for SaaS certs or the IdP's
+  JWKS); refresh handled by the library (refresh token rotation) → revocable: revoking a
+  user's session in Access/IdP stops refresh, and access tokens die within minutes.
+- The app requests an **offline-access refresh token**, stored in Android Keystore, never
+  exported. Service tokens: still never in the APK — M0 stands with the invariant.
+- Revocation check: can the account owner kill a device's refresh token from the Access
+  dashboard/IdP? If not cleanly, Access for SaaS fails the "revocable" bar → Candidate B.
+
+### Candidate B (fallback, recommended if A is not clean): direct OIDC / Better Auth for users, Access stays in front of admin/ops
+
+If the Access-for-SaaS token handoff is not clean (cookie-only, no token endpoint,
+non-revocable), the recommendation flips: user login goes through a first-class OIDC
+provider (or Better Auth) that natively supports native apps (PKCE, system browser, refresh
+rotation, revocation endpoint); Cloudflare Access stays in front of admin/ops surfaces
+(dashboard, D1 console, deploy pipeline) and is **removed from the app's API path**. The
+Worker validates the OIDC access/ID token (JWKS) instead of Access JWTs. This is the
+**default recommendation** unless Candidate A proves clean and revocable in M0.\n
+### M0 acceptance (either candidate)
+
+- On-device demo: login → token → Worker `/sync/whoami` echoes the identity and expiry.
+- Revocation: killing the session/refresh token makes the next API call fail within the
+  token TTL.
+- No Cloudflare secret in the APK (code review + string scan for `v1.1-` style service
+  token prefixes, `CF_Authorization` cookie handling, or any embedded credential).
+- Flow is a supported pattern: system browser / Custom Tabs + PKCE, no webview-in-app
+  auth, no cookie scraping.
 
 ## Desktop mapping (zigshell) — no wholesale file sync
 
