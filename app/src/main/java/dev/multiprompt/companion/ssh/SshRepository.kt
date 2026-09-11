@@ -183,6 +183,8 @@ class SshRepository(private val secrets: SecretStore) {
                 when (action) {
                     TmuxAction.ENTER -> "send Enter"
                     TmuxAction.INTERRUPT -> "interrupt the session"
+                    TmuxAction.SCROLL_UP -> "scroll the agent history up"
+                    TmuxAction.SCROLL_BOTTOM -> "return to the live view"
                 },
             )
     }
