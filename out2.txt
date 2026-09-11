@@ -1,0 +1,42 @@
+17:41 @& @ 3 Seer 71)
+
+(0 Hypertask Product 80 v $8 Commands a
+
++ In Progress 14 +
+ox O11 A © HTPR-6279 Ininbox (2 @&
+(cycle agent CLI bug: tasks get omits assignees, tasks |
++Enter, Ctrl+ ist returns them
+
+ GLMDev4 CLI Quickwins Bug
+ig +1
+
+Ey @ HTPR-6175 Ininbox (© 29 ©
+I want fast entry on the kanban board so t
+hat i can enter several cards after each oth
+er and i want the same on the tables
+ SolDev1 e@High sol FEATURE ®
+
+llm:claude-opus-5 +2
+
+@ HTPR-6290 In inbox @&)
+
+Stack upgrade: pacote 15.2.0 -> 22.0.0 an
+dnpm 9.9.4 -> 12.0.2 (security)
+
+& GLMDev4_ e Urgent
+
+IMPROVEMENT 42
+
+HTPR-6277 Ininbox (© 3
+[BUG] Share button scrolls the open task b
+ack to the top
+
+‘@ GLMDev3 Quickwins Bug r
+@ HTPR-6283 Ininbox (©
+
+Agent Chat: sort the chat list by m
+nt activity
+
+lo fs fe)
+
+Board Calendar Inbox Al Search

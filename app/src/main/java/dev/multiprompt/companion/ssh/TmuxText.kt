@@ -457,9 +457,10 @@ object TmuxText {
             line.startsWith("esc to interrupt", ignoreCase = true) ||
             BACKGROUND_ACTIVITY_LINE.containsMatchIn(line) ||
             (agent == AgentKind.PI && (line.startsWith("→") || line.startsWith("←"))) ||
-            // pi echoes the executed command with a "$ " prompt and ends tool output with
-            // "Took <time>" — desktop chrome, not conversation (Android reader, ysEEF.png).
-            (agent == AgentKind.PI && (line.startsWith("$ ") || DURATION_LINE.matches(line))) ||
+            // pi chrome: the executed-command echo ("$ ..."), the "Took <time>" tool
+            // footer, the composer placeholder, and its keyboard-hint rows — none of it
+            // is conversation (Android reader, ysEEF.png / 0tpsx.png).
+            (agent == AgentKind.PI && PI_CHROME_LINE.matches(line)) ||
             (agent == AgentKind.HAX && looksLikeHaxDetail(line)) ||
                 TOOL_CALL_MARKERS.any { line.startsWith(it) }
     }
@@ -607,6 +608,15 @@ object TmuxText {
     /** pi's "Took 0.2s" / "Took 1m 30s" tool-output footer. */
     private val DURATION_LINE = Regex(
         "(?i)^took\\s+\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h)(?:\\s+\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h))*\\s*$",
+    )
+
+    /**
+     * pi's non-conversation rows: the "$ command" echo, the "Took ..." footer, the
+     * composer placeholder ("Describe what to write, or press Shift+R"), keyboard hint
+     * rows, and the wrapped-input chrome around the composer.
+     */
+    private val PI_CHROME_LINE = Regex(
+        """(?i)^\s*(?:\$\s.*|took\s.*|describe what to write.*|press shift\+r.*|qwertyuiop|asdfghjkl|zxcvbnm|shift\+.*|ctrl\+.*)$""",
     )
     private val BACKGROUND_ACTIVITY_LINE = Regex(
         "(?i)^●\\s+Background\\s+(?:command|task)\\b",
