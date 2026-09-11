@@ -1397,6 +1397,7 @@ private fun AgentIcon(
         AgentKind.PI -> "π"
         AgentKind.KIMI -> "☾"
         AgentKind.HAX -> "▌"
+        AgentKind.CURSOR -> "▲"
         AgentKind.OTHER -> "›"
     }
     Box(modifier, contentAlignment = Alignment.Center) {

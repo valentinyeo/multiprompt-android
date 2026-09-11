@@ -761,4 +761,30 @@ class TmuxTextTest {
             blocks.map { it.kind },
         )
     }
+
+    @Test
+    fun cursorBannerAndShowCodeRowsAreProgressChrome() {
+        val blocks = TmuxText.readerBlocks(
+            """
+            Cursor Agent
+            v2026.09.10-fd3934a
+            Tip: Hit shift+tab to enable Plan Mode
+
+            Yes, I'm here. What can I help with?
+
+            Show code
+            Auto - 9.7% Run Everything
+            """.trimIndent(),
+            AgentKind.CURSOR,
+        )
+
+        assertEquals(
+            listOf(
+                TmuxText.ReaderBlockKind.PROGRESS,
+                TmuxText.ReaderBlockKind.PROSE,
+                TmuxText.ReaderBlockKind.PROGRESS,
+            ),
+            blocks.map { it.kind },
+        )
+    }
 }

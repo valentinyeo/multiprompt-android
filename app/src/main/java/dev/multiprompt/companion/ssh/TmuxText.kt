@@ -462,6 +462,7 @@ object TmuxText {
             // is conversation (Android reader, ysEEF.png / 0tpsx.png).
             (agent == AgentKind.PI && PI_CHROME_LINE.matches(line)) ||
             (agent == AgentKind.HAX && looksLikeHaxDetail(line)) ||
+            (agent == AgentKind.CURSOR && CURSOR_CHROME_LINE.matches(line)) ||
                 TOOL_CALL_MARKERS.any { line.startsWith(it) }
     }
 
@@ -617,6 +618,14 @@ object TmuxText {
      */
     private val PI_CHROME_LINE = Regex(
         """(?i)^\s*(?:\$\s.*|took\s.*|describe what to write.*|press shift\+r.*|qwertyuiop|asdfghjkl|zxcvbnm|shift\+.*|ctrl\+.*)$""",
+    )
+    /**
+     * Cursor Agent's non-conversation rows: the banner ("Cursor Agent", version line,
+     * "Tip: ..."), collapsed "Show code"/"Show activity" rows, the Auto/Run status row,
+     * the project footer, and keyboard-hint rows.
+     */
+    private val CURSOR_CHROME_LINE = Regex(
+        """(?i)^\s*(?:cursor agent|v\d{4}\.\d\d.*|tip:.*|show (?:code|activity).*|auto[ -].*|qwertyuiop|asdfghjkl|zxcvbnm|to me.*)$""",
     )
     private val BACKGROUND_ACTIVITY_LINE = Regex(
         "(?i)^●\\s+Background\\s+(?:command|task)\\b",

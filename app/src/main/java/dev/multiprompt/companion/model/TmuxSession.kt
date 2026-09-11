@@ -52,6 +52,7 @@ enum class AgentKind(val label: String) {
     PI("Pi"),
     KIMI("Kimi"),
     HAX("Hax"),
+    CURSOR("Cursor"),
     OTHER("Shell");
 
     companion object {
@@ -63,6 +64,7 @@ enum class AgentKind(val label: String) {
                 command == "pi" || command.startsWith("pi-") -> return PI
                 command == "kimi" || command.startsWith("kimi-") -> return KIMI
                 command == "hax" || command.startsWith("hax-") -> return HAX
+                command == "cursor-agent" || command == "agent" || command.startsWith("cursor") -> return CURSOR
             }
 
             val normalized = name.lowercase()
@@ -77,6 +79,7 @@ enum class AgentKind(val label: String) {
             if (namedAgent != OTHER) return namedAgent
 
             val terminalText = "$title\n$preview".lowercase()
+            if ("cursor agent" in terminalText) return CURSOR
             return when {
                 "openai codex" in terminalText || "codex>" in terminalText -> CODEX
                 "claude code" in terminalText || "shift+tab to cycle" in terminalText ||

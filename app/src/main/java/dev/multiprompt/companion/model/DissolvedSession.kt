@@ -26,6 +26,7 @@ data class DissolvedSession(
                     AgentKind.CLAUDE -> "claude --continue"
                     AgentKind.CODEX -> "codex resume --last"
                     AgentKind.HAX -> "hax --continue"
+                    AgentKind.CURSOR -> "cursor-agent --continue"
                     else -> ""
                 },
                 workspaceId = workspaceId,
