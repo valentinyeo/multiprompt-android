@@ -3,6 +3,10 @@ package dev.multiprompt.companion.ssh
 enum class TmuxAction {
     ENTER,
     INTERRUPT,
+    /** Scrolls the agent TUI's own scrollback up one page (alternate-screen panes). */
+    SCROLL_UP,
+    /** Returns to the live view. */
+    SCROLL_BOTTOM,
 }
 
 /** The complete allowlist of remote commands the mobile reader can run. */
@@ -21,12 +25,14 @@ object TmuxCommands {
     private fun captureCommand(target: String): String =
         "if [ \"\$(tmux display-message -p -t $target '#{alternate_on}' 2>/dev/null)\" = 1 ]; " +
             "then tmux capture-pane -p -J -t $target; " +
-            "else tmux capture-pane -p -J -S -2000 -t $target; fi"
+            "else tmux capture-pane -p -J -S -5000 -t $target; fi"
 
     fun action(sessionName: String, action: TmuxAction): String {
         val key = when (action) {
             TmuxAction.ENTER -> "Enter"
             TmuxAction.INTERRUPT -> "C-c"
+            TmuxAction.SCROLL_BOTTOM -> "End"
+            TmuxAction.SCROLL_UP -> "PageUp"
         }
         return "tmux send-keys -t ${target(sessionName)} $key"
     }

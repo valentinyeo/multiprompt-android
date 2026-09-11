@@ -64,6 +64,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
@@ -2347,6 +2349,8 @@ private fun ReaderScreen(
                     runtimeDetails = runtimeDetails,
                     reader = reader,
                     session = session,
+                    onScrollBackPage = { onSessionInteraction(); connection.scrollBackPage() },
+                    onScrollLive = { onSessionInteraction(); connection.scrollLive() },
                 )
                 Row(
                     Modifier.fillMaxWidth(),
@@ -3681,22 +3685,50 @@ private fun HarnessStatusBar(
     runtimeDetails: TmuxText.RuntimeDetails,
     reader: ReaderState,
     session: TmuxSession,
+    onScrollBackPage: () -> Unit,
+    onScrollLive: () -> Unit,
 ) {
     val parts = listOfNotNull(
         session.agent.label.takeIf { it.isNotBlank() },
         runtimeDetails.label,
         reader.waitingForInput.takeIf { it }?.let { "waiting for input" },
     )
-    Text(
-        parts.joinToString("  ·  "),
-        style = MaterialTheme.typography.labelSmall,
-        fontSize = 10.sp,
-        lineHeight = 12.sp,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier
+    Row(
+        Modifier
             .fillMaxWidth()
             .padding(bottom = 2.dp),
-    )
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            parts.joinToString("  ·  "),
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = 10.sp,
+            lineHeight = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(
+            onClick = onScrollBackPage,
+            modifier = Modifier.size(24.dp),
+        ) {
+            Icon(
+                Icons.Default.KeyboardArrowUp,
+                "Scroll agent history up",
+                Modifier.size(16.dp),
+            )
+        }
+        IconButton(
+            onClick = onScrollLive,
+            modifier = Modifier.size(24.dp),
+        ) {
+            Icon(
+                Icons.Default.KeyboardArrowDown,
+                "Back to live",
+                Modifier.size(16.dp),
+            )
+        }
+    }
 }

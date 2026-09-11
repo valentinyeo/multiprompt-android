@@ -81,6 +81,16 @@ class SessionReaderConnection(
         requests.trySend(Request.Action(TmuxAction.INTERRUPT))
     }
 
+    /** Pages the agent TUI's own scrollback up (alternate-screen panes own their history). */
+    fun scrollBackPage() {
+        requests.trySend(Request.Action(TmuxAction.SCROLL_UP))
+    }
+
+    /** Returns to the live view after scrolling. */
+    fun scrollLive() {
+        requests.trySend(Request.Action(TmuxAction.SCROLL_BOTTOM))
+    }
+
     fun selectModelPickerOption(index: Int): Boolean =
         requests.trySend(Request.ModelPickerOption(index)).isSuccess
 
