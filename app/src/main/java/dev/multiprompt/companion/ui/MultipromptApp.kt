@@ -168,11 +168,8 @@ import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.auth.SyncAuthManager
 import dev.multiprompt.companion.skills.Skill
-import dev.multiprompt.companion.auth.SyncAuthManager
 import dev.multiprompt.companion.skills.SkillModel
-import dev.multiprompt.companion.auth.SyncAuthManager
 import dev.multiprompt.companion.skills.SkillSnapshot
-import dev.multiprompt.companion.auth.SyncAuthManager
 import dev.multiprompt.companion.skills.SkillStore
 import dev.multiprompt.companion.data.ReminderTimeParser
 import dev.multiprompt.companion.data.SessionReadStore

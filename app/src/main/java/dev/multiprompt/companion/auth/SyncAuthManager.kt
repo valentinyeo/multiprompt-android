@@ -74,7 +74,7 @@ class SyncAuthManager(context: Context) {
 
     /** Exchanges the deep-link data for tokens and persists the refresh token. */
     suspend fun handleAuthorizationResponse(data: android.content.Intent?): TokenResult {
-        val codeExchange = AuthorizationResponse.fromIntent(data)
+        val codeExchange = AuthorizationResponse.fromIntent(data ?: return TokenResult.Failure("login was cancelled"))
             ?: return TokenResult.Failure("login was cancelled or the redirect did not match")
         val verifier = preferences.getString(KEY_CODE_VERIFIER, null)
             ?: return TokenResult.Failure("login session expired — try again")
@@ -88,7 +88,7 @@ class SyncAuthManager(context: Context) {
         )
             .setGrantType(net.openid.appauth.GrantTypeValues.AUTHORIZATION_CODE)
             .setAuthorizationCode(codeExchange.authorizationCode)
-            .setRedirectUri(redirectUri)
+            .setRedirectUri(android.net.Uri.parse(redirectUri))
             .setCodeVerifier(verifier)
             .build()
 
