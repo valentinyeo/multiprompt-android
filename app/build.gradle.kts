@@ -18,6 +18,9 @@ android {
 
     defaultConfig {
         applicationId = "dev.multiprompt.companion"
+        // AppAuth's manifest requires the redirect scheme placeholder; we handle the
+        // deep link ourselves in MainActivity, so the value matches our scheme.
+        manifestPlaceholders["appAuthRedirectScheme"] = "dev.multiprompt.companion"
         minSdk = 26
         targetSdk = 36
         versionCode = releaseVersionCode
