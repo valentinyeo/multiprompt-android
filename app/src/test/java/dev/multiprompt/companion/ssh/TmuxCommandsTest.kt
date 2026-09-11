@@ -11,7 +11,7 @@ class TmuxCommandsTest {
         val command = TmuxCommands.capture("a'; reboot")
 
         val target = "'a'\"'\"'; reboot:'"
-        assertTrue(command.contains("tmux capture-pane -p -J -S -2000 -t $target"))
+        assertTrue(command.contains("tmux capture-pane -p -J -S -5000 -t $target"))
         // A full-screen agent TUI keeps its conversation on the alternate screen; the pane's
         // scrollback then belongs to whatever ran before it and must stay out.
         assertTrue(command.contains("#{alternate_on}"))
@@ -59,7 +59,7 @@ class TmuxCommandsTest {
         val command = TmuxCommands.stream("work")
 
         assertTrue(command.contains("while tmux has-session -t 'work:'"))
-        assertTrue(command.contains("tmux capture-pane -p -J -S -2000 -t 'work:'"))
+        assertTrue(command.contains("tmux capture-pane -p -J -S -5000 -t 'work:'"))
         assertTrue(command.contains("tail -c 524288"))
         assertTrue(command.contains("mp_current=\$(cksum"))
         assertTrue(command.contains("mp_previous=\$mp_current"))
