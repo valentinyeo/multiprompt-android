@@ -1417,6 +1417,7 @@ private fun agentAccent(agent: AgentKind): Color = when (agent) {
     AgentKind.PI -> Color(0xFFA78BFA)
     AgentKind.KIMI -> Color(0xFF4C8DFF)
     AgentKind.HAX -> Color(0xFFE0A458)
+    AgentKind.CURSOR -> Color(0xFF34D399)
     AgentKind.OTHER -> Color(0xFFAFB8C8)
 }
 
