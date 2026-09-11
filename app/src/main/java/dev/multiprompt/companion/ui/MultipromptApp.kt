@@ -1722,25 +1722,6 @@ private fun ReaderScreen(
     var attachMenuExpanded by remember(connection) { mutableStateOf(false) }
     var signedIn by remember(connection) { mutableStateOf(syncAuth.hasSession()) }
     var pendingAuthLaunch by remember(connection) { mutableStateOf(false) }
-    val authLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        if (pendingAuthLaunch) {
-            pendingAuthLaunch = false
-            val intent = result.data
-            readerScope.launch {
-                when (val r = syncAuth.handleAuthorizationResponse(intent)) {
-                    is dev.multiprompt.companion.auth.SyncAuthManager.TokenResult.Success -> {
-                        signedIn = true
-                        microphoneError = "Signed in — sync is ready"
-                    }
-                    is dev.multiprompt.companion.auth.SyncAuthManager.TokenResult.Failure -> {
-                        microphoneError = r.message
-                    }
-                }
-            }
-        }
-    }
     var skillSnapshot by remember(connection) { mutableStateOf(skills.loadFromCache()) }
     var attachedSkill by remember(connection) { mutableStateOf<Skill?>(null) }
     var dissolveDialogVisible by remember(connection) { mutableStateOf(false) }
@@ -1764,6 +1745,25 @@ private fun ReaderScreen(
     var previousScrollMax by remember(connection) { mutableIntStateOf(0) }
     val context = LocalContext.current
     val readerScope = rememberCoroutineScope()
+    val authLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (pendingAuthLaunch) {
+            pendingAuthLaunch = false
+            val intent = result.data
+            readerScope.launch {
+                when (val r = syncAuth.handleAuthorizationResponse(intent)) {
+                    is dev.multiprompt.companion.auth.SyncAuthManager.TokenResult.Success -> {
+                        signedIn = true
+                        microphoneError = "Signed in — sync is ready"
+                    }
+                    is dev.multiprompt.companion.auth.SyncAuthManager.TokenResult.Failure -> {
+                        microphoneError = r.message
+                    }
+                }
+            }
+        }
+    }
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(maxItems = MAX_IMAGE_SELECTION),
     ) { uris ->
