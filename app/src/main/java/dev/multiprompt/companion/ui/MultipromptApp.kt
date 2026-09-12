@@ -3333,19 +3333,12 @@ private fun TerminalScreen(
                 .clipToBounds()
                 .pointerInput(onBack) { detectPassiveDoubleTap(onBack) },
         ) {
-            val viewportPx = with(density) { maxHeight.toPx() }
-            // 10% short of the measured slack: an overshoot would push the prompt row off
-            // the bottom edge, a small leftover gap above it costs nothing.
-            val slackPx = if (rows > 0 && lineHeightPx > 0) {
-                ((viewportPx - rows * lineHeightPx) * 0.9f).coerceAtLeast(0f).toInt()
-            } else {
-                0
-            }
             Terminal(
                 terminalEmulator = connection.emulator,
                 modifier = Modifier
                     .fillMaxSize()
-                    .offset { IntOffset(0, slackPx - keyboardHeightPx) }
+                    .align(Alignment.BottomCenter)
+                    .offset { IntOffset(0, -(keyboardHeightPx)) }
                     .horizontalSwipe(onSwitchSession),
                 initialFontSize = fontSize,
                 focusRequester = focusRequester,
