@@ -3325,7 +3325,7 @@ private fun TerminalScreen(
             )
         },
     ) { padding ->
-        BoxWithConstraints(
+        Box(
             Modifier
                 .padding(padding)
                 .fillMaxSize()

@@ -463,6 +463,7 @@ object TmuxText {
             (agent == AgentKind.PI && PI_CHROME_LINE.matches(line)) ||
             (agent == AgentKind.HAX && looksLikeHaxDetail(line)) ||
             (agent == AgentKind.CURSOR && CURSOR_CHROME_LINE.matches(line)) ||
+            (agent == AgentKind.CURSOR && CURSOR_TOOL_LINE.containsMatchIn(line)) ||
                 TOOL_CALL_MARKERS.any { line.startsWith(it) }
     }
 
@@ -626,6 +627,16 @@ object TmuxText {
      */
     private val CURSOR_CHROME_LINE = Regex(
         """(?i)^\s*(?:cursor agent|v\d{4}\.\d\d.*|tip:.*|show (?:code|activity).*|auto[ -].*|qwertyuiop|asdfghjkl|zxcvbnm|to me.*)$""",
+    )
+    /**
+     * Cursor Agent tool-stream rows: collapsed code/activity summaries ("Code - javascript:
+     * 13 lines - ...", "Show code", "Grepped ...", "Read ... lines ...", "Edited ...",
+     * "To-do ..."), which the desktop TUI shows as collapsible items — transcript chrome on
+     * the phone, not conversation.
+     */
+    private val CURSOR_TOOL_LINE = Regex(
+        "(?i)^\\s*(?:show (?:code|activity)\\b|code[ -]+\\d+ lines?[ -]|grepped\\b|" +
+            "read \\S+\\.(?:ts|tsx|js|cjs|mjs|json|md)|edited \\b|to-do\\b|\\.{2} \\d+ earlier items hidden)",
     )
     private val BACKGROUND_ACTIVITY_LINE = Regex(
         "(?i)^●\\s+Background\\s+(?:command|task)\\b",

@@ -787,4 +787,47 @@ class TmuxTextTest {
             blocks.map { it.kind },
         )
     }
+
+    @Test
+    fun cursorToolStreamRowsAreProgressChrome() {
+        val blocks = TmuxText.readerBlocks(
+            """
+            Grepped, read 4 greps, 3 files
+
+            .. 4 earlier items hidden
+
+            Read ...move-grok/tests/ai-gateway-key-routing.test.cjs
+            lines 990-1009 Grepped "provider === \"xai\"|\"xai\""
+
+            Edited ai-gateway-key-routing.test.cjs -1
+
+            Show code
+            Code - javascript: 7 lines-| delete process.env.AI_GATEWAY_ENABLED;
+
+            To-do Working on 1 to-do * 3 done
+
+            Real summary sentence for the user stands alone.
+            """.trimIndent(),
+            AgentKind.CURSOR,
+        )
+
+        // Tool rows collapse into PROGRESS blocks (blank lines split them); the reader
+        // hides every PROGRESS block in clean chat, leaving only the user-facing prose.
+        assertEquals(
+            listOf(
+                TmuxText.ReaderBlockKind.PROGRESS,
+                TmuxText.ReaderBlockKind.PROGRESS,
+                TmuxText.ReaderBlockKind.PROGRESS,
+                TmuxText.ReaderBlockKind.PROGRESS,
+                TmuxText.ReaderBlockKind.PROGRESS,
+                TmuxText.ReaderBlockKind.PROGRESS,
+                TmuxText.ReaderBlockKind.PROSE,
+            ),
+            blocks.map { it.kind },
+        )
+        // Clean chat hides every PROGRESS block, so none of the tool stream survives.
+        val visible = blocks.filter { it.kind == TmuxText.ReaderBlockKind.PROSE }
+        assertTrue(visible.isNotEmpty())
+        assertTrue(visible.all { !it.text.contains("Grepped") && !it.text.contains("Show code") })
+    }
 }
