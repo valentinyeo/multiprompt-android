@@ -3325,7 +3325,7 @@ private fun TerminalScreen(
             )
         },
     ) { padding ->
-        Box(
+        BoxWithConstraints(
             Modifier
                 .padding(padding)
                 .fillMaxSize()
@@ -3333,12 +3333,21 @@ private fun TerminalScreen(
                 .clipToBounds()
                 .pointerInput(onBack) { detectPassiveDoubleTap(onBack) },
         ) {
+            // Pan the grid so its BOTTOM edge sits at the viewport bottom (minus the
+            // keyboard). When the agent paints less than the full grid (Cursor's
+            // alternate screen), this keeps the live prompt just above the input area
+            // instead of showing dead rows below or a black void above.
+            val gridOverflowPx = if (rows > 0 && lineHeightPx > 0) {
+                ((rows * lineHeightPx) - with(density) { maxHeight.toPx() })
+                    .coerceAtLeast(0f).toInt()
+            } else {
+                0
+            }
             Terminal(
                 terminalEmulator = connection.emulator,
                 modifier = Modifier
                     .fillMaxSize()
-                    .align(Alignment.BottomCenter)
-                    .offset { IntOffset(0, -(keyboardHeightPx)) }
+                    .offset { IntOffset(0, -(gridOverflowPx + keyboardHeightPx)) }
                     .horizontalSwipe(onSwitchSession),
                 initialFontSize = fontSize,
                 focusRequester = focusRequester,

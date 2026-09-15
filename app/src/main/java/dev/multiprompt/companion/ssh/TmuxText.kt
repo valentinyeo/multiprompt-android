@@ -285,6 +285,11 @@ object TmuxText {
                     // its replies with one.
                     ReaderBlockKind.PROGRESS
                 }
+                agent == AgentKind.CLAUDE && line.trimStart().startsWith("\u25cf ") ->
+                    // Claude Code marks the agent's own prose with a filled circle; it always
+                    // starts a fresh conversational block, even right after tool output.
+                    ReaderBlockKind.PROSE
+
                 fencedCode || looksLikeCode(line) -> ReaderBlockKind.CODE
                 currentKind == ReaderBlockKind.CODE -> {
                     // Code output commonly contains continuation lines that do not have a
@@ -464,6 +469,7 @@ object TmuxText {
             (agent == AgentKind.HAX && looksLikeHaxDetail(line)) ||
             (agent == AgentKind.CURSOR && CURSOR_CHROME_LINE.matches(line)) ||
             (agent == AgentKind.CURSOR && CURSOR_TOOL_LINE.containsMatchIn(line)) ||
+            (agent == AgentKind.CLAUDE && CLAUDE_COLLAPSIBLE_LINE.matches(line)) ||
                 TOOL_CALL_MARKERS.any { line.startsWith(it) }
     }
 
@@ -637,6 +643,16 @@ object TmuxText {
     private val CURSOR_TOOL_LINE = Regex(
         "(?i)^\\s*(?:show (?:code|activity)\\b|code[ -]+\\d+ lines?[ -]|grepped\\b|" +
             "read \\S+\\.(?:ts|tsx|js|cjs|mjs|json|md)|edited \\b|to-do\\b|\\.{2} \\d+ earlier items hidden)",
+    )
+    /**
+     * Claude Code's collapsible tool-item chrome: the "Show code"/"Show activity"/"Hide
+     * code" toggle rows and their "Code · N lines"/"Activity · N lines" summaries. These
+     * are clickable UI in the TUI, not conversation.
+     */
+
+    private val CLAUDE_COLLAPSIBLE_LINE = Regex(
+        "(?i)^\\s*(?:show (?:code|activity)\\b|hide (?:code|activity)\\b|" +
+            "(?:code|activity)\\s*\\u00b7\\s*\\d+ lines?\\b)",
     )
     private val BACKGROUND_ACTIVITY_LINE = Regex(
         "(?i)^●\\s+Background\\s+(?:command|task)\\b",
