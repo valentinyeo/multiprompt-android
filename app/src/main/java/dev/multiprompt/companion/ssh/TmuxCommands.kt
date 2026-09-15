@@ -104,6 +104,8 @@ object TmuxCommands {
             "trap 'rm -f \"\$mp_snapshot\"' EXIT HUP INT TERM; " +
             "mp_previous=''; " +
             "while tmux has-session -t $target 2>/dev/null; do " +
+            "if [ \"\$(tmux display-message -p -t $target '#{pane_in_mode}' 2>/dev/null)\" = 1 ]; " +
+            "then sleep 1; continue; fi; " +
             "{ ${captureCommand(target)} ; } 2>/dev/null | " +
             "tail -c 524288 > \"\$mp_snapshot\"; " +
             "mp_current=\$(cksum < \"\$mp_snapshot\"); " +
