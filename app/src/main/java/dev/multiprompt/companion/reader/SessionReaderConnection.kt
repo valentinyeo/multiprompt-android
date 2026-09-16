@@ -114,10 +114,10 @@ class SessionReaderConnection(
     @Volatile
     private var historyMode = false
 
+    private val _historyPages = MutableStateFlow<List<String>>(emptyList())
+
     /** Captured TUI history pages while history mode is active. */
     val historyPages: StateFlow<List<String>> = _historyPages
-
-    private val _historyPages = MutableStateFlow<List<String>>(emptyList())
 
     /**
      * Enters history mode: the stream stops merging into the transcript and publishes

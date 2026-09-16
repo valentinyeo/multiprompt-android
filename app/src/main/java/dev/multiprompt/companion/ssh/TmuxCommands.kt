@@ -105,7 +105,7 @@ object TmuxCommands {
             "trap 'rm -f \"\$mp_snapshot\"' EXIT HUP INT TERM; " +
             "mp_previous=''; " +
             "while tmux has-session -t $target 2>/dev/null; do " +
-            "printf '$ALT_PREFIX'"\$(tmux display-message -p -t $target '#{alternate_on}' 2>/dev/null)\n"; " +
+            "printf '%s\\n' \"\$(tmux display-message -p -t $target '#{alternate_on}' 2>/dev/null)\"; " +
             "if [ \"\$(tmux display-message -p -t $target '#{pane_in_mode}' 2>/dev/null)\" = 1 ]; " +
             "then sleep 1; continue; fi; " +
             "{ ${captureCommand(target)} ; } 2>/dev/null | " +
