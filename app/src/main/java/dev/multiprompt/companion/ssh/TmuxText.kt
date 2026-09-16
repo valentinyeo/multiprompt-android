@@ -466,6 +466,7 @@ object TmuxText {
             // footer, the composer placeholder, and its keyboard-hint rows — none of it
             // is conversation (Android reader, ysEEF.png / 0tpsx.png).
             (agent == AgentKind.PI && PI_CHROME_LINE.matches(line)) ||
+            (agent == AgentKind.PI && PI_TOOL_LINE.containsMatchIn(line)) ||
             (agent == AgentKind.HAX && looksLikeHaxDetail(line)) ||
             (agent == AgentKind.CURSOR && CURSOR_CHROME_LINE.matches(line)) ||
             (agent == AgentKind.CURSOR && CURSOR_TOOL_LINE.containsMatchIn(line)) ||
@@ -653,6 +654,15 @@ object TmuxText {
     private val CLAUDE_COLLAPSIBLE_LINE = Regex(
         "(?i)^\\s*(?:show (?:code|activity)\\b|hide (?:code|activity)\\b|" +
             "(?:code|activity)\\s*\\u00b7\\s*\\d+ lines?\\b)",
+    )
+    /**
+     * pi tool-output rows that are meaningless in the chat: grep-style "1069: DropdownMenu(",
+     * collapsed-output hints ("... (1 earlier lines, ctrl+o to expand)"), the "Elapsed 30.9s"
+     * timer, and pi's status footer ("↑30M ↓371k R308M CH99.9% $7.443 …", "(openrouter)
+     * z-ai/glm-5.3-flash • high").
+     */
+    private val PI_TOOL_LINE = Regex(
+        """(?i)^\s*(?:\.{3} [(]|\d+:\s+\S|elapsed \d|\u2191\S|[(]openrouter[)]|ctrl\+o to expand)"""
     )
     private val BACKGROUND_ACTIVITY_LINE = Regex(
         "(?i)^●\\s+Background\\s+(?:command|task)\\b",

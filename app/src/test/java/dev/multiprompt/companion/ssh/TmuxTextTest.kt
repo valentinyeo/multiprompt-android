@@ -830,4 +830,24 @@ class TmuxTextTest {
         assertTrue(visible.isNotEmpty())
         assertTrue(visible.all { !it.text.contains("Grepped") && !it.text.contains("Show code") })
     }
+
+    @Test
+    fun piToolOutputAndFooterRowsAreProgressChrome() {
+        val blocks = TmuxText.readerBlocks(
+            """
+            ... (1 earlier lines, ctrl+o to expand)
+            1069:        DropdownMenu(
+            Text(if (loading) "Loading..." else "Load older")
+
+            Elapsed 30.9s
+
+            (openrouter) z-ai/glm-5.3-flash • high
+            ↑30M ↓371k R308M CH99.9% \$7.443 54.8%/1.0M (auto)
+            """.trimIndent(),
+            AgentKind.PI,
+        )
+
+        // Every row above is tool chrome; none may survive as PROSE in clean chat.
+        assertTrue(blocks.none { it.kind == TmuxText.ReaderBlockKind.PROSE })
+    }
 }

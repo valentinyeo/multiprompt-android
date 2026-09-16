@@ -77,7 +77,18 @@ class SessionReaderConnection(
         startStream()
     }
 
-    fun sendPrompt(text: String): Boolean = requests.trySend(Request.Prompt(text)).isSuccess
+    fun sendPrompt(text: String): Boolean {
+        val sent = requests.trySend(Request.Prompt(text)).isSuccess
+        if (sent) {
+            // The app knows exactly what it sent. Echoing it locally guarantees the user's
+            // own bubble even when the TUI queues the message without a "❯"/"> " marker
+            // (dictation sent while the agent is Working renders marker-less).
+            _state.update { current ->
+                current.copy(output = TmuxText.mergeSnapshot(current.output, "> $text"))
+            }
+        }
+        return sent
+    }
 
     fun sendEnter() {
         requests.trySend(Request.Action(TmuxAction.ENTER))
