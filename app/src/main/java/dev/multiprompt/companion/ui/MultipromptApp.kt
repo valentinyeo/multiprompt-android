@@ -1825,13 +1825,19 @@ private fun ReaderScreen(
 
     LaunchedEffect(connection, scrollState, density) {
         val bottomThresholdPx = with(density) { 56.dp.roundToPx() }
+        // Track whether the user is pinned to the bottom from THEIR scroll position, not
+        // from a max-height diff: a mid-scroll-up frame update used to race the check and
+        // yank the transcript back down on busy sessions, making history unreadable.
+        var pinnedToBottom = true
+        snapshotFlow { scrollState.value to scrollState.maxValue }.collect { (value, max) ->
+            pinnedToBottom = max - value <= bottomThresholdPx
+        }
         snapshotFlow { scrollState.maxValue }.collect { newMaximum ->
-            // Compare against the previous layout height. This keeps the transcript pinned
-            // while output arrives or the keyboard resizes the viewport, but preserves a
-            // deliberate scroll into history.
-            val wasAtBottom = previousScrollMax - scrollState.value <= bottomThresholdPx
+            val previous = previousScrollMax
             previousScrollMax = newMaximum
-            if (wasAtBottom) scrollState.scrollTo(newMaximum)
+            if (pinnedToBottom && newMaximum > previous) {
+                scrollState.scrollTo(newMaximum)
+            }
         }
     }
     LaunchedEffect(reader.completedActions) {
@@ -3333,13 +3339,16 @@ private fun TerminalScreen(
                 .clipToBounds()
                 .pointerInput(onBack) { detectPassiveDoubleTap(onBack) },
         ) {
-            // Pan the grid so its BOTTOM edge sits at the viewport bottom (minus the
-            // keyboard). When the agent paints less than the full grid (Cursor's
-            // alternate screen), this keeps the live prompt just above the input area
-            // instead of showing dead rows below or a black void above.
-            val gridOverflowPx = if (rows > 0 && lineHeightPx > 0) {
-                ((rows * lineHeightPx) - with(density) { maxHeight.toPx() })
-                    .coerceAtLeast(0f).toInt()
+            // Pan the grid so the agent's live prompt row stays visible:
+            // - grid shorter than the viewport (pi draws a partial screen): push it DOWN by
+            //   the leftover space so its bottom edge sits just above the keyboard.
+            // - grid taller than the viewport (Cursor paints the full grid): push it UP by
+            //   the overflow so the bottom of the grid (prompt row) is on screen.
+            // With the keyboard open the whole grid slides up by the keyboard height.
+            val gridHeightPx = if (rows > 0 && lineHeightPx > 0) (rows * lineHeightPx).toInt() else 0
+            val viewportPx = with(density) { maxHeight.toPx() }.toInt()
+            val panPx = if (gridHeightPx in 1..viewportPx) {
+                viewportPx - gridHeightPx
             } else {
                 0
             }
@@ -3347,7 +3356,7 @@ private fun TerminalScreen(
                 terminalEmulator = connection.emulator,
                 modifier = Modifier
                     .fillMaxSize()
-                    .offset { IntOffset(0, -(gridOverflowPx + keyboardHeightPx)) }
+                    .offset { IntOffset(0, panPx - keyboardHeightPx) }
                     .horizontalSwipe(onSwitchSession),
                 initialFontSize = fontSize,
                 focusRequester = focusRequester,
