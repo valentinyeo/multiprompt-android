@@ -120,6 +120,7 @@ class SshRepository(private val secrets: SecretStore) {
             TmuxText.RuntimeDetails,
             List<TmuxText.ModelPickerOption>,
             Boolean,
+            Boolean,
         ) -> Unit,
     ) = coroutineScope {
         val session = client.openSession()
@@ -129,6 +130,7 @@ class SshRepository(private val secrets: SecretStore) {
                 throw SshProblem.Connection("The SSH server refused the tmux reader")
             }
             val err = async { session.stderr.drain() }
+            var alternateOn = false
             val pending = StringBuilder()
             for (chunk in session.stdout) {
                 pending.append(chunk.toString(Charsets.UTF_8))
@@ -137,6 +139,10 @@ class SshRepository(private val secrets: SecretStore) {
                     if (end < 0) break
                     val line = pending.substring(0, end).trimEnd('\r')
                     pending.delete(0, end + 1)
+                    if (line.startsWith(TmuxCommands.ALT_PREFIX)) {
+                        alternateOn = line.removePrefix(TmuxCommands.ALT_PREFIX).trim() == "1"
+                        continue
+                    }
                     if (line.startsWith(TmuxCommands.SNAPSHOT_PREFIX)) {
                         val encoded = line.removePrefix(TmuxCommands.SNAPSHOT_PREFIX)
                         if (encoded.length > MAX_SNAPSHOT_HEX_CHARS) {
@@ -152,6 +158,7 @@ class SshRepository(private val secrets: SecretStore) {
                             TmuxText.runtimeDetails(rawOutput),
                             TmuxText.modelPickerOptions(rawOutput),
                             TmuxText.isWaitingForInput(rawOutput, agent),
+                            alternateOn,
                         )
                     }
                 }

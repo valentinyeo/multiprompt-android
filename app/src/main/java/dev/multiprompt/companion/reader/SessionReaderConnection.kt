@@ -19,6 +19,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withTimeout
 import org.connectbot.sshlib.SshClient
 
@@ -39,6 +43,8 @@ data class ReaderState(
     val lastUpdatedAtMillis: Long = 0,
     val completedActions: Long = 0,
     val waitingForInput: Boolean = false,
+    /** True when the agent TUI draws on the alternate screen (owns its own scrollback). */
+    val alternateOn: Boolean = false,
 )
 
 class SessionReaderConnection(
@@ -91,6 +97,61 @@ class SessionReaderConnection(
         requests.trySend(Request.Action(TmuxAction.SCROLL_BOTTOM))
     }
 
+    private val _historyPage = MutableStateFlow<String?>(null)
+    private val historyMutex = Mutex(false)
+
+    @Volatile
+    private var historyMode = false
+
+    /** Captured TUI history pages while history mode is active. */
+    val historyPages: StateFlow<List<String>> = _historyPages
+
+    private val _historyPages = MutableStateFlow<List<String>>(emptyList())
+
+    /**
+     * Enters history mode: the stream stops merging into the transcript and publishes
+     * captured screens to [historyPages] instead; the TUI is paged back one screen.
+     */
+    suspend fun enterHistory() = historyMutex.withLock {
+        if (!historyMode) {
+            historyMode = true
+            _historyPages.value = emptyList()
+            scrollBackPage()
+            // First paged screen arrives via the stream within ~1-2s.
+            delay(1200)
+            _historyPage.value?.let { page -> _historyPages.value = listOf(page) }
+        }
+    }
+
+    /**
+     * Pages back one more screen and appends the captured page. Returns true when a new
+     * distinct page arrived; false when the TUI has no older history.
+     */
+    suspend fun loadOlderHistoryPage(): Boolean = historyMutex.withLock {
+        if (!historyMode) return@withLock false
+        val before = _historyPages.value.lastOrNull()
+        scrollBackPage()
+        // Wait up to 3s for a frame that differs from the last collected page.
+        val deadline = System.currentTimeMillis() + 3000
+        while (System.currentTimeMillis() < deadline) {
+            val page = _historyPage.value
+            if (page != null && page != before && page !in _historyPages.value) {
+                _historyPages.value = _historyPages.value + page
+                return@withLock true
+            }
+            delay(150)
+        }
+        false
+    }
+
+    /** Leaves history mode and returns the TUI to the live view. */
+    suspend fun exitHistory() = historyMutex.withLock {
+        historyMode = false
+        _historyPages.value = emptyList()
+        _historyPage.value = null
+        scrollLive()
+    }
+
     fun selectModelPickerOption(index: Int): Boolean =
         requests.trySend(Request.ModelPickerOption(index)).isSuccess
 
@@ -108,7 +169,19 @@ class SessionReaderConnection(
                         connectedClient,
                         tmuxSessionName,
                         agent,
-                    ) { snapshot, details, pickerOptions, waitingForInput ->
+                    ) { snapshot, details, pickerOptions, waitingForInput, alternateOn ->
+                        if (historyMode) {
+                            // The history overlay is paging the TUI; captured screens belong
+                            // to the overlay, not the live transcript.
+                            _historyPage.value = snapshot
+                            _state.update { current ->
+                                current.copy(
+                                    status = ReaderStatus.Live,
+                                    alternateOn = alternateOn,
+                                )
+                            }
+                            return@streamSession
+                        }
                         _state.update { current ->
                             val liveDetails = if (details.model != null) {
                                 details
@@ -125,6 +198,7 @@ class SessionReaderConnection(
                                 status = ReaderStatus.Live,
                                 lastUpdatedAtMillis = System.currentTimeMillis(),
                                 waitingForInput = waitingForInput,
+                                alternateOn = alternateOn,
                             )
                         }
                     }

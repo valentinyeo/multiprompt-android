@@ -46,6 +46,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -1724,6 +1725,7 @@ private fun ReaderScreen(
     var imageAttachments by remember(connection) { mutableStateOf(emptyList<String>()) }
     var skillMenuExpanded by remember(connection) { mutableStateOf(false) }
     var attachMenuExpanded by remember(connection) { mutableStateOf(false) }
+    var historyDialogOpen by remember(connection) { mutableStateOf(false) }
     var signedIn by remember(connection) { mutableStateOf(syncAuth.hasSession()) }
     var pendingAuthLaunch by remember(connection) { mutableStateOf(false) }
     var skillSnapshot by remember(connection) { mutableStateOf(skills.loadFromCache()) }
@@ -2357,8 +2359,16 @@ private fun ReaderScreen(
                     runtimeDetails = runtimeDetails,
                     reader = reader,
                     session = session,
+                    alternateOn = reader.alternateOn,
                     onScrollBackPage = { onSessionInteraction(); connection.scrollBackPage() },
                     onScrollLive = { onSessionInteraction(); connection.scrollLive() },
+                    onOpenHistory = {
+                        onSessionInteraction()
+                        readerScope.launch {
+                            connection.enterHistory()
+                            historyDialogOpen = true
+                        }
+                    },
                 )
                 Row(
                     Modifier.fillMaxWidth(),
@@ -3698,8 +3708,10 @@ private fun HarnessStatusBar(
     runtimeDetails: TmuxText.RuntimeDetails,
     reader: ReaderState,
     session: TmuxSession,
+    alternateOn: Boolean,
     onScrollBackPage: () -> Unit,
     onScrollLive: () -> Unit,
+    onOpenHistory: () -> Unit,
 ) {
     val parts = listOfNotNull(
         session.agent.label.takeIf { it.isNotBlank() },
@@ -3724,12 +3736,12 @@ private fun HarnessStatusBar(
             modifier = Modifier.weight(1f),
         )
         IconButton(
-            onClick = onScrollBackPage,
+            onClick = if (alternateOn) onOpenHistory else onScrollBackPage,
             modifier = Modifier.size(24.dp),
         ) {
             Icon(
                 Icons.Default.KeyboardArrowUp,
-                "Scroll agent history up",
+                if (alternateOn) "Open agent history" else "Scroll agent history up",
                 Modifier.size(16.dp),
             )
         }
@@ -3744,4 +3756,69 @@ private fun HarnessStatusBar(
             )
         }
     }
+}
+
+
+/**
+ * Paged view into an alternate-screen agent's own history (Claude Code, Fable). The stream
+ * runs in history mode: captured screens land here instead of the live transcript. "Load
+ * older" pages the TUI back once and waits for the next distinct screen.
+ */
+@Composable
+private fun AgentHistoryDialog(connection: SessionReaderConnection, onDismiss: () -> Unit) {
+    val pages by connection.historyPages.collectAsState()
+    var loading by remember { mutableStateOf(false) }
+    var exhausted by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+
+    fun loadOlder() {
+        if (loading || exhausted) return
+        loading = true
+        scope.launch {
+            val got = connection.loadOlderHistoryPage()
+            if (!got) exhausted = true
+            loading = false
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Session history") },
+        text = {
+            Column {
+                if (pages.isEmpty()) {
+                    Text("Capturing…", style = MaterialTheme.typography.bodySmall)
+                } else if (exhausted) {
+                    Text("No older history available.", style = MaterialTheme.typography.bodySmall)
+                }
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    itemsIndexed(pages.asReversed()) { _, page ->
+                        SelectionContainer {
+                            Text(
+                                page,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                            )
+                        }
+                    }
+                    item {
+                        TextButton(onClick = ::loadOlder, enabled = !loading && !exhausted) {
+                            Text(if (loading) "Loading…" else "Load older")
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Back to live") }
+        },
+    )
 }

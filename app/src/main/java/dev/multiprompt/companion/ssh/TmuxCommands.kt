@@ -12,6 +12,7 @@ enum class TmuxAction {
 /** The complete allowlist of remote commands the mobile reader can run. */
 object TmuxCommands {
     const val SNAPSHOT_PREFIX = "__MP_TMUX_SNAPSHOT__"
+    const val ALT_PREFIX = "__MP_TMUX_ALT__"
     const val CREATED_PREFIX = "__MP_TMUX_CREATED__"
 
     fun capture(sessionName: String): String = captureCommand(target(sessionName))
@@ -104,6 +105,7 @@ object TmuxCommands {
             "trap 'rm -f \"\$mp_snapshot\"' EXIT HUP INT TERM; " +
             "mp_previous=''; " +
             "while tmux has-session -t $target 2>/dev/null; do " +
+            "printf '$ALT_PREFIX'"\$(tmux display-message -p -t $target '#{alternate_on}' 2>/dev/null)\n"; " +
             "if [ \"\$(tmux display-message -p -t $target '#{pane_in_mode}' 2>/dev/null)\" = 1 ]; " +
             "then sleep 1; continue; fi; " +
             "{ ${captureCommand(target)} ; } 2>/dev/null | " +
