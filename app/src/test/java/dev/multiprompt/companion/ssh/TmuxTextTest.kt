@@ -850,4 +850,32 @@ class TmuxTextTest {
         // Every row above is tool chrome; none may survive as PROSE in clean chat.
         assertTrue(blocks.none { it.kind == TmuxText.ReaderBlockKind.PROSE })
     }
+
+    @Test
+    fun longDictatedPromptWithParagraphsStaysInTheUserBubble() {
+        val blocks = TmuxText.readerBlocks(
+            """
+            ❯ Yeah. I mean, I think that, the the loop needs to essentially
+              have its own powers. Right? Like, sorry. It needs to
+              essentially be able to change itself so it can become more
+              powerful.
+
+            ● Agreed, and that is exactly what the build now running gives
+              Product Bot. Ticket
+              https://app.hypertask.ai/detail/project-5500/14.
+
+              What Product Bot can do once it lands:
+              1. Change its own toolkit.
+              2. Merge its own green pull requests.
+            """.trimIndent(),
+            AgentKind.CLAUDE,
+        )
+
+        val userBlocks = blocks.filter { it.kind == TmuxText.ReaderBlockKind.USER_PROMPT }
+        assertEquals(1, userBlocks.size)
+        assertTrue(userBlocks.single().text.contains("become more"))
+        assertTrue(userBlocks.single().text.contains("powerful"))
+        // The agent reply must not be absorbed into the user's bubble.
+        assertTrue(userBlocks.single().text.contains("Agreed") == false)
+    }
 }

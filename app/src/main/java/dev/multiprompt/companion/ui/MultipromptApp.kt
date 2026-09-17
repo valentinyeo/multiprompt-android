@@ -1826,19 +1826,23 @@ private fun ReaderScreen(
         }
     }
 
+    // Open at the newest message and stay there while the agent works; only a deliberate
+    // scroll (drag or fling) unpins. The previous version computed "pinned" from the current
+    // position every frame, so a freshly opened session (position 0, content below) counted
+    // as "scrolled up" and never followed the tail.
+    var pinnedToBottom by remember(connection) { mutableStateOf(true) }
     LaunchedEffect(connection, scrollState, density) {
         val bottomThresholdPx = with(density) { 56.dp.roundToPx() }
-        // Track whether the user is pinned to the bottom from THEIR scroll position, not
-        // from a max-height diff: a mid-scroll-up frame update used to race the check and
-        // yank the transcript back down on busy sessions, making history unreadable.
-        var pinnedToBottom = true
-        snapshotFlow { scrollState.value to scrollState.maxValue }.collect { (value, max) ->
-            pinnedToBottom = max - value <= bottomThresholdPx
+        launch {
+            snapshotFlow { scrollState.isScrollInProgress }.collect { inProgress ->
+                if (inProgress) {
+                    pinnedToBottom = scrollState.maxValue - scrollState.value <= bottomThresholdPx
+                }
+            }
         }
         snapshotFlow { scrollState.maxValue }.collect { newMaximum ->
-            val previous = previousScrollMax
             previousScrollMax = newMaximum
-            if (pinnedToBottom && newMaximum > previous) {
+            if (pinnedToBottom && newMaximum > 0) {
                 scrollState.scrollTo(newMaximum)
             }
         }

@@ -189,7 +189,7 @@ object TmuxText {
         var currentKind = ReaderBlockKind.PROSE
         var fencedCode = false
         var fencedLanguage: String? = null
-        var promptMayContinue = false
+        var userPromptOpen = false
         // tmux hard-wraps at the desktop pane width, so a paragraph arrives as several
         // full rows. Rejoin them, otherwise the phone wraps the leftovers again and every
         // paragraph reads as a stack of line-and-a-half fragments. A row long enough to be
@@ -213,7 +213,7 @@ object TmuxText {
             currentKind = ReaderBlockKind.PROSE
             fencedLanguage = null
             lastLineFilledTheRow = false
-            promptMayContinue = false
+            userPromptOpen = false
         }
 
         fun append(kind: ReaderBlockKind, line: String) {
@@ -228,10 +228,9 @@ object TmuxText {
             )
             lastLineFilledTheRow = line.trimEnd().length >= WRAPPED_ROW_LENGTH
             if (kind == ReaderBlockKind.USER_PROMPT) {
-                // A terminal-wrapped prompt fills the row it wraps out of. The old 64-column
-                // threshold sat above the width agents actually wrap prose at, so long
-                // dictated prompts lost their tail into the agent's block.
-                promptMayContinue = line.trim().length >= WRAPPED_ROW_LENGTH
+                // The prompt stays open while its continuation rows keep the TUI's
+                // indentation; a non-indented row or marker closes it.
+                userPromptOpen = true
             }
         }
 
@@ -258,8 +257,12 @@ object TmuxText {
             if (trimmed.isBlank()) {
                 lastLineFilledTheRow = false
                 if (current.isNotEmpty()) {
-                    if (currentKind == ReaderBlockKind.USER_PROMPT ||
-                        currentKind == ReaderBlockKind.CODE ||
+                    if (currentKind == ReaderBlockKind.USER_PROMPT && userPromptOpen) {
+                        // A dictated prompt can contain paragraph breaks. They belong to the
+                        // user's bubble: long dictations used to split after the first
+                        // paragraph and the tail rendered as agent output.
+                        current.append('\n')
+                    } else if (currentKind == ReaderBlockKind.CODE ||
                         currentKind == ReaderBlockKind.PROGRESS
                     ) {
                         flush()
@@ -269,13 +272,22 @@ object TmuxText {
                 }
                 return@forEach
             }
+            if (currentKind == ReaderBlockKind.USER_PROMPT && userPromptOpen &&
+                !line.startsWith("  ") && !lastLineFilledTheRow && current.isNotEmpty()
+            ) {
+                // A non-indented row ends the prompt even when the classifier might call it
+                // prose (some harnesses write agent replies without a marker).
+                flush()
+            }
             val kind = when {
                 looksLikeUserPrompt(line, agent) -> ReaderBlockKind.USER_PROMPT
                 looksLikeProgress(line, agent) -> ReaderBlockKind.PROGRESS
-                currentKind == ReaderBlockKind.USER_PROMPT && promptMayContinue -> {
+                currentKind == ReaderBlockKind.USER_PROMPT && userPromptOpen &&
+                    (line.startsWith("  ") || lastLineFilledTheRow) -> {
                     // Codex and Claude wrap a submitted prompt across terminal rows but only
-                    // draw the prompt marker on the first row. Keep those wrapped rows in the
-                    // same user bubble; an empty row or activity marker ends the prompt.
+                    // draw the prompt marker on the first row; continuation rows keep the
+                    // TUI's indentation. Keep them in the user bubble so a long dictated
+                    // prompt never leaks its tail into the agent's block.
                     ReaderBlockKind.USER_PROMPT
                 }
                 currentKind == ReaderBlockKind.PROGRESS && !line.trimStart().startsWith("•") -> {
