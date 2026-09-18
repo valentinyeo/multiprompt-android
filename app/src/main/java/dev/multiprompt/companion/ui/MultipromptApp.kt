@@ -2639,6 +2639,33 @@ private fun ReaderScreen(
             horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            if (reader.alternateOn) {
+                // Full-screen agents keep their scrollback inside the TUI, so tmux above the
+                // visible screen has nothing to show. This pulls one screen at a time back
+                // from the agent into the transcript.
+                var loadingOlder by remember(connection) { mutableStateOf(false) }
+                var noOlderHistory by remember(connection) { mutableStateOf(false) }
+                OutlinedButton(
+                    onClick = {
+                        if (loadingOlder) return@OutlinedButton
+                        loadingOlder = true
+                        readerScope.launch {
+                            val loaded = connection.loadOlderIntoTranscript()
+                            if (!loaded) noOlderHistory = true
+                            loadingOlder = false
+                        }
+                    },
+                    enabled = !loadingOlder && !reader.sending,
+                ) {
+                    Text(
+                        when {
+                            loadingOlder -> "Loading older messages…"
+                            noOlderHistory -> "No older messages"
+                            else -> "Load older messages"
+                        },
+                    )
+                }
+            }
             if (reader.status == ReaderStatus.Connecting && reader.output.isBlank()) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)

@@ -149,6 +149,9 @@ class SessionReaderConnection(
 
     private val _historyPages = MutableStateFlow<List<String>>(emptyList())
 
+    /** How many screens back the transcript has already pulled from the TUI. */
+    private var transcriptHistoryDepth = 0
+
     /** Captured TUI history pages while history mode is active. */
     val historyPages: StateFlow<List<String>> = _historyPages
 
@@ -194,6 +197,70 @@ class SessionReaderConnection(
         _historyPages.value = emptyList()
         _historyPage.value = null
         scrollLive()
+    }
+
+    /**
+     * Folds one older screen of the agent TUI's own history above the live transcript.
+     * Alternate-screen panes keep their scrollback inside the TUI, so tmux has nothing above
+     * the visible screen; paging the TUI is the only way to reach it. PageUp from the live
+     * view always lands on the same screen, so each call pages one screen deeper than the
+     * last before reading the pane. Returns false at the oldest screen the TUI still holds.
+     */
+    suspend fun loadOlderIntoTranscript(): Boolean = historyMutex.withLock {
+        if (historyMode) return@withLock false
+        if (!_state.value.alternateOn) return@withLock false
+        val targetDepth = transcriptHistoryDepth + 1
+        historyMode = true
+        _historyPage.value = null
+        repeat(targetDepth) {
+            runCatching { pageBackOnce() }
+            delay(HISTORY_PAGE_STEP_MS)
+        }
+        val page = awaitStableHistoryPage()
+        scrollLiveDirect()
+        // Let the TUI return to the live screen while history mode still discards captures,
+        // otherwise a stale paged screen merges into the transcript as if it were new.
+        delay(HISTORY_RETURN_MS)
+        historyMode = false
+        _historyPage.value = null
+        if (page == null) return@withLock false
+        val older = page.trimEnd()
+        // The TUI stopped moving when the captured screen is one the transcript already has.
+        if (_state.value.output.contains(older)) return@withLock false
+        transcriptHistoryDepth = targetDepth
+        _state.update { it.copy(output = older + "\n" + it.output) }
+        true
+    }
+
+    private suspend fun pageBackOnce() = withFreshClient { client ->
+        repository.performAction(client, tmuxSessionName, TmuxAction.SCROLL_UP)
+    }
+
+    private suspend fun scrollLiveDirect() {
+        runCatching {
+            withFreshClient { client ->
+                repository.performAction(client, tmuxSessionName, TmuxAction.SCROLL_BOTTOM)
+            }
+        }
+    }
+
+    /** Waits for repeated equal captures so a half-drawn or intermediate paged screen is not used. */
+    private suspend fun awaitStableHistoryPage(): String? {
+        var previous: String? = null
+        var stableReads = 0
+        val deadline = System.currentTimeMillis() + HISTORY_PAGE_WAIT_MS
+        while (System.currentTimeMillis() < deadline) {
+            val candidate = _historyPage.value?.takeIf(String::isNotBlank)
+            if (candidate != null && candidate == previous) {
+                stableReads++
+                if (stableReads >= HISTORY_PAGE_STABLE_READS) return candidate
+            } else {
+                stableReads = 0
+                previous = candidate
+            }
+            delay(HISTORY_PAGE_READ_MS)
+        }
+        return previous
     }
 
     fun selectModelPickerOption(index: Int): Boolean {
@@ -331,5 +398,10 @@ class SessionReaderConnection(
         const val RECONNECT_DELAY_MS = 3_000L
         const val SENT_PROMPT_MEMORY = 3
         const val MODEL_CONFIRM_TIMEOUT_MS = 25_000L
+        const val HISTORY_PAGE_STEP_MS = 350L
+        const val HISTORY_PAGE_READ_MS = 500L
+        const val HISTORY_PAGE_STABLE_READS = 3
+        const val HISTORY_PAGE_WAIT_MS = 4_000L
+        const val HISTORY_RETURN_MS = 1_200L
     }
 }
