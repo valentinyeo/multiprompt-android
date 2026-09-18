@@ -108,7 +108,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -1749,7 +1748,6 @@ private fun ReaderScreen(
     }
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
-    var previousScrollMax by remember(connection) { mutableIntStateOf(0) }
     val context = LocalContext.current
     val readerScope = rememberCoroutineScope()
     val authLauncher = rememberLauncherForActivityResult(
@@ -1834,15 +1832,19 @@ private fun ReaderScreen(
     LaunchedEffect(connection, scrollState, density) {
         val bottomThresholdPx = with(density) { 56.dp.roundToPx() }
         launch {
-            snapshotFlow { scrollState.isScrollInProgress }.collect { inProgress ->
-                if (inProgress) {
-                    pinnedToBottom = scrollState.maxValue - scrollState.value <= bottomThresholdPx
+            // Recompute on every scroll frame, not only when the gesture starts. On the first
+            // frame the finger has not moved yet, so a start-only check always read "still at
+            // the bottom" and pinned the transcript there: every new snapshot then yanked it
+            // back down and scrolling up was impossible.
+            snapshotFlow { scrollState.isScrollInProgress to scrollState.value }
+                .collect { (inProgress, value) ->
+                    if (inProgress) {
+                        pinnedToBottom = scrollState.maxValue - value <= bottomThresholdPx
+                    }
                 }
-            }
         }
         snapshotFlow { scrollState.maxValue }.collect { newMaximum ->
-            previousScrollMax = newMaximum
-            if (pinnedToBottom && newMaximum > 0) {
+            if (pinnedToBottom && !scrollState.isScrollInProgress && newMaximum > 0) {
                 scrollState.scrollTo(newMaximum)
             }
         }
