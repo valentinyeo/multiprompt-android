@@ -2273,6 +2273,26 @@ private fun ReaderScreen(
                                     onOpenTerminal()
                                 },
                             )
+                            // Diagnosis aid for scroll reports: the raw transcript plus the
+                            // numbers that separate "the reader holds one screen" from "the
+                            // view will not move".
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "Copy raw transcript (${reader.output.count { it == '\n' } + 1} lines · " +
+                                            "alt ${if (reader.alternateOn) 1 else 0} · " +
+                                            "view ${scrollState.value}/${scrollState.maxValue})",
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
+                                        as ClipboardManager
+                                    clipboard.setPrimaryClip(
+                                        ClipData.newPlainText("multiprompt transcript", reader.output),
+                                    )
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text(if (technicalMode) "Hide terminal details" else "Show terminal details") },
                                 onClick = {
