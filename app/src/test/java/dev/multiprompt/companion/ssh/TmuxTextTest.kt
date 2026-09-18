@@ -935,4 +935,35 @@ class TmuxTextTest {
             blocks,
         )
     }
+
+    @Test
+    fun claudeModelSwitchConfirmationIsDetected() {
+        assertTrue(
+            TmuxText.isModelSwitchConfirmation(
+                """
+                Switch model?
+                A PreModelSwitch hook asked you to confirm
+
+                ❯ 1. Yes, switch to Fable 5.1
+                  2. No, go back
+                """.trimIndent(),
+            ),
+        )
+        assertTrue(
+            TmuxText.isModelSwitchConfirmation(
+                """
+                Change effort level?
+                ❯ 1. Yes, switch to high
+                  2. No, go back
+                """.trimIndent(),
+            ),
+        )
+    }
+
+    @Test
+    fun ordinaryOutputIsNotAModelSwitchConfirmation() {
+        assertFalse(TmuxText.isModelSwitchConfirmation("● Switched the default model in settings.json"))
+        assertFalse(TmuxText.isModelSwitchConfirmation("Set model to Opus 5 and saved as your default"))
+        assertFalse(TmuxText.isModelSwitchConfirmation(""))
+    }
 }

@@ -80,6 +80,7 @@ class SessionReaderConnection(
     fun sendPrompt(text: String): Boolean {
         val sent = requests.trySend(Request.Prompt(text)).isSuccess
         if (sent) {
+            awaitModelSwitchConfirmation(text)
             // The app knows exactly what it sent. Echoing it locally guarantees the user's
             // own bubble even when the TUI queues the message without a "❯"/"> " marker
             // (dictation sent while the agent is Working renders marker-less).
@@ -104,6 +105,35 @@ class SessionReaderConnection(
     /** Pages the agent TUI's own scrollback up (alternate-screen panes own their history). */
     fun scrollBackPage() {
         requests.trySend(Request.Action(TmuxAction.SCROLL_UP))
+    }
+
+    @Volatile
+    private var modelSwitchConfirmDeadline = 0L
+
+    @Volatile
+    private var modelSwitchConfirmed = true
+
+    /**
+     * A model or effort command can raise the agent's own confirm dialog. Claude Code asks
+     * when a PreModelSwitch hook is configured; the companion app has already taken the
+     * user's choice, so arm a one-shot Enter for the dialog.
+     */
+    private fun awaitModelSwitchConfirmation(command: String) {
+        val trimmed = command.trimStart()
+        if (!trimmed.startsWith("/model") && !trimmed.startsWith("/effort")) return
+        modelSwitchConfirmed = false
+        modelSwitchConfirmDeadline = System.currentTimeMillis() + MODEL_CONFIRM_TIMEOUT_MS
+    }
+
+    private fun confirmModelSwitchIfAsked(visible: Boolean) {
+        if (modelSwitchConfirmed || !visible) return
+        if (System.currentTimeMillis() > modelSwitchConfirmDeadline) {
+            modelSwitchConfirmed = true
+            return
+        }
+        // The dialog's default choice is the switch the user asked for; Enter accepts it.
+        modelSwitchConfirmed = true
+        requests.trySend(Request.Action(TmuxAction.ENTER))
     }
 
     /** Returns to the live view after scrolling. */
@@ -166,8 +196,10 @@ class SessionReaderConnection(
         scrollLive()
     }
 
-    fun selectModelPickerOption(index: Int): Boolean =
-        requests.trySend(Request.ModelPickerOption(index)).isSuccess
+    fun selectModelPickerOption(index: Int): Boolean {
+        awaitModelSwitchConfirmation("/model")
+        return requests.trySend(Request.ModelPickerOption(index)).isSuccess
+    }
 
     private fun startStream() {
         if (streamJob?.isActive == true) return
@@ -183,7 +215,8 @@ class SessionReaderConnection(
                         connectedClient,
                         tmuxSessionName,
                         agent,
-                    ) { snapshot, details, pickerOptions, waitingForInput, alternateOn ->
+                    ) { snapshot, details, pickerOptions, waitingForInput, alternateOn, switchConfirmation ->
+                        confirmModelSwitchIfAsked(switchConfirmation)
                         if (historyMode) {
                             // The history overlay is paging the TUI; captured screens belong
                             // to the overlay, not the live transcript.
@@ -297,5 +330,6 @@ class SessionReaderConnection(
         const val REQUEST_TIMEOUT_MS = 20_000L
         const val RECONNECT_DELAY_MS = 3_000L
         const val SENT_PROMPT_MEMORY = 3
+        const val MODEL_CONFIRM_TIMEOUT_MS = 25_000L
     }
 }

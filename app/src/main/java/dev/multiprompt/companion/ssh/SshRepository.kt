@@ -121,6 +121,7 @@ class SshRepository(private val secrets: SecretStore) {
             List<TmuxText.ModelPickerOption>,
             Boolean,
             Boolean,
+            Boolean,
         ) -> Unit,
     ) = coroutineScope {
         val session = client.openSession()
@@ -159,6 +160,7 @@ class SshRepository(private val secrets: SecretStore) {
                             TmuxText.modelPickerOptions(rawOutput),
                             TmuxText.isWaitingForInput(rawOutput, agent),
                             alternateOn,
+                            TmuxText.isModelSwitchConfirmation(rawOutput),
                         )
                     }
                 }

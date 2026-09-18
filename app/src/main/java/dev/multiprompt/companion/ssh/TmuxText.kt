@@ -416,6 +416,22 @@ object TmuxText {
         }
     }
 
+    /**
+     * Claude Code's PreModelSwitch (or effort) confirmation dialog. A user who picked a model
+     * in the companion app has already consented, so the reader answers the dialog with Enter
+     * instead of leaving the switch stuck at the prompt.
+     */
+    fun isModelSwitchConfirmation(value: String): Boolean {
+        val lines = value.lineSequence()
+        return lines.any { line ->
+            val trimmed = line.trim()
+            trimmed.startsWith("Switch model?", ignoreCase = true) ||
+                trimmed.startsWith("Change effort level?", ignoreCase = true) ||
+                trimmed.startsWith("Yes, switch to", ignoreCase = true) ||
+                trimmed.contains("asked you to confirm", ignoreCase = true)
+        }
+    }
+
     /** A row the terminal did not wrap into: a bullet, a marker, or an indented block. */
     private fun startsNewParagraph(value: String): Boolean {
         if (value.startsWith("  ")) return true
