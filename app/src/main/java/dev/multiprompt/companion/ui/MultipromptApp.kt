@@ -2671,8 +2671,8 @@ private fun ReaderScreen(
                 waitingForInput -> MaterialTheme.colorScheme.onSecondaryContainer
                 else -> MaterialTheme.colorScheme.onPrimaryContainer
             }
-            val readerBlocks = remember(displayedOutput, session.agent) {
-                TmuxText.readerBlocks(displayedOutput, session.agent)
+            val readerBlocks = remember(displayedOutput, session.agent, reader.sentPrompts) {
+                TmuxText.readerBlocks(displayedOutput, session.agent, reader.sentPrompts)
             }
             val working = reader.sending || readerBlocks.any { block ->
                 block.kind == TmuxText.ReaderBlockKind.PROGRESS && isTransientProgress(block.text)

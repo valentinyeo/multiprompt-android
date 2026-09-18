@@ -41,6 +41,8 @@ data class ReaderState(
     val lastUpdatedAtMillis: Long = 0,
     val completedActions: Long = 0,
     val waitingForInput: Boolean = false,
+    /** Prompts sent from this app, newest last; keeps a dictated echo in one reader bubble. */
+    val sentPrompts: List<String> = emptyList(),
     /** True when the agent TUI draws on the alternate screen (owns its own scrollback). */
     val alternateOn: Boolean = false,
 )
@@ -82,7 +84,10 @@ class SessionReaderConnection(
             // own bubble even when the TUI queues the message without a "❯"/"> " marker
             // (dictation sent while the agent is Working renders marker-less).
             _state.update { current ->
-                current.copy(output = TmuxText.mergeSnapshot(current.output, "> $text"))
+                current.copy(
+                    output = TmuxText.mergeSnapshot(current.output, "> $text"),
+                    sentPrompts = (current.sentPrompts + text).takeLast(SENT_PROMPT_MEMORY),
+                )
             }
         }
         return sent
@@ -291,5 +296,6 @@ class SessionReaderConnection(
         const val CONNECT_TIMEOUT_MS = 20_000L
         const val REQUEST_TIMEOUT_MS = 20_000L
         const val RECONNECT_DELAY_MS = 3_000L
+        const val SENT_PROMPT_MEMORY = 3
     }
 }

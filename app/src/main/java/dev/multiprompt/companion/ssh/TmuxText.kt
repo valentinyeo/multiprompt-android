@@ -182,7 +182,11 @@ object TmuxText {
     }
 
     /** Converts a terminal snapshot into conservative, display-only Reader sections. */
-    fun readerBlocks(value: String, agent: AgentKind = AgentKind.OTHER): List<ReaderBlock> {
+    fun readerBlocks(
+        value: String,
+        agent: AgentKind = AgentKind.OTHER,
+        knownPrompts: List<String> = emptyList(),
+    ): List<ReaderBlock> {
         val blocks = mutableListOf<ReaderBlock>()
         val lines = value.lines()
         val current = StringBuilder()
@@ -190,6 +194,12 @@ object TmuxText {
         var fencedCode = false
         var fencedLanguage: String? = null
         var userPromptOpen = false
+        // The app knows the exact text it sent. Comparing that text against the echo keeps a
+        // dictated prompt in one bubble even when the terminal drops the marker, the
+        // indentation, or a paragraph break lands mid-sentence. The row-level heuristics
+        // below remain the fallback for prompts this device did not send.
+        val knownSignatures = knownPrompts.map(::promptSignature).filter(String::isNotEmpty)
+        var matchingKnownPrompt: String? = null
         // tmux hard-wraps at the desktop pane width, so a paragraph arrives as several
         // full rows. Rejoin them, otherwise the phone wraps the leftovers again and every
         // paragraph reads as a stack of line-and-a-half fragments. A row long enough to be
@@ -214,6 +224,7 @@ object TmuxText {
             fencedLanguage = null
             lastLineFilledTheRow = false
             userPromptOpen = false
+            matchingKnownPrompt = null
         }
 
         fun append(kind: ReaderBlockKind, line: String) {
@@ -231,6 +242,17 @@ object TmuxText {
                 // The prompt stays open while its continuation rows keep the TUI's
                 // indentation; a non-indented row or marker closes it.
                 userPromptOpen = true
+                val signature = promptSignature(current.toString())
+                val known = matchingKnownPrompt
+                    ?: knownSignatures
+                        .filter { signature.isNotEmpty() && it.startsWith(signature) }
+                        .maxByOrNull(String::length)
+                        ?.also { matchingKnownPrompt = it }
+                if (known != null && signature.length >= known.length) {
+                    // The whole sent prompt is on screen; the next row starts the agent's turn.
+                    matchingKnownPrompt = null
+                    userPromptOpen = false
+                }
             }
         }
 
@@ -271,6 +293,17 @@ object TmuxText {
                     }
                 }
                 return@forEach
+            }
+            val known = matchingKnownPrompt
+            if (known != null && currentKind == ReaderBlockKind.USER_PROMPT) {
+                // Continue the bubble while the row keeps completing the sent prompt, and stop
+                // the moment it stops matching so agent output can never be absorbed.
+                val candidate = promptSignature(current.toString() + " " + line)
+                if (known.startsWith(candidate)) {
+                    append(ReaderBlockKind.USER_PROMPT, line)
+                    return@forEach
+                }
+                matchingKnownPrompt = null
             }
             if (currentKind == ReaderBlockKind.USER_PROMPT && userPromptOpen &&
                 !line.startsWith("  ") && !lastLineFilledTheRow && current.isNotEmpty()
@@ -438,6 +471,9 @@ object TmuxText {
             line.startsWith("User:", ignoreCase = true) ||
             line.startsWith("You:", ignoreCase = true)
     }
+
+    /** Collapses terminal wrapping so an echoed prompt can be compared with the sent text. */
+    private fun promptSignature(value: String): String = value.replace(WHITESPACE, " ").trim()
 
     private fun removePromptMarker(value: String, agent: AgentKind): String = value.trimStart()
         .removePrefix("❯")

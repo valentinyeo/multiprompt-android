@@ -878,4 +878,61 @@ class TmuxTextTest {
         // The agent reply must not be absorbed into the user's bubble.
         assertTrue(userBlocks.single().text.contains("Agreed") == false)
     }
+
+    @Test
+    fun aKnownDictatedPromptWithParagraphBreaksStaysInOneBubble() {
+        // The app echoes what it sent as ">" plus the raw prompt text, so a dictated
+        // paragraph break arrives as a blank row followed by an unindented row. That used to
+        // end the bubble mid-sentence and render the tail as agent prose.
+        val prompt = "Yeah. We need to fix that. This is also a general topic. We need to desperately " +
+            "attack the board triage. As well as\n\nprioritization, there's just no order to anything. " +
+            "Right? Like, it just processes, I guess, by ticket ID."
+        val blocks = TmuxText.readerBlocks(
+            """
+            > Yeah. We need to fix that. This is also a general topic. We need to desperately attack the board triage. As well as
+
+            prioritization, there's just no order to anything. Right? Like, it just processes, I guess, by ticket ID.
+
+            • Yes. Product Bot becomes the triager.
+            """.trimIndent(),
+            AgentKind.CLAUDE,
+            listOf(prompt),
+        )
+
+        val userBlocks = blocks.filter { it.kind == TmuxText.ReaderBlockKind.USER_PROMPT }
+        assertEquals(1, userBlocks.size)
+        assertEquals(
+            "Yeah. We need to fix that. This is also a general topic. We need to desperately attack the " +
+                "board triage. As well as prioritization, there's just no order to anything. " +
+                "Right? Like, it just processes, I guess, by ticket ID.",
+            userBlocks.single().text.replace(Regex("\\s+"), " ").trim(),
+        )
+        // The agent's reply is a separate block, never absorbed into the prompt.
+        assertTrue(blocks.last().text.contains("Product Bot becomes the triager"))
+        assertTrue(blocks.last().kind != TmuxText.ReaderBlockKind.USER_PROMPT)
+    }
+
+    @Test
+    fun aKnownPromptDoesNotAbsorbAnUnmarkedAgentReply() {
+        val blocks = TmuxText.readerBlocks(
+            """
+            > Move the buttons to the top.
+
+            Done. The buttons now sit above the list.
+            """.trimIndent(),
+            AgentKind.CLAUDE,
+            listOf("Move the buttons to the top."),
+        )
+
+        assertEquals(
+            listOf(
+                TmuxText.ReaderBlock(TmuxText.ReaderBlockKind.USER_PROMPT, "Move the buttons to the top."),
+                TmuxText.ReaderBlock(
+                    TmuxText.ReaderBlockKind.PROSE,
+                    "Done. The buttons now sit above the list.",
+                ),
+            ),
+            blocks,
+        )
+    }
 }
