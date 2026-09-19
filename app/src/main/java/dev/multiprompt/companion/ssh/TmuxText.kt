@@ -206,6 +206,16 @@ object TmuxText {
         // a wrap point is the signal: measuring the pane width instead fails, because the
         // status bar is wider than the column the agent wraps its prose at.
         var lastLineFilledTheRow = false
+        // A captured pane can hold an unpaired fence: a collapsed tool preview prints a
+        // heredoc's closing ``` while its opener scrolled away. That one row used to flip
+        // every later row to CODE, which hides whole replies behind "Show code" in clean
+        // chat. Only fences that pair up inside this text are honored.
+        val pairedFence = lines.indices
+            .filter { lines[it].trim().matches(FENCE_LINE) }
+            .chunked(2)
+            .filter { it.size == 2 }
+            .flatten()
+            .toHashSet()
 
         fun flush() {
             val text = current.toString().trim()
@@ -256,15 +266,15 @@ object TmuxText {
             }
         }
 
-        lines.forEach { rawLine ->
+        lines.forEachIndexed { lineIndex, rawLine ->
             val line = rawLine.trimEnd()
             val trimmed = line.trim()
             if (isDivider(trimmed)) {
                 if (current.isNotEmpty()) flush()
                 lastLineFilledTheRow = false
-                return@forEach
+                return@forEachIndexed
             }
-            if (trimmed.startsWith("``")) {
+            if (lineIndex in pairedFence && trimmed.startsWith("``")) {
                 if (current.isNotEmpty()) flush()
                 if (fencedCode) {
                     fencedCode = false
@@ -274,7 +284,7 @@ object TmuxText {
                     currentKind = ReaderBlockKind.CODE
                     fencedLanguage = trimmed.removePrefix("```").trim().ifBlank { null }
                 }
-                return@forEach
+                return@forEachIndexed
             }
             if (trimmed.isBlank()) {
                 lastLineFilledTheRow = false
@@ -292,7 +302,7 @@ object TmuxText {
                         current.append('\n')
                     }
                 }
-                return@forEach
+                return@forEachIndexed
             }
             val known = matchingKnownPrompt
             if (known != null && currentKind == ReaderBlockKind.USER_PROMPT) {
@@ -301,7 +311,7 @@ object TmuxText {
                 val candidate = promptSignature(current.toString() + " " + line)
                 if (known.startsWith(candidate)) {
                     append(ReaderBlockKind.USER_PROMPT, line)
-                    return@forEach
+                    return@forEachIndexed
                 }
                 matchingKnownPrompt = null
             }
@@ -639,6 +649,7 @@ object TmuxText {
     private val ASSIGNMENT_LINE = Regex("[A-Za-z_][A-Za-z0-9_]*\\s*=\\s*\\S.*")
     private val CODE_LINE = Regex("(?:fun|class|interface|object|const|val|var)\\b.*(?:[({=]|\\s*$)")
     private val NUMBERED_DIFF_LINE = Regex("\\d+\\s+[+-](?:\\s|$).*")
+    private val FENCE_LINE = Regex("^```[A-Za-z0-9_+.-]*$")
     private val DIFF_PATH = Regex("diff --git a/\\S+ b/(\\S+)")
     private val FILE_PATH = Regex("(?:^|\\n)(?:\\+\\+\\+ b/|File: )([^\\s]+)")
     // Status lines decorate the gap between model and effort ("Opus 5 ⚡medium"), so plain

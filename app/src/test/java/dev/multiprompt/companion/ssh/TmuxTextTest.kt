@@ -966,4 +966,56 @@ class TmuxTextTest {
         assertFalse(TmuxText.isModelSwitchConfirmation("Set model to Opus 5 and saved as your default"))
         assertFalse(TmuxText.isModelSwitchConfirmation(""))
     }
+
+    @Test
+    fun anUnpairedFenceInAToolPreviewDoesNotHideLaterMessages() {
+        // A Codex tool preview prints a heredoc's closing fence while its opener scrolled out
+        // of the captured pane. That stray row used to flip every later row to CODE, so clean
+        // chat showed no messages at all, only "Show code" cards to expand by hand.
+        val captured = listOf(
+            "\u2022 Ran python3 - <<'PY'",
+            "  \u2502 import json",
+            "  \u2514 usage {'requests': 35}",
+            "  \u2026 +205 lines (ctrl + t to view transcript)",
+            "  systemctl --user enable --now strix-chatgpt-proxy.service",
+            "    ```",
+            "",
+            "\u2022 Strix is repaired and scheduled for Sundays at 03:00 Berlin time.",
+            "",
+            "  All three tickets are Urgent on board 15:",
+            "",
+            "  - CLI token leak: https://app.hypertask.ai/detail/project-15/6596",
+            "",
+            "  Worked for 37m 8s \u00b7 done 1:49 PM",
+        ).joinToString("\n")
+
+        val blocks = TmuxText.readerBlocks(captured, AgentKind.CODEX)
+
+        assertTrue(blocks.none { it.kind == TmuxText.ReaderBlockKind.CODE })
+        assertTrue(
+            blocks.any {
+                it.kind == TmuxText.ReaderBlockKind.PROSE &&
+                    it.text.contains("All three tickets are Urgent")
+            },
+        )
+    }
+
+    @Test
+    fun aPairedFenceStillRendersAsCode() {
+        val blocks = TmuxText.readerBlocks(
+            """
+            Here is the fix:
+            ```kotlin
+            val answer = 42
+            ```
+            """.trimIndent(),
+            AgentKind.PI,
+        )
+
+        assertEquals(
+            listOf(TmuxText.ReaderBlockKind.PROSE, TmuxText.ReaderBlockKind.CODE),
+            blocks.map { it.kind },
+        )
+        assertEquals("kotlin", blocks.last().language)
+    }
 }
