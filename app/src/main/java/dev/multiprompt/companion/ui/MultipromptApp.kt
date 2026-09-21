@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.ClipData
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
@@ -3345,14 +3346,16 @@ private fun TerminalScreen(
     // Pan the terminal up rather than shrinking it: resizing would renegotiate the PTY and
     // drag the desktop pane down with it.
     val keyboardHeightPx = WindowInsets.ime.getBottom(density)
-    // The emulator only holds the desktop's row count, so a tall phone viewport leaves dead
-    // rows under the pane. Pan the content down to sit on the bottom edge instead. Forcing
-    // the grid to those rows is not an option: the widget then scales itself into a corner.
-    val lineHeightPx = remember(fontSize) {
-        textMeasurer.measure(
-            AnnotatedString("0"),
-            TextStyle(fontFamily = ReaderFontFamily, fontSize = fontSize),
-        ).size.height
+    // Match termlib's own row metric, ceil(descent - ascent) at the same typeface. A layout
+    // line height is taller than the drawn row, which leaves the pan short and floats the grid
+    // above the input area.
+    val lineHeightPx = remember(fontSize, terminalTypeface) {
+        val paint = Paint().apply {
+            typeface = terminalTypeface
+            textSize = with(density) { fontSize.toPx() }
+        }
+        val metrics = paint.fontMetrics
+        kotlin.math.ceil((metrics.descent - metrics.ascent).toDouble()).toFloat()
     }
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -3403,11 +3406,16 @@ private fun TerminalScreen(
                 .clipToBounds()
                 .pointerInput(onBack) { detectPassiveDoubleTap(onBack) },
         ) {
-            // Pan the grid so the agent's live prompt row stays visible:
-            // - grid shorter than the viewport (pi draws a partial screen): push it DOWN by
-            //   the leftover space so its bottom edge sits just above the keyboard.
-            // - grid taller than the viewport (Cursor paints the full grid): push it UP by
-            //   the overflow so the bottom of the grid (prompt row) is on screen.
+            // The termlib emulator sizes itself to whatever box it is given unless a size is
+            // forced, so without forcedSize the phone's grid (say 50 rows) never matched the
+            // desktop pane (24 rows): tmux filled the top rows and left blank ones below, and
+            // the pan then moved that whole oversized grid off screen. Forcing the desktop
+            // grid makes the emulator, the PTY and the pan math agree.
+            //
+            // Pan the grid so the live prompt row stays visible:
+            // - grid shorter than the viewport (the usual case): push it DOWN so its bottom
+            //   edge sits above the input area instead of leaving dead rows below it.
+            // - grid taller (only when the font floor blocks the fit): leave it at the top.
             // With the keyboard open the whole grid slides up by the keyboard height.
             val gridHeightPx = if (rows > 0 && lineHeightPx > 0) (rows * lineHeightPx).toInt() else 0
             val viewportPx = with(density) { maxHeight.toPx() }.toInt()
@@ -3423,6 +3431,11 @@ private fun TerminalScreen(
                     .offset { IntOffset(0, panPx - keyboardHeightPx) }
                     .horizontalSwipe(onSwitchSession),
                 initialFontSize = fontSize,
+                // Let the fit shrink the font below the width-fit when the height demands it,
+                // but never grow past the size the width already allows.
+                minFontSize = 4.sp,
+                maxFontSize = fontSize,
+                forcedSize = if (rows > 0 && columns > 0) rows to columns else null,
                 focusRequester = focusRequester,
                 // Dismissing the keyboard leaves the terminal unfocused, so a tap has to
                 // ask for it back; otherwise the keyboard can never be reopened.
