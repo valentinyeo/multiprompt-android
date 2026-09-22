@@ -157,6 +157,7 @@ import dev.multiprompt.companion.AppUiState
 import dev.multiprompt.companion.SessionBucket
 import dev.multiprompt.companion.BuildConfig
 import dev.multiprompt.companion.MainViewModel
+import dev.multiprompt.companion.NewSessionPicker
 import dev.multiprompt.companion.NewSessionStep
 import dev.multiprompt.companion.R
 import dev.multiprompt.companion.model.AgentKind
@@ -376,6 +377,20 @@ private fun AppScreens(viewModel: MainViewModel) {
         return
     }
 
+    // The folder step owns the whole screen: its job is typing a repo name, and a dialog
+    // spent most of that space on its own chrome.
+    val newSession = state.newSession
+    if (newSession != null && newSession.step == NewSessionStep.PATH) {
+        NewSessionFolderScreen(
+            picker = newSession,
+            hosts = state.hosts,
+            onBrowse = viewModel::browseNewSessionDirectory,
+            onChoose = viewModel::chooseNewSessionFolder,
+            onClose = viewModel::closeNewSession,
+        )
+        return
+    }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
@@ -495,8 +510,6 @@ private fun AppScreens(viewModel: MainViewModel) {
     }
 
     state.newSession?.let { picker ->
-        // Typing narrows the folder list to the repo, which is the whole point of the picker.
-        var repoQuery by remember(picker.hostId) { mutableStateOf("") }
         when (picker.step) {
             NewSessionStep.HOST -> AlertDialog(
                 onDismissRequest = viewModel::closeNewSession,
@@ -522,110 +535,8 @@ private fun AppScreens(viewModel: MainViewModel) {
                 },
             )
 
-            NewSessionStep.PATH -> {
-                val ranked = remember(picker.directories, picker.usage, repoQuery) {
-                    DirectoryRanking.rank(picker.directories, picker.usage, repoQuery)
-                }
-                AlertDialog(
-                    onDismissRequest = viewModel::closeNewSession,
-                    title = { Text("New session · folder") },
-                    text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(
-                                picker.path,
-                                style = MaterialTheme.typography.labelSmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            OutlinedTextField(
-                                value = repoQuery,
-                                onValueChange = { repoQuery = it },
-                                singleLine = true,
-                                label = { Text("Find a repo") },
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            if (picker.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-                            picker.error?.let { message ->
-                                Text(
-                                    message,
-                                    color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.labelSmall,
-                                )
-                            }
-                            LazyColumn(
-                                modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp),
-                                verticalArrangement = Arrangement.spacedBy(2.dp),
-                            ) {
-                                if (repoQuery.isBlank() && picker.path.isNotBlank()) {
-                                    item {
-                                        TextButton(
-                                            onClick = {
-                                                viewModel.browseNewSessionDirectory(parentRemotePath(picker.path))
-                                            },
-                                            modifier = Modifier.fillMaxWidth(),
-                                        ) {
-                                            Text("..", Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
-                                        }
-                                    }
-                                }
-                                if (repoQuery.startsWith("/")) {
-                                    val typed = repoQuery.trim()
-                                    if (typed.length > 1) {
-                                        item {
-                                            TextButton(
-                                                onClick = { viewModel.browseNewSessionDirectory(typed) },
-                                                modifier = Modifier.fillMaxWidth(),
-                                            ) {
-                                                Text(
-                                                    "Go to $typed",
-                                                    Modifier.fillMaxWidth(),
-                                                    textAlign = TextAlign.Start,
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                                items(ranked, key = { it.name }) { entry ->
-                                    val full = joinRemotePath(picker.path, entry.name)
-                                    TextButton(
-                                        onClick = {
-                                            if (entry.isRepo) {
-                                                viewModel.chooseNewSessionFolder(full)
-                                            } else {
-                                                viewModel.browseNewSessionDirectory(full)
-                                            }
-                                        },
-                                        modifier = Modifier.fillMaxWidth(),
-                                    ) {
-                                        Column(Modifier.fillMaxWidth()) {
-                                            Text(entry.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                            Text(
-                                                buildString {
-                                                    append(full)
-                                                    if (entry.isRepo) append(" · git")
-                                                    if (entry.uses > 0) append(" · used ${entry.uses}×")
-                                                },
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { viewModel.chooseNewSessionFolder(picker.path) }) {
-                            Text("Use this folder")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = viewModel::closeNewSession) { Text("Cancel") }
-                    },
-                )
-            }
+            // The folder step is a full-screen picker, rendered before the dialogs.
+            NewSessionStep.PATH -> Unit
 
             NewSessionStep.HARNESS -> AlertDialog(
                 onDismissRequest = viewModel::closeNewSession,
@@ -777,6 +688,170 @@ private fun UpdateBanner(release: UpdateRelease, onInstall: () -> Unit) {
     ) {
         Text("v${release.versionName} is ready", Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
         FilledTonalButton(onClick = onInstall) { Text("Update now") }
+    }
+}
+
+/**
+ * Full-screen folder picker for a new session. Full screen because the job is typing: the
+ * search field takes focus on open, the keyboard stays up, and the list uses the whole
+ * screen instead of a dialog's fixed height.
+ */
+@Composable
+private fun NewSessionFolderScreen(
+    picker: NewSessionPicker,
+    hosts: List<HostProfile>,
+    onBrowse: (String) -> Unit,
+    onChoose: (String) -> Unit,
+    onClose: () -> Unit,
+) {
+    var query by remember(picker.hostId) { mutableStateOf("") }
+    val ranked = remember(picker.directories, picker.usage, query) {
+        DirectoryRanking.rank(picker.directories, picker.usage, query)
+    }
+    val hostLabel = hosts.firstOrNull { it.id == picker.hostId }?.label ?: "Host"
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    BackHandler(onBack = onClose)
+    LaunchedEffect(picker.hostId) {
+        focusRequester.requestFocus()
+        delay(120)
+        keyboard?.show()
+    }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                modifier = Modifier.statusBarsPadding(),
+                title = {
+                    Column {
+                        Text(
+                            "New session · $hostLabel",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            picker.path.ifBlank { "…" },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Cancel") }
+                },
+            )
+        },
+    ) { padding ->
+        Column(
+            Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .imePadding(),
+        ) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                singleLine = true,
+                label = { Text("Find a repo") },
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, "Clear") }
+                    }
+                },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(
+                    onSearch = {
+                        // Type a few letters, press the keyboard's search key, launch in the
+                        // top match. The whole point of the picker being full screen.
+                        ranked.firstOrNull { it.isRepo }?.let { entry ->
+                            onChoose(joinRemotePath(picker.path, entry.name))
+                        }
+                    },
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .focusRequester(focusRequester),
+            )
+            if (picker.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+            picker.error?.let { message ->
+                Text(
+                    message,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                )
+            }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                if (query.isBlank()) {
+                    item {
+                        TextButton(
+                            onClick = { onChoose(picker.path) },
+                            enabled = picker.path.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                "Use this folder",
+                                Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Start,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
+                    if (picker.path.isNotBlank() && picker.path != "/") {
+                        item {
+                            TextButton(
+                                onClick = { onBrowse(parentRemotePath(picker.path)) },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text("..", Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
+                            }
+                        }
+                    }
+                }
+                if (query.startsWith("/")) {
+                    val typed = query.trim()
+                    if (typed.length > 1) {
+                        item {
+                            TextButton(
+                                onClick = { onBrowse(typed) },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text("Go to $typed", Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
+                            }
+                        }
+                    }
+                }
+                items(ranked, key = { it.name }) { entry ->
+                    val full = joinRemotePath(picker.path, entry.name)
+                    TextButton(
+                        onClick = { if (entry.isRepo) onChoose(full) else onBrowse(full) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.fillMaxWidth()) {
+                            Text(entry.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                buildString {
+                                    append(full)
+                                    if (entry.isRepo) append(" · git")
+                                    if (entry.uses > 0) append(" · used ${entry.uses}×")
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
