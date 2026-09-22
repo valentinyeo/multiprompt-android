@@ -2,7 +2,10 @@ package dev.multiprompt.companion.ssh
 
 import android.util.Log
 import dev.multiprompt.companion.model.HostProfile
+import dev.multiprompt.companion.model.AgentHarness
 import dev.multiprompt.companion.model.AgentKind
+import dev.multiprompt.companion.model.RemoteDirectory
+import dev.multiprompt.companion.model.RemoteListing
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.model.DissolvedSession
 import dev.multiprompt.companion.security.SecretStore
@@ -199,41 +202,67 @@ class SshRepository(private val secrets: SecretStore) {
     }
 
     suspend fun createClaudeSession(host: HostProfile, remotePath: String): String =
-        withContext(Dispatchers.IO) {
-            withTimeout(CONNECTION_TIMEOUT_MS) {
-                withAuthenticatedClient(host) { client ->
-                    val project = remotePath.substringAfterLast('/').lowercase()
-                        .replace(Regex("[^a-z0-9]+"), "-")
-                        .trim('-')
-                        .ifBlank { "workspace" }
-                        .take(24)
-                    val sessionName = "claude-$project-${System.currentTimeMillis().toString(36)}"
-                    val result = execute(client, TmuxCommands.createClaudeSession(sessionName, remotePath))
-                    result.requireSuccess("create the Claude session")
-                    require(result.stdout.lineSequence().any {
-                        it.trim() == "${TmuxCommands.CREATED_PREFIX}$sessionName"
-                    }) { "The VPS did not confirm the new tmux session" }
-                    sessionName
-                }
-            }
-        }
+        createAgentSession(host, remotePath, AgentHarness.CLAUDE)
 
     suspend fun createShellSession(host: HostProfile, remotePath: String): String =
+        createAgentSession(host, remotePath, AgentHarness.SHELL)
+
+    suspend fun createAgentSession(
+        host: HostProfile,
+        remotePath: String,
+        harness: AgentHarness,
+    ): String = withContext(Dispatchers.IO) {
+        withTimeout(CONNECTION_TIMEOUT_MS) {
+            withAuthenticatedClient(host) { client ->
+                val project = remotePath.substringAfterLast('/').lowercase()
+                    .replace(Regex("[^a-z0-9]+"), "-")
+                    .trim('-')
+                    .ifBlank { "workspace" }
+                    .take(24)
+                val sessionName = "${harness.namePrefix}-$project-${System.currentTimeMillis().toString(36)}"
+                val result = execute(client, TmuxCommands.createAgentSession(sessionName, remotePath, harness))
+                result.requireSuccess("create the ${harness.label} session")
+                require(result.stdout.lineSequence().any {
+                    it.trim() == "${TmuxCommands.CREATED_PREFIX}$sessionName"
+                }) { "The VPS did not confirm the new tmux session" }
+                sessionName
+            }
+        }
+    }
+
+    /**
+     * Folders directly inside [path] on [host], for the new-session picker. A null [path]
+     * starts at the host's projects folder. Read-only and capped, so a directory with
+     * thousands of entries cannot stall the phone.
+     */
+    suspend fun listDirectories(host: HostProfile, path: String? = null): RemoteListing =
         withContext(Dispatchers.IO) {
             withTimeout(CONNECTION_TIMEOUT_MS) {
                 withAuthenticatedClient(host) { client ->
-                    val project = remotePath.substringAfterLast('/').lowercase()
-                        .replace(Regex("[^a-z0-9]+"), "-")
-                        .trim('-')
-                        .ifBlank { "workspace" }
-                        .take(24)
-                    val sessionName = "shell-$project-${System.currentTimeMillis().toString(36)}"
-                    val result = execute(client, TmuxCommands.createShellSession(sessionName, remotePath))
-                    result.requireSuccess("create the terminal session")
-                    require(result.stdout.lineSequence().any {
-                        it.trim() == "${TmuxCommands.CREATED_PREFIX}$sessionName"
-                    }) { "The VPS did not confirm the new tmux session" }
-                    sessionName
+                    val result = execute(client, TmuxCommands.listDirectories(path))
+                    result.requireSuccess("list the folders in ${path ?: "the home directory"}")
+                    var root = path.orEmpty()
+                    val directories = buildList {
+                        result.stdout.lineSequence()
+                            .filter(String::isNotBlank)
+                            .forEach { line ->
+                                val separator = line.indexOf('\t')
+                                val name = if (separator > 0) line.substring(0, separator) else line.trim()
+                                when {
+                                    name == DIRECTORY_ROOT_MARKER -> {
+                                        root = line.substring(separator + 1).trim()
+                                    }
+                                    name.isNotBlank() -> add(
+                                        RemoteDirectory(
+                                            name = name,
+                                            isRepo = separator > 0 &&
+                                                line.substring(separator + 1).trim() == "1",
+                                        ),
+                                    )
+                                }
+                            }
+                    }.take(MAX_DIRECTORY_ENTRIES)
+                    RemoteListing(root = root, directories = directories)
                 }
             }
         }
@@ -377,5 +406,7 @@ class SshRepository(private val secrets: SecretStore) {
         const val MAX_COMMAND_OUTPUT = 2 * 1024 * 1024
         const val MAX_PROMPT_BYTES = 64 * 1024
         const val MAX_SNAPSHOT_HEX_CHARS = 1024 * 1024
+        const val MAX_DIRECTORY_ENTRIES = 500
+        const val DIRECTORY_ROOT_MARKER = "@root"
     }
 }

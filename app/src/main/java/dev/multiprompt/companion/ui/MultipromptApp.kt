@@ -157,8 +157,11 @@ import dev.multiprompt.companion.AppUiState
 import dev.multiprompt.companion.SessionBucket
 import dev.multiprompt.companion.BuildConfig
 import dev.multiprompt.companion.MainViewModel
+import dev.multiprompt.companion.NewSessionStep
 import dev.multiprompt.companion.R
 import dev.multiprompt.companion.model.AgentKind
+import dev.multiprompt.companion.model.AgentHarness
+import dev.multiprompt.companion.model.DirectoryRanking
 import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
@@ -426,6 +429,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onRefresh = viewModel::refresh,
                     onSelectSection = viewModel::select,
                     onNewSession = { newSessionWorkspace = it },
+                    onStartNewSession = viewModel::startNewSession,
                     onSetNewestSessionsAtBottom = viewModel::setNewestSessionsAtBottom,
                     onSetAllSplitOnRight = viewModel::setAllSplitOnRight,
                     appTheme = state.appTheme,
@@ -462,20 +466,25 @@ private fun AppScreens(viewModel: MainViewModel) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("${workspace.remotePath}\nChoose how this tmux session should start.")
-                    Button(
-                        onClick = {
-                            newSessionWorkspace = null
-                            viewModel.createClaudeSession(workspace)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Claude Code") }
-                    OutlinedButton(
-                        onClick = {
-                            newSessionWorkspace = null
-                            viewModel.createShellSession(workspace)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Full terminal") }
+                    AgentHarness.entries.forEach { harness ->
+                        if (harness == AgentHarness.CLAUDE) {
+                            Button(
+                                onClick = {
+                                    newSessionWorkspace = null
+                                    viewModel.createSessionInWorkspace(workspace, harness)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text(harness.label) }
+                        } else {
+                            OutlinedButton(
+                                onClick = {
+                                    newSessionWorkspace = null
+                                    viewModel.createSessionInWorkspace(workspace, harness)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text(harness.label) }
+                        }
+                    }
                 }
             },
             confirmButton = {},
@@ -483,6 +492,177 @@ private fun AppScreens(viewModel: MainViewModel) {
                 TextButton(onClick = { newSessionWorkspace = null }) { Text("Cancel") }
             },
         )
+    }
+
+    state.newSession?.let { picker ->
+        // Typing narrows the folder list to the repo, which is the whole point of the picker.
+        var repoQuery by remember(picker.hostId) { mutableStateOf("") }
+        when (picker.step) {
+            NewSessionStep.HOST -> AlertDialog(
+                onDismissRequest = viewModel::closeNewSession,
+                title = { Text("New session · host") },
+                text = {
+                    Column(
+                        Modifier.verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        state.hosts.forEach { host ->
+                            TextButton(
+                                onClick = { viewModel.chooseNewSessionHost(host.id) },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(host.label, Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
+                            }
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(onClick = viewModel::closeNewSession) { Text("Cancel") }
+                },
+            )
+
+            NewSessionStep.PATH -> {
+                val ranked = remember(picker.directories, picker.usage, repoQuery) {
+                    DirectoryRanking.rank(picker.directories, picker.usage, repoQuery)
+                }
+                AlertDialog(
+                    onDismissRequest = viewModel::closeNewSession,
+                    title = { Text("New session · folder") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                picker.path,
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            OutlinedTextField(
+                                value = repoQuery,
+                                onValueChange = { repoQuery = it },
+                                singleLine = true,
+                                label = { Text("Find a repo") },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            if (picker.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                            picker.error?.let { message ->
+                                Text(
+                                    message,
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                            LazyColumn(
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                if (repoQuery.isBlank() && picker.path.isNotBlank()) {
+                                    item {
+                                        TextButton(
+                                            onClick = {
+                                                viewModel.browseNewSessionDirectory(parentRemotePath(picker.path))
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) {
+                                            Text("..", Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
+                                        }
+                                    }
+                                }
+                                if (repoQuery.startsWith("/")) {
+                                    val typed = repoQuery.trim()
+                                    if (typed.length > 1) {
+                                        item {
+                                            TextButton(
+                                                onClick = { viewModel.browseNewSessionDirectory(typed) },
+                                                modifier = Modifier.fillMaxWidth(),
+                                            ) {
+                                                Text(
+                                                    "Go to $typed",
+                                                    Modifier.fillMaxWidth(),
+                                                    textAlign = TextAlign.Start,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                items(ranked, key = { it.name }) { entry ->
+                                    val full = joinRemotePath(picker.path, entry.name)
+                                    TextButton(
+                                        onClick = {
+                                            if (entry.isRepo) {
+                                                viewModel.chooseNewSessionFolder(full)
+                                            } else {
+                                                viewModel.browseNewSessionDirectory(full)
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        Column(Modifier.fillMaxWidth()) {
+                                            Text(entry.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text(
+                                                buildString {
+                                                    append(full)
+                                                    if (entry.isRepo) append(" · git")
+                                                    if (entry.uses > 0) append(" · used ${entry.uses}×")
+                                                },
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { viewModel.chooseNewSessionFolder(picker.path) }) {
+                            Text("Use this folder")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = viewModel::closeNewSession) { Text("Cancel") }
+                    },
+                )
+            }
+
+            NewSessionStep.HARNESS -> AlertDialog(
+                onDismissRequest = viewModel::closeNewSession,
+                title = { Text("Start in ${picker.chosenPath?.substringAfterLast('/').orEmpty()}") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(picker.chosenPath.orEmpty(), style = MaterialTheme.typography.labelSmall)
+                        state.sessionActionError?.let { message ->
+                            Text(
+                                message,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                        AgentHarness.entries.forEach { harness ->
+                            if (harness == AgentHarness.CLAUDE) {
+                                Button(
+                                    onClick = { viewModel.createNewSession(harness) },
+                                    enabled = !state.creatingSession,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) { Text(harness.label) }
+                            } else {
+                                OutlinedButton(
+                                    onClick = { viewModel.createNewSession(harness) },
+                                    enabled = !state.creatingSession,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) { Text(harness.label) }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(onClick = viewModel::backToNewSessionFolder) { Text("Back") }
+                },
+            )
+        }
     }
 
     state.pendingHostKeys.entries.firstOrNull()?.let { (hostId, key) ->
@@ -625,6 +805,7 @@ private fun SessionsScreen(
     onRefresh: () -> Unit,
     onSelectSection: (AppSection) -> Unit,
     onNewSession: (Workspace) -> Unit,
+    onStartNewSession: () -> Unit,
     onSetNewestSessionsAtBottom: (Boolean) -> Unit,
     onSetAllSplitOnRight: (Boolean) -> Unit,
     appTheme: AppTheme,
@@ -656,7 +837,6 @@ private fun SessionsScreen(
     var searchQuery by remember { mutableStateOf("") }
     var overflowExpanded by remember { mutableStateOf(false) }
     var bucketMenuExpanded by remember { mutableStateOf(false) }
-    var newSessionWorkspacePickerVisible by remember { mutableStateOf(false) }
     var settingsVisible by remember { mutableStateOf(false) }
     var crashReportVisible by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
@@ -837,51 +1017,6 @@ private fun SessionsScreen(
                 },
             )
         }
-    }
-    if (newSessionWorkspacePickerVisible) {
-        AlertDialog(
-            onDismissRequest = { newSessionWorkspacePickerVisible = false },
-            title = { Text("New session") },
-            text = {
-                Column(
-                    Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        "Choose a workspace.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    // Two VPS hosts can share a folder name, so each group is labelled with
-                    // its host to keep the list unambiguous.
-                    state.workspaces.groupBy { it.hostId }.forEach { (hostId, workspaces) ->
-                        Text(
-                            hostLabels[hostId] ?: hostId,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        workspaces.forEach { workspace ->
-                            TextButton(
-                                onClick = {
-                                    newSessionWorkspacePickerVisible = false
-                                    onNewSession(workspace)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text(
-                                    workspace.name,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textAlign = TextAlign.Start,
-                                )
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { newSessionWorkspacePickerVisible = false }) { Text("Cancel") }
-            },
-        )
     }
     reminderPromptSession?.let { session ->
         ReminderDialog(
@@ -1099,12 +1234,12 @@ private fun SessionsScreen(
                 CircularProgressIndicator(Modifier.padding(12.dp).size(20.dp), strokeWidth = 2.dp)
             }
             IconButton(
-                enabled = state.workspaces.isNotEmpty() && !state.creatingSession,
+                enabled = !state.creatingSession,
                 onClick = {
                     val selected = state.selectedWorkspaceId?.let { selectedId ->
                         state.workspaces.firstOrNull { it.id == selectedId }
                     }
-                    if (selected != null) onNewSession(selected) else newSessionWorkspacePickerVisible = true
+                    if (selected != null) onNewSession(selected) else onStartNewSession()
                 },
             ) {
                 if (state.creatingSession) {
@@ -3596,6 +3731,19 @@ private fun Modifier.horizontalSwipe(
 
 /** Used only when tmux did not report a width for the session. */
 private const val FALLBACK_COLUMNS = 100
+
+/** Joins a picked folder name onto the directory the picker is showing. */
+private fun joinRemotePath(parent: String, name: String): String = when {
+    parent.isBlank() || parent == "/" -> "/$name"
+    else -> "${parent.trimEnd('/')}/$name"
+}
+
+/** The folder above [path], clamped at the filesystem root. */
+private fun parentRemotePath(path: String): String {
+    val trimmed = path.trimEnd('/')
+    if (trimmed.isBlank() || trimmed == "/") return "/"
+    return trimmed.substringBeforeLast('/', "").ifBlank { "/" }
+}
 // Long enough for a relaxed double tap, short enough that two deliberate taps are not read
 // as one gesture. Only used by the terminal's passive double-tap observer.
 private const val DOUBLE_TAP_TIMEOUT_MS = 320L

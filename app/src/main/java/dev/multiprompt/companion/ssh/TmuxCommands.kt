@@ -1,5 +1,7 @@
 package dev.multiprompt.companion.ssh
 
+import dev.multiprompt.companion.model.AgentHarness
+
 enum class TmuxAction {
     ENTER,
     INTERRUPT,
@@ -54,26 +56,75 @@ object TmuxCommands {
             "sleep 0.3 && " +
             "tmux send-keys -t ${target(sessionName)} Enter"
 
-    fun createClaudeSession(sessionName: String, remotePath: String): String {
+    fun createClaudeSession(sessionName: String, remotePath: String): String =
+        createAgentSession(sessionName, remotePath, AgentHarness.CLAUDE)
+
+    fun createShellSession(sessionName: String, remotePath: String): String =
+        createAgentSession(sessionName, remotePath, AgentHarness.SHELL)
+
+    /**
+     * Creates the tmux session and starts [harness] in [remotePath]. The binary, its flags and
+     * the login-shell wrapper are constants; only the quoted directory and session name are
+     * interpolated, so the request can never carry a command of its own.
+     */
+    fun createAgentSession(
+        sessionName: String,
+        remotePath: String,
+        harness: AgentHarness,
+    ): String {
         val path = TmuxParser.shellQuote(remotePath)
         val name = TmuxParser.shellQuote(sessionName)
         // An SSH exec channel runs a non-login, non-interactive shell whose PATH omits
         // ~/.local/bin (added by .profile, read only by login shells). The agent lookup and
-        // the launch must both go through a login shell or claude is never found.
+        // the launch must both go through a login shell or the binary is never found.
+        val check = if (harness.startsAnAgent) {
+            "if ! bash -lc 'command -v ${harness.binary} >/dev/null 2>&1'; then " +
+                "printf '${harness.binary} was not found on the VPS PATH\\n' >&2; exit 3; fi; "
+        } else {
+            ""
+        }
+        val launch = if (harness.startsAnAgent) {
+            val line = "exec ${harness.binary}${if (harness.arguments.isBlank()) "" else " ${harness.arguments}"}"
+            " 'exec bash -lc \"$line\"'"
+        } else {
+            ""
+        }
         return "if [ ! -d $path ]; then printf 'Project directory not found\\n' >&2; exit 2; fi; " +
-            "if ! bash -lc 'command -v claude >/dev/null 2>&1'; then printf 'claude was not found on the VPS PATH\\n' >&2; exit 3; fi; " +
-            "tmux new-session -d -s $name -c $path " +
-            "'exec bash -lc \"exec claude --dangerously-skip-permissions\"' && " +
+            "$check" +
+            "tmux new-session -d -s $name -c $path$launch && " +
             "printf '$CREATED_PREFIX%s\\n' $name"
     }
 
-    fun createShellSession(sessionName: String, remotePath: String): String {
-        val path = TmuxParser.shellQuote(remotePath)
-        val name = TmuxParser.shellQuote(sessionName)
-        return "if [ ! -d $path ]; then printf 'Project directory not found\\n' >&2; exit 2; fi; " +
-            "tmux new-session -d -s $name -c $path && " +
-            "printf '$CREATED_PREFIX%s\\n' $name"
+    /**
+     * Read-only listing of the folders directly inside [path]. Each line is "name<TAB>git",
+     * where git is 1 for a folder holding a .git entry (a directory or a worktree file).
+     * Hidden folders and files are skipped, and the caller caps how much it reads. A null
+     * [path] starts at the host's own projects folder, falling back to its home directory.
+     */
+    fun listDirectories(path: String? = null): String {
+        val quoted = path?.let(TmuxParser::shellQuote)
+        return if (quoted == null) {
+            "mp_home=\"\$HOME\"; " +
+                "if [ -d \"\$mp_home/projects\" ]; then mp_root=\"\$mp_home/projects\"; " +
+                "else mp_root=\"\$mp_home\"; fi; " +
+                "printf '@root\\t%s\\n' \"\$mp_root\"; " +
+                "cd \"\$mp_root\" || exit 2; " +
+                DIRECTORY_LIST_BODY
+        } else {
+            "if [ ! -d $quoted ]; then printf 'Directory not found\\n' >&2; exit 2; fi; " +
+                "cd $quoted || exit 2; " +
+                "printf '@root\\t%s\\n' \"\$PWD\"; " +
+                DIRECTORY_LIST_BODY
+        }
     }
+
+    private const val DIRECTORY_LIST_BODY =
+        "for mp_entry in *; do " +
+            "[ -d \"\$mp_entry\" ] || continue; " +
+            "case \"\$mp_entry\" in .*) continue;; esac; " +
+            "if [ -e \"\$mp_entry/.git\" ]; then mp_git=1; else mp_git=0; fi; " +
+            "printf '%s\\t%s\\n' \"\$mp_entry\" \"\$mp_git\"; " +
+            "done"
 
     fun dissolveSession(sessionName: String): String =
         "tmux kill-session -t ${TmuxParser.shellQuote("=$sessionName")}"

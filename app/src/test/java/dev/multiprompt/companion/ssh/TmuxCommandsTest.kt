@@ -1,5 +1,6 @@
 package dev.multiprompt.companion.ssh
 
+import dev.multiprompt.companion.model.AgentHarness
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -83,6 +84,48 @@ class TmuxCommandsTest {
 
         assertTrue(command.contains("tmux new-session -d -s 'shell-work' -c '/srv/work'"))
         assertFalse(command.contains("claude"))
+    }
+
+    @Test
+    fun codexSessionQuotesTheFolderAndCarriesTheCodexFlags() {
+        val command = TmuxCommands.createAgentSession(
+            "codex-api",
+            "/srv/a'; touch /bad",
+            AgentHarness.CODEX,
+        )
+
+        assertTrue(command.contains("-s 'codex-api'"))
+        assertTrue(command.contains("-c '/srv/a'\"'\"'; touch /bad'"))
+        assertTrue(command.contains("command -v codex"))
+        assertTrue(command.contains("--dangerously-bypass-approvals-and-sandbox"))
+    }
+
+    @Test
+    fun piSessionStartsPiWithoutExtraFlags() {
+        val command = TmuxCommands.createAgentSession("pi-api", "/srv/api", AgentHarness.PI)
+
+        assertTrue(command.contains("command -v pi"))
+        assertTrue(command.contains("exec pi\""))
+        assertFalse(command.contains("--dangerously"))
+    }
+
+    @Test
+    fun directoryListingQuotesThePathAndMarksGitFolders() {
+        val command = TmuxCommands.listDirectories("/srv/a'; reboot")
+
+        assertTrue(command.contains("/srv/a'\"'\"'; reboot"))
+        assertTrue(command.contains("\$mp_entry/.git"))
+        assertTrue(command.contains("@root"))
+        assertTrue(command.contains("printf '%s\\t%s\\n'"))
+    }
+
+    @Test
+    fun homeDirectoryListingPrefersTheProjectsFolder() {
+        val command = TmuxCommands.listDirectories()
+
+        assertTrue(command.contains("mp_home/projects"))
+        assertTrue(command.contains("@root"))
+        assertFalse(command.contains("cd 'null'"))
     }
 
     @Test

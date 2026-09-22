@@ -110,6 +110,31 @@ class WorkspaceStore(context: Context) {
         preferences.edit().putString("$ASSIGNMENT_PREFIX$key", workspaceId).apply()
     }
 
+    /** How many sessions this app has started in each folder, keyed by absolute path. */
+    fun pathUsage(hostId: String): Map<String, Int> {
+        val raw = preferences.getString(KEY_PATH_USAGE, null) ?: return emptyMap()
+        return runCatching {
+            val json = JSONObject(raw)
+            buildMap {
+                json.keys().forEach { key ->
+                    if (key.startsWith("$hostId\n")) {
+                        put(key.removePrefix("$hostId\n"), json.optInt(key))
+                    }
+                }
+            }
+        }.getOrDefault(emptyMap())
+    }
+
+    fun bumpPathUsage(hostId: String, path: String) {
+        if (hostId.isBlank() || path.isBlank()) return
+        val json = runCatching {
+            JSONObject(preferences.getString(KEY_PATH_USAGE, null) ?: "{}")
+        }.getOrElse { JSONObject() }
+        val key = "$hostId\n$path"
+        json.put(key, json.optInt(key) + 1)
+        preferences.edit().putString(KEY_PATH_USAGE, json.toString()).apply()
+    }
+
     fun removeHost(hostId: String) {
         val remaining = load().filterNot { it.hostId == hostId }
         val validIds = remaining.mapTo(mutableSetOf()) { it.id }
@@ -118,6 +143,14 @@ class WorkspaceStore(context: Context) {
             .filterValues { it !in validIds }
             .keys
             .forEach(editor::remove)
+        runCatching {
+            val usage = JSONObject(preferences.getString(KEY_PATH_USAGE, null) ?: "{}")
+            usage.keys().asSequence()
+                .filter { it.startsWith("$hostId\n") }
+                .toList()
+                .forEach(usage::remove)
+            editor.putString(KEY_PATH_USAGE, usage.toString())
+        }
         loadSplitOrder()?.let { order ->
             editor.putString(
                 KEY_SPLIT_ORDER,
@@ -168,6 +201,7 @@ class WorkspaceStore(context: Context) {
     companion object {
         private const val KEY_WORKSPACES = "workspaces_json"
         private const val KEY_SPLIT_ORDER = "split_order_json"
+        private const val KEY_PATH_USAGE = "path_usage_json"
         private const val ASSIGNMENT_PREFIX = "assignment::"
         private const val ALL_SPLIT_ID = "__all_sessions__"
         const val OTHER_WORKSPACE_ID = "__other_workspace__"

@@ -5,8 +5,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
+import dev.multiprompt.companion.model.AgentHarness
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.model.DissolvedSession
+import dev.multiprompt.companion.model.RemoteDirectory
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.SessionSearch
 import dev.multiprompt.companion.data.WorkspaceStore
@@ -84,7 +86,32 @@ data class AppUiState(
     val readerSwipeOrder: List<String> = emptyList(),
     /** The terminal was opened from a reader, so closing it returns to that conversation. */
     val terminalFromReader: Boolean = false,
+    /** Host, folder and harness picker for a brand new session. Null when it is closed. */
+    val newSession: NewSessionPicker? = null,
 )
+
+enum class NewSessionStep { HOST, PATH, HARNESS }
+
+/**
+ * State for the new-session flow: pick a host, walk to a folder, pick the harness. The folder
+ * list arrives from the host, and [usage] ranks the folders this app already works in.
+ */
+data class NewSessionPicker(
+    val hostId: String? = null,
+    val path: String = "",
+    val directories: List<RemoteDirectory> = emptyList(),
+    val usage: Map<String, Int> = emptyMap(),
+    val loading: Boolean = false,
+    val error: String? = null,
+    val chosenPath: String? = null,
+) {
+    val step: NewSessionStep
+        get() = when {
+            hostId == null -> NewSessionStep.HOST
+            chosenPath == null -> NewSessionStep.PATH
+            else -> NewSessionStep.HARNESS
+        }
+}
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as MultipromptApplication
@@ -827,51 +854,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(dissolvedSessions = it.dissolvedSessions.filterNot { item -> item.key == session.key }) }
     }
 
-    fun createClaudeSession(workspace: Workspace) {
-        if (_state.value.creatingSession) return
-        val host = _state.value.hosts.firstOrNull { it.id == workspace.hostId }
-        if (host == null) {
-            _state.update { it.copy(sessionActionError = "The workspace VPS is missing") }
-            return
-        }
-        viewModelScope.launch {
-            _state.update { it.copy(creatingSession = true, sessionActionError = null) }
-            runCatching { ssh.createClaudeSession(host, workspace.remotePath) }
-                .onSuccess { sessionName ->
-                    val session = TmuxSession(
-                        hostId = host.id,
-                        name = sessionName,
-                        windows = 1,
-                        attachedClients = 0,
-                        lastActivityEpochSeconds = System.currentTimeMillis() / 1000,
-                        workingDirectory = workspace.remotePath,
-                    )
-                    workspaceStore.assign(session, workspace.id)
-                    val key = SessionReadStore.key(session.hostId, session.name)
-                    _state.update {
-                        it.copy(
-                            sessions = (it.sessions + session).distinctBy { item ->
-                                SessionReadStore.key(item.hostId, item.name)
-                            },
-                            sessionWorkspaceIds = it.sessionWorkspaceIds + (key to workspace.id),
-                            creatingSession = false,
-                        )
-                    }
-                    openReader(session)
-                    refresh()
-                }
-                .onFailure { throwable ->
-                    _state.update {
-                        it.copy(
-                            creatingSession = false,
-                            sessionActionError = throwable.message ?: "Could not create the Claude session",
-                        )
-                    }
-                }
-        }
-    }
+    fun createClaudeSession(workspace: Workspace) =
+        createSessionInWorkspace(workspace, AgentHarness.CLAUDE)
 
-    fun createShellSession(workspace: Workspace) {
+    fun createShellSession(workspace: Workspace) =
+        createSessionInWorkspace(workspace, AgentHarness.SHELL)
+
+    /** Starts [harness] in a known workspace and opens it in the matching view. */
+    fun createSessionInWorkspace(workspace: Workspace, harness: AgentHarness) {
         if (_state.value.creatingSession) return
         val host = _state.value.hosts.firstOrNull { it.id == workspace.hostId }
         if (host == null) {
@@ -880,7 +870,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             _state.update { it.copy(creatingSession = true, sessionActionError = null) }
-            runCatching { ssh.createShellSession(host, workspace.remotePath) }
+            runCatching { ssh.createAgentSession(host, workspace.remotePath, harness) }
                 .onSuccess { sessionName ->
                     val session = TmuxSession(
                         hostId = host.id,
@@ -891,6 +881,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         workingDirectory = workspace.remotePath,
                     )
                     workspaceStore.assign(session, workspace.id)
+                    workspaceStore.bumpPathUsage(host.id, workspace.remotePath)
                     val key = SessionReadStore.key(session.hostId, session.name)
                     _state.update {
                         it.copy(
@@ -901,14 +892,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             creatingSession = false,
                         )
                     }
-                    openTerminal(session)
+                    if (harness == AgentHarness.SHELL) openTerminal(session) else openReader(session)
                     refresh()
                 }
                 .onFailure { throwable ->
                     _state.update {
                         it.copy(
                             creatingSession = false,
-                            sessionActionError = throwable.message ?: "Could not create the terminal session",
+                            sessionActionError = throwable.message ?: "Could not create the session",
                         )
                     }
                 }
@@ -920,6 +911,123 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // session is not visited again.
         _state.update { it.copy(reader = null, readerSession = null, readerSwipeOrder = emptyList()) }
         sweepWarmReaders()
+    }
+
+    fun startNewSession() {
+        _state.update { it.copy(newSession = NewSessionPicker(), sessionActionError = null) }
+    }
+
+    fun closeNewSession() {
+        _state.update { it.copy(newSession = null) }
+    }
+
+    fun chooseNewSessionHost(hostId: String) {
+        if (_state.value.hosts.none { it.id == hostId }) return
+        _state.update { it.copy(newSession = NewSessionPicker(hostId = hostId, loading = true)) }
+        loadNewSessionDirectory(hostId, null)
+    }
+
+    fun browseNewSessionDirectory(path: String) {
+        val hostId = _state.value.newSession?.hostId ?: return
+        loadNewSessionDirectory(hostId, path)
+    }
+
+    fun chooseNewSessionFolder(path: String) {
+        _state.update { it.copy(newSession = it.newSession?.copy(chosenPath = path, error = null)) }
+    }
+
+    fun backToNewSessionFolder() {
+        _state.update { it.copy(newSession = it.newSession?.copy(chosenPath = null)) }
+    }
+
+    fun createNewSession(harness: AgentHarness) {
+        val picker = _state.value.newSession ?: return
+        val hostId = picker.hostId ?: return
+        val path = picker.chosenPath ?: return
+        if (_state.value.creatingSession) return
+        val host = _state.value.hosts.firstOrNull { it.id == hostId } ?: return
+        viewModelScope.launch {
+            _state.update { it.copy(creatingSession = true, sessionActionError = null) }
+            runCatching { ssh.createAgentSession(host, path, harness) }
+                .onSuccess { sessionName ->
+                    val session = TmuxSession(
+                        hostId = host.id,
+                        name = sessionName,
+                        windows = 1,
+                        attachedClients = 0,
+                        lastActivityEpochSeconds = System.currentTimeMillis() / 1000,
+                        workingDirectory = path,
+                    )
+                    val workspace = workspaceFor(host.id, path)
+                    workspaceStore.assign(session, workspace.id)
+                    workspaceStore.bumpPathUsage(host.id, path)
+                    val key = SessionReadStore.key(session.hostId, session.name)
+                    _state.update {
+                        it.copy(
+                            sessions = (it.sessions + session).distinctBy { item ->
+                                SessionReadStore.key(item.hostId, item.name)
+                            },
+                            sessionWorkspaceIds = it.sessionWorkspaceIds + (key to workspace.id),
+                            workspaces = (it.workspaces.filterNot { item -> item.id == workspace.id } + workspace)
+                                .sortedBy { item -> item.name.lowercase() },
+                            creatingSession = false,
+                            newSession = null,
+                        )
+                    }
+                    if (harness == AgentHarness.SHELL) openTerminal(session) else openReader(session)
+                    refresh()
+                }
+                .onFailure { throwable ->
+                    _state.update {
+                        it.copy(
+                            creatingSession = false,
+                            sessionActionError = throwable.message ?: "Could not create the session",
+                        )
+                    }
+                }
+        }
+    }
+
+    private fun loadNewSessionDirectory(hostId: String, path: String?) {
+        val host = _state.value.hosts.firstOrNull { it.id == hostId } ?: return
+        viewModelScope.launch {
+            _state.update { it.copy(newSession = it.newSession?.copy(loading = true, error = null)) }
+            runCatching { ssh.listDirectories(host, path) }
+                .onSuccess { listing ->
+                    _state.update {
+                        it.copy(
+                            newSession = it.newSession?.copy(
+                                path = listing.root,
+                                directories = listing.directories,
+                                usage = workspaceStore.pathUsage(hostId),
+                                loading = false,
+                                error = null,
+                            ),
+                        )
+                    }
+                }
+                .onFailure { throwable ->
+                    _state.update {
+                        it.copy(
+                            newSession = it.newSession?.copy(
+                                loading = false,
+                                error = throwable.message ?: "Could not list the folders",
+                            ),
+                        )
+                    }
+                }
+        }
+    }
+
+    private fun workspaceFor(hostId: String, path: String): Workspace {
+        _state.value.workspaces.firstOrNull { it.hostId == hostId && it.remotePath == path }
+            ?.let { return it }
+        return Workspace(
+            id = UUID.nameUUIDFromBytes("$hostId::$path".toByteArray()).toString(),
+            name = path.substringAfterLast('/').ifBlank { path },
+            hostId = hostId,
+            remotePath = path,
+        ).also { workspaceStore.upsert(it) }
     }
 
     /** Archives the current thread and immediately advances through the remaining inbox. */
