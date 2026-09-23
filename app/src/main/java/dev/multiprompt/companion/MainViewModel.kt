@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.AgentHarness
+import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.model.DissolvedSession
 import dev.multiprompt.companion.model.RemoteDirectory
@@ -90,17 +91,26 @@ data class AppUiState(
     val newSession: NewSessionPicker? = null,
 )
 
-enum class NewSessionStep { HOST, PATH, HARNESS }
+enum class NewSessionStep { HOST, PATH, HARNESS, EXISTING }
+
+/** The picker's two jobs: start something new, or go back to something already running. */
+enum class NewSessionMode { NEW, EXISTING }
 
 /**
- * State for the new-session flow: pick a host, walk to a folder, pick the harness. The folder
- * list arrives from the host, and [usage] ranks the folders this app already works in.
+ * State for the new-session flow: pick a host, then either walk to a folder and pick the
+ * harness, or find one of the sessions already alive on that host and open it.
  */
 data class NewSessionPicker(
     val hostId: String? = null,
+    val mode: NewSessionMode = NewSessionMode.NEW,
     val path: String = "",
     val directories: List<RemoteDirectory> = emptyList(),
     val usage: Map<String, Int> = emptyMap(),
+    /** Sessions alive on the host right now, as of the last load. */
+    val sessions: List<TmuxSession> = emptyList(),
+    /** Sessions this app is already showing (inbox) or has a warm reader for. */
+    val openSessionKeys: Set<String> = emptySet(),
+    val needsAttentionOnly: Boolean = true,
     val loading: Boolean = false,
     val error: String? = null,
     val chosenPath: String? = null,
@@ -108,6 +118,7 @@ data class NewSessionPicker(
     val step: NewSessionStep
         get() = when {
             hostId == null -> NewSessionStep.HOST
+            mode == NewSessionMode.EXISTING -> NewSessionStep.EXISTING
             chosenPath == null -> NewSessionStep.PATH
             else -> NewSessionStep.HARNESS
         }
@@ -915,6 +926,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startNewSession() {
         _state.update { it.copy(newSession = NewSessionPicker(), sessionActionError = null) }
+        // One host means the host step would be a formality; go straight to its folders.
+        _state.value.hosts.singleOrNull()?.let { host -> chooseNewSessionHost(host.id) }
     }
 
     fun closeNewSession() {
@@ -938,6 +951,79 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun backToNewSessionFolder() {
         _state.update { it.copy(newSession = it.newSession?.copy(chosenPath = null)) }
+    }
+
+    /** Switches the picker between starting something new and finding what is already alive. */
+    fun setNewSessionMode(mode: NewSessionMode) {
+        val picker = _state.value.newSession ?: return
+        _state.update { it.copy(newSession = it.newSession?.copy(mode = mode, error = null)) }
+        val hostId = picker.hostId ?: return
+        when (mode) {
+            NewSessionMode.EXISTING -> loadHostSessions(hostId)
+            NewSessionMode.NEW -> if (picker.path.isBlank()) loadNewSessionDirectory(hostId, null)
+        }
+    }
+
+    fun setNewSessionNeedsAttentionOnly(needsAttentionOnly: Boolean) {
+        _state.update {
+            it.copy(newSession = it.newSession?.copy(needsAttentionOnly = needsAttentionOnly))
+        }
+    }
+
+    private fun loadHostSessions(hostId: String) {
+        val host = _state.value.hosts.firstOrNull { it.id == hostId } ?: return
+        viewModelScope.launch {
+            _state.update { it.copy(newSession = it.newSession?.copy(loading = true, error = null)) }
+            runCatching { ssh.listSessions(host) }
+                .onSuccess { sessions ->
+                    val openKeys = _state.value.sessions
+                        .filter { it.hostId == hostId }
+                        .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) }
+                    openKeys += warmReaders.keys
+                    _state.update {
+                        it.copy(
+                            newSession = it.newSession?.copy(
+                                sessions = sessions,
+                                openSessionKeys = openKeys,
+                                loading = false,
+                                error = null,
+                            ),
+                        )
+                    }
+                }
+                .onFailure { throwable ->
+                    _state.update {
+                        it.copy(
+                            newSession = it.newSession?.copy(
+                                loading = false,
+                                error = throwable.message ?: "Could not list the sessions",
+                            ),
+                        )
+                    }
+                }
+        }
+    }
+
+    /**
+     * Opens a session found on the host. Nothing is created: an already warm reader keeps its
+     * transcript, an archived session returns to the open inbox, and a shell session opens the
+     * live terminal.
+     */
+    fun openExistingSession(session: TmuxSession) {
+        val key = SessionReadStore.key(session.hostId, session.name)
+        _state.update { current ->
+            current.copy(
+                sessions = (current.sessions.filterNot {
+                    SessionReadStore.key(it.hostId, it.name) == key
+                } + session),
+                archivedSessionKeys = current.archivedSessionKeys - key,
+                unreadSessionKeys = current.unreadSessionKeys - key,
+                newSession = null,
+                sessionActionError = null,
+            )
+        }
+        if (session.agent == AgentKind.OTHER) openTerminal(session) else openReader(session)
+        refresh()
     }
 
     fun createNewSession(harness: AgentHarness) {

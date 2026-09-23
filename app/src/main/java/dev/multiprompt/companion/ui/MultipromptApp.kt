@@ -159,12 +159,14 @@ import dev.multiprompt.companion.AppUiState
 import dev.multiprompt.companion.SessionBucket
 import dev.multiprompt.companion.BuildConfig
 import dev.multiprompt.companion.MainViewModel
+import dev.multiprompt.companion.NewSessionMode
 import dev.multiprompt.companion.NewSessionPicker
 import dev.multiprompt.companion.NewSessionStep
 import dev.multiprompt.companion.R
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.model.AgentHarness
 import dev.multiprompt.companion.model.DirectoryRanking
+import dev.multiprompt.companion.model.SessionFinder
 import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
@@ -274,7 +276,6 @@ private fun AppScreens(viewModel: MainViewModel) {
         AppTheme.DARK -> false
         AppTheme.SUNLIGHT -> true
     }
-    var newSessionWorkspace by remember { mutableStateOf<Workspace?>(null) }
     var permissionLaunchVersion by remember { mutableStateOf<Long?>(null) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -388,6 +389,19 @@ private fun AppScreens(viewModel: MainViewModel) {
             hosts = state.hosts,
             onBrowse = viewModel::browseNewSessionDirectory,
             onChoose = viewModel::chooseNewSessionFolder,
+            onModeChange = viewModel::setNewSessionMode,
+            onClose = viewModel::closeNewSession,
+        )
+        return
+    }
+    if (newSession != null && newSession.step == NewSessionStep.EXISTING) {
+        ExistingSessionScreen(
+            picker = newSession,
+            hosts = state.hosts,
+            archivedKeys = state.archivedSessionKeys,
+            onModeChange = viewModel::setNewSessionMode,
+            onNeedsAttentionChange = viewModel::setNewSessionNeedsAttentionOnly,
+            onOpen = viewModel::openExistingSession,
             onClose = viewModel::closeNewSession,
         )
         return
@@ -445,7 +459,6 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onRenameSession = viewModel::renameSession,
                     onRefresh = viewModel::refresh,
                     onSelectSection = viewModel::select,
-                    onNewSession = { newSessionWorkspace = it },
                     onStartNewSession = viewModel::startNewSession,
                     onSetNewestSessionsAtBottom = viewModel::setNewestSessionsAtBottom,
                     onSetAllSplitOnRight = viewModel::setAllSplitOnRight,
@@ -476,41 +489,6 @@ private fun AppScreens(viewModel: MainViewModel) {
         }
     }
 
-    newSessionWorkspace?.let { workspace ->
-        AlertDialog(
-            onDismissRequest = { newSessionWorkspace = null },
-            title = { Text("New session in ${workspace.name}") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("${workspace.remotePath}\nChoose how this tmux session should start.")
-                    AgentHarness.entries.forEach { harness ->
-                        if (harness == AgentHarness.CLAUDE) {
-                            Button(
-                                onClick = {
-                                    newSessionWorkspace = null
-                                    viewModel.createSessionInWorkspace(workspace, harness)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) { Text(harness.label) }
-                        } else {
-                            OutlinedButton(
-                                onClick = {
-                                    newSessionWorkspace = null
-                                    viewModel.createSessionInWorkspace(workspace, harness)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) { Text(harness.label) }
-                        }
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { newSessionWorkspace = null }) { Text("Cancel") }
-            },
-        )
-    }
-
     state.newSession?.let { picker ->
         when (picker.step) {
             NewSessionStep.HOST -> AlertDialog(
@@ -539,6 +517,9 @@ private fun AppScreens(viewModel: MainViewModel) {
 
             // The folder step is a full-screen picker, rendered before the dialogs.
             NewSessionStep.PATH -> Unit
+
+            // Existing sessions are a full-screen picker too.
+            NewSessionStep.EXISTING -> Unit
 
             NewSessionStep.HARNESS -> AlertDialog(
                 onDismissRequest = viewModel::closeNewSession,
@@ -693,6 +674,212 @@ private fun UpdateBanner(release: UpdateRelease, onInstall: () -> Unit) {
     }
 }
 
+/** The one search bar both picker modes share: focused on open, keyboard up, edge to edge. */
+@Composable
+private fun PickerSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onSubmit: () -> Unit,
+    focusRequester: FocusRequester,
+    placeholder: String,
+    onClose: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 10.dp, end = 6.dp, top = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            singleLine = true,
+            placeholder = { Text(placeholder) },
+            leadingIcon = { Icon(Icons.Default.Search, null) },
+            trailingIcon = {
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { onQueryChange("") }) { Icon(Icons.Default.Close, "Clear") }
+                }
+            },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { onSubmit() }),
+            modifier = Modifier.weight(1f).focusRequester(focusRequester),
+        )
+        TextButton(onClick = onClose) { Text("Cancel") }
+    }
+}
+
+/** The picker's two jobs, as a switch: start something new, or return to something alive. */
+@Composable
+private fun PickerModeRow(mode: NewSessionMode, onModeChange: (NewSessionMode) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        val newSelected = mode == NewSessionMode.NEW
+        val newClick = { if (!newSelected) onModeChange(NewSessionMode.NEW) }
+        if (newSelected) {
+            Button(onClick = newClick, modifier = Modifier.weight(1f)) { Text("New session") }
+        } else {
+            OutlinedButton(onClick = newClick, modifier = Modifier.weight(1f)) { Text("New session") }
+        }
+        val existingSelected = mode == NewSessionMode.EXISTING
+        val existingClick = { if (!existingSelected) onModeChange(NewSessionMode.EXISTING) }
+        if (existingSelected) {
+            Button(onClick = existingClick, modifier = Modifier.weight(1f)) { Text("Existing") }
+        } else {
+            OutlinedButton(onClick = existingClick, modifier = Modifier.weight(1f)) { Text("Existing") }
+        }
+    }
+}
+
+/**
+ * Full-screen list of the tmux sessions alive on one host. The switch hides the ones that are
+ * attached or already open in this app, so the rows left are the ones that actually need a
+ * look; tapping any row just opens it, nothing is created.
+ */
+@Composable
+private fun ExistingSessionScreen(
+    picker: NewSessionPicker,
+    hosts: List<HostProfile>,
+    archivedKeys: Set<String>,
+    onModeChange: (NewSessionMode) -> Unit,
+    onNeedsAttentionChange: (Boolean) -> Unit,
+    onOpen: (TmuxSession) -> Unit,
+    onClose: () -> Unit,
+) {
+    var query by remember(picker.hostId) { mutableStateOf("") }
+    val hostLabel = hosts.firstOrNull { it.id == picker.hostId }?.label ?: "Host"
+    val ranked = remember(picker.sessions, picker.openSessionKeys, picker.needsAttentionOnly, query) {
+        SessionFinder.rank(
+            sessions = picker.sessions,
+            isOpen = { session ->
+                SessionReadStore.key(session.hostId, session.name) in picker.openSessionKeys
+            },
+            needsAttentionOnly = picker.needsAttentionOnly,
+            query = query,
+        )
+    }
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    BackHandler(onBack = onClose)
+    LaunchedEffect(picker.hostId) {
+        focusRequester.requestFocus()
+        delay(120)
+        keyboard?.show()
+    }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .windowInsetsPadding(WindowInsets.safeDrawing),
+    ) {
+        PickerSearchBar(
+            query = query,
+            onQueryChange = { query = it },
+            onSubmit = { ranked.firstOrNull()?.let(onOpen) },
+            focusRequester = focusRequester,
+            placeholder = "Find a session",
+            onClose = onClose,
+        )
+        PickerModeRow(mode = picker.mode, onModeChange = onModeChange)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 14.dp, end = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "$hostLabel · ${picker.sessions.size} session${if (picker.sessions.size == 1) "" else "s"}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Text("Needs attention", style = MaterialTheme.typography.labelSmall)
+            Switch(
+                checked = picker.needsAttentionOnly,
+                onCheckedChange = onNeedsAttentionChange,
+            )
+        }
+        if (picker.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        picker.error?.let { message ->
+            Text(
+                message,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(horizontal = 14.dp),
+            )
+        }
+        if (ranked.isEmpty() && !picker.loading && picker.error == null) {
+            Text(
+                if (picker.needsAttentionOnly && picker.sessions.isNotEmpty()) {
+                    "Nothing needs attention. Turn the switch off to see connected sessions."
+                } else {
+                    "No tmux sessions on this host."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            )
+        }
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            items(ranked, key = { SessionReadStore.key(it.hostId, it.name) }) { session ->
+                val key = SessionReadStore.key(session.hostId, session.name)
+                val openInApp = key in picker.openSessionKeys
+                val archived = key in archivedKeys
+                TextButton(
+                    onClick = { onOpen(session) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        AgentIcon(session.agent, Modifier.size(20.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(session.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                session.workingDirectory.ifBlank { session.name },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                buildString {
+                                    if (session.attachedClients > 0) append("desktop attached")
+                                    if (openInApp) {
+                                        if (isNotEmpty()) append(" · ")
+                                        append("open here")
+                                    }
+                                    if (archived) {
+                                        if (isNotEmpty()) append(" · ")
+                                        append("archived")
+                                    }
+                                    if (isEmpty()) append("detached")
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /**
  * Full-screen folder picker for a new session. The job is typing, so the search UI owns the
  * whole area above the keyboard: the field sits at the very top edge to edge, the list takes
@@ -705,6 +892,7 @@ private fun NewSessionFolderScreen(
     hosts: List<HostProfile>,
     onBrowse: (String) -> Unit,
     onChoose: (String) -> Unit,
+    onModeChange: (NewSessionMode) -> Unit,
     onClose: () -> Unit,
 ) {
     var query by remember(picker.hostId) { mutableStateOf("") }
@@ -728,38 +916,21 @@ private fun NewSessionFolderScreen(
             // list ends exactly where the keyboard starts instead of behind it.
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 10.dp, end = 6.dp, top = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                singleLine = true,
-                placeholder = { Text("Find a repo") },
-                leadingIcon = { Icon(Icons.Default.Search, null) },
-                trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, "Clear") }
-                    }
-                },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(
-                    onSearch = {
-                        // A few letters then the keyboard's search key launches in the top
-                        // match. That is the whole point of the picker owning the screen.
-                        ranked.firstOrNull { it.isRepo }?.let { entry ->
-                            onChoose(joinRemotePath(picker.path, entry.name))
-                        }
-                    },
-                ),
-                modifier = Modifier.weight(1f).focusRequester(focusRequester),
-            )
-            TextButton(onClick = onClose) { Text("Cancel") }
-        }
+        PickerSearchBar(
+            query = query,
+            onQueryChange = { query = it },
+            onSubmit = {
+                // A few letters then the keyboard's search key launches in the top match.
+                // That is the whole point of the picker owning the screen.
+                ranked.firstOrNull { it.isRepo }?.let { entry ->
+                    onChoose(joinRemotePath(picker.path, entry.name))
+                }
+            },
+            focusRequester = focusRequester,
+            placeholder = "Find a repo",
+            onClose = onClose,
+        )
+        PickerModeRow(mode = picker.mode, onModeChange = onModeChange)
         Row(
             Modifier
                 .fillMaxWidth()
@@ -865,7 +1036,6 @@ private fun SessionsScreen(
     onRenameSession: (TmuxSession, String) -> String?,
     onRefresh: () -> Unit,
     onSelectSection: (AppSection) -> Unit,
-    onNewSession: (Workspace) -> Unit,
     onStartNewSession: () -> Unit,
     onSetNewestSessionsAtBottom: (Boolean) -> Unit,
     onSetAllSplitOnRight: (Boolean) -> Unit,
@@ -1296,12 +1466,7 @@ private fun SessionsScreen(
             }
             IconButton(
                 enabled = !state.creatingSession,
-                onClick = {
-                    val selected = state.selectedWorkspaceId?.let { selectedId ->
-                        state.workspaces.firstOrNull { it.id == selectedId }
-                    }
-                    if (selected != null) onNewSession(selected) else onStartNewSession()
-                },
+                onClick = onStartNewSession,
             ) {
                 if (state.creatingSession) {
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
