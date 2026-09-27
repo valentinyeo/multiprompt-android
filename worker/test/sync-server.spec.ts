@@ -234,6 +234,41 @@ describe("vault envelope bootstrap", () => {
     expect(await rewrap.json()).toEqual({ revision: 2 });
   });
 
+  it("409s a create against a vault that does not exist and writes nothing", async () => {
+    const token = await mintAccessToken({ sub: "acct-vault-missing-row" });
+
+    // The client thinks the vault is at revision 1, but this account has no
+    // vault row: that is a conflict against revision 0, not a silent success.
+    const stale = await SELF.fetch(
+      req("/vault", {
+        method: "PUT",
+        token,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expectedRevision: 1, envelope: "envelope-v1" }),
+      }),
+    );
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toEqual({
+      revision: 0,
+      conflict: { revision: 0, envelope: null },
+    });
+
+    // Nothing was written: the vault is still absent, so a create still wins.
+    const fetched = await SELF.fetch(req("/vault", { token }));
+    expect(fetched.status).toBe(404);
+
+    const create = await SELF.fetch(
+      req("/vault", {
+        method: "PUT",
+        token,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expectedRevision: 0, envelope: "envelope-v1" }),
+      }),
+    );
+    expect(create.status).toBe(200);
+    expect(await create.json()).toEqual({ revision: 1 });
+  });
+
   it("isolates vaults per account", async () => {
     const tokenA = await mintAccessToken({ sub: "acct-vault-a" });
     const tokenB = await mintAccessToken({ sub: "acct-vault-b" });

@@ -20,7 +20,8 @@ export interface PushOutcome {
 
 export interface VaultRow {
   revision: number;
-  envelope: string;
+  /** Sealed envelope text, or null when no vault row exists yet (revision 0). */
+  envelope: string | null;
 }
 
 export interface VaultPushOutcome {
@@ -157,7 +158,10 @@ export class SyncStore {
       return { revision: current.revision, conflict: { revision: current.revision, envelope: current.envelope } };
     }
     if (current === null && expectedRevision !== 0) {
-      return { revision: 0, conflict: null };
+      // No row exists, but the client expected a nonzero revision: tell it
+      // the true current state (revision 0 = does not exist) so it rebases
+      // onto a create (expectedRevision 0) instead — same rule as push().
+      return { revision: 0, conflict: { revision: 0, envelope: null } };
     }
 
     const nextRevision = (current?.revision ?? 0) + 1;
