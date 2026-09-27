@@ -105,6 +105,138 @@ the wrap tag as `WRONG_PASSPHRASE`. A record whose wrap opened but whose tag fai
 `TAMPERED` — the vault key was correct, so the record body was modified or its id/IV
 substituted (the record id is inside the AAD, so renaming a record also fails).
 
+## Recovery key
+
+Product decision (Valentin, 2026-09-27): passphrase-encrypted sync stays as the normal
+path. Every vault additionally gets a **recovery key**: a second, independent way to
+unwrap the same vault key, generated once at vault creation and shown to the user exactly
+once to print or save. Losing both the passphrase and the recovery key means starting
+fresh — there is no third recovery path, no key rotation, and no server-side reset.
+
+### What it is
+
+- 256 bits (32 bytes) from a CSPRNG. It is a second content-key wrap, not a replacement
+  for the passphrase — the same invariants apply: it never derives a content key directly,
+  it only unwraps the existing vault key, and it never leaves the device (it is not sent
+  to the server in any form, encrypted or not — the server never learns it exists).
+
+### Human-typeable encoding
+
+The raw 32 bytes are shown to the user as a dash-grouped, case-insensitive string:
+
+- Alphabet: **Crockford Base32** — `0123456789ABCDEFGHJKMNPQRSTVWXYZ` (the 10 digits plus
+  22 letters; `I`, `L`, `O`, `U` are excluded because they are visually ambiguous with
+  `1`, `1`, `0`, and `V`). This implementation does **not** apply Crockford's traditional
+  `I`/`L`→`1`, `O`→`0` auto-correction: a character outside the 32-symbol alphabet is
+  rejected, not silently remapped.
+- 256 bits do not divide evenly by 5 bits/symbol, so the key encodes as **52 symbols**
+  (`ceil(256/5)`), covering 260 bits; the last symbol's low bit is always `0` padding.
+  Decoding rejects a string whose last symbol has that bit set — evidence of a corrupted
+  or hand-edited string.
+- A **4-symbol checksum** is appended: the top 16 bits of `SHA-256(key bytes)`, packed
+  into a 20-bit value with the low 4 bits zero, encoded the same way. This exists to catch
+  a mistyped character before the user assumes it works; it is not a security boundary
+  (16 bits of collision resistance against a typo, not against an attacker).
+- The 56 symbols (52 + 4) are grouped every 4 characters and joined with `-`: 14 groups,
+  e.g. `XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX`.
+- **Decoding is case-insensitive** (the input is upper-cased first). **Ignored on input:**
+  ASCII whitespace and `-`, wherever they appear — a user may type or paste the key with
+  or without the dashes, with extra spaces, or split across lines. Any other character
+  that is not in the 32-symbol alphabet after that normalization makes the string
+  malformed. A well-formed string whose checksum does not match is also rejected — both
+  cases are reported as `BAD_RECOVERY_KEY_FORMAT`, distinct from `WRONG_RECOVERY_KEY`
+  (a well-formed, checksum-valid key that simply does not unwrap this vault).
+
+### Key derivation and wrap
+
+The recovery key is already high-entropy (a CSPRNG value, not a human passphrase), so it
+skips Argon2id entirely and uses HKDF-SHA256 (RFC 5869, extract-then-expand) directly:
+
+```text
+recovery KEK = HKDF-SHA256(ikm = recovery key bytes (32), salt = recoverySalt (16 random
+               bytes, stored), info = "multiprompt-sync-v1 recovery", length = 32)
+recovery wrap = AES-256-GCM(recovery KEK, recoveryIv, vaultKey, AAD = recoveryAad)
+```
+
+This mirrors the passphrase wrap exactly: a per-vault random salt, a KDF whose output
+never touches disk, and an AES-256-GCM wrap of the very same vault key bytes the
+passphrase wrap protects. Two independent ciphertexts guard one vault key; either one
+unwraps it.
+
+`recoveryAad = UTF8("mp-sync-v1/recovery/" + canonicalRecoveryKdfJson)`, where
+`canonicalRecoveryKdfJson` is `{"alg":"hkdf-sha256","info":"multiprompt-sync-v1
+recovery","salt":"<b64>"}` in that exact field order — the same rule as the passphrase
+wrap's AAD (`wrapAad` binds `canonicalKdfJson`, see the Algorithms table above): the AAD
+binds the parsed-then-canonicalised recovery parameters, so re-serializing the envelope
+does not break the wrap, but swapping the salt (or the info/alg strings) does.
+
+### Storage: an additive envelope field
+
+The recovery wrap adds two optional top-level fields to the canonical envelope, spliced
+between `wrap` and `records`. Absent = no recovery key configured = the exact v1 format
+that predates this feature; **all 9 existing fixture vectors stay byte-identical** because
+they simply omit these fields.
+
+```json
+{
+  "v": 1,
+  "kdf": { "...": "..." },
+  "wrap": { "...": "..." },
+  "recoveryKdf": {
+    "alg": "hkdf-sha256",
+    "info": "multiprompt-sync-v1 recovery",
+    "salt": "<b64, 16 bytes>"
+  },
+  "recovery": {
+    "alg": "AES-256-GCM",
+    "iv": "<b64, 12 bytes>",
+    "ct": "<b64, 48 bytes>"
+  },
+  "records": { "...": "..." }
+}
+```
+
+Canonical field order when both are present: `v`, `kdf`, `wrap`, `recoveryKdf`,
+`recovery`, `records`. `recoveryKdf` field order: `alg`, `info`, `salt`. `recovery` field
+order: `alg`, `iv`, `ct` — the same shape as `wrap`. `recovery.ct` is 48 bytes
+(32-byte vault key + 16-byte GCM tag), exactly like `wrap.ct`. This is not a version bump
+(no breaking change to `v: 1`; adding an optional field follows the existing versioning
+rule) and does not change any parser's behavior on an envelope that omits it.
+
+### Flows (library functions, no UI)
+
+- **Create vault with passphrase + recovery**: generates a fresh vault key, wraps it
+  under the passphrase (Argon2id, as before) *and* under a freshly generated recovery key
+  (HKDF, above), and returns the recovery key string exactly once. Nothing else reads or
+  stores it; the caller is responsible for showing it to the user to print or save.
+- **Open vault with recovery key**: given a typed recovery key string and the envelope,
+  decodes and validates the string (checksum), derives the recovery KEK, unwraps the
+  vault key from the `recovery` block, and decrypts every record — the same records the
+  passphrase path would produce, since both wraps guard the same vault key.
+- **Set a new passphrase after a recovery-key open**: re-wraps the *already-unwrapped*
+  vault key under a new passphrase and a fresh salt/IV. Only the `kdf`/`wrap` blocks
+  change; `records` and the `recovery` block are copied through byte-for-byte — per the
+  key-hierarchy invariant, changing the passphrase never re-encrypts records, and it does
+  not touch or rotate the recovery key either (rotating the recovery key itself is out of
+  scope for this change).
+- **Validate a typed recovery key string**: decodes and checksum-checks a string without
+  needing an envelope, for catching a mistyped character as the user types it.
+
+There is no passphrase-change flow that only touches the passphrase wrap without going
+through a recovery-key open first, and no recovery-key rotation — both are out of scope
+for this change (the smallest design that satisfies the product decision above).
+
+### Fixtures
+
+Fixture vectors for this feature live in the same
+`sync-protocol-v1-fixtures.json`, alongside the pre-existing `vectors`/`entityVectors`/
+`schemaVectors`: `recoveryVectors` (full envelopes with a `recovery` block, fixed
+passphrase/recovery key/salts/IVs, expected recovery KEK/ciphertext and full envelope
+JSON+SHA-256, plus a wrong-recovery-key and a tampered-recovery-ciphertext negative case)
+and `recoveryKeyStringVectors` (fixed 32-byte keys, their expected encoded string, and a
+deliberately corrupted string that must fail its checksum). Same determinism and
+same-change-set rule as the rest of this file.
+
 ## Golden fixtures — the cross-language contract
 
 ```text

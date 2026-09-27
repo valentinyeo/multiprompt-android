@@ -142,5 +142,49 @@
       "canonicalBodyJson": "{\"lastReadAt\":1757500000,\"archivedAt\":null,\"resumeAt\":null}",
       "canonicalBodySha256": "430048927b517f4453f25fcbcea068a24eb500badf6e05644a5bc5ab43369e19"
     }
+  ],
+  "recoveryVectors": [
+    {
+      "name": "envelope-with-recovery",
+      "passphrase": "correct horse battery staple",
+      "salt": "jb261IRNtbqiCDWoJ7h/CA==",
+      "vaultKey": "KoBEqtQcor8xHDyYJSi3vzzOzPHEC+VSjpGmyaCJJOg=",
+      "wrapIv": "hHgkDqJ8AVi6i/bS",
+      "kdf": {
+        "memoryKiB": 65536,
+        "iterations": 3,
+        "parallelism": 1
+      },
+      "records": [
+        {
+          "id": "hosts",
+          "iv": "hKR9OJ+jwfYfHLXR",
+          "plaintextUtf8": "{\"hosts\":[{\"id\":\"3f7c1b2e-8a4d-4c6e-9b2f-1d5a7c9e0b31\",\"label\":\"hetzner\",\"hostname\":\"hetzner.example.com\",\"port\":22,\"username\":\"valentin\",\"keySecretId\":\"key-3f7c1b2e\",\"passphraseSecretId\":null,\"hostKeyType\":\"ed25519\",\"hostKeyFingerprint\":\"SHA256:Zk5tVQ8m5r4Ykqz9Xw2C1bN7vJ3hG8sD0aF6uT4iQ2o\"}]}",
+          "ct": "nUH3BYwkWNSbFsYe5IR4facTDxJy1bcKu2ZsHUvPV3Dhy+V+120wlvj3grdb4rmW4yvfGl6Y2tIL1JOkgRHjQjGsdmuWbhMil6vVBpvUjeaIldN4BafxhZbSKgeUudQHCsN6+Oe3+cOJOA4vdTS1GVrWMLsiesLXPAeW2rTnoE6Nww1YuDigS2bqlXeHh8eBcqRjAp2Nm+S369asi4GRng0nKkXUagNCO1FIeya8qRRhT93J0NMEN/Nd/XrTG0NfkD7SZWdB4wSU/OJwpvb6xirEVq6qQEGMtRaa02nUv8zDe3AVv6LFIExvwE81jfCt0VNGdmoJ4icwr1RF+Y0eTbcP1qYVi8zjFANYDlrtnUGUtSZIycVCT3L2rVZ/Y0JNmUr5SCGKMOpJU27pTzNowCsfJ6AG"
+        }
+      ],
+      "kek": "dQV3kSACQZrqWzgsAG/aJ1sm0wSjex5i/F0E71P4Kok=",
+      "wrapCt": "FjVODztIyZXYlzSQ7LvfmaBiJ/egdSXUxz8savcmiFl7e2CsFlK3T7/CQkMxHERf",
+      "recoveryKeyBytes": "gPC5kTQL5wPP5LcORDhJNXBXsJ3c5q4bLbWaz8mzTTo=",
+      "recoveryKeyString": "G3RB-K49M-1FKG-7KZ4-PW74-8E29-6NR5-FC4X-VKKA-W6SD-PPDC-ZJDK-9MX0-V9EG",
+      "recoverySalt": "tKDauYrBAUIMjMYsQujJ1g==",
+      "recoveryIv": "dlbb3K6iwjPU0rYo",
+      "recoveryKek": "wTgOSUtCQd4JWn8KILDa1/V3aiN9hqYr3gxco3O7B0E=",
+      "recoveryCt": "PQLjCND/C7p420Pv1I3/l5Ao/oaVQaGadHgyJ0bYmJOoj+SiJeUtVgam0CeWCa2X",
+      "envelopeJson": "{\"v\":1,\"kdf\":{\"alg\":\"argon2id\",\"version\":19,\"memoryKiB\":65536,\"iterations\":3,\"parallelism\":1,\"salt\":\"jb261IRNtbqiCDWoJ7h/CA==\"},\"wrap\":{\"alg\":\"AES-256-GCM\",\"iv\":\"hHgkDqJ8AVi6i/bS\",\"ct\":\"FjVODztIyZXYlzSQ7LvfmaBiJ/egdSXUxz8savcmiFl7e2CsFlK3T7/CQkMxHERf\"},\"recoveryKdf\":{\"alg\":\"hkdf-sha256\",\"info\":\"multiprompt-sync-v1 recovery\",\"salt\":\"tKDauYrBAUIMjMYsQujJ1g==\"},\"recovery\":{\"alg\":\"AES-256-GCM\",\"iv\":\"dlbb3K6iwjPU0rYo\",\"ct\":\"PQLjCND/C7p420Pv1I3/l5Ao/oaVQaGadHgyJ0bYmJOoj+SiJeUtVgam0CeWCa2X\"},\"records\":{\"hosts\":{\"iv\":\"hKR9OJ+jwfYfHLXR\",\"ct\":\"nUH3BYwkWNSbFsYe5IR4facTDxJy1bcKu2ZsHUvPV3Dhy+V+120wlvj3grdb4rmW4yvfGl6Y2tIL1JOkgRHjQjGsdmuWbhMil6vVBpvUjeaIldN4BafxhZbSKgeUudQHCsN6+Oe3+cOJOA4vdTS1GVrWMLsiesLXPAeW2rTnoE6Nww1YuDigS2bqlXeHh8eBcqRjAp2Nm+S369asi4GRng0nKkXUagNCO1FIeya8qRRhT93J0NMEN/Nd/XrTG0NfkD7SZWdB4wSU/OJwpvb6xirEVq6qQEGMtRaa02nUv8zDe3AVv6LFIExvwE81jfCt0VNGdmoJ4icwr1RF+Y0eTbcP1qYVi8zjFANYDlrtnUGUtSZIycVCT3L2rVZ/Y0JNmUr5SCGKMOpJU27pTzNowCsfJ6AG\"}}}",
+      "envelopeSha256": "3120a46e2fc6d68d5d08b6539d25bb86795db201947906077a36edb3121c752a"
+    }
+  ],
+  "recoveryKeyStringVectors": [
+    {
+      "name": "recovery-key-roundtrip",
+      "keyBytes": "TdQKLgWd/3o402SCuv3f1cjveLKMwyA4yFerRgp9TRY=",
+      "encoded": "9QA0-MBG5-KQZQ-ME6K-CJ1B-NZEZ-TQ4E-YY5J-HK1J-0E68-AYNM-C2KX-9MB0-X400"
+    },
+    {
+      "name": "recovery-key-bad-checksum",
+      "keyBytes": "TdQKLgWd/3o402SCuv3f1cjveLKMwyA4yFerRgp9TRY=",
+      "encoded": "0QA0-MBG5-KQZQ-ME6K-CJ1B-NZEZ-TQ4E-YY5J-HK1J-0E68-AYNM-C2KX-9MB0-X400"
+    }
   ]
 }

@@ -1,7 +1,10 @@
 package dev.multiprompt.companion.sync
 
+import org.bouncycastle.crypto.digests.SHA256Digest
 import org.bouncycastle.crypto.generators.Argon2BytesGenerator
+import org.bouncycastle.crypto.generators.HKDFBytesGenerator
 import org.bouncycastle.crypto.params.Argon2Parameters
+import org.bouncycastle.crypto.params.HKDFParameters
 import org.json.JSONObject
 import java.security.SecureRandom
 import java.util.Base64
@@ -45,8 +48,14 @@ object SyncProtocol {
     private const val ITERATIONS = 3
     private const val PARALLELISM = 1
 
+    // Recovery key wrap (see "Recovery key" in docs/sync-protocol-v1.md): a second,
+    // independent seal of the same vault key, unwrapped with a key derived from a
+    // 256-bit recovery key via HKDF (high-entropy input, so no Argon2 needed).
+    private const val RECOVERY_KDF_ALG = "hkdf-sha256"
+    private const val RECOVERY_INFO = "multiprompt-sync-v1 recovery"
+
     class SyncProtocolException(val reason: Reason, message: String) : Exception(message) {
-        enum class Reason { MALFORMED, UNSUPPORTED_VERSION, WRONG_PASSPHRASE, TAMPERED }
+        enum class Reason { MALFORMED, UNSUPPORTED_VERSION, WRONG_PASSPHRASE, TAMPERED, WRONG_RECOVERY_KEY, BAD_RECOVERY_KEY_FORMAT }
     }
 
     /** KDF parameters exactly as stored inside the envelope. */
@@ -141,6 +150,181 @@ object SyncProtocol {
             }
         }
         return decrypted
+    }
+
+    /** Result of sealing a fresh vault with both a passphrase and a recovery key. */
+    data class SealedVault(val envelope: ByteArray, val vaultKey: ByteArray, val recoveryKey: String)
+
+    /**
+     * Seals [records] into a v1 envelope with fresh randomness, wrapping the vault key
+     * under both [passphrase] and a freshly generated recovery key. The recovery key
+     * string is returned exactly once — the caller must show it to the user (print/save);
+     * it is never stored, and losing both it and the passphrase means starting fresh.
+     */
+    fun sealNewWithRecovery(passphrase: CharArray, records: Map<String, ByteArray>): SealedVault {
+        val random = SecureRandom()
+        val salt = randomBytes(random, SALT_BYTES)
+        val vaultKey = randomBytes(random, VAULT_KEY_BYTES)
+        val wrapIv = randomBytes(random, IV_BYTES)
+        val recordIvs = records.keys.associateWith { randomBytes(random, IV_BYTES) }
+        val recoveryKeyBytes = RecoveryKey.generate()
+        val recoverySalt = randomBytes(random, SALT_BYTES)
+        val recoveryIv = randomBytes(random, IV_BYTES)
+        val envelope = sealWithRecovery(passphrase, records, salt, vaultKey, wrapIv, recordIvs, recoveryKeyBytes, recoverySalt, recoveryIv)
+        return SealedVault(envelope, vaultKey, RecoveryKey.encode(recoveryKeyBytes))
+    }
+
+    /**
+     * Deterministic core of [sealNewWithRecovery]: every random input pinned. Fixtures
+     * and tests use this to reproduce envelopes with a recovery block byte-for-byte.
+     */
+    fun sealWithRecovery(
+        passphrase: CharArray,
+        records: Map<String, ByteArray>,
+        salt: ByteArray,
+        vaultKey: ByteArray,
+        wrapIv: ByteArray,
+        recordIvs: Map<String, ByteArray>,
+        recoveryKeyBytes: ByteArray,
+        recoverySalt: ByteArray,
+        recoveryIv: ByteArray,
+    ): ByteArray {
+        require(salt.size == SALT_BYTES) { "salt must be $SALT_BYTES bytes" }
+        require(vaultKey.size == VAULT_KEY_BYTES) { "vault key must be $VAULT_KEY_BYTES bytes" }
+        require(wrapIv.size == IV_BYTES) { "wrap IV must be $IV_BYTES bytes" }
+        require(recoveryKeyBytes.size == RecoveryKey.KEY_BYTES) { "recovery key must be ${RecoveryKey.KEY_BYTES} bytes" }
+        require(recoverySalt.size == SALT_BYTES) { "recovery salt must be $SALT_BYTES bytes" }
+        require(recoveryIv.size == IV_BYTES) { "recovery IV must be $IV_BYTES bytes" }
+        require(records.isNotEmpty()) { "an envelope without records is not a valid vault" }
+        records.keys.forEach { requireRecordId(it) }
+        require(recordIvs.keys == records.keys) { "every record needs exactly one IV" }
+        recordIvs.values.forEach { require(it.size == IV_BYTES) { "record IV must be $IV_BYTES bytes" } }
+
+        val kdf = KdfParams(MEMORY_KIB, ITERATIONS, PARALLELISM, salt)
+        val kek = deriveKek(passphrase, kdf)
+        val wrapCt = gcmSeal(kek, wrapIv, vaultKey, wrapAad(kdf))
+        val sealed = records.mapValues { (id, plaintext) ->
+            gcmSeal(vaultKey, recordIvs.getValue(id), plaintext, recordAad(id))
+        }
+        val recoveryKek = hkdfSha256(recoveryKeyBytes, recoverySalt, RECOVERY_INFO.toByteArray(Charsets.UTF_8), KEK_BYTES)
+        val recoveryCt = gcmSeal(recoveryKek, recoveryIv, vaultKey, recoveryAad(recoverySalt))
+        return canonicalEnvelopeWithRecovery(kdf, wrapIv, wrapCt, sealed, recordIvs, recoverySalt, recoveryIv, recoveryCt)
+    }
+
+    /** Result of opening a vault with its recovery key: the vault key plus every record. */
+    data class RecoveryOpenResult(val vaultKey: ByteArray, val records: Map<String, ByteArray>)
+
+    /**
+     * Opens a v1 envelope with a user-typed recovery key string (see [RecoveryKey]),
+     * returning the unwrapped vault key alongside every decrypted record. The caller uses
+     * the vault key to set a new passphrase via [rewrapPassphrase] — the recovery flow
+     * never re-derives or changes the recovery key itself.
+     *
+     * A malformed/mistyped recovery key string fails as `BAD_RECOVERY_KEY_FORMAT`; an
+     * envelope with no recovery block configured fails as `MALFORMED`; a well-formed but
+     * wrong recovery key fails the wrap tag as `WRONG_RECOVERY_KEY`.
+     */
+    fun openWithRecoveryKey(recoveryKey: String, envelope: ByteArray): RecoveryOpenResult {
+        val recoveryKeyBytes = RecoveryKey.decode(recoveryKey)
+        val root = runCatching { JSONObject(String(envelope, Charsets.UTF_8)) }
+            .getOrElse { malformed("envelope is not valid JSON") }
+        if (root.optInt("v", -1) != VERSION) {
+            throw SyncProtocolException(SyncProtocolException.Reason.UNSUPPORTED_VERSION, "envelope version ${root.optInt("v", -1)}")
+        }
+        val recoveryKdfObj = root.optJSONObject("recoveryKdf") ?: malformed("envelope has no recovery key configured")
+        if (recoveryKdfObj.optString("alg") != RECOVERY_KDF_ALG) malformed("unknown recovery kdf alg")
+        val recoverySalt = decode(recoveryKdfObj.optString("salt"))
+        if (recoverySalt.size != SALT_BYTES) malformed("recovery salt must be $SALT_BYTES bytes")
+        val recoveryObj = root.optJSONObject("recovery") ?: malformed("envelope has no recovery block")
+        if (recoveryObj.optString("alg") != WRAP_ALG) malformed("unknown recovery alg")
+        val recoveryIv = decodeIv(recoveryObj.optString("iv"))
+        val recoveryCt = decode(recoveryObj.optString("ct"))
+        if (recoveryCt.size != VAULT_KEY_BYTES + TAG_BYTES) {
+            malformed("recovery ciphertext is not $VAULT_KEY_BYTES bytes plus tag")
+        }
+
+        val recoveryKek = hkdfSha256(recoveryKeyBytes, recoverySalt, RECOVERY_INFO.toByteArray(Charsets.UTF_8), KEK_BYTES)
+        val vaultKey = runCatching {
+            gcmOpen(recoveryKek, recoveryIv, recoveryCt, recoveryAad(recoverySalt))
+        }.getOrElse {
+            throw SyncProtocolException(SyncProtocolException.Reason.WRONG_RECOVERY_KEY, "recovery wrap tag check failed")
+        }
+
+        val recordsJson = root.optJSONObject("records") ?: malformed("missing records")
+        val decrypted = linkedMapOf<String, ByteArray>()
+        val ids = recordsJson.keys().asSequence().toList()
+        for (id in ids) {
+            val entry = recordsJson.optJSONObject(id) ?: malformed("record $id is not an object")
+            val iv = decodeIv(entry.optString("iv"))
+            val ct = decode(entry.optString("ct"))
+            decrypted[id] = runCatching {
+                gcmOpen(vaultKey, iv, ct, recordAad(id))
+            }.getOrElse {
+                throw SyncProtocolException(SyncProtocolException.Reason.TAMPERED, "record $id failed the GCM tag")
+            }
+        }
+        return RecoveryOpenResult(vaultKey, decrypted)
+    }
+
+    /**
+     * Re-wraps [vaultKey] under [newPassphrase] with fresh randomness: the passphrase
+     * change flow after a recovery-key open. Records and the recovery block are copied
+     * through unchanged — only the `kdf`/`wrap` blocks are replaced, so records never
+     * need re-encryption on a passphrase change (per the key-hierarchy invariant).
+     */
+    fun rewrapPassphrase(vaultKey: ByteArray, newPassphrase: CharArray, envelope: ByteArray): ByteArray {
+        val random = SecureRandom()
+        return rewrapPassphraseWith(vaultKey, newPassphrase, randomBytes(random, SALT_BYTES), randomBytes(random, IV_BYTES), envelope)
+    }
+
+    /** Deterministic core of [rewrapPassphrase]: fixed salt and wrap IV. */
+    fun rewrapPassphraseWith(
+        vaultKey: ByteArray,
+        newPassphrase: CharArray,
+        newSalt: ByteArray,
+        newWrapIv: ByteArray,
+        envelope: ByteArray,
+    ): ByteArray {
+        require(vaultKey.size == VAULT_KEY_BYTES) { "vault key must be $VAULT_KEY_BYTES bytes" }
+        require(newSalt.size == SALT_BYTES) { "salt must be $SALT_BYTES bytes" }
+        require(newWrapIv.size == IV_BYTES) { "wrap IV must be $IV_BYTES bytes" }
+        val root = runCatching { JSONObject(String(envelope, Charsets.UTF_8)) }
+            .getOrElse { malformed("envelope is not valid JSON") }
+        if (root.optInt("v", -1) != VERSION) {
+            throw SyncProtocolException(SyncProtocolException.Reason.UNSUPPORTED_VERSION, "envelope version ${root.optInt("v", -1)}")
+        }
+        val recordsJson = root.optJSONObject("records") ?: malformed("missing records")
+        val recoveryKdfObj = root.optJSONObject("recoveryKdf")
+        val recoveryObj = root.optJSONObject("recovery")
+
+        val newKdf = KdfParams(MEMORY_KIB, ITERATIONS, PARALLELISM, newSalt)
+        val kek = deriveKek(newPassphrase, newKdf)
+        val wrapCt = gcmSeal(kek, newWrapIv, vaultKey, wrapAad(newKdf))
+
+        return buildString {
+            append("{\"v\":").append(VERSION)
+            append(",\"kdf\":").append(canonicalKdf(newKdf))
+            append(",\"wrap\":{\"alg\":\"").append(WRAP_ALG)
+            append("\",\"iv\":\"").append(b64(newWrapIv))
+            append("\",\"ct\":\"").append(b64(wrapCt)).append("\"}")
+            if (recoveryKdfObj != null && recoveryObj != null) {
+                append(",\"recoveryKdf\":{\"alg\":\"").append(recoveryKdfObj.optString("alg"))
+                append("\",\"info\":\"").append(recoveryKdfObj.optString("info"))
+                append("\",\"salt\":\"").append(recoveryKdfObj.optString("salt")).append("\"}")
+                append(",\"recovery\":{\"alg\":\"").append(recoveryObj.optString("alg"))
+                append("\",\"iv\":\"").append(recoveryObj.optString("iv"))
+                append("\",\"ct\":\"").append(recoveryObj.optString("ct")).append("\"}")
+            }
+            append(",\"records\":{")
+            val ids = recordsJson.keys().asSequence().sorted().toList()
+            ids.forEachIndexed { index, id ->
+                val entry = recordsJson.getJSONObject(id)
+                if (index > 0) append(",")
+                append("\"").append(id).append("\":{\"iv\":\"").append(entry.getString("iv"))
+                append("\",\"ct\":\"").append(entry.getString("ct")).append("\"}")
+            }
+            append("}}")
+        }.toByteArray(Charsets.UTF_8)
     }
 
     /**
@@ -242,6 +426,19 @@ object SyncProtocol {
     private fun recordAad(recordId: String): ByteArray =
         "mp-sync-v1/record/$recordId".toByteArray(Charsets.UTF_8)
 
+    private fun recoveryAad(recoverySalt: ByteArray): ByteArray =
+        "mp-sync-v1/recovery/${canonicalRecoveryKdf(recoverySalt)}".toByteArray(Charsets.UTF_8)
+
+    // HKDF-SHA256 (RFC 5869): the recovery key is already high-entropy (a CSPRNG value),
+    // so no password-hashing step is needed — only extract-then-expand.
+    private fun hkdfSha256(ikm: ByteArray, salt: ByteArray, info: ByteArray, length: Int): ByteArray {
+        val hkdf = HKDFBytesGenerator(SHA256Digest())
+        hkdf.init(HKDFParameters(ikm, salt, info))
+        val out = ByteArray(length)
+        hkdf.generateBytes(out, 0, length)
+        return out
+    }
+
     private fun entityAad(metadata: EntityMetadata): ByteArray =
         "mp-sync-v1/entity/${metadata.recordId}/${metadata.entityId}/${metadata.accountId}/${metadata.revision}/${metadata.schemaVersion}"
             .toByteArray(Charsets.UTF_8)
@@ -284,6 +481,43 @@ object SyncProtocol {
         append(",\"wrap\":{\"alg\":\"").append(WRAP_ALG)
         append("\",\"iv\":\"").append(b64(wrapIv))
         append("\",\"ct\":\"").append(b64(wrapCt))
+        append("\"},\"records\":{")
+        sealedRecords.keys.sorted().forEachIndexed { index, id ->
+            if (index > 0) append(",")
+            append("\"").append(id).append("\":{\"iv\":\"").append(b64(recordIvs.getValue(id)))
+            append("\",\"ct\":\"").append(b64(sealedRecords.getValue(id))).append("\"}")
+        }
+        append("}}")
+    }.toByteArray(Charsets.UTF_8)
+
+    internal fun canonicalRecoveryKdf(recoverySalt: ByteArray): String = buildString {
+        append("{\"alg\":\"").append(RECOVERY_KDF_ALG)
+        append("\",\"info\":\"").append(RECOVERY_INFO)
+        append("\",\"salt\":\"").append(b64(recoverySalt)).append("\"}")
+    }
+
+    // Same shape as canonicalEnvelope, with the additive recoveryKdf/recovery blocks
+    // spliced in between "wrap" and "records" (see "Recovery key" in the spec doc).
+    // Absent when there is no recovery key, so pre-recovery envelopes are byte-identical.
+    private fun canonicalEnvelopeWithRecovery(
+        kdf: KdfParams,
+        wrapIv: ByteArray,
+        wrapCt: ByteArray,
+        sealedRecords: Map<String, ByteArray>,
+        recordIvs: Map<String, ByteArray>,
+        recoverySalt: ByteArray,
+        recoveryIv: ByteArray,
+        recoveryCt: ByteArray,
+    ): ByteArray = buildString {
+        append("{\"v\":").append(VERSION)
+        append(",\"kdf\":").append(canonicalKdf(kdf))
+        append(",\"wrap\":{\"alg\":\"").append(WRAP_ALG)
+        append("\",\"iv\":\"").append(b64(wrapIv))
+        append("\",\"ct\":\"").append(b64(wrapCt))
+        append("\"},\"recoveryKdf\":").append(canonicalRecoveryKdf(recoverySalt))
+        append(",\"recovery\":{\"alg\":\"").append(WRAP_ALG)
+        append("\",\"iv\":\"").append(b64(recoveryIv))
+        append("\",\"ct\":\"").append(b64(recoveryCt))
         append("\"},\"records\":{")
         sealedRecords.keys.sorted().forEachIndexed { index, id ->
             if (index > 0) append(",")
