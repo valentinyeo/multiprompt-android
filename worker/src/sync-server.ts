@@ -14,7 +14,7 @@
  */
 
 import { verifyRequest, AuthError, type AuthEnv } from "./auth";
-import { SyncStore, type RemoteEntity } from "./store";
+import { SyncStore, type RemoteEntity, type VaultRow } from "./store";
 
 export interface Env extends AuthEnv {
   DB: D1Database;
@@ -88,9 +88,50 @@ export default {
       return json({ revision: outcome.revision }, 200);
     }
 
+    // Sync 4 (IGSH-251): the small single-row vault key envelope a device
+    // fetches to bootstrap before it can unwrap and sync entity records.
+    // Never the entity records themselves (see the module doc above).
+    if (parts.length === 1 && parts[0] === "vault" && request.method === "GET") {
+      const vault = await store.getVault(identity.accountId);
+      if (!vault) return json({ error: "not found" }, 404);
+      return json(serializeVault(vault), 200);
+    }
+
+    if (parts.length === 1 && parts[0] === "vault" && request.method === "PUT") {
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return json({ error: "invalid JSON body" }, 400);
+      }
+      const parsed = parseVaultBody(body);
+      if (!parsed) {
+        return json({ error: "expected {expectedRevision: int>=0, envelope: string}" }, 400);
+      }
+      const outcome = await store.putVault(identity.accountId, parsed.expectedRevision, parsed.envelope);
+      if (outcome.conflict) {
+        return json({ revision: outcome.revision, conflict: serializeVault(outcome.conflict) }, 409);
+      }
+      return json({ revision: outcome.revision }, 200);
+    }
+
     return json({ error: "not found" }, 404);
   },
 };
+
+function serializeVault(vault: VaultRow) {
+  return { revision: vault.revision, envelope: vault.envelope };
+}
+
+function parseVaultBody(body: unknown): { expectedRevision: number; envelope: string } | null {
+  if (typeof body !== "object" || body === null) return null;
+  const b = body as Record<string, unknown>;
+  if (typeof b.expectedRevision !== "number" || !Number.isInteger(b.expectedRevision) || b.expectedRevision < 0) {
+    return null;
+  }
+  if (typeof b.envelope !== "string" || b.envelope.length === 0) return null;
+  return { expectedRevision: b.expectedRevision, envelope: b.envelope };
+}
 
 function serializeEntity(entity: RemoteEntity) {
   return {

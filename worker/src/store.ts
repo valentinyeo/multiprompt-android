@@ -18,6 +18,16 @@ export interface PushOutcome {
   conflict: RemoteEntity | null;
 }
 
+export interface VaultRow {
+  revision: number;
+  envelope: string;
+}
+
+export interface VaultPushOutcome {
+  revision: number;
+  conflict: VaultRow | null;
+}
+
 interface Row {
   entity_id: string;
   revision: number;
@@ -112,6 +122,64 @@ export class SyncStore {
         .bind(accountId, recordId, entityId)
         .first<Row>();
       return { revision: after?.revision ?? 0, conflict: after ? rowToEntity(after) : null };
+    }
+    return { revision: written.revision, conflict: null };
+  }
+
+  /**
+   * Fetches the one small "vault key envelope" row for an account (IGSH-251,
+   * Sync 4): the wrapped-vault-key bootstrap object a second device needs
+   * before it can unwrap and sync the per-entity records above. Unlike
+   * entity records this is a single opaque row per account, not a
+   * collection — there is only ever one current envelope.
+   */
+  async getVault(accountId: string): Promise<VaultRow | null> {
+    const row = await this.db
+      .prepare("SELECT revision, envelope FROM sync_vault WHERE account_id = ?1")
+      .bind(accountId)
+      .first<{ revision: number; envelope: string }>();
+    return row ? { revision: row.revision, envelope: row.envelope } : null;
+  }
+
+  /**
+   * Writes the vault envelope under the same optimistic-concurrency rule as
+   * push(): the write is accepted only when the stored revision equals
+   * expectedRevision (0 = must not exist yet). Two devices racing to create
+   * or rewrap the vault get a conflict to resolve, never a silent overwrite.
+   */
+  async putVault(accountId: string, expectedRevision: number, envelope: string): Promise<VaultPushOutcome> {
+    const current = await this.db
+      .prepare("SELECT revision, envelope FROM sync_vault WHERE account_id = ?1")
+      .bind(accountId)
+      .first<{ revision: number; envelope: string }>();
+
+    if (current !== null && current.revision !== expectedRevision) {
+      return { revision: current.revision, conflict: { revision: current.revision, envelope: current.envelope } };
+    }
+    if (current === null && expectedRevision !== 0) {
+      return { revision: 0, conflict: null };
+    }
+
+    const nextRevision = (current?.revision ?? 0) + 1;
+    const now = new Date().toISOString();
+    const result = await this.db
+      .prepare(
+        "INSERT INTO sync_vault (account_id, revision, envelope, updated_at) VALUES (?1, ?2, ?3, ?4) " +
+          "ON CONFLICT (account_id) DO UPDATE SET " +
+          "revision = excluded.revision, envelope = excluded.envelope, updated_at = excluded.updated_at " +
+          "WHERE sync_vault.revision = ?5 " +
+          "RETURNING revision, envelope",
+      )
+      .bind(accountId, nextRevision, envelope, now, expectedRevision)
+      .all<{ revision: number; envelope: string }>();
+
+    const written = result.results?.[0];
+    if (!written) {
+      const after = await this.db
+        .prepare("SELECT revision, envelope FROM sync_vault WHERE account_id = ?1")
+        .bind(accountId)
+        .first<{ revision: number; envelope: string }>();
+      return { revision: after?.revision ?? 0, conflict: after ? { revision: after.revision, envelope: after.envelope } : null };
     }
     return { revision: written.revision, conflict: null };
   }

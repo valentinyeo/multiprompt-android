@@ -163,3 +163,104 @@ describe("entity sync", () => {
     expect(pushForB.status).toBe(200);
   });
 });
+
+describe("vault envelope bootstrap", () => {
+  it("401s with no Authorization header", async () => {
+    const res = await SELF.fetch(req("/vault"));
+    expect(res.status).toBe(401);
+  });
+
+  it("404s before a vault has been created", async () => {
+    const token = await mintAccessToken({ sub: "acct-no-vault" });
+    const res = await SELF.fetch(req("/vault", { token }));
+    expect(res.status).toBe(404);
+  });
+
+  it("creates the vault, then fetches it back", async () => {
+    const token = await mintAccessToken({ sub: "acct-vault-create" });
+
+    const create = await SELF.fetch(
+      req("/vault", {
+        method: "PUT",
+        token,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expectedRevision: 0, envelope: "sealed-envelope-v1" }),
+      }),
+    );
+    expect(create.status).toBe(200);
+    expect(await create.json()).toEqual({ revision: 1 });
+
+    const fetched = await SELF.fetch(req("/vault", { token }));
+    expect(fetched.status).toBe(200);
+    expect(await fetched.json()).toEqual({ revision: 1, envelope: "sealed-envelope-v1" });
+  });
+
+  it("409s a stale rewrap and reports the current envelope as the conflict", async () => {
+    const token = await mintAccessToken({ sub: "acct-vault-conflict" });
+
+    await SELF.fetch(
+      req("/vault", {
+        method: "PUT",
+        token,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expectedRevision: 0, envelope: "envelope-v1" }),
+      }),
+    );
+
+    const stale = await SELF.fetch(
+      req("/vault", {
+        method: "PUT",
+        token,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expectedRevision: 0, envelope: "envelope-v2-conflicting" }),
+      }),
+    );
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toEqual({
+      revision: 1,
+      conflict: { revision: 1, envelope: "envelope-v1" },
+    });
+
+    // The right expectedRevision (rewrap after reading the current one) succeeds.
+    const rewrap = await SELF.fetch(
+      req("/vault", {
+        method: "PUT",
+        token,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expectedRevision: 1, envelope: "envelope-v2" }),
+      }),
+    );
+    expect(rewrap.status).toBe(200);
+    expect(await rewrap.json()).toEqual({ revision: 2 });
+  });
+
+  it("isolates vaults per account", async () => {
+    const tokenA = await mintAccessToken({ sub: "acct-vault-a" });
+    const tokenB = await mintAccessToken({ sub: "acct-vault-b" });
+
+    await SELF.fetch(
+      req("/vault", {
+        method: "PUT",
+        token: tokenA,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expectedRevision: 0, envelope: "account-a-envelope" }),
+      }),
+    );
+
+    const forB = await SELF.fetch(req("/vault", { token: tokenB }));
+    expect(forB.status).toBe(404);
+  });
+
+  it("rejects a malformed vault body", async () => {
+    const token = await mintAccessToken({ sub: "acct-vault-bad-body" });
+    const res = await SELF.fetch(
+      req("/vault", {
+        method: "PUT",
+        token,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ envelope: "missing-expected-revision" }),
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+});
