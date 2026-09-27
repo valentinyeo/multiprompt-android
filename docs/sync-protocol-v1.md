@@ -8,6 +8,10 @@ Account: IGSH-223. Auth milestone M0 (Cloudflare Access from native Android) is 
 there and is a prerequisite for shipping any transport; this document covers only the
 envelope/record crypto, which is independent of transport.
 
+Milestone M3 (IGSH-249, production Worker + D1 sync server) is **implemented and
+deployed** — see "Milestone M3 — production sync server" below for the endpoints, auth,
+and deployment details.
+
 ## Threat model and invariants
 
 - The server (Cloudflare Worker + D1) is **zero-knowledge**: it stores opaque ciphertext
@@ -454,6 +458,53 @@ change on top, and retries** — rejection-and-rebase, not timestamped overwrite
 own the merge semantics per record id: `hosts` and `workspaces` merge at the field level,
 `sessionState` resolves as union/max per state key. Wall-clock-only last-write-wins is
 explicitly forbidden: timestamps never decide a conflict.
+
+## Milestone M3 — production sync server (implemented)
+
+The Worker + D1 server from the sections above is live. This section is the API shape
+that was left open by the storage design — it fills the gap the simplest way that matches
+`SyncTransport.kt`'s `list`/`push` contract 1:1, so this is the note called for by that
+open detail rather than a silent implementation choice.
+
+- **Worker**: `multiprompt-sync` (source: `worker/src/sync-server.ts`,
+  `worker/src/store.ts`, `worker/src/auth.ts`), deployed on
+  `sync.multiprompt.dev/*`. This worker is **not** sat behind a Cloudflare Access
+  application — the M0 `multiprompt-sync-m0` whoami stub (`worker/src/whoami.ts`) is
+  separate, untouched, and still behind its own self-hosted Access app. On
+  `multiprompt-sync`, the client's own Access-for-SaaS bearer token *is* the auth.
+- **D1**: database `multiprompt-sync` (binding `DB`), schema in
+  `worker/migrations/0001_sync_entity.sql` — exactly the `sync_entity` table above, plus
+  a `(account_id, record_id, revision)` index for `list`.
+- **Auth**: `Authorization: Bearer <token>` verified against the
+  `multiprompt-android (OIDC)` Access-for-SaaS app's own per-app JWKS
+  (`<issuer>/jwks`, from that app's OIDC discovery document), checking issuer, audience
+  (the app's `client_id`), and expiry. The verified JWT `sub` is `accountId`. Missing,
+  malformed, expired, wrong-issuer, or wrong-audience tokens are all rejected with `401`;
+  a request carrying a Cloudflare service-token header (`CF-Access-Client-Id` /
+  `CF-Access-Client-Secret`) is rejected with `403` even if it also carries a bearer token
+  (service tokens are machine auth only — see "Service tokens" above). This app is shared
+  by the Android client and the desktop (zigshell) client, which authenticate as the same
+  kind of public PKCE client against the same issuer/audience.
+- **Endpoints** (`recordId` matches `^[a-z][a-zA-Z0-9]*$`, the same shape as an envelope
+  record id — deliberately not an allowlist of the three known ids, since adding a record
+  id is not a breaking change; `entityId` matches the alphabet from "Entity records"
+  above):
+  - `GET /records/:recordId?since=<revision>` — `list`. Returns a JSON array of
+    `{entityId, revision, tombstone, payload}` for every entity at or above `since`
+    (default `0` = all) for the caller's account.
+  - `PUT /records/:recordId/:entityId` — `push`. Body
+    `{expectedRevision, tombstone, payload}` (`payload` is the sealed entity-record JSON
+    from "Entity records", sent and returned as a plain JSON string — since that payload
+    is itself already UTF-8 JSON text, it travels as-is with no extra base64 layer;
+    `payload` is `null` only for a tombstone write that intentionally clears the body).
+    On success: `200 {revision}`. On a stale `expectedRevision`: `409
+    {revision, conflict: {entityId, revision, tombstone, payload}}` — the current row, for
+    the client to rebase onto per "Optimistic concurrency" above.
+- Every query is scoped by `account_id` from the verified token, so two accounts can use
+  the same `entityId` under the same `recordId` without collision (tested).
+- Not implemented (left for later, out of scope for M3): batch push, real-time push
+  notification of remote changes, and tombstone compaction — the schema supports all
+  three without a breaking change.
 
 ## Versioning
 

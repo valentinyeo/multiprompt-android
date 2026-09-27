@@ -1,0 +1,26 @@
+# multiprompt sync — production sync server (IGSH-249, milestone M3).
+# Deploys the sync_entity CRUD endpoints from docs/sync-protocol-v1.md behind
+# bearer-token auth (Access for SaaS OIDC access tokens, verified against that
+# app's own JWKS — this worker is NOT sat behind a Cloudflare Access
+# application; the bearer token on each request is the auth).
+name = "multiprompt-sync"
+main = "src/sync-server.ts"
+compatibility_date = "2026-08-01"
+account_id = "7865043d9ae730882b77f3d5d670c158"
+
+routes = [
+  { pattern = "sync.multiprompt.dev/*", zone_name = "multiprompt.dev" },
+]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "multiprompt-sync"
+database_id = "080cb889-2859-48b4-99af-6a6a10a43dda"
+
+[vars]
+# The multiprompt-android (OIDC) Access-for-SaaS app: per-app OIDC issuer +
+# this app's client_id as the expected audience (see docs/sync-protocol-v1.md,
+# "M0 spike result"). Same app used by both the Android and desktop clients —
+# PKCE public clients, no client secret.
+OIDC_ISSUER = "https://vwo-analyzer.cloudflareaccess.com/cdn-cgi/access/sso/oidc/2394ba974f9c1921e1702c527ef91179e2f60d815a4008ec92bc00b3bd17e730"
+OIDC_CLIENT_ID = "2394ba974f9c1921e1702c527ef91179e2f60d815a4008ec92bc00b3bd17e730"
