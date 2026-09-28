@@ -1018,4 +1018,34 @@ class TmuxTextTest {
         )
         assertEquals("kotlin", blocks.last().language)
     }
+
+    @Test
+    fun formatsEtaRemainingLikeTheDesktop() {
+        assertEquals("<1m", TmuxText.formatEtaRemaining(30_000))
+        assertEquals("12m", TmuxText.formatEtaRemaining(12 * 60_000L))
+        assertEquals("1h 20m", TmuxText.formatEtaRemaining(80 * 60_000L))
+        assertEquals("+4m", TmuxText.formatEtaRemaining(-(4 * 60_000L + 100)))
+        assertEquals("+1m", TmuxText.formatEtaRemaining(-100))
+    }
+
+    @Test
+    fun parsesEtaRowsAndComputesTheProgressFraction() {
+        val state = TmuxText.parseSessionEtaStates("strix\t600\t1200\tfix tests\n").getValue("strix")
+
+        assertEquals(600, state.remainingSeconds)
+        assertEquals(1200, state.totalSeconds)
+        assertEquals("fix tests", state.description)
+
+        val eta = state.toEta(nowMillis = 1_000)
+        assertEquals(601_000, eta.deadlineMillis)
+        assertEquals(0.5f, eta.fillFraction(1_000), 0.001f)
+        assertEquals("10m", eta.label(1_000))
+    }
+
+    @Test
+    fun etaRowsWithoutFieldsAreIgnored() {
+        assertTrue(TmuxText.parseSessionEtaStates("").isEmpty())
+        assertTrue(TmuxText.parseSessionEtaStates("broken row\n").isEmpty())
+        assertTrue(TmuxText.parseSessionEtaStates("name\tnotanumber\t10\tx\n").isEmpty())
+    }
 }

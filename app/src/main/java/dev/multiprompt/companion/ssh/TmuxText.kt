@@ -17,6 +17,74 @@ object TmuxText {
         val current: Boolean = false,
     )
 
+    /**
+     * One live agent time estimate, as the host reports it: how long is left, the total the
+     * agent claimed, and its own one-line description of the work.
+     */
+    data class SessionEtaState(
+        val remainingSeconds: Long,
+        val totalSeconds: Long,
+        val description: String,
+    ) {
+        /**
+         * Converts the host's "remaining" into a local deadline, so the countdown ticks on the
+         * phone and a clock difference between phone and host cannot distort it.
+         */
+        fun toEta(nowMillis: Long): SessionEta = SessionEta(
+            deadlineMillis = nowMillis + remainingSeconds * 1000,
+            totalMillis = totalSeconds * 1000,
+            description = description,
+        )
+    }
+
+    /** A countdown the reader or the inbox can render at any clock time. */
+    data class SessionEta(
+        val deadlineMillis: Long,
+        val totalMillis: Long,
+        val description: String,
+    ) {
+        fun remainingMillis(nowMillis: Long): Long = deadlineMillis - nowMillis
+
+        /** Fraction of the progress line to fill: elapsed over total, clamped to [0, 1]. */
+        fun fillFraction(nowMillis: Long): Float {
+            if (totalMillis <= 0) return 0f
+            val elapsed = totalMillis - remainingMillis(nowMillis)
+            return (elapsed.toFloat() / totalMillis).coerceIn(0f, 1f)
+        }
+
+        fun label(nowMillis: Long): String = formatEtaRemaining(remainingMillis(nowMillis))
+    }
+
+    /** "<1m" / "12m" / "1h 20m", and "+4m" once the estimate ran out. */
+    fun formatEtaRemaining(remainingMillis: Long): String = when {
+        remainingMillis < 0 -> "+${((-remainingMillis) / 60_000).coerceAtLeast(1)}m"
+        remainingMillis < 60_000 -> "<1m"
+        else -> {
+            val totalMinutes = remainingMillis / 60_000
+            if (totalMinutes < 60) "${totalMinutes}m" else "${totalMinutes / 60}h ${totalMinutes % 60}m"
+        }
+    }
+
+    /** The host's whole estimate file as `name<TAB>remaining<TAB>total<TAB>description` rows. */
+    fun parseSessionEtaStates(value: String): Map<String, SessionEtaState> = buildMap {
+        value.lineSequence().forEach { line ->
+            val parts = line.split('\t')
+            if (parts.size < 3) return@forEach
+            val name = parts[0].trim()
+            val remaining = parts[1].toLongOrNull() ?: return@forEach
+            val total = parts[2].toLongOrNull() ?: 0L
+            if (name.isBlank()) return@forEach
+            put(
+                name,
+                SessionEtaState(
+                    remainingSeconds = remaining,
+                    totalSeconds = total,
+                    description = parts.getOrElse(3) { "" },
+                ),
+            )
+        }
+    }
+
     enum class ReaderBlockKind {
         PROSE,
         USER_PROMPT,

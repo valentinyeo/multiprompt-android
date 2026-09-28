@@ -46,11 +46,18 @@ sealed class SshProblem(message: String) : Exception(message) {
 }
 
 class SshRepository(private val secrets: SecretStore) {
-    suspend fun listSessions(host: HostProfile): List<TmuxSession> = withContext(Dispatchers.IO) {
+    /** Everything one host answered with: its sessions and its live agent time estimates. */
+    data class HostSessions(
+        val sessions: List<TmuxSession>,
+        val etaStates: Map<String, TmuxText.SessionEtaState> = emptyMap(),
+    )
+
+    suspend fun listSessions(host: HostProfile): HostSessions = withContext(Dispatchers.IO) {
         withTimeout(CONNECTION_TIMEOUT_MS) {
             withAuthenticatedClient(host) { client ->
                 val result = execute(client, TmuxParser.command())
                 val sessions = TmuxParser.parse(host.id, result.stdout)
+                val etaStates = TmuxParser.parseEtaStates(result.stdout)
                 Log.i(
                     LOG_TAG,
                     "tmux stdoutBytes=${result.stdout.toByteArray().size}, " +
@@ -69,7 +76,7 @@ class SshRepository(private val secrets: SecretStore) {
                 if (sessions.isEmpty() && result.stderr.isNotBlank()) {
                     throw SshProblem.Connection("tmux: ${result.stderr.trim().lines().first().take(200)}")
                 }
-                sessions
+                HostSessions(sessions = sessions, etaStates = etaStates)
             }
         }
     }
@@ -125,6 +132,7 @@ class SshRepository(private val secrets: SecretStore) {
             Boolean,
             Boolean,
             Boolean,
+            TmuxText.SessionEtaState?,
         ) -> Unit,
     ) = coroutineScope {
         val session = client.openSession()
@@ -135,6 +143,7 @@ class SshRepository(private val secrets: SecretStore) {
             }
             val err = async { session.stderr.drain() }
             var alternateOn = false
+            var etaState: TmuxText.SessionEtaState? = null
             val pending = StringBuilder()
             for (chunk in session.stdout) {
                 pending.append(chunk.toString(Charsets.UTF_8))
@@ -145,6 +154,16 @@ class SshRepository(private val secrets: SecretStore) {
                     pending.delete(0, end + 1)
                     if (line.startsWith(TmuxCommands.ALT_PREFIX)) {
                         alternateOn = line.removePrefix(TmuxCommands.ALT_PREFIX).trim() == "1"
+                        continue
+                    }
+                    if (line.startsWith(TmuxCommands.ETA_PREFIX)) {
+                        val payload = line.removePrefix(TmuxCommands.ETA_PREFIX).trim()
+                        // An empty payload means the estimate closed, so the countdown clears.
+                        etaState = TmuxText.decodeHex(payload)
+                            .takeIf(String::isNotBlank)
+                            ?.let(TmuxText::parseSessionEtaStates)
+                            ?.values
+                            ?.firstOrNull()
                         continue
                     }
                     if (line.startsWith(TmuxCommands.SNAPSHOT_PREFIX)) {
@@ -164,6 +183,7 @@ class SshRepository(private val secrets: SecretStore) {
                             TmuxText.isWaitingForInput(rawOutput, agent),
                             alternateOn,
                             TmuxText.isModelSwitchConfirmation(rawOutput),
+                            etaState,
                         )
                     }
                 }

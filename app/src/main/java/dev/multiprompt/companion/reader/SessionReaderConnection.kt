@@ -41,6 +41,8 @@ data class ReaderState(
     val lastUpdatedAtMillis: Long = 0,
     val completedActions: Long = 0,
     val waitingForInput: Boolean = false,
+    /** The live time estimate the agent declared for this session, when there is one. */
+    val eta: TmuxText.SessionEta? = null,
     /** Prompts sent from this app, newest last; keeps a dictated echo in one reader bubble. */
     val sentPrompts: List<String> = emptyList(),
     /** True when the agent TUI draws on the alternate screen (owns its own scrollback). */
@@ -282,7 +284,7 @@ class SessionReaderConnection(
                         connectedClient,
                         tmuxSessionName,
                         agent,
-                    ) { snapshot, details, pickerOptions, waitingForInput, alternateOn, switchConfirmation ->
+                    ) { snapshot, details, pickerOptions, waitingForInput, alternateOn, switchConfirmation, etaState ->
                         confirmModelSwitchIfAsked(switchConfirmation)
                         if (historyMode) {
                             // The history overlay is paging the TUI; captured screens belong
@@ -313,6 +315,7 @@ class SessionReaderConnection(
                                 lastUpdatedAtMillis = System.currentTimeMillis(),
                                 waitingForInput = waitingForInput,
                                 alternateOn = alternateOn,
+                                eta = etaState?.toEta(System.currentTimeMillis()),
                             )
                         }
                     }

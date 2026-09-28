@@ -34,6 +34,11 @@ object TmuxParser {
             "tmux capture-pane -p -J -S -12 -t \"\$mp_session:\" 2>/dev/null | " +
             "tail -c 4096 | od -An -v -tx1 | tr -d ' \\n'; " +
             "printf '\\n'; done; " +
+            // Agent time estimates for every session on this host, hex encoded as
+            // "name<TAB>remaining<TAB>total<TAB>description" rows.
+            "printf '${TmuxCommands.ETA_PREFIX}'; " +
+            "{ ${TmuxCommands.etaRowsCommand()} ; } | od -An -v -tx1 | tr -d ' \\n'; " +
+            "printf '\\n'; " +
             "else printf '${ERROR_PREFIX}tmux_not_found\\n'; fi; " +
             "printf '${END_MARKER}\\n'"
     }
@@ -99,4 +104,18 @@ object TmuxParser {
     }
 
     fun shellQuote(value: String): String = "'" + value.replace("'", "'\"'\"'") + "'"
+
+    /**
+     * The host's agent time estimates, from the [TmuxCommands.ETA_PREFIX] line of
+     * [command]. Empty when the host never installed the estimate hooks.
+     */
+    fun parseEtaStates(output: String): Map<String, TmuxText.SessionEtaState> {
+        val payload = output.lineSequence()
+            .firstOrNull { it.startsWith(TmuxCommands.ETA_PREFIX) }
+            ?.removePrefix(TmuxCommands.ETA_PREFIX)
+            ?.trim()
+            ?: return emptyMap()
+        if (payload.isEmpty()) return emptyMap()
+        return TmuxText.parseSessionEtaStates(TmuxText.decodeHex(payload))
+    }
 }

@@ -72,6 +72,8 @@ data class AppUiState(
     val sessionInteractionEpochSeconds: Map<String, Long> = emptyMap(),
     val creatingSession: Boolean = false,
     val sessionActionError: String? = null,
+    /** Live agent time estimates, keyed like a session key. Empty when none is running. */
+    val sessionEtas: Map<String, TmuxText.SessionEta> = emptyMap(),
     val newestSessionsAtBottom: Boolean = true,
     val allSplitOnRight: Boolean = true,
     val readerDefaultFontScale: Float = 1f,
@@ -330,7 +332,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 async {
                     runCatching { ssh.listSessions(host) }
                         .fold(
-                            onSuccess = { HostRefresh(host.id, it) },
+                            onSuccess = { HostRefresh(host.id, it.sessions, it.etaStates) },
                             onFailure = { throwable ->
                                 HostRefresh(
                                     hostId = host.id,
@@ -411,8 +413,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         current.selectedWorkspaceId
                     else -> workspaceSplitIds.firstOrNull()
                 }
+                // Estimates come from the host with a "remaining" already computed there, so
+                // they are converted to a local deadline exactly once, at receipt.
+                val etaNow = System.currentTimeMillis()
+                val sessionEtas = results
+                    .filter { it.error == null }
+                    .flatMap { result ->
+                        result.etaStates.mapNotNull { (name, state) ->
+                            SessionReadStore.key(result.hostId, name) to state.toEta(etaNow)
+                        }
+                    }
+                    .toMap()
                 current.copy(
                     sessions = sessions,
+                    sessionEtas = sessionEtas,
                     readerSession = current.readerSession?.let { open ->
                         sessions.firstOrNull { it.hostId == open.hostId && it.name == open.name } ?: open
                     },
@@ -975,7 +989,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _state.update { it.copy(newSession = it.newSession?.copy(loading = true, error = null)) }
             runCatching { ssh.listSessions(host) }
-                .onSuccess { sessions ->
+                .onSuccess { hostSessions ->
+                    val sessions = hostSessions.sessions
                     val openKeys = _state.value.sessions
                         .filter { it.hostId == hostId }
                         .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) }
@@ -1236,6 +1251,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private data class HostRefresh(
         val hostId: String,
         val sessions: List<TmuxSession> = emptyList(),
+        val etaStates: Map<String, TmuxText.SessionEtaState> = emptyMap(),
         val error: String? = null,
         val hostKey: PresentedHostKey? = null,
     )

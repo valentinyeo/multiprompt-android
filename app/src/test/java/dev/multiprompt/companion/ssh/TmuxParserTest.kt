@@ -152,4 +152,18 @@ class TmuxParserTest {
     fun shellQuoteCannotInjectCommands() {
         assertEquals("'a'\"'\"'; reboot'", TmuxParser.shellQuote("a'; reboot"))
     }
+
+    @Test
+    fun decodesHexEncodedEtaRows() {
+        val hex = "strix\t600\t1200\tfix tests".toByteArray()
+            .joinToString("") { byte -> "%02x".format(byte) }
+        val output = "${TmuxParser.START_MARKER}\n${TmuxCommands.ETA_PREFIX}$hex\n${TmuxParser.END_MARKER}\n"
+
+        val states = TmuxParser.parseEtaStates(output)
+
+        assertEquals(600, states.getValue("strix").remainingSeconds)
+        assertEquals(1200, states.getValue("strix").totalSeconds)
+        assertEquals("fix tests", states.getValue("strix").description)
+        assertTrue(TmuxParser.parseEtaStates("${TmuxParser.START_MARKER}\n${TmuxParser.END_MARKER}\n").isEmpty())
+    }
 }

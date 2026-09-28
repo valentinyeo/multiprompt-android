@@ -151,4 +151,24 @@ class TmuxCommandsTest {
             TmuxCommands.renameWindow("a'; reboot", "It's safe"),
         )
     }
+
+    @Test
+    fun etaReaderQuotesTheSessionAndCannotFailTheCommand() {
+        val command = TmuxCommands.etaRowsCommand("claude-a'; rm -rf /")
+
+        assertTrue(command.contains("eta-open.json"))
+        assertTrue(command.contains("MULTIPROMPT_STATE_DIR"))
+        assertTrue(command.contains(TmuxParser.shellQuote("claude-a'; rm -rf /")))
+        assertTrue(command.endsWith("2>/dev/null || true"))
+    }
+
+    @Test
+    fun listAndStreamCommandsCarryTheEstimateLine() {
+        assertTrue(TmuxParser.command().contains(TmuxCommands.ETA_PREFIX))
+        assertTrue(TmuxParser.command().contains("eta-open.json"))
+
+        val stream = TmuxCommands.stream("work")
+        assertTrue(stream.contains(TmuxCommands.ETA_PREFIX))
+        assertTrue(stream.contains("eta-open.json"))
+    }
 }

@@ -17,6 +17,32 @@ object TmuxCommands {
     const val ALT_PREFIX = "__MP_TMUX_ALT__"
     const val CREATED_PREFIX = "__MP_TMUX_CREATED__"
 
+    /** Reader stream line carrying the session's agent time estimate, hex encoded. */
+    const val ETA_PREFIX = "__MP_TMUX_ETA__"
+
+    /**
+     * Prints this host's agent time estimates as
+     * `name<TAB>remaining<TAB>total<TAB>description` rows, one per open estimate. The remaining
+     * time is computed on the host, so a clock difference between phone and host cannot distort
+     * a countdown. A session name narrows it to that one session. The output is empty when the
+     * host never installed the estimate hooks, and every failure is swallowed so a missing or
+     * corrupt state file can never break a reader command.
+     */
+    fun etaRowsCommand(sessionName: String? = null): String {
+        val argument = sessionName?.let { " " + TmuxParser.shellQuote(it) } ?: ""
+        return "python3 -c '$ETA_PYTHON'$argument 2>/dev/null || true"
+    }
+
+    /** Reads the estimate state file and prints one tab-separated row per open estimate. */
+    private const val ETA_PYTHON = "import json,os,sys,time; " +
+        "d=os.environ.get(\"MULTIPROMPT_STATE_DIR\") or os.path.join(os.path.expanduser(\"~\"),\".local/state/multiprompt\"); " +
+        "data=json.load(open(os.path.join(d,\"eta-open.json\"))); " +
+        "now=int(time.time()); want=sys.argv[1] if len(sys.argv)>1 else \"\"; " +
+        "sys.stdout.write(\"\".join(\"%s\\t%d\\t%d\\t%s\\n\" % (n, " +
+        "max(0, int(e.get(\"started_at\") or now) + int(e.get(\"est_seconds\") or 0) - now), " +
+        "int(e.get(\"est_seconds\") or 0), \" \".join(str(e.get(\"desc\") or \"\").split())) " +
+        "for n, e in data.items() if isinstance(e, dict) and (not want or n == want)))"
+
     fun capture(sessionName: String): String = captureCommand(target(sessionName))
 
     /**
@@ -161,8 +187,10 @@ object TmuxCommands {
             "then sleep 1; continue; fi; " +
             "{ ${captureCommand(target)} ; } 2>/dev/null | " +
             "tail -c 524288 > \"\$mp_snapshot\"; " +
-            "mp_current=\$(cksum < \"\$mp_snapshot\"); " +
+            "mp_eta=\$(${etaRowsCommand(sessionName)}); " +
+            "mp_current=\$(cksum < \"\$mp_snapshot\")-\$(printf '%s' \"\$mp_eta\" | cksum); " +
             "if [ \"\$mp_current\" != \"\$mp_previous\" ]; then " +
+            "printf '$ETA_PREFIX'; printf '%s' \"\$mp_eta\" | od -An -v -tx1 | tr -d ' \\n'; printf '\\n'; " +
             "printf '$SNAPSHOT_PREFIX'; " +
             "od -An -v -tx1 < \"\$mp_snapshot\" | tr -d ' \\n'; " +
             "printf '\\n'; mp_previous=\$mp_current; fi; " +

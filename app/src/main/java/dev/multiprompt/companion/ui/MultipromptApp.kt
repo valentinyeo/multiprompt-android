@@ -1392,6 +1392,15 @@ private fun SessionsScreen(
             },
         )
     }
+    // Countdowns tick locally: the host sent "remaining", the phone counts it down.
+    val anyEta = state.sessionEtas.isNotEmpty()
+    var etaNowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(anyEta) {
+        while (anyEta) {
+            etaNowMillis = System.currentTimeMillis()
+            delay(1_000)
+        }
+    }
     val normalizedQuery = searchQuery.trim()
     val workspaceNames = state.workspaces.associate { it.id to it.name }
     val visibleSessions = SessionSearch.newestFirst(state.sessions
@@ -1602,6 +1611,7 @@ private fun SessionsScreen(
                     workspaces = state.workspaces,
                     workspaceName = workspaceNames[state.sessionWorkspaceIds[key]]
                         .takeIf { state.selectedWorkspaceId == null },
+                    etaLabel = state.sessionEtas[key]?.label(etaNowMillis),
                     unread = key in state.unreadSessionKeys,
                     archived = key in state.archivedSessionKeys,
                     onClick = { onOpen(session) },
@@ -1811,6 +1821,7 @@ private fun SessionCard(
     session: TmuxSession,
     workspaces: List<Workspace>,
     workspaceName: String?,
+    etaLabel: String?,
     unread: Boolean,
     archived: Boolean,
     onClick: () -> Unit,
@@ -1890,6 +1901,22 @@ private fun SessionCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                etaLabel?.let { label ->
+                    Text(
+                        "ETA $label",
+                        modifier = Modifier
+                            .background(
+                                MaterialTheme.colorScheme.secondaryContainer,
+                                RoundedCornerShape(percent = 50),
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        fontSize = 10.sp,
+                        lineHeight = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                    )
+                }
                 workspaceName?.let { name ->
                     Text(
                         name,
@@ -2063,6 +2090,15 @@ private fun ReaderScreen(
     onResetFontScale: () -> Float,
 ) {
     val reader by connection.state.collectAsState()
+    // The host sends "remaining", so the countdown ticks here and a clock difference between
+    // phone and host cannot distort it.
+    var etaNowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(reader.eta) {
+        while (reader.eta != null) {
+            etaNowMillis = System.currentTimeMillis()
+            delay(1_000)
+        }
+    }
     val dictationState by dictation.state.collectAsState()
     var promptField by remember(connection) { mutableStateOf(TextFieldValue("")) }
     val prompt = promptField.text
@@ -2744,10 +2780,33 @@ private fun ReaderScreen(
                     .navigationBarsPadding(),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                // The desktop draws the same line under the tab: elapsed over total.
+                reader.eta?.let { eta ->
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .background(
+                                MaterialTheme.colorScheme.surfaceVariant,
+                                RoundedCornerShape(2.dp),
+                            ),
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(eta.fillFraction(etaNowMillis))
+                                .height(3.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.primary,
+                                    RoundedCornerShape(2.dp),
+                                ),
+                        )
+                    }
+                }
                 HarnessStatusBar(
                     runtimeDetails = runtimeDetails,
                     reader = reader,
                     session = session,
+                    etaLabel = reader.eta?.let { "ETA ${it.label(etaNowMillis)}" },
                     alternateOn = reader.alternateOn,
                     onScrollBackPage = { onSessionInteraction(); connection.scrollBackPage() },
                     onScrollLive = { onSessionInteraction(); connection.scrollLive() },
@@ -4149,6 +4208,7 @@ private fun HarnessStatusBar(
     runtimeDetails: TmuxText.RuntimeDetails,
     reader: ReaderState,
     session: TmuxSession,
+    etaLabel: String?,
     alternateOn: Boolean,
     onScrollBackPage: () -> Unit,
     onScrollLive: () -> Unit,
@@ -4156,6 +4216,7 @@ private fun HarnessStatusBar(
 ) {
     val parts = listOfNotNull(
         session.agent.label.takeIf { it.isNotBlank() },
+        etaLabel,
         runtimeDetails.label,
         reader.waitingForInput.takeIf { it }?.let { "waiting for input" },
     )
