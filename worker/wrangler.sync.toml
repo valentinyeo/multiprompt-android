@@ -34,8 +34,7 @@ routes = [
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "multiprompt-sync-staging"
-# Set to the staging D1 database_id before deploying.
-database_id = "REPLACE_WITH_STAGING_D1_DATABASE_ID"
+database_id = "0d1c6d1c-88c4-4575-87d9-753d38bcdeda"
 
 [env.staging.vars]
 OIDC_ISSUER = "https://vwo-analyzer.cloudflareaccess.com/cdn-cgi/access/sso/oidc/2394ba974f9c1921e1702c527ef91179e2f60d815a4008ec92bc00b3bd17e730"
