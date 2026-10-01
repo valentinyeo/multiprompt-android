@@ -126,6 +126,20 @@ class TerminalConnection(
         }
     }
 
+    /**
+     * Pages the agent TUI's own view back one screen. A full-screen agent keeps its history
+     * inside itself, so the emulator has no scrollback to scroll; the key is what the desktop
+     * would press. Written straight to the PTY, so it travels the existing session.
+     */
+    fun pageUp() {
+        keyboard.trySend(PAGE_UP)
+    }
+
+    /** Returns the TUI to its live view after [pageUp]. */
+    fun pageToLive() {
+        keyboard.trySend(END_KEY)
+    }
+
     fun paste(text: String) {
         if (text.isNotEmpty()) keyboard.trySend(text.toByteArray(Charsets.UTF_8))
     }
@@ -145,5 +159,11 @@ class TerminalConnection(
         client = null
         runCatching { oldSession?.close() }
         runCatching { oldClient?.disconnect() }
+    }
+
+    private companion object {
+        /** xterm key sequences for PageUp and End, the same keys tmux send-keys would send. */
+        val PAGE_UP = "\u001b[5~".toByteArray(Charsets.UTF_8)
+        val END_KEY = "\u001b[F".toByteArray(Charsets.UTF_8)
     }
 }

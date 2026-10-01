@@ -3837,6 +3837,14 @@ private fun TerminalScreen(
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Close terminal") }
                 },
                 actions = {
+                    // A full-screen agent keeps its history inside itself and the emulator keeps
+                    // no scrollback for that screen, so paging is the only way back.
+                    IconButton(onClick = { connection.pageUp() }) {
+                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Page the agent back one screen")
+                    }
+                    IconButton(onClick = { connection.pageToLive() }) {
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Back to the live view")
+                    }
                     IconButton(
                         onClick = {
                             focusRequester.requestFocus()
