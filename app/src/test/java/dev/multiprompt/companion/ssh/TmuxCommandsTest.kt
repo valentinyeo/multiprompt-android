@@ -171,4 +171,14 @@ class TmuxCommandsTest {
         assertTrue(stream.contains(TmuxCommands.ETA_PREFIX))
         assertTrue(stream.contains("eta-open.json"))
     }
+
+    @Test
+    fun theStreamCarriesTheAlternateScreenMarker() {
+        val stream = TmuxCommands.stream("work")
+
+        // The reader only offers its "Load older messages" button for an alternate-screen pane,
+        // and that flag arrives on this line. Dropping the marker silently disabled the button.
+        assertTrue(stream.contains("printf '${TmuxCommands.ALT_PREFIX}%s\\n'"))
+        assertTrue(stream.contains("#{alternate_on}"))
+    }
 }

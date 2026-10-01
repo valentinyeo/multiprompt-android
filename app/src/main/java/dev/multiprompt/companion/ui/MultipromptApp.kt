@@ -113,6 +113,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -129,7 +130,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.focus.focusRequester
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
@@ -2148,6 +2153,44 @@ private fun ReaderScreen(
     val density = LocalDensity.current
     val context = LocalContext.current
     val readerScope = rememberCoroutineScope()
+    // A full-screen agent keeps its scrollback inside the TUI, so tmux has nothing above the
+    // visible pane. Pulling down at the top asks the TUI for one older screen, which lands above
+    // the transcript; the button does the same on demand.
+    var loadingOlder by remember(connection) { mutableStateOf(false) }
+    var noOlderHistory by remember(connection) { mutableStateOf(false) }
+    val loadOlder: () -> Unit = {
+        if (reader.alternateOn && !loadingOlder && !noOlderHistory) {
+            loadingOlder = true
+            readerScope.launch {
+                val loaded = connection.loadOlderIntoTranscript()
+                if (!loaded) noOlderHistory = true
+                loadingOlder = false
+            }
+        }
+    }
+    val loadOlderRef = rememberUpdatedState(loadOlder)
+    val pullThresholdPx = with(density) { 72.dp.toPx() }
+    val overscrollLoader = remember(connection, scrollState, pullThresholdPx) {
+        object : NestedScrollConnection {
+            private var pulledPx = 0f
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                if (scrollState.value == 0 && available.y > 0f) {
+                    pulledPx += available.y
+                    if (pulledPx >= pullThresholdPx) {
+                        pulledPx = 0f
+                        loadOlderRef.value()
+                    }
+                } else {
+                    pulledPx = 0f
+                }
+                return Offset.Zero
+            }
+        }
+    }
     val authLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
@@ -3053,6 +3096,7 @@ private fun ReaderScreen(
                 .padding(padding)
                 .fillMaxSize()
                 .verticalScroll(scrollState)
+                .nestedScroll(overscrollLoader)
                 .pointerInput(onOpenTerminal) {
                     detectTapGestures(onDoubleTap = { onOpenTerminal() })
                 }
@@ -3061,22 +3105,9 @@ private fun ReaderScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (reader.alternateOn) {
-                // Full-screen agents keep their scrollback inside the TUI, so tmux above the
-                // visible screen has nothing to show. This pulls one screen at a time back
-                // from the agent into the transcript.
-                var loadingOlder by remember(connection) { mutableStateOf(false) }
-                var noOlderHistory by remember(connection) { mutableStateOf(false) }
                 OutlinedButton(
-                    onClick = {
-                        if (loadingOlder) return@OutlinedButton
-                        loadingOlder = true
-                        readerScope.launch {
-                            val loaded = connection.loadOlderIntoTranscript()
-                            if (!loaded) noOlderHistory = true
-                            loadingOlder = false
-                        }
-                    },
-                    enabled = !loadingOlder && !reader.sending,
+                    onClick = loadOlder,
+                    enabled = !loadingOlder && !noOlderHistory && !reader.sending,
                 ) {
                     Text(
                         when {
