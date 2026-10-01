@@ -311,7 +311,14 @@ object TmuxText {
             val rejoin = lastLineFilledTheRow &&
                 kind != ReaderBlockKind.CODE &&
                 !startsNewParagraph(line)
-            if (current.isNotEmpty()) current.append(if (rejoin) ' ' else '\n')
+            // The terminal wraps mid-address. Rows are joined with a space so wrapped prose
+            // reflows, but a space inside a URL truncates the link, so a wrapped address is
+            // kept as one token instead.
+            val joinInsideAddress = current.isNotEmpty() &&
+                !line.startsWith(" ") &&
+                endsInsideWebAddress(current) &&
+                (rejoin || looksLikeAddressContinuation(line))
+            if (current.isNotEmpty()) current.append(if (joinInsideAddress) "" else if (rejoin) ' ' else '\n')
             current.append(
                 if (kind == ReaderBlockKind.USER_PROMPT) removePromptMarker(line, agent) else line.trimEnd(),
             )
@@ -566,6 +573,29 @@ object TmuxText {
             line.startsWith("You:", ignoreCase = true)
     }
 
+    /**
+     * True when a row reads like the tail of a wrapped address rather than a new sentence. Used
+     * only for a row the terminal did not mark as a wrap, where a bare word would otherwise be
+     * glued onto the address.
+     */
+    private fun looksLikeAddressContinuation(line: String): Boolean {
+        val token = line.trimStart().substringBefore(' ').substringBefore('\t')
+        if (token.isEmpty() || isDivider(token.trim())) return false
+        return ADDRESS_CONTINUATION.containsMatchIn(token)
+    }
+
+    /**
+     * True when the text ends inside a web address, which means a terminal wrap cut it and the
+     * next row continues it. Any join keeps the address as the last whitespace-delimited token,
+     * so the scheme is still visible at the end of the block.
+     */
+    private fun endsInsideWebAddress(value: CharSequence): Boolean {
+        var start = value.length - 1
+        while (start >= 0 && !value[start].isWhitespace()) start--
+        val tail = value.subSequence(start + 1, value.length).toString().lowercase()
+        return tail.startsWith("http://") || tail.startsWith("https://") || tail.startsWith("www.")
+    }
+
     /** Collapses terminal wrapping so an echoed prompt can be compared with the sent text. */
     private fun promptSignature(value: String): String = value.replace(WHITESPACE, " ").trim()
 
@@ -718,6 +748,8 @@ object TmuxText {
     private val CODE_LINE = Regex("(?:fun|class|interface|object|const|val|var)\\b.*(?:[({=]|\\s*$)")
     private val NUMBERED_DIFF_LINE = Regex("\\d+\\s+[+-](?:\\s|$).*")
     private val FENCE_LINE = Regex("^```[A-Za-z0-9_+.-]*$")
+    /** Characters that make a bare word read as an address tail: a path, query, or number. */
+    private val ADDRESS_CONTINUATION = Regex("[/\\\\?=&#%_~+@:]|\\d")
     private val DIFF_PATH = Regex("diff --git a/\\S+ b/(\\S+)")
     private val FILE_PATH = Regex("(?:^|\\n)(?:\\+\\+\\+ b/|File: )([^\\s]+)")
     // Status lines decorate the gap between model and effort ("Opus 5 ⚡medium"), so plain

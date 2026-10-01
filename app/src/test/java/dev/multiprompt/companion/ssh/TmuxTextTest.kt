@@ -1048,4 +1048,61 @@ class TmuxTextTest {
         assertTrue(TmuxText.parseSessionEtaStates("broken row\n").isEmpty())
         assertTrue(TmuxText.parseSessionEtaStates("name\tnotanumber\t10\tx\n").isEmpty())
     }
+
+    @Test
+    fun aWrappedWebAddressStaysOneToken() {
+        val address = "https://docs.google.com/spreadsheets/d/1maaRnSkeGjM43jfLFCIN0eGldnhpj63ZW2qKJp66st8/edit"
+        val firstRow = address.take(60)
+        assertTrue(firstRow.length >= 55)
+
+        val text = TmuxText.readerBlocks("$firstRow\n${address.drop(60)}", AgentKind.CLAUDE)
+            .joinToString("\n") { it.text }
+
+        assertTrue(text.contains(address))
+    }
+
+    @Test
+    fun wrappedProseStillJoinsWithASpace() {
+        val first = "The detailed evidence table for this change lives in the shared sheet and the"
+        val second = "numbers below it are the ones we measured after the repair landed yesterday"
+        assertTrue(first.length >= 55)
+
+        val text = TmuxText.readerBlocks("$first\n$second", AgentKind.CLAUDE).single().text
+
+        assertEquals("$first $second", text)
+    }
+
+    @Test
+    fun aLinkEndingAParagraphStaysOutOfTheNextOne() {
+        val text = TmuxText.readerBlocks(
+            "See the sheet\nhttps://docs.google.com/spreadsheets/d/abc\n\nNext paragraph starts here",
+            AgentKind.CLAUDE,
+        ).single().text
+
+        assertTrue(text.contains("https://docs.google.com/spreadsheets/d/abc\n\nNext paragraph"))
+    }
+
+    @Test
+    fun anAddressSplitByAShortRowStaysOneToken() {
+        // The screenshot case: the terminal wrapped after "/d" on a short row, then again inside
+        // the sheet id. Tapping either piece used to open a truncated address.
+        val address = "https://docs.google.com/spreadsheets/d/1maaRnSkeGjM43jfLFCIN0eGldnhpj63ZW2qKJp66st8/edit"
+        val firstRow = "https://docs.google.com/spreadsheets/d"
+        val secondRow = address.removePrefix(firstRow)
+
+        val text = TmuxText.readerBlocks("$firstRow\n$secondRow", AgentKind.CLAUDE)
+            .joinToString("\n") { it.text }
+
+        assertTrue(text.contains(address))
+    }
+
+    @Test
+    fun aWordAfterALinkIsNotGluedOntoIt() {
+        val text = TmuxText.readerBlocks(
+            "See https://docs.google.com/spreadsheets/d/abc\nNext paragraph starts here",
+            AgentKind.CLAUDE,
+        ).single().text
+
+        assertTrue(text.contains("https://docs.google.com/spreadsheets/d/abc\nNext paragraph"))
+    }
 }
