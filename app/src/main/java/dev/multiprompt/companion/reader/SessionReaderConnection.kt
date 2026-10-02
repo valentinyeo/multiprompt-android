@@ -41,6 +41,8 @@ data class ReaderState(
     val lastUpdatedAtMillis: Long = 0,
     val completedActions: Long = 0,
     val waitingForInput: Boolean = false,
+    /** Why the last connection attempt failed, kept while the reader keeps retrying. */
+    val lastFailure: String? = null,
     /** The live time estimate the agent declared for this session, when there is one. */
     val eta: TmuxText.SessionEta? = null,
     /** Prompts sent from this app, newest last; keeps a dictated echo in one reader bubble. */
@@ -312,6 +314,7 @@ class SessionReaderConnection(
                                 runtimeDetails = liveDetails,
                                 modelPickerOptions = pickerOptions,
                                 status = ReaderStatus.Live,
+                                lastFailure = null,
                                 lastUpdatedAtMillis = System.currentTimeMillis(),
                                 waitingForInput = waitingForInput,
                                 alternateOn = alternateOn,
@@ -322,12 +325,9 @@ class SessionReaderConnection(
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (throwable: Throwable) {
+                    val message = throwable.message ?: throwable::class.java.simpleName
                     _state.update {
-                        it.copy(
-                            status = ReaderStatus.Failed(
-                                throwable.message ?: throwable::class.java.simpleName,
-                            ),
-                        )
+                        it.copy(status = ReaderStatus.Failed(message), lastFailure = message)
                     }
                 } finally {
                     val oldClient = streamClient

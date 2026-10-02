@@ -797,6 +797,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         destroySession(session, dissolved = null)
     }
 
+    /**
+     * Drops a session from this app without touching the host. Archiving and ending both need
+     * SSH, so this is the only way to clear a session whose VPS stopped answering. The host
+     * stays the source of truth: when it answers again, a session that still exists returns.
+     */
+    fun forgetSession(session: TmuxSession) {
+        val key = SessionReadStore.key(session.hostId, session.name)
+        sessionCache.save(
+            session.hostId,
+            sessionCache.load(session.hostId).filterNot { it.name == session.name },
+        )
+        warmReaders.remove(key)?.close()
+        warmReaderTouchedAt.remove(key)
+        val readerWasOpen = _state.value.readerSession?.let {
+            it.hostId == session.hostId && it.name == session.name
+        } == true
+        val terminalWasOpen = _state.value.terminalSession?.let {
+            it.hostId == session.hostId && it.name == session.name
+        } == true
+        if (terminalWasOpen) _state.value.terminal?.close()
+        _state.update {
+            it.copy(
+                sessions = it.sessions.filterNot { item ->
+                    item.hostId == session.hostId && item.name == session.name
+                },
+                sessionWorkspaceIds = it.sessionWorkspaceIds - key,
+                unreadSessionKeys = it.unreadSessionKeys - key,
+                archivedSessionKeys = it.archivedSessionKeys - key,
+                sessionInteractionEpochSeconds = it.sessionInteractionEpochSeconds - key,
+                reader = if (readerWasOpen) null else it.reader,
+                readerSession = if (readerWasOpen) null else it.readerSession,
+                terminal = if (terminalWasOpen) null else it.terminal,
+                terminalSession = if (terminalWasOpen) null else it.terminalSession,
+                sessionActionError = null,
+            )
+        }
+    }
+
     private fun destroySession(session: TmuxSession, dissolved: DissolvedSession?) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId }
         if (host == null) {

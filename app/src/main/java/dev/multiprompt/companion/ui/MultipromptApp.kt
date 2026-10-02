@@ -371,6 +371,9 @@ private fun AppScreens(viewModel: MainViewModel) {
             sunlightMode = sunlight,
             onSetAppTheme = viewModel::setAppTheme,
             onResetFontScale = { viewModel.resetReaderFontScale(readerSession) },
+            sessionActionError = state.sessionActionError,
+            onClearSessionActionError = viewModel::clearSessionActionError,
+            onForget = { viewModel.forgetSession(readerSession) },
         )
         return
     }
@@ -464,6 +467,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onRenameSession = viewModel::renameSession,
                     onRefresh = viewModel::refresh,
                     onSelectSection = viewModel::select,
+                    onForgetSession = viewModel::forgetSession,
                     onStartNewSession = viewModel::startNewSession,
                     onSetNewestSessionsAtBottom = viewModel::setNewestSessionsAtBottom,
                     onSetAllSplitOnRight = viewModel::setAllSplitOnRight,
@@ -1041,6 +1045,7 @@ private fun SessionsScreen(
     onRenameSession: (TmuxSession, String) -> String?,
     onRefresh: () -> Unit,
     onSelectSection: (AppSection) -> Unit,
+    onForgetSession: (TmuxSession) -> Unit,
     onStartNewSession: () -> Unit,
     onSetNewestSessionsAtBottom: (Boolean) -> Unit,
     onSetAllSplitOnRight: (Boolean) -> Unit,
@@ -1635,6 +1640,7 @@ private fun SessionsScreen(
                     },
                     onDissolve = { dissolvePromptSession = session },
                     onEnd = { endPromptSession = session },
+                    onForget = { onForgetSession(session) },
                 )
             }
             items(visibleDissolvedSessions, key = { "dissolved:${it.key}" }) { session ->
@@ -1839,19 +1845,23 @@ private fun SessionCard(
     onRename: () -> Unit,
     onDissolve: () -> Unit,
     onEnd: () -> Unit,
+    onForget: () -> Unit,
 ) {
     var menuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
-    val dismissState = rememberSwipeToDismissBoxState()
-    LaunchedEffect(dismissState.settledValue, archived) {
-        if (!archived) {
-            when (dismissState.settledValue) {
-                SwipeToDismissBoxValue.EndToStart -> onArchive()
-                SwipeToDismissBoxValue.StartToEnd -> onRemind()
-                SwipeToDismissBoxValue.Settled -> return@LaunchedEffect
+    // The action runs as soon as the gesture settles, and returning false keeps the row in
+    // place: archiving removes it, reminding opens its dialog, and neither leaves a blank gap.
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (!archived) {
+                when (value) {
+                    SwipeToDismissBoxValue.EndToStart -> onArchive()
+                    SwipeToDismissBoxValue.StartToEnd -> onRemind()
+                    SwipeToDismissBoxValue.Settled -> Unit
+                }
             }
-            dismissState.reset()
-        }
-    }
+            false
+        },
+    )
     SwipeToDismissBox(
         state = dismissState,
         enableDismissFromStartToEnd = !archived,
@@ -1969,6 +1979,13 @@ private fun SessionCard(
                             onClick = {
                                 menuExpanded = false
                                 onEnd()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Remove from list") },
+                            onClick = {
+                                menuExpanded = false
+                                onForget()
                             },
                         )
                         if (!unread && !archived) {
@@ -2093,6 +2110,9 @@ private fun ReaderScreen(
     sunlightMode: Boolean,
     onSetAppTheme: (AppTheme) -> Unit,
     onResetFontScale: () -> Float,
+    sessionActionError: String?,
+    onClearSessionActionError: () -> Unit,
+    onForget: () -> Unit,
 ) {
     val reader by connection.state.collectAsState()
     // The host sends "remaining", so the countdown ticks here and a clock difference between
@@ -2771,6 +2791,15 @@ private fun ReaderScreen(
                                 },
                             )
                             DropdownMenuItem(
+                                // The only action that works when the VPS stopped answering:
+                                // archiving and ending both need SSH.
+                                text = { Text("Remove from list") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onForget()
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text(if (signedIn) "Sync: signed in — sign out" else "Sign in to sync") },
                                 leadingIcon = {
                                     Icon(
@@ -3080,6 +3109,9 @@ private fun ReaderScreen(
                         modifier = Modifier.padding(horizontal = 12.dp),
                     )
                 }
+                sessionActionError?.let { message ->
+                    DismissibleError(message = message, onDismiss = onClearSessionActionError)
+                }
                 reader.actionError?.let { message ->
                     Text(
                         message,
@@ -3121,7 +3153,20 @@ private fun ReaderScreen(
             if (reader.status == ReaderStatus.Connecting && reader.output.isBlank()) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Text("Connecting to live output…")
+                    Column {
+                        Text("Connecting to live output…")
+                        // The retry loop resets the status every few seconds, which used to hide
+                        // the reason for good: the session looked stuck with nothing to act on.
+                        reader.lastFailure?.let { reason ->
+                            Text(
+                                reason,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
             }
             val failure = reader.status as? ReaderStatus.Failed
@@ -4041,7 +4086,11 @@ private fun Modifier.horizontalSwipe(
                 lastPosition = change.position
                 totalX += positionDelta.x
                 totalY += positionDelta.y
-                if (!claimed && kotlin.math.abs(totalX) > threshold &&
+                // A session row owns its own left/right swipe. Without this check the inbox's
+                // workspace swipe claimed the same drag on the Final pass and both fired: the
+                // thread did not act, the workspace changed under it, and the list looked blank.
+                if (!claimed && !change.isConsumed &&
+                    kotlin.math.abs(totalX) > threshold &&
                     kotlin.math.abs(totalX) > kotlin.math.abs(totalY) * 2
                 ) {
                     claimed = true
