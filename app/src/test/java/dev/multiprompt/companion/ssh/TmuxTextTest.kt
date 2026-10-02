@@ -1105,4 +1105,19 @@ class TmuxTextTest {
 
         assertTrue(text.contains("https://docs.google.com/spreadsheets/d/abc\nNext paragraph"))
     }
+
+    @Test
+    fun aSentenceAfterALinkIsNotGluedOntoIt() {
+        // The screenshot case: the ticket URL ended a wrapped row and the next row began "QA,".
+        // Joining them made the link open "https://.../6716.QA", which resolves to nothing.
+        val first = "  - Mohsin can't see imagess in board 339: " +
+            "https://app.hypertask.ai/detail/project-15/6716."
+        val second = "QA, 7h quiet. Suggest: take it and QA it."
+
+        val text = TmuxText.readerBlocks("$first\n$second", AgentKind.CLAUDE)
+            .joinToString("\n") { it.text }
+
+        assertTrue(text.contains("https://app.hypertask.ai/detail/project-15/6716. QA, 7h"))
+        assertFalse(text.contains("6716.QA"))
+    }
 }

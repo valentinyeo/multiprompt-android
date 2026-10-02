@@ -317,7 +317,7 @@ object TmuxText {
             val joinInsideAddress = current.isNotEmpty() &&
                 !line.startsWith(" ") &&
                 endsInsideWebAddress(current) &&
-                (rejoin || looksLikeAddressContinuation(line))
+                looksLikeAddressContinuation(line)
             if (current.isNotEmpty()) current.append(if (joinInsideAddress) "" else if (rejoin) ' ' else '\n')
             current.append(
                 if (kind == ReaderBlockKind.USER_PROMPT) removePromptMarker(line, agent) else line.trimEnd(),
@@ -574,9 +574,9 @@ object TmuxText {
     }
 
     /**
-     * True when a row reads like the tail of a wrapped address rather than a new sentence. Used
-     * only for a row the terminal did not mark as a wrap, where a bare word would otherwise be
-     * glued onto the address.
+     * True when a row reads like the tail of a wrapped address rather than a new sentence. A
+     * path, query, or anchor character has to appear in its first word: a word like "QA" after a
+     * full stop ends the address, and gluing it on makes the link open the wrong page.
      */
     private fun looksLikeAddressContinuation(line: String): Boolean {
         val token = line.trimStart().substringBefore(' ').substringBefore('\t')
@@ -749,7 +749,7 @@ object TmuxText {
     private val NUMBERED_DIFF_LINE = Regex("\\d+\\s+[+-](?:\\s|$).*")
     private val FENCE_LINE = Regex("^```[A-Za-z0-9_+.-]*$")
     /** Characters that make a bare word read as an address tail: a path, query, or number. */
-    private val ADDRESS_CONTINUATION = Regex("[/\\\\?=&#%_~+@:]|\\d")
+    private val ADDRESS_CONTINUATION = Regex("[/\\\\?=&#%@:]")
     private val DIFF_PATH = Regex("diff --git a/\\S+ b/(\\S+)")
     private val FILE_PATH = Regex("(?:^|\\n)(?:\\+\\+\\+ b/|File: )([^\\s]+)")
     // Status lines decorate the gap between model and effort ("Opus 5 ⚡medium"), so plain
