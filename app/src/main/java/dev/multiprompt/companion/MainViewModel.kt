@@ -857,6 +857,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (terminalWasOpen) _state.value.terminal?.close()
                     dissolved?.let(dissolvedStore::upsert)
                     sessionReads.restore(session)
+                    // A host whose tmux server died keeps answering with its cached list, so an
+                    // ended session has to leave the cache or it comes straight back.
+                    sessionCache.save(
+                        session.hostId,
+                        sessionCache.load(session.hostId).filterNot { it.name == session.name },
+                    )
                     // Ending a session should hand over to the one above it, the way the
                     // inbox is read, and only fall back to the inbox when nothing is left.
                     val successor = if (readerWasOpen) neighbourAfterRemoving(key) else null

@@ -129,13 +129,14 @@ class TmuxCommandsTest {
     }
 
     @Test
-    fun dissolveTargetsExactlyOneQuotedSession() {
+    fun dissolveTargetsExactlyOneQuotedSessionAndToleratesAnAbsentOne() {
         assertEquals(
-            "tmux kill-session -t '=work'",
+            "if tmux has-session -t '=work' 2>/dev/null; then tmux kill-session -t '=work'; fi",
             TmuxCommands.dissolveSession("work"),
         )
         assertEquals(
-            "tmux kill-session -t '=a'\"'\"'; reboot'",
+            "if tmux has-session -t '=a'\"'\"'; reboot' 2>/dev/null; then " +
+                "tmux kill-session -t '=a'\"'\"'; reboot'; fi",
             TmuxCommands.dissolveSession("a'; reboot"),
         )
     }

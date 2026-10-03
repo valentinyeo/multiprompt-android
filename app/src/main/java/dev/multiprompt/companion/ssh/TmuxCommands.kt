@@ -152,8 +152,15 @@ object TmuxCommands {
             "printf '%s\\t%s\\n' \"\$mp_entry\" \"\$mp_git\"; " +
             "done"
 
-    fun dissolveSession(sessionName: String): String =
-        "tmux kill-session -t ${TmuxParser.shellQuote("=$sessionName")}"
+    /**
+     * Ends one session. Idempotent on purpose: when the session is already gone, or the whole
+     * tmux server has died, `kill-session` fails with "no server running" and the app used to
+     * keep the dead session forever. Asking first means an absent session is success.
+     */
+    fun dissolveSession(sessionName: String): String {
+        val target = TmuxParser.shellQuote("=$sessionName")
+        return "if tmux has-session -t $target 2>/dev/null; then tmux kill-session -t $target; fi"
+    }
 
     fun resurrectSession(sessionName: String, workingDirectory: String, resumeCommand: String): String {
         val session = TmuxParser.shellQuote(sessionName)
