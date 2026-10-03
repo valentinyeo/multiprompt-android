@@ -570,15 +570,17 @@ private fun AppScreens(viewModel: MainViewModel) {
     }
 
     state.etaAccuracy?.let { rows ->
+        val accuracyError = state.etaAccuracyError
+        val accuracyLoading = state.etaAccuracyLoading
         AlertDialog(
             onDismissRequest = viewModel::dismissEtaAccuracy,
             title = { Text("Estimate accuracy") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     when {
-                        state.etaAccuracyLoading -> Text("Reading the estimate log…")
-                        state.etaAccuracyError != null -> Text(
-                            state.etaAccuracyError,
+                        accuracyLoading -> Text("Reading the estimate log…")
+                        accuracyError != null -> Text(
+                            accuracyError,
                             color = MaterialTheme.colorScheme.error,
                         )
                         rows.isEmpty() -> Text(
