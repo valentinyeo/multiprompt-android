@@ -783,14 +783,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun dissolveSession(session: TmuxSession) {
         val current = _state.value
         val key = SessionReadStore.key(session.hostId, session.name)
-        val dissolved = DissolvedSession.from(
-            session = session,
-            workspaceId = current.sessionWorkspaceIds[key],
-            workspaceName = current.sessionWorkspaceIds[key]
-                ?.let { id -> current.workspaces.firstOrNull { it.id == id }?.name }
-                .orEmpty(),
-        )
-        destroySession(session, dissolved)
+        viewModelScope.launch {
+            // Read the exact conversation id while the session is still alive, so the restore
+            // resumes this conversation and not whichever one became newest in that folder.
+            // An unreachable host or a folder Claude never ran in just leaves it unknown.
+            val claudeSessionId = if (session.agent == AgentKind.CLAUDE &&
+                session.workingDirectory.isNotBlank()
+            ) {
+                current.hosts.firstOrNull { it.id == session.hostId }
+                    ?.let { host -> ssh.latestClaudeSessionId(host, session.workingDirectory) }
+            } else {
+                null
+            }
+            destroySession(
+                session,
+                DissolvedSession.from(
+                    session = session,
+                    workspaceId = current.sessionWorkspaceIds[key],
+                    workspaceName = current.sessionWorkspaceIds[key]
+                        ?.let { id -> current.workspaces.firstOrNull { it.id == id }?.name }
+                        .orEmpty(),
+                    claudeSessionId = claudeSessionId,
+                ),
+            )
+        }
     }
 
     fun endSession(session: TmuxSession) {

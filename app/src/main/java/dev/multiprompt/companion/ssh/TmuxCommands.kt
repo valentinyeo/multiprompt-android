@@ -162,20 +162,55 @@ object TmuxCommands {
         return "if tmux has-session -t $target 2>/dev/null; then tmux kill-session -t $target; fi"
     }
 
-    fun resurrectSession(sessionName: String, workingDirectory: String, resumeCommand: String): String {
-        val session = TmuxParser.shellQuote(sessionName)
-        val target = TmuxParser.shellQuote("$sessionName:")
+    /**
+     * Restores an archived session under a fresh name. Reusing the old name is unsafe: tmux
+     * names get recycled from the folder name, so a same-name session is usually unrelated
+     * work, and attaching to it dropped people into the wrong conversation (the desktop hit
+     * exactly that). The window is renamed back to the archived label so the row still reads
+     * the same.
+     */
+    fun resurrectSession(
+        sessionName: String,
+        displayName: String,
+        workingDirectory: String,
+        resumeCommand: String,
+    ): String {
+        val fresh = freshSessionName(sessionName)
+        val session = TmuxParser.shellQuote(fresh)
+        val target = TmuxParser.shellQuote("$fresh:")
         val directory = TmuxParser.shellQuote(workingDirectory)
         val command = TmuxParser.shellQuote(resumeCommand)
+        val label = TmuxParser.shellQuote(displayName)
         val create = if (workingDirectory.isBlank()) {
             "tmux new-session -d -s $session"
         } else {
             "tmux new-session -d -s $session -c $directory"
         }
+        val rename = if (displayName.isBlank()) "" else " && tmux rename-window -t $target $label"
         return "if tmux has-session -t $session 2>/dev/null; then " +
             "printf 'session_exists\\n' >&2; exit 2; fi; " +
             "$create && tmux send-keys -t $target -l -- $command && " +
-            "tmux send-keys -t $target Enter"
+            "tmux send-keys -t $target Enter$rename"
+    }
+
+    /** A restore name that cannot collide with an unrelated session of the same base name. */
+    fun freshSessionName(sessionName: String): String {
+        val base = sessionName.take(40).trimEnd('-', '.', ':')
+        return "$base-r${System.currentTimeMillis() % 100000}"
+    }
+
+    /**
+     * The newest Claude conversation recorded for [workingDirectory]. Claude Code writes one
+     * jsonl per conversation under ~/.claude/projects/<path with punctuation as dashes>/, and
+     * the newest one is what a bare continue would pick. Reading it at archive time makes the
+     * later restore resume that exact conversation, not whatever became newest since.
+     */
+    fun latestClaudeSessionId(workingDirectory: String): String {
+        val path = TmuxParser.shellQuote(workingDirectory)
+        return "mp_cwd=$path; " +
+            "mp_enc=\$(printf '%s' \"\$mp_cwd\" | sed 's/[^A-Za-z0-9]/-/g'); " +
+            "ls -t \"\$HOME/.claude/projects/\$mp_enc\" 2>/dev/null | " +
+            "grep '\\.jsonl\$' | head -1 | sed 's/\\.jsonl\$//'"
     }
 
     fun renameWindow(sessionName: String, displayName: String): String =

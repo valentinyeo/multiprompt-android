@@ -15,7 +15,17 @@ data class DissolvedSession(
     val key: String get() = "$hostId::$tmuxSessionName"
 
     companion object {
-        fun from(session: TmuxSession, workspaceId: String?, workspaceName: String): DissolvedSession =
+        /**
+         * [claudeSessionId] is the newest conversation recorded for this folder, read from the
+         * host while the session was still alive. With it the restore resumes that exact
+         * conversation; without it the plain continue flag picks whichever is newest later.
+         */
+        fun from(
+            session: TmuxSession,
+            workspaceId: String?,
+            workspaceName: String,
+            claudeSessionId: String? = null,
+        ): DissolvedSession =
             DissolvedSession(
                 hostId = session.hostId,
                 tmuxSessionName = session.name,
@@ -23,8 +33,12 @@ data class DissolvedSession(
                 agent = session.agent,
                 workingDirectory = session.workingDirectory,
                 resumeCommand = when (session.agent) {
-                    AgentKind.CLAUDE -> "claude --continue"
+                    AgentKind.CLAUDE -> claudeSessionId
+                        ?.takeIf(String::isNotBlank)
+                        ?.let { "claude --resume $it" }
+                        ?: "claude --continue"
                     AgentKind.CODEX -> "codex resume --last"
+                    AgentKind.PI -> "pi --continue"
                     AgentKind.HAX -> "hax --continue"
                     AgentKind.CURSOR -> "cursor-agent --continue"
                     else -> ""

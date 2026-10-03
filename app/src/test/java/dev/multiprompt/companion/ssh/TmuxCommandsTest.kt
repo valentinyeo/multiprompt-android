@@ -182,4 +182,38 @@ class TmuxCommandsTest {
         assertTrue(stream.contains("printf '${TmuxCommands.ALT_PREFIX}%s\\n'"))
         assertTrue(stream.contains("#{alternate_on}"))
     }
+
+    @Test
+    fun resurrectUsesAFreshNameAndKeepsTheArchivedLabel() {
+        val command = TmuxCommands.resurrectSession(
+            sessionName = "hypertasks",
+            displayName = "hypertasks",
+            workingDirectory = "/srv/a'; touch /bad",
+            resumeCommand = "claude --resume abc",
+        )
+
+        // A recycled tmux name can belong to unrelated work, so the restore never reuses it.
+        assertTrue(command.contains("tmux new-session -d -s 'hypertasks-r"))
+        assertFalse(command.contains("-s 'hypertasks'"))
+        assertTrue(command.contains("-c '/srv/a'\"'\"'; touch /bad'"))
+        assertTrue(command.contains("send-keys -t 'hypertasks-r"))
+        assertTrue(command.contains("'claude --resume abc'"))
+        assertTrue(command.contains("rename-window -t 'hypertasks-r"))
+    }
+
+    @Test
+    fun freshSessionNameNeverReusesTheArchivedName() {
+        assertEquals("hypertasks", TmuxCommands.freshSessionName("hypertasks").substringBefore("-r"))
+        assertFalse("hypertasks" == TmuxCommands.freshSessionName("hypertasks"))
+    }
+
+    @Test
+    fun latestClaudeSessionReadsOnlyTheProjectsFolder() {
+        val command = TmuxCommands.latestClaudeSessionId("/srv/a'; reboot")
+
+        assertTrue(command.contains("'/srv/a'\"'\"'; reboot'"))
+        assertTrue(command.contains(".claude/projects/"))
+        assertTrue(command.contains("jsonl"))
+        assertTrue(command.contains("sed 's/[^A-Za-z0-9]/-/g'"))
+    }
 }

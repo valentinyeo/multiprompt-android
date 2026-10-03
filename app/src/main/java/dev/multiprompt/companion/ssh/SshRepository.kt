@@ -9,12 +9,14 @@ import dev.multiprompt.companion.model.RemoteListing
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.model.DissolvedSession
 import dev.multiprompt.companion.security.SecretStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.connectbot.sshlib.AuthResult
 import org.connectbot.sshlib.ConnectResult
 import org.connectbot.sshlib.HostKeyVerifier
@@ -297,6 +299,30 @@ class SshRepository(private val secrets: SecretStore) {
             }
         }
 
+    /**
+     * The newest Claude conversation recorded for [workingDirectory] on [host], or null when
+     * none is known. Read-only, and every failure counts as unknown: the archive then falls
+     * back to the plain continue flag instead of refusing to archive.
+     */
+    suspend fun latestClaudeSessionId(host: HostProfile, workingDirectory: String): String? =
+        withContext(Dispatchers.IO) {
+            try {
+                withTimeoutOrNull(LAUNCH_LOOKUP_TIMEOUT_MS) {
+                    withAuthenticatedClient(host) { client ->
+                        execute(client, TmuxCommands.latestClaudeSessionId(workingDirectory))
+                            .stdout.trim()
+                            .lineSequence()
+                            .firstOrNull { it.isNotBlank() }
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                // A real cancellation is not a lookup failure; only connection trouble is.
+                throw cancelled
+            } catch (throwable: Throwable) {
+                null
+            }
+        }
+
     suspend fun resurrectSession(host: HostProfile, session: DissolvedSession) =
         withContext(Dispatchers.IO) {
             require(session.resumeCommand.isNotBlank()) { "This agent does not expose a resume command" }
@@ -306,6 +332,7 @@ class SshRepository(private val secrets: SecretStore) {
                         client,
                         TmuxCommands.resurrectSession(
                             sessionName = session.tmuxSessionName,
+                            displayName = session.displayName,
                             workingDirectory = session.workingDirectory,
                             resumeCommand = session.resumeCommand,
                         ),
@@ -427,6 +454,8 @@ class SshRepository(private val secrets: SecretStore) {
         const val MAX_PROMPT_BYTES = 64 * 1024
         const val MAX_SNAPSHOT_HEX_CHARS = 1024 * 1024
         const val MAX_DIRECTORY_ENTRIES = 500
+        /** Short on purpose: a slow lookup must not delay an archive for long. */
+        const val LAUNCH_LOOKUP_TIMEOUT_MS = 8_000L
         const val DIRECTORY_ROOT_MARKER = "@root"
     }
 }
