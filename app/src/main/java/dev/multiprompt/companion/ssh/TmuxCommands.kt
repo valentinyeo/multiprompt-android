@@ -59,6 +59,15 @@ object TmuxCommands {
         "int(st.get(\"at\") or 0)) " +
         "for n, st in states.items() if isinstance(st, dict) and (not want or n == want)))"
 
+    /**
+     * The finished-estimate log, hex encoded so it survives the line framing. The last 64 KiB
+     * is plenty for the accuracy median and keeps a long log from stalling the phone.
+     */
+    fun etaLogCommand(): String =
+        "mp_dir=\"\${MULTIPROMPT_STATE_DIR:-\$HOME/.local/state/multiprompt}\"; " +
+            "if [ -f \"\$mp_dir/eta-log.jsonl\" ]; then " +
+            "tail -c 65536 \"\$mp_dir/eta-log.jsonl\" | od -An -v -tx1 | tr -d ' \\n'; fi"
+
     fun capture(sessionName: String): String = captureCommand(target(sessionName))
 
     /**

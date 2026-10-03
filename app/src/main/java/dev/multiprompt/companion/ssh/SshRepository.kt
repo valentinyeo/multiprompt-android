@@ -338,6 +338,22 @@ class SshRepository(private val secrets: SecretStore) {
             }
         }
 
+    /**
+     * How far off each agent's estimates usually are on [host], read from the finished-estimate
+     * log. Same rules as the desktop overlay: two minutes minimum, three samples minimum, the
+     * last twenty rows per agent.
+     */
+    suspend fun etaAccuracy(host: HostProfile): List<TmuxText.AgentAccuracy> =
+        withContext(Dispatchers.IO) {
+            withTimeout(CONNECTION_TIMEOUT_MS) {
+                withAuthenticatedClient(host) { client ->
+                    val result = execute(client, TmuxCommands.etaLogCommand())
+                    result.requireSuccess("read the estimate log")
+                    TmuxText.etaAccuracy(TmuxText.decodeHex(result.stdout.trim()))
+                }
+            }
+        }
+
     suspend fun resurrectSession(host: HostProfile, session: DissolvedSession) =
         withContext(Dispatchers.IO) {
             require(session.resumeCommand.isNotBlank()) { "This agent does not expose a resume command" }

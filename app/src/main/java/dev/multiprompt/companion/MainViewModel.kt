@@ -74,6 +74,10 @@ data class AppUiState(
     val sessionActionError: String? = null,
     /** Live agent time estimates, keyed like a session key. Empty when none is running. */
     val sessionEtas: Map<String, TmuxText.SessionEta> = emptyMap(),
+    /** Estimate accuracy dialog: null when it is closed, empty while it is still loading. */
+    val etaAccuracy: List<TmuxText.AgentAccuracy>? = null,
+    val etaAccuracyLoading: Boolean = false,
+    val etaAccuracyError: String? = null,
     val newestSessionsAtBottom: Boolean = true,
     val allSplitOnRight: Boolean = true,
     val readerDefaultFontScale: Float = 1f,
@@ -173,6 +177,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun select(section: AppSection) {
         _state.update { it.copy(section = section) }
+    }
+
+    /** Opens the estimate accuracy dialog for [session]'s host and reads the log. */
+    fun showEtaAccuracy(session: TmuxSession) {
+        val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
+        _state.update {
+            it.copy(etaAccuracy = emptyList(), etaAccuracyLoading = true, etaAccuracyError = null)
+        }
+        viewModelScope.launch {
+            runCatching { ssh.etaAccuracy(host) }
+                .onSuccess { rows ->
+                    _state.update { it.copy(etaAccuracy = rows, etaAccuracyLoading = false) }
+                }
+                .onFailure { throwable ->
+                    _state.update {
+                        it.copy(
+                            etaAccuracyLoading = false,
+                            etaAccuracyError = throwable.message ?: "Could not read the estimate log",
+                        )
+                    }
+                }
+        }
+    }
+
+    fun dismissEtaAccuracy() {
+        _state.update { it.copy(etaAccuracy = null, etaAccuracyLoading = false, etaAccuracyError = null) }
     }
 
     fun clearSessionActionError() {

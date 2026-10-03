@@ -86,6 +86,42 @@ object TmuxText {
         }
     }
 
+    /** How far off one agent's estimates usually are, over its last finished tasks. */
+    data class AgentAccuracy(
+        val agent: String,
+        val ratio: Double,
+        val samples: Int,
+    )
+
+    /**
+     * Reads the finished-estimate log and reports the median of actual over estimate per agent,
+     * the same number the desktop's Estimate Accuracy overlay shows. A turn under two minutes
+     * says nothing about a long estimate, an agent with fewer than three samples is left out,
+     * and only the last [limit] rows count.
+     */
+    fun etaAccuracy(value: String, limit: Int = 20): List<AgentAccuracy> {
+        val ratios = mutableMapOf<String, MutableList<Double>>()
+        value.lineSequence().forEach { line ->
+            val row = runCatching { org.json.JSONObject(line) }.getOrNull() ?: return@forEach
+            val estimate = row.optDouble("est_seconds", 0.0)
+            val actual = row.optDouble("actual_seconds", 0.0)
+            if (estimate <= 0.0 || actual < MIN_ACCURACY_ACTUAL_SECONDS) return@forEach
+            val agent = row.optString("agent").ifBlank { "unknown" }
+            ratios.getOrPut(agent) { mutableListOf() }.add(actual / estimate)
+        }
+        return ratios.mapNotNull { (agent, values) ->
+            val sample = values.takeLast(limit).sorted()
+            if (sample.size < MIN_ACCURACY_SAMPLES) return@mapNotNull null
+            val middle = sample.size / 2
+            val median = if (sample.size % 2 == 0) {
+                (sample[middle - 1] + sample[middle]) / 2
+            } else {
+                sample[middle]
+            }
+            AgentAccuracy(agent, median, sample.size)
+        }.sortedBy { it.agent }
+    }
+
     /** The `@state<TAB>name<TAB>state<TAB>recorded at` rows mixed into the same read. */
     fun parseHookStates(value: String): Map<String, HookState> = buildMap {
         value.lineSequence().forEach { line ->
@@ -785,6 +821,8 @@ object TmuxText {
     /** Marks the lifecycle rows that ride along with the estimate rows. */
     private const val HOOK_STATE_PREFIX = "@state"
     private val HOOK_STATES = setOf("active", "done")
+    private const val MIN_ACCURACY_ACTUAL_SECONDS = 120.0
+    private const val MIN_ACCURACY_SAMPLES = 3
     /** A silent agent that long after an ACTIVE event is likelier to be idle than working. */
     private const val ACTIVE_EVENT_TRUST_MS = 30 * 60 * 1000L
     /** Characters that make a bare word read as an address tail: a path, query, or number. */

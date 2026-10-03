@@ -374,6 +374,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             sessionActionError = state.sessionActionError,
             onClearSessionActionError = viewModel::clearSessionActionError,
             onForget = { viewModel.forgetSession(readerSession) },
+            onShowEtaAccuracy = { viewModel.showEtaAccuracy(readerSession) },
         )
         return
     }
@@ -566,6 +567,38 @@ private fun AppScreens(viewModel: MainViewModel) {
                 },
             )
         }
+    }
+
+    state.etaAccuracy?.let { rows ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissEtaAccuracy,
+            title = { Text("Estimate accuracy") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    when {
+                        state.etaAccuracyLoading -> Text("Reading the estimate log…")
+                        state.etaAccuracyError != null -> Text(
+                            state.etaAccuracyError,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        rows.isEmpty() -> Text(
+                            "No finished estimates yet. A finished turn counts when it ran " +
+                                "two minutes or more, and an agent needs three of them.",
+                        )
+                        else -> rows.forEach { row ->
+                            Text(
+                                "${row.agent}: tasks take " +
+                                    String.format(java.util.Locale.US, "%.1f", row.ratio) +
+                                    "x the estimate (last ${row.samples})",
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissEtaAccuracy) { Text("Close") }
+            },
+        )
     }
 
     state.pendingHostKeys.entries.firstOrNull()?.let { (hostId, key) ->
@@ -2113,6 +2146,7 @@ private fun ReaderScreen(
     sessionActionError: String?,
     onClearSessionActionError: () -> Unit,
     onForget: () -> Unit,
+    onShowEtaAccuracy: () -> Unit,
 ) {
     val reader by connection.state.collectAsState()
     // The host sends "remaining", so the countdown ticks here and a clock difference between
@@ -2752,6 +2786,13 @@ private fun ReaderScreen(
                                     clipboard.setPrimaryClip(
                                         ClipData.newPlainText("multiprompt transcript", reader.output),
                                     )
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Estimate accuracy") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onShowEtaAccuracy()
                                 },
                             )
                             DropdownMenuItem(

@@ -1145,4 +1145,27 @@ class TmuxTextTest {
         assertEquals(false, working.isReady(now))
         assertEquals(null, stale.isReady(now))
     }
+
+    @Test
+    fun accuracyIsTheMedianRatioIgnoringShortTurnsAndThinSamples() {
+        val rows = listOf(
+            // Ratios 3.0, 2.0 and 4.0: the median of the three is 3.0.
+            """{"agent":"claude","est_seconds":100,"actual_seconds":300}""",
+            """{"agent":"claude","est_seconds":100,"actual_seconds":200}""",
+            """{"agent":"claude","est_seconds":100,"actual_seconds":400}""",
+            // Below the two minute floor: a quick reply says nothing about a long estimate.
+            """{"agent":"claude","est_seconds":3600,"actual_seconds":69}""",
+            // Only two samples for codex: not enough to report.
+            """{"agent":"codex","est_seconds":100,"actual_seconds":400}""",
+            """{"agent":"codex","est_seconds":100,"actual_seconds":400}""",
+            """not json at all""",
+        ).joinToString("\n")
+
+        val accuracy = TmuxText.etaAccuracy(rows)
+
+        assertEquals(1, accuracy.size)
+        assertEquals("claude", accuracy.single().agent)
+        assertEquals(3.0, accuracy.single().ratio, 0.001)
+        assertEquals(3, accuracy.single().samples)
+    }
 }
