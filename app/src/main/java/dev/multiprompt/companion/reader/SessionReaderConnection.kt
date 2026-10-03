@@ -45,6 +45,8 @@ data class ReaderState(
     val lastFailure: String? = null,
     /** The live time estimate the agent declared for this session, when there is one. */
     val eta: TmuxText.SessionEta? = null,
+    /** Working or ready, as the host's notify hooks last reported it. Null when never recorded. */
+    val hookState: TmuxText.HookState? = null,
     /** Prompts sent from this app, newest last; keeps a dictated echo in one reader bubble. */
     val sentPrompts: List<String> = emptyList(),
     /** True when the agent TUI draws on the alternate screen (owns its own scrollback). */
@@ -286,39 +288,40 @@ class SessionReaderConnection(
                         connectedClient,
                         tmuxSessionName,
                         agent,
-                    ) { snapshot, details, pickerOptions, waitingForInput, alternateOn, switchConfirmation, etaState ->
-                        confirmModelSwitchIfAsked(switchConfirmation)
+                    ) { frame ->
+                        confirmModelSwitchIfAsked(frame.confirmationVisible)
                         if (historyMode) {
                             // The history overlay is paging the TUI; captured screens belong
                             // to the overlay, not the live transcript.
-                            _historyPage.value = snapshot
+                            _historyPage.value = frame.output
                             _state.update { current ->
                                 current.copy(
                                     status = ReaderStatus.Live,
-                                    alternateOn = alternateOn,
+                                    alternateOn = frame.alternateOn,
                                 )
                             }
                             return@streamSession
                         }
                         _state.update { current ->
-                            val liveDetails = if (details.model != null) {
-                                details
+                            val liveDetails = if (frame.details.model != null) {
+                                frame.details
                             } else {
                                 current.runtimeDetails
                             }
                             // The agent's screen is all tmux can give for an alternate-screen
                             // TUI, so the transcript above it is grown here, screen by screen.
-                            val merged = TmuxText.mergeSnapshot(current.output, snapshot)
+                            val merged = TmuxText.mergeSnapshot(current.output, frame.output)
                             current.copy(
                                 output = merged,
                                 runtimeDetails = liveDetails,
-                                modelPickerOptions = pickerOptions,
+                                modelPickerOptions = frame.pickerOptions,
                                 status = ReaderStatus.Live,
                                 lastFailure = null,
                                 lastUpdatedAtMillis = System.currentTimeMillis(),
-                                waitingForInput = waitingForInput,
-                                alternateOn = alternateOn,
-                                eta = etaState?.toEta(System.currentTimeMillis()),
+                                waitingForInput = frame.waitingForInput,
+                                alternateOn = frame.alternateOn,
+                                eta = frame.eta?.toEta(System.currentTimeMillis()),
+                                hookState = frame.hookState,
                             )
                         }
                     }

@@ -48,6 +48,18 @@ sealed class SshProblem(message: String) : Exception(message) {
 }
 
 class SshRepository(private val secrets: SecretStore) {
+    /** One frame from the reader stream: the pane plus the host-side facts about it. */
+    data class StreamSnapshot(
+        val output: String,
+        val details: TmuxText.RuntimeDetails,
+        val pickerOptions: List<TmuxText.ModelPickerOption>,
+        val waitingForInput: Boolean,
+        val alternateOn: Boolean,
+        val confirmationVisible: Boolean,
+        val eta: TmuxText.SessionEtaState?,
+        val hookState: TmuxText.HookState?,
+    )
+
     /** Everything one host answered with: its sessions and its live agent time estimates. */
     data class HostSessions(
         val sessions: List<TmuxSession>,
@@ -127,15 +139,7 @@ class SshRepository(private val secrets: SecretStore) {
         client: SshClient,
         sessionName: String,
         agent: AgentKind = AgentKind.OTHER,
-        onSnapshot: (
-            String,
-            TmuxText.RuntimeDetails,
-            List<TmuxText.ModelPickerOption>,
-            Boolean,
-            Boolean,
-            Boolean,
-            TmuxText.SessionEtaState?,
-        ) -> Unit,
+        onSnapshot: (StreamSnapshot) -> Unit,
     ) = coroutineScope {
         val session = client.openSession()
             ?: throw SshProblem.Connection("The SSH server refused a reader channel")
@@ -146,6 +150,7 @@ class SshRepository(private val secrets: SecretStore) {
             val err = async { session.stderr.drain() }
             var alternateOn = false
             var etaState: TmuxText.SessionEtaState? = null
+            var hookState: TmuxText.HookState? = null
             val pending = StringBuilder()
             for (chunk in session.stdout) {
                 pending.append(chunk.toString(Charsets.UTF_8))
@@ -160,10 +165,17 @@ class SshRepository(private val secrets: SecretStore) {
                     }
                     if (line.startsWith(TmuxCommands.ETA_PREFIX)) {
                         val payload = line.removePrefix(TmuxCommands.ETA_PREFIX).trim()
-                        // An empty payload means the estimate closed, so the countdown clears.
-                        etaState = TmuxText.decodeHex(payload)
+                        // An empty payload means both facts cleared: no open estimate and no
+                        // lifecycle state recorded for this session.
+                        val decoded = TmuxText.decodeHex(payload)
+                        etaState = decoded
                             .takeIf(String::isNotBlank)
                             ?.let(TmuxText::parseSessionEtaStates)
+                            ?.values
+                            ?.firstOrNull()
+                        hookState = decoded
+                            .takeIf(String::isNotBlank)
+                            ?.let(TmuxText::parseHookStates)
                             ?.values
                             ?.firstOrNull()
                         continue
@@ -179,13 +191,16 @@ class SshRepository(private val secrets: SecretStore) {
                             agent,
                         )
                         onSnapshot(
-                            mobileOutput,
-                            TmuxText.runtimeDetails(rawOutput),
-                            TmuxText.modelPickerOptions(rawOutput),
-                            TmuxText.isWaitingForInput(rawOutput, agent),
-                            alternateOn,
-                            TmuxText.isModelSwitchConfirmation(rawOutput),
-                            etaState,
+                            StreamSnapshot(
+                                output = mobileOutput,
+                                details = TmuxText.runtimeDetails(rawOutput),
+                                pickerOptions = TmuxText.modelPickerOptions(rawOutput),
+                                waitingForInput = TmuxText.isWaitingForInput(rawOutput, agent),
+                                alternateOn = alternateOn,
+                                confirmationVisible = TmuxText.isModelSwitchConfirmation(rawOutput),
+                                eta = etaState,
+                                hookState = hookState,
+                            ),
                         )
                     }
                 }

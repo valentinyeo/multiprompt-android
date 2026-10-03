@@ -1120,4 +1120,29 @@ class TmuxTextTest {
         assertTrue(text.contains("https://app.hypertask.ai/detail/project-15/6716. QA, 7h"))
         assertFalse(text.contains("6716.QA"))
     }
+
+    @Test
+    fun hookStatesRideAlongWithTheEstimateRows() {
+        val payload = "sess1\t900\t1200\tfix login\n@state\tsess1\tdone\t1791043496\n"
+
+        val states = TmuxText.parseHookStates(payload)
+        val eta = TmuxText.parseSessionEtaStates(payload)
+
+        assertEquals(TmuxText.HookState(active = false, atEpochSeconds = 1791043496), states.getValue("sess1"))
+        assertEquals(900, eta.getValue("sess1").remainingSeconds)
+        assertTrue(TmuxText.parseHookStates("sess1\t900\t1200\tfix login\n").isEmpty())
+        assertTrue(TmuxText.parseHookStates("@state\tsess1\tthinking\t1\n").isEmpty())
+    }
+
+    @Test
+    fun aRecordedFinishIsTrustedAndAStaleWorkingEventIsNot() {
+        val now = 1_000_000_000L
+        val finished = TmuxText.HookState(active = false, atEpochSeconds = now / 1000 - 60)
+        val working = TmuxText.HookState(active = true, atEpochSeconds = now / 1000 - 60)
+        val stale = TmuxText.HookState(active = true, atEpochSeconds = now / 1000 - 60 * 60)
+
+        assertEquals(true, finished.isReady(now))
+        assertEquals(false, working.isReady(now))
+        assertEquals(null, stale.isReady(now))
+    }
 }

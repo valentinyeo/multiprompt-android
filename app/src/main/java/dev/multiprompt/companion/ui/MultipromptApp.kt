@@ -3196,7 +3196,8 @@ private fun ReaderScreen(
                     ""
                 }
             }
-            val waitingForInput = reader.waitingForInput
+            val waitingForInput = reader.hookState?.isReady(System.currentTimeMillis())
+                ?: reader.waitingForInput
             val connectionLabel = when {
                 failure != null -> "Disconnected · retrying"
                 reader.status == ReaderStatus.Connecting -> "Connecting"

@@ -37,6 +37,27 @@ object TmuxText {
         )
     }
 
+    /**
+     * The last lifecycle event the host recorded for a session, written by the notify hooks.
+     * The desktop gets these over its notify channel; this is the same fact for a client that
+     * only has files, so a reader can say Working or Ready without guessing from pane text.
+     */
+    data class HookState(
+        val active: Boolean,
+        val atEpochSeconds: Long,
+    ) {
+        /**
+         * True when the last event says the agent finished, false when it says it is working,
+         * and null when a stale working event says nothing useful any more, so the caller falls
+         * back to the pane text. A recorded finish is durable until the next event replaces it.
+         */
+        fun isReady(nowMillis: Long): Boolean? = when {
+            !active -> true
+            nowMillis - atEpochSeconds * 1000 <= ACTIVE_EVENT_TRUST_MS -> false
+            else -> null
+        }
+    }
+
     /** A countdown the reader or the inbox can render at any clock time. */
     data class SessionEta(
         val deadlineMillis: Long,
@@ -62,6 +83,19 @@ object TmuxText {
         else -> {
             val totalMinutes = remainingMillis / 60_000
             if (totalMinutes < 60) "${totalMinutes}m" else "${totalMinutes / 60}h ${totalMinutes % 60}m"
+        }
+    }
+
+    /** The `@state<TAB>name<TAB>state<TAB>recorded at` rows mixed into the same read. */
+    fun parseHookStates(value: String): Map<String, HookState> = buildMap {
+        value.lineSequence().forEach { line ->
+            val parts = line.split('\t')
+            if (parts.size < 4 || parts[0] != HOOK_STATE_PREFIX) return@forEach
+            val name = parts[1].trim()
+            val state = parts[2].trim().lowercase()
+            val at = parts[3].toLongOrNull() ?: return@forEach
+            if (name.isBlank() || state !in HOOK_STATES) return@forEach
+            put(name, HookState(active = state == "active", atEpochSeconds = at))
         }
     }
 
@@ -748,6 +782,11 @@ object TmuxText {
     private val CODE_LINE = Regex("(?:fun|class|interface|object|const|val|var)\\b.*(?:[({=]|\\s*$)")
     private val NUMBERED_DIFF_LINE = Regex("\\d+\\s+[+-](?:\\s|$).*")
     private val FENCE_LINE = Regex("^```[A-Za-z0-9_+.-]*$")
+    /** Marks the lifecycle rows that ride along with the estimate rows. */
+    private const val HOOK_STATE_PREFIX = "@state"
+    private val HOOK_STATES = setOf("active", "done")
+    /** A silent agent that long after an ACTIVE event is likelier to be idle than working. */
+    private const val ACTIVE_EVENT_TRUST_MS = 30 * 60 * 1000L
     /** Characters that make a bare word read as an address tail: a path, query, or number. */
     private val ADDRESS_CONTINUATION = Regex("[/\\\\?=&#%@:]")
     private val DIFF_PATH = Regex("diff --git a/\\S+ b/(\\S+)")

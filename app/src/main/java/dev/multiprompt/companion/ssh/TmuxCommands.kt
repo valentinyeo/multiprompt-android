@@ -33,15 +33,31 @@ object TmuxCommands {
         return "python3 -c '$ETA_PYTHON'$argument 2>/dev/null || true"
     }
 
-    /** Reads the estimate state file and prints one tab-separated row per open estimate. */
-    private const val ETA_PYTHON = "import json,os,sys,time; " +
-        "d=os.environ.get(\"MULTIPROMPT_STATE_DIR\") or os.path.join(os.path.expanduser(\"~\"),\".local/state/multiprompt\"); " +
-        "data=json.load(open(os.path.join(d,\"eta-open.json\"))); " +
-        "now=int(time.time()); want=sys.argv[1] if len(sys.argv)>1 else \"\"; " +
+    /**
+     * Prints one tab-separated row per open estimate ("name<TAB>remaining<TAB>total<TAB>desc")
+     * and one per recorded lifecycle state ("@state<TAB>name<TAB>state<TAB>recorded at"), so a
+     * reader gets both the countdown and the hook-accurate working/ready state from one read.
+     * Every read is guarded: a missing or corrupt file can never take the estimate rows with it.
+     */
+    private const val ETA_PYTHON = "import json,os,sys,time\n" +
+        "d=os.environ.get(\"MULTIPROMPT_STATE_DIR\") or os.path.join(os.path.expanduser(\"~\"),\".local/state/multiprompt\")\n" +
+        "now=int(time.time())\n" +
+        "want=sys.argv[1] if len(sys.argv)>1 else \"\"\n" +
+        "try:\n" +
+        "    data=json.load(open(os.path.join(d,\"eta-open.json\")))\n" +
+        "except Exception:\n" +
+        "    data={}\n" +
         "sys.stdout.write(\"\".join(\"%s\\t%d\\t%d\\t%s\\n\" % (n, " +
         "max(0, int(e.get(\"started_at\") or now) + int(e.get(\"est_seconds\") or 0) - now), " +
         "int(e.get(\"est_seconds\") or 0), \" \".join(str(e.get(\"desc\") or \"\").split())) " +
-        "for n, e in data.items() if isinstance(e, dict) and (not want or n == want)))"
+        "for n, e in data.items() if isinstance(e, dict) and (not want or n == want)))\n" +
+        "try:\n" +
+        "    states=json.load(open(os.path.join(d,\"tab-state.json\")))\n" +
+        "except Exception:\n" +
+        "    states={}\n" +
+        "sys.stdout.write(\"\".join(\"@state\\t%s\\t%s\\t%d\\n\" % (n, str(st.get(\"state\") or \"\"), " +
+        "int(st.get(\"at\") or 0)) " +
+        "for n, st in states.items() if isinstance(st, dict) and (not want or n == want)))"
 
     fun capture(sessionName: String): String = captureCommand(target(sessionName))
 
