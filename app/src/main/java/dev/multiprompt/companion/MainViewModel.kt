@@ -303,6 +303,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         refresh()
     }
 
+    /**
+     * Adds a profile for another login on the same server. It reuses the source host's key,
+     * passphrase and pinned server fingerprint, so only the username differs. The secrets are
+     * copied under the new profile's own ids, so deleting either profile leaves the other working.
+     */
+    fun addUserOnHost(source: HostProfile, username: String) {
+        val user = username.trim()
+        val key = secrets.get(source.keySecretId)
+        if (user.isEmpty() || key == null) {
+            _state.update { it.copy(hostErrors = it.hostErrors + (source.id to "Could not copy this host's key")) }
+            return
+        }
+        val id = UUID.randomUUID().toString()
+        val keySecretId = "host_key_$id"
+        secrets.put(keySecretId, key)
+        val passphraseSecretId = source.passphraseSecretId?.let { sourceId ->
+            secrets.get(sourceId)?.let { passphrase ->
+                "host_passphrase_$id".also { secrets.put(it, passphrase) }
+            }
+        }
+        hosts.upsert(
+            source.copy(
+                id = id,
+                label = "${source.label} ($user)",
+                username = user,
+                keySecretId = keySecretId,
+                passphraseSecretId = passphraseSecretId,
+            ),
+        )
+        _state.update { it.copy(hosts = hosts.load(), section = AppSection.SESSIONS) }
+        refresh()
+    }
+
     fun deleteHost(host: HostProfile) {
         hosts.delete(host.id)
         secrets.remove(host.keySecretId)

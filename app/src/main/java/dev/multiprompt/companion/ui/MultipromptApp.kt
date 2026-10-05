@@ -71,6 +71,7 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
@@ -488,6 +489,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     state = state,
                     onEdit = viewModel::showHostEditor,
                     onDelete = viewModel::deleteHost,
+                    onAddUser = viewModel::addUserOnHost,
                     onTrust = viewModel::trustHostKey,
                 )
                 AppSection.UPDATE -> UpdateScreen(
@@ -3598,9 +3600,11 @@ private fun HostsScreen(
     state: AppUiState,
     onEdit: (HostProfile) -> Unit,
     onDelete: (HostProfile) -> Unit,
+    onAddUser: (HostProfile, String) -> Unit,
     onTrust: (String) -> Unit,
 ) {
     var deleting by remember { mutableStateOf<HostProfile?>(null) }
+    var addingUser by remember { mutableStateOf<HostProfile?>(null) }
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
@@ -3618,6 +3622,7 @@ private fun HostsScreen(
                                 fontFamily = FontFamily.Monospace,
                             )
                         }
+                        IconButton(onClick = { addingUser = host }) { Icon(Icons.Default.PersonAdd, "Add another user on this server") }
                         IconButton(onClick = { onEdit(host) }) { Icon(Icons.Default.Edit, "Edit") }
                         IconButton(onClick = { deleting = host }) { Icon(Icons.Default.Delete, "Delete") }
                     }
@@ -3650,6 +3655,26 @@ private fun HostsScreen(
                 TextButton(onClick = { onDelete(host); deleting = null }) { Text("Delete") }
             },
             dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
+        )
+    }
+    addingUser?.let { host ->
+        var username by remember(host.id) { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { addingUser = null },
+            title = { Text("Another user on ${host.hostname}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Uses the same key as ${host.label}. That user must accept this key on the server.")
+                    OutlinedTextField(username, { username = it.trim() }, label = { Text("Username") }, singleLine = true)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { onAddUser(host, username); addingUser = null },
+                    enabled = username.isNotEmpty() && username != host.username,
+                ) { Text("Add and connect") }
+            },
+            dismissButton = { TextButton(onClick = { addingUser = null }) { Text("Cancel") } },
         )
     }
 }
