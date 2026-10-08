@@ -9,11 +9,15 @@ import dev.multiprompt.companion.model.RemoteListing
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.model.DissolvedSession
 import dev.multiprompt.companion.security.SecretStore
+import dev.multiprompt.companion.reader.TranscriptProtocol
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -213,6 +217,61 @@ class SshRepository(private val secrets: SecretStore) {
                 stderr = err.await(),
                 exit = session.exitInfo.await(),
             ).requireSuccess("keep the session reader connected")
+        } finally {
+            session.close()
+        }
+    }
+
+    suspend fun streamTranscript(
+        client: SshClient,
+        initialIdentity: TranscriptProtocol.Identity,
+        onResponse: (TranscriptProtocol.Response) -> Unit,
+    ) = coroutineScope {
+        require(TranscriptProtocol.supports(initialIdentity.agent))
+        val session = client.openSession()
+            ?: throw SshProblem.Connection("The SSH server refused a transcript channel")
+        try {
+            if (!session.requestExec("exec python3 ~/.local/share/zigshell/mp_complete.py --serve")) {
+                throw SshProblem.Connection("The SSH server refused the transcript helper")
+            }
+            launch { for (chunk in session.stderr) { /* Discard helper diagnostics without buffering. */ } }
+            val framer = TranscriptProtocol.Framer()
+            var identity = initialIdentity
+            var token: String? = null
+            var requestId = 0L
+            while (isActive) {
+                // Re-resolve periodically: /clear or a restarted agent can change the live SID.
+                if (requestId % 15L == 0L) {
+                    identity = initialIdentity
+                    token = null
+                }
+                requestId++
+                val response = withTimeout(20_000L) {
+                    session.write(TranscriptProtocol.request(requestId, identity, token).toByteArray(Charsets.UTF_8))
+                    var wire: String? = null
+                    while (wire == null) {
+                        val chunk = session.stdout.receiveCatching().getOrNull()
+                            ?: throw SshProblem.Connection("The transcript helper is unavailable")
+                        val frames = framer.feed(chunk)
+                        check(frames.size <= 1 && (frames.isEmpty() || !framer.hasPending())) {
+                            "Unexpected transcript response"
+                        }
+                        wire = frames.firstOrNull()
+                    }
+                    TranscriptProtocol.parse(wire, requestId, identity)
+                        ?: throw SshProblem.Connection("Invalid transcript response")
+                }
+                check(response.status != "same" || token != null) { "Unexpected unchanged transcript" }
+                if (response.status == "missing") {
+                    identity = initialIdentity
+                    token = null
+                } else {
+                    identity = identity.copy(sid = response.sid)
+                    token = response.token
+                }
+                onResponse(response)
+                delay(2_000L)
+            }
         } finally {
             session.close()
         }

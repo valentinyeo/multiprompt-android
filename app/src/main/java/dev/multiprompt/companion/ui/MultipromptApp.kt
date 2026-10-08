@@ -2153,6 +2153,7 @@ private fun ReaderScreen(
     onShowEtaAccuracy: () -> Unit,
 ) {
     val reader by connection.state.collectAsState()
+    val transcript = reader.transcript.takeUnless { technicalMode }
     // The host sends "remaining", so the countdown ticks here and a clock difference between
     // phone and host cannot distort it.
     var etaNowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -2217,7 +2218,7 @@ private fun ReaderScreen(
     var loadingOlder by remember(connection) { mutableStateOf(false) }
     var noOlderHistory by remember(connection) { mutableStateOf(false) }
     val loadOlder: () -> Unit = {
-        if (reader.alternateOn && !loadingOlder && !noOlderHistory) {
+        if (transcript == null && reader.alternateOn && !loadingOlder && !noOlderHistory) {
             loadingOlder = true
             readerScope.launch {
                 val loaded = connection.loadOlderIntoTranscript()
@@ -3181,7 +3182,7 @@ private fun ReaderScreen(
             horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (reader.alternateOn) {
+            if (transcript == null && reader.alternateOn) {
                 OutlinedButton(
                     onClick = loadOlder,
                     enabled = !loadingOlder && !noOlderHistory && !reader.sending,
@@ -3271,7 +3272,7 @@ private fun ReaderScreen(
             }
             // Links are worth preserving even when a terminal row looks like bookkeeping;
             // hiding a handed-off result costs more than showing one extra technical block.
-            val visibleReaderBlocks = readerBlocks.filterNot { block ->
+            val visibleReaderBlocks = if (transcript != null) emptyList() else readerBlocks.filterNot { block ->
                 !technicalMode && !TmuxText.containsLink(block.text) && (
                     block.kind == TmuxText.ReaderBlockKind.PROGRESS ||
                         block.kind == TmuxText.ReaderBlockKind.CODE
@@ -3294,7 +3295,11 @@ private fun ReaderScreen(
                 ) {
                     AgentBadge(session.agent)
                     Text(
-                        if (technicalMode) "Terminal detail" else "Clean chat",
+                        when {
+                            technicalMode -> "Terminal detail"
+                            transcript != null -> "Transcript chat · recent messages"
+                            else -> "Clean chat"
+                        },
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -3390,7 +3395,48 @@ private fun ReaderScreen(
                         }
                     }
                 }
-                if (visibleReaderBlocks.isEmpty()) {
+                transcript?.forEach { message ->
+                    val isUser = message.role == "user"
+                    Box(
+                        Modifier.fillMaxWidth(),
+                        contentAlignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart,
+                    ) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(0.94f),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isUser) {
+                                    if (sunlightMode) PromptBubbleLight else MaterialTheme.colorScheme.primaryContainer
+                                } else MaterialTheme.colorScheme.surfaceVariant,
+                            ),
+                        ) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    if (isUser) "You" else session.agent.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isUser && sunlightMode) Color.White else MaterialTheme.colorScheme.onSurface,
+                                )
+                                SelectionContainer {
+                                    Text(
+                                        terminalLinks(message.text, sunlightMode, onDark = isUser && sunlightMode),
+                                        fontSize = transcriptFontSize,
+                                        lineHeight = (transcriptFontSize.value * 1.5f).sp,
+                                        color = if (isUser) {
+                                            if (sunlightMode) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
+                                        } else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                message.timestamp?.let { timestamp ->
+                                    Text(
+                                        timestamp,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (isUser && sunlightMode) Color.White else MaterialTheme.colorScheme.onSurface,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                if (transcript?.isEmpty() ?: visibleReaderBlocks.isEmpty()) {
                     Text(
                         "No recent output",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -593,6 +593,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 host = host,
                 tmuxSessionName = session.name,
                 agent = session.agent,
+                workingDirectory = session.workingDirectory,
             )
         }
         _state.update {

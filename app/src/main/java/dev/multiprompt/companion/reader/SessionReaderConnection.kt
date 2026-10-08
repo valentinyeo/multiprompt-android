@@ -51,6 +51,8 @@ data class ReaderState(
     val sentPrompts: List<String> = emptyList(),
     /** True when the agent TUI draws on the alternate screen (owns its own scrollback). */
     val alternateOn: Boolean = false,
+    /** Null uses the raw tmux reader; an empty list is a valid filtered conversation. */
+    val transcript: List<TranscriptMessage>? = null,
 )
 
 class SessionReaderConnection(
@@ -58,6 +60,7 @@ class SessionReaderConnection(
     private val host: HostProfile,
     val tmuxSessionName: String,
     private val agent: AgentKind = AgentKind.OTHER,
+    private val workingDirectory: String = "",
 ) : AutoCloseable {
     private sealed interface Request {
         data class Prompt(val text: String) : Request
@@ -73,6 +76,8 @@ class SessionReaderConnection(
     private var streamClient: SshClient? = null
     private var streamJob: Job? = null
     private var actionJob: Job? = null
+    private var transcriptJob: Job? = null
+    private var transcriptClient: SshClient? = null
 
     fun start() {
         if (actionJob == null) {
@@ -81,6 +86,7 @@ class SessionReaderConnection(
             }
         }
         startStream()
+        startTranscript()
     }
 
     fun sendPrompt(text: String): Boolean {
@@ -274,6 +280,44 @@ class SessionReaderConnection(
         return requests.trySend(Request.ModelPickerOption(index)).isSuccess
     }
 
+    private fun startTranscript() {
+        if (!TranscriptProtocol.supports(agent) || transcriptJob?.isActive == true) return
+        transcriptJob = scope.launch {
+            var retryDelay = RECONNECT_DELAY_MS
+            while (isActive) {
+                try {
+                    val connectedClient = withTimeout(CONNECT_TIMEOUT_MS) { repository.connect(host) }
+                    transcriptClient = connectedClient
+                    repository.streamTranscript(
+                        connectedClient,
+                        TranscriptProtocol.Identity(agent, tmuxSessionName, workingDirectory),
+                    ) { response ->
+                        retryDelay = RECONNECT_DELAY_MS
+                        _state.update { current ->
+                            current.copy(
+                                transcript = when (response.status) {
+                                    "ok" -> response.messages
+                                    "same" -> current.transcript
+                                    else -> null
+                                },
+                            )
+                        }
+                    }
+                } catch (failure: Exception) {
+                    if (failure is CancellationException && !isActive) throw failure
+                    // A missing/old helper or timed-out request must not stop the tmux reader.
+                    _state.update { it.copy(transcript = null) }
+                } finally {
+                    val oldClient = transcriptClient
+                    transcriptClient = null
+                    runCatching { oldClient?.disconnect() }
+                }
+                delay(retryDelay)
+                retryDelay = (retryDelay * 2).coerceAtMost(30_000L)
+            }
+        }
+    }
+
     private fun startStream() {
         if (streamJob?.isActive == true) return
         streamJob = scope.launch {
@@ -392,9 +436,15 @@ class SessionReaderConnection(
         requests.close()
         streamJob?.cancel()
         actionJob?.cancel()
+        transcriptJob?.cancel()
         val oldClient = streamClient
+        val oldTranscriptClient = transcriptClient
         streamClient = null
-        CoroutineScope(Dispatchers.IO).launch { runCatching { oldClient?.disconnect() } }
+        transcriptClient = null
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching { oldClient?.disconnect() }
+            runCatching { oldTranscriptClient?.disconnect() }
+        }
         scope.cancel()
     }
 
