@@ -35,8 +35,12 @@ class SyncAuthManager(context: Context, private val http: AccountHttp = AccountH
     fun hasSession(): Boolean = auth.hasSession()
     fun accountId(): String? = auth.accountId()
 
-    fun buildAuthorizationIntent(): Intent = CustomTabsIntent.Builder().build().intent.apply {
-        data = Uri.parse(auth.authorizationUrl("Android ${Build.MANUFACTURER} ${Build.MODEL}"))
+    suspend fun buildAuthorizationIntent(): Intent = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            CustomTabsIntent.Builder().build().intent.apply {
+                data = Uri.parse(auth.authorizationUrl("Android ${Build.MANUFACTURER} ${Build.MODEL}"))
+            }
+        }
     }
 
     suspend fun handleAuthorizationResponse(data: Intent?): TokenResult = withContext(Dispatchers.IO) {

@@ -1252,6 +1252,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun installUpdate(release: UpdateRelease) = updates.install(release)
 
+    fun signInAccount(launch: (Intent) -> Unit) {
+        val generation = accountGeneration
+        viewModelScope.launch {
+            try {
+                val intent = syncAuth.buildAuthorizationIntent()
+                if (generation == accountGeneration) launch(intent)
+            } catch (e: Exception) {
+                _state.update { it.copy(accountError = e.message ?: "Could not open the sign-in browser") }
+            }
+        }
+    }
+
     fun onAuthRedirect(intent: Intent) {
         val generation = accountGeneration
         viewModelScope.launch {

@@ -345,7 +345,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             screencast = viewModel.screencast,
             skills = viewModel.skills,
             signedIn = state.signedIn,
-            onSignIn = { context.startActivity(viewModel.syncAuth.buildAuthorizationIntent()) },
+            onSignIn = { viewModel.signInAccount { context.startActivity(it) } },
             onSignOut = viewModel::signOutAccount,
             session = readerSession,
             unread = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.unreadSessionKeys,
