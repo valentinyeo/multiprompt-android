@@ -26,6 +26,10 @@ shell interpolation.
 
 ## Build
 
+Account workspaces now use the same login and layout as desktop. See
+[account workspaces](docs/account-workspaces.md) for sign-in, host mapping,
+conflict handling, retained legacy folders and verification limits.
+
 Requirements: JDK 17 and Android SDK 36.
 
 ```powershell

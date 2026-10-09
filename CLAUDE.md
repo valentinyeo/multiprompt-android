@@ -44,7 +44,7 @@ Data flow for the core feature:
 - **Everything interpolated into a remote command goes through `TmuxParser.shellQuote`.** There is a test asserting it blocks injection.
 - **Reader commands are allowlisted.** Prompt content must travel through SSH stdin and tmux buffer/paste operations, never inside a shell command.
 - **`UpdateManager` verifies before installing:** HTTPS-only transport, declared size and SHA-256, package name, strictly newer versionCode, and the installed APK's signing certificate digest. Every one of those checks is load-bearing; a downgrade or a differently-signed APK must be rejected.
-- **No Cloudflare service token or other long-lived secret is ever embedded in the APK.** Service tokens are for automated/server-to-server systems only (CI, ops, optionally a per-machine DPAPI-stored token for the zigshell desktop); the Android app authenticates through the OIDC/Better Auth user login (PKCE, system browser, refresh rotation) and holds only short-lived user tokens (sync account work, IGSH-223; protocol in `docs/sync-protocol-v1.md`).
+- **No Cloudflare service token or other long-lived secret is ever embedded in the APK.** Android uses the desktop account service at `account.multiprompt.dev`: Access email OTP in a Custom Tab, exact app callback with state + PKCE S256, and rotating per-device user tokens in Keystore-backed `SecretStore`. Network errors must never clear login. Current schema-1 workspaces are plaintext metadata over HTTPS, not the older encrypted-sync/OIDC scaffolding; see `docs/account-workspaces.md`.
 
 Cleartext traffic is off (`res/xml/network_security_config.xml`).
 

@@ -18,7 +18,7 @@ class SecretStore(context: Context) {
         cipher.init(Cipher.ENCRYPT_MODE, encryptionKey())
         val ciphertext = cipher.doFinal(value)
         val encoded = Base64.encodeToString(cipher.iv + ciphertext, Base64.NO_WRAP)
-        preferences.edit().putString(id, encoded).commit()
+        check(preferences.edit().putString(id, encoded).commit()) { "Could not persist encrypted secret" }
     }
 
     fun get(id: String): ByteArray? {

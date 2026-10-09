@@ -15,6 +15,7 @@ data class TmuxSession(
     val windowName: String = "",
     val preview: String = "",
     val paneCommand: String = "",
+    val accountName: String? = null,
 ) {
     val agent: AgentKind
         get() = AgentKind.detect(name, title, preview, paneCommand)
@@ -26,6 +27,7 @@ data class TmuxSession(
      */
     val displayName: String
         get() {
+            accountName?.let { return it }
             val rawName = when {
                 usefulWindowName(windowName) -> windowName
                 title.isNotBlank() -> title

@@ -11,22 +11,18 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.view.WindowCompat
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.launch
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.activity.viewModels
 import dev.multiprompt.companion.ui.MultipromptApp
-import dev.multiprompt.companion.auth.SyncAuthManager
 import dev.multiprompt.companion.ui.AppTheme
 import dev.multiprompt.companion.ui.MultipromptTheme
 
 class MainActivity : ComponentActivity() {
 
-    private val syncAuth by lazy { SyncAuthManager(this) }
+    private val viewModel: MainViewModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            val viewModel: MainViewModel = viewModel()
             val state by viewModel.state.collectAsState()
             val systemDark = isSystemInDarkTheme()
             val sunlight = when (state.appTheme) {
@@ -50,19 +46,34 @@ class MainActivity : ComponentActivity() {
                 MultipromptApp(viewModel)
             }
         }
+        handleAuthIntent(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        viewModel.onResume()
+    }
+
+    override fun onPause() {
+        viewModel.onPause()
+        super.onPause()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         if (intent.getBooleanExtra(EXTRA_OPEN_UPDATE, false)) recreate()
-        if (intent.data?.toString()?.startsWith(AUTH_REDIRECT_PREFIX) == true) {
-            lifecycleScope.launch { syncAuth.handleAuthorizationResponse(intent) }
+        handleAuthIntent(intent)
+    }
+
+    private fun handleAuthIntent(intent: Intent) {
+        if (intent.data?.scheme == BuildConfig.APPLICATION_ID) {
+            viewModel.onAuthRedirect(Intent(intent))
+            intent.data = null
         }
     }
 
     companion object {
         const val EXTRA_OPEN_UPDATE = "open_update"
-        private const val AUTH_REDIRECT_PREFIX = "dev.multiprompt.companion://auth/callback"
     }
 }

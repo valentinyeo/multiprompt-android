@@ -21,7 +21,12 @@ import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.skills.SkillStore
 import dev.multiprompt.companion.auth.SyncAuthManager
 import android.content.Intent
-import kotlinx.coroutines.launch
+import dev.multiprompt.companion.account.AccountHostMap
+import dev.multiprompt.companion.account.AccountLayout
+import dev.multiprompt.companion.account.AccountLayoutStore
+import dev.multiprompt.companion.account.AccountTab
+import dev.multiprompt.companion.account.PendingLayout
+import org.json.JSONObject
 import dev.multiprompt.companion.ssh.PresentedHostKey
 import dev.multiprompt.companion.ssh.SshProblem
 import dev.multiprompt.companion.ssh.TmuxText
@@ -64,6 +69,12 @@ data class AppUiState(
     val sessionBucket: SessionBucket = SessionBucket.OPEN,
     val dissolvedSessions: List<DissolvedSession> = emptyList(),
     val crashReport: CrashReport? = null,
+    val signedIn: Boolean = false,
+    val accountLayout: AccountLayout? = null,
+    val accountSyncing: Boolean = false,
+    val accountPending: Boolean = false,
+    val accountError: String? = null,
+    val accountHosts: Map<Int, HostProfile> = emptyMap(),
     val workspaces: List<Workspace> = emptyList(),
     val workspaceSplitIds: List<String?> = listOf(null),
     val selectedWorkspaceId: String? = null,
@@ -108,6 +119,7 @@ enum class NewSessionMode { NEW, EXISTING }
  */
 data class NewSessionPicker(
     val hostId: String? = null,
+    val accountWorkspace: String? = null,
     val mode: NewSessionMode = NewSessionMode.NEW,
     val path: String = "",
     val directories: List<RemoteDirectory> = emptyList(),
@@ -146,12 +158,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val skills: SkillStore = app.skillStore
     val syncAuth: SyncAuthManager = app.syncAuth
 
-    private val initialWorkspaces = workspaceStore.ordered(workspaceStore.load(), emptyMap())
+    private val accountStore = AccountLayoutStore(application)
+    private var pendingLayout = accountStore.load(syncAuth.accountId())
+    private var foreground = false
+    private var accountRequestRunning = false
+    private var accountGeneration = 0
+    private val initialWorkspaces = pendingLayout?.edited?.workspaces.orEmpty().map { Workspace(id = it, name = it, hostId = "", remotePath = "") }
     private val _state = MutableStateFlow(
         AppUiState(
             hosts = hosts.load(),
             workspaces = initialWorkspaces,
-            workspaceSplitIds = workspaceStore.splitIds(initialWorkspaces, emptyMap()),
+            workspaceSplitIds = listOf(null) + initialWorkspaces.map { it.id },
+            signedIn = syncAuth.hasSession(),
+            accountLayout = pendingLayout?.edited,
+            accountPending = pendingLayout?.dirty == true,
+            accountHosts = AccountHostMap.resolve(hosts.load(), accountStore.hostOverrides()),
             newestSessionsAtBottom = sessionReads.newestSessionsAtBottom(),
             allSplitOnRight = sessionReads.allSplitOnRight(),
             readerDefaultFontScale = sessionReads.readerDefaultFontScale(),
@@ -170,10 +191,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             while (true) {
                 delay(SESSION_REFRESH_INTERVAL_MS)
                 sweepWarmReaders()
-                if (_state.value.hosts.isNotEmpty()) refresh()
+                if (foreground && _state.value.hosts.isNotEmpty()) refresh()
+            }
+        }
+        viewModelScope.launch {
+            while (true) {
+                delay(20_000)
+                if (foreground) syncAccount()
             }
         }
     }
+
+    fun onResume() {
+        foreground = true
+        refresh()
+        syncAccount()
+    }
+
+    fun onPause() { foreground = false }
 
     fun select(section: AppSection) {
         _state.update { it.copy(section = section) }
@@ -427,10 +462,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }.map { session ->
                     sessionReads.displayName(session)?.let { session.copy(title = it) } ?: session
                 }
-                val workspaces = workspaceStore.discover(sessions)
+                val mapping = AccountHostMap.resolve(current.hosts, accountStore.hostOverrides())
                 val sessionWorkspaceIds = sessions.mapNotNull { session ->
-                    workspaceStore.workspaceIdFor(session, workspaces)?.let { workspaceId ->
-                        SessionReadStore.key(session.hostId, session.name) to workspaceId
+                    current.accountLayout?.let { AccountHostMap.tabFor(session, it, mapping) }?.let { tab ->
+                        SessionReadStore.key(session.hostId, session.name) to tab.workspace
                     }
                 }.toMap()
                 val interactionEpochSeconds = current.sessionInteractionEpochSeconds + sessions
@@ -461,14 +496,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     }
                     .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) }
-                val orderedWorkspaces = workspaceStore.ordered(
-                    workspaces,
-                    sessionWorkspaceIds.values.groupingBy { it }.eachCount(),
-                )
-                val workspaceSplitIds = workspaceStore.splitIds(
-                    orderedWorkspaces,
-                    latestWorkspaceActivity(sessions, sessionWorkspaceIds, interactionEpochSeconds),
-                )
+                val orderedWorkspaces = current.workspaces
+                val workspaceSplitIds = listOf(null) + orderedWorkspaces.map { it.id }
                 val selectedWorkspaceId = when {
                     !current.workspaceSelectionInitialized -> workspaceSplitIds.firstOrNull()
                     current.selectedWorkspaceId == null -> null
@@ -490,11 +519,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 current.copy(
                     sessions = sessions,
                     sessionEtas = sessionEtas,
+                    accountHosts = mapping,
                     readerSession = current.readerSession?.let { open ->
-                        sessions.firstOrNull { it.hostId == open.hostId && it.name == open.name } ?: open
+                        val tab = current.accountLayout?.let { AccountHostMap.tabFor(open, it, mapping) }
+                        tab?.let { AccountHostMap.sessionFor(it, sessions, mapping) }
+                            ?: sessions.firstOrNull { it.hostId == open.hostId && it.name == open.name } ?: open
                     },
                     terminalSession = current.terminalSession?.let { open ->
-                        sessions.firstOrNull { it.hostId == open.hostId && it.name == open.name } ?: open
+                        val tab = current.accountLayout?.let { AccountHostMap.tabFor(open, it, mapping) }
+                        tab?.let { AccountHostMap.sessionFor(it, sessions, mapping) }
+                            ?: sessions.firstOrNull { it.hostId == open.hostId && it.name == open.name } ?: open
                     },
                     hostErrors = results.mapNotNull { result ->
                         result.error?.let { result.hostId to it }
@@ -679,108 +713,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val interactions = current.sessionInteractionEpochSeconds + (key to at)
             current.copy(
                 sessionInteractionEpochSeconds = interactions,
-                workspaceSplitIds = workspaceStore.splitIds(
-                    current.workspaces,
-                    latestWorkspaceActivity(current.sessions, current.sessionWorkspaceIds, interactions),
-                ),
+                workspaceSplitIds = listOf(null) + current.workspaces.map { it.id },
             )
         }
     }
 
     fun moveWorkspaceSplit(workspaceId: String?, delta: Int) {
-        _state.update { current ->
-            current.copy(
-                workspaceSplitIds = workspaceStore.moveSplit(
-                    current.workspaceSplitIds,
-                    workspaceId,
-                    delta,
-                ),
-            )
-        }
+        if (workspaceId == null) return
+        editAccountLayout { layout ->
+            val index = layout.workspaces.indexOf(workspaceId)
+            if (index < 0) layout else layout.copy(workspaces = layout.workspaces.toMutableList().apply {
+                add((index + delta).coerceIn(indices), removeAt(index))
+            })
+        }?.let { error -> _state.update { it.copy(accountError = error) } }
     }
 
-    fun resetWorkspaceSplitOrder() {
-        _state.update { current ->
-            current.copy(
-                workspaceSplitIds = workspaceStore.resetSplitOrder(
-                    current.workspaces,
-                    latestWorkspaceActivity(
-                        current.sessions,
-                        current.sessionWorkspaceIds,
-                        current.sessionInteractionEpochSeconds,
-                    ),
-                ),
-            )
-        }
-    }
+    fun resetWorkspaceSplitOrder() { publishAccountLayout() }
 
     fun openAdjacentWorkspace(delta: Int) {
-        val state = _state.value
-        val splits = if (state.allSplitOnRight) {
-            state.workspaceSplitIds.asReversed()
-        } else {
-            state.workspaceSplitIds
-        }
-        WorkspaceStore.adjacentSplit(splits, state.selectedWorkspaceId, delta)?.let(::selectWorkspace)
+        val splits = _state.value.workspaceSplitIds
+        val index = splits.indexOf(_state.value.selectedWorkspaceId).coerceAtLeast(0)
+        selectWorkspace(splits[Math.floorMod(index + delta, splits.size)])
     }
 
-    fun createWorkspace(name: String, hostId: String, remotePath: String): String? {
-        val cleanName = name.trim()
-        val cleanPath = remotePath.trim().trimEnd('/')
-        val error = when {
-            cleanName.isBlank() -> "Enter a workspace name"
-            _state.value.hosts.none { it.id == hostId } -> "Choose a VPS"
-            !cleanPath.startsWith('/') -> "Enter an absolute VPS project path"
-            else -> null
-        }
-        if (error != null) return error
-        val workspace = Workspace(name = cleanName, hostId = hostId, remotePath = cleanPath)
-        workspaceStore.upsert(workspace)
-        _state.update {
-            val workspaces = workspaceStore.ordered(
-                workspaceStore.discover(it.sessions),
-                it.sessionWorkspaceIds.values.groupingBy { id -> id }.eachCount(),
-            )
-            it.copy(
-                workspaces = workspaces,
-                workspaceSplitIds = workspaceStore.splitIds(
-                    workspaces,
-                    latestWorkspaceActivity(
-                        it.sessions,
-                        it.sessionWorkspaceIds,
-                        it.sessionInteractionEpochSeconds,
-                    ),
-                ),
-                selectedWorkspaceId = workspace.id,
-                workspaceSelectionInitialized = true,
-                sessionActionError = null,
-            )
-        }
-        return null
-    }
+    fun createWorkspace(name: String): String? =
+        editAccountLayout { it.copy(workspaces = it.workspaces + name.trim()) }
 
     fun moveSession(session: TmuxSession, workspace: Workspace) {
-        workspaceStore.assign(session, workspace.id)
-        val key = SessionReadStore.key(session.hostId, session.name)
-        _state.update {
-            val assignments = it.sessionWorkspaceIds + (key to workspace.id)
-            val workspaces = workspaceStore.ordered(
-                it.workspaces,
-                assignments.values.groupingBy { id -> id }.eachCount(),
-            )
-            it.copy(
-                sessionWorkspaceIds = assignments,
-                workspaces = workspaces,
-                workspaceSplitIds = workspaceStore.splitIds(
-                    workspaces,
-                    latestWorkspaceActivity(it.sessions, assignments, it.sessionInteractionEpochSeconds),
-                ),
-            )
-        }
+        addAccountSession(session, workspace.name)?.let { error -> _state.update { it.copy(accountError = error) } }
     }
 
     fun renameSession(session: TmuxSession, requestedName: String): String? {
         val displayName = requestedName.trim()
+        val tab = _state.value.accountLayout?.let { AccountHostMap.tabFor(session, it, _state.value.accountHosts) }
+        if (tab != null) return editAccountLayout { it.renameTab(tab.identity, displayName) }
         val error = when {
             displayName.isBlank() -> "Enter a session name"
             displayName.length > MAX_DISPLAY_NAME_LENGTH ->
@@ -883,6 +849,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * stays the source of truth: when it answers again, a session that still exists returns.
      */
     fun forgetSession(session: TmuxSession) {
+        _state.value.accountLayout?.let { AccountHostMap.tabFor(session, it, _state.value.accountHosts) }?.let(::closeAccountTab)
         val key = SessionReadStore.key(session.hostId, session.name)
         sessionCache.save(
             session.hostId,
@@ -963,6 +930,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             } ?: it.dissolvedSessions,
                         )
                     }
+                    _state.value.accountLayout?.let { AccountHostMap.tabFor(session, it, _state.value.accountHosts) }?.let(::closeAccountTab)
                     successor?.let(::openReader)
                     refresh()
                 }
@@ -1003,58 +971,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(dissolvedSessions = it.dissolvedSessions.filterNot { item -> item.key == session.key }) }
     }
 
-    fun createClaudeSession(workspace: Workspace) =
-        createSessionInWorkspace(workspace, AgentHarness.CLAUDE)
-
-    fun createShellSession(workspace: Workspace) =
-        createSessionInWorkspace(workspace, AgentHarness.SHELL)
-
-    /** Starts [harness] in a known workspace and opens it in the matching view. */
-    fun createSessionInWorkspace(workspace: Workspace, harness: AgentHarness) {
-        if (_state.value.creatingSession) return
-        val host = _state.value.hosts.firstOrNull { it.id == workspace.hostId }
-        if (host == null) {
-            _state.update { it.copy(sessionActionError = "The workspace VPS is missing") }
-            return
-        }
-        viewModelScope.launch {
-            _state.update { it.copy(creatingSession = true, sessionActionError = null) }
-            runCatching { ssh.createAgentSession(host, workspace.remotePath, harness) }
-                .onSuccess { sessionName ->
-                    val session = TmuxSession(
-                        hostId = host.id,
-                        name = sessionName,
-                        windows = 1,
-                        attachedClients = 0,
-                        lastActivityEpochSeconds = System.currentTimeMillis() / 1000,
-                        workingDirectory = workspace.remotePath,
-                    )
-                    workspaceStore.assign(session, workspace.id)
-                    workspaceStore.bumpPathUsage(host.id, workspace.remotePath)
-                    val key = SessionReadStore.key(session.hostId, session.name)
-                    _state.update {
-                        it.copy(
-                            sessions = (it.sessions + session).distinctBy { item ->
-                                SessionReadStore.key(item.hostId, item.name)
-                            },
-                            sessionWorkspaceIds = it.sessionWorkspaceIds + (key to workspace.id),
-                            creatingSession = false,
-                        )
-                    }
-                    if (harness == AgentHarness.SHELL) openTerminal(session) else openReader(session)
-                    refresh()
-                }
-                .onFailure { throwable ->
-                    _state.update {
-                        it.copy(
-                            creatingSession = false,
-                            sessionActionError = throwable.message ?: "Could not create the session",
-                        )
-                    }
-                }
-        }
-    }
-
     fun closeReader() {
         // The connection stays warm so reopening is instant; the sweep drops it if the
         // session is not visited again.
@@ -1063,7 +979,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startNewSession() {
-        _state.update { it.copy(newSession = NewSessionPicker(), sessionActionError = null) }
+        _state.update { it.copy(newSession = NewSessionPicker(accountWorkspace = it.selectedWorkspaceId), sessionActionError = null) }
         // One host means the host step would be a formality; go straight to its folders.
         _state.value.hosts.singleOrNull()?.let { host -> chooseNewSessionHost(host.id) }
     }
@@ -1074,7 +990,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun chooseNewSessionHost(hostId: String) {
         if (_state.value.hosts.none { it.id == hostId }) return
-        _state.update { it.copy(newSession = NewSessionPicker(hostId = hostId, loading = true)) }
+        _state.update { it.copy(newSession = NewSessionPicker(hostId = hostId, accountWorkspace = it.newSession?.accountWorkspace, loading = true)) }
         loadNewSessionDirectory(hostId, null)
     }
 
@@ -1183,21 +1099,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         lastActivityEpochSeconds = System.currentTimeMillis() / 1000,
                         workingDirectory = path,
                     )
-                    val workspace = workspaceFor(host.id, path)
-                    workspaceStore.assign(session, workspace.id)
                     workspaceStore.bumpPathUsage(host.id, path)
-                    val key = SessionReadStore.key(session.hostId, session.name)
                     _state.update {
                         it.copy(
-                            sessions = (it.sessions + session).distinctBy { item ->
-                                SessionReadStore.key(item.hostId, item.name)
-                            },
-                            sessionWorkspaceIds = it.sessionWorkspaceIds + (key to workspace.id),
-                            workspaces = (it.workspaces.filterNot { item -> item.id == workspace.id } + workspace)
-                                .sortedBy { item -> item.name.lowercase() },
+                            sessions = (it.sessions + session).distinctBy { item -> SessionReadStore.key(item.hostId, item.name) },
                             creatingSession = false,
                             newSession = null,
                         )
+                    }
+                    picker.accountWorkspace?.let { workspace ->
+                        addAccountSession(session, workspace)?.let { error -> _state.update { it.copy(accountError = error) } }
                     }
                     if (harness == AgentHarness.SHELL) openTerminal(session) else openReader(session)
                     refresh()
@@ -1242,17 +1153,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
         }
-    }
-
-    private fun workspaceFor(hostId: String, path: String): Workspace {
-        _state.value.workspaces.firstOrNull { it.hostId == hostId && it.remotePath == path }
-            ?.let { return it }
-        return Workspace(
-            id = UUID.nameUUIDFromBytes("$hostId::$path".toByteArray()).toString(),
-            name = path.substringAfterLast('/').ifBlank { path },
-            hostId = hostId,
-            remotePath = path,
-        ).also { workspaceStore.upsert(it) }
     }
 
     /** Archives the current thread and immediately advances through the remaining inbox. */
@@ -1352,16 +1252,127 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun installUpdate(release: UpdateRelease) = updates.install(release)
 
-    private val _authMessage = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
-    val authMessage: kotlinx.coroutines.flow.StateFlow<String?> = _authMessage
-
     fun onAuthRedirect(intent: Intent) {
+        val generation = accountGeneration
         viewModelScope.launch {
-            when (val result = syncAuth.handleAuthorizationResponse(intent)) {
-                is SyncAuthManager.TokenResult.Success ->
-                    _authMessage.value = "Signed in — sync is ready"
+            val result = syncAuth.handleAuthorizationResponse(intent)
+            if (generation != accountGeneration) return@launch
+            when (result) {
+                SyncAuthManager.TokenResult.Success -> {
+                    pendingLayout = accountStore.load(syncAuth.accountId())
+                    _state.update { it.copy(signedIn = true, accountError = null) }
+                    publishAccountLayout()
+                    syncAccount()
+                }
                 is SyncAuthManager.TokenResult.Failure ->
-                    _authMessage.value = result.message
+                    _state.update { it.copy(accountError = result.message) }
+            }
+        }
+    }
+
+    fun signOutAccount() {
+        accountGeneration++
+        pendingLayout = null
+        _state.update { it.copy(signedIn = false, accountLayout = null, accountPending = false,
+            accountError = null, workspaces = emptyList(), workspaceSplitIds = listOf(null), sessionWorkspaceIds = emptyMap()) }
+        viewModelScope.launch { syncAuth.signOut() }
+    }
+
+    fun mapAccountHost(slot: Int, hostId: String?) {
+        accountStore.setHost(slot, hostId)
+        publishAccountLayout()
+    }
+
+    private fun publishAccountLayout() {
+        val layout = pendingLayout?.edited
+        _state.update { current ->
+            val mapping = AccountHostMap.resolve(current.hosts, accountStore.hostOverrides())
+            val workspaces = layout?.workspaces.orEmpty().map { Workspace(id = it, name = it, hostId = "", remotePath = "") }
+            val assignments = current.sessions.mapNotNull { session ->
+                layout?.let { AccountHostMap.tabFor(session, it, mapping) }?.let { SessionReadStore.key(session.hostId, session.name) to it.workspace }
+            }.toMap()
+            current.copy(accountLayout = layout, accountPending = pendingLayout?.dirty == true, accountHosts = mapping,
+                workspaces = workspaces, workspaceSplitIds = listOf(null) + workspaces.map { it.id }, sessionWorkspaceIds = assignments,
+                selectedWorkspaceId = current.selectedWorkspaceId?.takeIf { it in layout?.workspaces.orEmpty() },
+                readerSession = current.readerSession?.let { open ->
+                    layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping) } ?: open
+                },
+                terminalSession = current.terminalSession?.let { open ->
+                    layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping) } ?: open
+                },
+            )
+        }
+    }
+
+    private fun saveAccountLayout(value: PendingLayout) {
+        val account = syncAuth.accountId() ?: throw IllegalStateException("Sign in before editing account workspaces")
+        accountStore.save(account, value)
+        pendingLayout = value
+        publishAccountLayout()
+    }
+
+    fun editAccountLayout(edit: (AccountLayout) -> AccountLayout): String? {
+        if (!_state.value.signedIn) return "Sign in before editing account workspaces"
+        val pending = pendingLayout ?: return "Pull the account layout before editing"
+        return try {
+            saveAccountLayout(pending.copy(edited = edit(pending.edited).validate()))
+            syncAccount()
+            null
+        } catch (e: Exception) { e.message ?: "Could not save account edit" }
+    }
+
+    fun addAccountSession(session: TmuxSession, workspace: String): String? {
+        val slot = _state.value.accountHosts.entries.firstOrNull { it.value.id == session.hostId }?.key
+            ?: return "Map this SSH profile to an account host first; direct inne/agent tmux is not host 0"
+        return editAccountLayout { layout ->
+            val existing = AccountHostMap.tabFor(session, layout, _state.value.accountHosts)
+            if (existing != null) layout.moveTab(existing.identity, workspace)
+            else layout.addTab(AccountTab(session.displayName.take(64), session.name, slot, workspace))
+        }
+    }
+
+    fun closeAccountTab(tab: AccountTab) {
+        editAccountLayout { it.closeTab(tab.identity) }?.let { error -> _state.update { it.copy(accountError = error) } }
+    }
+
+    fun syncAccount() {
+        if (accountRequestRunning) return
+        accountRequestRunning = true
+        val generation = accountGeneration
+        viewModelScope.launch {
+            _state.update { it.copy(accountSyncing = true) }
+            try {
+                val finishedLogin = syncAuth.finishPending()
+                if (generation != accountGeneration) return@launch
+                if (finishedLogin) {
+                    pendingLayout = accountStore.load(syncAuth.accountId())
+                    publishAccountLayout()
+                }
+                if (!syncAuth.hasSession()) return@launch
+                _state.update { it.copy(signedIn = true) }
+                var remote = AccountLayout.response(syncAuth.request("GET", "/v1/layout").json)
+                if (generation != accountGeneration) return@launch
+                saveAccountLayout(pendingLayout?.pull(remote) ?: PendingLayout(remote))
+                var retries = 0
+                while (pendingLayout?.dirty == true && retries++ < 4) {
+                    val sent = pendingLayout!!.edited
+                    val reply = syncAuth.request("PUT", "/v1/layout", JSONObject().put("base_revision", remote.revision).put("layout", sent.json()))
+                    if (generation != accountGeneration) return@launch
+                    if (reply.status == 409) {
+                        remote = AccountLayout.response(syncAuth.request("GET", "/v1/layout").json)
+                        if (generation != accountGeneration) return@launch
+                        saveAccountLayout(pendingLayout!!.pull(remote))
+                    } else {
+                        remote = AccountLayout.response(reply.json)
+                        saveAccountLayout(pendingLayout!!.acknowledge(sent, remote))
+                    }
+                }
+                _state.update { it.copy(accountError = if (pendingLayout?.dirty == true) "Account changed repeatedly; pending edits will retry" else null) }
+            } catch (e: Exception) {
+                if (generation == accountGeneration) _state.update { it.copy(signedIn = syncAuth.hasSession(), accountError = e.message ?: "Account offline; pending edits saved") }
+            } finally {
+                accountRequestRunning = false
+                _state.update { it.copy(accountSyncing = false) }
             }
         }
     }
@@ -1400,23 +1411,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
         }
         .let { sessions -> SessionSearch.newestFirst(sessions, state.sessionInteractionEpochSeconds) }
-
-    private fun latestWorkspaceActivity(
-        sessions: List<TmuxSession>,
-        assignments: Map<String, String>,
-        interactions: Map<String, Long> = emptyMap(),
-    ): Map<String, Long> = sessions
-        .mapNotNull { session ->
-            val key = SessionReadStore.key(session.hostId, session.name)
-            assignments[key]?.let { workspaceId ->
-                workspaceId to maxOf(
-                    session.lastActivityEpochSeconds,
-                    interactions[key] ?: 0L,
-                )
-            }
-        }
-        .groupingBy { it.first }
-        .fold(0L) { latest, entry -> maxOf(latest, entry.second) }
 
     private companion object {
         const val MAX_WARM_READERS = 3

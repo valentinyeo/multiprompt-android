@@ -1,0 +1,39 @@
+package dev.multiprompt.companion.account
+
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+import java.io.IOException
+import java.util.concurrent.TimeUnit
+
+fun interface AccountHttp {
+    fun request(method: String, path: String, token: String?, body: JSONObject?): AccountReply
+}
+
+data class AccountReply(val status: Int, val json: JSONObject)
+
+class AccountHttpClient : AccountHttp {
+    private val client = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
+        .connectTimeout(10, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS)
+        .callTimeout(25, TimeUnit.SECONDS).build()
+
+    override fun request(method: String, path: String, token: String?, body: JSONObject?): AccountReply {
+        val request = Request.Builder().url(ORIGIN + path).header("Accept", "application/json")
+            .method(method, body?.toString()?.toRequestBody("application/json".toMediaType()))
+        token?.let { request.header("Authorization", "Bearer $it") }
+        client.newCall(request.build()).execute().use { reply ->
+            val source = reply.body.source()
+            if (source.request(1024L * 1024L + 1)) throw IOException("Account response too large")
+            val text = source.readUtf8()
+            // Error pages from the network/edge are not invalid credentials.
+            val json = runCatching { JSONObject(text) }.getOrElse {
+                if (reply.isSuccessful) throw IOException("Invalid account response") else JSONObject()
+            }
+            return AccountReply(reply.code, json)
+        }
+    }
+
+    companion object { const val ORIGIN = "https://account.multiprompt.dev" }
+}

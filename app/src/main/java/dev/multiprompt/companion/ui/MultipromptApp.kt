@@ -184,7 +184,6 @@ import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
-import dev.multiprompt.companion.auth.SyncAuthManager
 import dev.multiprompt.companion.skills.Skill
 import dev.multiprompt.companion.skills.SkillModel
 import dev.multiprompt.companion.skills.SkillSnapshot
@@ -276,6 +275,8 @@ private fun AppScreens(viewModel: MainViewModel) {
     val state by viewModel.state.collectAsState()
     val updateState by viewModel.updates.state.collectAsState()
     val context = LocalContext.current
+    var inboxVisible by remember { mutableStateOf(false) }
+    BackHandler(enabled = inboxVisible && state.reader == null && state.terminal == null) { inboxVisible = false }
     val systemDark = isSystemInDarkTheme()
     val sunlight = when (state.appTheme) {
         AppTheme.SYSTEM -> !systemDark
@@ -343,7 +344,9 @@ private fun AppScreens(viewModel: MainViewModel) {
             dictation = viewModel.dictation,
             screencast = viewModel.screencast,
             skills = viewModel.skills,
-            syncAuth = viewModel.syncAuth,
+            signedIn = state.signedIn,
+            onSignIn = { context.startActivity(viewModel.syncAuth.buildAuthorizationIntent()) },
+            onSignOut = viewModel::signOutAccount,
             session = readerSession,
             unread = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.unreadSessionKeys,
             archived = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.archivedSessionKeys,
@@ -421,6 +424,9 @@ private fun AppScreens(viewModel: MainViewModel) {
         modifier = Modifier.fillMaxSize(),
         topBar = {
             Column(Modifier.statusBarsPadding()) {
+                if (inboxVisible && state.section == AppSection.SESSIONS) {
+                    TextButton(onClick = { inboxVisible = false }) { Text("← Account workspaces") }
+                }
                 if (state.section != AppSection.SESSIONS) {
                     Header(
                         refreshing = state.refreshing,
@@ -446,7 +452,7 @@ private fun AppScreens(viewModel: MainViewModel) {
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             when (state.section) {
-                AppSection.SESSIONS -> SessionsScreen(
+                AppSection.SESSIONS -> if (!inboxVisible) AccountWorkspacesScreen(viewModel, onInbox = { inboxVisible = true }) else SessionsScreen(
                     state = state,
                     onOpen = viewModel::openReader,
                     onOpenTerminal = viewModel::openTerminal,
@@ -1077,7 +1083,7 @@ private fun SessionsScreen(
     onSwitchWorkspace: (Int) -> Unit,
     onMoveWorkspaceSplit: (String?, Int) -> Unit,
     onResetWorkspaceSplitOrder: () -> Unit,
-    onCreateWorkspace: (String, String, String) -> String?,
+    onCreateWorkspace: (String) -> String?,
     onMoveSession: (TmuxSession, Workspace) -> Unit,
     onRenameSession: (TmuxSession, String) -> String?,
     onRefresh: () -> Unit,
@@ -1101,8 +1107,6 @@ private fun SessionsScreen(
     }
     var workspaceDialogVisible by remember { mutableStateOf(false) }
     var workspaceName by remember { mutableStateOf("") }
-    var workspacePath by remember { mutableStateOf("") }
-    var workspaceHostId by remember(state.hosts) { mutableStateOf(state.hosts.first().id) }
     var workspaceError by remember { mutableStateOf<String?>(null) }
     var splitOrderDialogVisible by remember { mutableStateOf(false) }
     var reminderPromptSession by remember { mutableStateOf<TmuxSession?>(null) }
@@ -1407,30 +1411,15 @@ private fun SessionsScreen(
                         label = { Text("Name") },
                         singleLine = true,
                     )
-                    OutlinedTextField(
-                        workspacePath,
-                        { workspacePath = it; workspaceError = null },
-                        label = { Text("VPS project path") },
-                        placeholder = { Text("/home/valentin/projects/project") },
-                        singleLine = true,
-                    )
-                    Row(Modifier.horizontalScroll(rememberScrollState())) {
-                        state.hosts.forEach { host ->
-                            TextButton(onClick = { workspaceHostId = host.id }) {
-                                Text(if (workspaceHostId == host.id) "✓ ${host.label}" else host.label)
-                            }
-                        }
-                    }
                     workspaceError?.let { InlineError(it) }
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    workspaceError = onCreateWorkspace(workspaceName, workspaceHostId, workspacePath)
+                    workspaceError = onCreateWorkspace(workspaceName)
                     if (workspaceError == null) {
                         workspaceDialogVisible = false
                         workspaceName = ""
-                        workspacePath = ""
                     }
                 }) { Text("Create") }
             },
@@ -2044,7 +2033,7 @@ private fun SessionCard(
                             )
                         }
                         if (!archived) {
-                            workspaces.filter { it.hostId == session.hostId }.forEach { workspace ->
+                            workspaces.forEach { workspace ->
                                 DropdownMenuItem(
                                     text = { Text("Move to ${workspace.name}") },
                                     onClick = {
@@ -2126,7 +2115,9 @@ private fun ReaderScreen(
     dictation: DeepgramDictation,
     screencast: ScreencastUploader,
     skills: SkillStore,
-    syncAuth: dev.multiprompt.companion.auth.SyncAuthManager,
+    signedIn: Boolean,
+    onSignIn: () -> Unit,
+    onSignOut: () -> Unit,
     session: TmuxSession,
     unread: Boolean,
     archived: Boolean,
@@ -2188,8 +2179,6 @@ private fun ReaderScreen(
     var skillMenuExpanded by remember(connection) { mutableStateOf(false) }
     var attachMenuExpanded by remember(connection) { mutableStateOf(false) }
     var historyDialogOpen by remember(connection) { mutableStateOf(false) }
-    var signedIn by remember(connection) { mutableStateOf(syncAuth.hasSession()) }
-    var pendingAuthLaunch by remember(connection) { mutableStateOf(false) }
     var skillSnapshot by remember(connection) { mutableStateOf(skills.loadFromCache()) }
     var attachedSkill by remember(connection) { mutableStateOf<Skill?>(null) }
     var dissolveDialogVisible by remember(connection) { mutableStateOf(false) }
@@ -2247,25 +2236,6 @@ private fun ReaderScreen(
                     pulledPx = 0f
                 }
                 return Offset.Zero
-            }
-        }
-    }
-    val authLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        if (pendingAuthLaunch) {
-            pendingAuthLaunch = false
-            val intent = result.data
-            readerScope.launch {
-                when (val r = syncAuth.handleAuthorizationResponse(intent)) {
-                    is dev.multiprompt.companion.auth.SyncAuthManager.TokenResult.Success -> {
-                        signedIn = true
-                        microphoneError = "Signed in — sync is ready"
-                    }
-                    is dev.multiprompt.companion.auth.SyncAuthManager.TokenResult.Failure -> {
-                        microphoneError = r.message
-                    }
-                }
             }
         }
     }
@@ -2857,12 +2827,7 @@ private fun ReaderScreen(
                                 },
                                 onClick = {
                                     menuExpanded = false
-                                    if (signedIn) {
-                                        syncAuth.signOut()
-                                    } else {
-                                        pendingAuthLaunch = true
-                                        authLauncher.launch(syncAuth.buildAuthorizationIntent())
-                                    }
+                                    if (signedIn) onSignOut() else onSignIn()
                                 },
                             )
                             DropdownMenuItem(

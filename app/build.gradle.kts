@@ -18,9 +18,7 @@ android {
 
     defaultConfig {
         applicationId = "dev.multiprompt.companion"
-        // AppAuth's manifest requires the redirect scheme placeholder; we handle the
-        // deep link ourselves in MainActivity, so the value matches our scheme.
-        manifestPlaceholders["appAuthRedirectScheme"] = "dev.multiprompt.companion"
+        manifestPlaceholders["accountRedirectScheme"] = "dev.multiprompt.companion"
         minSdk = 26
         targetSdk = 36
         versionCode = releaseVersionCode
@@ -48,6 +46,7 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
+            manifestPlaceholders["accountRedirectScheme"] = "dev.multiprompt.companion.debug"
             versionNameSuffix = "-debug"
         }
         release {
@@ -102,7 +101,7 @@ dependencies {
     implementation(libs.connectbot.ssh)
     implementation(libs.bouncycastle)
     implementation(libs.okhttp)
-    implementation(libs.appauth)
+    implementation(libs.androidx.browser)
     implementation(libs.androidx.work)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
