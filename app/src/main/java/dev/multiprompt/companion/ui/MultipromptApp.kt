@@ -424,9 +424,6 @@ private fun AppScreens(viewModel: MainViewModel) {
         modifier = Modifier.fillMaxSize(),
         topBar = {
             Column(Modifier.statusBarsPadding()) {
-                if (inboxVisible && state.section == AppSection.SESSIONS) {
-                    TextButton(onClick = { inboxVisible = false }) { Text("← Account workspaces") }
-                }
                 if (state.section != AppSection.SESSIONS) {
                     Header(
                         refreshing = state.refreshing,
