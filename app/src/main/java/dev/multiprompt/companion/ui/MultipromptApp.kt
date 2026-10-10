@@ -430,7 +430,6 @@ private fun AppScreens(viewModel: MainViewModel) {
                         onRefresh = viewModel::refresh,
                         section = state.section,
                         onSelect = viewModel::select,
-                        onBack = { viewModel.select(AppSection.SESSIONS) },
                     )
                 }
                 val available = updateState as? UpdateState.Available
@@ -652,19 +651,9 @@ private fun Header(
     onRefresh: () -> Unit,
     section: AppSection,
     onSelect: (AppSection) -> Unit,
-    onBack: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     TopAppBar(
-        navigationIcon = if (section != AppSection.SESSIONS) {
-            {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to sessions")
-                }
-            }
-        } else {
-            {}
-        },
         title = {
             Column {
                 Text(
@@ -2929,15 +2918,6 @@ private fun ReaderScreen(
                         Spacer(Modifier.size(2.dp))
                         Text(if (archived) "Open" else "Wait", maxLines = 1, softWrap = false)
                     }
-                    OutlinedButton(
-                        onClick = onBack,
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 8.dp),
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, Modifier.size(18.dp))
-                        Spacer(Modifier.size(2.dp))
-                        Text("Back", maxLines = 1, softWrap = false)
-                    }
                 }
                 if (imageAttachments.isNotEmpty()) {
                     Row(
@@ -3378,18 +3358,28 @@ private fun ReaderScreen(
                                     color = if (isUser && sunlightMode) Color.White else MaterialTheme.colorScheme.onSurface,
                                 )
                                 SelectionContainer {
-                                    Text(
-                                        terminalLinks(message.text, sunlightMode, onDark = isUser && sunlightMode),
-                                        fontSize = transcriptFontSize,
-                                        lineHeight = (transcriptFontSize.value * 1.5f).sp,
-                                        color = if (isUser) {
-                                            if (sunlightMode) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
-                                        } else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
+                                    val bodyColor = if (isUser) {
+                                        if (sunlightMode) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
+                                    } else MaterialTheme.colorScheme.onSurfaceVariant
+                                    if (isUser) {
+                                        Text(
+                                            terminalLinks(message.text, sunlightMode, onDark = sunlightMode),
+                                            fontSize = transcriptFontSize,
+                                            lineHeight = (transcriptFontSize.value * 1.5f).sp,
+                                            color = bodyColor,
+                                        )
+                                    } else {
+                                        MarkdownText(
+                                            text = message.text,
+                                            fontSize = transcriptFontSize,
+                                            color = bodyColor,
+                                            linkColor = terminalBlue(sunlightMode),
+                                        )
+                                    }
                                 }
                                 message.timestamp?.let { timestamp ->
                                     Text(
-                                        timestamp,
+                                        formatChatTime(timestamp),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = if (isUser && sunlightMode) Color.White else MaterialTheme.colorScheme.onSurface,
                                     )
@@ -3718,9 +3708,6 @@ private fun HostEditorScreen(
             TopAppBar(
                 modifier = Modifier.statusBarsPadding(),
                 title = { Text(if (host == null) "Add VPS" else "Edit ${host.label}") },
-                navigationIcon = {
-                    IconButton(onClick = onCancel) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                },
             )
         },
     ) { padding ->
@@ -3955,9 +3942,6 @@ private fun TerminalScreen(
                         )
                     }
                 },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Close terminal") }
-                },
                 actions = {
                     // A full-screen agent keeps its history inside itself and the emulator keeps
                     // no scrollback for that screen, so paging is the only way back.
@@ -4041,7 +4025,6 @@ private fun TerminalScreen(
                 Card(Modifier.align(Alignment.Center).padding(24.dp)) {
                     Column(Modifier.padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text((status as TerminalStatus.Failed).message, color = MaterialTheme.colorScheme.error)
-                        TextButton(onClick = onBack) { Text("Back") }
                     }
                 }
             }
