@@ -119,13 +119,9 @@ class DeepgramDictation(
             status = DictationStatus.CONNECTING,
             configured = true,
         )
-        val request = Request.Builder()
-            .url(DEEPGRAM_LISTEN_URL)
-            .header("Authorization", "Token $apiKey")
-            .build()
         // Start recording immediately around the websocket handshake. Audio is buffered until
         // Deepgram is ready, so the first words are not lost during network setup.
-        socket = client.newWebSocket(request, Listener())
+        socket = openSocket(apiKey, 0)
         startRecorder()
     }
 
@@ -306,7 +302,18 @@ class DeepgramDictation(
         scope.cancel()
     }
 
-    private inner class Listener : WebSocketListener() {
+    private fun openSocket(apiKey: String, hostIndex: Int): WebSocket {
+        val request = Request.Builder()
+            .url(DeepgramEndpoint.url(hostIndex))
+            .header("Authorization", "Token $apiKey")
+            .build()
+        return client.newWebSocket(request, Listener(apiKey, hostIndex))
+    }
+
+    private inner class Listener(
+        private val apiKey: String,
+        private val hostIndex: Int,
+    ) : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
             if (socket !== webSocket) {
                 webSocket.cancel()
@@ -346,11 +353,13 @@ class DeepgramDictation(
                 finishWithoutError()
                 return
             }
-            val message = when (response?.code) {
-                401, 403 -> "Deepgram rejected the API key"
-                else -> "Dictation connection failed"
+            val opened = synchronized(audioLock) { socketOpen }
+            if (DeepgramEndpoint.shouldTryNextHost(hostIndex, response?.code, opened, stopping)) {
+                // Audio stays buffered in pendingAudio while the next host handshakes.
+                socket = openSocket(apiKey, hostIndex + 1)
+                return
             }
-            fail(message)
+            fail(DeepgramEndpoint.failureMessage(response?.code, t))
         }
     }
 
@@ -378,11 +387,6 @@ class DeepgramDictation(
         const val AUDIO_BUFFER_BYTES = 3_200
         const val MAX_PENDING_AUDIO_BYTES = SAMPLE_RATE * 2 * 8
         const val FINAL_RESULT_WAIT_MS = 1_200L
-        const val DEEPGRAM_LISTEN_URL =
-            "wss://api.eu.deepgram.com/v1/listen" +
-                "?model=nova-3&language=en&smart_format=true&punctuate=true" +
-                "&interim_results=true&endpointing=300&encoding=linear16" +
-                "&sample_rate=$SAMPLE_RATE&channels=1"
         val ACTIVE_STATUSES = setOf(
             DictationStatus.CONNECTING,
             DictationStatus.LISTENING,

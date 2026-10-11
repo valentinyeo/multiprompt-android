@@ -1682,7 +1682,7 @@ private fun SessionsScreen(
                 .background(MaterialTheme.colorScheme.surface)
                 .navigationBarsPadding(),
         ) {
-            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(splitScrollState).padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -2047,7 +2047,7 @@ private fun SessionCard(
                     }
                 }
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
         }
     }
 }
@@ -3339,52 +3339,39 @@ private fun ReaderScreen(
                 }
                 transcript?.forEach { message ->
                     val isUser = message.role == "user"
-                    Box(
-                        Modifier.fillMaxWidth(),
-                        contentAlignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart,
-                    ) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(0.94f),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isUser) {
-                                    if (sunlightMode) PromptBubbleLight else MaterialTheme.colorScheme.primaryContainer
-                                } else MaterialTheme.colorScheme.surfaceVariant,
-                            ),
-                        ) {
-                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    val bodyColor = chatTextColor(sunlightMode)
+                    ChatBubble(isUser = isUser, sunlight = sunlightMode) {
+                        Text(
+                            if (isUser) "You" else session.agent.label,
+                            fontFamily = ChatFontFamily,
+                            fontSize = (transcriptFontSize.value - 3f).coerceAtLeast(8f).sp,
+                            color = chatHintColor(sunlightMode),
+                        )
+                        SelectionContainer {
+                            if (isUser) {
                                 Text(
-                                    if (isUser) "You" else session.agent.label,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (isUser && sunlightMode) Color.White else MaterialTheme.colorScheme.onSurface,
+                                    terminalLinks(message.text, sunlightMode),
+                                    fontFamily = ChatFontFamily,
+                                    fontSize = transcriptFontSize,
+                                    lineHeight = (transcriptFontSize.value * 1.5f).sp,
+                                    color = bodyColor,
                                 )
-                                SelectionContainer {
-                                    val bodyColor = if (isUser) {
-                                        if (sunlightMode) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
-                                    } else MaterialTheme.colorScheme.onSurfaceVariant
-                                    if (isUser) {
-                                        Text(
-                                            terminalLinks(message.text, sunlightMode, onDark = sunlightMode),
-                                            fontSize = transcriptFontSize,
-                                            lineHeight = (transcriptFontSize.value * 1.5f).sp,
-                                            color = bodyColor,
-                                        )
-                                    } else {
-                                        MarkdownText(
-                                            text = message.text,
-                                            fontSize = transcriptFontSize,
-                                            color = bodyColor,
-                                            linkColor = terminalBlue(sunlightMode),
-                                        )
-                                    }
-                                }
-                                message.timestamp?.let { timestamp ->
-                                    Text(
-                                        formatChatTime(timestamp),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (isUser && sunlightMode) Color.White else MaterialTheme.colorScheme.onSurface,
-                                    )
-                                }
+                            } else {
+                                MarkdownText(
+                                    text = message.text,
+                                    fontSize = transcriptFontSize,
+                                    color = bodyColor,
+                                    linkColor = terminalBlue(sunlightMode),
+                                )
                             }
+                        }
+                        message.timestamp?.let { timestamp ->
+                            Text(
+                                formatChatTime(timestamp),
+                                fontFamily = ChatFontFamily,
+                                fontSize = (transcriptFontSize.value - 3f).coerceAtLeast(8f).sp,
+                                color = chatHintColor(sunlightMode),
+                            )
                         }
                     }
                 }
@@ -3398,50 +3385,37 @@ private fun ReaderScreen(
                 visibleReaderBlocks.forEachIndexed { index, block ->
                     val blockKey = readerBlockKey(block)
                     when (block.kind) {
-                        TmuxText.ReaderBlockKind.PROSE -> if (sunlightMode) {
-                            // ChatGPT-style light transcript: prose sits directly on the page, no card.
-                            SelectionContainer {
-                                Text(
-                                    terminalLinks(block.text, sunlightMode),
-                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                    fontFamily = FontFamily.Default,
-                                    fontSize = transcriptFontSize,
-                                    lineHeight = (transcriptFontSize.value * 1.5f).sp,
-                                    color = MaterialTheme.colorScheme.onBackground,
-                                )
+                        TmuxText.ReaderBlockKind.PROSE -> {
+                            // One bubble per agent reply: consecutive prose blocks share it, so
+                            // only the first of a run draws, the paragraph gap is 8 dp inside.
+                            if (index > 0 && visibleReaderBlocks[index - 1].kind == TmuxText.ReaderBlockKind.PROSE) {
+                                return@forEachIndexed
                             }
-                        } else {
-                            Card(
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                ),
-                            ) {
+                            val run = visibleReaderBlocks.drop(index)
+                                .takeWhile { it.kind == TmuxText.ReaderBlockKind.PROSE }
+                            ChatBubble(isUser = false, sunlight = sunlightMode) {
                                 SelectionContainer {
-                                    Text(
-                                        terminalLinks(block.text, sunlightMode),
-                                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                        fontFamily = FontFamily.Default,
-                                        fontSize = transcriptFontSize,
-                                        lineHeight = (transcriptFontSize.value * 1.5f).sp,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        run.forEach { part ->
+                                            Text(
+                                                terminalLinks(part.text, sunlightMode),
+                                                fontFamily = ChatFontFamily,
+                                                fontSize = transcriptFontSize,
+                                                lineHeight = (transcriptFontSize.value * 1.5f).sp,
+                                                color = chatTextColor(sunlightMode),
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
-                        TmuxText.ReaderBlockKind.USER_PROMPT -> Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (sunlightMode) PromptBubbleLight else MaterialTheme.colorScheme.primaryContainer,
-                            ),
-                        ) {
+                        TmuxText.ReaderBlockKind.USER_PROMPT -> ChatBubble(isUser = true, sunlight = sunlightMode) {
                             Text(
-                                // Links sit on the near-black prompt bubble in sunlight mode,
-                                // where the dark-on-white blue would vanish.
-                                terminalLinks(block.text, sunlightMode, onDark = sunlightMode),
-                                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                fontFamily = FontFamily.Default,
+                                terminalLinks(block.text, sunlightMode),
+                                fontFamily = ChatFontFamily,
                                 fontSize = transcriptFontSize,
-                                lineHeight = (transcriptFontSize.value * 1.45f).sp,
-                                color = if (sunlightMode) Color.White else MaterialTheme.colorScheme.onPrimaryContainer,
+                                lineHeight = (transcriptFontSize.value * 1.5f).sp,
+                                color = chatTextColor(sunlightMode),
                             )
                         }
                         TmuxText.ReaderBlockKind.CODE,
@@ -3486,8 +3460,9 @@ private fun ReaderCollapsibleBlock(
     ).joinToString(" · ")
     Card(
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(ChatBubbleRadius),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
         ),
     ) {
         Column(Modifier.fillMaxWidth()) {
@@ -3520,7 +3495,7 @@ private fun ReaderCollapsibleBlock(
                 }
             }
             if (expanded) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
                 SelectionContainer {
                     if (isCode) {
                         Text(

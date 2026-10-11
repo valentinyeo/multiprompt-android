@@ -48,7 +48,8 @@ fun MarkdownText(
     val blocks = remember(text) { MarkdownParser.parse(text) }
     val codeBg = color.copy(alpha = 0.10f)
     val lineHeight = (fontSize.value * 1.5f).sp
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    androidx.compose.material3.ProvideTextStyle(androidx.compose.ui.text.TextStyle(fontFamily = ChatFontFamily)) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         blocks.forEach { block ->
             when (block) {
                 is MdBlock.Paragraph -> Text(
@@ -88,7 +89,7 @@ fun MarkdownText(
                 is MdBlock.Code -> Box(
                     Modifier
                         .fillMaxWidth()
-                        .background(codeBg, RoundedCornerShape(8.dp))
+                        .background(codeBg, RoundedCornerShape(4.dp))
                         .horizontalScroll(rememberScrollState())
                         .padding(10.dp),
                 ) {
@@ -109,6 +110,7 @@ fun MarkdownText(
             }
         }
     }
+    }
 }
 
 @Composable
@@ -123,7 +125,7 @@ private fun MarkdownTable(
     val columns = maxOf(table.header.size, table.rows.maxOfOrNull { it.size } ?: 0)
     Column(
         Modifier.horizontalScroll(rememberScrollState())
-            .background(color.copy(alpha = 0.05f), RoundedCornerShape(6.dp)),
+            .background(color.copy(alpha = 0.05f), RoundedCornerShape(4.dp)),
     ) {
         (listOf(table.header) + table.rows).forEachIndexed { rowIndex, row ->
             Row {
