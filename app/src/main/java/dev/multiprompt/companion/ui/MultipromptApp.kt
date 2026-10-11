@@ -81,22 +81,18 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -275,8 +271,8 @@ private fun AppScreens(viewModel: MainViewModel) {
     val state by viewModel.state.collectAsState()
     val updateState by viewModel.updates.state.collectAsState()
     val context = LocalContext.current
-    var inboxVisible by remember { mutableStateOf(false) }
-    BackHandler(enabled = inboxVisible && state.reader == null && state.terminal == null) { inboxVisible = false }
+    // The app always opens on the Inbox. The workspaces view is reached with Back from Hosts or Update.
+    var inboxVisible by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(StartScreen.INBOX_ON_LAUNCH) }
     val systemDark = isSystemInDarkTheme()
     val sunlight = when (state.appTheme) {
         AppTheme.SYSTEM -> !systemDark
@@ -320,7 +316,10 @@ private fun AppScreens(viewModel: MainViewModel) {
             state.reader == null &&
             !state.editorVisible &&
             state.section != AppSection.SESSIONS,
-        onBack = { viewModel.select(AppSection.SESSIONS) },
+        onBack = {
+            inboxVisible = StartScreen.inboxAfterLeaving(state.section)
+            viewModel.select(AppSection.SESSIONS)
+        },
     )
 
     val terminal = state.terminal
@@ -2966,7 +2965,7 @@ private fun ReaderScreen(
                     },
                     minLines = 1,
                     maxLines = 6,
-                    shape = RoundedCornerShape(24.dp),
+                    shape = ControlShape,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = { submitPrompt() }),
                     readOnly = dictationActive,
