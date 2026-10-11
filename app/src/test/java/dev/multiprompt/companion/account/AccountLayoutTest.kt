@@ -115,4 +115,17 @@ class AccountLayoutTest {
         assertEquals("ONE", result.tabs[0].session)
         assertTrue(result.tabs[0].manual)
     }
+
+    @Test fun phoneCloseDropsOnlyThatTabAndNeverWipesUnknownTabsOrWorkspaces() {
+        val inne = AccountTab("Inne", "inne", 0, "inne")
+        val remote = AccountLayout(9, listOf("Other", "Product", "inne"), listOf(one, two, inne))
+        val sent = PendingLayout(base, base.closeTab(one.identity)).pull(remote).edited
+        assertEquals(listOf("two", "inne"), sent.tabs.map { it.session })
+        assertEquals(remote.workspaces, sent.workspaces)
+        val renamed = PendingLayout(base, base.renameWorkspace("Product", "P2")).pull(remote).edited
+        assertEquals(listOf("one", "two", "inne"), renamed.tabs.map { it.session })
+        assertTrue("inne" in renamed.workspaces)
+        assertFalse(PendingLayout(base).pull(remote).dirty)
+        assertEquals(remote.tabs, PendingLayout(AccountLayout()).pull(remote).edited.tabs)
+    }
 }
