@@ -5,8 +5,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-val releaseVersionCode = providers.gradleProperty("versionCode").orNull?.toIntOrNull() ?: 1
-val releaseVersionName = providers.gradleProperty("versionName").orNull ?: "0.1.0-dev"
+val releaseVersionCode = providers.gradleProperty("versionCode").orNull?.toIntOrNull() ?: 2
+val releaseVersionName = providers.gradleProperty("versionName").orNull ?: "0.1.1-dev"
 val signingProperties = rootProject.file("keystore.properties")
 val signing = Properties().apply {
     if (signingProperties.isFile) signingProperties.inputStream().use(::load)
@@ -105,6 +105,9 @@ dependencies {
     implementation(libs.androidx.work)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
     testImplementation(libs.junit)
     testImplementation(libs.json)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.robolectric)
 }
