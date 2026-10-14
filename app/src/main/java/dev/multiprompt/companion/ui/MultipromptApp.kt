@@ -2182,7 +2182,7 @@ private fun ReaderScreen(
         transcriptZoom = nextScale
         onFontScaleChanged(nextScale)
     }
-    val scrollState = rememberScrollState()
+    val scrollState = rememberReaderScrollState(connection)
     val density = LocalDensity.current
     val context = LocalContext.current
     val readerScope = rememberCoroutineScope()
@@ -2279,31 +2279,6 @@ private fun ReaderScreen(
         }
     }
 
-    // Open at the newest message and stay there while the agent works; only a deliberate
-    // scroll (drag or fling) unpins. The previous version computed "pinned" from the current
-    // position every frame, so a freshly opened session (position 0, content below) counted
-    // as "scrolled up" and never followed the tail.
-    var pinnedToBottom by remember(connection) { mutableStateOf(true) }
-    LaunchedEffect(connection, scrollState, density) {
-        val bottomThresholdPx = with(density) { 56.dp.roundToPx() }
-        launch {
-            // Recompute on every scroll frame, not only when the gesture starts. On the first
-            // frame the finger has not moved yet, so a start-only check always read "still at
-            // the bottom" and pinned the transcript there: every new snapshot then yanked it
-            // back down and scrolling up was impossible.
-            snapshotFlow { scrollState.isScrollInProgress to scrollState.value }
-                .collect { (inProgress, value) ->
-                    if (inProgress) {
-                        pinnedToBottom = scrollState.maxValue - value <= bottomThresholdPx
-                    }
-                }
-        }
-        snapshotFlow { scrollState.maxValue }.collect { newMaximum ->
-            if (pinnedToBottom && !scrollState.isScrollInProgress && newMaximum > 0) {
-                scrollState.scrollTo(newMaximum)
-            }
-        }
-    }
     LaunchedEffect(reader.completedActions) {
         val pending = pendingPromptAction
         if (pending != null && reader.completedActions > pending) {
@@ -3114,8 +3089,8 @@ private fun ReaderScreen(
             Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .verticalScroll(scrollState)
                 .nestedScroll(overscrollLoader)
+                .readerScroll(scrollState)
                 .pointerInput(onOpenTerminal) {
                     detectTapGestures(onDoubleTap = { onOpenTerminal() })
                 }
