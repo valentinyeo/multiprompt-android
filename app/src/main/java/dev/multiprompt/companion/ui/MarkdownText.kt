@@ -36,7 +36,6 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** Renders a Markdown chat reply: headings, lists, quotes, code, tables, rules and tappable links. */
 @Composable
 fun MarkdownText(
     text: String,

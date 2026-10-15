@@ -12,24 +12,7 @@ import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-// Note: this file deliberately uses only java.security + BouncyCastle (already on the
-// classpath for sshlib). The entity-record API seals one entity per canonical JSON
-// payload; the per-row revision/tombstone/concurrency semantics live server-side (D1)
-// and in the sync client, not in the crypto envelope.
 
-/**
- * multiprompt sync protocol v1 — see docs/sync-protocol-v1.md.
- *
- * Key hierarchy: the account passphrase derives a KEK with Argon2id; a random 256-bit
- * vault key is the content key and is wrapped with the KEK (AES-256-GCM, AAD binds the
- * exact KDF parameters); every record is sealed with the vault key (AES-256-GCM, AAD
- * binds the record id). The passphrase is never a content key, and the vault key never
- * travels unsealed.
- *
- * The canonical envelope emitted here is the cross-language contract with the desktop
- * side (zigshell). The committed fixtures in app/src/test/resources/sync/ must reproduce
- * byte-for-byte in every implementation.
- */
 object SyncProtocol {
 
     const val VERSION = 1
@@ -48,9 +31,6 @@ object SyncProtocol {
     private const val ITERATIONS = 3
     private const val PARALLELISM = 1
 
-    // Recovery key wrap (see "Recovery key" in docs/sync-protocol-v1.md): a second,
-    // independent seal of the same vault key, unwrapped with a key derived from a
-    // 256-bit recovery key via HKDF (high-entropy input, so no Argon2 needed).
     private const val RECOVERY_KDF_ALG = "hkdf-sha256"
     private const val RECOVERY_INFO = "multiprompt-sync-v1 recovery"
 
@@ -58,7 +38,6 @@ object SyncProtocol {
         enum class Reason { MALFORMED, UNSUPPORTED_VERSION, WRONG_PASSPHRASE, TAMPERED, WRONG_RECOVERY_KEY, BAD_RECOVERY_KEY_FORMAT }
     }
 
-    /** KDF parameters exactly as stored inside the envelope. */
     data class KdfParams(
         val memoryKiB: Int,
         val iterations: Int,
@@ -67,10 +46,6 @@ object SyncProtocol {
         val version: Int = ARGON2_VERSION_13,
     )
 
-    /**
-     * Seals [records] into a canonical v1 envelope with fresh randomness: a random salt,
-     * a random vault key, a random wrap IV, and a random IV per record.
-     */
     fun seal(passphrase: CharArray, records: Map<String, ByteArray>): ByteArray {
         val random = SecureRandom()
         val salt = randomBytes(random, SALT_BYTES)
@@ -80,10 +55,6 @@ object SyncProtocol {
         return sealWith(passphrase, records, salt, vaultKey, wrapIv, recordIvs)
     }
 
-    /**
-     * Deterministic core: fixed salt, vault key and IVs. The fixtures and tests use this
-     * to reproduce envelopes byte-for-byte; [seal] is the randomized production entry.
-     */
     fun sealWith(
         passphrase: CharArray,
         records: Map<String, ByteArray>,
@@ -109,11 +80,6 @@ object SyncProtocol {
         return canonicalEnvelope(kdf, wrapIv, wrapCt, sealed, recordIvs)
     }
 
-    /**
-     * Opens a canonical envelope with [passphrase] and returns the decrypted records.
-     * A wrong passphrase (or a tampered wrap block) fails the wrap tag as
-     * WRONG_PASSPHRASE; a record whose wrap opened but whose own tag fails is TAMPERED.
-     */
     fun open(passphrase: CharArray, envelope: ByteArray): Map<String, ByteArray> {
         val root = runCatching { JSONObject(String(envelope, Charsets.UTF_8)) }
             .getOrElse { malformed("envelope is not valid JSON") }
@@ -152,15 +118,8 @@ object SyncProtocol {
         return decrypted
     }
 
-    /** Result of sealing a fresh vault with both a passphrase and a recovery key. */
     data class SealedVault(val envelope: ByteArray, val vaultKey: ByteArray, val recoveryKey: String)
 
-    /**
-     * Seals [records] into a v1 envelope with fresh randomness, wrapping the vault key
-     * under both [passphrase] and a freshly generated recovery key. The recovery key
-     * string is returned exactly once — the caller must show it to the user (print/save);
-     * it is never stored, and losing both it and the passphrase means starting fresh.
-     */
     fun sealNewWithRecovery(passphrase: CharArray, records: Map<String, ByteArray>): SealedVault {
         val random = SecureRandom()
         val salt = randomBytes(random, SALT_BYTES)
@@ -174,10 +133,6 @@ object SyncProtocol {
         return SealedVault(envelope, vaultKey, RecoveryKey.encode(recoveryKeyBytes))
     }
 
-    /**
-     * Deterministic core of [sealNewWithRecovery]: every random input pinned. Fixtures
-     * and tests use this to reproduce envelopes with a recovery block byte-for-byte.
-     */
     fun sealWithRecovery(
         passphrase: CharArray,
         records: Map<String, ByteArray>,
@@ -211,19 +166,8 @@ object SyncProtocol {
         return canonicalEnvelopeWithRecovery(kdf, wrapIv, wrapCt, sealed, recordIvs, recoverySalt, recoveryIv, recoveryCt)
     }
 
-    /** Result of opening a vault with its recovery key: the vault key plus every record. */
     data class RecoveryOpenResult(val vaultKey: ByteArray, val records: Map<String, ByteArray>)
 
-    /**
-     * Opens a v1 envelope with a user-typed recovery key string (see [RecoveryKey]),
-     * returning the unwrapped vault key alongside every decrypted record. The caller uses
-     * the vault key to set a new passphrase via [rewrapPassphrase] — the recovery flow
-     * never re-derives or changes the recovery key itself.
-     *
-     * A malformed/mistyped recovery key string fails as `BAD_RECOVERY_KEY_FORMAT`; an
-     * envelope with no recovery block configured fails as `MALFORMED`; a well-formed but
-     * wrong recovery key fails the wrap tag as `WRONG_RECOVERY_KEY`.
-     */
     fun openWithRecoveryKey(recoveryKey: String, envelope: ByteArray): RecoveryOpenResult {
         val recoveryKeyBytes = RecoveryKey.decode(recoveryKey)
         val root = runCatching { JSONObject(String(envelope, Charsets.UTF_8)) }
@@ -266,18 +210,11 @@ object SyncProtocol {
         return RecoveryOpenResult(vaultKey, decrypted)
     }
 
-    /**
-     * Re-wraps [vaultKey] under [newPassphrase] with fresh randomness: the passphrase
-     * change flow after a recovery-key open. Records and the recovery block are copied
-     * through unchanged — only the `kdf`/`wrap` blocks are replaced, so records never
-     * need re-encryption on a passphrase change (per the key-hierarchy invariant).
-     */
     fun rewrapPassphrase(vaultKey: ByteArray, newPassphrase: CharArray, envelope: ByteArray): ByteArray {
         val random = SecureRandom()
         return rewrapPassphraseWith(vaultKey, newPassphrase, randomBytes(random, SALT_BYTES), randomBytes(random, IV_BYTES), envelope)
     }
 
-    /** Deterministic core of [rewrapPassphrase]: fixed salt and wrap IV. */
     fun rewrapPassphraseWith(
         vaultKey: ByteArray,
         newPassphrase: CharArray,
@@ -327,11 +264,6 @@ object SyncProtocol {
         }.toByteArray(Charsets.UTF_8)
     }
 
-    /**
-     * Authenticated metadata bound into every entity record's GCM AAD: schema version,
-     * record id, entity id, account, and the row revision this payload seals. Mirrors the
-     * D1 row's indexed columns so the database cannot shuffle or replay rows undetected.
-     */
     data class EntityMetadata(
         val recordId: String,
         val entityId: String,
@@ -340,12 +272,6 @@ object SyncProtocol {
         val schemaVersion: Int = VERSION,
     )
 
-    /**
-     * Seals one entity into a canonical entity-record payload for the sync transport
-     * (one D1 row per entity; see docs/sync-protocol-v1.md). The AAD binds the full
-     * metadata — record id, entity id, account, revision, schema version — so a payload
-     * cannot be replayed onto another account, row, or an older revision.
-     */
     fun sealEntity(
         vaultKey: ByteArray,
         metadata: EntityMetadata,
@@ -362,10 +288,6 @@ object SyncProtocol {
         return canonicalEntityRecord(metadata, iv, ct)
     }
 
-    /**
-     * Opens a canonical entity-record payload, verifying it against the metadata of the
-     * row it was fetched into. Wrong row/account/revision = TAMPERED.
-     */
     fun openEntity(vaultKey: ByteArray, metadata: EntityMetadata, payload: ByteArray): ByteArray {
         val root = runCatching { JSONObject(String(payload, Charsets.UTF_8)) }
             .getOrElse { malformed("entity record is not valid JSON") }
@@ -383,7 +305,6 @@ object SyncProtocol {
         }
     }
 
-    // --- key derivation -----------------------------------------------------------------
 
     private fun deriveKek(passphrase: CharArray, kdf: KdfParams): ByteArray {
         val generator = Argon2BytesGenerator()
@@ -396,15 +317,11 @@ object SyncProtocol {
                 .withParallelism(kdf.parallelism)
                 .build(),
         )
-        // Raw UTF-8 password bytes, identical to hash_secret_raw in the fixture generator.
-        // The char[] overload of generateBytes is deliberately avoided: its byte conversion
-        // is an implementation detail, and this contract is UTF-8 by spec.
         val kek = ByteArray(KEK_BYTES)
         generator.generateBytes(String(passphrase).toByteArray(Charsets.UTF_8), kek)
         return kek
     }
 
-    // --- AES-256-GCM ----------------------------------------------------------------------
 
     private fun gcmSeal(key: ByteArray, iv: ByteArray, plaintext: ByteArray, aad: ByteArray): ByteArray {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -429,8 +346,6 @@ object SyncProtocol {
     private fun recoveryAad(recoverySalt: ByteArray): ByteArray =
         "mp-sync-v1/recovery/${canonicalRecoveryKdf(recoverySalt)}".toByteArray(Charsets.UTF_8)
 
-    // HKDF-SHA256 (RFC 5869): the recovery key is already high-entropy (a CSPRNG value),
-    // so no password-hashing step is needed — only extract-then-expand.
     private fun hkdfSha256(ikm: ByteArray, salt: ByteArray, info: ByteArray, length: Int): ByteArray {
         val hkdf = HKDFBytesGenerator(SHA256Digest())
         hkdf.init(HKDFParameters(ikm, salt, info))
@@ -458,7 +373,6 @@ object SyncProtocol {
             append("\",\"ct\":\"").append(b64(ct)).append("\"}")
         }.toByteArray(Charsets.UTF_8)
 
-    // --- canonical JSON ---------------------------------------------------------------------
 
     internal fun canonicalKdf(kdf: KdfParams): String = buildString {
         append("{\"alg\":\"").append(KDF_ALG)
@@ -496,9 +410,6 @@ object SyncProtocol {
         append("\",\"salt\":\"").append(b64(recoverySalt)).append("\"}")
     }
 
-    // Same shape as canonicalEnvelope, with the additive recoveryKdf/recovery blocks
-    // spliced in between "wrap" and "records" (see "Recovery key" in the spec doc).
-    // Absent when there is no recovery key, so pre-recovery envelopes are byte-identical.
     private fun canonicalEnvelopeWithRecovery(
         kdf: KdfParams,
         wrapIv: ByteArray,
@@ -527,7 +438,6 @@ object SyncProtocol {
         append("}}")
     }.toByteArray(Charsets.UTF_8)
 
-    // --- parsing helpers ----------------------------------------------------------------------
 
     private fun parseKdf(obj: JSONObject): KdfParams {
         if (obj.optString("alg") != KDF_ALG) malformed("unknown kdf alg")

@@ -41,17 +41,11 @@ data class ReaderState(
     val lastUpdatedAtMillis: Long = 0,
     val completedActions: Long = 0,
     val waitingForInput: Boolean = false,
-    /** Why the last connection attempt failed, kept while the reader keeps retrying. */
     val lastFailure: String? = null,
-    /** The live time estimate the agent declared for this session, when there is one. */
     val eta: TmuxText.SessionEta? = null,
-    /** Working or ready, as the host's notify hooks last reported it. Null when never recorded. */
     val hookState: TmuxText.HookState? = null,
-    /** Prompts sent from this app, newest last; keeps a dictated echo in one reader bubble. */
     val sentPrompts: List<String> = emptyList(),
-    /** True when the agent TUI draws on the alternate screen (owns its own scrollback). */
     val alternateOn: Boolean = false,
-    /** Null uses the raw tmux reader; an empty list is a valid filtered conversation. */
     val transcript: List<TranscriptMessage>? = null,
 )
 
@@ -93,9 +87,6 @@ class SessionReaderConnection(
         val sent = requests.trySend(Request.Prompt(text)).isSuccess
         if (sent) {
             awaitModelSwitchConfirmation(text)
-            // The app knows exactly what it sent. Echoing it locally guarantees the user's
-            // own bubble even when the TUI queues the message without a "❯"/"> " marker
-            // (dictation sent while the agent is Working renders marker-less).
             _state.update { current ->
                 current.copy(
                     output = TmuxText.mergeSnapshot(current.output, "> $text"),
@@ -114,7 +105,6 @@ class SessionReaderConnection(
         requests.trySend(Request.Action(TmuxAction.INTERRUPT))
     }
 
-    /** Pages the agent TUI's own scrollback up (alternate-screen panes own their history). */
     fun scrollBackPage() {
         requests.trySend(Request.Action(TmuxAction.SCROLL_UP))
     }
@@ -125,11 +115,6 @@ class SessionReaderConnection(
     @Volatile
     private var modelSwitchConfirmed = true
 
-    /**
-     * A model or effort command can raise the agent's own confirm dialog. Claude Code asks
-     * when a PreModelSwitch hook is configured; the companion app has already taken the
-     * user's choice, so arm a one-shot Enter for the dialog.
-     */
     private fun awaitModelSwitchConfirmation(command: String) {
         val trimmed = command.trimStart()
         if (!trimmed.startsWith("/model") && !trimmed.startsWith("/effort")) return
@@ -143,12 +128,10 @@ class SessionReaderConnection(
             modelSwitchConfirmed = true
             return
         }
-        // The dialog's default choice is the switch the user asked for; Enter accepts it.
         modelSwitchConfirmed = true
         requests.trySend(Request.Action(TmuxAction.ENTER))
     }
 
-    /** Returns to the live view after scrolling. */
     fun scrollLive() {
         requests.trySend(Request.Action(TmuxAction.SCROLL_BOTTOM))
     }
@@ -161,36 +144,24 @@ class SessionReaderConnection(
 
     private val _historyPages = MutableStateFlow<List<String>>(emptyList())
 
-    /** How many screens back the transcript has already pulled from the TUI. */
     private var transcriptHistoryDepth = 0
 
-    /** Captured TUI history pages while history mode is active. */
     val historyPages: StateFlow<List<String>> = _historyPages
 
-    /**
-     * Enters history mode: the stream stops merging into the transcript and publishes
-     * captured screens to [historyPages] instead; the TUI is paged back one screen.
-     */
     suspend fun enterHistory() = historyMutex.withLock {
         if (!historyMode) {
             historyMode = true
             _historyPages.value = emptyList()
             scrollBackPage()
-            // First paged screen arrives via the stream within ~1-2s.
             delay(1200)
             _historyPage.value?.let { page -> _historyPages.value = listOf(page) }
         }
     }
 
-    /**
-     * Pages back one more screen and appends the captured page. Returns true when a new
-     * distinct page arrived; false when the TUI has no older history.
-     */
     suspend fun loadOlderHistoryPage(): Boolean = historyMutex.withLock {
         if (!historyMode) return@withLock false
         val before = _historyPages.value.lastOrNull()
         scrollBackPage()
-        // Wait up to 3s for a frame that differs from the last collected page.
         val deadline = System.currentTimeMillis() + 3000
         while (System.currentTimeMillis() < deadline) {
             val page = _historyPage.value
@@ -203,7 +174,6 @@ class SessionReaderConnection(
         false
     }
 
-    /** Leaves history mode and returns the TUI to the live view. */
     suspend fun exitHistory() = historyMutex.withLock {
         historyMode = false
         _historyPages.value = emptyList()
@@ -211,13 +181,6 @@ class SessionReaderConnection(
         scrollLive()
     }
 
-    /**
-     * Folds one older screen of the agent TUI's own history above the live transcript.
-     * Alternate-screen panes keep their scrollback inside the TUI, so tmux has nothing above
-     * the visible screen; paging the TUI is the only way to reach it. PageUp from the live
-     * view always lands on the same screen, so each call pages one screen deeper than the
-     * last before reading the pane. Returns false at the oldest screen the TUI still holds.
-     */
     suspend fun loadOlderIntoTranscript(): Boolean = historyMutex.withLock {
         if (historyMode) return@withLock false
         if (!_state.value.alternateOn) return@withLock false
@@ -230,14 +193,11 @@ class SessionReaderConnection(
         }
         val page = awaitStableHistoryPage()
         scrollLiveDirect()
-        // Let the TUI return to the live screen while history mode still discards captures,
-        // otherwise a stale paged screen merges into the transcript as if it were new.
         delay(HISTORY_RETURN_MS)
         historyMode = false
         _historyPage.value = null
         if (page == null) return@withLock false
         val older = page.trimEnd()
-        // The TUI stopped moving when the captured screen is one the transcript already has.
         if (_state.value.output.contains(older)) return@withLock false
         transcriptHistoryDepth = targetDepth
         _state.update { it.copy(output = older + "\n" + it.output) }
@@ -256,7 +216,6 @@ class SessionReaderConnection(
         }
     }
 
-    /** Waits for repeated equal captures so a half-drawn or intermediate paged screen is not used. */
     private suspend fun awaitStableHistoryPage(): String? {
         var previous: String? = null
         var stableReads = 0
@@ -305,7 +264,6 @@ class SessionReaderConnection(
                     }
                 } catch (failure: Exception) {
                     if (failure is CancellationException && !isActive) throw failure
-                    // A missing/old helper or timed-out request must not stop the tmux reader.
                     _state.update { it.copy(transcript = null) }
                 } finally {
                     val oldClient = transcriptClient
@@ -335,8 +293,6 @@ class SessionReaderConnection(
                     ) { frame ->
                         confirmModelSwitchIfAsked(frame.confirmationVisible)
                         if (historyMode) {
-                            // The history overlay is paging the TUI; captured screens belong
-                            // to the overlay, not the live transcript.
                             _historyPage.value = frame.output
                             _state.update { current ->
                                 current.copy(
@@ -352,8 +308,6 @@ class SessionReaderConnection(
                             } else {
                                 current.runtimeDetails
                             }
-                            // The agent's screen is all tmux can give for an alternate-screen
-                            // TUI, so the transcript above it is grown here, screen by screen.
                             val merged = TmuxText.mergeSnapshot(current.output, frame.output)
                             current.copy(
                                 output = merged,

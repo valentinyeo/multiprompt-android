@@ -21,10 +21,6 @@ import java.security.Security
 class MultipromptApplication : Application() {
     override fun onCreate() {
         super.onCreate()
-        // Android 16 advertises Ed25519 from AndroidKeyStore only, which rejects software keys, and
-        // no platform provider can verify an ssh-ed25519 host key (sshlib's own provider has no
-        // Signature service). Replace the stripped platform "BC" with full BouncyCastle, first in
-        // line, so Ed25519 KeyFactory + Signature resolve to it. Same fix ConnectBot uses.
         Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
         Security.insertProviderAt(BouncyCastleProvider(), 1)
         crashReportStore.install()

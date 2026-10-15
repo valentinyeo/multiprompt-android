@@ -11,7 +11,6 @@ import java.util.Base64
 
 class AccountSignInRequired : IOException("Sign in again: this device credential was rejected")
 
-/** Called serially by SyncAuthManager; both credential and pending-login blobs are Keystore protected. */
 class AccountAuth(
     val redirect: String,
     private val http: AccountHttp,
@@ -82,7 +81,6 @@ class AccountAuth(
         val reply = http.request("POST", "/oauth/token", null, JSONObject().put("grant_type", "refresh_token")
             .put("refresh_token", stored.getString("refresh_token")))
         if (reply.status in listOf(400, 401) && reply.json.optString("error") == "invalid_grant") {
-            // Explicit rejection is distinct from an outage; retain cache and pending edits.
             write(TOKENS, null)
             throw AccountSignInRequired()
         }

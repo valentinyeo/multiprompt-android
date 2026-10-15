@@ -35,11 +35,6 @@ class TerminalConnection(
     windowColumns: Int = 0,
     windowRows: Int = 0,
 ) : AutoCloseable {
-    /**
-     * When tmux reported the window's size, the PTY is pinned to exactly that. A client the
-     * same size as the window leaves tmux nothing to fill, so no dot padding on the phone,
-     * and with ignore-size the desktop stays the owner of the geometry.
-     */
     private val fixedSize = if (windowColumns > 0 && windowRows > 0) {
         TerminalDimensions(rows = windowRows, columns = windowColumns)
     } else {
@@ -86,10 +81,6 @@ class TerminalConnection(
                 ) { "The SSH server refused a PTY" }
 
                 val target = TmuxParser.shellQuote(tmuxSessionName)
-                // ignore-size keeps this client out of tmux's size calculation, so attaching
-                // from the phone never resizes the window the desktop is using. Setting
-                // window-size on the session did the opposite: it stuck, and left the desktop
-                // looking at a window sized for a phone.
                 val command = "exec tmux attach-session -f ignore-size -t $target"
                 check(connectedSession.requestExec(command)) { "tmux attach was refused" }
                 _status.value = TerminalStatus.Connected
@@ -126,16 +117,10 @@ class TerminalConnection(
         }
     }
 
-    /**
-     * Pages the agent TUI's own view back one screen. A full-screen agent keeps its history
-     * inside itself, so the emulator has no scrollback to scroll; the key is what the desktop
-     * would press. Written straight to the PTY, so it travels the existing session.
-     */
     fun pageUp() {
         keyboard.trySend(PAGE_UP)
     }
 
-    /** Returns the TUI to its live view after [pageUp]. */
     fun pageToLive() {
         keyboard.trySend(END_KEY)
     }
@@ -162,7 +147,6 @@ class TerminalConnection(
     }
 
     private companion object {
-        /** xterm key sequences for PageUp and End, the same keys tmux send-keys would send. */
         val PAGE_UP = "\u001b[5~".toByteArray(Charsets.UTF_8)
         val END_KEY = "\u001b[F".toByteArray(Charsets.UTF_8)
     }

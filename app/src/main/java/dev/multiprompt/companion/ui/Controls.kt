@@ -17,7 +17,6 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 
-/** Shared corner radius for buttons and text inputs, matching the 4dp chat bubbles. */
 val ControlShape: Shape = RoundedCornerShape(4.dp)
 
 @Composable

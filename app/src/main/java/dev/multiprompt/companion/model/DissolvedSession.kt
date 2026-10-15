@@ -1,6 +1,5 @@
 package dev.multiprompt.companion.model
 
-/** A tmux session dissolved from the VPS but retained for later resurrection. */
 data class DissolvedSession(
     val hostId: String,
     val tmuxSessionName: String,
@@ -15,11 +14,6 @@ data class DissolvedSession(
     val key: String get() = "$hostId::$tmuxSessionName"
 
     companion object {
-        /**
-         * [claudeSessionId] is the newest conversation recorded for this folder, read from the
-         * host while the session was still alive. With it the restore resumes that exact
-         * conversation; without it the plain continue flag picks whichever is newest later.
-         */
         fun from(
             session: TmuxSession,
             workspaceId: String?,

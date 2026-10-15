@@ -10,15 +10,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
-/**
- * Maintains multiprompt's own skills, independent of any coding harness: the list is
- * fetched from GitHub (a public skills index + raw SKILL.md files), cached in prefs, and
- * served to the composer picker. When a skill is selected, its full body is injected
- * alongside the user's prompt — so the agent in the tmux session receives the real
- * instructions no matter which harness it runs under.
- *
- * No secrets: public repos, no API token. Offline → last cached snapshot.
- */
 class SkillStore(context: Context) {
 
     private val preferences = context.getSharedPreferences("skills", Context.MODE_PRIVATE)
@@ -27,10 +18,8 @@ class SkillStore(context: Context) {
         .readTimeout(20, TimeUnit.SECONDS)
         .build()
 
-    /** Repos to index, as "owner/repo" strings holding a skills index at [INDEX_PATH]. */
     var repos: List<String> = DEFAULT_REPOS
 
-    /** Snapshot for the UI; bundled skills are always present, GitHub adds/refreshes. */
     @Volatile
     var snapshot: SkillSnapshot? = null
         private set
@@ -43,10 +32,6 @@ class SkillStore(context: Context) {
         return snapshot
     }
 
-    /**
-     * Loads the skills bundled with the app: the harness set (source=harness) and the
-     * curated multiprompt set (source=multiprompt). Always available, no network.
-     */
     fun bundled(): SkillSnapshot? = runCatching {
         val indexJson = assets.open("skills/index.json").bufferedReader().use { it.readText() }
         val entries = SkillModel.parseIndex(indexJson).entries
@@ -67,10 +52,6 @@ class SkillStore(context: Context) {
         SkillSnapshot(SkillModel.sortedByDisplayName(skills), System.currentTimeMillis() / 1000)
     }.getOrNull()
 
-    /**
-     * Refreshes from GitHub in the background; emits the fresh snapshot via [onDone]
-     * (main caller decides threading). Falls back silently to the cache when offline.
-     */
     fun refresh(scope: CoroutineScope, onDone: (SkillSnapshot?) -> Unit = {}) {
         scope.launch {
             val fresh = fetchSnapshot()
@@ -107,8 +88,6 @@ class SkillStore(context: Context) {
                 source = entry.source,
             )
         }
-        // Harness skills ship with the app and cannot be removed remotely; fetched
-        // skills only add or update multiprompt-source entries.
         val byName = linkedMapOf<String, Skill>()
         (bundled?.skills ?: emptyList()).forEach { byName[it.name.lowercase()] = it }
         fetched.forEach { if (it.source == "multiprompt") byName[it.name.lowercase()] = it }
@@ -128,7 +107,6 @@ class SkillStore(context: Context) {
         private const val KEY_CACHE = "cache_json"
         private const val KEY_FETCHED_AT = "fetched_at"
 
-        /** Temporary default: multiprompt's own skills repo (owner/repo). */
         val DEFAULT_REPOS: List<String> = listOf("valentinyeo/multiprompt-skills")
 
         fun rawUrl(repo: String, path: String, ref: String): String =

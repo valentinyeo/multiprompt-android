@@ -17,19 +17,11 @@ object TmuxText {
         val current: Boolean = false,
     )
 
-    /**
-     * One live agent time estimate, as the host reports it: how long is left, the total the
-     * agent claimed, and its own one-line description of the work.
-     */
     data class SessionEtaState(
         val remainingSeconds: Long,
         val totalSeconds: Long,
         val description: String,
     ) {
-        /**
-         * Converts the host's "remaining" into a local deadline, so the countdown ticks on the
-         * phone and a clock difference between phone and host cannot distort it.
-         */
         fun toEta(nowMillis: Long): SessionEta = SessionEta(
             deadlineMillis = nowMillis + remainingSeconds * 1000,
             totalMillis = totalSeconds * 1000,
@@ -37,20 +29,10 @@ object TmuxText {
         )
     }
 
-    /**
-     * The last lifecycle event the host recorded for a session, written by the notify hooks.
-     * The desktop gets these over its notify channel; this is the same fact for a client that
-     * only has files, so a reader can say Working or Ready without guessing from pane text.
-     */
     data class HookState(
         val active: Boolean,
         val atEpochSeconds: Long,
     ) {
-        /**
-         * True when the last event says the agent finished, false when it says it is working,
-         * and null when a stale working event says nothing useful any more, so the caller falls
-         * back to the pane text. A recorded finish is durable until the next event replaces it.
-         */
         fun isReady(nowMillis: Long): Boolean? = when {
             !active -> true
             nowMillis - atEpochSeconds * 1000 <= ACTIVE_EVENT_TRUST_MS -> false
@@ -58,7 +40,6 @@ object TmuxText {
         }
     }
 
-    /** A countdown the reader or the inbox can render at any clock time. */
     data class SessionEta(
         val deadlineMillis: Long,
         val totalMillis: Long,
@@ -66,7 +47,6 @@ object TmuxText {
     ) {
         fun remainingMillis(nowMillis: Long): Long = deadlineMillis - nowMillis
 
-        /** Fraction of the progress line to fill: elapsed over total, clamped to [0, 1]. */
         fun fillFraction(nowMillis: Long): Float {
             if (totalMillis <= 0) return 0f
             val elapsed = totalMillis - remainingMillis(nowMillis)
@@ -76,7 +56,6 @@ object TmuxText {
         fun label(nowMillis: Long): String = formatEtaRemaining(remainingMillis(nowMillis))
     }
 
-    /** "<1m" / "12m" / "1h 20m", and "+4m" once the estimate ran out. */
     fun formatEtaRemaining(remainingMillis: Long): String = when {
         remainingMillis < 0 -> "+${((-remainingMillis) / 60_000).coerceAtLeast(1)}m"
         remainingMillis < 60_000 -> "<1m"
@@ -86,19 +65,12 @@ object TmuxText {
         }
     }
 
-    /** How far off one agent's estimates usually are, over its last finished tasks. */
     data class AgentAccuracy(
         val agent: String,
         val ratio: Double,
         val samples: Int,
     )
 
-    /**
-     * Reads the finished-estimate log and reports the median of actual over estimate per agent,
-     * the same number the desktop's Estimate Accuracy overlay shows. A turn under two minutes
-     * says nothing about a long estimate, an agent with fewer than three samples is left out,
-     * and only the last [limit] rows count.
-     */
     fun etaAccuracy(value: String, limit: Int = 20): List<AgentAccuracy> {
         val ratios = mutableMapOf<String, MutableList<Double>>()
         value.lineSequence().forEach { line ->
@@ -122,7 +94,6 @@ object TmuxText {
         }.sortedBy { it.agent }
     }
 
-    /** The `@state<TAB>name<TAB>state<TAB>recorded at` rows mixed into the same read. */
     fun parseHookStates(value: String): Map<String, HookState> = buildMap {
         value.lineSequence().forEach { line ->
             val parts = line.split('\t')
@@ -135,7 +106,6 @@ object TmuxText {
         }
     }
 
-    /** The host's whole estimate file as `name<TAB>remaining<TAB>total<TAB>description` rows. */
     fun parseSessionEtaStates(value: String): Map<String, SessionEtaState> = buildMap {
         value.lineSequence().forEach { line ->
             val parts = line.split('\t')
@@ -177,22 +147,15 @@ object TmuxText {
         return bytes.toString(Charsets.UTF_8)
     }
 
-    /** Links handed back by an agent must survive clean-chat filtering. */
     fun containsLink(value: String): Boolean = WEB_LINK.containsMatchIn(value)
 
-    /** Removes desktop TUI margins so captured output reads like a mobile transcript. */
     fun leftAligned(value: String): String = value
         .lineSequence()
         .joinToString("\n") { it.trimStart() }
         .trim()
 
-    /** Reads model/effort metadata from Codex and Claude TUI or cloud-session status lines. */
     fun runtimeDetails(value: String): RuntimeDetails {
         val lines = value.lineSequence().map(String::trim).filter(String::isNotEmpty).toList()
-        // Only the bottom rows carry the status line. Transcript prose above it routinely
-        // names other models ("run this on gpt-5.6-luna max"), and a whole-pane scan
-        // latched onto whatever was quoted and reported the wrong agent. Blank rows are
-        // dropped first: a pane ending in empty lines would push the footer out of view.
         lines.takeLast(RUNTIME_SEARCH_LINES).asReversed().forEach { line ->
             CODEX_RUNTIME.find(line)?.let { match ->
                 return RuntimeDetails(match.groupValues[1], match.groupValues[2].lowercase().ifBlank { null })
@@ -213,7 +176,6 @@ object TmuxText {
         return RuntimeDetails()
     }
 
-    /** Reads the numbered model/effort choices from Codex's interactive picker. */
     fun modelPickerOptions(value: String): List<ModelPickerOption> {
         val lines = value.lines()
         val headerIndex = lines.indexOfLast(::isModelPickerHeader)
@@ -237,7 +199,6 @@ object TmuxText {
             .toList()
     }
 
-    /** Hides the active terminal composer because Android provides its own native composer. */
     fun withoutActiveComposer(value: String, agent: AgentKind = AgentKind.OTHER): String {
         val lines = value.lines()
         val searchStart = (lines.size - COMPOSER_SEARCH_LINES).coerceAtLeast(0)
@@ -250,14 +211,6 @@ object TmuxText {
         return lines.take(dividerIndex ?: promptIndex).joinToString("\n").trimEnd()
     }
 
-    /**
-     * Grows a transcript from successive screens of an agent TUI.
-     *
-     * A full-screen agent draws on the alternate screen, which tmux keeps no history for,
-     * so a snapshot is only what fits on the pane right now. Each new screen is anchored
-     * against the transcript already collected: the anchor marks where this screen begins,
-     * everything from there is replaced, and anything above it survives as history.
-     */
     fun mergeSnapshot(history: String, snapshot: String): String {
         val collected = history.lines().dropLastWhile(String::isBlank)
         val screen = snapshot.lines().dropLastWhile(String::isBlank)
@@ -272,14 +225,6 @@ object TmuxText {
         return (collected + screen).takeLast(MAX_TRANSCRIPT_LINES).joinToString("\n")
     }
 
-    /**
-     * Finds where the current terminal screen begins in the transcript already collected.
-     *
-     * Agent TUIs redraw status and answer rows in place. Matching only the screen's first rows
-     * fails whenever those rows change, even if the rest of the screen is unchanged. Use the
-     * longest reliable overlap anywhere near the transcript tail so redraws replace the prior
-     * screen while a genuinely new, non-overlapping screen is still appended.
-     */
     private fun findScreenStart(collected: List<String>, screen: List<String>): Int? {
         val historyStart = (collected.size - ALIGNMENT_SEARCH_LINES).coerceAtLeast(0)
         var bestStart = -1
@@ -319,7 +264,6 @@ object TmuxText {
         return lines.size >= MIN_ALIGNMENT_LINES && distinctive >= 1
     }
 
-    /** Converts a terminal snapshot into conservative, display-only Reader sections. */
     fun readerBlocks(
         value: String,
         agent: AgentKind = AgentKind.OTHER,
@@ -332,22 +276,9 @@ object TmuxText {
         var fencedCode = false
         var fencedLanguage: String? = null
         var userPromptOpen = false
-        // The app knows the exact text it sent. Comparing that text against the echo keeps a
-        // dictated prompt in one bubble even when the terminal drops the marker, the
-        // indentation, or a paragraph break lands mid-sentence. The row-level heuristics
-        // below remain the fallback for prompts this device did not send.
         val knownSignatures = knownPrompts.map(::promptSignature).filter(String::isNotEmpty)
         var matchingKnownPrompt: String? = null
-        // tmux hard-wraps at the desktop pane width, so a paragraph arrives as several
-        // full rows. Rejoin them, otherwise the phone wraps the leftovers again and every
-        // paragraph reads as a stack of line-and-a-half fragments. A row long enough to be
-        // a wrap point is the signal: measuring the pane width instead fails, because the
-        // status bar is wider than the column the agent wraps its prose at.
         var lastLineFilledTheRow = false
-        // A captured pane can hold an unpaired fence: a collapsed tool preview prints a
-        // heredoc's closing ``` while its opener scrolled away. That one row used to flip
-        // every later row to CODE, which hides whole replies behind "Show code" in clean
-        // chat. Only fences that pair up inside this text are honored.
         val pairedFence = lines.indices
             .filter { lines[it].trim().matches(FENCE_LINE) }
             .chunked(2)
@@ -381,9 +312,6 @@ object TmuxText {
             val rejoin = lastLineFilledTheRow &&
                 kind != ReaderBlockKind.CODE &&
                 !startsNewParagraph(line)
-            // The terminal wraps mid-address. Rows are joined with a space so wrapped prose
-            // reflows, but a space inside a URL truncates the link, so a wrapped address is
-            // kept as one token instead.
             val joinInsideAddress = current.isNotEmpty() &&
                 !line.startsWith(" ") &&
                 endsInsideWebAddress(current) &&
@@ -394,8 +322,6 @@ object TmuxText {
             )
             lastLineFilledTheRow = line.trimEnd().length >= WRAPPED_ROW_LENGTH
             if (kind == ReaderBlockKind.USER_PROMPT) {
-                // The prompt stays open while its continuation rows keep the TUI's
-                // indentation; a non-indented row or marker closes it.
                 userPromptOpen = true
                 val signature = promptSignature(current.toString())
                 val known = matchingKnownPrompt
@@ -404,7 +330,6 @@ object TmuxText {
                         .maxByOrNull(String::length)
                         ?.also { matchingKnownPrompt = it }
                 if (known != null && signature.length >= known.length) {
-                    // The whole sent prompt is on screen; the next row starts the agent's turn.
                     matchingKnownPrompt = null
                     userPromptOpen = false
                 }
@@ -435,9 +360,6 @@ object TmuxText {
                 lastLineFilledTheRow = false
                 if (current.isNotEmpty()) {
                     if (currentKind == ReaderBlockKind.USER_PROMPT && userPromptOpen) {
-                        // A dictated prompt can contain paragraph breaks. They belong to the
-                        // user's bubble: long dictations used to split after the first
-                        // paragraph and the tail rendered as agent output.
                         current.append('\n')
                     } else if (currentKind == ReaderBlockKind.CODE ||
                         currentKind == ReaderBlockKind.PROGRESS
@@ -451,8 +373,6 @@ object TmuxText {
             }
             val known = matchingKnownPrompt
             if (known != null && currentKind == ReaderBlockKind.USER_PROMPT) {
-                // Continue the bubble while the row keeps completing the sent prompt, and stop
-                // the moment it stops matching so agent output can never be absorbed.
                 val candidate = promptSignature(current.toString() + " " + line)
                 if (known.startsWith(candidate)) {
                     append(ReaderBlockKind.USER_PROMPT, line)
@@ -463,8 +383,6 @@ object TmuxText {
             if (currentKind == ReaderBlockKind.USER_PROMPT && userPromptOpen &&
                 !line.startsWith("  ") && !lastLineFilledTheRow && current.isNotEmpty()
             ) {
-                // A non-indented row ends the prompt even when the classifier might call it
-                // prose (some harnesses write agent replies without a marker).
                 flush()
             }
             val kind = when {
@@ -472,29 +390,16 @@ object TmuxText {
                 looksLikeProgress(line, agent) -> ReaderBlockKind.PROGRESS
                 currentKind == ReaderBlockKind.USER_PROMPT && userPromptOpen &&
                     (line.startsWith("  ") || lastLineFilledTheRow) -> {
-                    // Codex and Claude wrap a submitted prompt across terminal rows but only
-                    // draw the prompt marker on the first row; continuation rows keep the
-                    // TUI's indentation. Keep them in the user bubble so a long dictated
-                    // prompt never leaks its tail into the agent's block.
                     ReaderBlockKind.USER_PROMPT
                 }
                 currentKind == ReaderBlockKind.PROGRESS && !line.trimStart().startsWith("•") -> {
-                    // Agent TUIs render command output as a marker followed by unmarked wrapped
-                    // lines. Keep that output in one activity section until a blank line or a
-                    // new semantic block. A fresh bullet is always a new block: Codex writes
-                    // its replies with one.
                     ReaderBlockKind.PROGRESS
                 }
                 agent == AgentKind.CLAUDE && line.trimStart().startsWith("\u25cf ") ->
-                    // Claude Code marks the agent's own prose with a filled circle; it always
-                    // starts a fresh conversational block, even right after tool output.
                     ReaderBlockKind.PROSE
 
                 fencedCode || looksLikeCode(line) -> ReaderBlockKind.CODE
                 currentKind == ReaderBlockKind.CODE -> {
-                    // Code output commonly contains continuation lines that do not have a
-                    // reliable syntax marker. Keep the contiguous section together until a
-                    // blank row or a new semantic marker appears.
                     ReaderBlockKind.CODE
                 }
                 else -> ReaderBlockKind.PROSE
@@ -505,7 +410,6 @@ object TmuxText {
         return withoutRepeatedReplies(blocks)
     }
 
-    /** Drops an adjacent assistant copy even when terminal detail separates the two blocks. */
     private fun withoutRepeatedReplies(blocks: List<ReaderBlock>): List<ReaderBlock> {
         var previousReply: String? = null
         return buildList {
@@ -523,23 +427,12 @@ object TmuxText {
         }
     }
 
-    /**
-     * Best-effort Android fallback for ZigShell's agent DONE event.
-     *
-     * The desktop gets an authoritative lifecycle hook. Android only has a pane
-     * snapshot, so an old prompt in the scrollback must never be enough to call a
-     * session idle: any meaningful line after the latest prompt means the agent
-     * may still be working. Only an explicit idle/completion marker at the end of
-     * the current terminal state is accepted.
-     */
     fun isWaitingForInput(value: String, agent: AgentKind = AgentKind.OTHER): Boolean {
         val tail = value.lineSequence()
             .map(String::trimStart)
             .filter(String::isNotBlank)
             .toList()
             .takeLast(INPUT_SEARCH_LINES)
-        // The spinner row only exists while the agent is running, so its presence anywhere on
-        // the current screen settles the question. The composer stays drawn either way.
         if (tail.any { line -> SPINNER_LINE.containsMatchIn(line) }) return false
         val meaningful = tail.withIndex()
             .filterNot { (_, line) -> isDivider(line) || isTerminalChrome(line) }
@@ -556,9 +449,6 @@ object TmuxText {
             IDLE_INPUT_MARKERS.any { marker -> line.contains(marker, ignoreCase = true) }
         }
 
-        // A visible activity marker after the latest prompt means the agent is
-        // still working, even if a stale completion/status line was painted
-        // below it. The desktop does not turn this into a blue dot.
         val activityIndex = meaningful.getOrNull(latestActivity)?.index ?: -1
         val promptIndex = meaningful.getOrNull(latestPrompt)?.index ?: -1
         if (latestActivity >= 0 && (latestPrompt < 0 || activityIndex > promptIndex)) return false
@@ -571,11 +461,6 @@ object TmuxText {
         }
     }
 
-    /**
-     * Claude Code's PreModelSwitch (or effort) confirmation dialog. A user who picked a model
-     * in the companion app has already consented, so the reader answers the dialog with Enter
-     * instead of leaving the switch stuck at the prompt.
-     */
     fun isModelSwitchConfirmation(value: String): Boolean {
         val lines = value.lineSequence()
         return lines.any { line ->
@@ -587,18 +472,12 @@ object TmuxText {
         }
     }
 
-    /** A row the terminal did not wrap into: a bullet, a marker, or an indented block. */
     private fun startsNewParagraph(value: String): Boolean {
         if (value.startsWith("  ")) return true
         val line = value.trim()
         return line.isEmpty() || PARAGRAPH_START.containsMatchIn(line)
     }
 
-    /**
-     * Codex marks its own replies with the same bullet it marks tool calls with, so the
-     * bullet alone cannot mean activity: hiding every one of them hid the answers. A tool
-     * line either names a tool verb or carries the elapsed time it took.
-     */
     private fun isActivityBullet(line: String): Boolean {
         if (!line.startsWith("•")) return false
         val body = line.removePrefix("•").trim()
@@ -613,8 +492,6 @@ object TmuxText {
         val compact = value.filterNot(Char::isWhitespace)
         if (compact.length < 8) return false
         if (compact.all { it in DIVIDER_CHARACTERS }) return true
-        // tmux pane borders and agent banners draw a rule with a title inside it
-        // ("---- HT AGENT MANAGER --"). Still chrome, not content.
         if (compact.first() !in DIVIDER_CHARACTERS || compact.last() !in DIVIDER_CHARACTERS) return false
         val rule = compact.count { it in DIVIDER_CHARACTERS }
         return rule >= 8 && compact.length - rule <= DIVIDER_LABEL_LIMIT
@@ -635,7 +512,6 @@ object TmuxText {
             line.startsWith("❯") -> true
             agent == AgentKind.HAX && isHaxUserPrompt(line) -> true
             agent != AgentKind.HAX && line.startsWith("›") -> true
-            // Claude renders a submitted message as "> text"; Pi does the same.
             line.startsWith("> ") -> true
             else -> false
         } ||
@@ -643,22 +519,12 @@ object TmuxText {
             line.startsWith("You:", ignoreCase = true)
     }
 
-    /**
-     * True when a row reads like the tail of a wrapped address rather than a new sentence. A
-     * path, query, or anchor character has to appear in its first word: a word like "QA" after a
-     * full stop ends the address, and gluing it on makes the link open the wrong page.
-     */
     private fun looksLikeAddressContinuation(line: String): Boolean {
         val token = line.trimStart().substringBefore(' ').substringBefore('\t')
         if (token.isEmpty() || isDivider(token.trim())) return false
         return ADDRESS_CONTINUATION.containsMatchIn(token)
     }
 
-    /**
-     * True when the text ends inside a web address, which means a terminal wrap cut it and the
-     * next row continues it. Any join keeps the address as the last whitespace-delimited token,
-     * so the scheme is still visible at the end of the block.
-     */
     private fun endsInsideWebAddress(value: CharSequence): Boolean {
         var start = value.length - 1
         while (start >= 0 && !value[start].isWhitespace()) start--
@@ -666,7 +532,6 @@ object TmuxText {
         return tail.startsWith("http://") || tail.startsWith("https://") || tail.startsWith("www.")
     }
 
-    /** Collapses terminal wrapping so an echoed prompt can be compared with the sent text. */
     private fun promptSignature(value: String): String = value.replace(WHITESPACE, " ").trim()
 
     private fun removePromptMarker(value: String, agent: AgentKind): String = value.trimStart()
@@ -704,9 +569,6 @@ object TmuxText {
             line.startsWith("esc to interrupt", ignoreCase = true) ||
             BACKGROUND_ACTIVITY_LINE.containsMatchIn(line) ||
             (agent == AgentKind.PI && (line.startsWith("→") || line.startsWith("←"))) ||
-            // pi chrome: the executed-command echo ("$ ..."), the "Took <time>" tool
-            // footer, the composer placeholder, and its keyboard-hint rows — none of it
-            // is conversation (Android reader, ysEEF.png / 0tpsx.png).
             (agent == AgentKind.PI && PI_CHROME_LINE.matches(line)) ||
             (agent == AgentKind.PI && PI_TOOL_LINE.containsMatchIn(line)) ||
             (agent == AgentKind.HAX && looksLikeHaxDetail(line)) ||
@@ -744,9 +606,6 @@ object TmuxText {
     }
 
     private fun isTerminalChrome(value: String): Boolean {
-        // Status rows are decorated ("⏵⏵ bypass permissions on"), so the marker has to be
-        // read past the decoration or the row counts as conversation and the session never
-        // looks idle.
         val line = value.trim().dropWhile { !it.isLetterOrDigit() && it != '/' }.lowercase()
         return STATUS_BAR.containsMatchIn(value) ||
             SLASH_HINT.matches(line) ||
@@ -813,24 +672,18 @@ object TmuxText {
     private const val DIVIDER_LABEL_LIMIT = 32
     private const val WRAPPED_ROW_LENGTH = 55
     private val PARAGRAPH_START = Regex("^(?:[-*•·>❯›#|+]|\\d+[.)]\\s)")
-    // A heredoc body pasted into a shell call reads as ordinary text otherwise.
     private val ASSIGNMENT_LINE = Regex("[A-Za-z_][A-Za-z0-9_]*\\s*=\\s*\\S.*")
     private val CODE_LINE = Regex("(?:fun|class|interface|object|const|val|var)\\b.*(?:[({=]|\\s*$)")
     private val NUMBERED_DIFF_LINE = Regex("\\d+\\s+[+-](?:\\s|$).*")
     private val FENCE_LINE = Regex("^```[A-Za-z0-9_+.-]*$")
-    /** Marks the lifecycle rows that ride along with the estimate rows. */
     private const val HOOK_STATE_PREFIX = "@state"
     private val HOOK_STATES = setOf("active", "done")
     private const val MIN_ACCURACY_ACTUAL_SECONDS = 120.0
     private const val MIN_ACCURACY_SAMPLES = 3
-    /** A silent agent that long after an ACTIVE event is likelier to be idle than working. */
     private const val ACTIVE_EVENT_TRUST_MS = 30 * 60 * 1000L
-    /** Characters that make a bare word read as an address tail: a path, query, or number. */
     private val ADDRESS_CONTINUATION = Regex("[/\\\\?=&#%@:]")
     private val DIFF_PATH = Regex("diff --git a/\\S+ b/(\\S+)")
     private val FILE_PATH = Regex("(?:^|\\n)(?:\\+\\+\\+ b/|File: )([^\\s]+)")
-    // Status lines decorate the gap between model and effort ("Opus 5 ⚡medium"), so plain
-    // whitespace is not enough to bridge it.
     private const val RUNTIME_GAP = "[\\s\u26a1·•|:]+"
     private val CODEX_RUNTIME = Regex(
         "(?i)\\b((?:gpt|o)[a-z0-9.-]+)$RUNTIME_GAP(none|minimal|low|medium|high|xhigh|max|ultra)\\b",
@@ -851,68 +704,36 @@ object TmuxText {
         "(?i)^(?:claude\\s+)?(opus|sonnet|haiku|fable)(?:[- ]+[0-9]+(?:[.-][0-9]+)*)?$",
     )
     private val MODEL_PICKER_OPTION = Regex("^\\s*(?:[›>]\\s+)?([1-9])\\.\\s+(.+?)\\s*$")
-    /** The host shell's own status bar, e.g. "projects | shell-projects-x   182MB 21:57". */
     private val STATUS_BAR = Regex("\\d+MB\\s+\\d{1,2}:\\d{2}\\s*$")
     private val SLASH_HINT = Regex("/[a-z-]{1,12}")
-    /** Claude and Codex paint their spinner with these. */
     private const val SPINNER_MARKERS = "●·✳✻✶✽✢✷∗✴*"
-    /** A running spinner: a glyph, a gerund, then the elapsed time. */
     private val SPINNER_LINE = Regex(
         "(?:^\\s*[$SPINNER_MARKERS]\\s+\\S+…\\s*\\(\\s*\\d)|(?i)esc to interrupt",
     )
-    /** Finished status rows are transcript chrome, but do not mean the agent is busy. */
     private val FINISHED_SPINNER_LINE = Regex(
         "(?i)^\\s*[$SPINNER_MARKERS]\\s+\\S+\\s+for\\s+" +
             "\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h)(?:\\s+\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h))*" +
             "(?:\\s+·\\s+done\\b.*)?\\s*$",
     )
-    /** pi's "Took 0.2s" / "Took 1m 30s" tool-output footer. */
     private val DURATION_LINE = Regex(
         "(?i)^took\\s+\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h)(?:\\s+\\d+(?:\\.\\d+)?\\s*(?:ms|s|m|h))*\\s*$",
     )
 
-    /**
-     * pi's non-conversation rows: the "$ command" echo, the "Took ..." footer, the
-     * composer placeholder ("Describe what to write, or press Shift+R"), keyboard hint
-     * rows, and the wrapped-input chrome around the composer.
-     */
     private val PI_CHROME_LINE = Regex(
         """(?i)^\s*(?:\$\s.*|took\s.*|describe what to write.*|press shift\+r.*|qwertyuiop|asdfghjkl|zxcvbnm|shift\+.*|ctrl\+.*)$""",
     )
-    /**
-     * Cursor Agent's non-conversation rows: the banner ("Cursor Agent", version line,
-     * "Tip: ..."), collapsed "Show code"/"Show activity" rows, the Auto/Run status row,
-     * the project footer, and keyboard-hint rows.
-     */
     private val CURSOR_CHROME_LINE = Regex(
         """(?i)^\s*(?:cursor agent|v\d{4}\.\d\d.*|tip:.*|show (?:code|activity).*|auto[ -].*|qwertyuiop|asdfghjkl|zxcvbnm|to me.*)$""",
     )
-    /**
-     * Cursor Agent tool-stream rows: collapsed code/activity summaries ("Code - javascript:
-     * 13 lines - ...", "Show code", "Grepped ...", "Read ... lines ...", "Edited ...",
-     * "To-do ..."), which the desktop TUI shows as collapsible items — transcript chrome on
-     * the phone, not conversation.
-     */
     private val CURSOR_TOOL_LINE = Regex(
         "(?i)^\\s*(?:show (?:code|activity)\\b|code[ -]+\\d+ lines?[ -]|grepped\\b|" +
             "read \\S+\\.(?:ts|tsx|js|cjs|mjs|json|md)|edited \\b|to-do\\b|\\.{2} \\d+ earlier items hidden)",
     )
-    /**
-     * Claude Code's collapsible tool-item chrome: the "Show code"/"Show activity"/"Hide
-     * code" toggle rows and their "Code · N lines"/"Activity · N lines" summaries. These
-     * are clickable UI in the TUI, not conversation.
-     */
 
     private val CLAUDE_COLLAPSIBLE_LINE = Regex(
         "(?i)^\\s*(?:show (?:code|activity)\\b|hide (?:code|activity)\\b|" +
             "(?:code|activity)\\s*\\u00b7\\s*\\d+ lines?\\b)",
     )
-    /**
-     * pi tool-output rows that are meaningless in the chat: grep-style "1069: DropdownMenu(",
-     * collapsed-output hints ("... (1 earlier lines, ctrl+o to expand)"), the "Elapsed 30.9s"
-     * timer, and pi's status footer ("↑30M ↓371k R308M CH99.9% $7.443 …", "(openrouter)
-     * z-ai/glm-5.3-flash • high").
-     */
     private val PI_TOOL_LINE = Regex(
         """(?i)^\s*(?:\.{3} [(]|\d+:\s+\S|elapsed \d|\u2191\S|[(]openrouter[)]|ctrl\+o to expand)"""
     )

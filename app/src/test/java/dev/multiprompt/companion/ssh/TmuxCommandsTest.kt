@@ -13,8 +13,6 @@ class TmuxCommandsTest {
 
         val target = "'a'\"'\"'; reboot:'"
         assertTrue(command.contains("tmux capture-pane -p -J -S -5000 -t $target"))
-        // A full-screen agent TUI keeps its conversation on the alternate screen; the pane's
-        // scrollback then belongs to whatever ran before it and must stay out.
         assertTrue(command.contains("#{alternate_on}"))
         assertTrue(command.contains("then tmux capture-pane -p -J -t $target"))
         assertFalse(command.contains("; reboot;"))
@@ -27,7 +25,6 @@ class TmuxCommandsTest {
         assertTrue(command.contains("tmux load-buffer"))
         assertTrue(command.contains("tmux paste-buffer -dpr"))
         assertTrue(command.contains("-t 'codex-main:'"))
-        // Enter must not ride along in the same read chunk as the bracketed paste.
         assertTrue(command.indexOf("sleep") in (command.indexOf("paste-buffer") + 1) until command.indexOf("send-keys"))
         assertFalse(command.contains("prompt text"))
         assertFalse(command.contains(" -S"))
@@ -177,8 +174,6 @@ class TmuxCommandsTest {
     fun theStreamCarriesTheAlternateScreenMarker() {
         val stream = TmuxCommands.stream("work")
 
-        // The reader only offers its "Load older messages" button for an alternate-screen pane,
-        // and that flag arrives on this line. Dropping the marker silently disabled the button.
         assertTrue(stream.contains("printf '${TmuxCommands.ALT_PREFIX}%s\\n'"))
         assertTrue(stream.contains("#{alternate_on}"))
     }
@@ -192,7 +187,6 @@ class TmuxCommandsTest {
             resumeCommand = "claude --resume abc",
         )
 
-        // A recycled tmux name can belong to unrelated work, so the restore never reuses it.
         assertTrue(command.contains("tmux new-session -d -s 'hypertasks-r"))
         assertFalse(command.contains("-s 'hypertasks'"))
         assertTrue(command.contains("-c '/srv/a'\"'\"'; touch /bad'"))

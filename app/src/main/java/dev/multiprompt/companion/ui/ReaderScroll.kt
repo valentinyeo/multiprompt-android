@@ -17,7 +17,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 
 @Composable
 internal fun rememberReaderScrollState(session: Any): ScrollState =
-    // A warm connection may reopen, but its old reading position must not be restored.
     remember(session) { ScrollState(0) }
 
 @Composable
@@ -30,7 +29,6 @@ internal fun Modifier.readerScroll(state: ScrollState): Modifier {
                 available: Offset,
                 source: NestedScrollSource,
             ): Offset {
-                // Drag/fling deltas reach nested scroll; our direct scrollTo does not.
                 if (consumed.y != 0f) pinnedToBottom = !state.canScrollForward
                 return Offset.Zero
             }
@@ -39,8 +37,6 @@ internal fun Modifier.readerScroll(state: ScrollState): Modifier {
     LaunchedEffect(state) {
         snapshotFlow { Triple(state.maxValue, state.isScrollInProgress, pinnedToBottom) }
             .collect { (maximum, scrolling, pinned) ->
-                // maxValue is unknown before the first layout. Retry after gestures finish,
-                // even if the content height changed during the gesture and never again.
                 if (pinned && !scrolling && maximum != Int.MAX_VALUE && state.value != maximum) {
                     state.scrollTo(maximum)
                 }

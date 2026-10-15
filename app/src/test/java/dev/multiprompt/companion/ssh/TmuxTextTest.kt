@@ -212,7 +212,6 @@ class TmuxTextTest {
         assertTrue(
             text.contains("and its backlog is deep. If you want one anyway"),
         )
-        // A row the agent did not fill ends the paragraph.
         assertTrue(text.contains("tell me the domain.\n"))
         assertTrue(text.contains("\n- a bullet"))
         assertTrue(text.contains("fill it still part of the bullet"))
@@ -811,8 +810,6 @@ class TmuxTextTest {
             AgentKind.CURSOR,
         )
 
-        // Tool rows collapse into PROGRESS blocks (blank lines split them); the reader
-        // hides every PROGRESS block in clean chat, leaving only the user-facing prose.
         assertEquals(
             listOf(
                 TmuxText.ReaderBlockKind.PROGRESS,
@@ -825,7 +822,6 @@ class TmuxTextTest {
             ),
             blocks.map { it.kind },
         )
-        // Clean chat hides every PROGRESS block, so none of the tool stream survives.
         val visible = blocks.filter { it.kind == TmuxText.ReaderBlockKind.PROSE }
         assertTrue(visible.isNotEmpty())
         assertTrue(visible.all { !it.text.contains("Grepped") && !it.text.contains("Show code") })
@@ -847,7 +843,6 @@ class TmuxTextTest {
             AgentKind.PI,
         )
 
-        // Every row above is tool chrome; none may survive as PROSE in clean chat.
         assertTrue(blocks.none { it.kind == TmuxText.ReaderBlockKind.PROSE })
     }
 
@@ -875,15 +870,11 @@ class TmuxTextTest {
         assertEquals(1, userBlocks.size)
         assertTrue(userBlocks.single().text.contains("become more"))
         assertTrue(userBlocks.single().text.contains("powerful"))
-        // The agent reply must not be absorbed into the user's bubble.
         assertTrue(userBlocks.single().text.contains("Agreed") == false)
     }
 
     @Test
     fun aKnownDictatedPromptWithParagraphBreaksStaysInOneBubble() {
-        // The app echoes what it sent as ">" plus the raw prompt text, so a dictated
-        // paragraph break arrives as a blank row followed by an unindented row. That used to
-        // end the bubble mid-sentence and render the tail as agent prose.
         val prompt = "Yeah. We need to fix that. This is also a general topic. We need to desperately " +
             "attack the board triage. As well as\n\nprioritization, there's just no order to anything. " +
             "Right? Like, it just processes, I guess, by ticket ID."
@@ -907,7 +898,6 @@ class TmuxTextTest {
                 "Right? Like, it just processes, I guess, by ticket ID.",
             userBlocks.single().text.replace(Regex("\\s+"), " ").trim(),
         )
-        // The agent's reply is a separate block, never absorbed into the prompt.
         assertTrue(blocks.last().text.contains("Product Bot becomes the triager"))
         assertTrue(blocks.last().kind != TmuxText.ReaderBlockKind.USER_PROMPT)
     }
@@ -969,9 +959,6 @@ class TmuxTextTest {
 
     @Test
     fun anUnpairedFenceInAToolPreviewDoesNotHideLaterMessages() {
-        // A Codex tool preview prints a heredoc's closing fence while its opener scrolled out
-        // of the captured pane. That stray row used to flip every later row to CODE, so clean
-        // chat showed no messages at all, only "Show code" cards to expand by hand.
         val captured = listOf(
             "\u2022 Ran python3 - <<'PY'",
             "  \u2502 import json",
@@ -1084,8 +1071,6 @@ class TmuxTextTest {
 
     @Test
     fun anAddressSplitByAShortRowStaysOneToken() {
-        // The screenshot case: the terminal wrapped after "/d" on a short row, then again inside
-        // the sheet id. Tapping either piece used to open a truncated address.
         val address = "https://docs.google.com/spreadsheets/d/1maaRnSkeGjM43jfLFCIN0eGldnhpj63ZW2qKJp66st8/edit"
         val firstRow = "https://docs.google.com/spreadsheets/d"
         val secondRow = address.removePrefix(firstRow)
@@ -1108,8 +1093,6 @@ class TmuxTextTest {
 
     @Test
     fun aSentenceAfterALinkIsNotGluedOntoIt() {
-        // The screenshot case: the ticket URL ended a wrapped row and the next row began "QA,".
-        // Joining them made the link open "https://.../6716.QA", which resolves to nothing.
         val first = "  - Mohsin can't see imagess in board 339: " +
             "https://app.hypertask.ai/detail/project-15/6716."
         val second = "QA, 7h quiet. Suggest: take it and QA it."
@@ -1149,13 +1132,10 @@ class TmuxTextTest {
     @Test
     fun accuracyIsTheMedianRatioIgnoringShortTurnsAndThinSamples() {
         val rows = listOf(
-            // Ratios 3.0, 2.0 and 4.0: the median of the three is 3.0.
             """{"agent":"claude","est_seconds":100,"actual_seconds":300}""",
             """{"agent":"claude","est_seconds":100,"actual_seconds":200}""",
             """{"agent":"claude","est_seconds":100,"actual_seconds":400}""",
-            // Below the two minute floor: a quick reply says nothing about a long estimate.
             """{"agent":"claude","est_seconds":3600,"actual_seconds":69}""",
-            // Only two samples for codex: not enough to report.
             """{"agent":"codex","est_seconds":100,"actual_seconds":400}""",
             """{"agent":"codex","est_seconds":100,"actual_seconds":400}""",
             """not json at all""",

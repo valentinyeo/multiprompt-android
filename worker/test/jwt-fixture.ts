@@ -11,7 +11,6 @@ function keyPair() {
   return keyPairPromise;
 }
 
-/** The JWKS document the mocked `${issuer}/jwks` endpoint should serve. */
 export async function testJwks(): Promise<{ keys: unknown[] }> {
   const { publicKey } = await keyPair();
   const jwk = await exportJWK(publicKey);
@@ -23,7 +22,6 @@ export interface MintOptions {
   email?: string;
   issuer?: string;
   audience?: string;
-  /** Absolute epoch-seconds expiry. Defaults to 5 minutes from now. */
   expiresAtSeconds?: number;
 }
 

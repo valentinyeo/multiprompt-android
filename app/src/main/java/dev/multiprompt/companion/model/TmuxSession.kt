@@ -6,12 +6,10 @@ data class TmuxSession(
     val windows: Int,
     val attachedClients: Int,
     val lastActivityEpochSeconds: Long,
-    /** Width the desktop gave this tmux window. The phone renders it without changing it. */
     val columns: Int = 0,
     val rows: Int = 0,
     val workingDirectory: String = "",
     val title: String = "",
-    /** The tmux window label, which desktop launchers use for the named session. */
     val windowName: String = "",
     val preview: String = "",
     val paneCommand: String = "",
@@ -20,11 +18,6 @@ data class TmuxSession(
     val agent: AgentKind
         get() = AgentKind.detect(name, title, preview, paneCommand)
 
-    /**
-     * What ZigShell shows on its tabs: the agent's pane title, falling back to the tmux name.
-     * Agent TUIs prefix some pane titles with their own monochrome status glyph. The Android UI
-     * already renders a colored agent icon, so suppress that duplicate decoration here.
-     */
     val displayName: String
         get() {
             accountName?.let { return it }

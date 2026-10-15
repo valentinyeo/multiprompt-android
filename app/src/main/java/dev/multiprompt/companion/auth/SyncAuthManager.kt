@@ -28,7 +28,6 @@ class SyncAuthManager(context: Context, private val http: AccountHttp = AccountH
     )
 
     init {
-        // The previous OIDC service is unrelated to this account; never reuse its plaintext tokens.
         context.getSharedPreferences("sync_auth", Context.MODE_PRIVATE).edit().clear().apply()
     }
 

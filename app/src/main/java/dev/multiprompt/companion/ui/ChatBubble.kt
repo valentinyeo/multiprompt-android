@@ -15,7 +15,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-/** Bubble fill for a chat message, from the desktop Chat View colours (see Theme.kt). */
 fun chatBubbleColor(isUser: Boolean, sunlight: Boolean): Color = when {
     isUser && sunlight -> ChatBubbleUserLight
     isUser -> ChatBubbleUserDark
@@ -25,14 +24,8 @@ fun chatBubbleColor(isUser: Boolean, sunlight: Boolean): Color = when {
 
 fun chatTextColor(sunlight: Boolean): Color = if (sunlight) ChatTextLight else ChatTextDark
 
-/** Colour of the small name and time labels (desktop "hint"). */
 fun chatHintColor(sunlight: Boolean): Color = if (sunlight) Color(0xFF4A4D52) else ChatHintDark
 
-/**
- * One bubble per message or reply, like the desktop Chat View: the user's on the right (at most
- * 70 percent of the width, light grey), the agent's on the left across the whole column (dark
- * grey), both with the card's 4 dp corners.
- */
 @Composable
 fun ChatBubble(
     isUser: Boolean,

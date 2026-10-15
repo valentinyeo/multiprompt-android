@@ -27,7 +27,6 @@ class AccountHttpClient : AccountHttp {
             val source = reply.body.source()
             if (source.request(1024L * 1024L + 1)) throw IOException("Account response too large")
             val text = source.readUtf8()
-            // Error pages from the network/edge are not invalid credentials.
             val json = runCatching { JSONObject(text) }.getOrElse {
                 if (reply.isSuccessful) throw IOException("Invalid account response") else JSONObject()
             }

@@ -1,15 +1,6 @@
-/**
- * M0 auth-spike stub — see docs/sync-protocol-v1.md, "Milestone M0".
- *
- * Validates the Cloudflare Access JWT from the Cf-Access-Jwt-Assertion header
- * (the pattern documented by Cloudflare) and echoes the identity. Storage (M3)
- * and production auth wiring are intentionally absent.
- */
 
 interface Env {
-  /** Zero Trust team domain, e.g. https://yeoux.cloudflareaccess.com */
   TEAM_DOMAIN: string;
-  /** Application Audience (AUD) tag of the Access application. */
   POLICY_AUD: string;
 }
 
@@ -21,8 +12,6 @@ export default {
     };
     if (request.method === "OPTIONS") return new Response(null, { headers: cors });
 
-    // Service tokens are machine auth (CI/ops) and must never pass the user path
-    // (docs/sync-protocol-v1.md). This rejection is live from the first deploy.
     if (
       request.headers.has("CF-Access-Client-Id") ||
       request.headers.has("CF-Access-Client-Secret")
@@ -44,8 +33,6 @@ export default {
     }
 
     if (!env.POLICY_AUD) {
-      // POLICY_AUD is set once the Access application exists; validation cannot run
-      // without the audience tag, so no token is trusted before then.
       return json(
         {
           error: "waiting for configuration",

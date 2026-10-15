@@ -6,7 +6,6 @@ import dev.multiprompt.companion.model.DissolvedSession
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Local restore records for sessions dissolved from the remote tmux server. */
 class DissolvedSessionStore(context: Context) {
     private val preferences = context.getSharedPreferences("dissolved_sessions", Context.MODE_PRIVATE)
 

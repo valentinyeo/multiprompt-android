@@ -3,23 +3,6 @@ package dev.multiprompt.companion.sync
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * Syncable state entities, their canonical JSON bodies, and the merge/tombstone rules
- * of sync protocol v1 (docs/sync-protocol-v1.md). Pure JVM: the Android stores feed
- * plain data in, the sync layer knows nothing about SharedPreferences.
- *
- * Field order, types, and null-vs-absent semantics follow the committed schema goldens:
- * - hosts: {"hosts":[{"id","label","hostname","port","username","keySecretId",
- *   "passphraseSecretId","hostKeyType","hostKeyFingerprint"}]} sorted by
- *   label (case-insensitive), then id. Secret material never appears; keySecretId is a
- *   local-only reference.
- * - workspaces: {"workspaces":[{id,name,hostId,remotePath}]} sorted by name
- *   (case-insensitive).
- * - sessionState: {lastReadAt, archivedAt, resumeAt} per session entity
- *   (<hostUuid>--<tmuxSessionName>); isUnread is derived, never stored; needsAttention is
- *   device-derived and never synced; fontScale is device-scoped and only synced under an
- *   explicit universal opt-in.
- */
 object SyncSchema {
 
     init {
@@ -33,14 +16,12 @@ object SyncSchema {
     private val WORKSPACE_FIELDS = listOf("id", "name", "hostId", "remotePath")
     private val SESSION_STATE_KEYS = listOf("lastReadAt", "archivedAt", "resumeAt")
 
-    /** A synced host profile: no key or passphrase material, ever. */
     data class SyncHost(
         val id: String,
         val label: String,
         val hostname: String,
         val port: Int,
         val username: String,
-        /** Local-only reference into this device's SecretStore; meaningless off-device. */
         val keySecretId: String,
         val passphraseSecretId: String? = null,
         val hostKeyType: String? = null,
@@ -54,24 +35,18 @@ object SyncSchema {
         val remotePath: String,
     )
 
-    /**
-     * Device-independent session state. [lastReadAt] is the remote activity watermark;
-     * [archivedAt]/[resumeAt] are the archive intent (both null = not archived).
-     */
     data class SyncSessionState(
         val lastReadAt: Long,
         val archivedAt: Long? = null,
         val resumeAt: Long? = null,
     )
 
-    /** One change to push: the record id, entity id, and the entity's canonical body. */
     data class EntityUpsert(
         val recordId: String,
         val entityId: String,
         val bodyJson: String,
     )
 
-    // --- hosts ---------------------------------------------------------------------------
 
     fun hostsBody(hosts: List<SyncHost>): String = buildString {
         append("{\"hosts\":[")
@@ -113,7 +88,6 @@ object SyncSchema {
         }
     }
 
-    // --- workspaces ----------------------------------------------------------------------
 
     fun workspacesBody(workspaces: List<SyncWorkspace>): String = buildString {
         append("{\"workspaces\":[")
@@ -145,7 +119,6 @@ object SyncSchema {
         }
     }
 
-    // --- sessionState ----------------------------------------------------------------------
 
     fun sessionStateBody(state: SyncSessionState): String = buildString {
         append("{\"lastReadAt\":").append(state.lastReadAt)
@@ -165,10 +138,6 @@ object SyncSchema {
         )
     }
 
-    /**
-     * Minimal canonical JSON string escaping. Writers pin the field order; org.json is
-     * used for parsing only, because its serializer re-orders keys alphabetically.
-     */
     private fun jsonString(value: String?): String {
         if (value == null) return "null"
         val sb = StringBuilder(value.length + 2)
@@ -188,13 +157,9 @@ object SyncSchema {
         return sb.toString()
     }
 
-    // Entity ids per the logical-ID rules.
     fun sessionEntityId(hostUuid: String, tmuxSessionName: String): String {
         require(hostUuid.isNotBlank()) { "host uuid must not be blank" }
         require(tmuxSessionName.isNotBlank()) { "tmux session name must not be blank" }
-        // The entity-id alphabet is ^[A-Za-z0-9][A-Za-z0-9._-]*$; tmux names may contain
-        // characters outside it, so the session-name portion is percent-encoded and the
-        // host UUID (safe alphabet) is joined with the reserved-free "--" separator.
         val encodedName = java.net.URLEncoder.encode(tmuxSessionName, "UTF-8")
             .replace("+", "%20")
         return "$hostUuid--$encodedName"

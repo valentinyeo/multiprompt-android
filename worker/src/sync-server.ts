@@ -1,17 +1,3 @@
-/**
- * multiprompt sync — production sync server (IGSH-249, milestone M3).
- * Endpoints per docs/sync-protocol-v1.md "Storage and sync semantics", shaped
- * to match SyncTransport.kt's list/push contract 1:1. The server never
- * decrypts: `payload` is always the sealed entity-record JSON text, opaque
- * bytes as far as this worker is concerned.
- *
- * Routes:
- *   GET /records/:recordId?since=<revision>   list entities at/above a revision
- *   PUT /records/:recordId/:entityId          push one entity (optimistic concurrency)
- *
- * Auth: `Authorization: Bearer <token>` verified against the Access-for-SaaS
- * app's JWKS (see auth.ts). Everything else is rejected.
- */
 
 import { verifyRequest, AuthError, type AuthEnv } from "./auth";
 import { SyncStore, type RemoteEntity, type VaultRow } from "./store";
@@ -20,12 +6,7 @@ export interface Env extends AuthEnv {
   DB: D1Database;
 }
 
-// Same shape as the local envelope's record ids (docs/sync-protocol-v1.md,
-// "Canonical envelope"): lowercase-led camelCase identifiers. Deliberately
-// not an allowlist of the three known record ids — "adding a record id is
-// not a breaking change" (docs/sync-protocol-v1.md, "Record ids (v1)").
 const RECORD_ID_RE = /^[a-z][a-zA-Z0-9]*$/;
-// docs/sync-protocol-v1.md, "Entity records".
 const ENTITY_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._%*-]*$/;
 
 export default {
@@ -88,9 +69,6 @@ export default {
       return json({ revision: outcome.revision }, 200);
     }
 
-    // Sync 4 (IGSH-251): the small single-row vault key envelope a device
-    // fetches to bootstrap before it can unwrap and sync entity records.
-    // Never the entity records themselves (see the module doc above).
     if (parts.length === 1 && parts[0] === "vault" && request.method === "GET") {
       const vault = await store.getVault(identity.accountId);
       if (!vault) return json({ error: "not found" }, 404);

@@ -1,6 +1,5 @@
 package dev.multiprompt.companion.ui
 
-/** Small, deterministic helpers for composing text in the native prompt field. */
 internal object PromptComposer {
     fun appendImageUrl(prompt: String, url: String): String {
         return appendImageUrls(prompt, listOf(url))

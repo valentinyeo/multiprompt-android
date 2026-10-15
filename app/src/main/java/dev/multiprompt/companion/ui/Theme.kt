@@ -18,8 +18,6 @@ val ReaderFontFamily = FontFamily(
     Font(R.font.ibm_plex_mono_regular, FontWeight.Normal),
 )
 
-// Chat View font: the same family as the desktop Chat View (IBM Plex Sans; Segoe UI is only the
-// desktop fallback). Bundled so the phone does not depend on a system font.
 val ChatFontFamily = FontFamily(
     Font(R.font.ibm_plex_sans_regular, FontWeight.Normal),
     Font(R.font.ibm_plex_sans_italic, FontWeight.Normal, FontStyle.Italic),
@@ -27,10 +25,6 @@ val ChatFontFamily = FontFamily(
     Font(R.font.ibm_plex_sans_bold, FontWeight.SemiBold),
 )
 
-// Desktop Chat View values (zigshell src/chat_style.zig and main.zig): corner radius 4
-// (CHAT_BUBBLE_RADIUS), bubble padding 12 by 10, 8 between paragraphs of one reply, user bubble
-// capped at 70 percent of the width, agent bubble spans the column. Fills derive from the page
-// colour: dark adds 53 (user) and 36 (agent) per channel, light subtracts 26 and 11.
 val ChatBubbleRadius = 4.dp
 const val ChatUserMaxWidthFraction = 0.7f
 val ChatBubbleUserDark = Color(0xFF353535)
@@ -50,19 +44,14 @@ val TerminalGreen = Color(0xFF42BE65)
 val TerminalYellow = Color(0xFFF1C21B)
 val TerminalRed = Color(0xFFFA4D56)
 
-// Sunlight mode needs dark ink on white: pastel-on-dark colours wash out completely at
-// max brightness outdoors, so each hue is darkened until it keeps 7:1 contrast on white.
 val TerminalBlueLight = Color(0xFF0043CE)
 val TerminalGreenLight = Color(0xFF0E6027)
 val TerminalYellowLight = Color(0xFF8E6A00)
 val TerminalRedLight = Color(0xFFA2191F)
 
 
-// Light link blue for text on the dark sunlight-mode prompt bubble; TerminalBlueLight is unreadable on it.
 val LinkOnDark = Color(0xFF8AB4F8)
 
-// Plain helpers (not @Composable) because the syntax highlighter builds AnnotatedStrings
-// outside composition; call sites pass the flag they already hold.
 fun terminalBlue(sunlight: Boolean): Color =
     if (sunlight) TerminalBlueLight else TerminalBlue
 
@@ -81,7 +70,6 @@ private val MultipromptColors = darkColorScheme(
     secondary = Color(0xFFA7F3D0),
     onSecondary = Color(0xFF064E3B),
     tertiary = Color(0xFFC4B5FD),
-    // Desktop AMOLED theme: pure black page, white text, grey bubbles (agent 242424, user 353535).
     background = Color(0xFF000000),
     onBackground = ChatTextDark,
     surface = Color(0xFF161616),
@@ -93,8 +81,6 @@ private val MultipromptColors = darkColorScheme(
     error = Color(0xFFFCA5A5),
 )
 
-// High-contrast light scheme for direct sunlight: mid-grey text disappears outdoors, so
-// every text-on-background pair here clears 7:1 at maximum brightness.
 private val SunlightColors = lightColorScheme(
     primary = Color(0xFF0043CE),
     onPrimary = Color(0xFFFFFFFF),

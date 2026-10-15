@@ -6,11 +6,6 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/**
- * Friendly local time for a transcript message, like the desktop Chat View: "11:27" today,
- * "Yesterday 18:04", "Mon 18:04" within the last week, "3 Oct 18:04" this year, else with the year.
- * Returns the input unchanged when it is not an ISO instant.
- */
 fun formatChatTime(
     iso: String,
     now: Instant = Instant.now(),

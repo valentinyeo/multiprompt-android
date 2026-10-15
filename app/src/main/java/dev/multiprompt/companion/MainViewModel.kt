@@ -83,9 +83,7 @@ data class AppUiState(
     val sessionInteractionEpochSeconds: Map<String, Long> = emptyMap(),
     val creatingSession: Boolean = false,
     val sessionActionError: String? = null,
-    /** Live agent time estimates, keyed like a session key. Empty when none is running. */
     val sessionEtas: Map<String, TmuxText.SessionEta> = emptyMap(),
-    /** Estimate accuracy dialog: null when it is closed, empty while it is still loading. */
     val etaAccuracy: List<TmuxText.AgentAccuracy>? = null,
     val etaAccuracyLoading: Boolean = false,
     val etaAccuracyError: String? = null,
@@ -94,29 +92,16 @@ data class AppUiState(
     val readerDefaultFontScale: Float = 1f,
     val readerTechnicalMode: Boolean = false,
     val appTheme: AppTheme = AppTheme.SYSTEM,
-    /** Consecutive idle snapshots required before a Waiting session is released. */
     val waitingIdleObservations: Map<String, Int> = emptyMap(),
-    /**
-     * Session keys in the order the inbox showed them when the reader opened. Opening a
-     * session marks it as the most recent interaction, which reorders the inbox, so
-     * recomputing neighbours per swipe walked a list that moved under the swipe.
-     */
     val readerSwipeOrder: List<String> = emptyList(),
-    /** The terminal was opened from a reader, so closing it returns to that conversation. */
     val terminalFromReader: Boolean = false,
-    /** Host, folder and harness picker for a brand new session. Null when it is closed. */
     val newSession: NewSessionPicker? = null,
 )
 
 enum class NewSessionStep { HOST, PATH, HARNESS, EXISTING }
 
-/** The picker's two jobs: start something new, or go back to something already running. */
 enum class NewSessionMode { NEW, EXISTING }
 
-/**
- * State for the new-session flow: pick a host, then either walk to a folder and pick the
- * harness, or find one of the sessions already alive on that host and open it.
- */
 data class NewSessionPicker(
     val hostId: String? = null,
     val accountWorkspace: String? = null,
@@ -124,9 +109,7 @@ data class NewSessionPicker(
     val path: String = "",
     val directories: List<RemoteDirectory> = emptyList(),
     val usage: Map<String, Int> = emptyMap(),
-    /** Sessions alive on the host right now, as of the last load. */
     val sessions: List<TmuxSession> = emptyList(),
-    /** Sessions this app is already showing (inbox) or has a warm reader for. */
     val openSessionKeys: Set<String> = emptySet(),
     val needsAttentionOnly: Boolean = true,
     val loading: Boolean = false,
@@ -214,7 +197,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(section = section) }
     }
 
-    /** Opens the estimate accuracy dialog for [session]'s host and reads the log. */
     fun showEtaAccuracy(session: TmuxSession) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
         _state.update {
@@ -338,11 +320,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         refresh()
     }
 
-    /**
-     * Adds a profile for another login on the same server. It reuses the source host's key,
-     * passphrase and pinned server fingerprint, so only the username differs. The secrets are
-     * copied under the new profile's own ids, so deleting either profile leaves the other working.
-     */
     fun addUserOnHost(source: HostProfile, username: String) {
         val user = username.trim()
         val key = secrets.get(source.keySecretId)
@@ -489,9 +466,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         val key = SessionReadStore.key(session.hostId, session.name)
                         sessionReads.isArchived(
                             session,
-                            // The first idle-looking snapshot can be a terminal redraw or
-                            // stale completion text. Match the desktop's stop-event semantics
-                            // by requiring the state to survive one more refresh.
                             needsAttention = (idleObservations[key] ?: 0) >= IDLE_OBSERVATIONS_TO_RELEASE,
                         )
                     }
@@ -505,8 +479,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         current.selectedWorkspaceId
                     else -> workspaceSplitIds.firstOrNull()
                 }
-                // Estimates come from the host with a "remaining" already computed there, so
-                // they are converted to a local deadline exactly once, at receipt.
                 val etaNow = System.currentTimeMillis()
                 val sessionEtas = results
                     .filter { it.error == null }
@@ -557,11 +529,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * Readers stay connected after they leave the screen so swiping back is instant. Each
-     * one holds an SSH stream, so only a few are kept and an untouched one is dropped
-     * after [READER_CACHE_TTL_MS].
-     */
     private val warmReaders = LinkedHashMap<String, SessionReaderConnection>()
     private val warmReaderTouchedAt = mutableMapOf<String, Long>()
 
@@ -611,8 +578,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun openReader(session: TmuxSession) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
         val swipeOrder = _state.value.readerSwipeOrder.ifEmpty {
-            // The inbox draws the list reversed when newest sits at the bottom, so a swipe
-            // right has to follow what is on screen, not the underlying order.
             visibleInboxSessions(_state.value)
                 .let { if (_state.value.newestSessionsAtBottom) it.asReversed() else it }
                 .map { SessionReadStore.key(it.hostId, it.name) }
@@ -814,9 +779,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val current = _state.value
         val key = SessionReadStore.key(session.hostId, session.name)
         viewModelScope.launch {
-            // Read the exact conversation id while the session is still alive, so the restore
-            // resumes this conversation and not whichever one became newest in that folder.
-            // An unreachable host or a folder Claude never ran in just leaves it unknown.
             val claudeSessionId = if (session.agent == AgentKind.CLAUDE &&
                 session.workingDirectory.isNotBlank()
             ) {
@@ -843,11 +805,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         destroySession(session, dissolved = null)
     }
 
-    /**
-     * Drops a session from this app without touching the host. Archiving and ending both need
-     * SSH, so this is the only way to clear a session whose VPS stopped answering. The host
-     * stays the source of truth: when it answers again, a session that still exists returns.
-     */
     fun forgetSession(session: TmuxSession) {
         _state.value.accountLayout?.let { AccountHostMap.tabFor(session, it, _state.value.accountHosts) }?.let(::closeAccountTab)
         val key = SessionReadStore.key(session.hostId, session.name)
@@ -904,14 +861,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (terminalWasOpen) _state.value.terminal?.close()
                     dissolved?.let(dissolvedStore::upsert)
                     sessionReads.restore(session)
-                    // A host whose tmux server died keeps answering with its cached list, so an
-                    // ended session has to leave the cache or it comes straight back.
                     sessionCache.save(
                         session.hostId,
                         sessionCache.load(session.hostId).filterNot { it.name == session.name },
                     )
-                    // Ending a session should hand over to the one above it, the way the
-                    // inbox is read, and only fall back to the inbox when nothing is left.
                     val successor = if (readerWasOpen) neighbourAfterRemoving(key) else null
                     _state.update {
                         it.copy(
@@ -972,15 +925,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun closeReader() {
-        // The connection stays warm so reopening is instant; the sweep drops it if the
-        // session is not visited again.
         _state.update { it.copy(reader = null, readerSession = null, readerSwipeOrder = emptyList()) }
         sweepWarmReaders()
     }
 
     fun startNewSession() {
         _state.update { it.copy(newSession = NewSessionPicker(accountWorkspace = it.selectedWorkspaceId), sessionActionError = null) }
-        // One host means the host step would be a formality; go straight to its folders.
         _state.value.hosts.singleOrNull()?.let { host -> chooseNewSessionHost(host.id) }
     }
 
@@ -1007,7 +957,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(newSession = it.newSession?.copy(chosenPath = null)) }
     }
 
-    /** Switches the picker between starting something new and finding what is already alive. */
     fun setNewSessionMode(mode: NewSessionMode) {
         val picker = _state.value.newSession ?: return
         _state.update { it.copy(newSession = it.newSession?.copy(mode = mode, error = null)) }
@@ -1059,11 +1008,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * Opens a session found on the host. Nothing is created: an already warm reader keeps its
-     * transcript, an archived session returns to the open inbox, and a shell session opens the
-     * live terminal.
-     */
     fun openExistingSession(session: TmuxSession) {
         val key = SessionReadStore.key(session.hostId, session.name)
         _state.update { current ->
@@ -1155,12 +1099,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Archives the current thread and immediately advances through the remaining inbox. */
     fun archiveReaderAndOpenNext() {
         archiveReaderUntilAndOpenNext(null)
     }
 
-    /** Snoozes the current thread and immediately advances through the remaining inbox. */
     fun archiveReaderUntilAndOpenNext(resumeAtEpochSeconds: Long?) {
         val current = _state.value.readerSession ?: return
         val visible = visibleInboxSessions(_state.value)
@@ -1179,7 +1121,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** The session shown above the one being removed, or the one below if it was first. */
     private fun neighbourAfterRemoving(key: String): TmuxSession? {
         val state = _state.value
         val live = visibleInboxSessions(state).associateBy { SessionReadStore.key(it.hostId, it.name) }
@@ -1191,7 +1132,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return live[remaining.getOrNull(index - 1) ?: remaining.getOrNull(index) ?: remaining.first()]
     }
 
-    /** Swiping the reader sideways opens the neighbouring visible inbox session. */
     fun openAdjacentReaderSession(delta: Int) {
         val state = _state.value
         val current = state.readerSession ?: return
@@ -1229,7 +1169,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Swiping the terminal sideways attaches the neighbouring session, wrapping at both ends. */
     fun openAdjacentSession(delta: Int) {
         val current = _state.value.terminalSession ?: return
         val sessions = _state.value.sessions
@@ -1245,7 +1184,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val session = state.terminalSession.takeIf { state.terminalFromReader }
         state.terminal?.close()
         _state.update { it.copy(terminal = null, terminalSession = null, terminalFromReader = false) }
-        // Leaving the terminal returns to the conversation it was opened from, not the inbox.
         session?.let(::openReader)
         refresh()
     }
@@ -1403,11 +1341,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val hostKey: PresentedHostKey? = null,
     )
 
-    /**
-     * The list the inbox is showing, in the order it shows it. Swiping between sessions and
-     * "open the next one" both follow this, so they cannot land on a session the current
-     * bucket and workspace do not contain.
-     */
     private fun visibleInboxSessions(state: AppUiState): List<TmuxSession> = state.sessions
         .filter { session ->
             val key = SessionReadStore.key(session.hostId, session.name)

@@ -1,6 +1,5 @@
 package dev.multiprompt.companion.ui
 
-/** One styled piece of inline text. [url] is set for links. */
 data class InlineRun(
     val text: String,
     val bold: Boolean = false,
@@ -20,7 +19,6 @@ sealed interface MdBlock {
     data object Rule : MdBlock
 }
 
-/** Small focused Markdown parser for chat replies: no HTML, no nested block quotes. */
 object MarkdownParser {
     private val FENCE = Regex("^\\s*(```+|~~~+)\\s*([\\w+#.-]*)\\s*$")
     private val HEADING = Regex("^\\s{0,3}(#{1,6})\\s+(.*?)\\s*#*\\s*$")
@@ -55,7 +53,7 @@ object MarkdownParser {
                     body += lines[i]
                     i++
                 }
-                i++ // closing fence (or end of input when unterminated)
+                i++
                 out += MdBlock.Code(fence.groupValues[2], body.joinToString("\n"))
                 continue
             }
@@ -101,7 +99,6 @@ object MarkdownParser {
                 val indent = m.groupValues[1].replace("\t", "    ").length
                 val marker = if (bullet != null) "•" else m.groupValues[2] + "."
                 val text = StringBuilder(m.groupValues[3])
-                // Indented continuation lines (not a new item or fence) belong to this item.
                 var j = i + 1
                 while (j < lines.size && lines[j].isNotBlank() && BULLET.matchEntire(lines[j]) == null &&
                     NUMBERED.matchEntire(lines[j]) == null && lines[j].startsWith(" ") &&
@@ -230,7 +227,6 @@ object MarkdownParser {
         return LinkMatch(s.substring(start + 1, i), url, urlEnd + 1)
     }
 
-    /** Plain text: linkify bare URLs unless already inside an explicit link or code. */
     private fun addPlain(text: String, style: InlineRun, out: MutableList<InlineRun>) {
         if (style.url != null || style.code) { out += style.copy(text = text); return }
         var last = 0

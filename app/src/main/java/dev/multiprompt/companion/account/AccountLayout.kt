@@ -86,7 +86,6 @@ data class AccountLayout(
             return layout
         }
 
-        // Replay changed fields, not a cached snapshot. Remote deletions cannot be revived by a rename.
         fun rebase(base: AccountLayout, edited: AccountLayout, remote: AccountLayout): AccountLayout {
             val old = base.tabs.associateBy { it.identity }
             val local = edited.tabs.associateBy { it.identity }

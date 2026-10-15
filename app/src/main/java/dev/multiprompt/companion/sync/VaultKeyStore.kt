@@ -10,21 +10,10 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/**
- * Stores the unwrapped account vault key on this device.
- *
- * After the passphrase unwraps the vault key (docs/sync-protocol-v1.md), it is persisted
- * here so the passphrase does not have to be re-entered on every launch: the vault key is
- * sealed with a dedicated Android Keystore AES key (hardware-backed, strongbox when
- * available) and stored base64 in prefs — the same pattern as [dev.multiprompt.companion.security.SecretStore].
- * The vault key itself never persists in plaintext and never leaves the device unsealed.
- * The later Windows adapter (zigshell) stores it under DPAPI instead.
- */
 class VaultKeyStore(context: Context) {
 
     private val preferences = context.getSharedPreferences("sync_vault", Context.MODE_PRIVATE)
 
-    /** Returns the stored vault key, or null when no account vault exists on this device. */
     fun get(): ByteArray? {
         val encoded = preferences.getString(VAULT_KEY, null) ?: return null
         return runCatching {
@@ -40,7 +29,6 @@ class VaultKeyStore(context: Context) {
         }.getOrNull()
     }
 
-    /** Persists the unwrapped vault key, sealed by the Android Keystore key. */
     fun put(vaultKey: ByteArray) {
         require(vaultKey.size == VAULT_KEY_BYTES) { "vault key must be 32 bytes" }
         val cipher = Cipher.getInstance(TRANSFORMATION)
@@ -50,7 +38,6 @@ class VaultKeyStore(context: Context) {
         preferences.edit().putString(VAULT_KEY, encoded).commit()
     }
 
-    /** Forgets the vault key (sign-out, passphrase reset, corruption). */
     fun clear() {
         preferences.edit().remove(VAULT_KEY).apply()
     }

@@ -52,7 +52,6 @@ sealed class SshProblem(message: String) : Exception(message) {
 }
 
 class SshRepository(private val secrets: SecretStore) {
-    /** One frame from the reader stream: the pane plus the host-side facts about it. */
     data class StreamSnapshot(
         val output: String,
         val details: TmuxText.RuntimeDetails,
@@ -64,7 +63,6 @@ class SshRepository(private val secrets: SecretStore) {
         val hookState: TmuxText.HookState?,
     )
 
-    /** Everything one host answered with: its sessions and its live agent time estimates. */
     data class HostSessions(
         val sessions: List<TmuxSession>,
         val etaStates: Map<String, TmuxText.SessionEtaState> = emptyMap(),
@@ -169,8 +167,6 @@ class SshRepository(private val secrets: SecretStore) {
                     }
                     if (line.startsWith(TmuxCommands.ETA_PREFIX)) {
                         val payload = line.removePrefix(TmuxCommands.ETA_PREFIX).trim()
-                        // An empty payload means both facts cleared: no open estimate and no
-                        // lifecycle state recorded for this session.
                         val decoded = TmuxText.decodeHex(payload)
                         etaState = decoded
                             .takeIf(String::isNotBlank)
@@ -234,13 +230,12 @@ class SshRepository(private val secrets: SecretStore) {
             if (!session.requestExec("exec python3 ~/.local/share/zigshell/mp_complete.py --serve")) {
                 throw SshProblem.Connection("The SSH server refused the transcript helper")
             }
-            launch { for (chunk in session.stderr) { /* Discard helper diagnostics without buffering. */ } }
+            launch { for (chunk in session.stderr) {  } }
             val framer = TranscriptProtocol.Framer()
             var identity = initialIdentity
             var token: String? = null
             var requestId = 0L
             while (isActive) {
-                // Re-resolve periodically: /clear or a restarted agent can change the live SID.
                 if (requestId % 15L == 0L) {
                     identity = initialIdentity
                     token = null
@@ -326,11 +321,6 @@ class SshRepository(private val secrets: SecretStore) {
         }
     }
 
-    /**
-     * Folders directly inside [path] on [host], for the new-session picker. A null [path]
-     * starts at the host's projects folder. Read-only and capped, so a directory with
-     * thousands of entries cannot stall the phone.
-     */
     suspend fun listDirectories(host: HostProfile, path: String? = null): RemoteListing =
         withContext(Dispatchers.IO) {
             withTimeout(CONNECTION_TIMEOUT_MS) {
@@ -373,11 +363,6 @@ class SshRepository(private val secrets: SecretStore) {
             }
         }
 
-    /**
-     * The newest Claude conversation recorded for [workingDirectory] on [host], or null when
-     * none is known. Read-only, and every failure counts as unknown: the archive then falls
-     * back to the plain continue flag instead of refusing to archive.
-     */
     suspend fun latestClaudeSessionId(host: HostProfile, workingDirectory: String): String? =
         withContext(Dispatchers.IO) {
             try {
@@ -390,18 +375,12 @@ class SshRepository(private val secrets: SecretStore) {
                     }
                 }
             } catch (cancelled: CancellationException) {
-                // A real cancellation is not a lookup failure; only connection trouble is.
                 throw cancelled
             } catch (throwable: Throwable) {
                 null
             }
         }
 
-    /**
-     * How far off each agent's estimates usually are on [host], read from the finished-estimate
-     * log. Same rules as the desktop overlay: two minutes minimum, three samples minimum, the
-     * last twenty rows per agent.
-     */
     suspend fun etaAccuracy(host: HostProfile): List<TmuxText.AgentAccuracy> =
         withContext(Dispatchers.IO) {
             withTimeout(CONNECTION_TIMEOUT_MS) {
@@ -544,7 +523,6 @@ class SshRepository(private val secrets: SecretStore) {
         const val MAX_PROMPT_BYTES = 64 * 1024
         const val MAX_SNAPSHOT_HEX_CHARS = 1024 * 1024
         const val MAX_DIRECTORY_ENTRIES = 500
-        /** Short on purpose: a slow lookup must not delay an archive for long. */
         const val LAUNCH_LOOKUP_TIMEOUT_MS = 8_000L
         const val DIRECTORY_ROOT_MARKER = "@root"
     }

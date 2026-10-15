@@ -1,19 +1,4 @@
 #!/usr/bin/env python3
-"""Generate the stable fixture vectors for multiprompt sync protocol v1.
-
-Implements exactly what docs/sync-protocol-v1.md specifies, using argon2-cffi
-(hash_secret_raw) and cryptography (AESGCM), and writes canonical JSON vectors that
-both the Kotlin tests (app/src/test/resources/sync/) and, later, the zigshell Zig
-verifier must reproduce byte-for-byte.
-
-The committed fixture file pins one set of random values. Re-running this script
-generates NEW vectors; that changes the committed file and is a deliberate,
-reviewable act — do not do it casually.
-
-Usage:
-    pip install argon2-cffi cryptography
-    python3 scripts/gen-sync-fixtures.py > app/src/test/resources/sync/sync-protocol-v1-fixtures.json
-"""
 
 import base64
 import hashlib
@@ -29,13 +14,12 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 PROTOCOL = "multiprompt-sync-v1"
 KDF = {"memoryKiB": 65536, "iterations": 3, "parallelism": 1}
-ARGON2_VERSION = 19  # 0x13
+ARGON2_VERSION = 19
 KEK_BYTES = 32
 VAULT_KEY_BYTES = 32
 IV_BYTES = 12
 SALT_BYTES = 16
 
-# --- Recovery key (docs/sync-protocol-v1.md, "Recovery key") -----------------------------
 
 RECOVERY_KEY_BYTES = 32
 RECOVERY_KDF_ALG = "hkdf-sha256"
@@ -44,14 +28,12 @@ CROCKFORD_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
 
 def crockford_encode_payload(key: bytes) -> str:
-    """256 bits -> 52 five-bit symbols; the last symbol's low bit is zero padding."""
     bits = "".join(f"{b:08b}" for b in key)
     bits += "0" * ((5 - len(bits) % 5) % 5)
     return "".join(CROCKFORD_ALPHABET[int(bits[i : i + 5], 2)] for i in range(0, len(bits), 5))
 
 
 def crockford_checksum(key: bytes) -> str:
-    """Top 16 bits of SHA-256(key), packed into a 20-bit value (low 4 bits zero)."""
     digest = hashlib.sha256(key).digest()
     value = (digest[0] << 12) | (digest[1] << 4)
     return "".join(CROCKFORD_ALPHABET[(value >> shift) & 0x1F] for shift in (15, 10, 5, 0))
@@ -95,9 +77,6 @@ def canonical_envelope_with_recovery(
 
 
 def fixed_bytes(domain: str, length: int) -> bytes:
-    """Deterministic 'random' bytes for the recovery fixtures: a fixed, re-runnable
-    derivation (not a CSPRNG) so the vectors are reproducible bit-for-bit, per the
-    determinism rule below. Each domain string yields independent-looking bytes."""
     out = b""
     counter = 0
     while len(out) < length:
@@ -334,14 +313,6 @@ def main():
         separators=(",", ":"),
     )
 
-    # `vectors`/`entityVectors`/`schemaVectors` are pre-existing golden vectors. This
-    # script currently seeds their randomness from `secrets.token_bytes`, so re-running
-    # the builders below regenerates *different* values on every run — re-running it does
-    # not, in fact, reproduce them bit-for-bit (a pre-existing gap in this determinism
-    # rule, not something the recovery-key change fixes). To keep the 9 committed vectors
-    # byte-identical while extending this file with the new recovery vectors, reuse them
-    # verbatim from the already-committed fixture file when present, and only fall back to
-    # generating fresh ones for a from-scratch bootstrap (no committed file yet).
     existing_path = os.path.join(os.path.dirname(__file__), "..", "app", "src", "test", "resources", "sync", "sync-protocol-v1-fixtures.json")
     existing = None
     if os.path.exists(existing_path):
@@ -362,7 +333,6 @@ def main():
             build_vector(
                 "multi-record-sorted",
                 "multiprompt sync v1 passphrase",
-                # Deliberately unsorted input: the envelope must sort record ids.
                 {"workspaces": workspaces, "hosts": hosts},
             ),
             build_vector(
@@ -372,8 +342,6 @@ def main():
             ),
         ]
 
-        # Entity-record vectors seal directly with a vault key (no passphrase in the
-        # loop): one D1 row per entity. Pinned keys keep the vectors deterministic.
         entity_vault_key = bytes(range(32))
         entity_vectors = [
             build_entity_vector(
@@ -392,9 +360,6 @@ def main():
             ),
         ]
 
-        # Schema vectors: canonical plaintext record bodies mappers must emit — the two
-        # languages must agree on field names/order/types before encryption. See the
-        # "Schema vectors" section of docs/sync-protocol-v1.md.
         schema_vectors = [
             build_schema_vector(
                 "schema-hosts-sorted-by-label",
@@ -458,9 +423,6 @@ def main():
             ),
         ]
 
-    # Recovery key vectors (docs/sync-protocol-v1.md, "Recovery key"). Fully deterministic
-    # (fixed_bytes derivation, not a CSPRNG) so re-running this script reproduces them
-    # bit-for-bit, same as the rest of this file.
     recovery_vectors = [
         build_recovery_vector(
             "envelope-with-recovery",
@@ -472,8 +434,6 @@ def main():
     recovery_key_string_vectors = [
         build_recovery_key_string_vector("recovery-key-roundtrip", fixed_bytes("recovery-key-roundtrip/key", RECOVERY_KEY_BYTES)),
     ]
-    # A second entry sharing the same key bytes but with one character of the encoded
-    # string corrupted, so decoding it must fail its checksum.
     _rt = recovery_key_string_vectors[0]
     _bad_char = "0" if _rt["encoded"][0] != "0" else "1"
     recovery_key_string_vectors.append(
@@ -504,5 +464,5 @@ def main():
 
 
 if __name__ == "__main__":
-    assert os.isatty(sys.stdout.fileno()) is False or True  # allow piping or redirect
+    assert os.isatty(sys.stdout.fileno()) is False or True
     main()

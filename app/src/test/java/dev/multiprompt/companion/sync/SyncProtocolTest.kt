@@ -8,7 +8,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Base64
 
-/** Behavioural tests for the v1 envelope, independent of the cross-language fixtures. */
 class SyncProtocolTest {
 
     private val passphrase = "correct horse battery staple".toCharArray()
@@ -48,7 +47,6 @@ class SyncProtocolTest {
         val first = SyncProtocol.seal(passphrase, records)
         val second = SyncProtocol.seal(passphrase, records)
         assertNotEquals(first, second)
-        // Both must still open correctly.
         records.forEach { (id, plaintext) ->
             assertArrayEquals(plaintext, SyncProtocol.open(passphrase, first).getValue(id))
             assertArrayEquals(plaintext, SyncProtocol.open(passphrase, second).getValue(id))
@@ -114,7 +112,6 @@ class SyncProtocolTest {
         assertEquals(SyncProtocol.SyncProtocolException.Reason.MALFORMED, exception.reason)
     }
 
-    /** Corrupt one byte of the final record's ciphertext, keeping the canonical shape. */
     private fun flipLastRecordCiphertext(envelope: String): String {
         val marker = "\"ct\":\""
         val start = envelope.lastIndexOf(marker) + marker.length
@@ -130,7 +127,6 @@ class SyncProtocolTest {
         val metadata = entityMetadata("sessionState", "3f7c1b2e-8a4d-4c6e-9b2f-1d5a7c9e0b31--my-session")
         val plaintext = """{"unread":true}""".toByteArray(Charsets.UTF_8)
         val payload = SyncProtocol.sealEntity(vaultKey, metadata, plaintext, iv)
-        // Canonical field order: v, recordId, entityId, iv, ct.
         val text = payload.toString(Charsets.UTF_8)
         assertTrue(text.startsWith("{\"v\":1,\"recordId\":\"sessionState\",\"entityId\":\""))
         val opened = SyncProtocol.openEntity(vaultKey, metadata, payload)

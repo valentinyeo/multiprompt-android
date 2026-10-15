@@ -5,7 +5,6 @@ import dev.multiprompt.companion.model.TmuxSession
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Persists the last successful session list so the inbox remains useful offline. */
 class SessionCacheStore(context: Context) {
     private val preferences = context.getSharedPreferences("session_cache", Context.MODE_PRIVATE)
 

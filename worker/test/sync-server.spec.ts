@@ -2,10 +2,6 @@ import { SELF, fetchMock } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { TEST_AUDIENCE, TEST_ISSUER, mintAccessToken, testJwks } from "./jwt-fixture";
 
-// verifyRequest() fetches `${issuer}/jwks` on the first token it needs to
-// verify, then jose caches the resolved keyset in-memory — so one persistent
-// mock covers every test in this file, however many times (or few) it's
-// actually hit.
 beforeAll(async () => {
   fetchMock.activate();
   fetchMock.disableNetConnect();
@@ -119,7 +115,6 @@ describe("entity sync", () => {
         body: JSON.stringify({ expectedRevision: 0, tombstone: false, payload: "v1" }),
       }),
     );
-    // Someone else already wrote revision 1; this client still thinks it's 0.
     const stale = await SELF.fetch(
       req("/records/hosts/host-1", {
         method: "PUT",
@@ -151,7 +146,6 @@ describe("entity sync", () => {
     const listForB = await SELF.fetch(req("/records/hosts?since=0", { token: tokenB }));
     expect(await listForB.json()).toEqual([]);
 
-    // Account B can create the same entityId independently (expectedRevision 0 = create).
     const pushForB = await SELF.fetch(
       req("/records/hosts/shared-id", {
         method: "PUT",
@@ -221,7 +215,6 @@ describe("vault envelope bootstrap", () => {
       conflict: { revision: 1, envelope: "envelope-v1" },
     });
 
-    // The right expectedRevision (rewrap after reading the current one) succeeds.
     const rewrap = await SELF.fetch(
       req("/vault", {
         method: "PUT",
@@ -237,8 +230,6 @@ describe("vault envelope bootstrap", () => {
   it("409s a create against a vault that does not exist and writes nothing", async () => {
     const token = await mintAccessToken({ sub: "acct-vault-missing-row" });
 
-    // The client thinks the vault is at revision 1, but this account has no
-    // vault row: that is a conflict against revision 0, not a silent success.
     const stale = await SELF.fetch(
       req("/vault", {
         method: "PUT",
@@ -253,7 +244,6 @@ describe("vault envelope bootstrap", () => {
       conflict: { revision: 0, envelope: null },
     });
 
-    // Nothing was written: the vault is still absent, so a create still wins.
     const fetched = await SELF.fetch(req("/vault", { token }));
     expect(fetched.status).toBe(404);
 

@@ -22,7 +22,6 @@ data class CrashReport(
     }
 }
 
-/** Keeps the most recent crash locally so it can be copied into a bug report after restart. */
 class CrashReportStore(context: Context) {
     private val preferences = context.getSharedPreferences("crash_report", Context.MODE_PRIVATE)
 
@@ -58,8 +57,6 @@ class CrashReportStore(context: Context) {
     }
 
     private fun save(report: CrashReport) {
-        // A synchronous commit is intentional: the process may be terminated immediately after
-        // the uncaught-exception handler returns.
         preferences.edit()
             .putLong(KEY_CAPTURED_AT, report.capturedAtEpochSeconds)
             .putString(KEY_THREAD, report.threadName)

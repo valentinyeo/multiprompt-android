@@ -206,15 +206,10 @@ fun MultipromptApp(viewModel: MainViewModel) {
     val updateState by viewModel.updates.state.collectAsState()
     LaunchedEffect(Unit) {
         while (true) {
-            // force: the manager throttles on its own clock too, and a tick landing a second
-            // early skipped a whole cycle, so a new build could sit unannounced for half an
-            // hour on a screen the user never leaves.
             viewModel.updates.check(force = true)
             delay(UPDATE_POLL_INTERVAL_MS)
         }
     }
-    // The banner floats over the screens instead of wrapping them: making it a Column row
-    // resized every screen and the keyboard then pushed the whole reader off the top.
     Box(Modifier.fillMaxSize()) {
         AppScreens(viewModel)
         UpdateBanner(
@@ -271,7 +266,6 @@ private fun AppScreens(viewModel: MainViewModel) {
     val state by viewModel.state.collectAsState()
     val updateState by viewModel.updates.state.collectAsState()
     val context = LocalContext.current
-    // The app always opens on the Inbox. The workspaces view is reached with Back from Hosts or Update.
     var inboxVisible by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(StartScreen.INBOX_ON_LAUNCH) }
     val systemDark = isSystemInDarkTheme()
     val sunlight = when (state.appTheme) {
@@ -392,8 +386,6 @@ private fun AppScreens(viewModel: MainViewModel) {
         return
     }
 
-    // The folder step owns the whole screen: its job is typing a repo name, and a dialog
-    // spent most of that space on its own chrome.
     val newSession = state.newSession
     if (newSession != null && newSession.step == NewSessionStep.PATH) {
         NewSessionFolderScreen(
@@ -528,10 +520,8 @@ private fun AppScreens(viewModel: MainViewModel) {
                 },
             )
 
-            // The folder step is a full-screen picker, rendered before the dialogs.
             NewSessionStep.PATH -> Unit
 
-            // Existing sessions are a full-screen picker too.
             NewSessionStep.EXISTING -> Unit
 
             NewSessionStep.HARNESS -> AlertDialog(
@@ -711,7 +701,6 @@ private fun UpdateBanner(release: UpdateRelease, onInstall: () -> Unit) {
     }
 }
 
-/** The one search bar both picker modes share: focused on open, keyboard up, edge to edge. */
 @Composable
 private fun PickerSearchBar(
     query: String,
@@ -747,7 +736,6 @@ private fun PickerSearchBar(
     }
 }
 
-/** The picker's two jobs, as a switch: start something new, or return to something alive. */
 @Composable
 private fun PickerModeRow(mode: NewSessionMode, onModeChange: (NewSessionMode) -> Unit) {
     Row(
@@ -773,11 +761,6 @@ private fun PickerModeRow(mode: NewSessionMode, onModeChange: (NewSessionMode) -
     }
 }
 
-/**
- * Full-screen list of the tmux sessions alive on one host. The switch hides the ones that are
- * attached or already open in this app, so the rows left are the ones that actually need a
- * look; tapping any row just opens it, nothing is created.
- */
 @Composable
 private fun ExistingSessionScreen(
     picker: NewSessionPicker,
@@ -917,12 +900,6 @@ private fun ExistingSessionScreen(
     }
 }
 
-/**
- * Full-screen folder picker for a new session. The job is typing, so the search UI owns the
- * whole area above the keyboard: the field sits at the very top edge to edge, the list takes
- * every remaining pixel down to the keyboard, and the current path stays visible so the
- * place is never lost while scrolling.
- */
 @Composable
 private fun NewSessionFolderScreen(
     picker: NewSessionPicker,
@@ -949,16 +926,12 @@ private fun NewSessionFolderScreen(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            // safeDrawing is the status bar at the top and the keyboard at the bottom, so the
-            // list ends exactly where the keyboard starts instead of behind it.
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
         PickerSearchBar(
             query = query,
             onQueryChange = { query = it },
             onSubmit = {
-                // A few letters then the keyboard's search key launches in the top match.
-                // That is the whole point of the picker owning the screen.
                 ranked.firstOrNull { it.isRepo }?.let { entry ->
                     onChoose(joinRemotePath(picker.path, entry.name))
                 }
@@ -1413,7 +1386,6 @@ private fun SessionsScreen(
             },
         )
     }
-    // Countdowns tick locally: the host sent "remaining", the phone counts it down.
     val anyEta = state.sessionEtas.isNotEmpty()
     var etaNowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(anyEta) {
@@ -1859,8 +1831,6 @@ private fun SessionCard(
     onForget: () -> Unit,
 ) {
     var menuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
-    // The action runs as soon as the gesture settles, and returning false keeps the row in
-    // place: archiving removes it, reminding opens its dialog, and neither leaves a blank gap.
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             if (!archived) {
@@ -2130,8 +2100,6 @@ private fun ReaderScreen(
 ) {
     val reader by connection.state.collectAsState()
     val transcript = reader.transcript.takeUnless { technicalMode }
-    // The host sends "remaining", so the countdown ticks here and a clock difference between
-    // phone and host cannot distort it.
     var etaNowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(reader.eta) {
         while (reader.eta != null) {
@@ -2186,9 +2154,6 @@ private fun ReaderScreen(
     val density = LocalDensity.current
     val context = LocalContext.current
     val readerScope = rememberCoroutineScope()
-    // A full-screen agent keeps its scrollback inside the TUI, so tmux has nothing above the
-    // visible pane. Pulling down at the top asks the TUI for one older screen, which lands above
-    // the transcript; the button does the same on demand.
     var loadingOlder by remember(connection) { mutableStateOf(false) }
     var noOlderHistory by remember(connection) { mutableStateOf(false) }
     val loadOlder: () -> Unit = {
@@ -2293,8 +2258,6 @@ private fun ReaderScreen(
     LaunchedEffect(dictationState.transcript) {
         val spoken = dictationState.transcript.trim()
         if (spoken.isNotBlank()) {
-            // Deepgram emits cumulative interim/final transcripts. Rebuild from the
-            // original draft instead of appending the cumulative text on every update.
             setPrompt(PromptComposer.appendDictation(dictationPrefix, spoken))
         }
     }
@@ -2309,7 +2272,6 @@ private fun ReaderScreen(
     val sendCurrentPrompt = {
         val attached = attachedSkill
         val composedPrompt = if (attached != null) {
-            // Strip the /name marker from the draft; the full skill body is injected.
             val draft = prompt.removePrefix("/${attached.name} ").trim()
             SkillModel.composeMessage(draft, attached)
         } else {
@@ -2703,9 +2665,6 @@ private fun ReaderScreen(
                                     onOpenTerminal()
                                 },
                             )
-                            // Diagnosis aid for scroll reports: the raw transcript plus the
-                            // numbers that separate "the reader holds one screen" from "the
-                            // view will not move".
                             DropdownMenuItem(
                                 text = {
                                     Text(
@@ -2767,8 +2726,6 @@ private fun ReaderScreen(
                                 },
                             )
                             DropdownMenuItem(
-                                // The only action that works when the VPS stopped answering:
-                                // archiving and ending both need SSH.
                                 text = { Text("Remove from list") },
                                 onClick = {
                                     menuExpanded = false
@@ -2823,7 +2780,6 @@ private fun ReaderScreen(
                     .navigationBarsPadding(),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                // The desktop draws the same line under the tab: elapsed over total.
                 reader.eta?.let { eta ->
                     Box(
                         Modifier
@@ -2997,7 +2953,6 @@ private fun ReaderScreen(
                                         attachedSkill = skill
                                         val marker = "/${skill.name} "
                                         promptField = if (promptField.text.startsWith("/")) {
-                                            // Replace an existing /marker with the new skill's.
                                             val rest = promptField.text.substringAfter(' ', "")
                                             TextFieldValue(
                                                 marker + rest,
@@ -3117,8 +3072,6 @@ private fun ReaderScreen(
                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                     Column {
                         Text("Connecting to live output…")
-                        // The retry loop resets the status every few seconds, which used to hide
-                        // the reason for good: the session looked stuck with nothing to act on.
                         reader.lastFailure?.let { reason ->
                             Text(
                                 reason,
@@ -3186,8 +3139,6 @@ private fun ReaderScreen(
             val working = reader.sending || readerBlocks.any { block ->
                 block.kind == TmuxText.ReaderBlockKind.PROGRESS && isTransientProgress(block.text)
             }
-            // Links are worth preserving even when a terminal row looks like bookkeeping;
-            // hiding a handed-off result costs more than showing one extra technical block.
             val visibleReaderBlocks = if (transcript != null) emptyList() else readerBlocks.filterNot { block ->
                 !technicalMode && !TmuxText.containsLink(block.text) && (
                     block.kind == TmuxText.ReaderBlockKind.PROGRESS ||
@@ -3360,8 +3311,6 @@ private fun ReaderScreen(
                     val blockKey = readerBlockKey(block)
                     when (block.kind) {
                         TmuxText.ReaderBlockKind.PROSE -> {
-                            // One bubble per agent reply: consecutive prose blocks share it, so
-                            // only the first of a run draws, the paragraph gap is 8 dp inside.
                             if (index > 0 && visibleReaderBlocks[index - 1].kind == TmuxText.ReaderBlockKind.PROSE) {
                                 return@forEachIndexed
                             }
@@ -3837,10 +3786,6 @@ private fun TerminalScreen(
     val terminalTypeface = remember(context) {
         ResourcesCompat.getFont(context, R.font.ibm_plex_mono_regular) ?: Typeface.MONOSPACE
     }
-    // The desktop owns the window width, so the phone shrinks its glyphs until that width
-    // fits instead of resizing anything. Measure the real monospace advance: a guessed ratio
-    // left the emulator a few columns narrower than tmux believed, so every full-width line
-    // wrapped and redraws of the status line stacked into ghost copies.
     val textMeasurer = rememberTextMeasurer()
     val fontSize = remember(screenWidthDp, columns) {
         val target = if (columns > 0) columns else FALLBACK_COLUMNS
@@ -3849,15 +3794,9 @@ private fun TerminalScreen(
             TextStyle(fontFamily = ReaderFontFamily, fontSize = 100.sp),
         ).size.width / 20f
         val screenPx = with(density) { screenWidthDp.dp.toPx() }
-        // 2% slack so rounding lands the emulator on target or slightly above, never below.
         (100f * screenPx / (target * pxPerCharAt100Sp) * 0.98f).coerceIn(4f, 14f).sp
     }
-    // Pan the terminal up rather than shrinking it: resizing would renegotiate the PTY and
-    // drag the desktop pane down with it.
     val keyboardHeightPx = WindowInsets.ime.getBottom(density)
-    // Match termlib's own row metric, ceil(descent - ascent) at the same typeface. A layout
-    // line height is taller than the drawn row, which leaves the pan short and floats the grid
-    // above the input area.
     val lineHeightPx = remember(fontSize, terminalTypeface) {
         val paint = Paint().apply {
             typeface = terminalTypeface
@@ -3892,8 +3831,6 @@ private fun TerminalScreen(
                     }
                 },
                 actions = {
-                    // A full-screen agent keeps its history inside itself and the emulator keeps
-                    // no scrollback for that screen, so paging is the only way back.
                     IconButton(onClick = { connection.pageUp() }) {
                         Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Page the agent back one screen")
                     }
@@ -3920,17 +3857,6 @@ private fun TerminalScreen(
                 .clipToBounds()
                 .pointerInput(onBack) { detectPassiveDoubleTap(onBack) },
         ) {
-            // The termlib emulator sizes itself to whatever box it is given unless a size is
-            // forced, so without forcedSize the phone's grid (say 50 rows) never matched the
-            // desktop pane (24 rows): tmux filled the top rows and left blank ones below, and
-            // the pan then moved that whole oversized grid off screen. Forcing the desktop
-            // grid makes the emulator, the PTY and the pan math agree.
-            //
-            // Pan the grid so the live prompt row stays visible:
-            // - grid shorter than the viewport (the usual case): push it DOWN so its bottom
-            //   edge sits above the input area instead of leaving dead rows below it.
-            // - grid taller (only when the font floor blocks the fit): leave it at the top.
-            // With the keyboard open the whole grid slides up by the keyboard height.
             val gridHeightPx = if (rows > 0 && lineHeightPx > 0) (rows * lineHeightPx).toInt() else 0
             val viewportPx = with(density) { maxHeight.toPx() }.toInt()
             val panPx = if (gridHeightPx in 1..viewportPx) {
@@ -3945,14 +3871,10 @@ private fun TerminalScreen(
                     .offset { IntOffset(0, panPx - keyboardHeightPx) }
                     .horizontalSwipe(onSwitchSession),
                 initialFontSize = fontSize,
-                // Let the fit shrink the font below the width-fit when the height demands it,
-                // but never grow past the size the width already allows.
                 minFontSize = 4.sp,
                 maxFontSize = fontSize,
                 forcedSize = if (rows > 0 && columns > 0) rows to columns else null,
                 focusRequester = focusRequester,
-                // Dismissing the keyboard leaves the terminal unfocused, so a tap has to
-                // ask for it back; otherwise the keyboard can never be reopened.
                 onTerminalTap = {
                     focusRequester.requestFocus()
                     keyboard?.show()
@@ -4069,11 +3991,6 @@ private fun tomorrowMorningEpochSeconds(): Long = ZonedDateTime.now()
     .withNano(0)
     .toEpochSecond()
 
-/**
- * Detects a sideways flick before the terminal sees it. The terminal consumes touches for
- * scrolling and selection, so this watches the initial pass and only claims the gesture once
- * the drag is clearly horizontal, leaving vertical scrolling untouched.
- */
 private fun Modifier.horizontalSwipe(
     onSwipe: (Int) -> Unit,
     eventPass: PointerEventPass = PointerEventPass.Initial,
@@ -4095,9 +4012,6 @@ private fun Modifier.horizontalSwipe(
                 lastPosition = change.position
                 totalX += positionDelta.x
                 totalY += positionDelta.y
-                // A session row owns its own left/right swipe. Without this check the inbox's
-                // workspace swipe claimed the same drag on the Final pass and both fired: the
-                // thread did not act, the workspace changed under it, and the list looked blank.
                 if (!claimed && !change.isConsumed &&
                     kotlin.math.abs(totalX) > threshold &&
                     kotlin.math.abs(totalX) > kotlin.math.abs(totalY) * 2
@@ -4111,23 +4025,18 @@ private fun Modifier.horizontalSwipe(
     }
 }
 
-/** Used only when tmux did not report a width for the session. */
 private const val FALLBACK_COLUMNS = 100
 
-/** Joins a picked folder name onto the directory the picker is showing. */
 private fun joinRemotePath(parent: String, name: String): String = when {
     parent.isBlank() || parent == "/" -> "/$name"
     else -> "${parent.trimEnd('/')}/$name"
 }
 
-/** The folder above [path], clamped at the filesystem root. */
 private fun parentRemotePath(path: String): String {
     val trimmed = path.trimEnd('/')
     if (trimmed.isBlank() || trimmed == "/") return "/"
     return trimmed.substringBeforeLast('/', "").ifBlank { "/" }
 }
-// Long enough for a relaxed double tap, short enough that two deliberate taps are not read
-// as one gesture. Only used by the terminal's passive double-tap observer.
 private const val DOUBLE_TAP_TIMEOUT_MS = 320L
 private const val UPDATE_POLL_INTERVAL_MS = 5 * 60 * 1000L
 
@@ -4197,11 +4106,6 @@ private val TERMINAL_WARNING = Regex("(?i)(^|\\b)(warning|warn)(\\b|:)")
 private val TERMINAL_SUCCESS = Regex("(?i)(^|\\b)(success|successful|passed|complete|completed)(\\b|:)")
 private val TERMINAL_PROMPT = Regex("^[>$❯›#]")
 
-/**
- * Watches for a double tap without consuming a single pointer event. The live terminal owns
- * its own touch handling (tap to focus the keyboard, horizontal swipe to switch session),
- * so this only observes: it never consumes a pointer event.
- */
 private suspend fun PointerInputScope.detectPassiveDoubleTap(onDoubleTap: () -> Unit) {
     awaitEachGesture {
         awaitFirstDown(requireUnconsumed = false)
@@ -4214,12 +4118,6 @@ private suspend fun PointerInputScope.detectPassiveDoubleTap(onDoubleTap: () -> 
     }
 }
 
-/**
- * The skill picker under the plus button: two groups — multiprompt-native skills first
- * (shipped/curated), then the skills bundled from the coding harness — each marked so
- * Valentin can tell them apart. Selecting one inserts "/name " into the composer; the
- * full skill body is injected when the prompt is sent.
- */
 @Composable
 private fun SkillPickerMenu(
     expanded: Boolean,
@@ -4295,11 +4193,6 @@ private fun SkillPickerMenu(
     }
 }
 
-/**
- * Tiny one-line status strip above the Archive/Remind/Wait/Back row: the harness's own
- * status-line data (model, effort, tokens, cost) pulled from the captured pane footer —
- * the same line the desktop shows below its input box. Small font, dense, non-blocking.
- */
 @Composable
 private fun HarnessStatusBar(
     runtimeDetails: TmuxText.RuntimeDetails,
@@ -4358,11 +4251,6 @@ private fun HarnessStatusBar(
 }
 
 
-/**
- * Paged view into an alternate-screen agent's own history (Claude Code, Fable). The stream
- * runs in history mode: captured screens land here instead of the live transcript. "Load
- * older" pages the TUI back once and waits for the next distinct screen.
- */
 @Composable
 private fun AgentHistoryDialog(connection: SessionReaderConnection, onDismiss: () -> Unit) {
     val pages by connection.historyPages.collectAsState()

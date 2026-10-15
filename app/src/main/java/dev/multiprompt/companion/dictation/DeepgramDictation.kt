@@ -70,8 +70,6 @@ class DeepgramDictation(
     private var socketOpen = false
     private var finalizeWhenOpen = false
     private var closeWhenOpen = false
-    // Set while a deliberate stop() teardown is in flight so a failure delivered during
-    // that teardown does not surface as an error.
     @Volatile
     private var stopping = false
 
@@ -119,8 +117,6 @@ class DeepgramDictation(
             status = DictationStatus.CONNECTING,
             configured = true,
         )
-        // Start recording immediately around the websocket handshake. Audio is buffered until
-        // Deepgram is ready, so the first words are not lost during network setup.
         socket = openSocket(apiKey, 0)
         startRecorder()
     }
@@ -136,7 +132,6 @@ class DeepgramDictation(
                 flushPendingAudioLocked(activeSocket)
                 activeSocket.send("""{"type":"Finalize"}""")
             } else {
-                // Keep Finalize behind the opening audio when the user stops during the handshake.
                 finalizeWhenOpen = true
             }
         }
@@ -154,7 +149,6 @@ class DeepgramDictation(
         }
     }
 
-    /** Drops an in-progress recording and its transcript when its owning chat closes. */
     @Synchronized
     fun discard() {
         val configured = _state.value.configured
@@ -271,8 +265,6 @@ class DeepgramDictation(
             if (activeSocket != null && socketOpen) {
                 return activeSocket.send(buffer.toByteString(0, count))
             }
-            // Keep the beginning of the utterance. A normal handshake is far below this limit,
-            // but refusing newer samples is safer than evicting the words already spoken.
             if (pendingAudio.size() + count <= MAX_PENDING_AUDIO_BYTES) {
                 pendingAudio.write(buffer, 0, count)
             }
@@ -347,15 +339,12 @@ class DeepgramDictation(
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             if (socket !== webSocket) return
-            // A deliberate stop tears the socket down and can still surface here as a
-            // failure; stay quiet about anything arriving after stop() was asked for.
             if (stopping) {
                 finishWithoutError()
                 return
             }
             val opened = synchronized(audioLock) { socketOpen }
             if (DeepgramEndpoint.shouldTryNextHost(hostIndex, response?.code, opened, stopping)) {
-                // Audio stays buffered in pendingAudio while the next host handshakes.
                 socket = openSocket(apiKey, hostIndex + 1)
                 return
             }
@@ -363,10 +352,6 @@ class DeepgramDictation(
         }
     }
 
-    /**
-     * Shared teardown for a socket that ended without an error: recorder stopped,
-     * buffers reset, flags cleared, back to idle.
-     */
     private fun finishWithoutError() {
         stopRecorder()
         socket = null

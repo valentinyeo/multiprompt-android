@@ -10,11 +10,6 @@ import org.junit.Test
 import java.security.MessageDigest
 import java.util.Base64
 
-/**
- * Verifies the Kotlin implementation against the committed, cross-language fixture
- * vectors byte-for-byte. These vectors are the contract the zigshell desktop side must
- * reproduce; see docs/sync-protocol-v1.md.
- */
 class SyncProtocolFixtureTest {
 
     private fun vectors(): JSONArray {
@@ -122,11 +117,6 @@ class SyncProtocolFixtureTest {
             val vector = schemaVectors.getJSONObject(i)
             val name = vector.getString("name")
             val body = vector.getString("canonicalBodyJson")
-            // The schema vector pins the exact byte sequence a mapper must emit —
-            // including field order. org.json re-serializes with sorted keys, so instead
-            // of a parse/serialize round-trip we verify the pinned field order directly:
-            // the body must contain each field's "key": in the documented order, with no
-            // whitespace between fields.
             val fields = when (vector.getString("recordId")) {
                 "hosts" -> listOf("id", "label", "hostname", "port", "username", "keySecretId", "passphraseSecretId", "hostKeyType", "hostKeyFingerprint")
                 "workspaces" -> listOf("id", "name", "hostId", "remotePath")

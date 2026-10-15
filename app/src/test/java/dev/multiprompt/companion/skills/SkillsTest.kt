@@ -7,7 +7,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Tests for the skill model: index parsing, cache round-trip, frontmatter, injection. */
 class SkillsTest {
 
     private val indexJson = """
@@ -30,7 +29,6 @@ class SkillsTest {
         source = source,
     )
 
-    // --- index parsing ---------------------------------------------------------------------
 
     @Test
     fun parseIndexSkipsBrokenEntriesAndSortsByName() {
@@ -47,7 +45,6 @@ class SkillsTest {
         assertEquals(0, SkillModel.parseIndex("""{"skills": []}""").entries.size)
     }
 
-    // --- cache round-trip --------------------------------------------------------------------
 
     @Test
     fun cacheRoundTripPreservesSourceAndBodies() {
@@ -70,7 +67,6 @@ class SkillsTest {
         assertNull(SkillModel.parseCache("nonsense"))
     }
 
-    // --- frontmatter ---------------------------------------------------------------------------
 
     @Test
     fun stripFrontmatterRemovesYamlHeader() {
@@ -83,7 +79,6 @@ class SkillsTest {
         assertEquals("# Plain", SkillModel.stripFrontmatter("# Plain").trim())
     }
 
-    // --- injection -------------------------------------------------------------------------------
 
     @Test
     fun composeMessageInjectsSkillAlongsidePrompt() {
@@ -100,7 +95,6 @@ class SkillsTest {
         assertTrue(message.contains("body of i-have-adhd"))
     }
 
-    // --- source grouping ---------------------------------------------------------------------------
 
     @Test
     fun sourceFieldDistinguishesMultipromptFromHarness() {

@@ -32,7 +32,6 @@ object AccountHostMap {
     fun sessionFor(tab: AccountTab, inventory: List<TmuxSession>, mapping: Map<Int, HostProfile>): TmuxSession? {
         val host = mapping[tab.host] ?: return null
         val live = inventory.firstOrNull { it.hostId == host.id && it.name.equals(tab.session, ignoreCase = true) }
-        // The account is authoritative even if SSH is offline. Open still uses the pinned existing SSH route.
         return (live ?: TmuxSession(host.id, tab.session, 1, 0, 0)).copy(title = tab.name, windowName = tab.name, accountName = tab.name)
     }
 }

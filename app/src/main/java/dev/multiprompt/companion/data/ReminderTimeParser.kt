@@ -9,7 +9,6 @@ import java.time.format.DateTimeParseException
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 
-/** Fast, offline parsing for the common reminder phrases used by inbox triage. */
 object ReminderTimeParser {
     private val relativePattern = Regex(
         "^(?:in\\s+)?(\\d+|one|two|three|four|five|six|seven|eight|nine|ten|thirty)\\s*" +

@@ -1,15 +1,8 @@
-/**
- * D1-backed sync_entity store — the server side of SyncTransport.kt
- * (app/src/main/java/dev/multiprompt/companion/sync/SyncTransport.kt).
- * Payloads are opaque sealed bytes; this module never inspects or decrypts
- * them (docs/sync-protocol-v1.md, "Threat model and invariants").
- */
 
 export interface RemoteEntity {
   entityId: string;
   revision: number;
   tombstone: boolean;
-  /** Sealed entity-record JSON (docs/sync-protocol-v1.md, "Entity records"), or null. */
   payload: string | null;
 }
 
@@ -20,7 +13,6 @@ export interface PushOutcome {
 
 export interface VaultRow {
   revision: number;
-  /** Sealed envelope text, or null when no vault row exists yet (revision 0). */
   envelope: string | null;
 }
 
@@ -39,7 +31,6 @@ interface Row {
 export class SyncStore {
   constructor(private readonly db: D1Database) {}
 
-  /** Lists every entity for `recordId` at or above `sinceRevision` (0 = all), for one account. */
   async list(accountId: string, recordId: string, sinceRevision: number): Promise<RemoteEntity[]> {
     const result = await this.db
       .prepare(
@@ -51,14 +42,6 @@ export class SyncStore {
     return (result.results ?? []).map(rowToEntity);
   }
 
-  /**
-   * Pushes one entity under optimistic concurrency: the write is accepted
-   * only when the stored revision equals expectedRevision (0 = must not
-   * exist yet), bumping to a fresh per-key revision on success. On mismatch
-   * returns the current row as a conflict for the client to rebase onto
-   * (docs/sync-protocol-v1.md, "Optimistic concurrency") — never a
-   * timestamp-based overwrite.
-   */
   async push(
     accountId: string,
     recordId: string,
@@ -79,24 +62,13 @@ export class SyncStore {
       return { revision: current.revision, conflict: rowToEntity(current) };
     }
     if (current === null && expectedRevision !== 0) {
-      // No row exists, but the client expected a nonzero revision: tell it
-      // the true current state (revision 0 = does not exist) so it rebases
-      // onto a create (expectedRevision 0) instead.
       return { revision: 0, conflict: { entityId, revision: 0, tombstone: false, payload: null } };
     }
 
     const nextRevision = (current?.revision ?? 0) + 1;
-    // Tombstones keep the last known sealed payload when none is supplied
-    // (docs/sync-protocol-v1.md: "for tombstones: a sealed empty body or the
-    // last sealed body").
     const storedPayload = payload ?? (tombstone ? (current?.payload ?? "") : "");
     const now = new Date().toISOString();
 
-    // The WHERE on DO UPDATE re-checks expectedRevision at write time (not
-    // just at our earlier SELECT): if another writer changed the row in
-    // between, this condition is false, the UPDATE is skipped, and RETURNING
-    // yields no row — the atomic signal that we lost the race, without a
-    // second round trip guessing at "did it apply".
     const result = await this.db
       .prepare(
         "INSERT INTO sync_entity (account_id, record_id, entity_id, revision, tombstone, payload, updated_at) " +
@@ -112,9 +84,6 @@ export class SyncStore {
 
     const written = result.results?.[0];
     if (!written) {
-      // Lost the race: someone else's write landed between our SELECT and
-      // this INSERT/UPDATE. Re-read and report their row as the conflict so
-      // the caller rebases onto reality.
       const after = await this.db
         .prepare(
           "SELECT entity_id, revision, tombstone, payload FROM sync_entity " +
@@ -127,13 +96,6 @@ export class SyncStore {
     return { revision: written.revision, conflict: null };
   }
 
-  /**
-   * Fetches the one small "vault key envelope" row for an account (IGSH-251,
-   * Sync 4): the wrapped-vault-key bootstrap object a second device needs
-   * before it can unwrap and sync the per-entity records above. Unlike
-   * entity records this is a single opaque row per account, not a
-   * collection — there is only ever one current envelope.
-   */
   async getVault(accountId: string): Promise<VaultRow | null> {
     const row = await this.db
       .prepare("SELECT revision, envelope FROM sync_vault WHERE account_id = ?1")
@@ -142,12 +104,6 @@ export class SyncStore {
     return row ? { revision: row.revision, envelope: row.envelope } : null;
   }
 
-  /**
-   * Writes the vault envelope under the same optimistic-concurrency rule as
-   * push(): the write is accepted only when the stored revision equals
-   * expectedRevision (0 = must not exist yet). Two devices racing to create
-   * or rewrap the vault get a conflict to resolve, never a silent overwrite.
-   */
   async putVault(accountId: string, expectedRevision: number, envelope: string): Promise<VaultPushOutcome> {
     const current = await this.db
       .prepare("SELECT revision, envelope FROM sync_vault WHERE account_id = ?1")
@@ -158,9 +114,6 @@ export class SyncStore {
       return { revision: current.revision, conflict: { revision: current.revision, envelope: current.envelope } };
     }
     if (current === null && expectedRevision !== 0) {
-      // No row exists, but the client expected a nonzero revision: tell it
-      // the true current state (revision 0 = does not exist) so it rebases
-      // onto a create (expectedRevision 0) instead — same rule as push().
       return { revision: 0, conflict: { revision: 0, envelope: null } };
     }
 

@@ -12,9 +12,6 @@ export default defineWorkersConfig(async () => {
           miniflare: {
             bindings: {
               TEST_MIGRATIONS: migrations,
-              // Point JWT verification at a fixture issuer/audience instead of
-              // the real Access app, so tests sign tokens with a local test
-              // key (test/jwt-fixture.ts) and never touch the network.
               OIDC_ISSUER: "https://sync-test.invalid",
               OIDC_CLIENT_ID: "test-client-id",
             },

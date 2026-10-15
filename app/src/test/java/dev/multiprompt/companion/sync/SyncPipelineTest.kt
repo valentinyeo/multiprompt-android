@@ -10,11 +10,6 @@ import org.junit.Test
 import java.security.MessageDigest
 import java.util.Base64
 
-/**
- * End-to-end JVM tests of the sync model: schema goldens, canonical sealing, merge and
- * tombstone rules, and the mocked transport's server semantics — the whole entity
- * pipeline without any Cloudflare dependency.
- */
 class SyncPipelineTest {
 
     private val vaultKey = ByteArray(32) { (it * 5 + 1).toByte() }
@@ -36,7 +31,6 @@ class SyncPipelineTest {
         return hash.copyOf(12)
     }
 
-    // --- schema goldens ------------------------------------------------------------------
 
     @Test
     fun mappersReproduceTheCommittedSchemaGoldens() {
@@ -88,13 +82,10 @@ class SyncPipelineTest {
         )
         org.junit.Assert.assertFalse(body.contains("BEGIN OPENSSH PRIVATE KEY"))
         org.junit.Assert.assertFalse(body.lowercase().contains("private key"))
-        // The local-only reference serializes as its id; an absent passphrase reference
-        // serializes as null per the schema goldens.
         assertEquals(true, body.contains("\"keySecretId\":\"key-1\""))
         assertEquals(true, body.contains("\"passphraseSecretId\":null"))
     }
 
-    // --- entity ids ------------------------------------------------------------------------
 
     @Test
     fun sessionEntityIdIsHostUuidPlusEncodedTmuxName() {
@@ -106,7 +97,6 @@ class SyncPipelineTest {
     @Test
     fun sessionEntityIdPercentEncodesNamesOutsideTheAlphabet() {
         val id = SyncSchema.sessionEntityId("h1", "weird/name:with spaces")
-        // Slashes and colons are outside ^[A-Za-z0-9][A-Za-z0-9._-]*$
         val regex = Regex("^[A-Za-z0-9][A-Za-z0-9._-]*$")
         assertEquals(true, Regex("^[A-Za-z0-9][A-Za-z0-9._%*-]*$").matches(id))
         val decoded = SyncSchema.sessionIdFrom(id)!!
@@ -114,7 +104,6 @@ class SyncPipelineTest {
         assertEquals("weird/name:with spaces", java.net.URLDecoder.decode(id.substringAfter("--"), "UTF-8"))
     }
 
-    // --- merge / tombstones ----------------------------------------------------------------
 
     @Test
     fun sessionStateMergeKeepsTheWatermarkMonotonic() {
@@ -129,8 +118,6 @@ class SyncPipelineTest {
             revision = 7,
         )
         val result = SyncMerge.rebase(stale, remote)
-        // The stale device cannot regress the watermark: merged body has 500 whether the
-        // result is Applied (something to push) or NoOp (remote already has it).
         val body = when (result) {
             is SyncMerge.MergeResult.Applied -> result.body
             is SyncMerge.MergeResult.NoOp -> result.body
@@ -174,7 +161,6 @@ class SyncPipelineTest {
     fun sealedEntityRoundTripsThroughTheTransportAndBackToPlaintext() {
         val transport = transport()
         val body = SyncSchema.sessionStateBody(SyncSchema.SyncSessionState(lastReadAt = 100))
-        // The payload is sealed for the revision it will occupy: expectedRevision + 1.
         val payload = seal("sessionState", "h--s", 1, body)
         val pushed = runBlocking { transport.push("sessionState", "h--s", 0, false, payload) }
         val listed = runBlocking { transport.list("sessionState", 0) }

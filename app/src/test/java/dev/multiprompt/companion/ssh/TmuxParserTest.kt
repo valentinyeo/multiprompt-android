@@ -108,8 +108,6 @@ class TmuxParserTest {
 
     @Test
     fun ignoresDefaultPaneTitleThatIsJustTheHostname() {
-        // tmux leaves pane_title as the hostname when no agent set one; showing it would
-        // label every idle session with the same useless string.
         val output = row("multiprompt-android", "1", "0", "200", "70", "50", "/tmp", "vmi3202882", "bash", "vmi3202882")
 
         val session = TmuxParser.parse("de", output).single()
@@ -145,7 +143,6 @@ class TmuxParserTest {
         assertEquals("hello\nworld", TmuxParser.parse("de", output).single().preview)
     }
 
-    /** Mirrors the field order in [TmuxParser.command], so a reordered format fails loudly here. */
     private fun row(vararg fields: String) = fields.joinToString(TmuxParser.FIELD_SEPARATOR) + "\n"
 
     @Test

@@ -65,7 +65,6 @@ object TranscriptProtocol {
             } catch (_: IllegalArgumentException) {
                 return null
             }
-            // Require the standard padded encoding, not Java's permissive unpadded variant.
             if (Base64.getEncoder().encodeToString(bytes) != row[3]) return null
             bytesUsed += bytes.size
             if (bytesUsed > MAX_TEXT_BYTES) return null
@@ -81,7 +80,6 @@ object TranscriptProtocol {
         return Response(status, sid, token, messages)
     }
 
-    /** Frames bytes before UTF-8 decoding so SSH chunk boundaries cannot split a character. */
     class Framer {
         private val pending = ByteArrayOutputStream()
         private val linePrefix = ByteArray(END.length + 1)

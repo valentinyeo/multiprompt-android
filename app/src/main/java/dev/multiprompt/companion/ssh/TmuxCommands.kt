@@ -5,40 +5,22 @@ import dev.multiprompt.companion.model.AgentHarness
 enum class TmuxAction {
     ENTER,
     INTERRUPT,
-    /** Scrolls the agent TUI's own scrollback up one page (alternate-screen panes). */
     SCROLL_UP,
-    /** Returns to the live view. */
     SCROLL_BOTTOM,
 }
 
-/** The complete allowlist of remote commands the mobile reader can run. */
 object TmuxCommands {
     const val SNAPSHOT_PREFIX = "__MP_TMUX_SNAPSHOT__"
     const val ALT_PREFIX = "__MP_TMUX_ALT__"
     const val CREATED_PREFIX = "__MP_TMUX_CREATED__"
 
-    /** Reader stream line carrying the session's agent time estimate, hex encoded. */
     const val ETA_PREFIX = "__MP_TMUX_ETA__"
 
-    /**
-     * Prints this host's agent time estimates as
-     * `name<TAB>remaining<TAB>total<TAB>description` rows, one per open estimate. The remaining
-     * time is computed on the host, so a clock difference between phone and host cannot distort
-     * a countdown. A session name narrows it to that one session. The output is empty when the
-     * host never installed the estimate hooks, and every failure is swallowed so a missing or
-     * corrupt state file can never break a reader command.
-     */
     fun etaRowsCommand(sessionName: String? = null): String {
         val argument = sessionName?.let { " " + TmuxParser.shellQuote(it) } ?: ""
         return "python3 -c '$ETA_PYTHON'$argument 2>/dev/null || true"
     }
 
-    /**
-     * Prints one tab-separated row per open estimate ("name<TAB>remaining<TAB>total<TAB>desc")
-     * and one per recorded lifecycle state ("@state<TAB>name<TAB>state<TAB>recorded at"), so a
-     * reader gets both the countdown and the hook-accurate working/ready state from one read.
-     * Every read is guarded: a missing or corrupt file can never take the estimate rows with it.
-     */
     private const val ETA_PYTHON = "import json,os,sys,time\n" +
         "d=os.environ.get(\"MULTIPROMPT_STATE_DIR\") or os.path.join(os.path.expanduser(\"~\"),\".local/state/multiprompt\")\n" +
         "now=int(time.time())\n" +
@@ -59,10 +41,6 @@ object TmuxCommands {
         "int(st.get(\"at\") or 0)) " +
         "for n, st in states.items() if isinstance(st, dict) and (not want or n == want)))"
 
-    /**
-     * The finished-estimate log, hex encoded so it survives the line framing. The last 64 KiB
-     * is plenty for the accuracy median and keeps a long log from stalling the phone.
-     */
     fun etaLogCommand(): String =
         "mp_dir=\"\${MULTIPROMPT_STATE_DIR:-\$HOME/.local/state/multiprompt}\"; " +
             "if [ -f \"\$mp_dir/eta-log.jsonl\" ]; then " +
@@ -70,12 +48,6 @@ object TmuxCommands {
 
     fun capture(sessionName: String): String = captureCommand(target(sessionName))
 
-    /**
-     * Full-screen agent TUIs draw in the alternate screen, so the pane's scrollback holds
-     * whatever ran before they started, not their conversation. Mixing the two put
-     * hours-old output directly above the current turn. Take history only when the pane is
-     * on the normal screen.
-     */
     private fun captureCommand(target: String): String =
         "if [ \"\$(tmux display-message -p -t $target '#{alternate_on}' 2>/dev/null)\" = 1 ]; " +
             "then tmux capture-pane -p -J -t $target; " +
@@ -101,9 +73,6 @@ object TmuxCommands {
             "trap 'tmux delete-buffer -b \"\$mp_buffer\" 2>/dev/null || true' EXIT HUP INT TERM; " +
             "tmux load-buffer -b \"\$mp_buffer\" - && " +
             "tmux paste-buffer -dpr -b \"\$mp_buffer\" -t ${target(sessionName)} && " +
-            // Agent TUIs read a bracketed paste asynchronously. An Enter that lands in the
-            // same read chunk is swallowed as part of the paste, which leaves the prompt
-            // sitting unsent in the composer.
             "sleep 0.3 && " +
             "tmux send-keys -t ${target(sessionName)} Enter"
 
@@ -113,11 +82,6 @@ object TmuxCommands {
     fun createShellSession(sessionName: String, remotePath: String): String =
         createAgentSession(sessionName, remotePath, AgentHarness.SHELL)
 
-    /**
-     * Creates the tmux session and starts [harness] in [remotePath]. The binary, its flags and
-     * the login-shell wrapper are constants; only the quoted directory and session name are
-     * interpolated, so the request can never carry a command of its own.
-     */
     fun createAgentSession(
         sessionName: String,
         remotePath: String,
@@ -125,9 +89,6 @@ object TmuxCommands {
     ): String {
         val path = TmuxParser.shellQuote(remotePath)
         val name = TmuxParser.shellQuote(sessionName)
-        // An SSH exec channel runs a non-login, non-interactive shell whose PATH omits
-        // ~/.local/bin (added by .profile, read only by login shells). The agent lookup and
-        // the launch must both go through a login shell or the binary is never found.
         val check = if (harness.startsAnAgent) {
             "if ! bash -lc 'command -v ${harness.binary} >/dev/null 2>&1'; then " +
                 "printf '${harness.binary} was not found on the VPS PATH\\n' >&2; exit 3; fi; "
@@ -146,12 +107,6 @@ object TmuxCommands {
             "printf '$CREATED_PREFIX%s\\n' $name"
     }
 
-    /**
-     * Read-only listing of the folders directly inside [path]. Each line is "name<TAB>git",
-     * where git is 1 for a folder holding a .git entry (a directory or a worktree file).
-     * Hidden folders and files are skipped, and the caller caps how much it reads. A null
-     * [path] starts at the host's own projects folder, falling back to its home directory.
-     */
     fun listDirectories(path: String? = null): String {
         val quoted = path?.let(TmuxParser::shellQuote)
         return if (quoted == null) {
@@ -177,23 +132,11 @@ object TmuxCommands {
             "printf '%s\\t%s\\n' \"\$mp_entry\" \"\$mp_git\"; " +
             "done"
 
-    /**
-     * Ends one session. Idempotent on purpose: when the session is already gone, or the whole
-     * tmux server has died, `kill-session` fails with "no server running" and the app used to
-     * keep the dead session forever. Asking first means an absent session is success.
-     */
     fun dissolveSession(sessionName: String): String {
         val target = TmuxParser.shellQuote("=$sessionName")
         return "if tmux has-session -t $target 2>/dev/null; then tmux kill-session -t $target; fi"
     }
 
-    /**
-     * Restores an archived session under a fresh name. Reusing the old name is unsafe: tmux
-     * names get recycled from the folder name, so a same-name session is usually unrelated
-     * work, and attaching to it dropped people into the wrong conversation (the desktop hit
-     * exactly that). The window is renamed back to the archived label so the row still reads
-     * the same.
-     */
     fun resurrectSession(
         sessionName: String,
         displayName: String,
@@ -218,18 +161,11 @@ object TmuxCommands {
             "tmux send-keys -t $target Enter$rename"
     }
 
-    /** A restore name that cannot collide with an unrelated session of the same base name. */
     fun freshSessionName(sessionName: String): String {
         val base = sessionName.take(40).trimEnd('-', '.', ':')
         return "$base-r${System.currentTimeMillis() % 100000}"
     }
 
-    /**
-     * The newest Claude conversation recorded for [workingDirectory]. Claude Code writes one
-     * jsonl per conversation under ~/.claude/projects/<path with punctuation as dashes>/, and
-     * the newest one is what a bare continue would pick. Reading it at archive time makes the
-     * later restore resume that exact conversation, not whatever became newest since.
-     */
     fun latestClaudeSessionId(workingDirectory: String): String {
         val path = TmuxParser.shellQuote(workingDirectory)
         return "mp_cwd=$path; " +

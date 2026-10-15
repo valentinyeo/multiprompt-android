@@ -110,7 +110,6 @@ class WorkspaceStore(context: Context) {
         preferences.edit().putString("$ASSIGNMENT_PREFIX$key", workspaceId).apply()
     }
 
-    /** How many sessions this app has started in each folder, keyed by absolute path. */
     fun pathUsage(hostId: String): Map<String, Int> {
         val raw = preferences.getString(KEY_PATH_USAGE, null) ?: return emptyMap()
         return runCatching {
@@ -228,8 +227,6 @@ class WorkspaceStore(context: Context) {
             val automatic = listOf(ALL_SPLIT_ID) + automaticWorkspaceIds
             if (manualOrder == null) return automatic.map { it.takeUnless { id -> id == ALL_SPLIT_ID } }
 
-            // v0.1.21 stored workspace IDs only. Prepending All migrates that order while
-            // preserving the new default that All starts first.
             val migrated = if (ALL_SPLIT_ID in manualOrder) {
                 manualOrder
             } else {

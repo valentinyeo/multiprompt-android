@@ -2,7 +2,6 @@ package dev.multiprompt.companion.update
 
 import org.json.JSONObject
 
-/** One published build, kept so the Update screen can show a running changelog. */
 data class ReleaseNote(
     val versionName: String,
     val date: String,
