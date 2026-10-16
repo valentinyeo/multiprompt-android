@@ -10,6 +10,7 @@ import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.model.DissolvedSession
 import dev.multiprompt.companion.model.RemoteDirectory
+import dev.multiprompt.companion.model.RefreshMerge
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.SessionSearch
 import dev.multiprompt.companion.data.WorkspaceStore
@@ -55,6 +56,7 @@ data class AppUiState(
     val sessions: List<TmuxSession> = emptyList(),
     val hostErrors: Map<String, String> = emptyMap(),
     val cachedHostIds: Set<String> = emptySet(),
+    val updatingHostIds: Set<String> = emptySet(),
     val pendingHostKeys: Map<String, PresentedHostKey> = emptyMap(),
     val refreshing: Boolean = false,
     val editorHost: HostProfile? = null,
@@ -361,6 +363,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 sessions = it.sessions.filterNot { session -> session.hostId == host.id },
                 hostErrors = it.hostErrors - host.id,
                 cachedHostIds = it.cachedHostIds - host.id,
+                updatingHostIds = it.updatingHostIds - host.id,
                 dissolvedSessions = it.dissolvedSessions.filterNot { session -> session.hostId == host.id },
                 pendingHostKeys = it.pendingHostKeys - host.id,
             )
@@ -403,9 +406,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _state.update { it.copy(refreshing = true) }
             val cachedByHost = snapshot.associate { host -> host.id to sessionCache.load(host.id) }
-            val results = snapshot.map { host ->
+            val results = mutableMapOf<String, HostRefresh>()
+            if (RefreshMerge.SHOW_SAVED_SESSIONS_WHILE_CONNECTING_IGSH_340) {
+                _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = false) }
+            }
+            snapshot.map { host ->
                 async {
-                    runCatching { ssh.listSessions(host) }
+                    val result = runCatching { ssh.listSessions(host) }
                         .fold(
                             onSuccess = { HostRefresh(host.id, it.sessions, it.etaStates) },
                             onFailure = { throwable ->
@@ -416,117 +423,127 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 )
                             },
                         )
+                    results[host.id] = result
+                    if (RefreshMerge.SHOW_SAVED_SESSIONS_WHILE_CONNECTING_IGSH_340) {
+                        _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = false) }
+                    }
                 }
             }.awaitAll()
-            results.filter { it.error == null }.forEach { result ->
+            results.values.filter { it.error == null }.forEach { result ->
                 sessionCache.save(result.hostId, result.sessions)
             }
-            _state.update { current ->
-                val currentByHost = current.sessions.groupBy { it.hostId }
-                val cachedHostIds = results.filter { result ->
-                    result.error != null &&
-                        (cachedByHost[result.hostId].orEmpty().isNotEmpty() ||
-                            currentByHost[result.hostId].orEmpty().isNotEmpty())
-                }.mapTo(mutableSetOf()) { it.hostId }
-                val sessions = results.flatMap { result ->
-                    if (result.error == null) {
-                        result.sessions
-                    } else {
-                        cachedByHost[result.hostId].orEmpty().ifEmpty {
-                            currentByHost[result.hostId].orEmpty()
-                        }
-                    }
-                }.map { session ->
-                    sessionReads.displayName(session)?.let { session.copy(title = it) } ?: session
+            _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = true) }
+        }
+    }
+
+    private fun applyRefresh(
+        current: AppUiState,
+        snapshot: List<HostProfile>,
+        cachedByHost: Map<String, List<TmuxSession>>,
+        answered: Map<String, HostRefresh>,
+        final: Boolean,
+    ): AppUiState {
+        val results = snapshot.mapNotNull { answered[it.id] }
+        val merged = RefreshMerge.merge(
+            hostIds = snapshot.map { it.id },
+            currentSessions = current.sessions,
+            cachedByHost = cachedByHost,
+            results = answered.mapValues { (_, result) -> RefreshMerge.HostResult(result.sessions, result.error) },
+            final = final,
+            currentUpdatingHostIds = current.updatingHostIds,
+        )
+        val sessions = merged.sessions.map { session ->
+            sessionReads.displayName(session)?.let { session.copy(title = it) } ?: session
+        }
+        val mapping = AccountHostMap.resolve(current.hosts, accountStore.hostOverrides())
+        val sessionWorkspaceIds = sessions.mapNotNull { session ->
+            current.accountLayout?.let { AccountHostMap.tabFor(session, it, mapping) }?.let { tab ->
+                SessionReadStore.key(session.hostId, session.name) to tab.workspace
+            }
+        }.toMap()
+        val interactionEpochSeconds = current.sessionInteractionEpochSeconds + sessions
+            .mapNotNull { session ->
+                sessionReads.lastInteractedAt(session).takeIf { it > 0 }?.let {
+                    SessionReadStore.key(session.hostId, session.name) to it
                 }
-                val mapping = AccountHostMap.resolve(current.hosts, accountStore.hostOverrides())
-                val sessionWorkspaceIds = sessions.mapNotNull { session ->
-                    current.accountLayout?.let { AccountHostMap.tabFor(session, it, mapping) }?.let { tab ->
-                        SessionReadStore.key(session.hostId, session.name) to tab.workspace
-                    }
-                }.toMap()
-                val interactionEpochSeconds = current.sessionInteractionEpochSeconds + sessions
-                    .mapNotNull { session ->
-                        sessionReads.lastInteractedAt(session).takeIf { it > 0 }?.let {
-                            SessionReadStore.key(session.hostId, session.name) to it
-                        }
-                    }
-                    .toMap()
-                val idleObservations = sessions.mapNotNull { session ->
-                    val key = SessionReadStore.key(session.hostId, session.name)
-                    val observations = if (TmuxText.isWaitingForInput(session.preview, session.agent)) {
-                        (current.waitingIdleObservations[key] ?: 0) + 1
-                    } else {
-                        0
-                    }
-                    observations.takeIf { it > 0 }?.let { key to it }
-                }.toMap()
-                val archivedKeys = sessions
-                    .filter { session ->
-                        val key = SessionReadStore.key(session.hostId, session.name)
-                        sessionReads.isArchived(
-                            session,
-                            needsAttention = (idleObservations[key] ?: 0) >= IDLE_OBSERVATIONS_TO_RELEASE,
-                        )
-                    }
-                    .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) }
-                val orderedWorkspaces = current.workspaces
-                val workspaceSplitIds = listOf(null) + orderedWorkspaces.map { it.id }
-                val selectedWorkspaceId = when {
-                    !current.workspaceSelectionInitialized -> workspaceSplitIds.firstOrNull()
-                    current.selectedWorkspaceId == null -> null
-                    orderedWorkspaces.any { it.id == current.selectedWorkspaceId } ->
-                        current.selectedWorkspaceId
-                    else -> workspaceSplitIds.firstOrNull()
-                }
-                val etaNow = System.currentTimeMillis()
-                val sessionEtas = results
-                    .filter { it.error == null }
-                    .flatMap { result ->
-                        result.etaStates.mapNotNull { (name, state) ->
-                            SessionReadStore.key(result.hostId, name) to state.toEta(etaNow)
-                        }
-                    }
-                    .toMap()
-                current.copy(
-                    sessions = sessions,
-                    sessionEtas = sessionEtas,
-                    accountHosts = mapping,
-                    readerSession = current.readerSession?.let { open ->
-                        val tab = current.accountLayout?.let { AccountHostMap.tabFor(open, it, mapping) }
-                        tab?.let { AccountHostMap.sessionFor(it, sessions, mapping) }
-                            ?: sessions.firstOrNull { it.hostId == open.hostId && it.name == open.name } ?: open
-                    },
-                    terminalSession = current.terminalSession?.let { open ->
-                        val tab = current.accountLayout?.let { AccountHostMap.tabFor(open, it, mapping) }
-                        tab?.let { AccountHostMap.sessionFor(it, sessions, mapping) }
-                            ?: sessions.firstOrNull { it.hostId == open.hostId && it.name == open.name } ?: open
-                    },
-                    hostErrors = results.mapNotNull { result ->
-                        result.error?.let { result.hostId to it }
-                    }.toMap(),
-                    cachedHostIds = cachedHostIds,
-                    pendingHostKeys = results.mapNotNull { result ->
-                        result.hostKey?.let { result.hostId to it }
-                    }.toMap(),
-                    unreadSessionKeys = sessions
-                        .filter { SessionReadStore.key(it.hostId, it.name) !in archivedKeys }
-                        .filter { TmuxText.isWaitingForInput(it.preview, it.agent) }
-                        .filter(sessionReads::isUnread)
-                        .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) },
-                    archivedSessionKeys = archivedKeys,
-                    workspaces = orderedWorkspaces,
-                    workspaceSplitIds = workspaceSplitIds,
-                    selectedWorkspaceId = selectedWorkspaceId,
-                    workspaceSelectionInitialized = orderedWorkspaces.isNotEmpty() ||
-                        current.workspaceSelectionInitialized,
-                    sessionWorkspaceIds = sessionWorkspaceIds,
-                    sessionInteractionEpochSeconds = interactionEpochSeconds,
-                    waitingIdleObservations = idleObservations.filterKeys { it in archivedKeys },
-                    refreshing = false,
+            }
+            .toMap()
+        val idleObservations = if (!final) current.waitingIdleObservations else sessions.mapNotNull { session ->
+            val key = SessionReadStore.key(session.hostId, session.name)
+            val observations = if (TmuxText.isWaitingForInput(session.preview, session.agent)) {
+                (current.waitingIdleObservations[key] ?: 0) + 1
+            } else {
+                0
+            }
+            observations.takeIf { it > 0 }?.let { key to it }
+        }.toMap()
+        val archivedKeys = sessions
+            .filter { session ->
+                val key = SessionReadStore.key(session.hostId, session.name)
+                sessionReads.isArchived(
+                    session,
+                    needsAttention = (idleObservations[key] ?: 0) >= IDLE_OBSERVATIONS_TO_RELEASE,
+                    restoreReleased = final,
                 )
             }
+            .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) }
+        val orderedWorkspaces = current.workspaces
+        val workspaceSplitIds = listOf(null) + orderedWorkspaces.map { it.id }
+        val selectedWorkspaceId = when {
+            !current.workspaceSelectionInitialized -> workspaceSplitIds.firstOrNull()
+            current.selectedWorkspaceId == null -> null
+            orderedWorkspaces.any { it.id == current.selectedWorkspaceId } ->
+                current.selectedWorkspaceId
+            else -> workspaceSplitIds.firstOrNull()
         }
+        val etaNow = System.currentTimeMillis()
+        val sessionEtas = results
+            .filter { it.error == null }
+            .flatMap { result ->
+                result.etaStates.mapNotNull { (name, state) ->
+                    SessionReadStore.key(result.hostId, name) to state.toEta(etaNow)
+                }
+            }
+            .toMap()
+        return current.copy(
+            sessions = sessions,
+            sessionEtas = if (final) sessionEtas else current.sessionEtas + sessionEtas,
+            accountHosts = mapping,
+            readerSession = current.readerSession?.let { open ->
+                val tab = current.accountLayout?.let { AccountHostMap.tabFor(open, it, mapping) }
+                tab?.let { AccountHostMap.sessionFor(it, sessions, mapping) }
+                    ?: sessions.firstOrNull { it.hostId == open.hostId && it.name == open.name } ?: open
+            },
+            terminalSession = current.terminalSession?.let { open ->
+                val tab = current.accountLayout?.let { AccountHostMap.tabFor(open, it, mapping) }
+                tab?.let { AccountHostMap.sessionFor(it, sessions, mapping) }
+                    ?: sessions.firstOrNull { it.hostId == open.hostId && it.name == open.name } ?: open
+            },
+            hostErrors = results.mapNotNull { result ->
+                result.error?.let { result.hostId to it }
+            }.toMap(),
+            cachedHostIds = merged.cachedHostIds,
+            updatingHostIds = merged.updatingHostIds,
+            pendingHostKeys = results.mapNotNull { result ->
+                result.hostKey?.let { result.hostId to it }
+            }.toMap(),
+            unreadSessionKeys = sessions
+                .filter { SessionReadStore.key(it.hostId, it.name) !in archivedKeys }
+                .filter { TmuxText.isWaitingForInput(it.preview, it.agent) }
+                .filter(sessionReads::isUnread)
+                .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) },
+            archivedSessionKeys = archivedKeys,
+            workspaces = orderedWorkspaces,
+            workspaceSplitIds = workspaceSplitIds,
+            selectedWorkspaceId = selectedWorkspaceId,
+            workspaceSelectionInitialized = orderedWorkspaces.isNotEmpty() ||
+                current.workspaceSelectionInitialized,
+            sessionWorkspaceIds = sessionWorkspaceIds,
+            sessionInteractionEpochSeconds = interactionEpochSeconds,
+            waitingIdleObservations = if (final) idleObservations.filterKeys { it in archivedKeys }
+                else current.waitingIdleObservations,
+            refreshing = !final,
+        )
     }
 
     private val warmReaders = LinkedHashMap<String, SessionReaderConnection>()
