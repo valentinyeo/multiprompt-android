@@ -47,7 +47,7 @@ class SessionReadStore(context: Context) {
         editor.apply()
     }
 
-    fun isArchived(session: TmuxSession, needsAttention: Boolean): Boolean {
+    fun isArchived(session: TmuxSession, needsAttention: Boolean, restoreReleased: Boolean = true): Boolean {
         val archiveKey = archiveKey(session.hostId, session.name)
         if (!preferences.contains(archiveKey)) return false
         val archivedAt = preferences.getLong(archiveKey, Long.MAX_VALUE)
@@ -61,7 +61,7 @@ class SessionReadStore(context: Context) {
                 needsAttention = needsAttention,
             )
         ) return true
-        restore(session)
+        if (restoreReleased) restore(session)
         return false
     }
 
