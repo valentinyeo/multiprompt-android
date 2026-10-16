@@ -14,11 +14,14 @@ A single Android app (`dev.multiprompt.companion`) that SSHes straight into publ
 ./gradlew testDebugUnitTest --tests '*TmuxParserTest*'   # single test class
 ```
 
-Requires JDK 17 and Android SDK 36. CI runs `gradle --no-daemon lintDebug test` on every pull request (`.github/workflows/test.yml`) and `gradle --no-daemon lintDebug test assembleRelease` on every push to `main`.
+Requires JDK 17 and Android SDK 36. Before every push run `tools/check.sh`: it is exactly what CI runs on every pull request and push to `main` (`.github/workflows/test.yml`). `release.yml` then lints, tests, signs, and republishes the fixed `android-latest` release, which the installed app pulls from its Update screen.
 
-No code comments: `node tools/strip-comments.mjs --check` fails CI on any new one (`.github/workflows/no-comments.yml`); license headers and tool directives stay allowed.
-
-**VPS-first workflow:** normal development does not compile locally. Edit, commit, push `main`; GitHub Actions (`.github/workflows/release.yml`) lints, tests, signs, and republishes the fixed `android-latest` release. The installed app pulls the new build from its Update screen. Only reach for a local Gradle build when you specifically need one.
+| Rule | Enforced by |
+|---|---|
+| Never push code that does not compile or pass tests | `tools/check.sh` in `test.yml` |
+| No code comments (license headers and tool directives allowed) | `tools/strip-comments.mjs --check` in `tools/check.sh` |
+| No scratch output (logs, OCR dumps, screenshots) at the repo root | `tools/root-files.mjs` allowlist in `tools/check.sh` |
+| Merged branches do not linger on GitHub | repo setting: delete branch on merge |
 
 ## Git workflow
 
