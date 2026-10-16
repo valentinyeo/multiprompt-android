@@ -2,6 +2,8 @@ name: Android tests
 
 on:
   pull_request:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -26,5 +28,11 @@ jobs:
         with:
           gradle-version: "9.5.1"
 
-      - name: Lint and unit tests
-        run: gradle --no-daemon lintDebug test
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Root files, comments, lint and unit tests
+        env:
+          GRADLE: gradle
+        run: tools/check.sh
