@@ -14,7 +14,7 @@ A single Android app (`dev.multiprompt.companion`) that SSHes straight into publ
 ./gradlew testDebugUnitTest --tests '*TmuxParserTest*'   # single test class
 ```
 
-Requires JDK 17 and Android SDK 36. CI runs `gradle --no-daemon lintDebug test assembleRelease`.
+Requires JDK 17 and Android SDK 36. CI runs `gradle --no-daemon lintDebug test` on every pull request (`.github/workflows/test.yml`) and `gradle --no-daemon lintDebug test assembleRelease` on every push to `main`.
 
 **VPS-first workflow:** normal development does not compile locally. Edit, commit, push `main`; GitHub Actions (`.github/workflows/release.yml`) lints, tests, signs, and republishes the fixed `android-latest` release. The installed app pulls the new build from its Update screen. Only reach for a local Gradle build when you specifically need one.
 
