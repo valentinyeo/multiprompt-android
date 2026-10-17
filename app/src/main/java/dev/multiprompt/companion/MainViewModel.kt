@@ -407,9 +407,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(refreshing = true) }
             val cachedByHost = snapshot.associate { host -> host.id to sessionCache.load(host.id) }
             val results = mutableMapOf<String, HostRefresh>()
-            if (RefreshMerge.SHOW_SAVED_SESSIONS_WHILE_CONNECTING_IGSH_340) {
-                _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = false) }
-            }
+            _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = false) }
             snapshot.map { host ->
                 async {
                     val result = runCatching { ssh.listSessions(host) }
@@ -424,9 +422,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             },
                         )
                     results[host.id] = result
-                    if (RefreshMerge.SHOW_SAVED_SESSIONS_WHILE_CONNECTING_IGSH_340) {
-                        _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = false) }
-                    }
+                    _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = false) }
                 }
             }.awaitAll()
             results.values.filter { it.error == null }.forEach { result ->

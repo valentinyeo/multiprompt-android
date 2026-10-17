@@ -1,8 +1,6 @@
 package dev.multiprompt.companion.model
 
 object RefreshMerge {
-    const val SHOW_SAVED_SESSIONS_WHILE_CONNECTING_IGSH_340 = true
-
     data class HostResult(
         val sessions: List<TmuxSession> = emptyList(),
         val error: String? = null,
