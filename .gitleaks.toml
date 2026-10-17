@@ -21,3 +21,7 @@ regex = '''(?i)(?:token|secret|api[ _-]?key|password)[^\n]{0,60}?[`'"]([A-Za-z0-
 secretGroup = 1
 entropy = 4.0
 keywords = ["token", "secret", "key", "password"]
+
+[allowlist]
+description = "Sync protocol test vectors: fixed test bytes from scripts/gen-sync-fixtures.py, not real keys"
+paths = ['''^app/src/test/resources/sync/sync-protocol-v1-fixtures\.json$''']
