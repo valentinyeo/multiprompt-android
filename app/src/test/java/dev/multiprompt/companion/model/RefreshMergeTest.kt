@@ -152,11 +152,6 @@ class RefreshMergeTest {
         assertTrue(merged.updatingHostIds.isEmpty())
     }
 
-    @Test
-    fun featureSwitchShowsSavedSessionsByDefault() {
-        assertTrue(RefreshMerge.SHOW_SAVED_SESSIONS_WHILE_CONNECTING_IGSH_340)
-    }
-
     private fun session(hostId: String, name: String) = TmuxSession(
         hostId = hostId,
         name = name,
