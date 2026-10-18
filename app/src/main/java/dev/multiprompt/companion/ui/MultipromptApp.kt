@@ -2162,6 +2162,12 @@ private fun ReaderScreen(
         onFontScaleChanged(nextScale)
     }
     val scrollState = rememberReaderScrollState(connection)
+    var followRequest by remember(connection) { mutableStateOf(0) }
+    val scrollLive: () -> Unit = {
+        onSessionInteraction()
+        followRequest++
+        connection.scrollLive()
+    }
     val density = LocalDensity.current
     val context = LocalContext.current
     val readerScope = rememberCoroutineScope()
@@ -2532,6 +2538,13 @@ private fun ReaderScreen(
     BackHandler(onBack = onBack)
     Scaffold(
         modifier = Modifier.horizontalSwipe(onSwitchSession),
+        floatingActionButton = {
+            if (scrollState.canScrollForward) {
+                FloatingActionButton(onClick = scrollLive, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Default.KeyboardArrowDown, "Jump to newest")
+                }
+            }
+        },
         topBar = {
             TopAppBar(
                 modifier = Modifier
@@ -2819,7 +2832,7 @@ private fun ReaderScreen(
                     etaLabel = reader.eta?.let { "ETA ${it.label(etaNowMillis)}" },
                     alternateOn = reader.alternateOn,
                     onScrollBackPage = { onSessionInteraction(); connection.scrollBackPage() },
-                    onScrollLive = { onSessionInteraction(); connection.scrollLive() },
+                    onScrollLive = scrollLive,
                     onOpenHistory = {
                         onSessionInteraction()
                         readerScope.launch {
@@ -3056,7 +3069,7 @@ private fun ReaderScreen(
                 .padding(padding)
                 .fillMaxSize()
                 .nestedScroll(overscrollLoader)
-                .readerScroll(scrollState)
+                .readerScroll(scrollState, followRequest)
                 .pointerInput(onOpenTerminal) {
                     detectTapGestures(onDoubleTap = { onOpenTerminal() })
                 }
