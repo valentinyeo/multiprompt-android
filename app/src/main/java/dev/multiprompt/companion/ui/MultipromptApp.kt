@@ -187,6 +187,7 @@ import dev.multiprompt.companion.skills.SkillStore
 import dev.multiprompt.companion.data.ReminderTimeParser
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.SessionSearch
+import dev.multiprompt.companion.ssh.HostKeyWarning
 import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.terminal.TerminalConnection
 import dev.multiprompt.companion.terminal.TerminalStatus
@@ -597,23 +598,30 @@ private fun AppScreens(viewModel: MainViewModel) {
     }
 
     state.pendingHostKeys.entries.firstOrNull()?.let { (hostId, key) ->
-        val hostLabel = state.hosts.firstOrNull { it.id == hostId }?.label ?: "SSH host"
+        val host = state.hosts.firstOrNull { it.id == hostId }
+        val warning = HostKeyWarning.text(host, key)
         AlertDialog(
             onDismissRequest = {},
             title = {
-                Text(if (key.changed) "SSH host key changed" else "Trust $hostLabel?")
+                Text(warning.title)
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(warning.body)
                     Text(
-                        if (key.changed) {
-                            "The saved identity for $hostLabel no longer matches. Only continue if you intentionally changed the server key."
-                        } else {
-                            "$hostLabel presented this identity on the first connection:"
-                        },
+                        warning.server,
+                        fontFamily = FontFamily.Monospace,
+                        style = MaterialTheme.typography.bodySmall,
                     )
+                    warning.saved?.let { saved ->
+                        Text(
+                            saved,
+                            fontFamily = FontFamily.Monospace,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                     Text(
-                        key.fingerprint,
+                        warning.presented,
                         fontFamily = FontFamily.Monospace,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -621,7 +629,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             },
             confirmButton = {
                 Button(onClick = { viewModel.trustHostKey(hostId) }) {
-                    Text(if (key.changed) "Replace trusted key" else "Trust and connect")
+                    Text(warning.confirm)
                 }
             },
             dismissButton = {
