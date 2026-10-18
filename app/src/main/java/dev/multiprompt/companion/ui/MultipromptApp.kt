@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
@@ -46,6 +47,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -1688,13 +1690,20 @@ private fun SessionsScreen(
                 displayedWorkspaceSplitIds.forEach { id ->
                     val name = when (id) {
                         null -> "All"
-                        FAVORITES_SPLIT_ID -> "★ Favorites"
+                        FAVORITES_SPLIT_ID -> "Favorites"
                         else -> state.workspaces.firstOrNull { it.id == id }?.name.orEmpty()
                     }
+                    val label: @Composable RowScope.() -> Unit = {
+                        if (id == FAVORITES_SPLIT_ID) {
+                            FavoriteDot()
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        Text(name)
+                    }
                     if (state.selectedWorkspaceId == id) {
-                        FilledTonalButton(onClick = { onSelectWorkspace(id) }) { Text(name) }
+                        FilledTonalButton(onClick = { onSelectWorkspace(id) }, content = label)
                     } else {
-                        TextButton(onClick = { onSelectWorkspace(id) }) { Text(name) }
+                        TextButton(onClick = { onSelectWorkspace(id) }, content = label)
                     }
                 }
             }
@@ -1919,7 +1928,7 @@ private fun SessionCard(
                         ),
                 )
                 AgentIcon(session.agent)
-                if (starred) Text("★", color = Color(0xFFFFC107), fontSize = 14.sp)
+                if (starred) FavoriteDot()
                 Text(
                     session.displayName,
                     modifier = Modifier.weight(1f),
