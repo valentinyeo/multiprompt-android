@@ -49,6 +49,7 @@ class ReaderScrollTest {
     private val messages = mutableStateOf((1..12).map { "Message $it" })
     private val markdown = mutableStateOf("Reply")
     private val viewportHeight = mutableStateOf(240.dp)
+    private val followRequest = mutableStateOf(0)
     private lateinit var scroll: ScrollState
     private lateinit var scope: CoroutineScope
 
@@ -60,7 +61,7 @@ class ReaderScrollTest {
                 scope = rememberCoroutineScope()
                 Column(
                     Modifier.height(viewportHeight.value).fillMaxWidth()
-                        .testTag("reader").readerScroll(scroll),
+                        .testTag("reader").readerScroll(scroll, followRequest.value),
                 ) {
                     messages.value.forEach { message ->
                         Box(Modifier.height(80.dp)) { Text(message) }
@@ -200,6 +201,62 @@ class ReaderScrollTest {
         restoration.setContent { Reader() }
         scrollUp()
         restoration.emulateSavedInstanceStateRestore()
+        assertAtBottom()
+    }
+
+    @Test
+    fun partialRegrowthClampsWithoutLosingChosenOffsetOrRepinning() {
+        messages.value = (1..40).map { "Message $it" }
+        compose.setContent { Reader() }
+        scrollUp()
+        val chosenOffset = compose.runOnIdle { scroll.value }
+        compose.runOnIdle { messages.value = listOf("Short fallback") }
+        compose.runOnIdle { assertEquals(0, scroll.value) }
+        compose.runOnIdle { messages.value = (1..12).map { "Partial $it" } }
+        compose.runOnIdle {
+            assertTrue(scroll.maxValue < chosenOffset)
+            assertEquals(scroll.maxValue, scroll.value)
+        }
+        compose.runOnIdle { messages.value = (1..40).map { "Message $it" } }
+        compose.runOnIdle { assertEquals(chosenOffset, scroll.value) }
+        compose.runOnIdle { messages.value = messages.value + "Later message" }
+        compose.runOnIdle { assertEquals(chosenOffset, scroll.value) }
+    }
+
+    @Test
+    fun deliberateScrollAfterClampingUpdatesChosenOffset() {
+        messages.value = (1..40).map { "Message $it" }
+        compose.setContent { Reader() }
+        scrollUp()
+        compose.runOnIdle { messages.value = (1..20).map { "Shorter $it" } }
+        compose.runOnIdle { assertEquals(scroll.maxValue, scroll.value) }
+        scrollUp()
+        val chosenOffset = compose.runOnIdle { scroll.value }
+        compose.runOnIdle { messages.value = (1..40).map { "Message $it" } }
+        compose.runOnIdle { assertEquals(chosenOffset, scroll.value) }
+    }
+
+    @Test
+    fun followRequestRepinsAndFollowsNewMessages() {
+        compose.setContent { Reader() }
+        repeat(2) {
+            scrollUp()
+            compose.runOnIdle { followRequest.value++ }
+            assertAtBottom()
+            compose.runOnIdle { messages.value = messages.value + "Later message $it" }
+            assertAtBottom()
+        }
+    }
+
+    @Test
+    fun followRequestDuringDropoutFollowsRestoredContent() {
+        compose.setContent { Reader() }
+        scrollUp()
+        compose.runOnIdle { messages.value = emptyList() }
+        compose.runOnIdle { followRequest.value++ }
+        compose.runOnIdle { messages.value = (1..20).map { "Restored $it" } }
+        assertAtBottom()
+        compose.runOnIdle { messages.value = messages.value + "Later message" }
         assertAtBottom()
     }
 

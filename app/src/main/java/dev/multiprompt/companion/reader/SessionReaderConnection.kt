@@ -49,6 +49,15 @@ data class ReaderState(
     val transcript: List<TranscriptMessage>? = null,
 )
 
+internal fun transcriptAfterUpdate(
+    current: List<TranscriptMessage>?,
+    response: TranscriptProtocol.Response?,
+): List<TranscriptMessage>? = when (response?.status) {
+    null, "same" -> current
+    "ok" -> response.messages
+    else -> null
+}
+
 class SessionReaderConnection(
     private val repository: SshRepository,
     private val host: HostProfile,
@@ -254,17 +263,13 @@ class SessionReaderConnection(
                         retryDelay = RECONNECT_DELAY_MS
                         _state.update { current ->
                             current.copy(
-                                transcript = when (response.status) {
-                                    "ok" -> response.messages
-                                    "same" -> current.transcript
-                                    else -> null
-                                },
+                                transcript = transcriptAfterUpdate(current.transcript, response),
                             )
                         }
                     }
                 } catch (failure: Exception) {
                     if (failure is CancellationException && !isActive) throw failure
-                    _state.update { it.copy(transcript = null) }
+                    _state.update { it.copy(transcript = transcriptAfterUpdate(it.transcript, null)) }
                 } finally {
                     val oldClient = transcriptClient
                     transcriptClient = null
