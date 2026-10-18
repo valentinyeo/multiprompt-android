@@ -177,6 +177,7 @@ import dev.multiprompt.companion.data.CrashReport
 import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.dictation.DictationStatus
+import dev.multiprompt.companion.reader.QueuedMessages
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
@@ -3169,6 +3170,12 @@ private fun ReaderScreen(
                         block.kind == TmuxText.ReaderBlockKind.CODE
                     )
             }
+            val nowMillis = System.currentTimeMillis()
+            val queuedMessages = remember(transcript, reader.screenOutput, session.agent, reader.sentRecord, nowMillis) {
+                transcript?.let {
+                    QueuedMessages.pending(it, reader.screenOutput, session.agent, reader.sentRecord, nowMillis)
+                }.orEmpty()
+            }
             var expandedReaderBlocks by remember(connection) { mutableStateOf(emptySet<String>()) }
             val transcriptFontSize = (14f * transcriptZoom).sp
             Column(
@@ -3324,7 +3331,32 @@ private fun ReaderScreen(
                         }
                     }
                 }
-                if (transcript?.isEmpty() ?: visibleReaderBlocks.isEmpty()) {
+                queuedMessages.forEach { text ->
+                    ChatBubble(isUser = true, sunlight = sunlightMode) {
+                        Text(
+                            "You · queued",
+                            fontFamily = ChatFontFamily,
+                            fontSize = (transcriptFontSize.value - 3f).coerceAtLeast(8f).sp,
+                            color = chatHintColor(sunlightMode),
+                        )
+                        SelectionContainer {
+                            Text(
+                                terminalLinks(text, sunlightMode),
+                                fontFamily = ChatFontFamily,
+                                fontSize = transcriptFontSize,
+                                lineHeight = (transcriptFontSize.value * 1.5f).sp,
+                                color = chatTextColor(sunlightMode),
+                            )
+                        }
+                        Text(
+                            "The agent reads it after its current step",
+                            fontFamily = ChatFontFamily,
+                            fontSize = (transcriptFontSize.value - 3f).coerceAtLeast(8f).sp,
+                            color = chatHintColor(sunlightMode),
+                        )
+                    }
+                }
+                if ((transcript?.isEmpty() ?: visibleReaderBlocks.isEmpty()) && queuedMessages.isEmpty()) {
                     Text(
                         "No recent output",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

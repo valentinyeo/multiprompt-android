@@ -385,6 +385,7 @@ object TmuxText {
             ) {
                 flush()
             }
+            if (currentKind == ReaderBlockKind.USER_PROMPT && looksLikeUserPrompt(line, agent)) flush()
             val kind = when {
                 looksLikeUserPrompt(line, agent) -> ReaderBlockKind.USER_PROMPT
                 looksLikeProgress(line, agent) -> ReaderBlockKind.PROGRESS

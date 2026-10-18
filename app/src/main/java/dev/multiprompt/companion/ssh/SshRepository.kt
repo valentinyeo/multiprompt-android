@@ -54,6 +54,7 @@ sealed class SshProblem(message: String) : Exception(message) {
 class SshRepository(private val secrets: SecretStore) {
     data class StreamSnapshot(
         val output: String,
+        val screenOutput: String,
         val details: TmuxText.RuntimeDetails,
         val pickerOptions: List<TmuxText.ModelPickerOption>,
         val waitingForInput: Boolean,
@@ -193,6 +194,7 @@ class SshRepository(private val secrets: SecretStore) {
                         onSnapshot(
                             StreamSnapshot(
                                 output = mobileOutput,
+                                screenOutput = rawOutput,
                                 details = TmuxText.runtimeDetails(rawOutput),
                                 pickerOptions = TmuxText.modelPickerOptions(rawOutput),
                                 waitingForInput = TmuxText.isWaitingForInput(rawOutput, agent),
