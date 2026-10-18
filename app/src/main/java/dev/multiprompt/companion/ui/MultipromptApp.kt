@@ -156,6 +156,11 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.multiprompt.companion.account.AccountTab
+import dev.multiprompt.companion.account.AccountHostMap
+import dev.multiprompt.companion.account.FAVORITES_SPLIT_ID
+import dev.multiprompt.companion.account.inboxSplitIds
+import dev.multiprompt.companion.account.isFavoriteSession
 import dev.multiprompt.companion.AppSection
 import dev.multiprompt.companion.AppUiState
 import dev.multiprompt.companion.SessionBucket
@@ -461,6 +466,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onCreateWorkspace = viewModel::createWorkspace,
                     onMoveSession = viewModel::moveSession,
                     onRenameSession = viewModel::renameSession,
+                    onSetFavorite = { tab, value -> viewModel.editAccountLayout { it.setFavorite(tab.identity, value) } },
                     onRefresh = viewModel::refresh,
                     onSelectSection = viewModel::select,
                     onForgetSession = viewModel::forgetSession,
@@ -1052,6 +1058,7 @@ private fun SessionsScreen(
     onCreateWorkspace: (String) -> String?,
     onMoveSession: (TmuxSession, Workspace) -> Unit,
     onRenameSession: (TmuxSession, String) -> String?,
+    onSetFavorite: (AccountTab, Boolean) -> Unit,
     onRefresh: () -> Unit,
     onSelectSection: (AppSection) -> Unit,
     onForgetSession: (TmuxSession) -> Unit,
@@ -1092,11 +1099,8 @@ private fun SessionsScreen(
     val context = LocalContext.current
     val splitScrollState = rememberScrollState()
     val hostLabels = state.hosts.associate { it.id to it.label }
-    val displayedWorkspaceSplitIds = if (state.allSplitOnRight) {
-        state.workspaceSplitIds.asReversed()
-    } else {
-        state.workspaceSplitIds
-    }
+    val displayedWorkspaceSplitIds = inboxSplitIds(state.workspaceSplitIds, state.allSplitOnRight)
+    val arrangedWorkspaceSplitIds = displayedWorkspaceSplitIds.filterNot { it == FAVORITES_SPLIT_ID }
     LaunchedEffect(searchVisible) {
         if (searchVisible) searchFocusRequester.requestFocus()
     }
@@ -1321,7 +1325,7 @@ private fun SessionsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    displayedWorkspaceSplitIds.forEachIndexed { index, splitId ->
+                    arrangedWorkspaceSplitIds.forEachIndexed { index, splitId ->
                         val workspace = splitId?.let { id ->
                             state.workspaces.firstOrNull { it.id == id }
                         }
@@ -1351,7 +1355,7 @@ private fun SessionsScreen(
                                 onClick = {
                                     onMoveWorkspaceSplit(splitId, if (state.allSplitOnRight) -1 else 1)
                                 },
-                                enabled = index < displayedWorkspaceSplitIds.lastIndex,
+                                enabled = index < arrangedWorkspaceSplitIds.lastIndex,
                             ) { Text("↓") }
                         }
                     }
@@ -1409,9 +1413,12 @@ private fun SessionsScreen(
             val key = SessionReadStore.key(session.hostId, session.name)
             state.sessionBucket != SessionBucket.ARCHIVE &&
                 (key in state.archivedSessionKeys) == (state.sessionBucket == SessionBucket.WAITING) &&
-                (normalizedQuery.isNotBlank() ||
-                    state.selectedWorkspaceId == null ||
-                    state.sessionWorkspaceIds[key] == state.selectedWorkspaceId) &&
+                (if (state.selectedWorkspaceId == FAVORITES_SPLIT_ID) {
+                    isFavoriteSession(session, state.accountLayout, state.accountHosts)
+                } else {
+                    normalizedQuery.isNotBlank() || state.selectedWorkspaceId == null ||
+                        state.sessionWorkspaceIds[key] == state.selectedWorkspaceId
+                }) &&
                 SessionSearch.matches(
                     session = session,
                     query = normalizedQuery,
@@ -1419,7 +1426,7 @@ private fun SessionsScreen(
                     workspaceName = workspaceNames[state.sessionWorkspaceIds[key]].orEmpty(),
                 )
         }, state.sessionInteractionEpochSeconds)
-    val visibleDissolvedSessions = if (state.sessionBucket == SessionBucket.ARCHIVE) {
+    val visibleDissolvedSessions = if (state.sessionBucket == SessionBucket.ARCHIVE && state.selectedWorkspaceId != FAVORITES_SPLIT_ID) {
         state.dissolvedSessions.filter { session ->
             normalizedQuery.isBlank() ||
                 session.displayName.contains(normalizedQuery, ignoreCase = true) ||
@@ -1610,6 +1617,8 @@ private fun SessionsScreen(
             }
             items(visibleSessions, key = { "${it.hostId}:${it.name}" }) { session ->
                 val key = SessionReadStore.key(session.hostId, session.name)
+                val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
+                val starred = tab?.favorite == true
                 SessionCard(
                     session = session,
                     workspaces = state.workspaces,
@@ -1618,6 +1627,10 @@ private fun SessionsScreen(
                     etaLabel = state.sessionEtas[key]?.label(etaNowMillis),
                     unread = key in state.unreadSessionKeys,
                     archived = key in state.archivedSessionKeys,
+                    starred = starred,
+                    onToggleFavorite = if (tab != null && state.signedIn) {
+                        { onSetFavorite(tab, !starred) }
+                    } else null,
                     onClick = { onOpen(session) },
                     onOpenTerminal = { onOpenTerminal(session) },
                     onArchive = { onArchive(session) },
@@ -1649,6 +1662,7 @@ private fun SessionsScreen(
                     Text(
                         when {
                             normalizedQuery.isNotBlank() -> "No sessions match “$normalizedQuery”"
+                            state.selectedWorkspaceId == FAVORITES_SPLIT_ID -> "No starred sessions"
                             state.sessionBucket == SessionBucket.ARCHIVE -> "No archived sessions"
                             state.sessionBucket == SessionBucket.WAITING -> "No waiting sessions"
                             else -> "This split is clear"
@@ -1671,9 +1685,11 @@ private fun SessionsScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 displayedWorkspaceSplitIds.forEach { id ->
-                    val name = id?.let { workspaceId ->
-                        state.workspaces.firstOrNull { it.id == workspaceId }?.name
-                    } ?: "All"
+                    val name = when (id) {
+                        null -> "All"
+                        FAVORITES_SPLIT_ID -> "★ Favorites"
+                        else -> state.workspaces.firstOrNull { it.id == id }?.name.orEmpty()
+                    }
                     if (state.selectedWorkspaceId == id) {
                         FilledTonalButton(onClick = { onSelectWorkspace(id) }) { Text(name) }
                     } else {
@@ -1829,6 +1845,8 @@ private fun SessionCard(
     etaLabel: String?,
     unread: Boolean,
     archived: Boolean,
+    starred: Boolean,
+    onToggleFavorite: (() -> Unit)?,
     onClick: () -> Unit,
     onOpenTerminal: () -> Unit,
     onArchive: () -> Unit,
@@ -1900,6 +1918,7 @@ private fun SessionCard(
                         ),
                 )
                 AgentIcon(session.agent)
+                if (starred) Text("★", color = Color(0xFFFFC107), fontSize = 14.sp)
                 Text(
                     session.displayName,
                     modifier = Modifier.weight(1f),
@@ -1950,6 +1969,15 @@ private fun SessionCard(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false },
                     ) {
+                        onToggleFavorite?.let { toggle ->
+                            DropdownMenuItem(
+                                text = { Text(if (starred) "Unstar" else "Star") },
+                                onClick = {
+                                    menuExpanded = false
+                                    toggle()
+                                },
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text(if (archived) "Return to open" else "Waiting") },
                             onClick = {
