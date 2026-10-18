@@ -25,6 +25,9 @@ import dev.multiprompt.companion.auth.SyncAuthManager
 import android.content.Intent
 import dev.multiprompt.companion.account.AccountHostMap
 import dev.multiprompt.companion.account.AccountLayout
+import dev.multiprompt.companion.account.FAVORITES_SPLIT_ID
+import dev.multiprompt.companion.account.inboxSplitIds
+import dev.multiprompt.companion.account.isFavoriteSession
 import dev.multiprompt.companion.account.AccountLayoutStore
 import dev.multiprompt.companion.account.AccountTab
 import dev.multiprompt.companion.account.PendingLayout
@@ -402,7 +405,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 sessionEtas = it.sessionEtas.filterKeys { key -> !key.startsWith(sessionPrefix) },
                 workspaces = workspaces,
                 workspaceSplitIds = it.workspaceSplitIds.filter { id -> id == null || id in workspaceIds },
-                selectedWorkspaceId = it.selectedWorkspaceId?.takeIf { id -> id in workspaceIds },
+                selectedWorkspaceId = it.selectedWorkspaceId?.takeIf { id -> id == FAVORITES_SPLIT_ID || id in workspaceIds },
                 sessions = it.sessions.filterNot { session -> session.hostId == host.id },
                 hostErrors = it.hostErrors - host.id,
                 cachedHostIds = it.cachedHostIds - host.id,
@@ -530,6 +533,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val selectedWorkspaceId = when {
             !current.workspaceSelectionInitialized -> workspaceSplitIds.firstOrNull()
             current.selectedWorkspaceId == null -> null
+            current.selectedWorkspaceId == FAVORITES_SPLIT_ID -> FAVORITES_SPLIT_ID
             orderedWorkspaces.any { it.id == current.selectedWorkspaceId } ->
                 current.selectedWorkspaceId
             else -> workspaceSplitIds.firstOrNull()
@@ -736,7 +740,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun moveWorkspaceSplit(workspaceId: String?, delta: Int) {
-        if (workspaceId == null) return
+        if (workspaceId == null || workspaceId == FAVORITES_SPLIT_ID) return
         editAccountLayout { layout ->
             val index = layout.workspaces.indexOf(workspaceId)
             if (index < 0) layout else layout.copy(workspaces = layout.workspaces.toMutableList().apply {
@@ -748,7 +752,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun resetWorkspaceSplitOrder() { publishAccountLayout() }
 
     fun openAdjacentWorkspace(delta: Int) {
-        val splits = _state.value.workspaceSplitIds
+        val splits = inboxSplitIds(_state.value.workspaceSplitIds, _state.value.allSplitOnRight)
         val index = splits.indexOf(_state.value.selectedWorkspaceId).coerceAtLeast(0)
         selectWorkspace(splits[Math.floorMod(index + delta, splits.size)])
     }
@@ -982,7 +986,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startNewSession() {
-        _state.update { it.copy(newSession = NewSessionPicker(accountWorkspace = it.selectedWorkspaceId), sessionActionError = null) }
+        _state.update { it.copy(newSession = NewSessionPicker(accountWorkspace = it.selectedWorkspaceId?.takeUnless { id -> id == FAVORITES_SPLIT_ID }), sessionActionError = null) }
         _state.value.hosts.singleOrNull()?.let { host -> chooseNewSessionHost(host.id) }
     }
 
@@ -1295,7 +1299,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }.toMap()
             current.copy(accountLayout = layout, accountPending = pendingLayout?.dirty == true, accountHosts = mapping,
                 workspaces = workspaces, workspaceSplitIds = listOf(null) + workspaces.map { it.id }, sessionWorkspaceIds = assignments,
-                selectedWorkspaceId = current.selectedWorkspaceId?.takeIf { it in layout?.workspaces.orEmpty() },
+                selectedWorkspaceId = current.selectedWorkspaceId?.takeIf { it == FAVORITES_SPLIT_ID || it in layout?.workspaces.orEmpty() },
                 readerSession = current.readerSession?.let { open ->
                     layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping) } ?: open
                 },
@@ -1402,10 +1406,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 SessionBucket.WAITING -> archived
                 else -> !archived
             }
-            bucketMatches && (
-                state.selectedWorkspaceId == null ||
-                    state.sessionWorkspaceIds[key] == state.selectedWorkspaceId
-                )
+            bucketMatches && when (state.selectedWorkspaceId) {
+                null -> true
+                FAVORITES_SPLIT_ID -> isFavoriteSession(session, state.accountLayout, state.accountHosts)
+                else -> state.sessionWorkspaceIds[key] == state.selectedWorkspaceId
+            }
         }
         .let { sessions -> SessionSearch.newestFirst(sessions, state.sessionInteractionEpochSeconds) }
 

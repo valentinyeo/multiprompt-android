@@ -40,6 +40,10 @@ All Sessions lists the existing SSH inventory on **every saved profile**, withou
 Inbox/Waiting/archive filtering, including sessions outside the account layout.
 Each row shows membership or “Not in a workspace”, with an Add/Move action.
 
+Inbox shows gold stars synced with the laptop; signed-in account tabs offer Star/Unstar.
+The ★ Favorites split stays just after All and shows only starred account sessions.
+Android negotiates favorite metadata and preserves absent values without inventing stars.
+
 Host mapping is device-local: 0 = Hetzner, 1 = Contabo UK, 2 = Inne CRO. Recognized,
 unambiguous profiles are selected automatically; Host mapping lets the user choose
 explicitly when labels are ambiguous. Host 0 must use the `valentin` outer tmux

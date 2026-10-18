@@ -9,10 +9,12 @@ data class AccountTab(
     val host: Int,
     val workspace: String,
     val manual: Boolean = false,
+    val favorite: Boolean? = null,
 ) {
     val identity: String get() = "$host:${session.lowercase(java.util.Locale.ROOT)}"
     fun json(): JSONObject = JSONObject().put("kind", "tmux").put("name", name)
         .put("tmux_session", session).put("tmux_host", host).put("workspace", workspace).put("manual", manual)
+        .apply { favorite?.let { put("favorite", it) } }
 }
 
 data class AccountLayout(
@@ -46,6 +48,9 @@ data class AccountLayout(
     fun moveTab(identity: String, workspace: String): AccountLayout = copy(tabs = tabs.map {
         if (it.identity == identity) it.copy(workspace = workspace) else it
     }).validate()
+    fun setFavorite(identity: String, value: Boolean): AccountLayout = copy(tabs = tabs.map {
+        if (it.identity == identity) it.copy(favorite = value) else it
+    }).validate()
     fun renameWorkspace(old: String, name: String): AccountLayout = copy(
         workspaces = workspaces.map { if (it == old) name else it },
         tabs = tabs.map { if (it.workspace == old) it.copy(workspace = name) else it },
@@ -68,15 +73,16 @@ data class AccountLayout(
                 w.getString("name")
             }, (0 until tabs.length()).map {
                 val t = tabs.getJSONObject(it)
-                require(t.keys().asSequence().toSet() in listOf(
-                    setOf("kind", "name", "tmux_session", "tmux_host", "workspace"),
-                    setOf("kind", "name", "tmux_session", "tmux_host", "workspace", "manual"),
-                ) && t.get("kind") == "tmux")
+                val required = setOf("kind", "name", "tmux_session", "tmux_host", "workspace")
+                val keys = t.keys().asSequence().toSet()
+                require(keys.containsAll(required) && (keys - required).all { it in setOf("manual", "favorite") } && t.get("kind") == "tmux")
                 require(listOf("name", "tmux_session", "workspace").all { key -> t.get(key) is String })
                 val host = t.get("tmux_host")
                 require(host is Number && host.toDouble() == host.toInt().toDouble())
                 require(!t.has("manual") || t.get("manual") is Boolean)
-                AccountTab(t.getString("name"), t.getString("tmux_session"), host.toInt(), t.getString("workspace"), t.optBoolean("manual", false))
+                require(!t.has("favorite") || t.get("favorite") is Boolean)
+                AccountTab(t.getString("name"), t.getString("tmux_session"), host.toInt(), t.getString("workspace"),
+                    t.optBoolean("manual", false), if (t.has("favorite")) t.getBoolean("favorite") else null)
             }).validate()
         }
 
@@ -98,6 +104,7 @@ data class AccountLayout(
                     name = if (e.name != b.name || e.manual != b.manual) e.name else r.name,
                     manual = if (e.name != b.name || e.manual != b.manual) e.manual else r.manual,
                     workspace = if (e.workspace != b.workspace) e.workspace else r.workspace,
+                    favorite = if (e.favorite != b.favorite) e.favorite else r.favorite,
                 )
             }.toMutableList()
             edited.tabs.filter { it.identity !in old && tabs.none { r -> r.identity == it.identity } }.forEach(tabs::add)

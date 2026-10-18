@@ -14,13 +14,15 @@ fun interface AccountHttp {
 
 data class AccountReply(val status: Int, val json: JSONObject)
 
-class AccountHttpClient : AccountHttp {
-    private val client = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
+class AccountHttpClient(
+    private val client: OkHttpClient = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
         .connectTimeout(10, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS)
-        .callTimeout(25, TimeUnit.SECONDS).build()
+        .callTimeout(25, TimeUnit.SECONDS).build(),
+) : AccountHttp {
 
     override fun request(method: String, path: String, token: String?, body: JSONObject?): AccountReply {
         val request = Request.Builder().url(ORIGIN + path).header("Accept", "application/json")
+            .header("X-Layout-Features", "favorite")
             .method(method, body?.toString()?.toRequestBody("application/json".toMediaType()))
         token?.let { request.header("Authorization", "Bearer $it") }
         client.newCall(request.build()).execute().use { reply ->

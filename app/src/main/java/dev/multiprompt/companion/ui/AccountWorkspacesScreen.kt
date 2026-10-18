@@ -50,7 +50,7 @@ internal fun AccountWorkspacesScreen(viewModel: MainViewModel, onInbox: () -> Un
     var moveTab by remember { mutableStateOf<AccountTab?>(null) }
     var addSession by remember { mutableStateOf<TmuxSession?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    val selected = state.selectedWorkspaceId ?: layout?.workspaces?.firstOrNull()
+    val selected = state.selectedWorkspaceId?.takeIf { it in layout?.workspaces.orEmpty() } ?: layout?.workspaces?.firstOrNull()
     val signIn: () -> Unit = { viewModel.signInAccount { context.startActivity(it) } }
 
     Column(Modifier.fillMaxSize()) {
