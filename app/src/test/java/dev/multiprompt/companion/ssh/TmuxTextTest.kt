@@ -847,6 +847,19 @@ class TmuxTextTest {
     }
 
     @Test
+    fun consecutiveWrappedClaudePromptsRemainSeparateBlocks() {
+        val first = "Do not post this video until the captions are ready and checked carefully."
+        val second = "Use the faster cutting cadence from the reference video."
+        assertEquals(
+            listOf(
+                TmuxText.ReaderBlock(TmuxText.ReaderBlockKind.USER_PROMPT, first),
+                TmuxText.ReaderBlock(TmuxText.ReaderBlockKind.USER_PROMPT, second),
+            ),
+            TmuxText.readerBlocks("> $first\n> $second", AgentKind.CLAUDE),
+        )
+    }
+
+    @Test
     fun longDictatedPromptWithParagraphsStaysInTheUserBubble() {
         val blocks = TmuxText.readerBlocks(
             """

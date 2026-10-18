@@ -33,6 +33,7 @@ sealed interface ReaderStatus {
 
 data class ReaderState(
     val output: String = "",
+    val screenOutput: String = "",
     val runtimeDetails: TmuxText.RuntimeDetails = TmuxText.RuntimeDetails(),
     val modelPickerOptions: List<TmuxText.ModelPickerOption> = emptyList(),
     val status: ReaderStatus = ReaderStatus.Connecting,
@@ -45,6 +46,7 @@ data class ReaderState(
     val eta: TmuxText.SessionEta? = null,
     val hookState: TmuxText.HookState? = null,
     val sentPrompts: List<String> = emptyList(),
+    val sentRecord: List<QueuedMessages.SentPrompt> = emptyList(),
     val alternateOn: Boolean = false,
     val transcript: List<TranscriptMessage>? = null,
 )
@@ -95,11 +97,13 @@ class SessionReaderConnection(
     fun sendPrompt(text: String): Boolean {
         val sent = requests.trySend(Request.Prompt(text)).isSuccess
         if (sent) {
+            val prompt = QueuedMessages.SentPrompt(text, System.currentTimeMillis())
             awaitModelSwitchConfirmation(text)
             _state.update { current ->
                 current.copy(
                     output = TmuxText.mergeSnapshot(current.output, "> $text"),
                     sentPrompts = (current.sentPrompts + text).takeLast(SENT_PROMPT_MEMORY),
+                    sentRecord = (current.sentRecord + prompt).takeLast(8),
                 )
             }
         }
@@ -316,6 +320,7 @@ class SessionReaderConnection(
                             val merged = TmuxText.mergeSnapshot(current.output, frame.output)
                             current.copy(
                                 output = merged,
+                                screenOutput = frame.screenOutput,
                                 runtimeDetails = liveDetails,
                                 modelPickerOptions = frame.pickerOptions,
                                 status = ReaderStatus.Live,
