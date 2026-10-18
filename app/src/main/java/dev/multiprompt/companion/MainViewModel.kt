@@ -12,6 +12,7 @@ import dev.multiprompt.companion.model.DissolvedSession
 import dev.multiprompt.companion.model.RemoteDirectory
 import dev.multiprompt.companion.model.RefreshMerge
 import dev.multiprompt.companion.data.SessionReadStore
+import dev.multiprompt.companion.data.RetiredHosts
 import dev.multiprompt.companion.data.SessionSearch
 import dev.multiprompt.companion.data.WorkspaceStore
 import dev.multiprompt.companion.data.CrashReport
@@ -169,7 +170,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
     val state: StateFlow<AppUiState> = _state.asStateFlow()
 
+    private val warmReaders = LinkedHashMap<String, SessionReaderConnection>()
+    private val warmReaderTouchedAt = mutableMapOf<String, Long>()
+
     init {
+        RetiredHosts.hostsToRemove(_state.value.hosts).forEach(::deleteHost)
         updates.check()
         if (_state.value.hosts.isNotEmpty()) refresh()
         viewModelScope.launch {
@@ -352,14 +357,52 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteHost(host: HostProfile) {
         hosts.delete(host.id)
-        secrets.remove(host.keySecretId)
-        secrets.remove(host.passphraseSecretId)
+        val remainingHosts = hosts.load()
+        listOfNotNull(host.keySecretId, host.passphraseSecretId).distinct().forEach { secretId ->
+            if (remainingHosts.none { it.keySecretId == secretId || it.passphraseSecretId == secretId }) {
+                secrets.remove(secretId)
+            }
+        }
+        accountStore.hostOverrides().filterValues { it == host.id }.keys.forEach { slot ->
+            accountStore.setHost(slot, null)
+        }
         sessionReads.removeHost(host.id)
         dissolvedStore.removeHost(host.id)
         workspaceStore.removeHost(host.id)
+        sessionCache.removeHost(host.id)
+        val sessionPrefix = SessionReadStore.key(host.id, "")
+        warmReaders.keys.filter { it.startsWith(sessionPrefix) }.forEach { key ->
+            warmReaders.remove(key)?.close()
+            warmReaderTouchedAt.remove(key)
+        }
+        val current = _state.value
+        if (current.readerSession?.hostId == host.id) current.reader?.close()
+        if (current.terminalSession?.hostId == host.id) current.terminal?.close()
         _state.update {
+            val workspaces = it.workspaces.filterNot { workspace -> workspace.hostId == host.id }
+            val workspaceIds = workspaces.mapTo(mutableSetOf()) { workspace -> workspace.id }
             it.copy(
-                hosts = hosts.load(),
+                hosts = remainingHosts,
+                accountHosts = AccountHostMap.resolve(remainingHosts, accountStore.hostOverrides()),
+                editorHost = it.editorHost?.takeUnless { profile -> profile.id == host.id },
+                editorVisible = it.editorVisible && it.editorHost?.id != host.id,
+                editorError = it.editorError.takeUnless { _ -> it.editorHost?.id == host.id },
+                newSession = it.newSession?.takeUnless { picker -> picker.hostId == host.id },
+                reader = it.reader.takeUnless { _ -> it.readerSession?.hostId == host.id },
+                readerSession = it.readerSession?.takeUnless { session -> session.hostId == host.id },
+                terminal = it.terminal.takeUnless { _ -> it.terminalSession?.hostId == host.id },
+                terminalSession = it.terminalSession?.takeUnless { session -> session.hostId == host.id },
+                terminalFromReader = it.terminalFromReader && it.terminalSession?.hostId != host.id,
+                readerSwipeOrder = it.readerSwipeOrder.filterNot { key -> key.startsWith(sessionPrefix) },
+                unreadSessionKeys = it.unreadSessionKeys.filterNot { key -> key.startsWith(sessionPrefix) }.toSet(),
+                archivedSessionKeys = it.archivedSessionKeys.filterNot { key -> key.startsWith(sessionPrefix) }.toSet(),
+                sessionWorkspaceIds = it.sessionWorkspaceIds.filterKeys { key -> !key.startsWith(sessionPrefix) },
+                sessionInteractionEpochSeconds = it.sessionInteractionEpochSeconds.filterKeys { key -> !key.startsWith(sessionPrefix) },
+                waitingIdleObservations = it.waitingIdleObservations.filterKeys { key -> !key.startsWith(sessionPrefix) },
+                sessionEtas = it.sessionEtas.filterKeys { key -> !key.startsWith(sessionPrefix) },
+                workspaces = workspaces,
+                workspaceSplitIds = it.workspaceSplitIds.filter { id -> id == null || id in workspaceIds },
+                selectedWorkspaceId = it.selectedWorkspaceId?.takeIf { id -> id in workspaceIds },
                 sessions = it.sessions.filterNot { session -> session.hostId == host.id },
                 hostErrors = it.hostErrors - host.id,
                 cachedHostIds = it.cachedHostIds - host.id,
@@ -368,7 +411,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 pendingHostKeys = it.pendingHostKeys - host.id,
             )
         }
-        sessionCache.removeHost(host.id)
     }
 
     fun trustHostKey(hostId: String) {
@@ -541,9 +583,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             refreshing = !final,
         )
     }
-
-    private val warmReaders = LinkedHashMap<String, SessionReaderConnection>()
-    private val warmReaderTouchedAt = mutableMapOf<String, Long>()
 
     private fun warmReader(key: String, create: () -> SessionReaderConnection): SessionReaderConnection {
         sweepWarmReaders(except = key)
