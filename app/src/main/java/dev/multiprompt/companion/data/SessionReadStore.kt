@@ -102,6 +102,16 @@ class SessionReadStore(context: Context) {
         preferences.edit().putBoolean(READER_TECHNICAL_MODE, enabled).apply()
     }
 
+    fun shellFontSize(): Float? = preferences.getFloat(SHELL_FONT_SIZE, 0f)
+        .takeIf { it.isFinite() && it > 0f }
+        ?.coerceIn(8f, 28f)
+
+    fun setShellFontSize(size: Float) {
+        if (size.isFinite()) {
+            preferences.edit().putFloat(SHELL_FONT_SIZE, size.coerceIn(8f, 28f)).apply()
+        }
+    }
+
     fun appTheme(): AppTheme {
         if (!preferences.contains(APP_THEME)) {
             val sunlight = runCatching { preferences.getBoolean(SUNLIGHT_MODE, false) }
@@ -168,6 +178,7 @@ class SessionReadStore(context: Context) {
         private const val MANUAL_FONT_SCALE_PREFIX = "manual_font_scale::"
         private const val READER_DEFAULT_FONT_SCALE = "reader_default_font_scale"
         private const val READER_TECHNICAL_MODE = "reader_technical_mode"
+        private const val SHELL_FONT_SIZE = "shell_font_size"
         private const val APP_THEME = "app_theme"
         private const val SUNLIGHT_MODE = "sunlight_mode"
         private const val NEWEST_SESSIONS_AT_BOTTOM = "newest_sessions_at_bottom"
