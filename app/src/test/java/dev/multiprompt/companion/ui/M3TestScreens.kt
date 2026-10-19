@@ -146,7 +146,7 @@ private fun ReaderFixture(material3: Boolean, sunlight: Boolean) {
         onDissolve = {},
         onEnd = {},
         onSessionInteraction = {},
-        onSessionUsed = {},
+        onSessionInput = {},
         technicalMode = false,
         onTechnicalModeChanged = {},
         sunlightMode = sunlight,
