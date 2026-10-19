@@ -66,7 +66,6 @@ import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
@@ -455,6 +454,9 @@ private fun AppScreens(viewModel: MainViewModel) {
             when (state.section) {
                 AppSection.SESSIONS -> if (!inboxVisible) AccountWorkspacesScreen(viewModel, onInbox = { inboxVisible = true }) else SessionsScreen(
                     state = state,
+                    signedIn = state.signedIn,
+                    onSignIn = { viewModel.signInAccount { context.startActivity(it) } },
+                    onSignOut = viewModel::signOutAccount,
                     onOpen = viewModel::openReader,
                     onOpenTerminal = viewModel::openTerminal,
                     onArchive = viewModel::archiveSession,
@@ -1047,6 +1049,9 @@ private fun NewSessionFolderScreen(
 @Composable
 private fun SessionsScreen(
     state: AppUiState,
+    signedIn: Boolean,
+    onSignIn: () -> Unit,
+    onSignOut: () -> Unit,
     onOpen: (TmuxSession) -> Unit,
     onOpenTerminal: (TmuxSession) -> Unit,
     onArchive: (TmuxSession) -> Unit,
@@ -1082,10 +1087,6 @@ private fun SessionsScreen(
     onClearCrashReport: () -> Unit,
     onAddHost: () -> Unit,
 ) {
-    if (state.hosts.isEmpty()) {
-        EmptyState("Connect your first VPS", "Import an SSH key, then the app will discover tmux sessions.", onAddHost)
-        return
-    }
     var workspaceDialogVisible by remember { mutableStateOf(false) }
     var workspaceName by remember { mutableStateOf("") }
     var workspaceError by remember { mutableStateOf<String?>(null) }
@@ -1098,7 +1099,6 @@ private fun SessionsScreen(
     var renameError by remember { mutableStateOf<String?>(null) }
     var searchVisible by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
-    var overflowExpanded by remember { mutableStateOf(false) }
     var bucketMenuExpanded by remember { mutableStateOf(false) }
     var settingsVisible by remember { mutableStateOf(false) }
     var crashReportVisible by remember { mutableStateOf(false) }
@@ -1516,61 +1516,23 @@ private fun SessionsScreen(
                     if (searchVisible) "Close session search" else "Search sessions",
                 )
             }
-            Box {
-                IconButton(onClick = { overflowExpanded = true }) {
-                    Icon(Icons.Default.MoreVert, "Session list actions")
-                }
-                DropdownMenu(
-                    expanded = overflowExpanded,
-                    onDismissRequest = { overflowExpanded = false },
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Settings") },
-                        onClick = {
-                            overflowExpanded = false
-                            settingsVisible = true
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Arrange splits") },
-                        onClick = {
-                            overflowExpanded = false
-                            splitOrderDialogVisible = true
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("New workspace") },
-                        onClick = {
-                            overflowExpanded = false
-                            workspaceError = null
-                            workspaceDialogVisible = true
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Refresh") },
-                        leadingIcon = { Icon(Icons.Default.Refresh, null) },
-                        onClick = {
-                            overflowExpanded = false
-                            onRefresh()
-                        },
-                    )
-                    HorizontalDivider()
-                    DropdownMenuItem(
-                        text = { Text("Hosts") },
-                        onClick = {
-                            overflowExpanded = false
-                            onSelectSection(AppSection.HOSTS)
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Update") },
-                        onClick = {
-                            overflowExpanded = false
-                            onSelectSection(AppSection.UPDATE)
-                        },
-                    )
-                }
-            }
+            InboxOverflowMenu(
+                signedIn = signedIn,
+                onSignIn = onSignIn,
+                onSignOut = onSignOut,
+                onSettings = { settingsVisible = true },
+                onArrangeSplits = { splitOrderDialogVisible = true },
+                onNewWorkspace = {
+                    workspaceError = null
+                    workspaceDialogVisible = true
+                },
+                onRefresh = onRefresh,
+                onHosts = { onSelectSection(AppSection.HOSTS) },
+                onUpdate = { onSelectSection(AppSection.UPDATE) },
+            )
+        }
+        if (!signedIn) {
+            SignedOutNotice(onSignIn = onSignIn)
         }
         if (searchVisible) {
             Column(Modifier.padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1615,7 +1577,11 @@ private fun SessionsScreen(
         state.sessionActionError?.let { error ->
             DismissibleError(message = error, onDismiss = onClearSessionActionError)
         }
-        LazyColumn(
+        if (state.hosts.isEmpty()) {
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                EmptyState("Connect your first VPS", "Import an SSH key, then the app will discover tmux sessions.", onAddHost)
+            }
+        } else LazyColumn(
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
@@ -2811,20 +2777,12 @@ private fun ReaderScreen(
                                     onForget()
                                 },
                             )
-                            DropdownMenuItem(
-                                text = { Text(if (signedIn) "Sync: signed in — sign out" else "Sign in to sync") },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Default.Cloud,
-                                        null,
-                                        Modifier.size(18.dp),
-                                        tint = if (signedIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    if (signedIn) onSignOut() else onSignIn()
-                                },
+                            HorizontalDivider()
+                            AppMenuItems(
+                                signedIn = signedIn,
+                                onSignIn = onSignIn,
+                                onSignOut = onSignOut,
+                                onDismiss = { menuExpanded = false },
                             )
                             DropdownMenuItem(
                                 text = { Text("Dictation API key") },

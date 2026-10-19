@@ -1,0 +1,155 @@
+package dev.multiprompt.companion.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+
+@Composable
+internal fun ColumnScope.AppMenuItems(
+    signedIn: Boolean,
+    onSignIn: () -> Unit,
+    onSignOut: () -> Unit,
+    onDismiss: () -> Unit,
+    onHosts: (() -> Unit)? = null,
+    onUpdate: (() -> Unit)? = null,
+) {
+    DropdownMenuItem(
+        text = { Text(if (signedIn) "Sync: signed in — sign out" else "Sign in to sync") },
+        leadingIcon = {
+            Icon(
+                Icons.Default.Cloud,
+                null,
+                Modifier.size(18.dp),
+                tint = if (signedIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+        onClick = {
+            onDismiss()
+            if (signedIn) onSignOut() else onSignIn()
+        },
+    )
+    if (onHosts != null) {
+        DropdownMenuItem(
+            text = { Text("Hosts") },
+            onClick = {
+                onDismiss()
+                onHosts()
+            },
+        )
+    }
+    if (onUpdate != null) {
+        DropdownMenuItem(
+            text = { Text("Update") },
+            onClick = {
+                onDismiss()
+                onUpdate()
+            },
+        )
+    }
+}
+
+@Composable
+internal fun InboxOverflowMenu(
+    signedIn: Boolean,
+    onSignIn: () -> Unit,
+    onSignOut: () -> Unit,
+    onSettings: () -> Unit,
+    onArrangeSplits: () -> Unit,
+    onNewWorkspace: () -> Unit,
+    onRefresh: () -> Unit,
+    onHosts: () -> Unit,
+    onUpdate: () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(Icons.Default.MoreVert, "Session list actions")
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text("Settings") },
+                onClick = {
+                    expanded = false
+                    onSettings()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Arrange splits") },
+                onClick = {
+                    expanded = false
+                    onArrangeSplits()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("New workspace") },
+                onClick = {
+                    expanded = false
+                    onNewWorkspace()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Refresh") },
+                leadingIcon = { Icon(Icons.Default.Refresh, null) },
+                onClick = {
+                    expanded = false
+                    onRefresh()
+                },
+            )
+            HorizontalDivider()
+            AppMenuItems(
+                signedIn = signedIn,
+                onSignIn = onSignIn,
+                onSignOut = onSignOut,
+                onDismiss = { expanded = false },
+                onHosts = onHosts,
+                onUpdate = onUpdate,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun SignedOutNotice(onSignIn: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "Signed out. Sign in to see your workspaces and splits.",
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        TextButton(onClick = onSignIn) { Text("Sign in") }
+    }
+}
