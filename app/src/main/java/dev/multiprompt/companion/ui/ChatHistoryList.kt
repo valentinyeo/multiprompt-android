@@ -38,6 +38,7 @@ internal fun ChatHistoryView(
     connection: SessionReaderConnection,
     reader: ReaderState,
     agent: AgentKind,
+    workingDirectory: String,
     fontScale: Float,
     sunlight: Boolean,
     replyGate: ReplySwipeGate,
@@ -47,7 +48,8 @@ internal fun ChatHistoryView(
     followRequest: Int,
     modifier: Modifier = Modifier,
 ) {
-    val state by requireNotNull(connection.chatHistory).state.collectAsState()
+    val history = remember(connection, agent, workingDirectory) { connection.chatHistory(agent, workingDirectory) }
+    val state by history.state.collectAsState()
     val transcript = remember(state.history) { state.history.messages.map { it.transcript() } }
     val queued = QueuedMessages.pending(transcript, reader.screenOutput, agent, reader.sentRecord, System.currentTimeMillis())
     Column(modifier.fillMaxSize()) {
@@ -71,7 +73,7 @@ internal fun ChatHistoryView(
             sunlight = sunlight,
             replyGate = replyGate,
             onReply = onReply,
-            onNearTop = connection.chatHistory::nearTop,
+            onNearTop = history::nearTop,
             listState = listState,
             followRequest = followRequest,
             modifier = Modifier.weight(1f),

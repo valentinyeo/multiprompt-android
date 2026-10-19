@@ -3122,6 +3122,7 @@ internal fun ReaderScreen(
                 connection = connection,
                 reader = reader,
                 agent = session.agent,
+                workingDirectory = session.workingDirectory,
                 fontScale = transcriptZoom,
                 sunlight = sunlightMode,
                 replyGate = replyGate,

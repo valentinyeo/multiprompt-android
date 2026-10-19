@@ -65,8 +65,8 @@ class SessionReaderConnection(
     private val host: HostProfile,
     val tmuxSessionName: String,
     private val agent: AgentKind = AgentKind.OTHER,
-    private val workingDirectory: String = "",
-    val chatHistory: ChatHistoryConnection? = null,
+    private val historyScript: ByteArray,
+    private val historyCache: ChatHistoryCache,
 ) : AutoCloseable {
     private sealed interface Request {
         data class Prompt(val text: String) : Request
@@ -83,6 +83,22 @@ class SessionReaderConnection(
     private var streamJob: Job? = null
     private var actionJob: Job? = null
 
+    private var historyConnection: ChatHistoryConnection? = null
+    private var historyIdentity: ChatHistoryProtocol.Identity? = null
+
+    fun chatHistory(agent: AgentKind, cwd: String): ChatHistoryConnection {
+        require(TranscriptProtocol.supports(agent))
+        val identity = ChatHistoryProtocol.Identity(agent, tmuxSessionName, cwd)
+        if (historyIdentity == identity) return requireNotNull(historyConnection)
+        historyConnection?.close()
+        return ChatHistoryConnection(repository, host, identity, historyScript, historyCache)
+            .also {
+                historyIdentity = identity
+                historyConnection = it
+                it.start()
+            }
+    }
+
     fun start() {
         if (actionJob == null) {
             actionJob = scope.launch {
@@ -90,7 +106,6 @@ class SessionReaderConnection(
             }
         }
         startStream()
-        chatHistory?.start()
     }
 
     fun sendPrompt(text: String): Boolean {
@@ -366,7 +381,7 @@ class SessionReaderConnection(
         requests.close()
         streamJob?.cancel()
         actionJob?.cancel()
-        chatHistory?.close()
+        historyConnection?.close()
         val oldClient = streamClient
         streamClient = null
         CoroutineScope(Dispatchers.IO).launch {

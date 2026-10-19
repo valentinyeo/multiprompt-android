@@ -63,6 +63,23 @@ class ChatHistoryMergeTest {
             client.poll()
             assertEquals(settled.messages, client.history.messages)
             assertEquals(settled.rows, client.history.rows)
+            transcript.appendText(buildString {
+                for (index in 726 until 1526) {
+                    val text = "Catch-up $index " + "€ ✔ body ".repeat(350)
+                    append(event(index, if (index % 2 == 0) "user" else "assistant", text))
+                    expected.add(text)
+                }
+            })
+            client.poll()
+            assertTrue(client.history.more)
+            while (client.history.more) client.poll()
+            assertEquals(expected, client.history.messages.map { it.text })
+            transcript.appendText(event(1526, "user", "Incomplete line € ✔").trimEnd('\n'))
+            client.poll()
+            assertEquals(expected, client.history.messages.map { it.text })
+            transcript.appendText("\n")
+            client.poll()
+            assertEquals(expected + "Incomplete line € ✔", client.history.messages.map { it.text })
         }
     }
 
@@ -126,7 +143,8 @@ class ChatHistoryMergeTest {
         assertTrue(directory.listFiles()!!.sumOf { it.length() } <= 7000)
         assertNull(cache.restore("host/tmux"))
         assertNotNull(cache.restore("third"))
-        File(directory, "broken.jsonl").writeText("not json")
+        directory.listFiles()!!.forEach { it.writeText("not json") }
+        assertNull(cache.restore("third"))
         assertNull(cache.restore("missing"))
     }
 
