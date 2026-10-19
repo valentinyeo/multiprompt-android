@@ -63,10 +63,15 @@ class FrequentInboxTest {
     private fun assertGammaIsBottomRow() {
         compose.onNodeWithText("alpha").assertIsDisplayed()
         compose.onNodeWithText("gamma").assertIsDisplayed()
-        compose.onNodeWithText("beta").assertDoesNotExist()
+        compose.onNodeWithText("beta").assertIsDisplayed()
+        compose.onNodeWithText("delta").assertDoesNotExist()
+        compose.onNodeWithText("epsilon").assertDoesNotExist()
+        compose.onNodeWithText("runner").assertDoesNotExist()
+        val beta = compose.onNodeWithText("beta").fetchSemanticsNode().boundsInRoot
         val alpha = compose.onNodeWithText("alpha").fetchSemanticsNode().boundsInRoot
         val gamma = compose.onNodeWithText("gamma").fetchSemanticsNode().boundsInRoot
         val split = compose.onNodeWithText("Frequent").fetchSemanticsNode().boundsInRoot
+        assertTrue("alpha must be below beta on screen", alpha.top >= beta.bottom)
         assertTrue("gamma must be below alpha on screen", gamma.top >= alpha.bottom)
         assertTrue("gamma must be the session row nearest the split bar", split.top - gamma.bottom < split.top - alpha.bottom)
         assertTrue("split bar must be below gamma", split.top >= gamma.bottom)
@@ -83,18 +88,21 @@ class FrequentInboxTest {
         assertTrue("Frequent must be the first chip", frequent.left < all.left && all.left < favorites.left)
     }
 
-    @Test fun gammaRemainsOnScreenBottomWhenNewestAtBottomSettingIsOff() {
+    @Test fun settingOffPlacesNewestAtTopLikeOtherSplits() {
         state.value = state.value.copy(newestSessionsAtBottom = false)
         render()
-        assertGammaIsBottomRow()
+        val gamma = compose.onNodeWithText("gamma").fetchSemanticsNode().boundsInRoot
+        val alpha = compose.onNodeWithText("alpha").fetchSemanticsNode().boundsInRoot
+        val beta = compose.onNodeWithText("beta").fetchSemanticsNode().boundsInRoot
+        assertTrue(gamma.bottom <= alpha.top && alpha.bottom <= beta.top)
     }
 
-    @Test fun longFrequentListInitiallyShowsNewestNextToBarEvenWithSettingOff() {
+    @Test fun longFrequentListInitiallyShowsNewestAtBottomWithSettingOn() {
         val extended = layout.copy(tabs = layout.tabs + (1..30).map { index ->
-            layout.tabs.first().copy(name = "older_$index", session = "older_$index")
+            layout.tabs.first().copy(name = "older_$index", session = "older_$index", input = fixture.getLong("now") - 20_000_000 - index)
         })
         state.value = state.value.copy(
-            newestSessionsAtBottom = false,
+            newestSessionsAtBottom = true,
             accountLayout = extended,
             sessions = extended.tabs.map { TmuxSession(host.id, it.session, 1, 0, 0) },
         )

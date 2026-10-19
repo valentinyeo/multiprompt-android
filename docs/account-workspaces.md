@@ -44,34 +44,34 @@ Inbox shows gold stars synced with the laptop; signed-in account tabs offer Star
 The ★ Favorites split stays just after All and shows only starred account sessions.
 Android negotiates favorite metadata and preserves absent values without inventing stars.
 
-Frequent is the first split. It includes tabs with at least three visits in the last
-six hours, the local session currently open in the foreground reader/terminal, and
-the tab holding the newest visit anywhere in the layout if that visit is within
-six hours. Future values count. Sessions are ordered by newest visit (now for the
-local front session), with the newest row at the bottom, next to the split bar,
-regardless of the Inbox newest-at-bottom setting. Selection uses stable split IDs,
-not stored indices, so moving Frequent does not change the selected split.
+Frequent is the first split. It includes sessions with input in the last 24 hours
+(inclusive), or at least three watch-only looks in the last six hours. Future
+values count. The order key is input when recent, otherwise the newest look.
+Like other splits it follows newest-at-bottom; with that setting on, the newest
+key is the bottom on-screen row. Selection uses stable IDs, not stored indices.
+Old `used` stamps never qualify a session.
 
-Android negotiates `X-Layout-Features: favorite,used,visits`. Optional per-tab
-`visits` is a unique ascending array of at most eight non-negative safe-integer
-Unix-epoch millisecond values; absent means unknown. A foreground reader/terminal
-front period records one visit after ten seconds, using the period's start time.
-Switching sessions, closing the session or backgrounding the app cancels the dwell;
-returning starts a new period. Shorter periods record and upload no visit.
-Local/server visits merge by union, deduplication, ascending sort and newest-eight
-cap, including across conflicts and PUT acknowledgements. Omission never erases
-known visits. A new visit persists and triggers sync immediately, independently
-of the used-stamp throttle.
+Android negotiates `X-Layout-Features: favorite,used,visits,input`. Optional `input`
+is a non-negative safe-integer Unix millisecond timestamp, merged by maximum
+across pulls, conflicts and acknowledgements; omission preserves known input.
+Composer sends, voice sends, reader commands and terminal keystrokes stamp both
+`input` and legacy `used`. Input publishes immediately when the last synced input
+is absent or more than 60 seconds older, otherwise it waits for another publish.
+Plain opens, switches and automatic step-jumps stamp neither field.
 
-`used` remains an optional safe-integer epoch time in milliseconds, merged by
-maximum for older apps. Opening a reader or terminal, sending a message, and
-terminal input still stamp it locally. Stamp-only uploads require a value more
-than ten minutes newer than the last sent or received value for that tab; other
-layout edits and conflict retries still use the normal revisioned PUT path.
-Terminal input tracking uses the library's modifier-reset hook after processed
-hardware or IME input, not its keyboard-output callback, which also carries
-automatic replies to remote terminal queries. Output, polling, history browsing
-and restoring an archived session never stamp usage.
+Optional `visits` is a unique ascending array of at most eight non-negative
+safe-integer Unix millisecond values. Only an explicit user open qualifies for a
+look: ten uninterrupted foreground seconds in reader or terminal record the
+front period's start time once. Step-jumps, restore, startup and automatic opens
+never qualify. Backgrounding or changing sessions cancels pending dwell. Visits
+merge by union, deduplication, ascending sort and newest-eight cap. New looks
+persist and sync immediately, independently of input throttling.
+
+`used` remains optional and merged by maximum for older apps. Its stamp-only
+uploads retain the ten-minute throttle. Terminal input tracking uses the library's
+modifier-reset hook after hardware or IME input, not its keyboard-output callback,
+which also carries automatic remote-terminal query replies. Output, polling and
+history browsing never stamp input.
 
 Host mapping is device-local: 0 = Hetzner, 1 = Contabo UK, 2 = Inne CRO. Recognized,
 unambiguous profiles are selected automatically; Host mapping lets the user choose

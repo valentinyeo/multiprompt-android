@@ -69,7 +69,7 @@ class FrequentSplitTest {
         assertFalse(ack.acknowledge(ack.edited, ack.edited.copy(revision = 3)).dirty)
     }
 
-    @Test fun visitCountWindowAndNewestAnywhereRules() {
+    @Test fun threeLooksInSixHoursInclusiveBoundaryAndFuture() {
         val newest = tab.copy(session = "elsewhere", visits = listOf(now + 2 * hour))
         for ((visits, included) in listOf(
             listOf(now - 5 * hour, now - 3 * hour, now - hour) to true,
@@ -87,41 +87,37 @@ class FrequentSplitTest {
         assertTrue(frequentSessions(listOf(session), null, mapping, now).isEmpty())
     }
 
-    @Test fun localFrontCountsWithoutVisitsOrLayoutButOnlyOnThisDevice() {
-        assertEquals(listOf(session), frequentSessions(listOf(session), null, mapping, now, session))
-        assertTrue(frequentSessions(listOf(session), null, mapping, now, session.copy(hostId = "c")).isEmpty())
-        assertTrue(frequentSessions(listOf(session), layout, mapping, now).isEmpty())
-    }
-
-    @Test fun newestVisitAcrossEntireLayoutCountsIncludingFutureAndBoundaryButNotStale() {
-        for ((visit, included) in listOf(now - 6 * hour to true, now - 6 * hour - 1 to false, now + hour to true)) {
-            val stamped = layout.copy(tabs = listOf(tab.copy(visits = listOf(visit))))
-            assertEquals(included, frequentSessions(listOf(session), stamped, mapping, now).isNotEmpty())
+    @Test fun lookingWithoutInputOrThreeLooksNeverQualifiesEvenIfNewestAnywhere() {
+        for (visits in listOf(null, emptyList(), listOf(now), listOf(now - 1, now), listOf(now + hour))) {
+            val stamped = layout.copy(tabs = listOf(tab.copy(used = now, visits = visits)))
+            assertTrue(frequentSessions(listOf(session), stamped, mapping, now).isEmpty())
         }
-        val stamped = layout.copy(tabs = listOf(tab.copy(visits = listOf(now - hour)),
-            tab.copy(session = "not-in-inventory", visits = listOf(now))))
-        assertTrue(frequentSessions(listOf(session), stamped, mapping, now).isEmpty())
     }
 
-    @Test fun frequentUsesAccountHostAndCaseInsensitiveMatchingAndOrdersByNewestVisitOrLocalNow() {
+    @Test fun inputWindowIsInclusiveFutureCountsAndOldUsedDoesNot() {
+        for ((input, included) in listOf(now - INPUT_WINDOW to true, now - INPUT_WINDOW - 1 to false,
+            now to true, now + hour to true, null to false)) {
+            val stamped = layout.copy(tabs = listOf(tab.copy(input = input, used = now)))
+            assertEquals("input=$input", included, frequentSessions(listOf(session), stamped, mapping, now).isNotEmpty())
+        }
+    }
+
+    @Test fun inputTakesPrecedenceOverNewerLooksAndMatchingUsesAccountHostAndCase() {
         val second = session.copy(name = "two", lastActivityEpochSeconds = Long.MAX_VALUE)
-        val third = session.copy(name = "three")
-        val sessions = listOf(second, session.copy(name = "ONE"), third, session.copy(hostId = "c"), session.copy(name = "missing"))
-        val stamped = layout.copy(tabs = listOf(tab.copy(visits = listOf(now - 3, now - 2, now - 1)),
-            tab.copy(session = "two", visits = listOf(now - 5, now - 4, now - 3)),
-            tab.copy(session = "three", visits = listOf(now - 2))))
-        assertEquals(listOf(sessions[1], second), frequentSessions(sessions, stamped, mapping, now))
-        assertEquals(listOf(third, sessions[1], second), frequentSessions(sessions, stamped, mapping, now, third))
+        val stamped = layout.copy(tabs = listOf(tab.copy(input = now - 10, visits = listOf(now - 2, now - 1, now)),
+            tab.copy(session = "two", visits = listOf(now - 9, now - 8, now - 7))))
+        val sessions = listOf(session.copy(name = "ONE"), second, session.copy(hostId = "c"), session.copy(name = "missing"))
+        assertEquals(listOf(second, sessions.first()), frequentSessions(sessions, stamped, mapping, now))
         assertTrue(frequentSessions(sessions, stamped, emptyMap(), now).isEmpty())
     }
 
-    @Test fun sharedFixtureHasAlphaThenGammaOnScreenWithGammaAtBottom() {
+    @Test fun sharedV2FixtureOrdersBetaAlphaGamma() {
         val fixture = JSONObject(javaClass.getResource("/igsh-415-frequent.json")!!.readText())
         val layout = AccountLayout.parse(fixture.getJSONObject("layout"))
         val sessions = layout.tabs.map { session.copy(name = it.session) }
         val newestFirst = frequentSessions(sessions, layout, mapping, fixture.getLong("now"))
         val screenTopToBottom = newestFirst.asReversed().map { it.name }
-        val expected = fixture.getJSONArray("expectedScreenTopToBottom")
+        val expected = fixture.getJSONArray("expected")
         assertEquals((0 until expected.length()).map { expected.getString(it) }, screenTopToBottom)
         assertEquals("gamma", screenTopToBottom.last())
     }

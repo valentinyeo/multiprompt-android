@@ -12,11 +12,12 @@ data class AccountTab(
     val favorite: Boolean? = null,
     val used: Long? = null,
     val visits: List<Long>? = null,
+    val input: Long? = null,
 ) {
     val identity: String get() = "$host:${session.lowercase(java.util.Locale.ROOT)}"
     fun json(): JSONObject = JSONObject().put("kind", "tmux").put("name", name)
         .put("tmux_session", session).put("tmux_host", host).put("workspace", workspace).put("manual", manual)
-        .apply { favorite?.let { put("favorite", it) }; used?.let { put("used", it) }; visits?.let { put("visits", JSONArray(it)) } }
+        .apply { favorite?.let { put("favorite", it) }; used?.let { put("used", it) }; input?.let { put("input", it) }; visits?.let { put("visits", JSONArray(it)) } }
 }
 
 data class AccountLayout(
@@ -32,6 +33,7 @@ data class AccountLayout(
         require(tabs.map { it.identity }.distinct().size == tabs.size && tabs.all {
             validText(it.name, 64) && it.host in 0..2 && Regex("[A-Za-z0-9_-]{1,63}").matches(it.session) && it.workspace in workspaces &&
                 (it.used == null || it.used in 0..9_007_199_254_740_991L) &&
+                (it.input == null || it.input in 0..9_007_199_254_740_991L) &&
                 (it.visits == null || it.visits.size <= MAX_VISITS && it.visits.all { v -> v in 0..9_007_199_254_740_991L } &&
                     it.visits.zipWithNext().all { (a, b) -> a < b })
         }) { "Invalid or duplicate account tab" }
@@ -58,6 +60,9 @@ data class AccountLayout(
     }).validate()
     fun stampUsed(identity: String, now: Long): AccountLayout = copy(tabs = tabs.map {
         if (it.identity == identity) it.copy(used = maxOf(it.used ?: 0, now)) else it
+    }).validate()
+    fun stampInput(identity: String, now: Long): AccountLayout = copy(tabs = tabs.map {
+        if (it.identity == identity) it.copy(input = maxOf(it.input ?: 0, now), used = maxOf(it.used ?: 0, now)) else it
     }).validate()
     fun recordVisit(identity: String, startedAt: Long): AccountLayout {
         require(startedAt in 0..9_007_199_254_740_991L)
@@ -89,7 +94,7 @@ data class AccountLayout(
                 val t = tabs.getJSONObject(it)
                 val required = setOf("kind", "name", "tmux_session", "tmux_host", "workspace")
                 val keys = t.keys().asSequence().toSet()
-                require(keys.containsAll(required) && (keys - required).all { it in setOf("manual", "favorite", "used", "visits") } && t.get("kind") == "tmux")
+                require(keys.containsAll(required) && (keys - required).all { it in setOf("manual", "favorite", "used", "visits", "input") } && t.get("kind") == "tmux")
                 require(listOf("name", "tmux_session", "workspace").all { key -> t.get(key) is String })
                 val host = t.get("tmux_host")
                 require(host is Number && host.toDouble() == host.toInt().toDouble())
@@ -98,6 +103,9 @@ data class AccountLayout(
                 val used = if (t.has("used")) t.get("used") else null
                 require(!t.has("used") || used is Number && used.toLong() in 0..9_007_199_254_740_991L &&
                     used.toString().toBigDecimalOrNull()?.compareTo(used.toLong().toBigDecimal()) == 0)
+                val input = if (t.has("input")) t.get("input") else null
+                require(!t.has("input") || input is Number && input.toLong() in 0..9_007_199_254_740_991L &&
+                    input.toString().toBigDecimalOrNull()?.compareTo(input.toLong().toBigDecimal()) == 0)
                 val visits = if (t.has("visits")) {
                     val values = t.get("visits")
                     require(values is JSONArray && values.length() <= MAX_VISITS)
@@ -109,7 +117,7 @@ data class AccountLayout(
                     }
                 } else null
                 AccountTab(t.getString("name"), t.getString("tmux_session"), host.toInt(), t.getString("workspace"),
-                    t.optBoolean("manual", false), if (t.has("favorite")) t.getBoolean("favorite") else null, (used as? Number)?.toLong(), visits)
+                    t.optBoolean("manual", false), if (t.has("favorite")) t.getBoolean("favorite") else null, (used as? Number)?.toLong(), visits, (input as? Number)?.toLong())
             }).validate()
         }
 
@@ -127,6 +135,7 @@ data class AccountLayout(
             val tabs = remote.tabs.mapNotNull { r ->
                 val b = old[r.identity] ?: return@mapNotNull r.copy(
                     used = listOfNotNull(r.used, local[r.identity]?.used).maxOrNull(),
+                    input = listOfNotNull(r.input, local[r.identity]?.input).maxOrNull(),
                     visits = mergeVisits(r.visits, local[r.identity]?.visits),
                 )
                 val e = local[r.identity] ?: return@mapNotNull null
@@ -136,6 +145,7 @@ data class AccountLayout(
                     workspace = if (e.workspace != b.workspace) e.workspace else r.workspace,
                     favorite = if (e.favorite != b.favorite) e.favorite else r.favorite,
                     used = listOfNotNull(b.used, e.used, r.used).maxOrNull(),
+                    input = listOfNotNull(b.input, e.input, r.input).maxOrNull(),
                     visits = mergeVisits(b.visits, e.visits, r.visits),
                 )
             }.toMutableList()

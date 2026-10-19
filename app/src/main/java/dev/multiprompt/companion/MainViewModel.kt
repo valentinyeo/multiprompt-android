@@ -77,6 +77,7 @@ data class AppUiState(
     val editorError: String? = null,
     val terminal: TerminalConnection? = null,
     val terminalSession: TmuxSession? = null,
+    val userSelectedSessionKey: String? = null,
     val reader: SessionReaderConnection? = null,
     val readerSession: TmuxSession? = null,
     val unreadSessionKeys: Set<String> = emptySet(),
@@ -191,7 +192,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             combine(_state, foreground) { state, active ->
-                (state.terminalSession ?: state.readerSession)?.takeIf { active }?.let {
+                (state.terminalSession ?: state.readerSession)?.takeIf {
+                    active && SessionReadStore.key(it.hostId, it.name) == state.userSelectedSessionKey
+                }?.let {
                     it.hostId to it.name.lowercase(java.util.Locale.ROOT)
                 }
             }.distinctUntilChanged().collectLatest { front ->
@@ -678,15 +681,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         warmReaderTouchedAt.clear()
     }
 
-    fun openReader(session: TmuxSession) {
+    fun openReader(session: TmuxSession, userInitiated: Boolean = false) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
         val swipeOrder = _state.value.readerSwipeOrder.ifEmpty {
             visibleInboxSessions(_state.value)
-                .let { if (_state.value.newestSessionsAtBottom || _state.value.selectedWorkspaceId == FREQUENT_SPLIT_ID) it.asReversed() else it }
+                .let { if (_state.value.newestSessionsAtBottom) it.asReversed() else it }
                 .map { SessionReadStore.key(it.hostId, it.name) }
         }
         noteSessionInteraction(session)
-        stampSessionUsed(session)
         sessionReads.markRead(session)
         val key = SessionReadStore.key(session.hostId, session.name)
         _state.value.terminal?.close()
@@ -706,6 +708,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 terminalSession = null,
                 reader = reader,
                 readerSession = session,
+                userSelectedSessionKey = key.takeIf { userInitiated },
                 readerSwipeOrder = swipeOrder,
                 unreadSessionKeys = it.unreadSessionKeys - key,
             )
@@ -788,12 +791,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun stampSessionUsed(session: TmuxSession) {
+    fun stampSessionInput(session: TmuxSession) {
         if (!_state.value.signedIn) return
         val pending = pendingLayout ?: return
         val tab = AccountHostMap.tabFor(session, pending.edited, _state.value.accountHosts) ?: return
         try {
-            saveAccountLayout(pending.copy(edited = pending.edited.stampUsed(tab.identity, System.currentTimeMillis())))
+            saveAccountLayout(pending.copy(edited = pending.edited.stampInput(tab.identity, System.currentTimeMillis())))
             if (usedStampThrottle.shouldPush(pendingLayout!!)) syncAccount()
         } catch (e: Exception) {
             _state.update { it.copy(accountError = e.message ?: "Could not save session use") }
@@ -1013,7 +1016,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     }
                     _state.value.accountLayout?.let { AccountHostMap.tabFor(session, it, _state.value.accountHosts) }?.let(::closeAccountTab)
-                    successor?.let(::openReader)
+                    successor?.let { openReader(it) }
                     refresh()
                 }
                 .onFailure { throwable ->
@@ -1273,13 +1276,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         openReader(sessions[Math.floorMod(index + delta, sessions.size)])
     }
 
-    fun openTerminal(session: TmuxSession) {
+    fun openTerminal(session: TmuxSession, userInitiated: Boolean = false) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
         val fromReader = _state.value.readerSession?.let {
             it.hostId == session.hostId && it.name == session.name
         } == true
         noteSessionInteraction(session)
-        stampSessionUsed(session)
         _state.value.terminal?.close()
         val terminal = TerminalConnection(
             repository = ssh,
@@ -1292,6 +1294,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             it.copy(
                 terminal = terminal,
                 terminalSession = session,
+                userSelectedSessionKey = SessionReadStore.key(session.hostId, session.name).takeIf { userInitiated },
                 terminalFromReader = fromReader,
                 reader = null,
                 readerSession = null,
@@ -1314,7 +1317,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val session = state.terminalSession.takeIf { state.terminalFromReader }
         state.terminal?.close()
         _state.update { it.copy(terminal = null, terminalSession = null, terminalFromReader = false) }
-        session?.let(::openReader)
+        session?.let { openReader(it) }
         refresh()
     }
 
@@ -1441,7 +1444,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 var retryConflict = false
                 while (pendingLayout?.let { it.dirty && (retryConflict || usedStampThrottle.shouldPush(it)) } == true && retries++ < 4) {
                     val sent = pendingLayout!!.edited
-                    usedStampThrottle.observe(sent)
                     val reply = syncAuth.request("PUT", "/v1/layout", JSONObject().put("base_revision", remote.revision).put("layout", sent.json()))
                     if (generation != accountGeneration) return@launch
                     retryConflict = reply.status == 409
@@ -1498,8 +1500,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         .let { sessions ->
             if (state.selectedWorkspaceId == FREQUENT_SPLIT_ID) {
-                frequentSessions(sessions, state.accountLayout, state.accountHosts, System.currentTimeMillis(),
-                    (state.terminalSession ?: state.readerSession).takeIf { foreground.value })
+                frequentSessions(sessions, state.accountLayout, state.accountHosts, System.currentTimeMillis())
             } else SessionSearch.newestFirst(sessions, state.sessionInteractionEpochSeconds)
         }
 

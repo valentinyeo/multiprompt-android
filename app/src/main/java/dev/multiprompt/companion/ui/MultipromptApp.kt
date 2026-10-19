@@ -341,7 +341,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             onBack = viewModel::closeTerminal,
             onReleaseNotes = viewModel::openReleaseNotes,
             onSwitchSession = viewModel::openAdjacentSession,
-            onSessionUsed = { state.terminalSession?.let(viewModel::stampSessionUsed) },
+            onSessionInput = { state.terminalSession?.let(viewModel::stampSessionInput) },
         )
         return
     }
@@ -374,14 +374,14 @@ private fun AppScreens(viewModel: MainViewModel) {
                 }
             },
             onRemind = viewModel::archiveReaderUntilAndOpenNext,
-            onOpenTerminal = { viewModel.openTerminal(readerSession) },
+            onOpenTerminal = { viewModel.openTerminal(readerSession, userInitiated = true) },
             onSwitchSession = viewModel::openAdjacentReaderSession,
             onFontScaleChanged = { scale -> viewModel.saveReaderFontScale(readerSession, scale) },
             onRename = { name -> viewModel.renameSession(readerSession, name) },
             onDissolve = { viewModel.dissolveSession(readerSession) },
             onEnd = { viewModel.endSession(readerSession) },
             onSessionInteraction = { viewModel.noteSessionInteraction(readerSession) },
-            onSessionUsed = { viewModel.stampSessionUsed(readerSession) },
+            onSessionInput = { viewModel.stampSessionInput(readerSession) },
             technicalMode = state.readerTechnicalMode,
             onTechnicalModeChanged = viewModel::setReaderTechnicalMode,
             sunlightMode = sunlight,
@@ -465,8 +465,8 @@ private fun AppScreens(viewModel: MainViewModel) {
                     signedIn = state.signedIn,
                     onSignIn = { viewModel.signInAccount { context.startActivity(it) } },
                     onSignOut = viewModel::signOutAccount,
-                    onOpen = viewModel::openReader,
-                    onOpenTerminal = viewModel::openTerminal,
+                    onOpen = { viewModel.openReader(it, userInitiated = true) },
+                    onOpenTerminal = { viewModel.openTerminal(it, userInitiated = true) },
                     onArchive = viewModel::archiveSession,
                     onArchiveUntil = viewModel::archiveSessionUntil,
                     onRestore = viewModel::restoreSession,
@@ -1471,8 +1471,7 @@ internal fun SessionsScreen(
                 )
         }
     val visibleSessions = if (state.selectedWorkspaceId == FREQUENT_SPLIT_ID) {
-        frequentSessions(matchingSessions, state.accountLayout, state.accountHosts, etaNowMillis,
-            state.terminalSession ?: state.readerSession)
+        frequentSessions(matchingSessions, state.accountLayout, state.accountHosts, etaNowMillis)
     } else SessionSearch.newestFirst(matchingSessions, state.sessionInteractionEpochSeconds)
     val visibleDissolvedSessions = if (state.sessionBucket == SessionBucket.ARCHIVE && state.selectedWorkspaceId != FAVORITES_SPLIT_ID && state.selectedWorkspaceId != FREQUENT_SPLIT_ID) {
         state.dissolvedSessions.filter { session ->
@@ -1635,7 +1634,7 @@ internal fun SessionsScreen(
                 .fillMaxWidth()
                 .horizontalSwipe(onSwitchWorkspace, PointerEventPass.Final),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-            reverseLayout = normalizedQuery.isBlank() && (state.newestSessionsAtBottom || state.selectedWorkspaceId == FREQUENT_SPLIT_ID),
+            reverseLayout = normalizedQuery.isBlank() && state.newestSessionsAtBottom,
         ) {
             state.hostErrors.forEach { (hostId, error) ->
                 if (hostId !in state.cachedHostIds) {
@@ -2269,7 +2268,7 @@ internal fun ReaderScreen(
     onDissolve: () -> Unit,
     onEnd: () -> Unit,
     onSessionInteraction: () -> Unit,
-    onSessionUsed: () -> Unit,
+    onSessionInput: () -> Unit,
     technicalMode: Boolean,
     onTechnicalModeChanged: (Boolean) -> Unit,
     sunlightMode: Boolean,
@@ -2485,7 +2484,7 @@ internal fun ReaderScreen(
             val actionCount = reader.completedActions
             if (connection.sendPrompt(composedPrompt)) {
                 onSessionInteraction()
-                onSessionUsed()
+                onSessionInput()
                 pendingPromptAction = actionCount
                 attachedSkill = null
                 replyTo = null
@@ -2499,7 +2498,7 @@ internal fun ReaderScreen(
                 setPrompt("")
                 imageAttachments = emptyList()
                 onSessionInteraction()
-                onSessionUsed()
+                onSessionInput()
                 pendingPromptAction = actionCount
             }
         }
@@ -2535,7 +2534,7 @@ internal fun ReaderScreen(
                     val actionCount = reader.completedActions
                     if (connection.sendPrompt(composedPrompt)) {
                         onSessionInteraction()
-                        onSessionUsed()
+                        onSessionInput()
                         pendingPromptAction = actionCount
                         replyTo = null
                     }
@@ -2753,7 +2752,7 @@ internal fun ReaderScreen(
                             onClick = {
                                 menuExpanded = false
                                 onSessionInteraction()
-                                onSessionUsed()
+                                onSessionInput()
                                 connection.sendEnter()
                             },
                         )
@@ -3397,7 +3396,7 @@ internal fun ReaderScreen(
                                     onClick = {
                                         if (connection.selectModelPickerOption(option.index)) {
                                             onSessionInteraction()
-                                            onSessionUsed()
+                                            onSessionInput()
                                         }
                                     },
                                     enabled = !reader.sending,
@@ -4028,12 +4027,12 @@ private fun TerminalScreen(
     onFontSizeChange: (Float) -> Unit,
     onBack: () -> Unit,
     onSwitchSession: (Int) -> Unit,
-    onSessionUsed: () -> Unit,
+    onSessionInput: () -> Unit,
     onReleaseNotes: () -> Unit,
 ) {
     val status by connection.status.collectAsState()
-    val currentOnSessionUsed by rememberUpdatedState(onSessionUsed)
-    val inputTracker = remember(connection) { TerminalInputTracker { currentOnSessionUsed() } }
+    val currentOnSessionInput by rememberUpdatedState(onSessionInput)
+    val inputTracker = remember(connection) { TerminalInputTracker { currentOnSessionInput() } }
     val context = LocalContext.current
     val density = LocalDensity.current
     val terminalTypeface = remember(context) {
@@ -4127,7 +4126,7 @@ private fun TerminalScreen(
                     onPasteRequest = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()?.let { text ->
-                            if (text.isNotEmpty()) onSessionUsed()
+                            if (text.isNotEmpty()) onSessionInput()
                             connection.paste(text)
                         }
                     },
