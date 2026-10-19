@@ -40,10 +40,10 @@ class MarkdownTableTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private fun render(fixture: String) {
+    private fun render(fixture: String, material3: Boolean = false) {
         val source = checkNotNull(javaClass.getResource("/$fixture")).readText()
         compose.setContent {
-            MaterialTheme {
+            MultipromptTheme(material3 = material3) {
                 Box(Modifier.width(390.dp)) {
                     MarkdownText(source, 14.sp, MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.primary)
                 }
@@ -101,4 +101,27 @@ class MarkdownTableTest {
             assertTrue(node.config[SemanticsProperties.Text].none { text -> text.any { it in '\u2500'..'\u257f' } })
         }
     }
+
+    @Test
+    fun material3TableKeepsContentSizedAlignedColumnsAndUsesSemiboldHeader() {
+        render("table-fixture.md", material3 = true)
+        assertTableCellsDisplayed()
+        val results = ArrayList<TextLayoutResult>()
+        compose.onNode(hasTestTag("md-cell") and hasText("Flag on"))
+            .performScrollTo().performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+        assertEquals(FontWeight.SemiBold, results.single().layoutInput.style.fontWeight)
+        val cells = compose.onAllNodesWithTag("md-cell")
+        for (column in 0..2) {
+            val header = cells[column].getUnclippedBoundsInRoot()
+            for (row in 1..2) {
+                val cell = cells[row * 3 + column].getUnclippedBoundsInRoot()
+                assertEquals(header.left, cell.left)
+                assertEquals(header.width, cell.width)
+                assertTrue(cell.width <= 280.dp)
+            }
+        }
+        val range = compose.onNodeWithTag("md-table").fetchSemanticsNode().config[SemanticsProperties.HorizontalScrollAxisRange]
+        assertTrue(range.maxValue() > 0f)
+    }
+
 }

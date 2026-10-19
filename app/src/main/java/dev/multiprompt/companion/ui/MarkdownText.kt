@@ -1,5 +1,7 @@
 package dev.multiprompt.companion.ui
 
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -50,7 +52,7 @@ fun MarkdownText(
 ) {
     val blocks = remember(text) { MarkdownParser.parse(text) }
     val codeBg = color.copy(alpha = 0.10f)
-    val scale = if (LocalMaterial3.current) fontSize.value / MaterialTheme.typography.bodyLarge.fontSize.value else 1f
+    val scale = if (LocalMaterial3.current) fontSize.value / 15f else 1f
     val lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, scale)
     androidx.compose.material3.ProvideTextStyle(androidx.compose.ui.text.TextStyle(fontFamily = chatFontFamily())) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -80,13 +82,14 @@ fun MarkdownText(
                         modifier = Modifier.weight(1f),
                     )
                 }
-                is MdBlock.Quote -> Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-                    Box(Modifier.width(3.dp).fillMaxHeight().background(color.copy(alpha = 0.4f)))
+                is MdBlock.Quote -> Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)
+                    .then(if (LocalMaterial3.current) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp)) else Modifier)) {
+                    Box(Modifier.width(3.dp).fillMaxHeight().background(if (LocalMaterial3.current) MaterialTheme.colorScheme.primary else color.copy(alpha = 0.4f)))
                     Text(
                         markdownAnnotated(block.runs, linkColor, codeBg),
-                        fontSize = fontSize, lineHeight = lineHeight,
-                        color = color.copy(alpha = 0.85f),
-                        fontStyle = FontStyle.Italic,
+                        fontSize = if (LocalMaterial3.current) 13.sp else fontSize, lineHeight = lineHeight,
+                        color = if (LocalMaterial3.current) MaterialTheme.colorScheme.onSurfaceVariant else color.copy(alpha = 0.85f),
+                        fontStyle = if (LocalMaterial3.current) FontStyle.Normal else FontStyle.Italic,
                         modifier = Modifier.padding(start = 10.dp).weight(1f),
                     )
                 }
@@ -125,37 +128,46 @@ private fun MarkdownTable(
     linkColor: Color,
     codeBg: Color,
 ) {
+    val material3 = LocalMaterial3.current
     val columns = maxOf(table.header.size, table.rows.maxOfOrNull { it.size } ?: 0)
     val rows = listOf(table.header) + table.rows
+    val cellCount = rows.size * columns
+    val dividerCount = if (material3) rows.size - 1 else 1
     Layout(
         modifier = Modifier.testTag("md-table").horizontalScroll(rememberScrollState())
-            .background(color.copy(alpha = 0.05f), chromeShape(RoundedCornerShape(4.dp))),
+            .then(if (material3) Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp)) else Modifier)
+            .background(if (material3) MaterialTheme.colorScheme.surface else color.copy(alpha = 0.05f), chromeShape(RoundedCornerShape(4.dp))),
         content = {
             rows.forEachIndexed { rowIndex, row ->
                 for (c in 0 until columns) {
                     Text(
                         markdownAnnotated(row.getOrNull(c).orEmpty(), linkColor, codeBg),
-                        fontSize = if (LocalMaterial3.current) MaterialTheme.typography.bodyMedium.fontSize * (fontSize.value / MaterialTheme.typography.bodyLarge.fontSize.value) else (fontSize.value * 0.92f).sp,
-                        fontWeight = if (rowIndex == 0) FontWeight.Bold else FontWeight.Normal,
+                        fontSize = if (LocalMaterial3.current) MaterialTheme.typography.bodyMedium.fontSize * (fontSize.value / 15f) else (fontSize.value * 0.92f).sp,
+                        fontWeight = if (rowIndex == 0) { if (LocalMaterial3.current) FontWeight.SemiBold else FontWeight.Bold } else FontWeight.Normal,
                         color = color,
                         modifier = Modifier.testTag("md-cell").padding(horizontal = 8.dp, vertical = 5.dp),
                     )
                 }
             }
-            Box(Modifier.height(1.dp).background(color.copy(alpha = 0.3f)))
+            if (material3) Box(Modifier.background(MaterialTheme.colorScheme.surfaceContainer))
+            repeat(dividerCount) {
+                Box(Modifier.height(1.dp).background(if (material3) MaterialTheme.colorScheme.outlineVariant else color.copy(alpha = 0.3f)))
+            }
         },
     ) { measurables, constraints ->
         val widths = (0 until columns).map { column ->
             rows.indices.maxOf { row -> measurables[row * columns + column].maxIntrinsicWidth(Constraints.Infinity) }
                 .coerceAtMost(280.dp.roundToPx())
         }
-        val cells = measurables.dropLast(1).mapIndexed { index, measurable ->
+        val cells = measurables.take(cellCount).mapIndexed { index, measurable ->
             measurable.measure(Constraints.fixedWidth(widths[index % columns]))
         }
         val heights = rows.indices.map { row -> (0 until columns).maxOf { cells[row * columns + it].height } }
         val width = widths.sum()
-        val divider = measurables.last().measure(Constraints.fixedWidth(width))
-        layout(constraints.constrainWidth(width), constraints.constrainHeight(heights.sum() + divider.height)) {
+        val header = if (material3) measurables[cellCount].measure(Constraints.fixed(width, heights.first())) else null
+        val dividers = measurables.takeLast(dividerCount).map { it.measure(Constraints.fixedWidth(width)) }
+        layout(constraints.constrainWidth(width), constraints.constrainHeight(heights.sum() + dividers.sumOf { it.height })) {
+            header?.placeRelative(0, 0)
             var y = 0
             rows.indices.forEach { row ->
                 var x = 0
@@ -164,7 +176,8 @@ private fun MarkdownTable(
                     x += widths[column]
                 }
                 y += heights[row]
-                if (row == 0) {
+                if (row == 0 && !material3 || material3 && row < rows.lastIndex) {
+                    val divider = dividers[if (material3) row else 0]
                     divider.placeRelative(0, y)
                     y += divider.height
                 }

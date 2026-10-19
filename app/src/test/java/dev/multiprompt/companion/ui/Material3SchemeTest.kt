@@ -65,7 +65,7 @@ class Material3SchemeTest {
     fun everyFallbackRoleMatchesTonalSpot() {
         val colors = MaterialDynamicColors()
         listOf(false to Material3LightColors, true to Material3DarkColors).forEach { (dark, committed) ->
-            val generated = SchemeTonalSpot(Hct.fromInt(0xFF0043CE.toInt()), dark, 0.0)
+            val generated = SchemeTonalSpot(Hct.fromInt(0xFFD27B35.toInt()), dark, 0.0)
             committed.materialRoles().forEach { (role, color) ->
                 val dynamic = MaterialDynamicColors::class.java.getMethod(role).invoke(colors)
                     as com.google.android.material.color.utilities.DynamicColor

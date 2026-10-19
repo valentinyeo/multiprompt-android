@@ -15,10 +15,14 @@ import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.ChatHistoryCache
 import dev.multiprompt.companion.reader.SessionReaderConnection
-import dev.multiprompt.companion.reader.TranscriptMessage
+import dev.multiprompt.companion.reader.ChatHistory
+import dev.multiprompt.companion.reader.ChatHistoryConnection
+import dev.multiprompt.companion.reader.ChatHistoryProtocol
+import dev.multiprompt.companion.reader.ChatHistoryState
 import dev.multiprompt.companion.security.SecretStore
 import dev.multiprompt.companion.skills.SkillStore
 import dev.multiprompt.companion.ssh.SshRepository
+import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.upload.ScreencastUploader
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.robolectric.util.ReflectionHelpers
@@ -107,11 +111,21 @@ private fun ReaderFixture(material3: Boolean, sunlight: Boolean) {
         ).apply {
             ReflectionHelpers.getField<MutableStateFlow<ReaderState>>(this, "_state").value = ReaderState(
                 status = ReaderStatus.Live,
-                transcript = listOf(
-                    TranscriptMessage("user", null, "Give the Inbox a Material 3 look."),
-                    TranscriptMessage("assistant", null, "## Ready\n\nThe classic app stays unchanged.\n\n- Inbox and chat only\n- Independent update channel\n\n[Project](https://multiprompt.dev)"),
-                ),
+                runtimeDetails = TmuxText.RuntimeDetails("Opus 5.5", "medium"),
+                waitingForInput = true,
             )
+            val identity = ChatHistoryProtocol.Identity(testSession.agent, testSession.name, testSession.workingDirectory)
+            val history = ChatHistoryConnection(SshRepository(secrets), testHost, identity, byteArrayOf(),
+                ChatHistoryCache(context.cacheDir.resolve("m3-chat-history")))
+            ReflectionHelpers.getField<MutableStateFlow<ChatHistoryState>>(history, "_state").value = ChatHistoryState(
+                history = ChatHistory(sid = "fixture", inode = 1, offset = 2, rows = listOf(
+                    ChatHistoryProtocol.Row("user", "Give the Inbox a Material 3 look.", "user", "", 0, 1),
+                    ChatHistoryProtocol.Row("assistant", "## Ready\n\nThe classic app stays unchanged.\n\n- Inbox and chat only\n- Independent update channel\n\n[Project](https://multiprompt.dev)", "assistant", "", 1, 2),
+                )),
+                loaded = true,
+            )
+            ReflectionHelpers.setField(this, "historyIdentity", identity)
+            ReflectionHelpers.setField(this, "historyConnection", history)
         }
     }
     val dictation = remember { DeepgramDictation(context, secrets) }

@@ -1,5 +1,7 @@
 package dev.multiprompt.companion.ui
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -14,7 +16,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -148,15 +149,16 @@ internal fun ReplyQuoteBar(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier.fillMaxWidth().padding(vertical = 4.dp)
+            .then(if (LocalMaterial3.current) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp)) else Modifier),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(3.dp).height(40.dp).background(MaterialTheme.colorScheme.primary))
         Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-            Text("Reply to $author", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text("Reply to $author", style = if (LocalMaterial3.current) MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp) else MaterialTheme.typography.labelMedium, color = if (LocalMaterial3.current) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary)
             Text(
                 ReplyQuote.preview(message),
-                style = MaterialTheme.typography.bodySmall,
+                style = if (LocalMaterial3.current) MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) else MaterialTheme.typography.bodySmall,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )

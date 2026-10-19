@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,7 +32,8 @@ internal fun VersionLabel(
             .clickable(onClick = onClick)
             .padding(horizontal = 2.dp, vertical = 4.dp),
         fontSize = 10.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontFamily = if (LocalMaterial3.current) FontFamily.Monospace else null,
+        color = if (LocalMaterial3.current) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,
         softWrap = false,
         overflow = TextOverflow.Ellipsis,
