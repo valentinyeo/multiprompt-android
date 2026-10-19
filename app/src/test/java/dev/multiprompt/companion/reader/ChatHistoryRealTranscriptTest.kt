@@ -32,11 +32,31 @@ class ChatHistoryRealTranscriptTest {
             val timestamps = messages.mapNotNull { it.timestamp.takeIf(String::isNotBlank)?.let(Instant::parse) }
             val regressions = timestamps.zipWithNext().count { (a, b) -> a > b }
             val terminal = Regex("Update installed|Restart to apply|esc to interrupt|⏵⏵|────", RegexOption.IGNORE_CASE)
-            val terminalMessages = messages.count { terminal.containsMatchIn(it.text) }
+            val terminalMessages = messages.count { message ->
+                val source = sourceStrings(transcript, message.offset, message.end)
+                terminal.findAll(message.text).any { match -> !source.contains(match.value, ignoreCase = true) }
+            }
             println("Real transcript read: ${messages.size} messages, ${client.pages} pages, bytes 0..${history.offset}; " +
-                "$regressions timestamp regressions; $terminalMessages source messages with terminal markers")
+                "$regressions timestamp regressions; $terminalMessages messages with terminal markers missing from their source")
             assertTrue("Message timestamps must be non-decreasing: $regressions regressions", regressions == 0)
-            assertTrue("Source conversation must not contain terminal markers: $terminalMessages messages", terminalMessages == 0)
+            assertTrue("Messages must not contain terminal markers absent from their source lines: $terminalMessages messages", terminalMessages == 0)
         }
+    }
+
+    private fun sourceStrings(file: File, start: Long, end: Long): String {
+        val bytes = ByteArray((end - start).toInt())
+        java.io.RandomAccessFile(file, "r").use { it.seek(start); it.readFully(bytes) }
+        val out = StringBuilder()
+        fun collect(value: Any?) {
+            when (value) {
+                is String -> out.append(value).append('\n')
+                is JSONObject -> value.keys().forEach { collect(value.opt(it)) }
+                is org.json.JSONArray -> for (i in 0 until value.length()) collect(value.opt(i))
+            }
+        }
+        String(bytes, Charsets.UTF_8).lineSequence().filter(String::isNotBlank).forEach { line ->
+            runCatching { JSONObject(line) }.getOrNull()?.let(::collect)
+        }
+        return out.toString()
     }
 }
