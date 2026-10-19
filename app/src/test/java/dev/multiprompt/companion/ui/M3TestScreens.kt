@@ -156,6 +156,7 @@ private fun ReaderFixture(material3: Boolean, sunlight: Boolean) {
         onClearSessionActionError = {},
         onForget = {},
         onShowEtaAccuracy = {},
+        onReleaseNotes = {},
         material3 = material3,
     )
 }

@@ -339,6 +339,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             savedFontSize = state.shellFontSize,
             onFontSizeChange = viewModel::setShellFontSize,
             onBack = viewModel::closeTerminal,
+            onReleaseNotes = viewModel::openReleaseNotes,
             onSwitchSession = viewModel::openAdjacentSession,
             onSessionUsed = { state.terminalSession?.let(viewModel::stampSessionUsed) },
         )
@@ -361,6 +362,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             archived = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.archivedSessionKeys,
             initialFontScale = viewModel.readerFontScale(readerSession),
             onBack = viewModel::closeReader,
+            onReleaseNotes = viewModel::openReleaseNotes,
             onMarkRead = viewModel::markReaderRead,
             onArchiveToggle = {
                 if (SessionReadStore.key(readerSession.hostId, readerSession.name) in
@@ -399,6 +401,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             error = state.editorError,
             onCancel = viewModel::hideHostEditor,
             onSave = viewModel::saveHost,
+            onReleaseNotes = viewModel::openReleaseNotes,
         )
         return
     }
@@ -438,6 +441,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                         onRefresh = viewModel::refresh,
                         section = state.section,
                         onSelect = viewModel::select,
+                        onReleaseNotes = viewModel::openReleaseNotes,
                     )
                 }
                 val available = updateState as? UpdateState.Available
@@ -456,7 +460,7 @@ private fun AppScreens(viewModel: MainViewModel) {
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             when (state.section) {
-                AppSection.SESSIONS -> if (!inboxVisible) AccountWorkspacesScreen(viewModel, onInbox = { inboxVisible = true }) else SessionsScreen(
+                AppSection.SESSIONS -> if (!inboxVisible) AccountWorkspacesScreen(viewModel, onInbox = { inboxVisible = true }, onReleaseNotes = viewModel::openReleaseNotes) else SessionsScreen(
                     state = state,
                     signedIn = state.signedIn,
                     onSignIn = { viewModel.signInAccount { context.startActivity(it) } },
@@ -483,6 +487,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onSetFavorite = { tab, value -> viewModel.editAccountLayout { it.setFavorite(tab.identity, value) } },
                     onRefresh = viewModel::refresh,
                     onSelectSection = viewModel::select,
+                    onReleaseNotes = viewModel::openReleaseNotes,
                     onForgetSession = viewModel::forgetSession,
                     onStartNewSession = viewModel::startNewSession,
                     onSetNewestSessionsAtBottom = viewModel::setNewestSessionsAtBottom,
@@ -663,11 +668,12 @@ private fun AppScreens(viewModel: MainViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Header(
+internal fun Header(
     refreshing: Boolean,
     onRefresh: () -> Unit,
     section: AppSection,
     onSelect: (AppSection) -> Unit,
+    onReleaseNotes: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     TopAppBar(
@@ -690,6 +696,7 @@ private fun Header(
             } else {
                 IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, "Refresh") }
             }
+            VersionLabel(onClick = onReleaseNotes)
             Box {
                 IconButton(onClick = { menuExpanded = true }) {
                     Icon(Icons.Default.MoreVert, "Open navigation")
@@ -1078,6 +1085,7 @@ internal fun SessionsScreen(
     onSetFavorite: (AccountTab, Boolean) -> Unit,
     onRefresh: () -> Unit,
     onSelectSection: (AppSection) -> Unit,
+    onReleaseNotes: () -> Unit = { onSelectSection(AppSection.UPDATE) },
     onForgetSession: (TmuxSession) -> Unit,
     onStartNewSession: () -> Unit,
     onSetNewestSessionsAtBottom: (Boolean) -> Unit,
@@ -1174,7 +1182,15 @@ internal fun SessionsScreen(
         MultipromptTheme(sunlight = sunlight, material3 = false) {
             AlertDialog(
                 onDismissRequest = { settingsVisible = false },
-                title = { Text("Session list settings") },
+                title = {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Session list settings", Modifier.weight(1f))
+                        VersionLabel(onClick = {
+                            settingsVisible = false
+                            onReleaseNotes()
+                        })
+                    }
+                },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(
@@ -1511,46 +1527,55 @@ internal fun SessionsScreen(
                     }
                 }
             }
-            Spacer(Modifier.weight(1f))
-            if (state.refreshing) {
-                CircularProgressIndicator(Modifier.padding(12.dp).size(20.dp), strokeWidth = 2.dp)
-            }
-            IconButton(
-                enabled = !state.creatingSession,
-                onClick = onStartNewSession,
+            Row(
+                Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (state.creatingSession) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else {
-                    Icon(Icons.Default.Add, "New session")
+                if (state.refreshing) {
+                    CircularProgressIndicator(Modifier.padding(12.dp).size(20.dp), strokeWidth = 2.dp)
                 }
-            }
-            IconButton(onClick = {
-                searchVisible = !searchVisible
-                if (!searchVisible) {
-                    searchQuery = ""
-                    focusManager.clearFocus()
+                IconButton(
+                    enabled = !state.creatingSession,
+                    onClick = onStartNewSession,
+                ) {
+                    if (state.creatingSession) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Default.Add, "New session")
+                    }
                 }
-            }) {
-                Icon(
-                    if (searchVisible) Icons.Default.Close else Icons.Default.Search,
-                    if (searchVisible) "Close session search" else "Search sessions",
+                IconButton(onClick = {
+                    searchVisible = !searchVisible
+                    if (!searchVisible) {
+                        searchQuery = ""
+                        focusManager.clearFocus()
+                    }
+                }) {
+                    Icon(
+                        if (searchVisible) Icons.Default.Close else Icons.Default.Search,
+                        if (searchVisible) "Close session search" else "Search sessions",
+                    )
+                }
+                VersionLabel(
+                    onClick = onReleaseNotes,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                InboxOverflowMenu(
+                    signedIn = signedIn,
+                    onSignIn = onSignIn,
+                    onSignOut = onSignOut,
+                    onSettings = { settingsVisible = true },
+                    onArrangeSplits = { splitOrderDialogVisible = true },
+                    onNewWorkspace = {
+                        workspaceError = null
+                        workspaceDialogVisible = true
+                    },
+                    onRefresh = onRefresh,
+                    onHosts = { onSelectSection(AppSection.HOSTS) },
+                    onUpdate = { onSelectSection(AppSection.UPDATE) },
                 )
             }
-            InboxOverflowMenu(
-                signedIn = signedIn,
-                onSignIn = onSignIn,
-                onSignOut = onSignOut,
-                onSettings = { settingsVisible = true },
-                onArrangeSplits = { splitOrderDialogVisible = true },
-                onNewWorkspace = {
-                    workspaceError = null
-                    workspaceDialogVisible = true
-                },
-                onRefresh = onRefresh,
-                onHosts = { onSelectSection(AppSection.HOSTS) },
-                onUpdate = { onSelectSection(AppSection.UPDATE) },
-            )
         }
         if (!signedIn) {
             SignedOutNotice(onSignIn = onSignIn)
@@ -2114,6 +2139,111 @@ private fun DissolvedSessionCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+internal fun ReaderTopBar(
+    session: TmuxSession,
+    modelLabel: String?,
+    onModelCommand: (String) -> Unit,
+    onOpenTerminal: () -> Unit,
+    onReleaseNotes: () -> Unit,
+    onMenuClick: () -> Unit,
+    menuContent: @Composable () -> Unit,
+) {
+    var modelMenuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
+    TopAppBar(
+        modifier = Modifier.statusBarsPadding().pointerInput(onOpenTerminal) {
+            detectTapGestures(onDoubleTap = { onOpenTerminal() })
+        },
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                AgentIcon(session.agent, Modifier.size(22.dp))
+                Box(Modifier.weight(1f)) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { modelMenuExpanded = true },
+                    ) {
+                        Text(
+                            session.displayName,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            modelLabel ?: "Model / effort",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = modelMenuExpanded,
+                        onDismissRequest = { modelMenuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Current: ${modelLabel ?: "Unknown"}") },
+                            enabled = false,
+                            onClick = {},
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Open model picker (/model)") },
+                            onClick = {
+                                modelMenuExpanded = false
+                                onModelCommand("/model")
+                            },
+                        )
+                        if (session.agent == AgentKind.CLAUDE) {
+                            DropdownMenuItem(
+                                text = { Text("Use Claude Opus") },
+                                onClick = {
+                                    modelMenuExpanded = false
+                                    onModelCommand("/model opus")
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Use Claude Sonnet") },
+                                onClick = {
+                                    modelMenuExpanded = false
+                                    onModelCommand("/model sonnet")
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Use Claude Fable") },
+                                onClick = {
+                                    modelMenuExpanded = false
+                                    onModelCommand("/model fable")
+                                },
+                            )
+                            listOf("low", "medium", "high", "xhigh", "max").forEach { level ->
+                                DropdownMenuItem(
+                                    text = { Text("Set effort: $level") },
+                                    onClick = {
+                                        modelMenuExpanded = false
+                                        onModelCommand("/effort $level")
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        actions = {
+            VersionLabel(onClick = onReleaseNotes)
+            Box {
+                IconButton(onClick = onMenuClick) {
+                    Icon(Icons.Default.MoreVert, "Session actions")
+                }
+                menuContent()
+            }
+        },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 internal fun ReaderScreen(
     connection: SessionReaderConnection,
     dictation: DeepgramDictation,
@@ -2147,6 +2277,7 @@ internal fun ReaderScreen(
     onClearSessionActionError: () -> Unit,
     onForget: () -> Unit,
     onShowEtaAccuracy: () -> Unit,
+    onReleaseNotes: () -> Unit,
     material3: Boolean = BuildConfig.MATERIAL3,
 ) = MultipromptTheme(sunlight = sunlightMode, material3 = material3) {
     val reader by connection.state.collectAsState()
@@ -2180,7 +2311,6 @@ internal fun ReaderScreen(
     val dictationSubmissionStarted = remember(connection) { AtomicBoolean(false) }
     var pendingPromptAction by remember(connection) { mutableStateOf<Long?>(null) }
     var menuExpanded by remember(connection) { mutableStateOf(false) }
-    var modelMenuExpanded by remember(connection) { mutableStateOf(false) }
     var apiKeyDialogVisible by remember(connection) { mutableStateOf(false) }
     var apiKeyDraft by remember(connection) { mutableStateOf("") }
     var apiKeyError by remember(connection) { mutableStateOf<String?>(null) }
@@ -2603,243 +2733,162 @@ internal fun ReaderScreen(
             }
         },
         topBar = {
-            TopAppBar(
-                modifier = Modifier
-                    .statusBarsPadding()
-                    .pointerInput(onOpenTerminal) {
-                        detectTapGestures(onDoubleTap = { onOpenTerminal() })
-                    },
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ReaderTopBar(
+                session = session,
+                modelLabel = runtimeDetails.label,
+                onModelCommand = sendModelCommand,
+                onOpenTerminal = onOpenTerminal,
+                onReleaseNotes = onReleaseNotes,
+                onMenuClick = { menuExpanded = true },
+                menuContent = {
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
                     ) {
-                        AgentIcon(session.agent, Modifier.size(22.dp))
-                        Box(Modifier.weight(1f)) {
-                            Column(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable { modelMenuExpanded = true },
-                            ) {
+                        DropdownMenuItem(
+                            text = { Text("Enter / approve") },
+                            enabled = !reader.sending,
+                            onClick = {
+                                menuExpanded = false
+                                onSessionInteraction()
+                                onSessionUsed()
+                                connection.sendEnter()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Interrupt session") },
+                            enabled = !reader.sending,
+                            onClick = {
+                                menuExpanded = false
+                                onSessionInteraction()
+                                connection.interrupt()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (unread) "Mark read" else "Already read") },
+                            enabled = unread,
+                            onClick = {
+                                menuExpanded = false
+                                onMarkRead()
+                            },
+                        )
+                        if (session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {
+                            DropdownMenuItem(
+                                text = { Text("Rename") },
+                                onClick = {
+                                    menuExpanded = false
+                                    renameDraft = session.displayName
+                                    renameError = null
+                                    renameDialogVisible = true
+                                },
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text(if (archived) "Return to open" else "Waiting and open next") },
+                            onClick = {
+                                menuExpanded = false
+                                onArchiveToggle()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Open live terminal") },
+                            onClick = {
+                                menuExpanded = false
+                                onOpenTerminal()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = {
                                 Text(
-                                    session.displayName,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
+                                    "Copy raw transcript (${reader.output.count { it == '\n' } + 1} lines · " +
+                                        "alt ${if (reader.alternateOn) 1 else 0} · " +
+                                        "view ${scrollState.value}/${scrollState.maxValue})",
                                 )
-                                Text(
-                                    runtimeDetails.label ?: "Model / effort",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
+                                    as ClipboardManager
+                                clipboard.setPrimaryClip(
+                                    ClipData.newPlainText("multiprompt transcript", reader.output),
                                 )
-                            }
-                            DropdownMenu(
-                                expanded = modelMenuExpanded,
-                                onDismissRequest = { modelMenuExpanded = false },
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Current: ${runtimeDetails.label ?: "Unknown"}") },
-                                    enabled = false,
-                                    onClick = {},
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Open model picker (/model)") },
-                                    onClick = {
-                                        modelMenuExpanded = false
-                                        sendModelCommand("/model")
-                                    },
-                                )
-                                if (session.agent == AgentKind.CLAUDE) {
-                                    DropdownMenuItem(
-                                        text = { Text("Use Claude Opus") },
-                                        onClick = {
-                                            modelMenuExpanded = false
-                                            sendModelCommand("/model opus")
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Use Claude Sonnet") },
-                                        onClick = {
-                                            modelMenuExpanded = false
-                                            sendModelCommand("/model sonnet")
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Use Claude Fable") },
-                                        onClick = {
-                                            modelMenuExpanded = false
-                                            sendModelCommand("/model fable")
-                                        },
-                                    )
-                                    listOf("low", "medium", "high", "xhigh", "max").forEach { level ->
-                                        DropdownMenuItem(
-                                            text = { Text("Set effort: $level") },
-                                            onClick = {
-                                                modelMenuExpanded = false
-                                                sendModelCommand("/effort $level")
-                                            },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                actions = {
-                    Box {
-                        IconButton(onClick = { menuExpanded = true }) {
-                            Icon(Icons.Default.MoreVert, "Session actions")
-                        }
-                        DropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false },
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Enter / approve") },
-                                enabled = !reader.sending,
-                                onClick = {
-                                    menuExpanded = false
-                                    onSessionInteraction()
-                                    onSessionUsed()
-                                    connection.sendEnter()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Interrupt session") },
-                                enabled = !reader.sending,
-                                onClick = {
-                                    menuExpanded = false
-                                    onSessionInteraction()
-                                    connection.interrupt()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(if (unread) "Mark read" else "Already read") },
-                                enabled = unread,
-                                onClick = {
-                                    menuExpanded = false
-                                    onMarkRead()
-                                },
-                            )
-                            if (session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {
-                                DropdownMenuItem(
-                                    text = { Text("Rename") },
-                                    onClick = {
-                                        menuExpanded = false
-                                        renameDraft = session.displayName
-                                        renameError = null
-                                        renameDialogVisible = true
-                                    },
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text(if (archived) "Return to open" else "Waiting and open next") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onArchiveToggle()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Open live terminal") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onOpenTerminal()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        "Copy raw transcript (${reader.output.count { it == '\n' } + 1} lines · " +
-                                            "alt ${if (reader.alternateOn) 1 else 0} · " +
-                                            "view ${scrollState.value}/${scrollState.maxValue})",
-                                    )
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
-                                        as ClipboardManager
-                                    clipboard.setPrimaryClip(
-                                        ClipData.newPlainText("multiprompt transcript", reader.output),
-                                    )
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Estimate accuracy") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onShowEtaAccuracy()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(if (technicalMode) "Hide terminal details" else "Show terminal details") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onTechnicalModeChanged(!technicalMode)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(if (sunlightMode) "Sunlight mode off" else "Sunlight mode on") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onSetAppTheme(if (sunlightMode) AppTheme.DARK else AppTheme.SUNLIGHT)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Use default font size") },
-                                onClick = {
-                                    menuExpanded = false
-                                    transcriptZoom = onResetFontScale()
-                                },
-                            )
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text("Archive session", color = MaterialTheme.colorScheme.error) },
-                                onClick = {
-                                    menuExpanded = false
-                                    dissolveDialogVisible = true
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("End session", color = MaterialTheme.colorScheme.error) },
-                                onClick = {
-                                    menuExpanded = false
-                                    endDialogVisible = true
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Remove from list") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onForget()
-                                },
-                            )
-                            HorizontalDivider()
-                            AppMenuItems(
-                                signedIn = signedIn,
-                                onSignIn = onSignIn,
-                                onSignOut = onSignOut,
-                                onDismiss = { menuExpanded = false },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Dictation API key") },
-                                onClick = {
-                                    menuExpanded = false
-                                    apiKeyDraft = ""
-                                    apiKeyError = null
-                                    apiKeyDialogVisible = true
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Screencast2 upload key") },
-                                onClick = {
-                                    menuExpanded = false
-                                    imageKeyDraft = ""
-                                    imageKeyError = null
-                                    imageKeyDialogVisible = true
-                                },
-                            )
-                        }
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Estimate accuracy") },
+                            onClick = {
+                                menuExpanded = false
+                                onShowEtaAccuracy()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (technicalMode) "Hide terminal details" else "Show terminal details") },
+                            onClick = {
+                                menuExpanded = false
+                                onTechnicalModeChanged(!technicalMode)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (sunlightMode) "Sunlight mode off" else "Sunlight mode on") },
+                            onClick = {
+                                menuExpanded = false
+                                onSetAppTheme(if (sunlightMode) AppTheme.DARK else AppTheme.SUNLIGHT)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Use default font size") },
+                            onClick = {
+                                menuExpanded = false
+                                transcriptZoom = onResetFontScale()
+                            },
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Archive session", color = MaterialTheme.colorScheme.error) },
+                            onClick = {
+                                menuExpanded = false
+                                dissolveDialogVisible = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("End session", color = MaterialTheme.colorScheme.error) },
+                            onClick = {
+                                menuExpanded = false
+                                endDialogVisible = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Remove from list") },
+                            onClick = {
+                                menuExpanded = false
+                                onForget()
+                            },
+                        )
+                        HorizontalDivider()
+                        AppMenuItems(
+                            signedIn = signedIn,
+                            onSignIn = onSignIn,
+                            onSignOut = onSignOut,
+                            onDismiss = { menuExpanded = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Dictation API key") },
+                            onClick = {
+                                menuExpanded = false
+                                apiKeyDraft = ""
+                                apiKeyError = null
+                                apiKeyDialogVisible = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Screencast2 upload key") },
+                            onClick = {
+                                menuExpanded = false
+                                imageKeyDraft = ""
+                                imageKeyError = null
+                                imageKeyDialogVisible = true
+                            },
+                        )
                     }
                 },
             )
@@ -3726,11 +3775,12 @@ private fun HostsScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HostEditorScreen(
+internal fun HostEditorScreen(
     host: HostProfile?,
     error: String?,
     onCancel: () -> Unit,
     onSave: (HostDraft, ByteArray?) -> Unit,
+    onReleaseNotes: () -> Unit,
 ) {
     BackHandler(onBack = onCancel)
     val context = LocalContext.current
@@ -3754,7 +3804,8 @@ private fun HostEditorScreen(
         topBar = {
             TopAppBar(
                 modifier = Modifier.statusBarsPadding(),
-                title = { Text(if (host == null) "Add VPS" else "Edit ${host.label}") },
+                title = { Text(if (host == null) "Add VPS" else "Edit ${host.label}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                actions = { VersionLabel(onClick = onReleaseNotes) },
             )
         },
     ) { padding ->
@@ -3920,6 +3971,52 @@ private fun UpdateAvailableCard(release: UpdateRelease, onInstall: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+internal fun TerminalTopBar(
+    title: String,
+    subtitle: String,
+    onBack: () -> Unit,
+    onReleaseNotes: () -> Unit,
+    onOpenHistory: () -> Unit,
+    onLiveView: () -> Unit,
+    onShowKeyboard: () -> Unit,
+) {
+    TopAppBar(
+        modifier = Modifier
+            .statusBarsPadding()
+            .pointerInput(onBack) { detectTapGestures(onDoubleTap = { onBack() }) },
+        title = {
+            Column {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        },
+        actions = {
+            VersionLabel(onClick = onReleaseNotes)
+            IconButton(onClick = onOpenHistory) {
+                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Open shell history")
+            }
+            IconButton(onClick = onLiveView) {
+                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Back to the live view")
+            }
+            IconButton(onClick = onShowKeyboard) {
+                Icon(Icons.Default.Keyboard, contentDescription = "Show keyboard")
+            }
+        },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 private fun TerminalScreen(
     connection: TerminalConnection,
     title: String,
@@ -3930,6 +4027,7 @@ private fun TerminalScreen(
     onBack: () -> Unit,
     onSwitchSession: (Int) -> Unit,
     onSessionUsed: () -> Unit,
+    onReleaseNotes: () -> Unit,
 ) {
     val status by connection.status.collectAsState()
     val currentOnSessionUsed by rememberUpdatedState(onSessionUsed)
@@ -3955,45 +4053,14 @@ private fun TerminalScreen(
     BackHandler(onBack = onBack)
     Scaffold(
         topBar = {
-            TopAppBar(
-                modifier = Modifier
-                    .statusBarsPadding()
-                    .pointerInput(onBack) { detectTapGestures(onDoubleTap = { onBack() }) },
-                title = {
-                    Column {
-                        Text(
-                            title,
-                            style = MaterialTheme.typography.labelLarge,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            "${connection.tmuxSessionName} · ${statusLabel(status)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = {
-                        historyVisible = true
-                        keyboard?.hide()
-                    }) {
-                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Open shell history")
-                    }
-                    IconButton(onClick = { historyVisible = false }) {
-                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Back to the live view")
-                    }
-                    IconButton(
-                        onClick = {
-                            focusRequester.requestFocus()
-                            keyboard?.show()
-                        },
-                    ) {
-                        Icon(Icons.Default.Keyboard, contentDescription = "Show keyboard")
-                    }
-                },
+            TerminalTopBar(
+                title = title,
+                subtitle = "${connection.tmuxSessionName} · ${statusLabel(status)}",
+                onBack = onBack,
+                onReleaseNotes = onReleaseNotes,
+                onOpenHistory = { historyVisible = true; keyboard?.hide() },
+                onLiveView = { historyVisible = false },
+                onShowKeyboard = { focusRequester.requestFocus(); keyboard?.show() },
             )
         },
     ) { padding ->

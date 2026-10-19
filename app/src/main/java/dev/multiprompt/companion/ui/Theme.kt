@@ -76,7 +76,7 @@ fun terminalYellow(sunlight: Boolean): Color =
 fun terminalRed(sunlight: Boolean): Color =
     if (sunlight) TerminalRedLight else TerminalRed
 
-private val MultipromptColors = darkColorScheme(
+internal val MultipromptColors = darkColorScheme(
     primary = Color(0xFF7DD3FC),
     onPrimary = Color(0xFF082F49),
     secondary = Color(0xFFA7F3D0),
@@ -93,7 +93,7 @@ private val MultipromptColors = darkColorScheme(
     error = Color(0xFFFCA5A5),
 )
 
-private val SunlightColors = lightColorScheme(
+internal val SunlightColors = lightColorScheme(
     primary = Color(0xFF0043CE),
     onPrimary = Color(0xFFFFFFFF),
     secondary = Color(0xFF0E6027),
