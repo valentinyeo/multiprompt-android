@@ -107,6 +107,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -2137,6 +2138,15 @@ private fun ReaderScreen(
     }
     val dictationState by dictation.state.collectAsState()
     var promptField by remember(connection) { mutableStateOf(TextFieldValue("")) }
+    var replyTo by remember(connection, session.hostId, session.name) { mutableStateOf<String?>(null) }
+    var replyAuthor by remember(connection, session.hostId, session.name) { mutableStateOf("") }
+    val replyGate = remember(connection, session.hostId, session.name) { ReplySwipeGate() }
+    val promptFocusRequester = remember { FocusRequester() }
+    val chooseReply: (String, Boolean) -> Unit = { text, isUser ->
+        replyTo = text
+        replyAuthor = if (isUser) "You" else session.agent.label
+        promptFocusRequester.requestFocus()
+    }
     val prompt = promptField.text
     val setPrompt: (String) -> Unit = { value ->
         promptField = TextFieldValue(value, selection = TextRange(value.length))
@@ -2307,9 +2317,9 @@ private fun ReaderScreen(
         val attached = attachedSkill
         val composedPrompt = if (attached != null) {
             val draft = prompt.removePrefix("/${attached.name} ").trim()
-            SkillModel.composeMessage(draft, attached)
+            SkillModel.composeMessage(ReplyQuote.compose(replyTo, draft), attached)
         } else {
-            PromptComposer.composeMessage(prompt, imageAttachments)
+            ReplyQuote.compose(replyTo, PromptComposer.composeMessage(prompt, imageAttachments))
         }
         if (composedPrompt.isNotBlank() &&
             !reader.sending &&
@@ -2321,6 +2331,7 @@ private fun ReaderScreen(
                 onSessionUsed()
                 pendingPromptAction = actionCount
                 attachedSkill = null
+                replyTo = null
             }
         }
     }
@@ -2359,7 +2370,7 @@ private fun ReaderScreen(
                 )
                 setPrompt(finalPrompt)
                 sendAfterDictation = false
-                val composedPrompt = PromptComposer.composeMessage(finalPrompt, imageAttachments)
+                val composedPrompt = ReplyQuote.compose(replyTo, PromptComposer.composeMessage(finalPrompt, imageAttachments))
                 if (composedPrompt.isNotBlank() &&
                     !reader.sending &&
                     pendingPromptAction == null
@@ -2369,6 +2380,7 @@ private fun ReaderScreen(
                         onSessionInteraction()
                         onSessionUsed()
                         pendingPromptAction = actionCount
+                        replyTo = null
                     }
                 }
             }
@@ -2557,7 +2569,7 @@ private fun ReaderScreen(
     }
     BackHandler(onBack = onBack)
     Scaffold(
-        modifier = Modifier.horizontalSwipe(onSwitchSession),
+        modifier = Modifier.horizontalSwipe(onSwitchSession, suppressRight = replyGate::suppressRight),
         floatingActionButton = {
             if (scrollState.canScrollForward) {
                 FloatingActionButton(onClick = scrollLive, modifier = Modifier.size(40.dp)) {
@@ -2924,10 +2936,13 @@ private fun ReaderScreen(
                         }
                     }
                 }
+                replyTo?.let { quoted ->
+                    ReplyQuoteBar(message = quoted, author = replyAuthor, onCancel = { replyTo = null })
+                }
                 OutlinedTextField(
                     value = promptField,
                     onValueChange = { promptField = it },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().focusRequester(promptFocusRequester),
                     placeholder = {
                         Text("Message this session")
                     },
@@ -3309,14 +3324,20 @@ private fun ReaderScreen(
                 transcript?.forEach { message ->
                     val isUser = message.role == "user"
                     val bodyColor = chatTextColor(sunlightMode)
-                    ChatBubble(isUser = isUser, sunlight = sunlightMode) {
-                        Text(
-                            if (isUser) "You" else session.agent.label,
-                            fontFamily = ChatFontFamily,
-                            fontSize = (transcriptFontSize.value - 3f).coerceAtLeast(8f).sp,
-                            color = chatHintColor(sunlightMode),
-                        )
-                        SelectionContainer {
+                    key(connection, message.role, message.timestamp, message.text) {
+                        ReplyableBubble(
+                            isUser = isUser,
+                            sunlight = sunlightMode,
+                            text = message.text,
+                            onReply = { chooseReply(it, isUser) },
+                            gate = replyGate,
+                        ) {
+                            Text(
+                                if (isUser) "You" else session.agent.label,
+                                fontFamily = ChatFontFamily,
+                                fontSize = (transcriptFontSize.value - 3f).coerceAtLeast(8f).sp,
+                                color = chatHintColor(sunlightMode),
+                            )
                             if (isUser) {
                                 Text(
                                     terminalLinks(message.text, sunlightMode),
@@ -3333,14 +3354,14 @@ private fun ReaderScreen(
                                     linkColor = terminalBlue(sunlightMode),
                                 )
                             }
-                        }
-                        message.timestamp?.let { timestamp ->
-                            Text(
-                                formatChatTime(timestamp),
-                                fontFamily = ChatFontFamily,
-                                fontSize = (transcriptFontSize.value - 3f).coerceAtLeast(8f).sp,
-                                color = chatHintColor(sunlightMode),
-                            )
+                            message.timestamp?.let { timestamp ->
+                                Text(
+                                    formatChatTime(timestamp),
+                                    fontFamily = ChatFontFamily,
+                                    fontSize = (transcriptFontSize.value - 3f).coerceAtLeast(8f).sp,
+                                    color = chatHintColor(sunlightMode),
+                                )
+                            }
                         }
                     }
                 }
@@ -3385,8 +3406,15 @@ private fun ReaderScreen(
                             }
                             val run = visibleReaderBlocks.drop(index)
                                 .takeWhile { it.kind == TmuxText.ReaderBlockKind.PROSE }
-                            ChatBubble(isUser = false, sunlight = sunlightMode) {
-                                SelectionContainer {
+                            val text = run.joinToString("\n\n") { it.text }
+                            key(connection, blockKey) {
+                                ReplyableBubble(
+                                    isUser = false,
+                                    sunlight = sunlightMode,
+                                    text = text,
+                                    onReply = { chooseReply(it, false) },
+                                    gate = replyGate,
+                                ) {
                                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         run.forEach { part ->
                                             Text(
@@ -3401,14 +3429,22 @@ private fun ReaderScreen(
                                 }
                             }
                         }
-                        TmuxText.ReaderBlockKind.USER_PROMPT -> ChatBubble(isUser = true, sunlight = sunlightMode) {
-                            Text(
-                                terminalLinks(block.text, sunlightMode),
-                                fontFamily = ChatFontFamily,
-                                fontSize = transcriptFontSize,
-                                lineHeight = (transcriptFontSize.value * 1.5f).sp,
-                                color = chatTextColor(sunlightMode),
-                            )
+                        TmuxText.ReaderBlockKind.USER_PROMPT -> key(connection, blockKey) {
+                            ReplyableBubble(
+                                isUser = true,
+                                sunlight = sunlightMode,
+                                text = block.text,
+                                onReply = { chooseReply(it, true) },
+                                gate = replyGate,
+                            ) {
+                                Text(
+                                    terminalLinks(block.text, sunlightMode),
+                                    fontFamily = ChatFontFamily,
+                                    fontSize = transcriptFontSize,
+                                    lineHeight = (transcriptFontSize.value * 1.5f).sp,
+                                    color = chatTextColor(sunlightMode),
+                                )
+                            }
                         }
                         TmuxText.ReaderBlockKind.CODE,
                         TmuxText.ReaderBlockKind.PROGRESS -> {
@@ -4082,10 +4118,11 @@ private fun tomorrowMorningEpochSeconds(): Long = ZonedDateTime.now()
     .withNano(0)
     .toEpochSecond()
 
-private fun Modifier.horizontalSwipe(
+internal fun Modifier.horizontalSwipe(
     onSwipe: (Int) -> Unit,
     eventPass: PointerEventPass = PointerEventPass.Initial,
-) = pointerInput(eventPass) {
+    suppressRight: () -> Boolean = { false },
+) = pointerInput(eventPass, suppressRight) {
     val threshold = 72.dp.toPx()
     awaitPointerEventScope {
         while (true) {
@@ -4105,7 +4142,8 @@ private fun Modifier.horizontalSwipe(
                 totalY += positionDelta.y
                 if (!claimed && !change.isConsumed &&
                     kotlin.math.abs(totalX) > threshold &&
-                    kotlin.math.abs(totalX) > kotlin.math.abs(totalY) * 2
+                    kotlin.math.abs(totalX) > kotlin.math.abs(totalY) * 2 &&
+                    (totalX < 0 || !suppressRight())
                 ) {
                     claimed = true
                     onSwipe(if (totalX < 0) 1 else -1)
