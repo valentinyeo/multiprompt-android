@@ -65,6 +65,34 @@ test('Shell: shebangs, directives, word hashes, quoted substitutions and heredoc
   await fixture('shell', `#!/bin/sh\n# shellcheck disable=SC2086\n# remove\necho 'https://x/#' word#literal "$#" "$(printf '#')" # remove\ncat <<'EOF'\n# literal heredoc\nhttps://x/#\nEOF\ncat <<< "$value" # remove\n`, `#!/bin/sh\n# shellcheck disable=SC2086\necho 'https://x/#' word#literal "$#" "$(printf '#')"\ncat <<'EOF'\n# literal heredoc\nhttps://x/#\nEOF\ncat <<< "$value"\n`);
 });
 
+test('YAML: comments, quoted hashes, expressions, plain values and block scalars', async () => {
+  const kept = ["single: '# literal it''s text'", 'double: "# literal \\" text"', "expression: ${{ contains('a#b', '#') }}", 'plain: a#b', "prose: can't stop", 'run: |', '  # shell text', '  echo "# script text"', 'folded: >-', '  # scalar text', 'explicit: |2-', '  # explicit scalar text', 'next: value'];
+  await fixture('yaml', '# remove\n' + kept.map((line, n) => [0, 1, 2, 3, 12].includes(n) ? line + ' # remove' : line).join('\n') + '\n# remove\n', kept.join('\n') + '\n');
+  await fixture('yaml', 'jobs:\r\n  run: |+ # remove\r\n    # shell text\r\n    echo done\r\n  next: [a#b, \"a # b\"] # remove\r\n# remove\r\n', 'jobs:\r\n  run: |+\r\n    # shell text\r\n    echo done\r\n  next: [a#b, \"a # b\"]\r\n');
+  const { tokenize, languageFor } = await api;
+  const source = '# full-line\nkey: value # trailing\n';
+  assert.deepEqual(tokenize(source, 'yaml').comments.map(c => source.slice(c.start, c.end)), ['# full-line', '# trailing']);
+  for (const file of ['workflow.yml', 'workflow.yaml']) assert.equal(languageFor(file), 'yaml');
+});
+
+test('TOML: comments and hashes inside basic, literal and multiline strings', async () => {
+  const kept = ['basic = "# literal \\" text"', String.raw`literal = '# literal \'`, 'multibasic = """', '# multiline basic text', '"""', "multiliteral = '''", '# multiline literal text', "'''", 'value = 1'];
+  await fixture('toml', '# remove\n' + kept.map((line, n) => [0, 1, 4, 7, 8].includes(n) ? line + ' # remove' : line).join('\n') + '\n# remove\n', kept.join('\n') + '\n');
+  await fixture('toml', '# remove\r\nvalue = 1# remove\r\nbasic = """# literal """"" # remove\r\nliteral = \'\'\'# literal \'\'\'\'\' # remove\r\n', 'value = 1\r\nbasic = """# literal """""\r\nliteral = \'\'\'# literal \'\'\'\'\'\r\n');
+  const { tokenize, languageFor } = await api;
+  const source = '# full-line\nkey = 1 # trailing\n';
+  assert.deepEqual(tokenize(source, 'toml').comments.map(c => source.slice(c.start, c.end)), ['# full-line', '# trailing']);
+  assert.equal(languageFor('config.toml'), 'toml');
+});
+
+test('YAML: only pinned-action version tags are kept as tool directives', async () => {
+  const pin = '11d5960a326750d5838078e36cf38b85af677262';
+  const kept = `uses: actions/checkout@${pin} # v4\n`;
+  await fixture('yaml', kept + `uses: actions/checkout@${pin} # explanation\nuses: actions/checkout@v4 # v4\nuses: actions/checkout@${pin.slice(1)} # v4\nuses: actions/checkout@${pin} # v4 explanation\nvalue: other@${pin} # v4\n`, kept + `uses: actions/checkout@${pin}\nuses: actions/checkout@v4\nuses: actions/checkout@${pin.slice(1)}\nuses: actions/checkout@${pin}\nvalue: other@${pin}\n`);
+  const { tokenize } = await api;
+  assert.equal(tokenize(kept, 'yaml').comments[0].reason, 'tool directive');
+});
+
 test('C/C++ headers: raw literals, escaped characters and token separators', async () => {
   await fixture('c', `/* remove */\nconst/* remove */char *s = "https://x/#"; // remove\nchar c = '\\'';\nauto raw = R"tag(// # /* literal */)tag";\n#define VALUE 1 /* remove */\n`, `const char *s = "https://x/#";\nchar c = '\\'';\nauto raw = R"tag(// # /* literal */)tag";\n#define VALUE 1\n`);
 });
@@ -86,7 +114,7 @@ test('license headers and directives retained in full, never join code lines', a
 
 test('protected directories/data and generated sources are excluded', async () => {
   const { languageFor } = await api;
-  for (const file of ['vendor/x.js', 'third_party/x.kt', 'node_modules/x.js', 'skillsrepo/x.py', 'docs/x.html', 'docs-site/x.ts', 'openwiki/x.sh', 'CLAUDE.md', 'AGENTS.md', 'README', 'data.json', 'config.toml', 'gradle/wrapper/gradle-wrapper.properties', 'tools/fixtures/x.html']) assert.equal(languageFor(file), null, file);
+  for (const file of ['vendor/x.js', 'third_party/x.kt', 'node_modules/x.js', 'skillsrepo/x.py', 'docs/x.html', 'docs-site/x.ts', 'openwiki/x.sh', 'CLAUDE.md', 'AGENTS.md', 'README', 'data.json', 'gradle/wrapper/gradle-wrapper.properties', 'tools/fixtures/x.html']) assert.equal(languageFor(file), null, file);
   assert.equal(languageFor('src/generated.js', '// automatically generated'), null);
   assert.equal(languageFor('assets/page.html'), 'html');
 });
@@ -135,5 +163,27 @@ test('CLI --check fails on a new code comment and names where it is', () => {
     assert.equal(failed.status, 1);
     assert.match(failed.stderr, /tool\.js:3: \/\/ explains c/);
     assert.equal(fs.readFileSync(path.join(root, 'tool.js'), 'utf8'), '// eslint-disable-next-line\nconst b = 1;\nconst c = 2; // explains c\n');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('CLI --check rejects new YAML/TOML comments and strip mode removes them', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'strip-comments-config-'));
+  const script = path.join(__dirname, 'strip-comments.mjs');
+  const git = args => execFileSync('git', ['-C', root, ...args], { stdio: 'pipe' });
+  try {
+    git(['init', '-q']);
+    for (const [file, source] of [['workflow.yml', 'run: |\n  # shell text\n'], ['workflow.yaml', 'value: a#b\n'], ['config.toml', 'value = "# literal"\n']]) fs.writeFileSync(path.join(root, file), source);
+    git(['add', '.']);
+    assert.equal(spawnSync(process.execPath, [script, '--check', root]).status, 0);
+    for (const file of ['workflow.yml', 'workflow.yaml', 'config.toml']) fs.appendFileSync(path.join(root, file), '# new comment\n');
+    const failed = spawnSync(process.execPath, [script, '--check', root], { encoding: 'utf8' });
+    assert.equal(failed.status, 1);
+    for (const [file, line] of [['workflow.yml', 3], ['workflow.yaml', 2], ['config.toml', 2]]) {
+      assert.ok(failed.stderr.includes(`${file}:${line}: # new comment`));
+      assert.ok(fs.readFileSync(path.join(root, file), 'utf8').endsWith('# new comment\n'));
+    }
+    execFileSync(process.execPath, [script, root]);
+    assert.equal(spawnSync(process.execPath, [script, '--check', root]).status, 0);
+    assert.equal(fs.readFileSync(path.join(root, 'workflow.yml'), 'utf8'), 'run: |\n  # shell text\n');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
