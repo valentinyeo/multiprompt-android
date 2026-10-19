@@ -1047,7 +1047,7 @@ private fun NewSessionFolderScreen(
 }
 
 @Composable
-private fun SessionsScreen(
+internal fun SessionsScreen(
     state: AppUiState,
     signedIn: Boolean,
     onSignIn: () -> Unit,
@@ -1449,7 +1449,7 @@ private fun SessionsScreen(
     } else {
         emptyList()
     }
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().imePadding()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1587,7 +1587,7 @@ private fun SessionsScreen(
                 .fillMaxWidth()
                 .horizontalSwipe(onSwitchWorkspace, PointerEventPass.Final),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-            reverseLayout = state.newestSessionsAtBottom && state.selectedWorkspaceId != FREQUENT_SPLIT_ID,
+            reverseLayout = normalizedQuery.isBlank() && state.newestSessionsAtBottom && state.selectedWorkspaceId != FREQUENT_SPLIT_ID,
         ) {
             state.hostErrors.forEach { (hostId, error) ->
                 if (hostId !in state.cachedHostIds) {
