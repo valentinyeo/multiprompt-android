@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -35,7 +36,11 @@ import dev.multiprompt.companion.account.AccountTab
 import dev.multiprompt.companion.model.TmuxSession
 
 @Composable
-internal fun AccountWorkspacesScreen(viewModel: MainViewModel, onInbox: () -> Unit) {
+internal fun AccountWorkspacesScreen(
+    viewModel: MainViewModel,
+    onInbox: () -> Unit,
+    onReleaseNotes: () -> Unit,
+) {
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
     val layout = state.accountLayout
@@ -54,14 +59,20 @@ internal fun AccountWorkspacesScreen(viewModel: MainViewModel, onInbox: () -> Un
     val signIn: () -> Unit = { viewModel.signInAccount { context.startActivity(it) } }
 
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp)) {
-            if (!allSessions) FilledTonalButton(onClick = { allSessions = false }) { Text("Workspaces") }
-            else TextButton(onClick = { allSessions = false }) { Text("Workspaces") }
-            if (allSessions) FilledTonalButton(onClick = { allSessions = true }) { Text("All Sessions") }
-            else TextButton(onClick = { allSessions = true; viewModel.refresh() }) { Text("All Sessions") }
-            TextButton(onClick = onInbox) { Text("Inbox") }
-            TextButton(onClick = { viewModel.select(AppSection.HOSTS) }) { Text("Hosts") }
-            TextButton(onClick = { viewModel.select(AppSection.UPDATE) }) { Text("Update") }
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(Modifier.weight(1f).horizontalScroll(rememberScrollState())) {
+                if (!allSessions) FilledTonalButton(onClick = { allSessions = false }) { Text("Workspaces") }
+                else TextButton(onClick = { allSessions = false }) { Text("Workspaces") }
+                if (allSessions) FilledTonalButton(onClick = { allSessions = true }) { Text("All Sessions") }
+                else TextButton(onClick = { allSessions = true; viewModel.refresh() }) { Text("All Sessions") }
+                TextButton(onClick = onInbox) { Text("Inbox") }
+                TextButton(onClick = { viewModel.select(AppSection.HOSTS) }) { Text("Hosts") }
+                TextButton(onClick = { viewModel.select(AppSection.UPDATE) }) { Text("Update") }
+            }
+            VersionLabel(onClick = onReleaseNotes)
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp)) {
             TextButton(onClick = { viewModel.syncAccount(); viewModel.refresh() }) { Text("Refresh") }

@@ -213,6 +213,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(section = section) }
     }
 
+    fun openReleaseNotes() {
+        _state.value.terminal?.close()
+        _state.update {
+            it.copy(
+                terminal = null,
+                terminalSession = null,
+                terminalFromReader = false,
+                editorVisible = false,
+                section = AppSection.UPDATE,
+            )
+        }
+        closeReader()
+    }
+
     fun showEtaAccuracy(session: TmuxSession) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
         _state.update {
