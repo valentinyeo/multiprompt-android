@@ -28,10 +28,15 @@ object MarkdownParser {
     private val QUOTE = Regex("^\\s{0,3}>\\s?(.*)$")
     private val TABLE_SEP = Regex("^\\s*\\|?\\s*:?-{1,}:?\\s*(\\|\\s*:?-{1,}:?\\s*)*\\|?\\s*$")
 
+    private val BOX_TOP = Regex("┌─+(┬─+)+┐")
+    private val BOX_SEP = Regex("├─+(┼─+)+┤")
+    private val BOX_BOTTOM = Regex("└─+(┴─+)+┘")
+
     fun parse(source: String): List<MdBlock> {
         val lines = source.replace("\r\n", "\n").replace('\r', '\n').split('\n')
         val out = ArrayList<MdBlock>()
         val para = ArrayList<String>()
+        val listIndents = ArrayList<Int>()
         fun flushPara() {
             if (para.isNotEmpty()) {
                 out += MdBlock.Paragraph(parseInline(para.joinToString("\n")))
@@ -79,6 +84,13 @@ object MarkdownParser {
                 out += MdBlock.Table(header, rows)
                 continue
             }
+            val boxTable = parseBoxTable(lines, i)
+            if (boxTable != null) {
+                flushPara()
+                out += boxTable.first
+                i = boxTable.second
+                continue
+            }
             val quote = QUOTE.matchEntire(line)
             if (quote != null) {
                 flushPara()
@@ -97,6 +109,8 @@ object MarkdownParser {
                 flushPara()
                 val m = bullet ?: numbered!!
                 val indent = m.groupValues[1].replace("\t", "    ").length
+                while (listIndents.isNotEmpty() && indent < listIndents.last()) listIndents.removeAt(listIndents.lastIndex)
+                if (listIndents.isEmpty() || indent > listIndents.last()) listIndents += indent
                 val marker = if (bullet != null) "•" else m.groupValues[2] + "."
                 val text = StringBuilder(m.groupValues[3])
                 var j = i + 1
@@ -107,15 +121,58 @@ object MarkdownParser {
                     text.append('\n').append(lines[j].trim())
                     j++
                 }
-                out += MdBlock.ListItem(indent / 2, marker, parseInline(text.toString()))
+                out += MdBlock.ListItem(listIndents.lastIndex, marker, parseInline(text.toString()))
                 i = j
                 continue
             }
+            listIndents.clear()
             para += line
             i++
         }
         flushPara()
         return out
+    }
+
+    private fun parseBoxTable(lines: List<String>, start: Int): Pair<MdBlock.Table, Int>? {
+        val top = lines[start].trim()
+        if (!BOX_TOP.matches(top)) return null
+        val columns = top.count { it == '┬' } + 1
+        val groups = ArrayList<List<List<String>>>()
+        var bodySeparated = false
+        var group = ArrayList<List<String>>()
+        var i = start + 1
+        while (i < lines.size) {
+            val line = lines[i].trim()
+            when {
+                BOX_BOTTOM.matches(line) -> {
+                    if (line.count { it == '┴' } + 1 != columns) return null
+                    if (group.isNotEmpty()) groups += group
+                    if (groups.isEmpty()) return null
+                    fun joinCells(rows: List<List<String>>) = (0 until columns).map { column ->
+                        parseInline(rows.map { it[column] }.filter(String::isNotEmpty).joinToString(" "))
+                    }
+                    val header = joinCells(groups.first())
+                    val body = groups.drop(1)
+                    val rows = if (bodySeparated) body.map(::joinCells)
+                        else body.flatten().map { joinCells(listOf(it)) }
+                    return MdBlock.Table(header, rows) to i + 1
+                }
+                BOX_SEP.matches(line) -> {
+                    if (line.count { it == '┼' } + 1 != columns || group.isEmpty()) return null
+                    if (groups.isNotEmpty()) bodySeparated = true
+                    groups += group
+                    group = ArrayList()
+                }
+                line.startsWith('│') && line.endsWith('│') -> {
+                    val cells = line.drop(1).dropLast(1).split('│').map(String::trim)
+                    if (cells.size != columns) return null
+                    group += cells
+                }
+                else -> return null
+            }
+            i++
+        }
+        return null
     }
 
     private fun splitRow(line: String): List<String> {

@@ -1161,4 +1161,23 @@ class TmuxTextTest {
         assertEquals(3.0, accuracy.single().ratio, 0.001)
         assertEquals(3, accuracy.single().samples)
     }
+
+    @Test
+    fun terminalTableSurvivesPaneCaptureWithoutRejoiningGridRows() {
+        val fixture = checkNotNull(javaClass.getResource("/table-fixture.terminal.txt")).readText().trimEnd()
+        for (indent in listOf("", "  ")) {
+            val captured = "• Bash(command)\n  │ tool output\n" + fixture.lines().joinToString("\n") { indent + it } + "\n❯"
+            val blocks = TmuxText.readerBlocks(TmuxText.withoutActiveComposer(captured, AgentKind.CLAUDE), AgentKind.CLAUDE)
+            val message = blocks.filter { it.kind == TmuxText.ReaderBlockKind.PROSE }.joinToString("\n") { it.text }
+            assertEquals(fixture, message.lines().joinToString("\n") { it.trim() })
+        }
+    }
+
+    @Test
+    fun toolOutputBarsAndCornersAreNotMessageText() {
+        val blocks = TmuxText.readerBlocks("Answer.\n\n  │ some output\n  └ Done\n\nMore answer.", AgentKind.CLAUDE)
+        assertEquals(listOf("Answer.", "More answer."), blocks.filter { it.kind == TmuxText.ReaderBlockKind.PROSE }.map { it.text })
+        assertEquals("  │ some output\n  └ Done".trim(), blocks.single { it.kind == TmuxText.ReaderBlockKind.PROGRESS }.text)
+    }
+
 }
