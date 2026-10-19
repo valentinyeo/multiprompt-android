@@ -6,7 +6,7 @@ object DeepgramEndpoint {
     private const val QUERY =
         "?model=nova-3&language=en&smart_format=true&punctuate=true" +
             "&interim_results=true&endpointing=300&encoding=linear16" +
-            "&sample_rate=16000&channels=1"
+            "&sample_rate=16000&channels=1&tag=multiprompt-android"
 
     fun url(index: Int): String = "wss://${HOSTS[index]}/v1/listen$QUERY"
 

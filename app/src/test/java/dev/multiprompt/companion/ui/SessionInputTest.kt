@@ -74,7 +74,11 @@ class SessionInputTest {
     @Test fun voiceSendStampsInputOnlyAfterFinalTranscriptIsSubmitted() {
         render()
         val dictation = f.field<MutableStateFlow<DictationState>>(f.app.deepgramDictation, "_state")
-        compose.runOnIdle { dictation.value = DictationState(DictationStatus.LISTENING, "spoken", true) }
+        compose.runOnIdle {
+            f.app.deepgramDictation.javaClass.getDeclaredField("stopping").apply { isAccessible = true }
+                .setBoolean(f.app.deepgramDictation, true)
+            dictation.value = DictationState(DictationStatus.FINISHING, "spoken", true)
+        }
         compose.runOnIdle { assertNull(input()) }
         compose.onNodeWithContentDescription("Send prompt").performClick()
         compose.runOnIdle { assertNull(input()) }
@@ -83,6 +87,20 @@ class SessionInputTest {
         compose.runOnIdle {
             assertTrue(input()!! >= before)
             assertEquals(listOf("spoken final"), connection.state.value.sentPrompts)
+        }
+    }
+
+    @Test fun voiceSendWithoutASocketSubmitsWhenStopImmediatelyEndsDictation() {
+        render()
+        val dictation = f.field<MutableStateFlow<DictationState>>(f.app.deepgramDictation, "_state")
+        compose.runOnIdle { dictation.value = DictationState(DictationStatus.LISTENING, "spoken", true) }
+        compose.runOnIdle { assertNull(input()) }
+        val before = System.currentTimeMillis()
+        compose.onNodeWithContentDescription("Send prompt").performClick()
+        compose.runOnIdle {
+            assertEquals(DictationStatus.IDLE, dictation.value.status)
+            assertTrue(input()!! >= before)
+            assertEquals(listOf("spoken"), connection.state.value.sentPrompts)
         }
     }
 

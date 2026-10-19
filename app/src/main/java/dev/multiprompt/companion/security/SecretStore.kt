@@ -10,10 +10,16 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-class SecretStore(context: Context) {
+interface SecretStorage {
+    fun put(id: String, value: ByteArray)
+    fun get(id: String): ByteArray?
+    fun remove(id: String?)
+}
+
+class SecretStore(context: Context) : SecretStorage {
     private val preferences = context.getSharedPreferences("encrypted_secrets", Context.MODE_PRIVATE)
 
-    fun put(id: String, value: ByteArray) {
+    override fun put(id: String, value: ByteArray) {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, encryptionKey())
         val ciphertext = cipher.doFinal(value)
@@ -21,7 +27,7 @@ class SecretStore(context: Context) {
         check(preferences.edit().putString(id, encoded).commit()) { "Could not persist encrypted secret" }
     }
 
-    fun get(id: String): ByteArray? {
+    override fun get(id: String): ByteArray? {
         val encoded = preferences.getString(id, null) ?: return null
         return runCatching {
             val packed = Base64.decode(encoded, Base64.NO_WRAP)
@@ -36,7 +42,7 @@ class SecretStore(context: Context) {
         }.getOrNull()
     }
 
-    fun remove(id: String?) {
+    override fun remove(id: String?) {
         if (id != null) preferences.edit().remove(id).apply()
     }
 
