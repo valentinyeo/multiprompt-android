@@ -92,14 +92,12 @@ class Material3LookTest(private val screen: M3Screen, private val sunlight: Bool
         }
         compose.waitForIdle()
         assertEquals(if (sunlight) Material3LightColors else Material3DarkColors, actualScheme)
-        assertEquals(if (sunlight) Color(0xFF8A5022) else Color(0xFFFFB784), primary)
+        assertEquals(if (sunlight) Color(0xFF8F4C27) else Color(0xFFFFB68E), primary)
+        assertEquals(if (sunlight) Color(0xFFFFF8F5) else Color(0xFF1A120D), actualScheme?.surface)
         assertEquals(androidx.compose.ui.text.font.FontFamily.SansSerif, family)
         val layouts = mutableListOf<TextLayoutResult>()
         compose.onNodeWithText("Title").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertEquals(22f, layouts.single().layoutInput.style.fontSize.value)
-        val target = if (sunlight) Color(0xFF8F4C27) else Color(0xFFFFB68E)
-        val maxDeviation = listOf(kotlin.math.abs(primary.red - target.red), kotlin.math.abs(primary.green - target.green), kotlin.math.abs(primary.blue - target.blue)).max() * 255
-        assertTrue("primary deviation=$maxDeviation", maxDeviation <= if (sunlight) 5.01f else 10.01f)
     }
 
     companion object {
