@@ -87,7 +87,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -95,6 +94,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -119,6 +122,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -400,6 +406,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             onClearSessionActionError = viewModel::clearSessionActionError,
             onForget = { viewModel.forgetSession(readerSession) },
             onShowEtaAccuracy = { viewModel.showEtaAccuracy(readerSession) },
+            material3 = BuildConfig.MATERIAL3,
         )
         return
     }
@@ -508,6 +515,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     readerDefaultFontScale = state.readerDefaultFontScale,
                     crashReport = state.crashReport,
                     onClearCrashReport = viewModel::clearCrashReport,
+                    material3 = BuildConfig.MATERIAL3,
                     onAddHost = {
                         viewModel.select(AppSection.HOSTS)
                         viewModel.showHostEditor()
@@ -1133,7 +1141,7 @@ internal fun SessionsScreen(
     onClearCrashReport: () -> Unit,
     onAddHost: () -> Unit,
     nowMillis: () -> Long = System::currentTimeMillis,
-    material3: Boolean = BuildConfig.MATERIAL3,
+    material3: Boolean = LocalMaterial3.current,
 ) = MultipromptTheme(
     sunlight = when (appTheme) {
         AppTheme.SYSTEM -> !isSystemInDarkTheme()
@@ -1523,7 +1531,9 @@ internal fun SessionsScreen(
             .imePadding(),
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+            Modifier.fillMaxWidth()
+                .then(if (LocalMaterial3.current) Modifier.height(64.dp) else Modifier)
+                .padding(horizontal = 8.dp, vertical = if (LocalMaterial3.current) 0.dp else 2.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -1538,8 +1548,8 @@ internal fun SessionsScreen(
                             SessionBucket.WAITING -> "Waiting"
                             SessionBucket.ARCHIVE -> "Archive"
                         },
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        style = if (LocalMaterial3.current) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
+                        fontWeight = if (LocalMaterial3.current) FontWeight.Normal else FontWeight.SemiBold,
                     )
                     Icon(Icons.Default.ExpandMore, "Switch session bucket")
                 }
@@ -1617,7 +1627,9 @@ internal fun SessionsScreen(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    modifier = Modifier.fillMaxWidth().focusRequester(searchFocusRequester),
+                    modifier = Modifier.fillMaxWidth().then(if (LocalMaterial3.current) Modifier.height(56.dp) else Modifier).focusRequester(searchFocusRequester),
+                    filled = LocalMaterial3.current,
+                    search = true,
                     placeholder = { Text("Search all sessions") },
                     leadingIcon = { Icon(Icons.Default.Search, null) },
                     trailingIcon = if (searchQuery.isNotEmpty()) {
@@ -1638,6 +1650,50 @@ internal fun SessionsScreen(
                         "${visibleSessions.size} ${if (visibleSessions.size == 1) "result" else "results"} across all splits",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        if (LocalMaterial3.current) {
+            ScrollableTabRow(
+                selectedTabIndex = displayedWorkspaceSplitIds.indexOf(state.selectedWorkspaceId).coerceAtLeast(0),
+                edgePadding = 16.dp,
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.primary,
+                indicator = { positions ->
+                    val index = displayedWorkspaceSplitIds.indexOf(state.selectedWorkspaceId).coerceAtLeast(0)
+                    Box(
+                        Modifier.tabIndicatorOffset(positions[index]).height(3.dp)
+                            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)),
+                    )
+                },
+                divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant) },
+            ) {
+                displayedWorkspaceSplitIds.forEach { id ->
+                    Tab(
+                        selected = state.selectedWorkspaceId == id,
+                        onClick = { onSelectWorkspace(id) },
+                        modifier = Modifier.height(48.dp),
+                        selectedContentColor = MaterialTheme.colorScheme.primary,
+                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (id == FAVORITES_SPLIT_ID) {
+                                    FavoriteDot()
+                                    Spacer(Modifier.width(6.dp))
+                                }
+                                Text(
+                                    when (id) {
+                                        null -> "All"
+                                        FAVORITES_SPLIT_ID -> "Favorites"
+                                        FREQUENT_SPLIT_ID -> "Frequent"
+                                        else -> state.workspaces.firstOrNull { it.id == id }?.name.orEmpty()
+                                    },
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
+                        },
                     )
                 }
             }
@@ -1664,7 +1720,7 @@ internal fun SessionsScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .horizontalSwipe(onSwitchWorkspace, PointerEventPass.Final),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = if (LocalMaterial3.current) 0.dp else 8.dp, vertical = 4.dp),
             reverseLayout = normalizedQuery.isBlank() && state.newestSessionsAtBottom,
         ) {
             state.hostErrors.forEach { (hostId, error) ->
@@ -1730,36 +1786,38 @@ internal fun SessionsScreen(
                 }
             }
         }
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surface)
-                .navigationBarsPadding(),
-        ) {
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(splitScrollState).padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically,
+        if (!LocalMaterial3.current) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .navigationBarsPadding(),
             ) {
-                displayedWorkspaceSplitIds.forEach { id ->
-                    val name = when (id) {
-                        null -> "All"
-                        FAVORITES_SPLIT_ID -> "Favorites"
-                        FREQUENT_SPLIT_ID -> "Frequent"
-                        else -> state.workspaces.firstOrNull { it.id == id }?.name.orEmpty()
-                    }
-                    val label: @Composable RowScope.() -> Unit = {
-                        if (id == FAVORITES_SPLIT_ID) {
-                            FavoriteDot()
-                            Spacer(Modifier.width(6.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(splitScrollState).padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    displayedWorkspaceSplitIds.forEach { id ->
+                        val name = when (id) {
+                            null -> "All"
+                            FAVORITES_SPLIT_ID -> "Favorites"
+                            FREQUENT_SPLIT_ID -> "Frequent"
+                            else -> state.workspaces.firstOrNull { it.id == id }?.name.orEmpty()
                         }
-                        Text(name)
-                    }
-                    if (state.selectedWorkspaceId == id) {
-                        FilledTonalButton(onClick = { onSelectWorkspace(id) }, content = label)
-                    } else {
-                        TextButton(onClick = { onSelectWorkspace(id) }, content = label)
+                        val label: @Composable RowScope.() -> Unit = {
+                            if (id == FAVORITES_SPLIT_ID) {
+                                FavoriteDot()
+                                Spacer(Modifier.width(6.dp))
+                            }
+                            Text(name)
+                        }
+                        if (state.selectedWorkspaceId == id) {
+                            FilledTonalButton(onClick = { onSelectWorkspace(id) }, content = label)
+                        } else {
+                            TextButton(onClick = { onSelectWorkspace(id) }, content = label)
+                        }
                     }
                 }
             }
@@ -1939,6 +1997,54 @@ private fun SessionCard(
             false
         },
     )
+    val title: @Composable RowScope.() -> Unit = {
+        AgentIcon(session.agent)
+        if (starred) FavoriteDot()
+        Text(
+            session.displayName,
+            modifier = Modifier.weight(1f),
+            style = if (LocalMaterial3.current) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium,
+            fontWeight = if (LocalMaterial3.current) FontWeight.Medium else if (unread) FontWeight.Bold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+    val metadata: @Composable RowScope.() -> Unit = {
+        etaLabel?.let { label ->
+            Text(
+                "ETA $label",
+                modifier = Modifier
+                    .background(
+                        MaterialTheme.colorScheme.secondaryContainer,
+                        chromeShape(RoundedCornerShape(percent = 50)),
+                    )
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                fontSize = chromeFontSize(10.sp),
+                lineHeight = chromeLineHeight(12.sp),
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+            )
+        }
+        workspaceName?.let { name ->
+            Text(
+                name,
+                modifier = Modifier
+                    .widthIn(max = 88.dp)
+                    .background(
+                        MaterialTheme.colorScheme.surfaceVariant,
+                        chromeShape(RoundedCornerShape(percent = 50)),
+                    )
+                    .padding(horizontal = 5.dp, vertical = 2.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = chromeFontSize(9.sp),
+                lineHeight = chromeLineHeight(11.sp),
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
     SwipeToDismissBox(
         state = dismissState,
         enableDismissFromStartToEnd = !archived,
@@ -1972,61 +2078,45 @@ private fun SessionCard(
                 Modifier
                     .fillMaxWidth()
                     .clickable(onClick = onClick)
-                    .padding(start = 12.dp, end = 2.dp, top = 3.dp, bottom = 3.dp),
+                    .then(if (LocalMaterial3.current) Modifier.heightIn(min = 72.dp) else Modifier)
+                    .padding(
+                        start = if (LocalMaterial3.current) 16.dp else 12.dp,
+                        end = if (LocalMaterial3.current) 16.dp else 2.dp,
+                        top = if (LocalMaterial3.current) 12.dp else 3.dp,
+                        bottom = if (LocalMaterial3.current) 12.dp else 3.dp,
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(9.dp),
             ) {
+                if (LocalMaterial3.current) {
+                    Box(
+                        Modifier.size(40.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape).clearAndSetSemantics {},
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            session.displayName.split(Regex("\\s+")).filter(String::isNotBlank).take(2).joinToString("") { it.take(1).uppercase() },
+                            modifier = Modifier.clearAndSetSemantics {},
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                }
                 Box(
                     Modifier
-                        .size(7.dp)
+                        .size(if (LocalMaterial3.current && unread) 20.dp else 7.dp)
                         .background(
                             if (unread) MaterialTheme.colorScheme.primary else Color.Transparent,
                             CircleShape,
                         ),
                 )
-                AgentIcon(session.agent)
-                if (starred) FavoriteDot()
-                Text(
-                    session.displayName,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (unread) FontWeight.Bold else FontWeight.Normal,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                etaLabel?.let { label ->
-                    Text(
-                        "ETA $label",
-                        modifier = Modifier
-                            .background(
-                                MaterialTheme.colorScheme.secondaryContainer,
-                                chromeShape(RoundedCornerShape(percent = 50)),
-                            )
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        fontSize = chromeFontSize(10.sp),
-                        lineHeight = chromeLineHeight(12.sp),
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                    )
-                }
-                workspaceName?.let { name ->
-                    Text(
-                        name,
-                        modifier = Modifier
-                            .widthIn(max = 88.dp)
-                            .background(
-                                MaterialTheme.colorScheme.surfaceVariant,
-                                chromeShape(RoundedCornerShape(percent = 50)),
-                            )
-                            .padding(horizontal = 5.dp, vertical = 2.dp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = chromeFontSize(9.sp),
-                        lineHeight = chromeLineHeight(11.sp),
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                if (LocalMaterial3.current) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), content = title)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), content = metadata)
+                    }
+                } else {
+                    title()
+                    metadata()
                 }
                 Box {
                     IconButton(onClick = { menuExpanded = true }) {
@@ -2122,7 +2212,7 @@ private fun SessionCard(
                     }
                 }
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+            if (!LocalMaterial3.current) HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
         }
     }
 }
@@ -2174,15 +2264,24 @@ private fun DissolvedSessionCard(
 internal fun ReaderTopBar(
     session: TmuxSession,
     modelLabel: String?,
-    statusLabel: String?,
+    statusLabel: String? = null,
     onModelCommand: (String) -> Unit,
     onOpenTerminal: () -> Unit,
     onReleaseNotes: () -> Unit,
     onMenuClick: () -> Unit,
     menuContent: @Composable () -> Unit,
+    onBack: () -> Unit = {},
 ) {
     var modelMenuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     TopAppBar(
+        expandedHeight = if (LocalMaterial3.current) 64.dp else androidx.compose.material3.TopAppBarDefaults.TopAppBarExpandedHeight,
+        navigationIcon = {
+            if (LocalMaterial3.current) {
+                IconButton(onClick = onBack, modifier = Modifier.semantics { onClick(label = "Back", action = null) }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
+                }
+            }
+        },
         modifier = Modifier.testTag("reader-top-bar").statusBarsPadding().pointerInput(onOpenTerminal) {
             detectTapGestures(onDoubleTap = { onOpenTerminal() })
         },
@@ -2196,16 +2295,18 @@ internal fun ReaderTopBar(
                     Column(
                         Modifier
                             .fillMaxWidth()
-                            .clickable { modelMenuExpanded = true },
+                            .clickable { modelMenuExpanded = true }
+                            .then(if (LocalMaterial3.current) Modifier.heightIn(min = 48.dp) else Modifier),
                     ) {
                         Text(
                             session.displayName,
+                            style = if (LocalMaterial3.current) MaterialTheme.typography.titleLarge else androidx.compose.material3.LocalTextStyle.current,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
                             listOfNotNull(modelLabel, statusLabel).joinToString(" · ").ifEmpty { "Model / effort" },
-                            style = MaterialTheme.typography.labelSmall,
+                            style = if (LocalMaterial3.current) MaterialTheme.typography.bodySmall else MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -2311,7 +2412,7 @@ internal fun ReaderScreen(
     onForget: () -> Unit,
     onShowEtaAccuracy: () -> Unit,
     onReleaseNotes: () -> Unit,
-    material3: Boolean = BuildConfig.MATERIAL3,
+    material3: Boolean = LocalMaterial3.current,
 ) = MultipromptTheme(sunlight = sunlightMode, material3 = material3) {
     val reader by connection.state.collectAsState()
     val transcript = reader.transcript.takeUnless { technicalMode }
@@ -2766,13 +2867,14 @@ internal fun ReaderScreen(
         modifier = Modifier.horizontalSwipe(onSwitchSession, suppressRight = replyGate::suppressRight),
         floatingActionButton = {
             if (if (historyChat) chatListState.canScrollBackward else scrollState.canScrollForward) {
-                FloatingActionButton(onClick = scrollLive, modifier = Modifier.size(40.dp)) {
+                FloatingActionButton(onClick = scrollLive, modifier = Modifier.size(if (LocalMaterial3.current) 48.dp else 40.dp)) {
                     Icon(Icons.Default.KeyboardArrowDown, "Jump to newest")
                 }
             }
         },
         topBar = {
             ReaderTopBar(
+                onBack = onBack,
                 session = session,
                 modelLabel = runtimeDetails.label,
                 statusLabel = listOfNotNull(
@@ -2986,28 +3088,28 @@ internal fun ReaderScreen(
                 ) {
                     OutlinedButton(
                         onClick = onDissolve,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).then(if (LocalMaterial3.current) Modifier.height(40.dp) else Modifier),
                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
                     ) {
-                        Icon(Icons.Default.Archive, null, Modifier.size(18.dp))
+                        Icon(Icons.Default.Archive, null, Modifier.size(if (LocalMaterial3.current) 20.dp else 18.dp))
                         Spacer(Modifier.size(4.dp))
                         Text("Archive", maxLines = 1, softWrap = false)
                     }
                     OutlinedButton(
                         onClick = { reminderDialogVisible = true },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).then(if (LocalMaterial3.current) Modifier.height(40.dp) else Modifier),
                         contentPadding = PaddingValues(horizontal = 2.dp, vertical = 8.dp),
                     ) {
-                        Icon(Icons.Default.Schedule, null, Modifier.size(18.dp))
+                        Icon(Icons.Default.Schedule, null, Modifier.size(if (LocalMaterial3.current) 20.dp else 18.dp))
                         Spacer(Modifier.size(4.dp))
                         Text("Remind", maxLines = 1, softWrap = false)
                     }
                     OutlinedButton(
                         onClick = onArchiveToggle,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).then(if (LocalMaterial3.current) Modifier.height(40.dp) else Modifier),
                         contentPadding = PaddingValues(horizontal = 2.dp, vertical = 8.dp),
                     ) {
-                        Icon(Icons.Default.Sync, null, Modifier.size(18.dp))
+                        Icon(Icons.Default.Sync, null, Modifier.size(if (LocalMaterial3.current) 20.dp else 18.dp))
                         Spacer(Modifier.size(2.dp))
                         Text(if (archived) "Open" else "Wait", maxLines = 1, softWrap = false)
                     }
@@ -3030,7 +3132,7 @@ internal fun ReaderScreen(
                                     Modifier.padding(start = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    Icon(Icons.Default.Image, "Image attachment", Modifier.size(18.dp))
+                                    Icon(Icons.Default.Image, "Image attachment", Modifier.size(if (LocalMaterial3.current) 20.dp else 18.dp))
                                     Text(
                                         "Image ${index + 1}",
                                         modifier = Modifier.padding(horizontal = 5.dp),
@@ -3041,7 +3143,7 @@ internal fun ReaderScreen(
                                         onClick = {
                                             imageAttachments = imageAttachments.filterNot { it == url }
                                         },
-                                        modifier = Modifier.size(30.dp),
+                                        modifier = Modifier.size(if (LocalMaterial3.current) 48.dp else 30.dp),
                                     ) {
                                         Icon(Icons.Default.Close, "Remove image ${index + 1}")
                                     }
@@ -3056,7 +3158,8 @@ internal fun ReaderScreen(
                 OutlinedTextField(
                     value = promptField,
                     onValueChange = { promptField = it },
-                    modifier = Modifier.fillMaxWidth().focusRequester(promptFocusRequester),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = if (LocalMaterial3.current) 56.dp else 0.dp).focusRequester(promptFocusRequester),
+                    filled = LocalMaterial3.current,
                     placeholder = {
                         Text("Message this session")
                     },
@@ -3089,7 +3192,7 @@ internal fun ReaderScreen(
                                 ) {
                                     DropdownMenuItem(
                                         text = { Text("Add image") },
-                                        leadingIcon = { Icon(Icons.Default.Image, null, Modifier.size(18.dp)) },
+                                        leadingIcon = { Icon(Icons.Default.Image, null, Modifier.size(if (LocalMaterial3.current) 20.dp else 18.dp)) },
                                         onClick = {
                                             attachMenuExpanded = false
                                             if (screencast.configured) {
@@ -3103,7 +3206,7 @@ internal fun ReaderScreen(
                                     )
                                     DropdownMenuItem(
                                         text = { Text("Use skill") },
-                                        leadingIcon = { Icon(Icons.Default.Build, null, Modifier.size(18.dp)) },
+                                        leadingIcon = { Icon(Icons.Default.Build, null, Modifier.size(if (LocalMaterial3.current) 20.dp else 18.dp)) },
                                         onClick = {
                                             attachMenuExpanded = false
                                             skillMenuExpanded = true
@@ -3161,9 +3264,9 @@ internal fun ReaderScreen(
                                 onClick = submitPrompt,
                                 enabled = sendEnabled,
                                 modifier = Modifier
-                                    .padding(2.dp)
+                                    .then(if (LocalMaterial3.current) Modifier.minimumInteractiveComponentSize().size(40.dp) else Modifier.padding(2.dp))
                                     .background(
-                                        if (sendEnabled) MaterialTheme.colorScheme.primary else {
+                                        if (LocalMaterial3.current || sendEnabled) MaterialTheme.colorScheme.primary else {
                                             MaterialTheme.colorScheme.surfaceVariant
                                         },
                                         CircleShape,
@@ -3175,7 +3278,7 @@ internal fun ReaderScreen(
                                     Icon(
                                         Icons.AutoMirrored.Filled.Send,
                                         "Send prompt",
-                                        tint = if (sendEnabled) MaterialTheme.colorScheme.onPrimary else {
+                                        tint = if (LocalMaterial3.current || sendEnabled) MaterialTheme.colorScheme.onPrimary else {
                                             MaterialTheme.colorScheme.onSurfaceVariant
                                         },
                                     )

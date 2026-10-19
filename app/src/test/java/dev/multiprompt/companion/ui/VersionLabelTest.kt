@@ -274,6 +274,35 @@ class VersionLabelTest {
     }
 
     @Test
+    fun material3ReaderVersionUsesTinyMonospaceOutlineAndKeepsReleaseNotesAction() {
+        compose.setContent {
+            MultipromptTheme(sunlight = sunlight.value, material3 = true) {
+                ReaderTopBar(
+                    session = session,
+                    modelLabel = "Claude Opus · high",
+                    onModelCommand = {},
+                    onOpenTerminal = {},
+                    onReleaseNotes = { clicks++ },
+                    onMenuClick = {},
+                    menuContent = {},
+                )
+            }
+        }
+        listOf(false, true).forEachIndexed { index, light ->
+            compose.runOnIdle { sunlight.value = light }
+            val version = checkLayout(session.displayName, "Session actions")
+            val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            version.fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action!!.invoke(results)
+            val style = results.single().layoutInput.style
+            assertEquals(10f, style.fontSize.value)
+            assertEquals(androidx.compose.ui.text.font.FontFamily.Monospace, style.fontFamily)
+            assertEquals(if (light) Material3LightColors.outline else Material3DarkColors.outline, style.color)
+            version.performClick()
+            compose.runOnIdle { assertEquals(index + 1, clicks) }
+        }
+    }
+
+    @Test
     fun terminalVersionIsFirstActionAndOpensReleaseNotes() {
         render {
             TerminalTopBar(

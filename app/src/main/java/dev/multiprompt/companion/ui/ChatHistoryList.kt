@@ -149,20 +149,20 @@ private fun HistoryBubble(
     gate: ReplySwipeGate,
     onReply: (String, Boolean) -> Unit,
 ) {
-    val fontSize = (14f * fontScale).sp
+    val fontSize = chatFontSize((14f * fontScale).sp, fontScale)
     val isUser = role == "user"
     ReplyableBubble(isUser = isUser, sunlight = sunlight, text = text,
         onReply = { onReply(it, isUser) }, gate = gate) {
-        Text(author, fontFamily = ChatFontFamily, fontSize = (fontSize.value - 3f).coerceAtLeast(8f).sp,
+        Text(author, fontFamily = chatFontFamily(), fontSize = (fontSize.value - 3f).coerceAtLeast(8f).sp,
             color = chatHintColor(sunlight))
         if (isUser) {
-            Text(terminalLinks(text, sunlight), fontFamily = ChatFontFamily, fontSize = fontSize,
-                lineHeight = (fontSize.value * 1.5f).sp, color = chatTextColor(sunlight))
+            Text(terminalLinks(text, sunlight), fontFamily = chatFontFamily(), fontSize = fontSize,
+                lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, fontScale), color = chatTextColor(sunlight))
         } else {
-            MarkdownText(text = text, fontSize = fontSize, color = chatTextColor(sunlight), linkColor = terminalBlue(sunlight))
+            MarkdownText(text = text, fontSize = fontSize, color = chatTextColor(sunlight), linkColor = chatLinkColor(terminalBlue(sunlight)))
         }
         if (timestamp.isNotEmpty()) {
-            Text(formatChatTime(timestamp), fontFamily = ChatFontFamily,
+            Text(formatChatTime(timestamp), fontFamily = chatFontFamily(),
                 fontSize = (fontSize.value - 3f).coerceAtLeast(8f).sp, color = chatHintColor(sunlight))
         }
     }

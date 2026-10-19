@@ -1,10 +1,16 @@
 package dev.multiprompt.companion.ui
 
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.MenuDefaults
+import androidx.compose.material3.TextField as M3TextField
+import androidx.compose.material3.DropdownMenu as M3DropdownMenu
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField as M3OutlinedTextField
 import androidx.compose.material3.Button as M3Button
@@ -44,7 +50,12 @@ fun OutlinedButton(
     enabled: Boolean = true,
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
     content: @Composable RowScope.() -> Unit,
-) = M3OutlinedButton(onClick, modifier, enabled, shape = chromeShape(ControlShape), contentPadding = contentPadding, content = content)
+) = M3OutlinedButton(onClick, modifier, enabled, shape = if (LocalMaterial3.current) RoundedCornerShape(percent = 50) else ControlShape,
+    border = if (LocalMaterial3.current) {
+        androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    } else ButtonDefaults.outlinedButtonBorder(enabled),
+    colors = if (LocalMaterial3.current) ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant) else ButtonDefaults.outlinedButtonColors(),
+    contentPadding = contentPadding, content = content)
 
 @Composable
 fun OutlinedTextField(
@@ -64,7 +75,33 @@ fun OutlinedTextField(
     singleLine: Boolean = false,
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
     minLines: Int = 1,
-) = M3OutlinedTextField(
+    filled: Boolean = false,
+    search: Boolean = false,
+) = if (filled) M3TextField(
+    value = value,
+    onValueChange = onValueChange,
+    modifier = modifier,
+    readOnly = readOnly,
+    placeholder = placeholder,
+    leadingIcon = leadingIcon,
+    trailingIcon = trailingIcon,
+    keyboardOptions = keyboardOptions,
+    keyboardActions = keyboardActions,
+    singleLine = singleLine,
+    maxLines = maxLines,
+    minLines = minLines,
+    shape = RoundedCornerShape(28.dp),
+    textStyle = MaterialTheme.typography.bodyLarge,
+    colors = TextFieldDefaults.colors(
+        focusedContainerColor = if (search) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainer,
+        unfocusedContainerColor = if (search) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainer,
+        focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+        unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+        disabledIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+        focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    ),
+) else M3OutlinedTextField(
     value = value,
     onValueChange = onValueChange,
     modifier = modifier,
@@ -102,8 +139,33 @@ fun OutlinedTextField(
     singleLine: Boolean = false,
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
     minLines: Int = 1,
+    filled: Boolean = false,
     shape: Shape = chromeShape(ControlShape),
-) = M3OutlinedTextField(
+) = if (filled) M3TextField(
+    value = value,
+    onValueChange = onValueChange,
+    modifier = modifier,
+    readOnly = readOnly,
+    placeholder = placeholder,
+    leadingIcon = leadingIcon,
+    trailingIcon = trailingIcon,
+    keyboardOptions = keyboardOptions,
+    keyboardActions = keyboardActions,
+    singleLine = singleLine,
+    maxLines = maxLines,
+    minLines = minLines,
+    shape = RoundedCornerShape(28.dp),
+    textStyle = MaterialTheme.typography.bodyLarge,
+    colors = TextFieldDefaults.colors(
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+        focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+        unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+        disabledIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+        focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    ),
+) else M3OutlinedTextField(
     value = value,
     onValueChange = onValueChange,
     modifier = modifier,
@@ -121,4 +183,19 @@ fun OutlinedTextField(
     maxLines = maxLines,
     minLines = minLines,
     shape = shape,
+)
+
+@Composable
+fun DropdownMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) = M3DropdownMenu(
+    expanded = expanded,
+    onDismissRequest = onDismissRequest,
+    modifier = modifier,
+    shape = if (LocalMaterial3.current) RoundedCornerShape(8.dp) else MenuDefaults.shape,
+    containerColor = if (LocalMaterial3.current) MaterialTheme.colorScheme.surfaceContainer else MenuDefaults.containerColor,
+    content = content,
 )

@@ -1,0 +1,112 @@
+package dev.multiprompt.companion.ui
+
+import android.app.Application
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.ParameterizedRobolectricTestRunner
+import org.robolectric.ParameterizedRobolectricTestRunner.Parameters
+import org.robolectric.annotation.Config
+
+@RunWith(ParameterizedRobolectricTestRunner::class)
+@Config(sdk = [34], application = Application::class, qualifiers = "w411dp-h891dp-mdpi")
+class Material3LookTest(private val screen: M3Screen, private val sunlight: Boolean) {
+    @get:Rule
+    val compose = createComposeRule()
+
+    @Test
+    fun wireframeLayoutAndEveryClickableTouchTarget() {
+        compose.setContent { M3TestScreen(screen, material3 = true, sunlight = sunlight) }
+        compose.openM3Screen(screen)
+        val clickable = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsActions.OnClick), useUnmergedTree = true).fetchSemanticsNodes()
+        assertTrue(clickable.isNotEmpty())
+        clickable.forEach { node ->
+            val bounds = node.touchBoundsInRoot
+            assertTrue("screen=$screen ${node.config} touch=$bounds", bounds.width >= 48f && bounds.height >= 48f)
+        }
+        if (screen == M3Screen.SESSION || screen == M3Screen.SESSION_MENU) {
+            compose.onNodeWithText("Conversation").assertDoesNotExist()
+            listOf("Scroll agent history up", "Open agent history", "Back to live").forEach {
+                compose.onNodeWithContentDescription(it).assertDoesNotExist()
+            }
+            val titleLayouts = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithText("claude-reader", useUnmergedTree = true)
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(titleLayouts) }
+            assertEquals(22f, titleLayouts.single().layoutInput.style.fontSize.value)
+            val subtitleLayouts = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithText("Opus 5.5 · medium · waiting for input", useUnmergedTree = true)
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(subtitleLayouts) }
+            val subtitleStyle = subtitleLayouts.single().layoutInput.style
+            assertEquals(12f, subtitleStyle.fontSize.value)
+            assertEquals(if (sunlight) Material3LightColors.onSurfaceVariant else Material3DarkColors.onSurfaceVariant, subtitleStyle.color)
+            val send = compose.onNodeWithContentDescription("Send prompt").fetchSemanticsNode().boundsInRoot
+            assertEquals(40f, send.width, 0.01f)
+            assertEquals(40f, send.height, 0.01f)
+            val field = compose.onNode(hasSetTextAction()).fetchSemanticsNode().boundsInRoot
+            assertTrue("composer=$field", field.height >= 56f)
+            listOf("Archive", "Remind", "Wait").forEach { label ->
+                val target = compose.onNodeWithText(label).fetchSemanticsNode().touchBoundsInRoot
+                assertTrue("$label=$target", target.height >= 48f)
+            }
+        } else {
+            val tab = compose.onNodeWithText("All").fetchSemanticsNode()
+            val row = compose.onNodeWithText("claude-reader").fetchSemanticsNode()
+            assertTrue("tab=${tab.boundsInRoot} row=${row.boundsInRoot}", tab.boundsInRoot.bottom <= row.boundsInRoot.top)
+            assertTrue("row=${row.boundsInRoot}", row.boundsInRoot.height >= 72f)
+            val texts = compose.onAllNodes(SemanticsMatcher("all") { true }, useUnmergedTree = true).fetchSemanticsNodes()
+                .flatMap { it.config.getOrElse(SemanticsProperties.Text) { emptyList() } }.map { it.text }
+            assertTrue("Avatar initials must be decorative: $texts", "C" !in texts && "CR" !in texts && "CT" !in texts)
+        }
+    }
+
+    @Test
+    fun deterministicOrangeSchemeAndDefaultTypeScaleOnAndroid34() {
+        var primary = Color.Unspecified
+        var actualScheme: androidx.compose.material3.ColorScheme? = null
+        var family: androidx.compose.ui.text.font.FontFamily? = null
+        compose.setContent {
+            MultipromptTheme(sunlight = sunlight, material3 = true) {
+                val scheme = MaterialTheme.colorScheme
+                val typography = MaterialTheme.typography
+                SideEffect {
+                    actualScheme = scheme
+                    primary = scheme.primary
+                    family = typography.bodyLarge.fontFamily
+                }
+                androidx.compose.material3.Text("Title", style = typography.titleLarge)
+            }
+        }
+        compose.waitForIdle()
+        assertEquals(if (sunlight) Material3LightColors else Material3DarkColors, actualScheme)
+        assertEquals(if (sunlight) Color(0xFF8A5022) else Color(0xFFFFB784), primary)
+        assertEquals(androidx.compose.ui.text.font.FontFamily.SansSerif, family)
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText("Title").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertEquals(22f, layouts.single().layoutInput.style.fontSize.value)
+        val target = if (sunlight) Color(0xFF8F4C27) else Color(0xFFFFB68E)
+        val maxDeviation = listOf(kotlin.math.abs(primary.red - target.red), kotlin.math.abs(primary.green - target.green), kotlin.math.abs(primary.blue - target.blue)).max() * 255
+        assertTrue("primary deviation=$maxDeviation", maxDeviation <= if (sunlight) 5.01f else 10.01f)
+    }
+
+    companion object {
+        @JvmStatic
+        @Parameters(name = "{0}-sunlight={1}")
+        fun parameters(): List<Array<Any>> = M3Screen.entries.flatMap { screen ->
+            listOf(false, true).map { sunlight -> arrayOf(screen, sunlight) }
+        }
+    }
+}
