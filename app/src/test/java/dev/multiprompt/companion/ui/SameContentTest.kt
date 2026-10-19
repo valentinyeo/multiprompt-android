@@ -41,17 +41,17 @@ class SameContentTest(private val screen: M3Screen, private val sunlight: Boolea
     val compose = createComposeRule()
 
     @Test
-    fun contentMultisetAndRegionOrderAreIdentical() {
+    fun sharedContentMultisetAndRegionOrderAreIdentical() {
         val material3 = mutableStateOf(false)
         compose.setContent {
             key(material3.value) { M3TestScreen(screen, material3.value, sunlight) }
         }
         compose.openM3Screen(screen)
-        val classic = regions()
+        val classic = regions(material3 = false)
         assertTrue("Fixture must expose text and descriptions", classic.getValue("all").any { it.startsWith("text:") } && classic.getValue("all").any { it.startsWith("description:") })
         compose.runOnIdle { material3.value = true }
         compose.openM3Screen(screen)
-        val m3 = regions()
+        val m3 = regions(material3 = true)
         if (screen == M3Screen.SESSION || screen == M3Screen.SESSION_MENU) {
             assertTrue(classic.getValue("chat messages").isNotEmpty())
         } else {
@@ -67,11 +67,19 @@ class SameContentTest(private val screen: M3Screen, private val sunlight: Boolea
         }
     }
 
-    private fun regions(): Map<String, List<String>> {
+    private fun regions(material3: Boolean): Map<String, List<String>> {
         val nodes = compose.onAllNodes(SemanticsMatcher("all") { true }, useUnmergedTree = true).fetchSemanticsNodes()
+        val activities = nodes.filter { it.config.getOrElse(SemanticsProperties.TestTag) { "" } == "Session activity" }
+        val badges = nodes.filter { it.config.getOrElse(SemanticsProperties.ContentDescription) { emptyList() } == listOf("Unread") }
+        val inbox = screen != M3Screen.SESSION && screen != M3Screen.SESSION_MENU
+        val rowCount = if (screen == M3Screen.INBOX_SEARCH || screen == M3Screen.INBOX_SPLITS) 1 else 2
+        assertEquals(if (material3 && inbox) rowCount else 0, activities.size)
+        assertEquals(if (material3 && inbox) 1 else 0, badges.size)
         fun ancestors(node: SemanticsNode) = generateSequence(node) { it.parent }
         fun subtree(node: SemanticsNode): List<SemanticsNode> = listOf(node) + node.children.flatMap { subtree(it) }
         fun tokens(node: SemanticsNode): List<String> = buildList {
+            if (node.config.getOrElse(SemanticsProperties.TestTag) { "" } == "Session activity" ||
+                node.config.getOrElse(SemanticsProperties.ContentDescription) { emptyList() } == listOf("Unread")) return@buildList
             node.config.getOrElse(SemanticsProperties.Text) { emptyList() }.forEach { add("text:${it.text}") }
             node.config.getOrElse(SemanticsProperties.ContentDescription) { emptyList() }.forEach { add("description:$it") }
             node.config.getOrElseNullable(SemanticsProperties.EditableText) { null }?.let { add("editable:${it.text}") }

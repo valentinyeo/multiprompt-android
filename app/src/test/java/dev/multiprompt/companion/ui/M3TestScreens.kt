@@ -30,7 +30,7 @@ import org.robolectric.util.ReflectionHelpers
 enum class M3Screen { INBOX_SPLITS, INBOX_SEARCH, INBOX_LIST, SESSION, INBOX_MENU, SESSION_MENU }
 
 private val testHost = HostProfile("host", "VPS", "example.com", username = "user", keySecretId = "key")
-private val testSession = TmuxSession("host", "claude-reader", 1, 0, 20, preview = "Ready for your next prompt")
+private val testSession = TmuxSession("host", "claude-reader", 1, 0, System.currentTimeMillis() / 1000 - 120, preview = "Ready for your next prompt")
 private val testWorkspace = Workspace("work", "Android", "host", "/home/user/android")
 
 @Composable
@@ -51,10 +51,11 @@ private fun InboxFixture(screen: M3Screen, material3: Boolean, sunlight: Boolean
     SessionsScreen(
         state = AppUiState(
             hosts = listOf(testHost),
-            sessions = listOf(testSession, testSession.copy(name = "codex-tests", lastActivityEpochSeconds = 10)),
+            sessions = listOf(testSession, testSession.copy(name = "codex-tests", lastActivityEpochSeconds = testSession.lastActivityEpochSeconds - 600)),
             workspaces = listOf(testWorkspace),
             workspaceSplitIds = listOf(null, testWorkspace.id),
             sessionWorkspaceIds = mapOf(SessionReadStore.key("host", testSession.name) to testWorkspace.id),
+            unreadSessionKeys = setOf(SessionReadStore.key("host", testSession.name)),
             newestSessionsAtBottom = false,
             selectedWorkspaceId = if (screen == M3Screen.INBOX_SPLITS) testWorkspace.id else null,
         ),

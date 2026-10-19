@@ -11,6 +11,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
+import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -2132,14 +2133,16 @@ private fun SessionCard(
                         )
                     }
                 }
-                Box(
-                    Modifier
-                        .size(if (LocalMaterial3.current && unread) 20.dp else 7.dp)
-                        .background(
-                            if (unread) MaterialTheme.colorScheme.primary else Color.Transparent,
-                            CircleShape,
-                        ),
-                )
+                if (!LocalMaterial3.current) {
+                    Box(
+                        Modifier
+                            .size(7.dp)
+                            .background(
+                                if (unread) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                CircleShape,
+                            ),
+                    )
+                }
                 if (LocalMaterial3.current) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), content = title)
@@ -2148,6 +2151,35 @@ private fun SessionCard(
                 } else {
                     title()
                     metadata()
+                }
+                if (LocalMaterial3.current) {
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            DateUtils.getRelativeTimeSpanString(
+                                session.lastActivityEpochSeconds * 1000,
+                                System.currentTimeMillis(),
+                                DateUtils.MINUTE_IN_MILLIS,
+                                DateUtils.FORMAT_ABBREV_RELATIVE,
+                            ).toString(),
+                            modifier = Modifier.testTag("Session activity"),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp,
+                            lineHeight = 16.sp,
+                            maxLines = 1,
+                        )
+                        if (unread) {
+                            Box(
+                                Modifier
+                                    .widthIn(min = 20.dp)
+                                    .height(20.dp)
+                                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                    .semantics { contentDescription = "Unread" },
+                            )
+                        }
+                    }
                 }
                 Box {
                     IconButton(onClick = { menuExpanded = true }) {
