@@ -9,6 +9,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import dev.multiprompt.companion.dictation.DictationState
 import dev.multiprompt.companion.dictation.DictationStatus
+import dev.multiprompt.companion.reader.ChatHistoryCache
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.terminal.TerminalInputTracker
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,7 +32,8 @@ class SessionInputTest {
 
     @Before fun setup() {
         f = SessionActivityFixture()
-        connection = SessionReaderConnection(f.app.sshRepository, f.host, f.session.name)
+        connection = SessionReaderConnection(f.app.sshRepository, f.host, f.session.name, historyScript = byteArrayOf(),
+            historyCache = ChatHistoryCache(f.app.cacheDir.resolve("session-input-history")))
     }
     @After fun cleanup() { connection.close(); f.close() }
 
