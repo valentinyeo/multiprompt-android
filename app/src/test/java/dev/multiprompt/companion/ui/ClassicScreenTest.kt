@@ -46,7 +46,7 @@ class ClassicScreenTest {
     }
 
     private fun settingsStyles(): List<TextStyle> = listOf(
-        "Session list settings", "Newest sessions at bottom", "Theme", "Default Reader font size", "Done",
+        "Session list settings", "Newest sessions at bottom", "Theme", "Default Reader font size", "Normal",
     ).map { text ->
         val layouts = mutableListOf<TextLayoutResult>()
         compose.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }

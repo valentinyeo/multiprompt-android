@@ -113,7 +113,15 @@ data class AppUiState(
     val readerSwipeOrder: List<String> = emptyList(),
     val terminalFromReader: Boolean = false,
     val newSession: NewSessionPicker? = null,
-)
+) {
+    val showFrequentSplit: Boolean get() = accountLayout?.settings?.get("frequent") ?: true
+    val showFavoritesSplit: Boolean get() = accountLayout?.settings?.get("favorites") ?: true
+    val showAllSplit: Boolean get() = accountLayout?.settings?.get("all") ?: true
+    val frequentFirst: Boolean get() = accountLayout?.settings?.get("frequent_first") ?: true
+    val visibleWorkspaceSplitIds: List<String?> get() = inboxSplitIds(
+        workspaceSplitIds, allSplitOnRight, showFrequentSplit, showFavoritesSplit, showAllSplit, frequentFirst,
+    )
+}
 
 enum class NewSessionStep { HOST, PATH, HARNESS, EXISTING }
 
@@ -182,7 +190,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             appTheme = sessionReads.appTheme(),
             dissolvedSessions = dissolvedStore.load(),
             crashReport = crashReportStore.load(),
-        ),
+        ).let { initial ->
+            initial.copy(selectedWorkspaceId = if (null in initial.visibleWorkspaceSplitIds) null else initial.visibleWorkspaceSplitIds.first())
+        },
     )
     val state: StateFlow<AppUiState> = _state.asStateFlow()
 
@@ -293,6 +303,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setAllSplitOnRight(enabled: Boolean) {
         sessionReads.setAllSplitOnRight(enabled)
         _state.update { it.copy(allSplitOnRight = enabled) }
+    }
+
+    fun setSessionListSetting(key: String, enabled: Boolean) {
+        editAccountLayout { it.setSetting(key, enabled) }?.let { error -> _state.update { it.copy(accountError = error) } }
     }
 
     fun setReaderDefaultFontScale(scale: Float) {
@@ -454,14 +468,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 sessionEtas = it.sessionEtas.filterKeys { key -> !key.startsWith(sessionPrefix) },
                 workspaces = workspaces,
                 workspaceSplitIds = it.workspaceSplitIds.filter { id -> id == null || id in workspaceIds },
-                selectedWorkspaceId = it.selectedWorkspaceId?.takeIf { id -> id == FAVORITES_SPLIT_ID || id == FREQUENT_SPLIT_ID || id in workspaceIds },
                 sessions = it.sessions.filterNot { session -> session.hostId == host.id },
                 hostErrors = it.hostErrors - host.id,
                 cachedHostIds = it.cachedHostIds - host.id,
                 updatingHostIds = it.updatingHostIds - host.id,
                 dissolvedSessions = it.dissolvedSessions.filterNot { session -> session.hostId == host.id },
                 pendingHostKeys = it.pendingHostKeys - host.id,
-            )
+            ).let { next ->
+                next.copy(selectedWorkspaceId = if (it.selectedWorkspaceId in next.visibleWorkspaceSplitIds) it.selectedWorkspaceId else next.visibleWorkspaceSplitIds.first())
+            }
         }
     }
 
@@ -579,15 +594,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) }
         val orderedWorkspaces = current.workspaces
         val workspaceSplitIds = listOf(null) + orderedWorkspaces.map { it.id }
-        val selectedWorkspaceId = when {
-            !current.workspaceSelectionInitialized -> workspaceSplitIds.firstOrNull()
-            current.selectedWorkspaceId == null -> null
-            current.selectedWorkspaceId == FAVORITES_SPLIT_ID -> FAVORITES_SPLIT_ID
-            current.selectedWorkspaceId == FREQUENT_SPLIT_ID -> FREQUENT_SPLIT_ID
-            orderedWorkspaces.any { it.id == current.selectedWorkspaceId } ->
-                current.selectedWorkspaceId
-            else -> workspaceSplitIds.firstOrNull()
-        }
+        val visibleSplitIds = current.copy(workspaceSplitIds = workspaceSplitIds).visibleWorkspaceSplitIds
+        val selectedWorkspaceId = if (current.selectedWorkspaceId in visibleSplitIds) current.selectedWorkspaceId else visibleSplitIds.first()
         val etaNow = System.currentTimeMillis()
         val sessionEtas = results
             .filter { it.error == null }
@@ -774,7 +782,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectWorkspace(workspaceId: String?) {
         _state.update {
-            it.copy(selectedWorkspaceId = workspaceId, workspaceSelectionInitialized = true)
+            it.copy(selectedWorkspaceId = if (workspaceId in it.visibleWorkspaceSplitIds) workspaceId else it.visibleWorkspaceSplitIds.first(), workspaceSelectionInitialized = true)
         }
     }
 
@@ -828,7 +836,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun resetWorkspaceSplitOrder() { publishAccountLayout() }
 
     fun openAdjacentWorkspace(delta: Int) {
-        val splits = inboxSplitIds(_state.value.workspaceSplitIds, _state.value.allSplitOnRight)
+        val splits = _state.value.visibleWorkspaceSplitIds
         val index = splits.indexOf(_state.value.selectedWorkspaceId).coerceAtLeast(0)
         selectWorkspace(splits[Math.floorMod(index + delta, splits.size)])
     }
@@ -1378,14 +1386,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }.toMap()
             current.copy(accountLayout = layout, accountPending = pendingLayout?.dirty == true, accountHosts = mapping,
                 workspaces = workspaces, workspaceSplitIds = listOf(null) + workspaces.map { it.id }, sessionWorkspaceIds = assignments,
-                selectedWorkspaceId = current.selectedWorkspaceId?.takeIf { it == FAVORITES_SPLIT_ID || it == FREQUENT_SPLIT_ID || it in layout?.workspaces.orEmpty() },
                 readerSession = current.readerSession?.let { open ->
                     layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping) } ?: open
                 },
                 terminalSession = current.terminalSession?.let { open ->
                     layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping) } ?: open
                 },
-            )
+            ).let { next ->
+                next.copy(selectedWorkspaceId = if (current.selectedWorkspaceId in next.visibleWorkspaceSplitIds) current.selectedWorkspaceId else next.visibleWorkspaceSplitIds.first())
+            }
         }
     }
 
