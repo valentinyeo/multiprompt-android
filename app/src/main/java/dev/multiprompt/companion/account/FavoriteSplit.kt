@@ -9,6 +9,6 @@ fun isFavoriteSession(session: TmuxSession, layout: AccountLayout?, mapping: Map
     layout?.let { AccountHostMap.tabFor(session, it, mapping) }?.favorite == true
 
 fun inboxSplitIds(workspaceSplitIds: List<String?>, allOnRight: Boolean): List<String?> =
-    (if (allOnRight) workspaceSplitIds.asReversed() else workspaceSplitIds).flatMap {
-        if (it == null) listOf(null, FAVORITES_SPLIT_ID, FREQUENT_SPLIT_ID) else listOf(it)
+    listOf(FREQUENT_SPLIT_ID) + (if (allOnRight) workspaceSplitIds.asReversed() else workspaceSplitIds).flatMap {
+        if (it == null) listOf(null, FAVORITES_SPLIT_ID) else listOf(it)
     }

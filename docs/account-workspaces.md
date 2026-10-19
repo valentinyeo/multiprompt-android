@@ -44,13 +44,30 @@ Inbox shows gold stars synced with the laptop; signed-in account tabs offer Star
 The ★ Favorites split stays just after All and shows only starred account sessions.
 Android negotiates favorite metadata and preserves absent values without inventing stars.
 
-Frequent stays next to Favorites and lists matching account sessions used in the last
-48 hours, newest first, including future timestamps but excluding zero or unknown.
-Android negotiates `favorite,used`; `used` is an optional safe-integer epoch time in
-milliseconds, merged by maximum. Opening a reader or terminal, sending a message,
-and terminal input stamp it locally. Stamp-only uploads require a value more than
-10 minutes newer than the last sent or received value for that tab; other layout
-edits and conflict retries still use the normal revisioned PUT path.
+Frequent is the first split. It includes tabs with at least three visits in the last
+six hours, the local session currently open in the foreground reader/terminal, and
+the tab holding the newest visit anywhere in the layout if that visit is within
+six hours. Future values count. Sessions are ordered by newest visit (now for the
+local front session), with the newest row at the bottom, next to the split bar,
+regardless of the Inbox newest-at-bottom setting. Selection uses stable split IDs,
+not stored indices, so moving Frequent does not change the selected split.
+
+Android negotiates `X-Layout-Features: favorite,used,visits`. Optional per-tab
+`visits` is a unique ascending array of at most eight non-negative safe-integer
+Unix-epoch millisecond values; absent means unknown. A foreground reader/terminal
+front period records one visit after ten seconds, using the period's start time.
+Switching sessions, closing the session or backgrounding the app cancels the dwell;
+returning starts a new period. Shorter periods record and upload no visit.
+Local/server visits merge by union, deduplication, ascending sort and newest-eight
+cap, including across conflicts and PUT acknowledgements. Omission never erases
+known visits. A new visit persists and triggers sync immediately, independently
+of the used-stamp throttle.
+
+`used` remains an optional safe-integer epoch time in milliseconds, merged by
+maximum for older apps. Opening a reader or terminal, sending a message, and
+terminal input still stamp it locally. Stamp-only uploads require a value more
+than ten minutes newer than the last sent or received value for that tab; other
+layout edits and conflict retries still use the normal revisioned PUT path.
 Terminal input tracking uses the library's modifier-reset hook after processed
 hardware or IME input, not its keyboard-output callback, which also carries
 automatic replies to remote terminal queries. Output, polling, history browsing

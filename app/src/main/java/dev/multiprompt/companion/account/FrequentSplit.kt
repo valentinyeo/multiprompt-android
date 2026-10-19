@@ -5,15 +5,32 @@ import dev.multiprompt.companion.model.TmuxSession
 
 const val FREQUENT_SPLIT_ID = "\u0000frequent"
 
+const val VISIT_WINDOW = 6 * 60 * 60 * 1000L
+const val MIN_VISITS = 3
+const val DWELL = 10_000L
+const val MAX_VISITS = 8
+
+fun mergeVisits(vararg values: List<Long>?): List<Long>? =
+    if (values.all { it == null }) null else values.filterNotNull().flatten().distinct().sorted().takeLast(MAX_VISITS)
+
 fun frequentSessions(
     sessions: List<TmuxSession>,
     layout: AccountLayout?,
     mapping: Map<Int, HostProfile>,
     now: Long,
-): List<TmuxSession> = sessions.mapNotNull { session ->
-    val used = layout?.let { AccountHostMap.tabFor(session, it, mapping) }?.used ?: return@mapNotNull null
-    if (used != 0L && (used > now || now - used <= 48 * 60 * 60 * 1000L)) session to used else null
-}.sortedByDescending { it.second }.map { it.first }
+    localFront: TmuxSession? = null,
+): List<TmuxSession> {
+    val newest = layout?.tabs?.mapNotNull { it.visits?.lastOrNull() }?.maxOrNull()
+    return sessions.mapNotNull { session ->
+        val visits = layout?.let { AccountHostMap.tabFor(session, it, mapping) }?.visits.orEmpty()
+        val front = localFront?.let { it.hostId == session.hostId && it.name.equals(session.name, ignoreCase = true) } == true
+        val latest = visits.lastOrNull()
+        if (front || visits.count { it >= now - VISIT_WINDOW } >= MIN_VISITS ||
+            latest != null && latest == newest && latest >= now - VISIT_WINDOW) {
+            session to if (front) now else latest!!
+        } else null
+    }.sortedByDescending { it.second }.map { it.first }
+}
 
 class UsedStampThrottle(initial: AccountLayout? = null) {
     private val known = mutableMapOf<String, Long>()

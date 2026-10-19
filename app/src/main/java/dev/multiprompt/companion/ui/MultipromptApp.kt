@@ -1098,6 +1098,7 @@ internal fun SessionsScreen(
     crashReport: CrashReport?,
     onClearCrashReport: () -> Unit,
     onAddHost: () -> Unit,
+    nowMillis: () -> Long = System::currentTimeMillis,
     material3: Boolean = BuildConfig.MATERIAL3,
 ) = MultipromptTheme(
     sunlight = when (appTheme) {
@@ -1440,10 +1441,10 @@ internal fun SessionsScreen(
         )
     }
     val anyEta = state.sessionEtas.isNotEmpty() || state.selectedWorkspaceId == FREQUENT_SPLIT_ID
-    var etaNowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+    var etaNowMillis by remember { mutableStateOf(nowMillis()) }
     LaunchedEffect(anyEta) {
         while (anyEta) {
-            etaNowMillis = System.currentTimeMillis()
+            etaNowMillis = nowMillis()
             delay(1_000)
         }
     }
@@ -1470,7 +1471,8 @@ internal fun SessionsScreen(
                 )
         }
     val visibleSessions = if (state.selectedWorkspaceId == FREQUENT_SPLIT_ID) {
-        frequentSessions(matchingSessions, state.accountLayout, state.accountHosts, etaNowMillis)
+        frequentSessions(matchingSessions, state.accountLayout, state.accountHosts, etaNowMillis,
+            state.terminalSession ?: state.readerSession)
     } else SessionSearch.newestFirst(matchingSessions, state.sessionInteractionEpochSeconds)
     val visibleDissolvedSessions = if (state.sessionBucket == SessionBucket.ARCHIVE && state.selectedWorkspaceId != FAVORITES_SPLIT_ID && state.selectedWorkspaceId != FREQUENT_SPLIT_ID) {
         state.dissolvedSessions.filter { session ->
@@ -1633,7 +1635,7 @@ internal fun SessionsScreen(
                 .fillMaxWidth()
                 .horizontalSwipe(onSwitchWorkspace, PointerEventPass.Final),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-            reverseLayout = normalizedQuery.isBlank() && state.newestSessionsAtBottom && state.selectedWorkspaceId != FREQUENT_SPLIT_ID,
+            reverseLayout = normalizedQuery.isBlank() && (state.newestSessionsAtBottom || state.selectedWorkspaceId == FREQUENT_SPLIT_ID),
         ) {
             state.hostErrors.forEach { (hostId, error) ->
                 if (hostId !in state.cachedHostIds) {
@@ -1688,7 +1690,7 @@ internal fun SessionsScreen(
                         when {
                             normalizedQuery.isNotBlank() -> "No sessions match “$normalizedQuery”"
                             state.selectedWorkspaceId == FAVORITES_SPLIT_ID -> "No starred sessions"
-                            state.selectedWorkspaceId == FREQUENT_SPLIT_ID -> "No recently used sessions"
+                            state.selectedWorkspaceId == FREQUENT_SPLIT_ID -> "No frequent sessions"
                             state.sessionBucket == SessionBucket.ARCHIVE -> "No archived sessions"
                             state.sessionBucket == SessionBucket.WAITING -> "No waiting sessions"
                             else -> "This split is clear"

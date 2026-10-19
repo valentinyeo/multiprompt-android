@@ -1,6 +1,9 @@
 package dev.multiprompt.companion
 
 import android.app.Application
+import android.os.SystemClock
+import dev.multiprompt.companion.account.DWELL
+import dev.multiprompt.companion.account.VisitDwell
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.multiprompt.companion.model.HostDraft
@@ -50,6 +53,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -154,7 +160,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val accountStore = AccountLayoutStore(application)
     private var pendingLayout = accountStore.load(syncAuth.accountId())
     private var usedStampThrottle = UsedStampThrottle(pendingLayout?.base)
-    private var foreground = false
+    private val foreground = MutableStateFlow(false)
     private var accountRequestRunning = false
     private var accountGeneration = 0
     private val initialWorkspaces = pendingLayout?.edited?.workspaces.orEmpty().map { Workspace(id = it, name = it, hostId = "", remotePath = "") }
@@ -183,6 +189,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val warmReaderTouchedAt = mutableMapOf<String, Long>()
 
     init {
+        viewModelScope.launch {
+            combine(_state, foreground) { state, active ->
+                (state.terminalSession ?: state.readerSession)?.takeIf { active }?.let {
+                    it.hostId to it.name.lowercase(java.util.Locale.ROOT)
+                }
+            }.distinctUntilChanged().collectLatest { front ->
+                if (front == null) return@collectLatest
+                val dwell = VisitDwell(System.currentTimeMillis(), SystemClock.elapsedRealtime())
+                delay(DWELL)
+                val startedAt = dwell.visitAt(SystemClock.elapsedRealtime()) ?: return@collectLatest
+                val session = _state.value.terminalSession ?: _state.value.readerSession ?: return@collectLatest
+                if (!foreground.value || front != (session.hostId to session.name.lowercase(java.util.Locale.ROOT))) return@collectLatest
+                recordSessionVisit(session, startedAt)
+            }
+        }
         RetiredHosts.hostsToRemove(_state.value.hosts).forEach(::deleteHost)
         updates.check()
         if (_state.value.hosts.isNotEmpty()) refresh()
@@ -190,24 +211,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             while (true) {
                 delay(SESSION_REFRESH_INTERVAL_MS)
                 sweepWarmReaders()
-                if (foreground && _state.value.hosts.isNotEmpty()) refresh()
+                if (foreground.value && _state.value.hosts.isNotEmpty()) refresh()
             }
         }
         viewModelScope.launch {
             while (true) {
                 delay(20_000)
-                if (foreground) syncAccount()
+                if (foreground.value) syncAccount()
             }
         }
     }
 
     fun onResume() {
-        foreground = true
+        foreground.value = true
         refresh()
         syncAccount()
     }
 
-    fun onPause() { foreground = false }
+    fun onPause() { foreground.value = false }
 
     fun select(section: AppSection) {
         _state.update { it.copy(section = section) }
@@ -661,7 +682,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
         val swipeOrder = _state.value.readerSwipeOrder.ifEmpty {
             visibleInboxSessions(_state.value)
-                .let { if (_state.value.newestSessionsAtBottom && _state.value.selectedWorkspaceId != FREQUENT_SPLIT_ID) it.asReversed() else it }
+                .let { if (_state.value.newestSessionsAtBottom || _state.value.selectedWorkspaceId == FREQUENT_SPLIT_ID) it.asReversed() else it }
                 .map { SessionReadStore.key(it.hostId, it.name) }
         }
         noteSessionInteraction(session)
@@ -776,6 +797,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (usedStampThrottle.shouldPush(pendingLayout!!)) syncAccount()
         } catch (e: Exception) {
             _state.update { it.copy(accountError = e.message ?: "Could not save session use") }
+        }
+    }
+
+    private fun recordSessionVisit(session: TmuxSession, startedAt: Long) {
+        if (!_state.value.signedIn) return
+        val pending = pendingLayout ?: return
+        val tab = AccountHostMap.tabFor(session, pending.edited, _state.value.accountHosts) ?: return
+        try {
+            saveAccountLayout(pending.copy(edited = pending.edited.recordVisit(tab.identity, startedAt)))
+            syncAccount()
+        } catch (e: Exception) {
+            _state.update { it.copy(accountError = e.message ?: "Could not save session visit") }
         }
     }
 
@@ -1465,7 +1498,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         .let { sessions ->
             if (state.selectedWorkspaceId == FREQUENT_SPLIT_ID) {
-                frequentSessions(sessions, state.accountLayout, state.accountHosts, System.currentTimeMillis())
+                frequentSessions(sessions, state.accountLayout, state.accountHosts, System.currentTimeMillis(),
+                    (state.terminalSession ?: state.readerSession).takeIf { foreground.value })
             } else SessionSearch.newestFirst(sessions, state.sessionInteractionEpochSeconds)
         }
 

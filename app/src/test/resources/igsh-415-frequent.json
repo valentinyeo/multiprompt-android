@@ -1,0 +1,14 @@
+{
+  "now": 1800000000000,
+  "layout": {
+    "schema": 1,
+    "revision": 1,
+    "workspaces": [{"name": "Other"}],
+    "tabs": [
+      {"kind": "tmux", "name": "alpha", "tmux_session": "alpha", "tmux_host": 0, "workspace": "Other", "visits": [1799982000000, 1799989200000, 1799996400000]},
+      {"kind": "tmux", "name": "beta", "tmux_session": "beta", "tmux_host": 0, "workspace": "Other", "visits": [1799974800000, 1799992800000, 1799998200000]},
+      {"kind": "tmux", "name": "gamma", "tmux_session": "gamma", "tmux_host": 0, "workspace": "Other", "visits": [1799999880000]}
+    ]
+  },
+  "expectedScreenTopToBottom": ["alpha", "gamma"]
+}
