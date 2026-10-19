@@ -1,5 +1,8 @@
 package dev.multiprompt.companion
 
+import dev.multiprompt.companion.reader.TranscriptProtocol
+import dev.multiprompt.companion.reader.ChatHistoryProtocol
+import dev.multiprompt.companion.reader.ChatHistoryConnection
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -662,6 +665,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 tmuxSessionName = session.name,
                 agent = session.agent,
                 workingDirectory = session.workingDirectory,
+                chatHistory = if (TranscriptProtocol.supports(session.agent)) {
+                    ChatHistoryConnection(
+                        ssh, host,
+                        ChatHistoryProtocol.Identity(
+                            session.agent, session.name, session.workingDirectory,
+                        ),
+                        app.chatHistoryScript, app.chatHistoryCache,
+                    )
+                } else null,
             )
         }
         _state.update {

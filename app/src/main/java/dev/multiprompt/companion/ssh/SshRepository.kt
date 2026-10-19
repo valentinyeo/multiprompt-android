@@ -10,6 +10,8 @@ import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.model.DissolvedSession
 import dev.multiprompt.companion.security.SecretStore
 import dev.multiprompt.companion.reader.TranscriptProtocol
+import dev.multiprompt.companion.reader.ChatHistoryProtocol
+import java.util.Base64
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -217,6 +219,39 @@ class SshRepository(private val secrets: SecretStore) {
             ).requireSuccess("keep the session reader connected")
         } finally {
             session.close()
+        }
+    }
+
+    suspend fun streamChatHistory(
+        client: SshClient,
+        script: ByteArray,
+        exchange: suspend (suspend (String) -> String) -> Unit,
+    ) = withContext(Dispatchers.IO) {
+        coroutineScope {
+            val session = client.openSession()
+                ?: throw SshProblem.Connection("The SSH server refused a history channel")
+            try {
+                check(session.requestExec(ChatHistoryProtocol.COMMAND))
+                launch { for (chunk in session.stderr) { } }
+                session.write(Base64.getEncoder().encode(script) + byteArrayOf(10))
+                val framer = ChatHistoryProtocol.Framer()
+                exchange { query ->
+                    withTimeout(45_000L) {
+                        session.write(query.toByteArray(Charsets.UTF_8))
+                        var reply: String? = null
+                        while (reply == null) {
+                            val chunk = session.stdout.receiveCatching().getOrNull()
+                                ?: throw SshProblem.Connection("The history reader is unavailable")
+                            val replies = framer.feed(chunk)
+                            check(replies.size <= 1 && (replies.isEmpty() || !framer.hasPending()))
+                            reply = replies.firstOrNull()
+                        }
+                        reply
+                    }
+                }
+            } finally {
+                session.close()
+            }
         }
     }
 

@@ -1,5 +1,7 @@
 package dev.multiprompt.companion
 
+import java.io.File
+import dev.multiprompt.companion.reader.ChatHistoryCache
 import android.app.Application
 import dev.multiprompt.companion.data.HostStore
 import dev.multiprompt.companion.data.SessionReadStore
@@ -34,6 +36,8 @@ class MultipromptApplication : Application() {
     val crashReportStore by lazy { CrashReportStore(this) }
     val workspaceStore by lazy { WorkspaceStore(this) }
     val secretStore by lazy { SecretStore(this) }
+    val chatHistoryCache by lazy { ChatHistoryCache(File(filesDir, "chat-history")) }
+    val chatHistoryScript by lazy { assets.open("chat_history_reader.py").use { it.readBytes() } }
     val sshRepository by lazy { SshRepository(secretStore) }
     val deepgramDictation by lazy { DeepgramDictation(this, secretStore) }
     val updateManager by lazy { UpdateManager(this) }

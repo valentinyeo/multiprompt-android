@@ -66,6 +66,7 @@ class SessionReaderConnection(
     val tmuxSessionName: String,
     private val agent: AgentKind = AgentKind.OTHER,
     private val workingDirectory: String = "",
+    val chatHistory: ChatHistoryConnection? = null,
 ) : AutoCloseable {
     private sealed interface Request {
         data class Prompt(val text: String) : Request
@@ -81,8 +82,6 @@ class SessionReaderConnection(
     private var streamClient: SshClient? = null
     private var streamJob: Job? = null
     private var actionJob: Job? = null
-    private var transcriptJob: Job? = null
-    private var transcriptClient: SshClient? = null
 
     fun start() {
         if (actionJob == null) {
@@ -91,7 +90,7 @@ class SessionReaderConnection(
             }
         }
         startStream()
-        startTranscript()
+        chatHistory?.start()
     }
 
     fun sendPrompt(text: String): Boolean {
@@ -195,7 +194,7 @@ class SessionReaderConnection(
     }
 
     suspend fun loadOlderIntoTranscript(): Boolean = historyMutex.withLock {
-        if (historyMode) return@withLock false
+        if (TranscriptProtocol.supports(agent) || historyMode) return@withLock false
         if (!_state.value.alternateOn) return@withLock false
         val targetDepth = transcriptHistoryDepth + 1
         historyMode = true
@@ -250,39 +249,6 @@ class SessionReaderConnection(
     fun selectModelPickerOption(index: Int): Boolean {
         awaitModelSwitchConfirmation("/model")
         return requests.trySend(Request.ModelPickerOption(index)).isSuccess
-    }
-
-    private fun startTranscript() {
-        if (!TranscriptProtocol.supports(agent) || transcriptJob?.isActive == true) return
-        transcriptJob = scope.launch {
-            var retryDelay = RECONNECT_DELAY_MS
-            while (isActive) {
-                try {
-                    val connectedClient = withTimeout(CONNECT_TIMEOUT_MS) { repository.connect(host) }
-                    transcriptClient = connectedClient
-                    repository.streamTranscript(
-                        connectedClient,
-                        TranscriptProtocol.Identity(agent, tmuxSessionName, workingDirectory),
-                    ) { response ->
-                        retryDelay = RECONNECT_DELAY_MS
-                        _state.update { current ->
-                            current.copy(
-                                transcript = transcriptAfterUpdate(current.transcript, response),
-                            )
-                        }
-                    }
-                } catch (failure: Exception) {
-                    if (failure is CancellationException && !isActive) throw failure
-                    _state.update { it.copy(transcript = transcriptAfterUpdate(it.transcript, null)) }
-                } finally {
-                    val oldClient = transcriptClient
-                    transcriptClient = null
-                    runCatching { oldClient?.disconnect() }
-                }
-                delay(retryDelay)
-                retryDelay = (retryDelay * 2).coerceAtMost(30_000L)
-            }
-        }
     }
 
     private fun startStream() {
@@ -400,14 +366,11 @@ class SessionReaderConnection(
         requests.close()
         streamJob?.cancel()
         actionJob?.cancel()
-        transcriptJob?.cancel()
+        chatHistory?.close()
         val oldClient = streamClient
-        val oldTranscriptClient = transcriptClient
         streamClient = null
-        transcriptClient = null
         CoroutineScope(Dispatchers.IO).launch {
             runCatching { oldClient?.disconnect() }
-            runCatching { oldTranscriptClient?.disconnect() }
         }
         scope.cancel()
     }
