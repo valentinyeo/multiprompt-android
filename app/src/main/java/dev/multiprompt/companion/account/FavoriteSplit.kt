@@ -10,5 +10,5 @@ fun isFavoriteSession(session: TmuxSession, layout: AccountLayout?, mapping: Map
 
 fun inboxSplitIds(workspaceSplitIds: List<String?>, allOnRight: Boolean): List<String?> =
     (if (allOnRight) workspaceSplitIds.asReversed() else workspaceSplitIds).flatMap {
-        if (it == null) listOf(null, FAVORITES_SPLIT_ID) else listOf(it)
+        if (it == null) listOf(null, FAVORITES_SPLIT_ID, FREQUENT_SPLIT_ID) else listOf(it)
     }

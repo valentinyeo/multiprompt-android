@@ -25,6 +25,9 @@ import dev.multiprompt.companion.auth.SyncAuthManager
 import android.content.Intent
 import dev.multiprompt.companion.account.AccountHostMap
 import dev.multiprompt.companion.account.AccountLayout
+import dev.multiprompt.companion.account.FREQUENT_SPLIT_ID
+import dev.multiprompt.companion.account.frequentSessions
+import dev.multiprompt.companion.account.UsedStampThrottle
 import dev.multiprompt.companion.account.FAVORITES_SPLIT_ID
 import dev.multiprompt.companion.account.inboxSplitIds
 import dev.multiprompt.companion.account.isFavoriteSession
@@ -149,6 +152,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val accountStore = AccountLayoutStore(application)
     private var pendingLayout = accountStore.load(syncAuth.accountId())
+    private var usedStampThrottle = UsedStampThrottle(pendingLayout?.base)
     private var foreground = false
     private var accountRequestRunning = false
     private var accountGeneration = 0
@@ -405,7 +409,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 sessionEtas = it.sessionEtas.filterKeys { key -> !key.startsWith(sessionPrefix) },
                 workspaces = workspaces,
                 workspaceSplitIds = it.workspaceSplitIds.filter { id -> id == null || id in workspaceIds },
-                selectedWorkspaceId = it.selectedWorkspaceId?.takeIf { id -> id == FAVORITES_SPLIT_ID || id in workspaceIds },
+                selectedWorkspaceId = it.selectedWorkspaceId?.takeIf { id -> id == FAVORITES_SPLIT_ID || id == FREQUENT_SPLIT_ID || id in workspaceIds },
                 sessions = it.sessions.filterNot { session -> session.hostId == host.id },
                 hostErrors = it.hostErrors - host.id,
                 cachedHostIds = it.cachedHostIds - host.id,
@@ -534,6 +538,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             !current.workspaceSelectionInitialized -> workspaceSplitIds.firstOrNull()
             current.selectedWorkspaceId == null -> null
             current.selectedWorkspaceId == FAVORITES_SPLIT_ID -> FAVORITES_SPLIT_ID
+            current.selectedWorkspaceId == FREQUENT_SPLIT_ID -> FREQUENT_SPLIT_ID
             orderedWorkspaces.any { it.id == current.selectedWorkspaceId } ->
                 current.selectedWorkspaceId
             else -> workspaceSplitIds.firstOrNull()
@@ -635,10 +640,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
         val swipeOrder = _state.value.readerSwipeOrder.ifEmpty {
             visibleInboxSessions(_state.value)
-                .let { if (_state.value.newestSessionsAtBottom) it.asReversed() else it }
+                .let { if (_state.value.newestSessionsAtBottom && _state.value.selectedWorkspaceId != FREQUENT_SPLIT_ID) it.asReversed() else it }
                 .map { SessionReadStore.key(it.hostId, it.name) }
         }
         noteSessionInteraction(session)
+        stampSessionUsed(session)
         sessionReads.markRead(session)
         val key = SessionReadStore.key(session.hostId, session.name)
         _state.value.terminal?.close()
@@ -739,8 +745,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun stampSessionUsed(session: TmuxSession) {
+        if (!_state.value.signedIn) return
+        val pending = pendingLayout ?: return
+        val tab = AccountHostMap.tabFor(session, pending.edited, _state.value.accountHosts) ?: return
+        try {
+            saveAccountLayout(pending.copy(edited = pending.edited.stampUsed(tab.identity, System.currentTimeMillis())))
+            if (usedStampThrottle.shouldPush(pendingLayout!!)) syncAccount()
+        } catch (e: Exception) {
+            _state.update { it.copy(accountError = e.message ?: "Could not save session use") }
+        }
+    }
+
     fun moveWorkspaceSplit(workspaceId: String?, delta: Int) {
-        if (workspaceId == null || workspaceId == FAVORITES_SPLIT_ID) return
+        if (workspaceId == null || workspaceId == FAVORITES_SPLIT_ID || workspaceId == FREQUENT_SPLIT_ID) return
         editAccountLayout { layout ->
             val index = layout.workspaces.indexOf(workspaceId)
             if (index < 0) layout else layout.copy(workspaces = layout.workspaces.toMutableList().apply {
@@ -986,7 +1004,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startNewSession() {
-        _state.update { it.copy(newSession = NewSessionPicker(accountWorkspace = it.selectedWorkspaceId?.takeUnless { id -> id == FAVORITES_SPLIT_ID }), sessionActionError = null) }
+        _state.update { it.copy(newSession = NewSessionPicker(accountWorkspace = it.selectedWorkspaceId?.takeUnless { id -> id == FAVORITES_SPLIT_ID || id == FREQUENT_SPLIT_ID }), sessionActionError = null) }
         _state.value.hosts.singleOrNull()?.let { host -> chooseNewSessionHost(host.id) }
     }
 
@@ -1206,6 +1224,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             it.hostId == session.hostId && it.name == session.name
         } == true
         noteSessionInteraction(session)
+        stampSessionUsed(session)
         _state.value.terminal?.close()
         val terminal = TerminalConnection(
             repository = ssh,
@@ -1266,6 +1285,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             when (result) {
                 SyncAuthManager.TokenResult.Success -> {
                     pendingLayout = accountStore.load(syncAuth.accountId())
+                    usedStampThrottle = UsedStampThrottle(pendingLayout?.base)
                     _state.update { it.copy(signedIn = true, accountError = null) }
                     publishAccountLayout()
                     syncAccount()
@@ -1279,6 +1299,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun signOutAccount() {
         accountGeneration++
         pendingLayout = null
+        usedStampThrottle = UsedStampThrottle()
         _state.update { it.copy(signedIn = false, accountLayout = null, accountPending = false,
             accountError = null, workspaces = emptyList(), workspaceSplitIds = listOf(null), sessionWorkspaceIds = emptyMap()) }
         viewModelScope.launch { syncAuth.signOut() }
@@ -1299,7 +1320,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }.toMap()
             current.copy(accountLayout = layout, accountPending = pendingLayout?.dirty == true, accountHosts = mapping,
                 workspaces = workspaces, workspaceSplitIds = listOf(null) + workspaces.map { it.id }, sessionWorkspaceIds = assignments,
-                selectedWorkspaceId = current.selectedWorkspaceId?.takeIf { it == FAVORITES_SPLIT_ID || it in layout?.workspaces.orEmpty() },
+                selectedWorkspaceId = current.selectedWorkspaceId?.takeIf { it == FAVORITES_SPLIT_ID || it == FREQUENT_SPLIT_ID || it in layout?.workspaces.orEmpty() },
                 readerSession = current.readerSession?.let { open ->
                     layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping) } ?: open
                 },
@@ -1352,28 +1373,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (generation != accountGeneration) return@launch
                 if (finishedLogin) {
                     pendingLayout = accountStore.load(syncAuth.accountId())
+                    usedStampThrottle = UsedStampThrottle(pendingLayout?.base)
                     publishAccountLayout()
                 }
                 if (!syncAuth.hasSession()) return@launch
                 _state.update { it.copy(signedIn = true) }
                 var remote = AccountLayout.response(syncAuth.request("GET", "/v1/layout").json)
                 if (generation != accountGeneration) return@launch
+                usedStampThrottle.observe(remote)
                 saveAccountLayout(pendingLayout?.pull(remote) ?: PendingLayout(remote))
                 var retries = 0
-                while (pendingLayout?.dirty == true && retries++ < 4) {
+                var retryConflict = false
+                while (pendingLayout?.let { it.dirty && (retryConflict || usedStampThrottle.shouldPush(it)) } == true && retries++ < 4) {
                     val sent = pendingLayout!!.edited
+                    usedStampThrottle.observe(sent)
                     val reply = syncAuth.request("PUT", "/v1/layout", JSONObject().put("base_revision", remote.revision).put("layout", sent.json()))
                     if (generation != accountGeneration) return@launch
-                    if (reply.status == 409) {
+                    retryConflict = reply.status == 409
+                    if (retryConflict) {
                         remote = AccountLayout.response(syncAuth.request("GET", "/v1/layout").json)
                         if (generation != accountGeneration) return@launch
+                        usedStampThrottle.observe(remote)
                         saveAccountLayout(pendingLayout!!.pull(remote))
                     } else {
                         remote = AccountLayout.response(reply.json)
+                        usedStampThrottle.observe(remote)
                         saveAccountLayout(pendingLayout!!.acknowledge(sent, remote))
                     }
                 }
-                _state.update { it.copy(accountError = if (pendingLayout?.dirty == true) "Account changed repeatedly; pending edits will retry" else null) }
+                _state.update { it.copy(accountError = if (pendingLayout?.let { usedStampThrottle.shouldPush(it) } == true) "Account changed repeatedly; pending edits will retry" else null) }
             } catch (e: Exception) {
                 if (generation == accountGeneration) _state.update { it.copy(signedIn = syncAuth.hasSession(), accountError = e.message ?: "Account offline; pending edits saved") }
             } finally {
@@ -1409,10 +1437,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             bucketMatches && when (state.selectedWorkspaceId) {
                 null -> true
                 FAVORITES_SPLIT_ID -> isFavoriteSession(session, state.accountLayout, state.accountHosts)
+                FREQUENT_SPLIT_ID -> true
                 else -> state.sessionWorkspaceIds[key] == state.selectedWorkspaceId
             }
         }
-        .let { sessions -> SessionSearch.newestFirst(sessions, state.sessionInteractionEpochSeconds) }
+        .let { sessions ->
+            if (state.selectedWorkspaceId == FREQUENT_SPLIT_ID) {
+                frequentSessions(sessions, state.accountLayout, state.accountHosts, System.currentTimeMillis())
+            } else SessionSearch.newestFirst(sessions, state.sessionInteractionEpochSeconds)
+        }
 
     private companion object {
         const val MAX_WARM_READERS = 3

@@ -160,6 +160,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.account.AccountTab
 import dev.multiprompt.companion.account.AccountHostMap
+import dev.multiprompt.companion.account.FREQUENT_SPLIT_ID
+import dev.multiprompt.companion.account.frequentSessions
 import dev.multiprompt.companion.account.FAVORITES_SPLIT_ID
 import dev.multiprompt.companion.account.inboxSplitIds
 import dev.multiprompt.companion.account.isFavoriteSession
@@ -209,6 +211,7 @@ import java.time.ZonedDateTime
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.launch
 import org.connectbot.terminal.Terminal
+import dev.multiprompt.companion.terminal.TerminalInputTracker
 
 @Composable
 fun MultipromptApp(viewModel: MainViewModel) {
@@ -334,6 +337,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             rows = state.terminalSession?.rows ?: 0,
             onBack = viewModel::closeTerminal,
             onSwitchSession = viewModel::openAdjacentSession,
+            onSessionUsed = { state.terminalSession?.let(viewModel::stampSessionUsed) },
         )
         return
     }
@@ -372,6 +376,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             onDissolve = { viewModel.dissolveSession(readerSession) },
             onEnd = { viewModel.endSession(readerSession) },
             onSessionInteraction = { viewModel.noteSessionInteraction(readerSession) },
+            onSessionUsed = { viewModel.stampSessionUsed(readerSession) },
             technicalMode = state.readerTechnicalMode,
             onTechnicalModeChanged = viewModel::setReaderTechnicalMode,
             sunlightMode = sunlight,
@@ -1103,7 +1108,7 @@ private fun SessionsScreen(
     val splitScrollState = rememberScrollState()
     val hostLabels = state.hosts.associate { it.id to it.label }
     val displayedWorkspaceSplitIds = inboxSplitIds(state.workspaceSplitIds, state.allSplitOnRight)
-    val arrangedWorkspaceSplitIds = displayedWorkspaceSplitIds.filterNot { it == FAVORITES_SPLIT_ID }
+    val arrangedWorkspaceSplitIds = displayedWorkspaceSplitIds.filterNot { it == FAVORITES_SPLIT_ID || it == FREQUENT_SPLIT_ID }
     LaunchedEffect(searchVisible) {
         if (searchVisible) searchFocusRequester.requestFocus()
     }
@@ -1401,7 +1406,7 @@ private fun SessionsScreen(
             },
         )
     }
-    val anyEta = state.sessionEtas.isNotEmpty()
+    val anyEta = state.sessionEtas.isNotEmpty() || state.selectedWorkspaceId == FREQUENT_SPLIT_ID
     var etaNowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(anyEta) {
         while (anyEta) {
@@ -1411,16 +1416,18 @@ private fun SessionsScreen(
     }
     val normalizedQuery = searchQuery.trim()
     val workspaceNames = state.workspaces.associate { it.id to it.name }
-    val visibleSessions = SessionSearch.newestFirst(state.sessions
+    val matchingSessions = state.sessions
         .filter { session ->
             val key = SessionReadStore.key(session.hostId, session.name)
             state.sessionBucket != SessionBucket.ARCHIVE &&
                 (key in state.archivedSessionKeys) == (state.sessionBucket == SessionBucket.WAITING) &&
-                (if (state.selectedWorkspaceId == FAVORITES_SPLIT_ID) {
-                    isFavoriteSession(session, state.accountLayout, state.accountHosts)
-                } else {
-                    normalizedQuery.isNotBlank() || state.selectedWorkspaceId == null ||
-                        state.sessionWorkspaceIds[key] == state.selectedWorkspaceId
+                (when (state.selectedWorkspaceId) {
+                    FAVORITES_SPLIT_ID -> isFavoriteSession(session, state.accountLayout, state.accountHosts)
+                    FREQUENT_SPLIT_ID -> true
+                    else -> {
+                        normalizedQuery.isNotBlank() || state.selectedWorkspaceId == null ||
+                            state.sessionWorkspaceIds[key] == state.selectedWorkspaceId
+                    }
                 }) &&
                 SessionSearch.matches(
                     session = session,
@@ -1428,8 +1435,11 @@ private fun SessionsScreen(
                     hostLabel = hostLabels[session.hostId].orEmpty(),
                     workspaceName = workspaceNames[state.sessionWorkspaceIds[key]].orEmpty(),
                 )
-        }, state.sessionInteractionEpochSeconds)
-    val visibleDissolvedSessions = if (state.sessionBucket == SessionBucket.ARCHIVE && state.selectedWorkspaceId != FAVORITES_SPLIT_ID) {
+        }
+    val visibleSessions = if (state.selectedWorkspaceId == FREQUENT_SPLIT_ID) {
+        frequentSessions(matchingSessions, state.accountLayout, state.accountHosts, etaNowMillis)
+    } else SessionSearch.newestFirst(matchingSessions, state.sessionInteractionEpochSeconds)
+    val visibleDissolvedSessions = if (state.sessionBucket == SessionBucket.ARCHIVE && state.selectedWorkspaceId != FAVORITES_SPLIT_ID && state.selectedWorkspaceId != FREQUENT_SPLIT_ID) {
         state.dissolvedSessions.filter { session ->
             normalizedQuery.isBlank() ||
                 session.displayName.contains(normalizedQuery, ignoreCase = true) ||
@@ -1611,7 +1621,7 @@ private fun SessionsScreen(
                 .fillMaxWidth()
                 .horizontalSwipe(onSwitchWorkspace, PointerEventPass.Final),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-            reverseLayout = state.newestSessionsAtBottom,
+            reverseLayout = state.newestSessionsAtBottom && state.selectedWorkspaceId != FREQUENT_SPLIT_ID,
         ) {
             state.hostErrors.forEach { (hostId, error) ->
                 if (hostId !in state.cachedHostIds) {
@@ -1666,6 +1676,7 @@ private fun SessionsScreen(
                         when {
                             normalizedQuery.isNotBlank() -> "No sessions match “$normalizedQuery”"
                             state.selectedWorkspaceId == FAVORITES_SPLIT_ID -> "No starred sessions"
+                            state.selectedWorkspaceId == FREQUENT_SPLIT_ID -> "No recently used sessions"
                             state.sessionBucket == SessionBucket.ARCHIVE -> "No archived sessions"
                             state.sessionBucket == SessionBucket.WAITING -> "No waiting sessions"
                             else -> "This split is clear"
@@ -1691,6 +1702,7 @@ private fun SessionsScreen(
                     val name = when (id) {
                         null -> "All"
                         FAVORITES_SPLIT_ID -> "Favorites"
+                        FREQUENT_SPLIT_ID -> "Frequent"
                         else -> state.workspaces.firstOrNull { it.id == id }?.name.orEmpty()
                     }
                     val label: @Composable RowScope.() -> Unit = {
@@ -2137,6 +2149,7 @@ private fun ReaderScreen(
     onDissolve: () -> Unit,
     onEnd: () -> Unit,
     onSessionInteraction: () -> Unit,
+    onSessionUsed: () -> Unit,
     technicalMode: Boolean,
     onTechnicalModeChanged: (Boolean) -> Unit,
     sunlightMode: Boolean,
@@ -2339,6 +2352,7 @@ private fun ReaderScreen(
             val actionCount = reader.completedActions
             if (connection.sendPrompt(composedPrompt)) {
                 onSessionInteraction()
+                onSessionUsed()
                 pendingPromptAction = actionCount
                 attachedSkill = null
             }
@@ -2351,6 +2365,7 @@ private fun ReaderScreen(
                 setPrompt("")
                 imageAttachments = emptyList()
                 onSessionInteraction()
+                onSessionUsed()
                 pendingPromptAction = actionCount
             }
         }
@@ -2386,6 +2401,7 @@ private fun ReaderScreen(
                     val actionCount = reader.completedActions
                     if (connection.sendPrompt(composedPrompt)) {
                         onSessionInteraction()
+                        onSessionUsed()
                         pendingPromptAction = actionCount
                     }
                 }
@@ -2682,6 +2698,7 @@ private fun ReaderScreen(
                                 onClick = {
                                     menuExpanded = false
                                     onSessionInteraction()
+                                    onSessionUsed()
                                     connection.sendEnter()
                                 },
                             )
@@ -3312,6 +3329,7 @@ private fun ReaderScreen(
                                     onClick = {
                                         if (connection.selectModelPickerOption(option.index)) {
                                             onSessionInteraction()
+                                            onSessionUsed()
                                         }
                                     },
                                     enabled = !reader.sending,
@@ -3871,8 +3889,11 @@ private fun TerminalScreen(
     rows: Int,
     onBack: () -> Unit,
     onSwitchSession: (Int) -> Unit,
+    onSessionUsed: () -> Unit,
 ) {
     val status by connection.status.collectAsState()
+    val currentOnSessionUsed by rememberUpdatedState(onSessionUsed)
+    val inputTracker = remember(connection) { TerminalInputTracker { currentOnSessionUsed() } }
     val context = LocalContext.current
     val density = LocalDensity.current
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
@@ -3977,9 +3998,13 @@ private fun TerminalScreen(
                 foregroundColor = TerminalForeground,
                 keyboardEnabled = true,
                 showSoftKeyboard = true,
+                modifierManager = inputTracker,
                 onPasteRequest = {
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()?.let(connection::paste)
+                    clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()?.let { text ->
+                        if (text.isNotEmpty()) onSessionUsed()
+                        connection.paste(text)
+                    }
                 },
             )
             if (status is TerminalStatus.Connecting) {
