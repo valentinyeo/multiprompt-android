@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.connectbot.sshlib.SshClient
 import org.connectbot.sshlib.SshSession
 import org.connectbot.terminal.TerminalDimensions
@@ -117,12 +118,13 @@ class TerminalConnection(
         }
     }
 
-    fun pageUp() {
-        keyboard.trySend(PAGE_UP)
-    }
-
-    fun pageToLive() {
-        keyboard.trySend(END_KEY)
+    suspend fun history(): List<String> = withContext(Dispatchers.IO) {
+        val historyClient = repository.connect(host)
+        try {
+            shellHistoryLines(repository.captureSession(historyClient, tmuxSessionName))
+        } finally {
+            historyClient.disconnect()
+        }
     }
 
     fun paste(text: String) {
@@ -146,8 +148,4 @@ class TerminalConnection(
         runCatching { oldClient?.disconnect() }
     }
 
-    private companion object {
-        val PAGE_UP = "\u001b[5~".toByteArray(Charsets.UTF_8)
-        val END_KEY = "\u001b[F".toByteArray(Charsets.UTF_8)
-    }
 }

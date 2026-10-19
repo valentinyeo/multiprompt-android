@@ -100,6 +100,7 @@ data class AppUiState(
     val allSplitOnRight: Boolean = true,
     val readerDefaultFontScale: Float = 1f,
     val readerTechnicalMode: Boolean = false,
+    val shellFontSize: Float? = null,
     val appTheme: AppTheme = AppTheme.SYSTEM,
     val waitingIdleObservations: Map<String, Int> = emptyMap(),
     val readerSwipeOrder: List<String> = emptyList(),
@@ -170,6 +171,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             allSplitOnRight = sessionReads.allSplitOnRight(),
             readerDefaultFontScale = sessionReads.readerDefaultFontScale(),
             readerTechnicalMode = sessionReads.readerTechnicalMode(),
+            shellFontSize = sessionReads.shellFontSize(),
             appTheme = sessionReads.appTheme(),
             dissolvedSessions = dissolvedStore.load(),
             crashReport = crashReportStore.load(),
@@ -263,6 +265,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setReaderTechnicalMode(enabled: Boolean) {
         sessionReads.setReaderTechnicalMode(enabled)
         _state.update { it.copy(readerTechnicalMode = enabled) }
+    }
+
+    fun setShellFontSize(size: Float) {
+        sessionReads.setShellFontSize(size)
+        _state.update { it.copy(shellFontSize = sessionReads.shellFontSize()) }
     }
 
     fun setAppTheme(theme: AppTheme) {

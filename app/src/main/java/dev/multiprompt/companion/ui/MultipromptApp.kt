@@ -335,6 +335,8 @@ private fun AppScreens(viewModel: MainViewModel) {
             title = state.terminalSession?.displayName ?: terminal.tmuxSessionName,
             columns = state.terminalSession?.columns ?: 0,
             rows = state.terminalSession?.rows ?: 0,
+            savedFontSize = state.shellFontSize,
+            onFontSizeChange = viewModel::setShellFontSize,
             onBack = viewModel::closeTerminal,
             onSwitchSession = viewModel::openAdjacentSession,
             onSessionUsed = { state.terminalSession?.let(viewModel::stampSessionUsed) },
@@ -3881,6 +3883,8 @@ private fun TerminalScreen(
     title: String,
     columns: Int,
     rows: Int,
+    savedFontSize: Float?,
+    onFontSizeChange: (Float) -> Unit,
     onBack: () -> Unit,
     onSwitchSession: (Int) -> Unit,
     onSessionUsed: () -> Unit,
@@ -3890,22 +3894,13 @@ private fun TerminalScreen(
     val inputTracker = remember(connection) { TerminalInputTracker { currentOnSessionUsed() } }
     val context = LocalContext.current
     val density = LocalDensity.current
-    val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val terminalTypeface = remember(context) {
         ResourcesCompat.getFont(context, R.font.ibm_plex_mono_regular) ?: Typeface.MONOSPACE
     }
-    val textMeasurer = rememberTextMeasurer()
-    val fontSize = remember(screenWidthDp, columns) {
-        val target = if (columns > 0) columns else FALLBACK_COLUMNS
-        val pxPerCharAt100Sp = textMeasurer.measure(
-            AnnotatedString("0".repeat(20)),
-            TextStyle(fontFamily = ReaderFontFamily, fontSize = 100.sp),
-        ).size.width / 20f
-        val screenPx = with(density) { screenWidthDp.dp.toPx() }
-        (100f * screenPx / (target * pxPerCharAt100Sp) * 0.98f).coerceIn(4f, 14f).sp
-    }
+    val fontSize = savedFontSize?.sp ?: defaultShellFontSize(MaterialTheme.typography.bodyMedium.fontSize)
+    var historyVisible by remember(connection) { mutableStateOf(false) }
     val keyboardHeightPx = WindowInsets.ime.getBottom(density)
-    val lineHeightPx = remember(fontSize, terminalTypeface) {
+    val lineHeightPx = remember(fontSize, terminalTypeface, density) {
         val paint = Paint().apply {
             typeface = terminalTypeface
             textSize = with(density) { fontSize.toPx() }
@@ -3939,10 +3934,13 @@ private fun TerminalScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { connection.pageUp() }) {
-                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Page the agent back one screen")
+                    IconButton(onClick = {
+                        historyVisible = true
+                        keyboard?.hide()
+                    }) {
+                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Open shell history")
                     }
-                    IconButton(onClick = { connection.pageToLive() }) {
+                    IconButton(onClick = { historyVisible = false }) {
                         Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Back to the live view")
                     }
                     IconButton(
@@ -3972,35 +3970,58 @@ private fun TerminalScreen(
             } else {
                 0
             }
-            Terminal(
-                terminalEmulator = connection.emulator,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .offset { IntOffset(0, panPx - keyboardHeightPx) }
-                    .horizontalSwipe(onSwitchSession),
-                initialFontSize = fontSize,
-                minFontSize = 4.sp,
-                maxFontSize = fontSize,
-                forcedSize = if (rows > 0 && columns > 0) rows to columns else null,
-                focusRequester = focusRequester,
-                onTerminalTap = {
+            val charWidthPx = remember(fontSize, terminalTypeface, density) {
+                Paint().apply {
+                    typeface = terminalTypeface
+                    textSize = with(density) { fontSize.toPx() }
+                }.measureText("M")
+            }
+            ShellContent(
+                historyVisible = historyVisible,
+                onOpenHistory = {
+                    historyVisible = true
+                    keyboard?.hide()
+                },
+                onJumpToLive = { historyVisible = false },
+                loadHistory = connection::history,
+                fontSize = fontSize,
+                onFontSizeChange = onFontSizeChange,
+                contentWidth = with(density) { ((columns.takeIf { it > 0 } ?: FALLBACK_COLUMNS) * charWidthPx).toDp() },
+                onSwitchSession = onSwitchSession,
+                onLiveTap = {
                     focusRequester.requestFocus()
                     keyboard?.show()
                 },
-                typeface = terminalTypeface,
-                backgroundColor = TerminalBackground,
-                foregroundColor = TerminalForeground,
-                keyboardEnabled = true,
-                showSoftKeyboard = true,
-                modifierManager = inputTracker,
-                onPasteRequest = {
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()?.let { text ->
-                        if (text.isNotEmpty()) onSessionUsed()
-                        connection.paste(text)
-                    }
-                },
-            )
+            ) { liveModifier ->
+                Terminal(
+                    terminalEmulator = connection.emulator,
+                    modifier = liveModifier
+                        .fillMaxSize()
+                        .offset { IntOffset(0, panPx - keyboardHeightPx) },
+                    initialFontSize = fontSize,
+                    minFontSize = fontSize,
+                    maxFontSize = fontSize,
+                    forcedSize = if (rows > 0 && columns > 0) rows to columns else null,
+                    focusRequester = focusRequester,
+                    onTerminalTap = {
+                        focusRequester.requestFocus()
+                        keyboard?.show()
+                    },
+                    typeface = terminalTypeface,
+                    backgroundColor = TerminalBackground,
+                    foregroundColor = TerminalForeground,
+                    keyboardEnabled = true,
+                    showSoftKeyboard = true,
+                    modifierManager = inputTracker,
+                    onPasteRequest = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()?.let { text ->
+                            if (text.isNotEmpty()) onSessionUsed()
+                            connection.paste(text)
+                        }
+                    },
+                )
+            }
             if (status is TerminalStatus.Connecting) {
                 CircularProgressIndicator(Modifier.align(Alignment.Center))
             }
