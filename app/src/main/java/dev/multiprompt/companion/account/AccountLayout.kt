@@ -24,8 +24,10 @@ data class AccountLayout(
     val revision: Long = 0,
     val workspaces: List<String> = emptyList(),
     val tabs: List<AccountTab> = emptyList(),
+    val settings: Map<String, Boolean>? = null,
 ) {
     fun validate(): AccountLayout {
+        require(settings == null || settings.keys.all { it in setOf("frequent", "favorites", "all", "frequent_first") }) { "Invalid layout settings" }
         require(revision >= 0 && workspaces.size <= 9 && tabs.size <= 256) { "Invalid layout capacity or revision" }
         require(workspaces.distinct().size == workspaces.size && workspaces.all {
             validText(it, 32) && it.toByteArray(Charsets.UTF_8).size <= 31
@@ -43,8 +45,9 @@ data class AccountLayout(
     fun json(): JSONObject = JSONObject().put("schema", 1).put("revision", revision)
         .put("workspaces", JSONArray(workspaces.map { JSONObject().put("name", it) }))
         .put("tabs", JSONArray(tabs.map { it.json() }))
+        .apply { settings?.let { put("settings", JSONObject(it)) } }
 
-    fun sameContent(other: AccountLayout): Boolean = workspaces == other.workspaces && tabs == other.tabs
+    fun sameContent(other: AccountLayout): Boolean = workspaces == other.workspaces && tabs == other.tabs && settings == other.settings
 
     fun renameTab(identity: String, name: String): AccountLayout = copy(tabs = tabs.map {
         if (it.identity == identity) it.copy(name = name, manual = true) else it
@@ -61,6 +64,7 @@ data class AccountLayout(
     fun stampUsed(identity: String, now: Long): AccountLayout = copy(tabs = tabs.map {
         if (it.identity == identity) it.copy(used = maxOf(it.used ?: 0, now)) else it
     }).validate()
+    fun setSetting(key: String, value: Boolean): AccountLayout = copy(settings = settings.orEmpty() + (key to value)).validate()
     fun stampInput(identity: String, now: Long): AccountLayout = copy(tabs = tabs.map {
         if (it.identity == identity) it.copy(input = maxOf(it.input ?: 0, now), used = maxOf(it.used ?: 0, now)) else it
     }).validate()
@@ -81,7 +85,18 @@ data class AccountLayout(
             Charsets.UTF_8.newEncoder().canEncode(text)
 
         fun parse(json: JSONObject): AccountLayout {
-            require(json.keys().asSequence().toSet() == setOf("schema", "revision", "workspaces", "tabs") && json.get("schema") == 1)
+            val required = setOf("schema", "revision", "workspaces", "tabs")
+            val keys = json.keys().asSequence().toSet()
+            require(keys.containsAll(required) && (keys - required).all { it == "settings" } && json.get("schema") == 1)
+            val settings = if (json.has("settings")) {
+                val value = json.get("settings")
+                require(value is JSONObject)
+                value.keys().asSequence().associateWith { key ->
+                    val flag = value.get(key)
+                    require(flag is Boolean)
+                    flag
+                }
+            } else null
             val revision = json.get("revision")
             require(revision is Number && revision.toDouble() == revision.toLong().toDouble())
             val ws = json.getJSONArray("workspaces")
@@ -118,7 +133,7 @@ data class AccountLayout(
                 } else null
                 AccountTab(t.getString("name"), t.getString("tmux_session"), host.toInt(), t.getString("workspace"),
                     t.optBoolean("manual", false), if (t.has("favorite")) t.getBoolean("favorite") else null, (used as? Number)?.toLong(), visits, (input as? Number)?.toLong())
-            }).validate()
+            }, settings).validate()
         }
 
         fun response(json: JSONObject): AccountLayout {
@@ -158,7 +173,16 @@ data class AccountLayout(
             val orderedWorkspaces = if (base.workspaces != edited.workspaces) {
                 edited.workspaces.filter { it in workspaces } + workspaces.filterNot { it in edited.workspaces }
             } else workspaces
-            return remote.copy(workspaces = orderedWorkspaces, tabs = orderedTabs).validate()
+            val settings = if (edited.settings == base.settings) remote.settings else {
+                val merged = remote.settings.orEmpty().toMutableMap()
+                (base.settings.orEmpty().keys + edited.settings.orEmpty().keys).forEach { key ->
+                    if (edited.settings?.get(key) != base.settings?.get(key)) {
+                        edited.settings?.get(key)?.let { merged[key] = it } ?: merged.remove(key)
+                    }
+                }
+                merged.takeIf { it.isNotEmpty() || edited.settings != null || remote.settings != null }
+            }
+            return remote.copy(workspaces = orderedWorkspaces, tabs = orderedTabs, settings = settings).validate()
         }
     }
 }

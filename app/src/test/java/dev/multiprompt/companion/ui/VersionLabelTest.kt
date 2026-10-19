@@ -26,9 +26,6 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.hasTestTag
-import androidx.compose.ui.test.hasAnyAncestor
-import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.ViewModelStore
@@ -153,11 +150,7 @@ class VersionLabelTest {
     }
 
     private fun checkLayout(title: String, action: String? = null): SemanticsNodeInteraction {
-        val version = if (title == "Session list settings") {
-            compose.onNode(hasTestTag("app-version") and hasAnyAncestor(isDialog()))
-        } else {
-            compose.onNodeWithTag("app-version")
-        }
+        val version = compose.onNodeWithTag("app-version")
         version
             .assertIsDisplayed()
             .assertTextEquals(BuildConfig.VERSION_NAME)
@@ -180,11 +173,7 @@ class VersionLabelTest {
     }
 
     private fun screenshot(name: String) {
-        val root = if (name.startsWith("settings")) {
-            compose.onNode(isDialog())
-        } else {
-            compose.onRoot()
-        }
+        val root = compose.onRoot()
         val view = (root.fetchSemanticsNode().root as ViewRootForTest).view.rootView
         val attachInfo = ReflectionHelpers.getField<Any>(view, "mAttachInfo")
         val hardwareAccelerated = view.isHardwareAccelerated
@@ -319,7 +308,7 @@ class VersionLabelTest {
     }
 
     @Test
-    fun settingsVersionDismissesDialogBeforeOpeningReleaseNotes() {
+    fun settingsVersionClosesPageBeforeOpeningReleaseNotes() {
         render { inbox() }
         listOf(false, true).forEachIndexed { index, light ->
             compose.runOnIdle { sunlight.value = light }

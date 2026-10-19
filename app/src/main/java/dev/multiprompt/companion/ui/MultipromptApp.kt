@@ -123,6 +123,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.draw.clipToBounds
@@ -171,7 +172,6 @@ import dev.multiprompt.companion.account.AccountHostMap
 import dev.multiprompt.companion.account.FREQUENT_SPLIT_ID
 import dev.multiprompt.companion.account.frequentSessions
 import dev.multiprompt.companion.account.FAVORITES_SPLIT_ID
-import dev.multiprompt.companion.account.inboxSplitIds
 import dev.multiprompt.companion.account.isFavoriteSession
 import dev.multiprompt.companion.AppSection
 import dev.multiprompt.companion.AppUiState
@@ -508,6 +508,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onStartNewSession = viewModel::startNewSession,
                     onSetNewestSessionsAtBottom = viewModel::setNewestSessionsAtBottom,
                     onSetAllSplitOnRight = viewModel::setAllSplitOnRight,
+                    onSetSessionListSetting = viewModel::setSessionListSetting,
                     appTheme = state.appTheme,
                     onSetAppTheme = viewModel::setAppTheme,
                     onClearSessionActionError = viewModel::clearSessionActionError,
@@ -1141,6 +1142,7 @@ internal fun SessionsScreen(
     onClearCrashReport: () -> Unit,
     onAddHost: () -> Unit,
     nowMillis: () -> Long = System::currentTimeMillis,
+    onSetSessionListSetting: (String, Boolean) -> Unit = { _, _ -> },
     material3: Boolean = LocalMaterial3.current,
 ) = MultipromptTheme(
     sunlight = when (appTheme) {
@@ -1171,7 +1173,7 @@ internal fun SessionsScreen(
     val context = LocalContext.current
     val splitScrollState = rememberScrollState()
     val hostLabels = state.hosts.associate { it.id to it.label }
-    val displayedWorkspaceSplitIds = inboxSplitIds(state.workspaceSplitIds, state.allSplitOnRight)
+    val displayedWorkspaceSplitIds = state.visibleWorkspaceSplitIds
     val arrangedWorkspaceSplitIds = displayedWorkspaceSplitIds.filterNot { it == FAVORITES_SPLIT_ID || it == FREQUENT_SPLIT_ID }
     LaunchedEffect(searchVisible) {
         if (searchVisible) searchFocusRequester.requestFocus()
@@ -1222,104 +1224,132 @@ internal fun SessionsScreen(
         )
     }
     if (settingsVisible) {
+        BackHandler { settingsVisible = false }
         MultipromptTheme(sunlight = sunlight, material3 = false) {
-            AlertDialog(
-                onDismissRequest = { settingsVisible = false },
-                title = {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Session list settings", Modifier.weight(1f))
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                topBar = {
+                    Row(
+                        Modifier.fillMaxWidth().statusBarsPadding().padding(end = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconButton(onClick = { settingsVisible = false }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        }
+                        Text("Session list settings", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                         VersionLabel(onClick = {
                             settingsVisible = false
                             onReleaseNotes()
                         })
                     }
                 },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ) { padding ->
+                Column(
+                    Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    listOf(
+                        Triple("frequent", "Show Frequent split", state.showFrequentSplit),
+                        Triple("frequent_first", "Frequent as first tab", state.frequentFirst),
+                        Triple("favorites", "Show Favorites split", state.showFavoritesSplit),
+                        Triple("all", "Show All split", state.showAllSplit),
+                    ).forEach { (key, label, checked) ->
                         Row(
                             Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            Text("Newest sessions at bottom", Modifier.weight(1f))
+                            Text(label, Modifier.weight(1f))
                             Switch(
-                                checked = state.newestSessionsAtBottom,
-                                onCheckedChange = onSetNewestSessionsAtBottom,
+                                checked = checked,
+                                onCheckedChange = { onSetSessionListSetting(key, it) },
+                                enabled = key != "frequent_first" || state.showFrequentSplit,
+                                modifier = Modifier.semantics { contentDescription = label },
                             )
                         }
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            Text("All split on right", Modifier.weight(1f))
-                            Switch(
-                                checked = state.allSplitOnRight,
-                                onCheckedChange = onSetAllSplitOnRight,
-                            )
-                        }
-                        Text("Theme")
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            listOf(
-                                AppTheme.SYSTEM to "System",
-                                AppTheme.DARK to "Dark",
-                                AppTheme.SUNLIGHT to "Sunlight",
-                            ).forEach { (theme, label) ->
-                                if (appTheme == theme) {
-                                    FilledTonalButton(
-                                        onClick = { onSetAppTheme(theme) },
-                                        modifier = Modifier.weight(1f),
-                                    ) { Text(label) }
-                                } else {
-                                    OutlinedButton(
-                                        onClick = { onSetAppTheme(theme) },
-                                        modifier = Modifier.weight(1f),
-                                    ) { Text(label) }
-                                }
-                            }
-                        }
-                        Text("Default Reader font size")
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            listOf(0.9f to "Small", 1f to "Normal", 1.15f to "Large").forEach { (scale, label) ->
-                                if (kotlin.math.abs(readerDefaultFontScale - scale) < 0.01f) {
-                                    FilledTonalButton(
-                                        onClick = { onSetReaderDefaultFontScale(scale) },
-                                        modifier = Modifier.weight(1f),
-                                    ) { Text(label) }
-                                } else {
-                                    OutlinedButton(
-                                        onClick = { onSetReaderDefaultFontScale(scale) },
-                                        modifier = Modifier.weight(1f),
-                                    ) { Text(label) }
-                                }
-                            }
-                        }
-                        crashReport?.let {
-                            HorizontalDivider()
-                            Text(
-                                "A crash report from the previous launch is available.",
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                OutlinedButton(onClick = { crashReportVisible = true }) {
-                                    Text("View report")
-                                }
-                                TextButton(onClick = onClearCrashReport) { Text("Dismiss") }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text("Newest sessions at bottom", Modifier.weight(1f))
+                        Switch(
+                            checked = state.newestSessionsAtBottom,
+                            onCheckedChange = onSetNewestSessionsAtBottom,
+                        )
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text("All split on right", Modifier.weight(1f))
+                        Switch(
+                            checked = state.allSplitOnRight,
+                            onCheckedChange = onSetAllSplitOnRight,
+                        )
+                    }
+                    Text("Theme")
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        listOf(
+                            AppTheme.SYSTEM to "System",
+                            AppTheme.DARK to "Dark",
+                            AppTheme.SUNLIGHT to "Sunlight",
+                        ).forEach { (theme, label) ->
+                            if (appTheme == theme) {
+                                FilledTonalButton(
+                                    onClick = { onSetAppTheme(theme) },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 8.dp),
+                                ) { Text(label, Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, softWrap = false) }
+                            } else {
+                                OutlinedButton(
+                                    onClick = { onSetAppTheme(theme) },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 8.dp),
+                                ) { Text(label, Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, softWrap = false) }
                             }
                         }
                     }
-                },
-                confirmButton = {
-                    TextButton(onClick = { settingsVisible = false }) { Text("Done") }
-                },
-            )
+                    Text("Default Reader font size")
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        listOf(0.9f to "Small", 1f to "Normal", 1.15f to "Large").forEach { (scale, label) ->
+                            if (kotlin.math.abs(readerDefaultFontScale - scale) < 0.01f) {
+                                FilledTonalButton(
+                                    onClick = { onSetReaderDefaultFontScale(scale) },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 8.dp),
+                                ) { Text(label, Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, softWrap = false) }
+                            } else {
+                                OutlinedButton(
+                                    onClick = { onSetReaderDefaultFontScale(scale) },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 8.dp),
+                                ) { Text(label, Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, softWrap = false) }
+                            }
+                        }
+                    }
+                    crashReport?.let {
+                        HorizontalDivider()
+                        Text(
+                            "A crash report from the previous launch is available.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            OutlinedButton(onClick = { crashReportVisible = true }) { Text("View report") }
+                            TextButton(onClick = onClearCrashReport) { Text("Dismiss") }
+                        }
+                    }
+                }
+            }
         }
     }
     if (crashReportVisible) {
@@ -1354,6 +1384,7 @@ internal fun SessionsScreen(
             }
         }
     }
+    if (settingsVisible) return@MultipromptTheme
     reminderPromptSession?.let { session ->
         ReminderDialog(
             session = session,
