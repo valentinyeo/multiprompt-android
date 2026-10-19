@@ -4,7 +4,7 @@ import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const extensions = { '.zig': 'zig', '.js': 'javascript', '.ts': 'typescript', '.mjs': 'javascript', '.cjs': 'javascript', '.jsx': 'javascript', '.tsx': 'typescript', '.py': 'python', '.kt': 'kotlin', '.kts': 'kotlin', '.java': 'java', '.ps1': 'powershell', '.psm1': 'powershell', '.sh': 'shell', '.bash': 'shell', '.c': 'c', '.h': 'c', '.cpp': 'c', '.hpp': 'c', '.rc': 'c', '.css': 'css', '.html': 'html' };
+const extensions = { '.zig': 'zig', '.js': 'javascript', '.ts': 'typescript', '.mjs': 'javascript', '.cjs': 'javascript', '.jsx': 'javascript', '.tsx': 'typescript', '.py': 'python', '.kt': 'kotlin', '.kts': 'kotlin', '.java': 'java', '.ps1': 'powershell', '.psm1': 'powershell', '.sh': 'shell', '.bash': 'shell', '.c': 'c', '.h': 'c', '.cpp': 'c', '.hpp': 'c', '.rc': 'c', '.css': 'css', '.html': 'html', '.yml': 'yaml', '.yaml': 'yaml', '.toml': 'toml' };
 const excluded = new Set(['third_party', 'third-party', 'vendor', 'vendored', 'node_modules', 'skillsrepo', 'openwiki', 'docs', 'docs-site', '.git', '.zig-cache', 'zig-out', 'build', 'generated']);
 const operators = ['>>>=', '===', '!==', '**=', '&&=', '||=', '??=', '>>>', '<<=', '>>=', '...', '=>', '==', '!=', '<=', '>=', '++', '--', '&&', '||', '??', '?.', '**', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '<<', '>>', '::', '->', '..', '##'];
 const white = c => c !== undefined && /\s/.test(c);
@@ -15,6 +15,7 @@ const jsLanguages = new Set(['javascript', 'typescript']);
 function keptReason(text, start, source) {
   if (start === 0 && text.startsWith('#!')) return 'shebang';
   if (/eslint-(?:disable|enable)|@ts-(?:check|nocheck|ignore|expect-error)|prettier-ignore|#\s*type:\s*ignore|#\s*noqa\b|#.*coding[:=]|#Requires\b|#\s*shellcheck\b|\/\/\s*noinspection\b/i.test(text)) return 'tool directive';
+  if (/^# v[0-9]+[ \t]*$/.test(text) && /^[ \t]*(?:-[ \t]+)?uses:[ \t]+[\w.-]+\/[\w./-]+@[0-9a-f]{40}[ \t]+$/.test(source.slice(source.lastIndexOf('\n', start - 1) + 1, start))) return 'tool directive';
   return null;
 }
 
@@ -91,6 +92,8 @@ export function tokenize(source, language) {
 
 function lex(source, language) {
   if (language === 'python') return pythonLex(source);
+  if (language === 'yaml') return yamlLex(source);
+  if (language === 'toml') return tomlLex(source);
   const tokens = [], comments = [];
   let i = 0, expression = true, previous = '', pendingControl = false;
   const parens = [], braces = [];
@@ -236,6 +239,85 @@ function lex(source, language) {
   return { tokens, comments };
 }
 
+function yamlLex(source) {
+  const tokens = [], comments = [];
+  let i = 0, plain = false, block = null, flow = 0;
+  const endLine = start => { const end = source.indexOf('\n', start); return end < 0 ? source.length : end; };
+  while (i < source.length) {
+    const start = i, c = source[i];
+    if (c === '\n') {
+      i++; plain = false;
+      if (block) {
+        const body = i;
+        let indent = block.explicit ? block.indent + block.explicit : null;
+        while (i < source.length) {
+          const end = endLine(i), line = source.slice(i, end), spaces = /^[ ]*/.exec(line)[0].length;
+          if (line.trim()) {
+            if (indent === null) { if (spaces <= block.indent) break; indent = spaces; }
+            if (spaces < indent) break;
+          }
+          i = Math.min(source.length, end + 1);
+        }
+        if (i > body) tokens.push(['scalar', source.slice(body, i)]);
+        block = null;
+      }
+      continue;
+    }
+    if (white(c)) { i++; continue; }
+    if (c === '#' && (i === 0 || white(source[i - 1]))) {
+      i = endLine(i); if (source[i - 1] === '\r') i--;
+      comments.push({ start, end: i, reason: keptReason(source.slice(start, i), start, source) }); continue;
+    }
+    if (source.startsWith('${{', i)) {
+      i += 3;
+      while (i < source.length && !source.startsWith('}}', i)) {
+        if (source[i] === "'" || source[i] === '"') i = quoted(source, i, source[i], source[i] === '"' ? '\\' : '', true); else i++;
+      }
+      if (i >= source.length) throw new Error(`Unterminated YAML expression at ${start}`);
+      i += 2; tokens.push(['expression', source.slice(start, i)]); plain = true; continue;
+    }
+    if (!plain && (c === '"' || c === "'")) { i = quoted(source, i, c, c === '"' ? '\\' : '', c === "'"); tokens.push(['string', source.slice(start, i)]); continue; }
+    const marker = !plain && !flow && /^[|>](?:[1-9][+-]?|[+-][1-9]?)?(?=[ \t\r\n]|$)/.exec(source.slice(i));
+    if (marker) {
+      const line = source.slice(source.lastIndexOf('\n', i - 1) + 1, i);
+      block = { indent: /^[ ]*/.exec(line)[0].length, explicit: Number(/[1-9]/.exec(marker[0])?.[0] || 0) };
+      i += marker[0].length; tokens.push(['code', marker[0]]); continue;
+    }
+    if (!plain && '[{'.includes(c)) { flow++; plain = false; }
+    else if (flow && ']}'.includes(c)) { flow--; plain = false; }
+    else if (flow && c === ',' || c === ':' && (white(source[i + 1]) || source[i + 1] === undefined || flow && '[]{},'.includes(source[i + 1])) || !plain && '-?:'.includes(c) && white(source[i + 1])) plain = false;
+    else plain = true;
+    i++; tokens.push(['code', c]);
+  }
+  return { tokens, comments };
+}
+
+function tomlLex(source) {
+  const tokens = [], comments = [];
+  let i = 0;
+  while (i < source.length) {
+    const start = i, c = source[i];
+    if (white(c)) { i++; continue; }
+    if (c === '#') {
+      const end = source.indexOf('\n', i); i = end < 0 ? source.length : end; if (source[i - 1] === '\r') i--;
+      comments.push({ start, end: i, reason: keptReason(source.slice(start, i), start, source) }); continue;
+    }
+    if (c === '"' || c === "'") {
+      const triple = source.startsWith(c.repeat(3), i);
+      if (!triple) i = quoted(source, i, c, c === '"' ? '\\' : '');
+      else {
+        i += 3;
+        while (i < source.length && !source.startsWith(c.repeat(3), i)) { if (c === '"' && source[i] === '\\') i += 2; else i++; }
+        if (i >= source.length) throw new Error(`Unterminated TOML string at ${start}`);
+        i += 3; while (source[i] === c) i++;
+      }
+      tokens.push(['string', source.slice(start, i)]); continue;
+    }
+    i++; tokens.push(['code', c]);
+  }
+  return { tokens, comments };
+}
+
 function shellLex(source) {
   const tokens = [], comments = [];
   let i = 0, atWordStart = true;
@@ -373,7 +455,7 @@ export function strip(source, language) {
 
 export function languageFor(file, source = '') {
   if (file.split('/').some(p => excluded.has(p)) || file.startsWith('gradle/wrapper/') || /(^|\/)README(?:\.|$)/i.test(file)) return null;
-  if (/\.(?:md|mdx|json|jsonc|zon|ya?ml|toml|xml|properties|svg)$/i.test(file)) return null;
+  if (/\.(?:md|mdx|json|jsonc|zon|xml|properties|svg)$/i.test(file)) return null;
   if (/(?:@generated|auto-generated|automatically generated|generated by)/i.test(source.slice(0, 1000))) return null;
   if (path.extname(file) === '.html' && !/^(?:src|assets|extension|app\/src\/main\/assets)\//.test(file)) return null;
   return extensions[path.extname(file)] || (source.startsWith('#!/bin/sh') || /^#!.*\b(?:bash|sh)\b/.test(source.split('\n')[0]) ? 'shell' : null);

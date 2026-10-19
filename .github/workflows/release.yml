@@ -79,7 +79,7 @@ jobs:
           -PversionCode="$VERSION_CODE"
           -PversionName="$VERSION_NAME"
 
-      - name: Build verified update manifest
+      - name: Build verified update manifest and carry forward its changelog history
         shell: bash
         run: |
           source_apk=app/build/outputs/apk/release/app-release.apk
@@ -89,8 +89,6 @@ jobs:
           sha256=$(sha256sum "$release_dir/multiprompt-companion.apk" | cut -d' ' -f1)
           size=$(stat -c%s "$release_dir/multiprompt-companion.apk")
 
-          # The published manifest is the only changelog store. Read the last one, list the
-          # commits since the build it shipped, and carry its history forward.
           previous=$(curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/download/android-latest/multiprompt-companion-update.json" || echo '{}')
           previous_commit=$(jq -r '.commit // ""' <<<"$previous")
           if [[ -n "$previous_commit" ]] && git cat-file -e "${previous_commit}^{commit}" 2>/dev/null; then
