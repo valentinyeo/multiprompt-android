@@ -3177,7 +3177,7 @@ internal fun ReaderScreen(
                 sunlight = sunlightMode,
                 replyGate = replyGate,
                 onReply = chooseReply,
-                onSessionUsed = { onSessionInteraction(); onSessionUsed() },
+                onSessionUsed = { onSessionInteraction(); onSessionInput() },
                 listState = chatListState,
                 followRequest = followRequest,
                 modifier = Modifier.padding(padding).padding(horizontal = 4.dp, vertical = 10.dp)
