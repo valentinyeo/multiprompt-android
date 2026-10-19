@@ -77,18 +77,4 @@ class SignInMenuTest {
             assertEquals(1, signOutCalls)
         }
     }
-
-    @Test
-    fun signedOutNoticeSignsIn() {
-        var signInCalls = 0
-        compose.setContent {
-            MaterialTheme {
-                SignedOutNotice(onSignIn = { signInCalls++ })
-            }
-        }
-
-        compose.onNodeWithText("Signed out. Sign in to see your workspaces and splits.").assertIsDisplayed()
-        compose.onNodeWithText("Sign in").assertIsDisplayed().performClick()
-        compose.runOnIdle { assertEquals(1, signInCalls) }
-    }
 }

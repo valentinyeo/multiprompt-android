@@ -314,6 +314,15 @@ private fun AppScreens(viewModel: MainViewModel) {
         }
     }
 
+    if (!state.signedIn) {
+        SignInScreen(
+            error = state.accountError,
+            onSignIn = { viewModel.signInAccount { context.startActivity(it) } },
+            onReleaseNotes = viewModel::openReleaseNotes,
+        )
+        return
+    }
+
     BackHandler(
         enabled = state.editorVisible,
         onBack = viewModel::hideHostEditor,
@@ -663,6 +672,31 @@ private fun AppScreens(viewModel: MainViewModel) {
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun SignInScreen(error: String?, onSignIn: () -> Unit, onReleaseNotes: () -> Unit) {
+    Surface(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(24.dp)) {
+            Column(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text("multiprompt", style = MaterialTheme.typography.headlineLarge)
+                Text(
+                    "Sign in to see your servers, workspaces and sessions.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                )
+                Button(onClick = onSignIn) { Text("Sign in") }
+                if (error != null) {
+                    Text(error, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
+                }
+            }
+            VersionLabel(onClick = onReleaseNotes, modifier = Modifier.align(Alignment.BottomCenter))
+        }
     }
 }
 
@@ -1577,9 +1611,6 @@ internal fun SessionsScreen(
                     onUpdate = { onSelectSection(AppSection.UPDATE) },
                 )
             }
-        }
-        if (!signedIn) {
-            SignedOutNotice(onSignIn = onSignIn)
         }
         if (searchVisible) {
             Column(Modifier.padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
