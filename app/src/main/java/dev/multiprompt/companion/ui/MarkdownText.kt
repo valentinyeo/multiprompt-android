@@ -20,6 +20,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -31,8 +33,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.constrainHeight
+import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -121,25 +125,50 @@ private fun MarkdownTable(
     linkColor: Color,
     codeBg: Color,
 ) {
-    val cell: Dp = 120.dp
     val columns = maxOf(table.header.size, table.rows.maxOfOrNull { it.size } ?: 0)
-    Column(
-        Modifier.horizontalScroll(rememberScrollState())
+    val rows = listOf(table.header) + table.rows
+    Layout(
+        modifier = Modifier.testTag("md-table").horizontalScroll(rememberScrollState())
             .background(color.copy(alpha = 0.05f), chromeShape(RoundedCornerShape(4.dp))),
-    ) {
-        (listOf(table.header) + table.rows).forEachIndexed { rowIndex, row ->
-            Row {
+        content = {
+            rows.forEachIndexed { rowIndex, row ->
                 for (c in 0 until columns) {
                     Text(
                         markdownAnnotated(row.getOrNull(c).orEmpty(), linkColor, codeBg),
                         fontSize = if (LocalMaterial3.current) MaterialTheme.typography.bodyMedium.fontSize * (fontSize.value / MaterialTheme.typography.bodyLarge.fontSize.value) else (fontSize.value * 0.92f).sp,
                         fontWeight = if (rowIndex == 0) FontWeight.Bold else FontWeight.Normal,
                         color = color,
-                        modifier = Modifier.width(cell).padding(horizontal = 8.dp, vertical = 5.dp),
+                        modifier = Modifier.testTag("md-cell").padding(horizontal = 8.dp, vertical = 5.dp),
                     )
                 }
             }
-            if (rowIndex == 0) Box(Modifier.fillMaxWidth().height(1.dp).background(color.copy(alpha = 0.3f)))
+            Box(Modifier.height(1.dp).background(color.copy(alpha = 0.3f)))
+        },
+    ) { measurables, constraints ->
+        val widths = (0 until columns).map { column ->
+            rows.indices.maxOf { row -> measurables[row * columns + column].maxIntrinsicWidth(Constraints.Infinity) }
+                .coerceAtMost(280.dp.roundToPx())
+        }
+        val cells = measurables.dropLast(1).mapIndexed { index, measurable ->
+            measurable.measure(Constraints.fixedWidth(widths[index % columns]))
+        }
+        val heights = rows.indices.map { row -> (0 until columns).maxOf { cells[row * columns + it].height } }
+        val width = widths.sum()
+        val divider = measurables.last().measure(Constraints.fixedWidth(width))
+        layout(constraints.constrainWidth(width), constraints.constrainHeight(heights.sum() + divider.height)) {
+            var y = 0
+            rows.indices.forEach { row ->
+                var x = 0
+                for (column in 0 until columns) {
+                    cells[row * columns + column].placeRelative(x, y)
+                    x += widths[column]
+                }
+                y += heights[row]
+                if (row == 0) {
+                    divider.placeRelative(0, y)
+                    y += divider.height
+                }
+            }
         }
     }
 }

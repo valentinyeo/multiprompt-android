@@ -320,7 +320,7 @@ object TmuxText {
             current.append(
                 if (kind == ReaderBlockKind.USER_PROMPT) removePromptMarker(line, agent) else line.trimEnd(),
             )
-            lastLineFilledTheRow = line.trimEnd().length >= WRAPPED_ROW_LENGTH
+            lastLineFilledTheRow = line.trimEnd().length >= WRAPPED_ROW_LENGTH && !isTableLine(line)
             if (kind == ReaderBlockKind.USER_PROMPT) {
                 userPromptOpen = true
                 val signature = promptSignature(current.toString())
@@ -388,6 +388,7 @@ object TmuxText {
             if (currentKind == ReaderBlockKind.USER_PROMPT && looksLikeUserPrompt(line, agent)) flush()
             val kind = when {
                 looksLikeUserPrompt(line, agent) -> ReaderBlockKind.USER_PROMPT
+                !fencedCode && isTableLine(line) -> ReaderBlockKind.PROSE
                 looksLikeProgress(line, agent) -> ReaderBlockKind.PROGRESS
                 currentKind == ReaderBlockKind.USER_PROMPT && userPromptOpen &&
                     (line.startsWith("  ") || lastLineFilledTheRow) -> {
@@ -474,7 +475,7 @@ object TmuxText {
     }
 
     private fun startsNewParagraph(value: String): Boolean {
-        if (value.startsWith("  ")) return true
+        if (value.startsWith("  ") || isTableLine(value)) return true
         val line = value.trim()
         return line.isEmpty() || PARAGRAPH_START.containsMatchIn(line)
     }
@@ -546,7 +547,21 @@ object TmuxText {
         .removePrefix("you:")
         .trim()
 
+    private fun isTableLine(value: String): Boolean {
+        val line = value.trim()
+        if (line.length < 3) return false
+        val right = when (line.first()) {
+            '┌' -> '┐'
+            '├' -> '┤'
+            '│' -> '│'
+            '└' -> '┘'
+            else -> return false
+        }
+        return line.last() == right && line.substring(1, line.lastIndex).any { it in "│┬┼┴" }
+    }
+
     private fun looksLikeProgress(value: String, agent: AgentKind): Boolean {
+        if (isTableLine(value)) return false
         val line = value.trimStart()
         return line.startsWith("⏺") || line.startsWith("⎿") ||
             line.startsWith("✓") || line.startsWith("✗") ||
@@ -591,6 +606,7 @@ object TmuxText {
             value.startsWith("› [")
 
     private fun looksLikeActivity(value: String): Boolean {
+        if (isTableLine(value)) return false
         val line = value.trimStart()
         return line.startsWith("Working", ignoreCase = true) ||
             line.startsWith("Running", ignoreCase = true) ||

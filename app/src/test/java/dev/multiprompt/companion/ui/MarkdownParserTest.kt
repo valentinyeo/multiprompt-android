@@ -80,4 +80,59 @@ class MarkdownParserTest {
     }
 
     @Test fun emptyInput() = assertTrue(MarkdownParser.parse("").isEmpty())
+
+    @Test fun realPipeTableHasExactCells() {
+        val table = MarkdownParser.parse(checkNotNull(javaClass.getResource("/table-fixture.md")).readText())
+            .filterIsInstance<MdBlock.Table>().single()
+        assertEquals(listOf("", "Flag on", "Flag off"), table.header.map { cell -> cell.joinToString("") { it.text } })
+        assertEquals(
+            listOf(
+                listOf("Desktop", "0.006 to 0.007 over 13 cold loads", "0.058 to 0.064 over 5 cold loads"),
+                listOf("Phone, 4x CPU", "0 over 5 cold loads", "0 over 5 cold loads"),
+            ),
+            table.rows.map { row -> row.map { cell -> cell.joinToString("") { it.text } } },
+        )
+    }
+
+    @Test fun terminalTableMatchesPipeTableIncludingWrappedCells() {
+        val pipe = MarkdownParser.parse(checkNotNull(javaClass.getResource("/table-fixture.md")).readText())
+            .filterIsInstance<MdBlock.Table>().single()
+        val terminal = checkNotNull(javaClass.getResource("/table-fixture.terminal.txt")).readText()
+        assertEquals(listOf(pipe), MarkdownParser.parse(terminal))
+        assertEquals(listOf(pipe), MarkdownParser.parse(terminal.lines().joinToString("\n") { "    $it" }))
+    }
+
+    @Test fun terminalBodyWithoutSeparatorsKeepsEachDataLineAsARow() {
+        val table = MarkdownParser.parse(
+            "┌───┬───┐\n│ A │ B │\n├───┼───┤\n│ 1 │ 2 │\n│ 3 │ 4 │\n└───┴───┘",
+        ).single() as MdBlock.Table
+        assertEquals(listOf(listOf(inline("1"), inline("2")), listOf(inline("3"), inline("4"))), table.rows)
+    }
+
+    @Test fun realFixtureListsUseRelativeIndentLevels() {
+        val items = MarkdownParser.parse(checkNotNull(javaClass.getResource("/table-fixture.md")).readText())
+            .filterIsInstance<MdBlock.ListItem>()
+        assertEquals(listOf(0, 0, 0, 1, 1, 0, 1, 2, 2, 1), items.map { it.depth })
+        val starts = listOf("CLS", "Comment box", "Videos", "Desktop", "Phone", "Each click", "Influencer", "15.9", "11.2", "Monthly")
+        items.zip(starts).forEach { (item, prefix) ->
+            assertTrue(item.runs.joinToString("") { it.text }.startsWith(prefix))
+        }
+    }
+
+    @Test fun fourSpaceNestingAndContinuationDoNotSwallowBullets() {
+        val items = MarkdownParser.parse("1. parent\n   continuation\n    - child\n        - grandchild\n    - sibling\n2. next")
+            .filterIsInstance<MdBlock.ListItem>()
+        assertEquals(listOf(0, 1, 2, 1, 0), items.map { it.depth })
+        assertEquals("parent\ncontinuation", items.first().runs.joinToString("") { it.text })
+    }
+
+
+    @Test fun terminalRowSeparatorsJoinHeaderAndBodyContinuations() {
+        val table = MarkdownParser.parse(
+            "┌─────┬─────┐\n│ A   │ B   │\n│ C   │     │\n├─────┼─────┤\n│ one │ two │\n│ end │     │\n├─────┼─────┤\n└─────┴─────┘",
+        ).single() as MdBlock.Table
+        assertEquals(listOf(inline("A C"), inline("B")), table.header)
+        assertEquals(listOf(listOf(inline("one end"), inline("two"))), table.rows)
+    }
+
 }
