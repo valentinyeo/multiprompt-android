@@ -34,7 +34,7 @@ import org.robolectric.util.ReflectionHelpers
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [35], application = Application::class, qualifiers = "w411dp-h891dp-xxhdpi")
+@Config(sdk = [35], application = Application::class, qualifiers = "w390dp-h844dp-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class M3ScreenshotTest {
     private val scheduler = TestCoroutineScheduler()

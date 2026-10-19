@@ -11,6 +11,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.TextLayoutResult
 import org.junit.Assert.assertEquals
@@ -67,6 +68,17 @@ class Material3LookTest(private val screen: M3Screen, private val sunlight: Bool
             val row = compose.onNodeWithText("claude-reader").fetchSemanticsNode()
             assertTrue("tab=${tab.boundsInRoot} row=${row.boundsInRoot}", tab.boundsInRoot.bottom <= row.boundsInRoot.top)
             assertTrue("row=${row.boundsInRoot}", row.boundsInRoot.height >= 72f)
+            val title = compose.onNodeWithText("claude-reader", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            val badgeNode = compose.onNodeWithContentDescription("Unread", useUnmergedTree = true).fetchSemanticsNode()
+            val badge = badgeNode.boundsInRoot
+            val time = compose.onAllNodesWithTag("Session activity", useUnmergedTree = true).fetchSemanticsNodes()
+                .single { it.boundsInRoot.top <= badge.top && it.boundsInRoot.bottom < badge.bottom }.boundsInRoot
+            assertTrue("title=$title badge=$badge", badge.left >= title.right)
+            assertTrue("time=$time badge=$badge", badge.top >= time.bottom)
+            assertEquals(time.right, badge.right, 0.01f)
+            assertTrue("badge=$badge", badge.width >= 20f)
+            assertEquals(20f, badge.height, 0.01f)
+            assertTrue(badgeNode.config.getOrElse(SemanticsProperties.Text) { emptyList() }.isEmpty())
             val texts = compose.onAllNodes(SemanticsMatcher("all") { true }, useUnmergedTree = true).fetchSemanticsNodes()
                 .flatMap { it.config.getOrElse(SemanticsProperties.Text) { emptyList() } }.map { it.text }
             assertTrue("Avatar initials must be decorative: $texts", "C" !in texts && "CR" !in texts && "CT" !in texts)
@@ -92,14 +104,12 @@ class Material3LookTest(private val screen: M3Screen, private val sunlight: Bool
         }
         compose.waitForIdle()
         assertEquals(if (sunlight) Material3LightColors else Material3DarkColors, actualScheme)
-        assertEquals(if (sunlight) Color(0xFF8A5022) else Color(0xFFFFB784), primary)
+        assertEquals(if (sunlight) Color(0xFF8F4C27) else Color(0xFFFFB68E), primary)
+        assertEquals(if (sunlight) Color(0xFFFFF8F5) else Color(0xFF1A120D), actualScheme?.surface)
         assertEquals(androidx.compose.ui.text.font.FontFamily.SansSerif, family)
         val layouts = mutableListOf<TextLayoutResult>()
         compose.onNodeWithText("Title").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertEquals(22f, layouts.single().layoutInput.style.fontSize.value)
-        val target = if (sunlight) Color(0xFF8F4C27) else Color(0xFFFFB68E)
-        val maxDeviation = listOf(kotlin.math.abs(primary.red - target.red), kotlin.math.abs(primary.green - target.green), kotlin.math.abs(primary.blue - target.blue)).max() * 255
-        assertTrue("primary deviation=$maxDeviation", maxDeviation <= if (sunlight) 5.01f else 10.01f)
     }
 
     companion object {
