@@ -132,13 +132,13 @@ internal fun AccountWorkspacesScreen(
                     Card(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                         Column(Modifier.padding(12.dp)) {
                             Text(tab.name, Modifier.fillMaxWidth().clickable(enabled = session != null) {
-                                session?.let(viewModel::openReader)
+                                session?.let { viewModel.openReader(it, userInitiated = true) }
                             }, style = MaterialTheme.typography.titleMedium)
                             Text("${AccountHostMap.labels[tab.host]} · ${tab.session}", style = MaterialTheme.typography.bodySmall)
                             if (session == null) Text("Map this host to an SSH profile to open it", color = MaterialTheme.colorScheme.error)
                             Row(Modifier.horizontalScroll(rememberScrollState())) {
-                                TextButton(enabled = session != null, onClick = { session?.let(viewModel::openReader) }) { Text("Open") }
-                                TextButton(enabled = session != null, onClick = { session?.let(viewModel::openTerminal) }) { Text("Terminal") }
+                                TextButton(enabled = session != null, onClick = { session?.let { viewModel.openReader(it, userInitiated = true) } }) { Text("Open") }
+                                TextButton(enabled = session != null, onClick = { session?.let { viewModel.openTerminal(it, userInitiated = true) } }) { Text("Terminal") }
                                 TextButton(enabled = state.signedIn, onClick = { renameTab = tab; tabName = tab.name; error = null }) { Text("Rename") }
                                 TextButton(enabled = state.signedIn, onClick = { moveTab = tab; error = null }) { Text("Move") }
                                 TextButton(enabled = state.signedIn, onClick = { viewModel.closeAccountTab(tab) }) { Text("Close tab") }

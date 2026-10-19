@@ -128,4 +128,63 @@ class AccountLayoutTest {
         assertFalse(PendingLayout(base).pull(remote).dirty)
         assertEquals(remote.tabs, PendingLayout(AccountLayout()).pull(remote).edited.tabs)
     }
+    @Test fun visitsRoundTripPreservesAbsentEmptyAndSafeIntegerValues() {
+        for (visits in listOf(null, emptyList(), listOf(0L, 1_800_000_000_000L, 9_007_199_254_740_991L))) {
+            val layout = base.copy(tabs = listOf(one.copy(visits = visits), two))
+            val json = JSONObject(layout.json().toString())
+            assertEquals(visits != null, json.getJSONArray("tabs").getJSONObject(0).has("visits"))
+            assertEquals(layout, AccountLayout.parse(json))
+            assertFalse(json.getJSONArray("tabs").getJSONObject(1).has("visits"))
+        }
+    }
+
+    @Test fun visitsRejectNonArraysInvalidNumbersDuplicatesDisorderAndOverCapacity() {
+        val invalid = listOf(-1, true, "123", JSONObject.NULL, JSONObject(),
+            org.json.JSONArray(listOf(-1)), org.json.JSONArray(listOf(0.5)),
+            org.json.JSONArray(listOf(java.math.BigDecimal("9007199254740990.5"))),
+            org.json.JSONArray(listOf(9_007_199_254_740_992L)), org.json.JSONArray(listOf(Long.MAX_VALUE)),
+            org.json.JSONArray(listOf("123")), org.json.JSONArray(listOf(true)),
+            org.json.JSONArray(listOf(JSONObject.NULL)), org.json.JSONArray(listOf(JSONObject())),
+            org.json.JSONArray(listOf(1, 1)), org.json.JSONArray(listOf(2, 1)), org.json.JSONArray((0..8).toList()))
+        invalid.forEach { visits ->
+            val json = base.json()
+            json.getJSONArray("tabs").getJSONObject(0).put("visits", visits)
+            assertThrows("visits=$visits", IllegalArgumentException::class.java) { AccountLayout.parse(json) }
+        }
+        for (visits in listOf(listOf(-1L), listOf(9_007_199_254_740_992L), listOf(1L, 1L), listOf(2L, 1L), (0L..8L).toList())) {
+            assertThrows(IllegalArgumentException::class.java) { base.copy(tabs = listOf(one.copy(visits = visits))).validate() }
+        }
+    }
+
+    @Test fun visitsMergeUnionDedupeSortCapAndNeverDropOnOmission() {
+        val original = base.copy(tabs = listOf(one.copy(visits = listOf(1L, 2L, 3L)), two))
+        val edited = original.copy(tabs = listOf(one.copy(visits = listOf(3L, 5L, 7L, 9L, 11L)), two))
+        val remote = original.copy(revision = 2, tabs = listOf(one.copy(visits = listOf(2L, 4L, 6L, 8L, 10L)), two))
+        val result = PendingLayout(original, edited).pull(remote)
+        assertEquals((4L..11L).toList(), result.edited.tabs[0].visits)
+        assertNull(result.edited.tabs[1].visits)
+        assertEquals(result, PendingLayout.parse(JSONObject(result.json().toString())))
+        assertEquals(original.tabs, AccountLayout.rebase(original, base, base).tabs)
+        val empty = base.copy(tabs = emptyList())
+        assertEquals((3L..10L).toList(), AccountLayout.rebase(empty,
+            base.copy(tabs = listOf(one.copy(visits = (1L..5L).toList()))),
+            base.copy(tabs = listOf(one.copy(visits = (5L..10L).toList())))).tabs.single().visits)
+    }
+
+    @Test fun visitDuringPutSurvivesAcknowledgementAndLocalRecordingCapsWithoutTouchingOtherFields() {
+        val sent = base.recordVisit(one.identity, 100)
+        val later = sent.recordVisit(one.identity, 200)
+        val remote = sent.recordVisit(one.identity, 300).copy(revision = 2)
+        val pending = PendingLayout(base, later).acknowledge(sent, remote)
+        assertEquals(listOf(100L, 200L, 300L), pending.edited.tabs[0].visits)
+        assertTrue(pending.dirty)
+        assertFalse(pending.acknowledge(pending.edited, pending.edited.copy(revision = 3)).dirty)
+        val capped = (0L..10L).fold(base) { layout, visit -> layout.recordVisit(one.identity, visit) }
+        assertEquals((3L..10L).toList(), capped.tabs[0].visits)
+        assertEquals(capped, capped.recordVisit(one.identity, 9))
+        assertEquals(base.tabs[1], capped.tabs[1])
+        assertEquals(base, capped.copy(tabs = listOf(capped.tabs[0].copy(visits = null), capped.tabs[1])))
+        assertThrows(IllegalArgumentException::class.java) { capped.recordVisit(one.identity, -1) }
+    }
+
 }

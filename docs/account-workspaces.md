@@ -44,17 +44,34 @@ Inbox shows gold stars synced with the laptop; signed-in account tabs offer Star
 The ★ Favorites split stays just after All and shows only starred account sessions.
 Android negotiates favorite metadata and preserves absent values without inventing stars.
 
-Frequent stays next to Favorites and lists matching account sessions used in the last
-48 hours, newest first, including future timestamps but excluding zero or unknown.
-Android negotiates `favorite,used`; `used` is an optional safe-integer epoch time in
-milliseconds, merged by maximum. Opening a reader or terminal, sending a message,
-and terminal input stamp it locally. Stamp-only uploads require a value more than
-10 minutes newer than the last sent or received value for that tab; other layout
-edits and conflict retries still use the normal revisioned PUT path.
-Terminal input tracking uses the library's modifier-reset hook after processed
-hardware or IME input, not its keyboard-output callback, which also carries
-automatic replies to remote terminal queries. Output, polling, history browsing
-and restoring an archived session never stamp usage.
+Frequent is the first split. It includes sessions with input in the last 24 hours
+(inclusive), or at least three watch-only looks in the last six hours. Future
+values count. The order key is input when recent, otherwise the newest look.
+Like other splits it follows newest-at-bottom; with that setting on, the newest
+key is the bottom on-screen row. Selection uses stable IDs, not stored indices.
+Old `used` stamps never qualify a session.
+
+Android negotiates `X-Layout-Features: favorite,used,visits,input`. Optional `input`
+is a non-negative safe-integer Unix millisecond timestamp, merged by maximum
+across pulls, conflicts and acknowledgements; omission preserves known input.
+Composer sends, voice sends, reader commands and terminal keystrokes stamp both
+`input` and legacy `used`. Input publishes immediately when the last synced input
+is absent or more than 60 seconds older, otherwise it waits for another publish.
+Plain opens, switches and automatic step-jumps stamp neither field.
+
+Optional `visits` is a unique ascending array of at most eight non-negative
+safe-integer Unix millisecond values. Only an explicit user open qualifies for a
+look: ten uninterrupted foreground seconds in reader or terminal record the
+front period's start time once. Step-jumps, restore, startup and automatic opens
+never qualify. Backgrounding or changing sessions cancels pending dwell. Visits
+merge by union, deduplication, ascending sort and newest-eight cap. New looks
+persist and sync immediately, independently of input throttling.
+
+`used` remains optional and merged by maximum for older apps. Its stamp-only
+uploads retain the ten-minute throttle. Terminal input tracking uses the library's
+modifier-reset hook after hardware or IME input, not its keyboard-output callback,
+which also carries automatic remote-terminal query replies. Output, polling and
+history browsing never stamp input.
 
 Host mapping is device-local: 0 = Hetzner, 1 = Contabo UK, 2 = Inne CRO. Recognized,
 unambiguous profiles are selected automatically; Host mapping lets the user choose
