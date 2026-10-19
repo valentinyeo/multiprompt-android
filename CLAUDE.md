@@ -14,7 +14,7 @@ A single Android app (`dev.multiprompt.companion`) that SSHes straight into publ
 ./gradlew testDebugUnitTest --tests '*TmuxParserTest*'   # single test class
 ```
 
-Requires JDK 17 and Android SDK 36. Before every push run `tools/check.sh`: it is exactly what CI runs on every pull request and push to `main` (`.github/workflows/test.yml`). `release.yml` then lints, tests, signs, and republishes the fixed `android-latest` release, which the installed app pulls from its Update screen.
+Requires JDK 17 and Android SDK 36. Before every push run `tools/check.sh`: it is exactly what CI runs on every pull request and push to `main` (`.github/workflows/test.yml`).
 
 | Rule | Enforced by |
 |---|---|
@@ -23,6 +23,12 @@ Requires JDK 17 and Android SDK 36. Before every push run `tools/check.sh`: it i
 | No scratch output (logs, OCR dumps, screenshots) at the repo root | `tools/root-files.mjs` allowlist in `tools/check.sh` |
 | Merged branches do not linger on GitHub | repo setting: delete branch on merge |
 | No keys in Git; whole history rescanned weekly | `secret-scan` in `gitleaks.yml`, required on `main` |
+
+## Release and install
+
+- **Release:** merge the PR to `main`: `gh pr merge <n> --squash --delete-branch`. `release.yml` lints, tests, signs and republishes `android-latest`. Watch it: `gh run watch $(gh run list -w release.yml -L 1 --json databaseId -q ".[0].databaseId") --exit-status`. Trigger another release without a code change: `gh workflow run release.yml` (optionally add `-f version_name=0.2.0`).
+- **Prove it:** `node tools/release-status.mjs` passes only when the live `android-latest` manifest serves the local `origin/main` ref (`--commit <sha>` for another commit).
+- **Install:** the release app schedules an hourly background manifest check and notifies for a newer version: "multiprompt <version> is ready". Tap it to open Update, then tap "Download and update" to download, verify and install (Android may require install permission or confirmation). The Update screen also works directly. No adb or Play Store step. Debug builds (`./gradlew installDebug`, package suffix `.debug`) never receive release updates.
 
 ## Git workflow
 
