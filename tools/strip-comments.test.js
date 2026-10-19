@@ -187,3 +187,13 @@ test('CLI --check rejects new YAML/TOML comments and strip mode removes them', (
     assert.equal(fs.readFileSync(path.join(root, 'workflow.yml'), 'utf8'), 'run: |\n  # shell text\n');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+test('only the byte-identical bundled desktop reader is exempt', async () => {
+  const { languageFor, tokenize } = await api;
+  const reader = 'app/src/main/assets/chat_history_reader.py';
+  assert.equal(languageFor(reader, '# upstream comment\n'), null);
+  for (const file of ['app/src/main/assets/other.py', 'app/src/main/assets/nested/chat_history_reader.py', 'src/chat_history_reader.py']) {
+    assert.equal(languageFor(file, '# comment\n'), 'python');
+    assert.equal(tokenize('# comment\n', languageFor(file)).comments.filter(c => !c.reason).length, 1);
+  }
+});
