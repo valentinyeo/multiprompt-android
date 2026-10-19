@@ -243,6 +243,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onPause() { foreground.value = false }
 
+    fun onStop() { dictation.onAppBackgrounded() }
+
     fun select(section: AppSection) {
         _state.update { it.copy(section = section) }
     }

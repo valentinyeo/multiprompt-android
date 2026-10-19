@@ -3,11 +3,9 @@ package dev.multiprompt.companion.dictation
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.media.AudioFormat
-import android.media.AudioRecord
-import android.media.MediaRecorder
+import android.util.Log
 import androidx.core.content.ContextCompat
-import dev.multiprompt.companion.security.SecretStore
+import dev.multiprompt.companion.security.SecretStorage
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
@@ -46,7 +44,10 @@ data class DictationState(
 
 class DeepgramDictation(
     context: Context,
-    private val secrets: SecretStore,
+    private val secrets: SecretStorage,
+    private val micFactory: () -> MicSource? = { AudioRecordMicSource.create() },
+    private val socketFactory: ((Request, WebSocketListener) -> WebSocket)? = null,
+    private val usageLog: DictationUsageLog = DictationUsageLog(PreferencesDictationUsageStore(context)),
 ) : AutoCloseable {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -59,19 +60,23 @@ class DeepgramDictation(
     )
     val state: StateFlow<DictationState> = _state.asStateFlow()
 
-    @Volatile
+    private class Stream {
+        val pendingAudio = ByteArrayOutputStream()
+        var open = false
+        var finalizeWhenOpen = false
+        var closeWhenOpen = false
+        var gateClosed = false
+    }
+
+    private val liveSockets = mutableMapOf<WebSocket, Stream>()
     private var socket: WebSocket? = null
-    @Volatile
-    private var recorder: AudioRecord? = null
+    private var recorder: MicSource? = null
     private var recordingJob: Job? = null
     private var finishingJob: Job? = null
-    private val audioLock = Any()
-    private val pendingAudio = ByteArrayOutputStream()
-    private var socketOpen = false
-    private var finalizeWhenOpen = false
-    private var closeWhenOpen = false
-    @Volatile
+    private var durationJob: Job? = null
     private var stopping = false
+    private var gate: SpeechGate? = null
+    private var usageRecorded = true
 
     fun saveApiKey(value: String): Boolean {
         val key = value.trim()
@@ -81,8 +86,9 @@ class DeepgramDictation(
         return true
     }
 
+    @Synchronized
     fun removeApiKey() {
-        stop()
+        discard()
         secrets.remove(API_KEY_SECRET_ID)
         _state.value = DictationState(configured = false)
     }
@@ -105,262 +111,274 @@ class DeepgramDictation(
             }
 
         finishingJob?.cancel()
+        cancelSockets()
         finalSegments.clear()
         stopping = false
-        synchronized(audioLock) {
-            pendingAudio.reset()
-            socketOpen = false
-            finalizeWhenOpen = false
-            closeWhenOpen = false
+        gate = SpeechGate()
+        usageRecorded = false
+        _state.value = DictationState(status = DictationStatus.LISTENING, configured = true)
+        val mic = try {
+            micFactory()
+        } catch (_: SecurityException) {
+            fail("Microphone permission was removed")
+            return
+        } catch (_: IllegalArgumentException) {
+            null
         }
-        _state.value = DictationState(
-            status = DictationStatus.CONNECTING,
-            configured = true,
-        )
-        socket = openSocket(apiKey, 0)
-        startRecorder()
+        recorder = mic
+        if (mic == null || !runCatching { mic.start() }.getOrDefault(false)) {
+            fail("The microphone could not be initialized")
+            return
+        }
+        startRecorder(mic, apiKey)
+        durationJob = scope.launch {
+            delay(SpeechGate.MAX_DURATION_MS.toLong())
+            stop()
+        }
     }
 
     @Synchronized
     fun stop() {
-        val activeSocket = socket ?: return
+        if (_state.value.status !in ACTIVE_STATUSES || stopping) return
         stopping = true
         stopRecorder()
+        recordUsage()
+        if (liveSockets.isEmpty()) {
+            finishWithoutError()
+            return
+        }
         _state.update { it.copy(status = DictationStatus.FINISHING) }
-        synchronized(audioLock) {
-            if (socketOpen) {
-                flushPendingAudioLocked(activeSocket)
-                activeSocket.send("""{"type":"Finalize"}""")
-            } else {
-                finalizeWhenOpen = true
-            }
+        socket?.let { active ->
+            liveSockets[active]?.let { stream -> finalizeStream(active, stream) }
         }
         finishingJob?.cancel()
         finishingJob = scope.launch {
             delay(FINAL_RESULT_WAIT_MS)
-            synchronized(audioLock) {
-                if (socketOpen) {
-                    activeSocket.send("""{"type":"CloseStream"}""")
-                    activeSocket.close(1000, "Dictation complete")
-                } else {
-                    closeWhenOpen = true
+            synchronized(this@DeepgramDictation) {
+                liveSockets.forEach { (active, stream) -> closeStream(active, stream) }
+            }
+            delay(FINAL_RESULT_WAIT_MS)
+            synchronized(this@DeepgramDictation) {
+                if (stopping) {
+                    cancelSockets()
+                    finishWithoutError()
                 }
             }
         }
     }
+
+    fun onAppBackgrounded() = stop()
 
     @Synchronized
     fun discard() {
-        val configured = _state.value.configured
         finishingJob?.cancel()
         finishingJob = null
-        stopping = false
         stopRecorder()
-        socket?.cancel()
-        socket = null
-        synchronized(audioLock) {
-            pendingAudio.reset()
-            socketOpen = false
-            finalizeWhenOpen = false
-            closeWhenOpen = false
-        }
-        synchronized(finalSegments) { finalSegments.clear() }
-        _state.value = DictationState(configured = configured)
+        recordUsage()
+        cancelSockets()
+        stopping = false
+        finalSegments.clear()
+        _state.value = DictationState(configured = _state.value.configured)
     }
 
-    private fun startRecorder() {
-        recordingJob?.cancel()
+    private fun startRecorder(mic: MicSource, apiKey: String) {
         recordingJob = scope.launch {
-            if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) !=
-                PackageManager.PERMISSION_GRANTED
-            ) {
-                failAndCancelSocket("Microphone permission was removed")
-                return@launch
-            }
-            val minimum = AudioRecord.getMinBufferSize(
-                SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-            )
-            if (minimum <= 0) {
-                failAndCancelSocket("The microphone could not be initialized")
-                return@launch
-            }
-            val audioRecord = try {
-                AudioRecord(
-                    MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                    SAMPLE_RATE,
-                    AudioFormat.CHANNEL_IN_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT,
-                    maxOf(minimum, AUDIO_BUFFER_BYTES),
-                )
-            } catch (_: SecurityException) {
-                failAndCancelSocket("Microphone permission was removed")
-                return@launch
-            }
-            if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
-                audioRecord.release()
-                failAndCancelSocket("The microphone could not be initialized")
-                return@launch
-            }
-            recorder = audioRecord
-            audioRecord.startRecording()
-            _state.update { it.copy(status = DictationStatus.LISTENING, error = null) }
-            val buffer = ByteArray(maxOf(minimum, AUDIO_BUFFER_BYTES))
+            val buffer = ByteArray(AUDIO_BUFFER_BYTES)
             try {
-                while (isActive && recorder === audioRecord) {
-                    val count = audioRecord.read(buffer, 0, buffer.size)
-                    if (count > 0 && !sendOrBufferAudio(buffer, count)) break
+                while (isActive) {
+                    val count = mic.read(buffer)
+                    if (count == 0) {
+                        delay(10)
+                        continue
+                    }
+                    synchronized(this@DeepgramDictation) {
+                        if (recorder !== mic || stopping) return@launch
+                        if (count < 0) {
+                            fail("The microphone could not be read")
+                            return@launch
+                        }
+                        gate?.process(buffer, count)?.forEach { action ->
+                            if (recorder === mic && !stopping) handleAction(action, apiKey)
+                        }
+                    }
                 }
-            } finally {
-                if (recorder === audioRecord) recorder = null
-                runCatching { audioRecord.stop() }
-                audioRecord.release()
+            } catch (_: Exception) {
+                synchronized(this@DeepgramDictation) {
+                    if (recorder === mic && !stopping) fail("The microphone could not be read")
+                }
             }
+        }
+    }
+
+    private fun handleAction(action: GateAction, apiKey: String) {
+        when (action) {
+            GateAction.OpenStream -> openSocket(apiKey, 0, Stream())
+            is GateAction.Send -> if (!sendOrBufferAudio(action.bytes)) fail("Dictation audio could not be sent")
+            GateAction.KeepAlive -> socket?.let { active ->
+                if (liveSockets[active]?.open == true) active.send("""{"type":"KeepAlive"}""")
+            }
+            GateAction.Finalize -> socket?.let { active ->
+                liveSockets[active]?.let { finalizeStream(active, it) }
+            }
+            GateAction.CloseStream -> socket?.let { active ->
+                liveSockets[active]?.let {
+                    it.gateClosed = true
+                    closeStream(active, it)
+                }
+                socket = null
+            }
+            is GateAction.StopDictation -> stop()
         }
     }
 
     private fun acceptTranscript(result: DeepgramTranscript) {
-        synchronized(finalSegments) {
-            if (result.isFinal) finalSegments += result.text
-            val finalText = finalSegments.joinToString(" ")
-            val combined = if (result.isFinal) {
-                finalText
-            } else {
-                listOf(finalText, result.text).filter(String::isNotBlank).joinToString(" ")
-            }
-            _state.update { it.copy(transcript = combined) }
+        if (result.isFinal) finalSegments += result.text
+        val finalText = finalSegments.joinToString(" ")
+        val combined = if (result.isFinal) {
+            finalText
+        } else {
+            listOf(finalText, result.text).filter(String::isNotBlank).joinToString(" ")
         }
+        _state.update { it.copy(transcript = combined) }
     }
 
     private fun stopRecorder() {
         val activeRecorder = recorder
         recorder = null
         runCatching { activeRecorder?.stop() }
+        runCatching { activeRecorder?.release() }
         recordingJob?.cancel()
         recordingJob = null
+        durationJob?.cancel()
+        durationJob = null
+    }
+
+    private fun recordUsage() {
+        if (usageRecorded) return
+        usageRecorded = true
+        val seconds = gate?.sentSeconds ?: 0.0
+        val total = usageLog.add(seconds)
+        Log.i("Dictation", "Streamed ${seconds}s this dictation; ${total}s total today")
     }
 
     private fun fail(message: String) {
         stopRecorder()
-        socket = null
-        synchronized(audioLock) {
-            pendingAudio.reset()
-            socketOpen = false
-            finalizeWhenOpen = false
-            closeWhenOpen = false
-        }
+        recordUsage()
+        cancelSockets()
+        stopping = false
         _state.update { it.copy(status = DictationStatus.FAILED, error = message) }
     }
 
-    private fun failAndCancelSocket(message: String) {
-        val activeSocket = socket
-        fail(message)
-        activeSocket?.cancel()
+    private fun sendOrBufferAudio(buffer: ByteArray): Boolean {
+        val active = socket ?: return false
+        val stream = liveSockets[active] ?: return false
+        if (stream.open) return active.send(buffer.toByteString())
+        if (stream.pendingAudio.size() + buffer.size > MAX_PENDING_AUDIO_BYTES) return false
+        stream.pendingAudio.write(buffer)
+        return true
     }
 
-    private fun sendOrBufferAudio(buffer: ByteArray, count: Int): Boolean {
-        val activeSocket = socket
-        synchronized(audioLock) {
-            if (activeSocket != null && socketOpen) {
-                return activeSocket.send(buffer.toByteString(0, count))
-            }
-            if (pendingAudio.size() + count <= MAX_PENDING_AUDIO_BYTES) {
-                pendingAudio.write(buffer, 0, count)
-            }
-            return true
+    private fun finalizeStream(active: WebSocket, stream: Stream) {
+        if (stream.open) active.send("""{"type":"Finalize"}""") else stream.finalizeWhenOpen = true
+    }
+
+    private fun closeStream(active: WebSocket, stream: Stream) {
+        if (stream.open) {
+            active.send("""{"type":"CloseStream"}""")
+            active.close(1000, "Dictation complete")
+        } else {
+            stream.closeWhenOpen = true
         }
     }
 
-    private fun flushPendingAudioLocked(activeSocket: WebSocket) {
-        if (pendingAudio.size() == 0) return
-        activeSocket.send(pendingAudio.toByteArray().toByteString())
-        pendingAudio.reset()
-    }
-
-    override fun close() {
-        finishingJob?.cancel()
-        stopRecorder()
-        socket?.cancel()
+    private fun cancelSockets() {
+        val sockets = liveSockets.keys.toList()
+        liveSockets.clear()
         socket = null
-        synchronized(audioLock) {
-            pendingAudio.reset()
-            socketOpen = false
-            finalizeWhenOpen = false
-            closeWhenOpen = false
-        }
+        sockets.forEach { it.cancel() }
+    }
+
+    @Synchronized
+    override fun close() {
+        discard()
         client.dispatcher.executorService.shutdown()
         client.connectionPool.evictAll()
         scope.cancel()
     }
 
-    private fun openSocket(apiKey: String, hostIndex: Int): WebSocket {
+    private fun openSocket(apiKey: String, hostIndex: Int, stream: Stream) {
         val request = Request.Builder()
             .url(DeepgramEndpoint.url(hostIndex))
             .header("Authorization", "Token $apiKey")
             .build()
-        return client.newWebSocket(request, Listener(apiKey, hostIndex))
+        val listener = Listener(apiKey, hostIndex)
+        val active = socketFactory?.invoke(request, listener) ?: client.newWebSocket(request, listener)
+        liveSockets[active] = stream
+        socket = active
     }
 
     private inner class Listener(
         private val apiKey: String,
         private val hostIndex: Int,
     ) : WebSocketListener() {
-        override fun onOpen(webSocket: WebSocket, response: Response) {
-            if (socket !== webSocket) {
+        override fun onOpen(webSocket: WebSocket, response: Response) = synchronized(this@DeepgramDictation) {
+            val stream = liveSockets[webSocket] ?: run {
                 webSocket.cancel()
-                return
+                return@synchronized
             }
-            synchronized(audioLock) {
-                socketOpen = true
-                flushPendingAudioLocked(webSocket)
-                if (finalizeWhenOpen) {
-                    finalizeWhenOpen = false
-                    webSocket.send("""{"type":"Finalize"}""")
-                }
-                if (closeWhenOpen) {
-                    closeWhenOpen = false
-                    webSocket.send("""{"type":"CloseStream"}""")
-                    webSocket.close(1000, "Dictation complete")
+            stream.open = true
+            if (stream.pendingAudio.size() > 0) {
+                val sent = webSocket.send(stream.pendingAudio.toByteArray().toByteString())
+                stream.pendingAudio.reset()
+                if (!sent && !stream.gateClosed) {
+                    fail("Dictation audio could not be sent")
+                    return@synchronized
                 }
             }
-            _state.update { it.copy(status = DictationStatus.LISTENING, error = null) }
+            if (stream.finalizeWhenOpen) {
+                stream.finalizeWhenOpen = false
+                finalizeStream(webSocket, stream)
+            }
+            if (stream.closeWhenOpen) {
+                stream.closeWhenOpen = false
+                closeStream(webSocket, stream)
+            }
         }
 
-        override fun onMessage(webSocket: WebSocket, text: String) {
-            if (socket !== webSocket) return
-            DeepgramTranscriptParser.parse(text)?.let(::acceptTranscript)
+        override fun onMessage(webSocket: WebSocket, text: String) = synchronized(this@DeepgramDictation) {
+            if (webSocket in liveSockets) DeepgramTranscriptParser.parse(text)?.let(::acceptTranscript)
+            Unit
         }
 
-        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-            if (socket !== webSocket) return
-            finishWithoutError()
-        }
-
-        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            if (socket !== webSocket) return
+        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = synchronized(this@DeepgramDictation) {
+            val stream = liveSockets.remove(webSocket) ?: return@synchronized
+            if (socket === webSocket) socket = null
             if (stopping) {
+                if (liveSockets.isEmpty()) finishWithoutError()
+            } else if (!stream.gateClosed) {
                 finishWithoutError()
-                return
             }
-            val opened = synchronized(audioLock) { socketOpen }
-            if (DeepgramEndpoint.shouldTryNextHost(hostIndex, response?.code, opened, stopping)) {
-                socket = openSocket(apiKey, hostIndex + 1)
-                return
+        }
+
+        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) = synchronized(this@DeepgramDictation) {
+            val stream = liveSockets.remove(webSocket) ?: return@synchronized
+            if (socket === webSocket) socket = null
+            if (stopping) {
+                if (liveSockets.isEmpty()) finishWithoutError()
+            } else if (!stream.gateClosed) {
+                if (DeepgramEndpoint.shouldTryNextHost(hostIndex, response?.code, stream.open, stopping)) {
+                    openSocket(apiKey, hostIndex + 1, stream)
+                } else {
+                    fail(DeepgramEndpoint.failureMessage(response?.code, t))
+                }
             }
-            fail(DeepgramEndpoint.failureMessage(response?.code, t))
         }
     }
 
     private fun finishWithoutError() {
         stopRecorder()
-        socket = null
-        synchronized(audioLock) {
-            pendingAudio.reset()
-            socketOpen = false
-            finalizeWhenOpen = false
-            closeWhenOpen = false
-        }
+        recordUsage()
+        cancelSockets()
         stopping = false
         _state.update { it.copy(status = DictationStatus.IDLE) }
     }
@@ -368,9 +386,8 @@ class DeepgramDictation(
     private companion object {
         const val API_KEY_SECRET_ID = "deepgram_api_key"
         const val MAX_API_KEY_CHARACTERS = 512
-        const val SAMPLE_RATE = 16_000
         const val AUDIO_BUFFER_BYTES = 3_200
-        const val MAX_PENDING_AUDIO_BYTES = SAMPLE_RATE * 2 * 8
+        const val MAX_PENDING_AUDIO_BYTES = SpeechGate.SAMPLE_RATE * 2 * 8
         const val FINAL_RESULT_WAIT_MS = 1_200L
         val ACTIVE_STATUSES = setOf(
             DictationStatus.CONNECTING,

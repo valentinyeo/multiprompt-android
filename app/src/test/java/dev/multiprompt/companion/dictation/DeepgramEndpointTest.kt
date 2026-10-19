@@ -10,6 +10,9 @@ class DeepgramEndpointTest {
     fun triesEuFirstThenGlobal() {
         assertTrue(DeepgramEndpoint.url(0).startsWith("wss://api.eu.deepgram.com/v1/listen?"))
         assertTrue(DeepgramEndpoint.url(1).startsWith("wss://api.deepgram.com/v1/listen?"))
+        DeepgramEndpoint.HOSTS.indices.forEach {
+            assertTrue(DeepgramEndpoint.url(it).contains("&tag=multiprompt-android"))
+        }
     }
 
     @Test
