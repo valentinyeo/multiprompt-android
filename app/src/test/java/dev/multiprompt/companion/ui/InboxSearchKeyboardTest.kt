@@ -100,6 +100,9 @@ class InboxSearchKeyboardTest {
                     crashReport = null,
                     onClearCrashReport = {},
                     onAddHost = {},
+                    signedIn = true,
+                    onSignIn = {},
+                    onSignOut = {},
                 )
             }
         }
