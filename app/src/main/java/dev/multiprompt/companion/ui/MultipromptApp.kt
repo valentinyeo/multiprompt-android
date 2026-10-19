@@ -130,6 +130,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -188,7 +189,6 @@ import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.reader.QueuedMessages
-import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.skills.Skill
@@ -2143,6 +2143,7 @@ private fun DissolvedSessionCard(
 internal fun ReaderTopBar(
     session: TmuxSession,
     modelLabel: String?,
+    statusLabel: String?,
     onModelCommand: (String) -> Unit,
     onOpenTerminal: () -> Unit,
     onReleaseNotes: () -> Unit,
@@ -2151,7 +2152,7 @@ internal fun ReaderTopBar(
 ) {
     var modelMenuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     TopAppBar(
-        modifier = Modifier.statusBarsPadding().pointerInput(onOpenTerminal) {
+        modifier = Modifier.testTag("reader-top-bar").statusBarsPadding().pointerInput(onOpenTerminal) {
             detectTapGestures(onDoubleTap = { onOpenTerminal() })
         },
         title = {
@@ -2172,7 +2173,7 @@ internal fun ReaderTopBar(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            modelLabel ?: "Model / effort",
+                            listOfNotNull(modelLabel, statusLabel).joinToString(" · ").ifEmpty { "Model / effort" },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -2723,6 +2724,12 @@ internal fun ReaderScreen(
             },
         )
     }
+    if (historyDialogOpen) {
+        AgentHistoryDialog(connection) {
+            historyDialogOpen = false
+            readerScope.launch { connection.exitHistory() }
+        }
+    }
     BackHandler(onBack = onBack)
     Scaffold(
         modifier = Modifier.horizontalSwipe(onSwitchSession, suppressRight = replyGate::suppressRight),
@@ -2737,6 +2744,10 @@ internal fun ReaderScreen(
             ReaderTopBar(
                 session = session,
                 modelLabel = runtimeDetails.label,
+                statusLabel = listOfNotNull(
+                    reader.eta?.let { "ETA ${it.label(etaNowMillis)}" },
+                    "waiting for input".takeIf { reader.waitingForInput },
+                ).joinToString(" · ").ifEmpty { null },
                 onModelCommand = sendModelCommand,
                 onOpenTerminal = onOpenTerminal,
                 onReleaseNotes = onReleaseNotes,
@@ -2746,6 +2757,19 @@ internal fun ReaderScreen(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false },
                     ) {
+                        if (reader.alternateOn) {
+                            DropdownMenuItem(
+                                text = { Text("Session history") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onSessionInteraction()
+                                    readerScope.launch {
+                                        connection.enterHistory()
+                                        historyDialogOpen = true
+                                    }
+                                },
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text("Enter / approve") },
                             enabled = !reader.sending,
@@ -2925,22 +2949,6 @@ internal fun ReaderScreen(
                         )
                     }
                 }
-                HarnessStatusBar(
-                    runtimeDetails = runtimeDetails,
-                    reader = reader,
-                    session = session,
-                    etaLabel = reader.eta?.let { "ETA ${it.label(etaNowMillis)}" },
-                    alternateOn = reader.alternateOn,
-                    onScrollBackPage = { onSessionInteraction(); connection.scrollBackPage() },
-                    onScrollLive = scrollLive,
-                    onOpenHistory = {
-                        onSessionInteraction()
-                        readerScope.launch {
-                            connection.enterHistory()
-                            historyDialogOpen = true
-                        }
-                    },
-                )
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -4456,64 +4464,6 @@ private fun SkillPickerMenu(
         }
     }
 }
-
-@Composable
-private fun HarnessStatusBar(
-    runtimeDetails: TmuxText.RuntimeDetails,
-    reader: ReaderState,
-    session: TmuxSession,
-    etaLabel: String?,
-    alternateOn: Boolean,
-    onScrollBackPage: () -> Unit,
-    onScrollLive: () -> Unit,
-    onOpenHistory: () -> Unit,
-) {
-    val parts = listOfNotNull(
-        session.agent.label.takeIf { it.isNotBlank() },
-        etaLabel,
-        runtimeDetails.label,
-        reader.waitingForInput.takeIf { it }?.let { "waiting for input" },
-    )
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(bottom = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Text(
-            parts.joinToString("  ·  "),
-            style = MaterialTheme.typography.labelSmall,
-            fontSize = chromeFontSize(10.sp),
-            lineHeight = chromeLineHeight(12.sp),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f),
-        )
-        IconButton(
-            onClick = if (alternateOn) onOpenHistory else onScrollBackPage,
-            modifier = Modifier.size(24.dp),
-        ) {
-            Icon(
-                Icons.Default.KeyboardArrowUp,
-                if (alternateOn) "Open agent history" else "Scroll agent history up",
-                Modifier.size(16.dp),
-            )
-        }
-        IconButton(
-            onClick = onScrollLive,
-            modifier = Modifier.size(24.dp),
-        ) {
-            Icon(
-                Icons.Default.KeyboardArrowDown,
-                "Back to live",
-                Modifier.size(16.dp),
-            )
-        }
-    }
-}
-
 
 @Composable
 private fun AgentHistoryDialog(connection: SessionReaderConnection, onDismiss: () -> Unit) {
