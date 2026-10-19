@@ -44,6 +44,18 @@ Inbox shows gold stars synced with the laptop; signed-in account tabs offer Star
 The ★ Favorites split stays just after All and shows only starred account sessions.
 Android negotiates favorite metadata and preserves absent values without inventing stars.
 
+Frequent stays next to Favorites and lists matching account sessions used in the last
+48 hours, newest first, including future timestamps but excluding zero or unknown.
+Android negotiates `favorite,used`; `used` is an optional safe-integer epoch time in
+milliseconds, merged by maximum. Opening a reader or terminal, sending a message,
+and terminal input stamp it locally. Stamp-only uploads require a value more than
+10 minutes newer than the last sent or received value for that tab; other layout
+edits and conflict retries still use the normal revisioned PUT path.
+Terminal input tracking uses the library's modifier-reset hook after processed
+hardware or IME input, not its keyboard-output callback, which also carries
+automatic replies to remote terminal queries. Output, polling, history browsing
+and restoring an archived session never stamp usage.
+
 Host mapping is device-local: 0 = Hetzner, 1 = Contabo UK, 2 = Inne CRO. Recognized,
 unambiguous profiles are selected automatically; Host mapping lets the user choose
 explicitly when labels are ambiguous. Host 0 must use the `valentin` outer tmux

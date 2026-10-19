@@ -10,11 +10,12 @@ data class AccountTab(
     val workspace: String,
     val manual: Boolean = false,
     val favorite: Boolean? = null,
+    val used: Long? = null,
 ) {
     val identity: String get() = "$host:${session.lowercase(java.util.Locale.ROOT)}"
     fun json(): JSONObject = JSONObject().put("kind", "tmux").put("name", name)
         .put("tmux_session", session).put("tmux_host", host).put("workspace", workspace).put("manual", manual)
-        .apply { favorite?.let { put("favorite", it) } }
+        .apply { favorite?.let { put("favorite", it) }; used?.let { put("used", it) } }
 }
 
 data class AccountLayout(
@@ -28,7 +29,8 @@ data class AccountLayout(
             validText(it, 32) && it.toByteArray(Charsets.UTF_8).size <= 31
         }) { "Workspace names must be unique and at most 31 UTF-8 bytes" }
         require(tabs.map { it.identity }.distinct().size == tabs.size && tabs.all {
-            validText(it.name, 64) && it.host in 0..2 && Regex("[A-Za-z0-9_-]{1,63}").matches(it.session) && it.workspace in workspaces
+            validText(it.name, 64) && it.host in 0..2 && Regex("[A-Za-z0-9_-]{1,63}").matches(it.session) && it.workspace in workspaces &&
+                (it.used == null || it.used in 0..9_007_199_254_740_991L)
         }) { "Invalid or duplicate account tab" }
         return this
     }
@@ -50,6 +52,9 @@ data class AccountLayout(
     }).validate()
     fun setFavorite(identity: String, value: Boolean): AccountLayout = copy(tabs = tabs.map {
         if (it.identity == identity) it.copy(favorite = value) else it
+    }).validate()
+    fun stampUsed(identity: String, now: Long): AccountLayout = copy(tabs = tabs.map {
+        if (it.identity == identity) it.copy(used = maxOf(it.used ?: 0, now)) else it
     }).validate()
     fun renameWorkspace(old: String, name: String): AccountLayout = copy(
         workspaces = workspaces.map { if (it == old) name else it },
@@ -75,14 +80,17 @@ data class AccountLayout(
                 val t = tabs.getJSONObject(it)
                 val required = setOf("kind", "name", "tmux_session", "tmux_host", "workspace")
                 val keys = t.keys().asSequence().toSet()
-                require(keys.containsAll(required) && (keys - required).all { it in setOf("manual", "favorite") } && t.get("kind") == "tmux")
+                require(keys.containsAll(required) && (keys - required).all { it in setOf("manual", "favorite", "used") } && t.get("kind") == "tmux")
                 require(listOf("name", "tmux_session", "workspace").all { key -> t.get(key) is String })
                 val host = t.get("tmux_host")
                 require(host is Number && host.toDouble() == host.toInt().toDouble())
                 require(!t.has("manual") || t.get("manual") is Boolean)
                 require(!t.has("favorite") || t.get("favorite") is Boolean)
+                val used = if (t.has("used")) t.get("used") else null
+                require(!t.has("used") || used is Number && used.toLong() in 0..9_007_199_254_740_991L &&
+                    used.toString().toBigDecimalOrNull()?.compareTo(used.toLong().toBigDecimal()) == 0)
                 AccountTab(t.getString("name"), t.getString("tmux_session"), host.toInt(), t.getString("workspace"),
-                    t.optBoolean("manual", false), if (t.has("favorite")) t.getBoolean("favorite") else null)
+                    t.optBoolean("manual", false), if (t.has("favorite")) t.getBoolean("favorite") else null, (used as? Number)?.toLong())
             }).validate()
         }
 
@@ -98,13 +106,16 @@ data class AccountLayout(
             val workspaces = remote.workspaces.filterNot { it in base.workspaces && it !in edited.workspaces }.toMutableList()
             edited.workspaces.filter { it !in base.workspaces && it !in workspaces }.forEach(workspaces::add)
             val tabs = remote.tabs.mapNotNull { r ->
-                val b = old[r.identity] ?: return@mapNotNull r
+                val b = old[r.identity] ?: return@mapNotNull r.copy(
+                    used = listOfNotNull(r.used, local[r.identity]?.used).maxOrNull(),
+                )
                 val e = local[r.identity] ?: return@mapNotNull null
                 r.copy(
                     name = if (e.name != b.name || e.manual != b.manual) e.name else r.name,
                     manual = if (e.name != b.name || e.manual != b.manual) e.manual else r.manual,
                     workspace = if (e.workspace != b.workspace) e.workspace else r.workspace,
                     favorite = if (e.favorite != b.favorite) e.favorite else r.favorite,
+                    used = listOfNotNull(b.used, e.used, r.used).maxOrNull(),
                 )
             }.toMutableList()
             edited.tabs.filter { it.identity !in old && tabs.none { r -> r.identity == it.identity } }.forEach(tabs::add)

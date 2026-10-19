@@ -5,8 +5,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-val releaseVersionCode = providers.gradleProperty("versionCode").orNull?.toIntOrNull() ?: 2
-val releaseVersionName = providers.gradleProperty("versionName").orNull ?: "0.1.1-dev"
+val releaseVersionCode = providers.gradleProperty("versionCode").orNull?.toIntOrNull() ?: 3
+val releaseVersionName = providers.gradleProperty("versionName").orNull ?: "0.1.2-dev"
 val signingProperties = rootProject.file("keystore.properties")
 val signing = Properties().apply {
     if (signingProperties.isFile) signingProperties.inputStream().use(::load)
