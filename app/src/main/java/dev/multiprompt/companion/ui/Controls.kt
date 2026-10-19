@@ -26,7 +26,7 @@ fun Button(
     enabled: Boolean = true,
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
     content: @Composable RowScope.() -> Unit,
-) = M3Button(onClick, modifier, enabled, shape = ControlShape, contentPadding = contentPadding, content = content)
+) = M3Button(onClick, modifier, enabled, shape = chromeShape(ControlShape), contentPadding = contentPadding, content = content)
 
 @Composable
 fun FilledTonalButton(
@@ -35,7 +35,7 @@ fun FilledTonalButton(
     enabled: Boolean = true,
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
     content: @Composable RowScope.() -> Unit,
-) = M3FilledTonalButton(onClick, modifier, enabled, shape = ControlShape, contentPadding = contentPadding, content = content)
+) = M3FilledTonalButton(onClick, modifier, enabled, shape = chromeShape(ControlShape), contentPadding = contentPadding, content = content)
 
 @Composable
 fun OutlinedButton(
@@ -44,7 +44,7 @@ fun OutlinedButton(
     enabled: Boolean = true,
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
     content: @Composable RowScope.() -> Unit,
-) = M3OutlinedButton(onClick, modifier, enabled, shape = ControlShape, contentPadding = contentPadding, content = content)
+) = M3OutlinedButton(onClick, modifier, enabled, shape = chromeShape(ControlShape), contentPadding = contentPadding, content = content)
 
 @Composable
 fun OutlinedTextField(
@@ -81,7 +81,7 @@ fun OutlinedTextField(
     singleLine = singleLine,
     maxLines = maxLines,
     minLines = minLines,
-    shape = ControlShape,
+    shape = chromeShape(ControlShape),
 )
 
 @Composable
@@ -102,7 +102,7 @@ fun OutlinedTextField(
     singleLine: Boolean = false,
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
     minLines: Int = 1,
-    shape: Shape = ControlShape,
+    shape: Shape = chromeShape(ControlShape),
 ) = M3OutlinedTextField(
     value = value,
     onValueChange = onValueChange,

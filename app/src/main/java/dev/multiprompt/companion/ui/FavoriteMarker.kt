@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -16,5 +17,5 @@ object FavoriteMarker {
 
 @Composable
 fun FavoriteDot(modifier: Modifier = Modifier) {
-    Box(modifier.size(FavoriteMarker.DOT_DP.dp).background(Color(FavoriteMarker.DOT_ARGB), CircleShape))
+    Box(modifier.size(FavoriteMarker.DOT_DP.dp).background(if (LocalMaterial3.current) MaterialTheme.colorScheme.primary else Color(FavoriteMarker.DOT_ARGB), CircleShape))
 }

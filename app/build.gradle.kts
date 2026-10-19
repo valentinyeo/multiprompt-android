@@ -24,6 +24,8 @@ android {
         versionCode = releaseVersionCode
         versionName = releaseVersionName
 
+        buildConfigField("boolean", "MATERIAL3", "false")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField(
             "String",
@@ -60,6 +62,22 @@ android {
                 signingConfig = signingConfigs.getByName("release")
             }
         }
+        create("m3") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".m3"
+            versionNameSuffix = "-m3"
+            matchingFallbacks += "release"
+            manifestPlaceholders["accountRedirectScheme"] = "dev.multiprompt.companion.m3"
+            buildConfigField("boolean", "MATERIAL3", "true")
+            buildConfigField(
+                "String",
+                "UPDATE_MANIFEST_URL",
+                "\"https://github.com/valentinyeo/multiprompt-android/releases/download/android-m3-latest/multiprompt-m3-update.json\"",
+            )
+            if (signingProperties.isFile) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
     }
 
     buildFeatures {
@@ -79,7 +97,20 @@ android {
         )
     }
 
-    testOptions.unitTests.isIncludeAndroidResources = true
+    testOptions.unitTests {
+        isIncludeAndroidResources = true
+        all {
+            providers.gradleProperty("m3Shots").orNull?.let { directory ->
+                it.systemProperty("m3.shots", directory)
+            }
+        }
+    }
+}
+
+androidComponents {
+    beforeVariants(selector().withBuildType("m3")) {
+        it.hostTests.getValue(com.android.build.api.variant.HostTestBuilder.UNIT_TEST_TYPE).enable = true
+    }
 }
 
 kotlin {
@@ -106,6 +137,8 @@ dependencies {
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    add("m3Implementation", libs.androidx.compose.ui.test.manifest)
+    testImplementation(libs.material.color.utilities) { isTransitive = false }
     testImplementation(libs.junit)
     testImplementation(libs.json)
     testImplementation(libs.androidx.compose.ui.test.junit4)

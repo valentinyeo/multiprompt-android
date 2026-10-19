@@ -36,7 +36,7 @@ class MainActivity : ComponentActivity() {
                     isAppearanceLightNavigationBars = sunlight
                 }
             }
-            MultipromptTheme(sunlight = sunlight) {
+            MultipromptTheme(sunlight = sunlight, material3 = false) {
                 LaunchedEffect(Unit) {
                     if (intent.getBooleanExtra(EXTRA_OPEN_UPDATE, false)) {
                         viewModel.select(AppSection.UPDATE)
