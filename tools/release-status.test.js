@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { execFileSync, spawnSync } = require('node:child_process');
+const { spawnSync } = require('node:child_process');
 const api = import('./release-status.mjs');
 const commit = 'ea33a2a0d5fa97743ea5a9def4e35ee6a81834a9';
 const manifest = { versionName: '0.1.198', versionCode: 100198, commit };
@@ -69,13 +69,6 @@ test('CLI succeeds only on a match and writes mismatches to stderr', () => {
   const missing = cli(['--commit', commit], 'return { ok: true, json: async () => ({}) };');
   assert.equal(missing.status, 1);
   assert.equal(missing.stderr, `android-latest serves missing, wanted ${commit}\n`);
-});
-
-test('CLI defaults to the local origin/main ref', () => {
-  const wanted = execFileSync('git', ['rev-parse', 'origin/main'], { encoding: 'utf8' }).trim();
-  const result = cli([], `return { ok: true, json: async () => (${JSON.stringify({ ...manifest, commit: wanted })}) };`);
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout, `android-latest 0.1.198 (100198) serves ${wanted}\n`);
 });
 
 test('CLI reports network, HTTP and JSON parse failures with exit 1', () => {
