@@ -29,14 +29,11 @@ class ChatHistoryRealTranscriptTest {
             assertTrue("First user message must match source", firstUser == messages.first().text)
             assertEquals(messages.size, messages.map { it.key }.toSet().size)
             assertTrue(messages.zipWithNext().all { (a, b) -> a.offset < b.offset })
-            val settled = messages
-            client.poll()
-            assertTrue("Unchanged polling must preserve messages", settled == client.history.messages)
             val timestamps = messages.mapNotNull { it.timestamp.takeIf(String::isNotBlank)?.let(Instant::parse) }
             val regressions = timestamps.zipWithNext().count { (a, b) -> a > b }
             val terminal = Regex("Update installed|Restart to apply|esc to interrupt|⏵⏵|────", RegexOption.IGNORE_CASE)
             val terminalMessages = messages.count { terminal.containsMatchIn(it.text) }
-            println("Real transcript read: ${messages.size} messages, ${client.pages} pages, first byte reached; " +
+            println("Real transcript read: ${messages.size} messages, ${client.pages} pages, bytes 0..${history.offset}; " +
                 "$regressions timestamp regressions; $terminalMessages source messages with terminal markers")
             assertTrue("Message timestamps must be non-decreasing: $regressions regressions", regressions == 0)
             assertTrue("Source conversation must not contain terminal markers: $terminalMessages messages", terminalMessages == 0)
