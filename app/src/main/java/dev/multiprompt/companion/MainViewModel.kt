@@ -661,7 +661,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 host = host,
                 tmuxSessionName = session.name,
                 agent = session.agent,
-                workingDirectory = session.workingDirectory,
+                historyScript = app.chatHistoryScript,
+                historyCache = app.chatHistoryCache,
             )
         }
         _state.update {

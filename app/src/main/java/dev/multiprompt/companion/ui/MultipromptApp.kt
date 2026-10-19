@@ -1,5 +1,7 @@
 package dev.multiprompt.companion.ui
 
+import androidx.compose.foundation.lazy.rememberLazyListState
+import dev.multiprompt.companion.reader.TranscriptProtocol
 import android.Manifest
 import android.content.ClipboardManager
 import android.content.ClipData
@@ -52,7 +54,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -2150,6 +2151,9 @@ internal fun ReaderScreen(
 ) = MultipromptTheme(sunlight = sunlightMode, material3 = material3) {
     val reader by connection.state.collectAsState()
     val transcript = reader.transcript.takeUnless { technicalMode }
+    val historyAgent = TranscriptProtocol.supports(session.agent)
+    val historyChat = historyAgent && !technicalMode
+    val chatListState = key(connection) { rememberLazyListState() }
     var etaNowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(reader.eta) {
         while (reader.eta != null) {
@@ -2222,7 +2226,7 @@ internal fun ReaderScreen(
     var loadingOlder by remember(connection) { mutableStateOf(false) }
     var noOlderHistory by remember(connection) { mutableStateOf(false) }
     val loadOlder: () -> Unit = {
-        if (transcript == null && reader.alternateOn && !loadingOlder && !noOlderHistory) {
+        if (!historyAgent && transcript == null && reader.alternateOn && !loadingOlder && !noOlderHistory) {
             loadingOlder = true
             readerScope.launch {
                 val loaded = connection.loadOlderIntoTranscript()
@@ -2592,7 +2596,7 @@ internal fun ReaderScreen(
     Scaffold(
         modifier = Modifier.horizontalSwipe(onSwitchSession, suppressRight = replyGate::suppressRight),
         floatingActionButton = {
-            if (scrollState.canScrollForward) {
+            if (if (historyChat) chatListState.canScrollBackward else scrollState.canScrollForward) {
                 FloatingActionButton(onClick = scrollLive, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Default.KeyboardArrowDown, "Jump to newest")
                 }
@@ -3113,7 +3117,26 @@ internal fun ReaderScreen(
             }
         },
     ) { padding ->
-        Column(
+        if (historyChat) {
+            ChatHistoryView(
+                connection = connection,
+                reader = reader,
+                agent = session.agent,
+                workingDirectory = session.workingDirectory,
+                fontScale = transcriptZoom,
+                sunlight = sunlightMode,
+                replyGate = replyGate,
+                onReply = chooseReply,
+                onSessionUsed = { onSessionInteraction(); onSessionUsed() },
+                listState = chatListState,
+                followRequest = followRequest,
+                modifier = Modifier.padding(padding).padding(horizontal = 4.dp, vertical = 10.dp)
+                    .transformable(state = transcriptTransform, canPan = { false })
+                    .pointerInput(onOpenTerminal) {
+                        detectTapGestures(onDoubleTap = { onOpenTerminal() })
+                    },
+            )
+        } else Column(
             Modifier
                 .padding(padding)
                 .fillMaxSize()
@@ -3126,7 +3149,7 @@ internal fun ReaderScreen(
             horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (transcript == null && reader.alternateOn) {
+            if (!historyAgent && transcript == null && reader.alternateOn) {
                 OutlinedButton(
                     onClick = loadOlder,
                     enabled = !loadingOlder && !noOlderHistory && !reader.sending,
@@ -4231,7 +4254,7 @@ private fun Context.readSmallFile(uri: Uri, maxBytes: Int): ByteArray {
     }
 }
 
-private fun terminalLinks(
+internal fun terminalLinks(
     value: String,
     sunlight: Boolean,
     onDark: Boolean = false,
