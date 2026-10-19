@@ -262,6 +262,7 @@ class VersionLabelTest {
             ReaderTopBar(
                 session = session,
                 modelLabel = "Claude Opus · high",
+                statusLabel = null,
                 onModelCommand = {},
                 onOpenTerminal = {},
                 onReleaseNotes = { clicks++ },

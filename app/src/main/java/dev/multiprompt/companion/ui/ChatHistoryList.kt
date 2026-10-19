@@ -2,7 +2,6 @@ package dev.multiprompt.companion.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -53,9 +52,13 @@ internal fun ChatHistoryView(
     val transcript = remember(state.history) { state.history.messages.map { it.transcript() } }
     val queued = QueuedMessages.pending(transcript, reader.screenOutput, agent, reader.sentRecord, System.currentTimeMillis())
     Column(modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(agent.label, style = MaterialTheme.typography.labelSmall)
-            Text(if (state.retrying) "Disconnected · retrying" else "Conversation", style = MaterialTheme.typography.labelSmall)
+        if (state.retrying) {
+            Text(
+                "Disconnected · retrying",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(8.dp),
+            )
         }
         reader.modelPickerOptions.forEach { option ->
             OutlinedButton(
