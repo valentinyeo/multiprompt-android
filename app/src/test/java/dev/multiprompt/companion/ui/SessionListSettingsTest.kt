@@ -1,9 +1,14 @@
 package dev.multiprompt.companion.ui
 
 import android.app.Application
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.os.Looper
 import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -12,20 +17,33 @@ import dev.multiprompt.companion.account.AccountLayout
 import dev.multiprompt.companion.account.AccountLayoutStore
 import dev.multiprompt.companion.account.FAVORITES_SPLIT_ID
 import dev.multiprompt.companion.account.FREQUENT_SPLIT_ID
+import java.io.File
+import java.time.Duration
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.util.ReflectionHelpers
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.Config
 
+@OptIn(ExperimentalCoroutinesApi::class, androidx.compose.ui.InternalComposeUiApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class, qualifiers = "w390dp-h800dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class SessionListSettingsTest {
-    @get:Rule val compose = createComposeRule()
+    private val scheduler = TestCoroutineScheduler()
+    @get:Rule val compose = createComposeRule(effectContext = UnconfinedTestDispatcher(scheduler))
     private lateinit var fixture: SessionActivityFixture
     private lateinit var back: OnBackPressedDispatcher
 
@@ -73,17 +91,28 @@ class SessionListSettingsTest {
         compose.onNodeWithText("Inbox").assertIsDisplayed()
     }
 
-    @Test fun allChoiceLabelsStayOnOneLineAt390DpAndChoicesStillWork() {
+    private fun assertChoiceLabelFits(label: String) {
+        val node = compose.onNodeWithText(label, useUnmergedTree = true)
+        node.performScrollTo().assertIsDisplayed()
+        val results = mutableListOf<TextLayoutResult>()
+        node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+        val layout = results.single()
+        assertEquals(label, 1, layout.lineCount)
+        assertFalse("$label must not overflow: ${layout.size}, paragraph width ${layout.multiParagraph.width}", layout.hasVisualOverflow)
+        assertTrue("$label must fit its text bounds", layout.getLineLeft(0) >= 0 && layout.getLineRight(0) <= layout.size.width)
+        val text = node.getUnclippedBoundsInRoot()
+        val button = compose.onNode(hasText(label) and hasClickAction()).getUnclippedBoundsInRoot()
+        assertTrue("$label must stay inside its button: $text vs $button",
+            text.left >= button.left && text.top >= button.top && text.right <= button.right && text.bottom <= button.bottom)
+    }
+
+    private fun checkChoiceLabelsAndActions() {
         render()
         openSettings()
         for (label in listOf("System", "Dark", "Sunlight", "Small", "Normal", "Large")) {
-            val node = compose.onNodeWithText(label)
-            node.performScrollTo().assertIsDisplayed()
-            val results = mutableListOf<TextLayoutResult>()
-            node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
-            assertEquals(label, 1, results.single().lineCount)
-            assertTrue("$label must fit its text bounds", results.single().getLineRight(0) - results.single().getLineLeft(0) <= results.single().size.width)
-            node.performClick()
+            assertChoiceLabelFits(label)
+            compose.onNodeWithText(label).performClick()
+            assertChoiceLabelFits(label)
         }
         compose.runOnIdle {
             assertEquals(AppTheme.SUNLIGHT, fixture.model.state.value.appTheme)
@@ -93,6 +122,56 @@ class SessionListSettingsTest {
         openSettings()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Session list settings").assertDoesNotExist()
+    }
+
+    @Test fun allChoiceLabelsStayOnOneLineAt390DpAndChoicesStillWork() = checkChoiceLabelsAndActions()
+
+    @Test fun allChoiceLabelsFitAt390DpWithLargestSystemFont() {
+        RuntimeEnvironment.setFontScale(2f)
+        assertEquals(2f, RuntimeEnvironment.getFontScale())
+        checkChoiceLabelsAndActions()
+    }
+
+    private fun screenshot(name: String) {
+        val root = compose.onRoot()
+        val view = (root.fetchSemanticsNode().root as ViewRootForTest).view.rootView
+        val attachInfo = ReflectionHelpers.getField<Any>(view, "mAttachInfo")
+        val hardwareAccelerated = view.isHardwareAccelerated
+        ReflectionHelpers.setField(attachInfo, "mHardwareAccelerated", false)
+        val redraw = CoroutineScope(UnconfinedTestDispatcher(scheduler)).launch {
+            delay(16)
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(32))
+            view.draw(Canvas(Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)))
+            view.viewTreeObserver.dispatchOnDraw()
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        val bitmap = try {
+            root.captureToImage().asAndroidBitmap()
+        } finally {
+            redraw.cancel()
+            ReflectionHelpers.setField(attachInfo, "mHardwareAccelerated", hardwareAccelerated)
+        }
+        val output = File("build/outputs/igsh-423/$name.png")
+        checkNotNull(output.parentFile).mkdirs()
+        output.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+        assertTrue(output.isFile && output.length() > 0)
+    }
+
+    @Test fun captureSettingsAt390Dp() {
+        render()
+        openSettings()
+        screenshot("settings-390dp")
+    }
+
+    @Test fun captureSplitBarWithFrequentHidden() {
+        render()
+        openSettings()
+        compose.onNodeWithContentDescription("Show Frequent split").performClick()
+        closeSettings()
+        compose.onNodeWithText("Frequent").assertDoesNotExist()
+        compose.onNodeWithText("Favorites").assertIsDisplayed()
+        compose.onNodeWithText("All").assertIsDisplayed()
+        screenshot("split-bar-frequent-hidden")
     }
 
     private fun toggleSplit(key: String, label: String, split: String, id: String?) {

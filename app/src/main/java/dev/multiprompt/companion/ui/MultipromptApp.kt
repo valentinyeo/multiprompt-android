@@ -1290,51 +1290,49 @@ internal fun SessionsScreen(
                             onCheckedChange = onSetAllSplitOnRight,
                         )
                     }
+                    Text("Theme")
                     Row(
                         Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Text("Theme", Modifier.weight(1f))
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            listOf(
-                                AppTheme.SYSTEM to "System",
-                                AppTheme.DARK to "Dark",
-                                AppTheme.SUNLIGHT to "Sunlight",
-                            ).forEach { (theme, label) ->
-                                if (appTheme == theme) {
-                                    FilledTonalButton(
-                                        onClick = { onSetAppTheme(theme) },
-                                        contentPadding = PaddingValues(horizontal = 8.dp),
-                                    ) { Text(label, maxLines = 1, softWrap = false) }
-                                } else {
-                                    OutlinedButton(
-                                        onClick = { onSetAppTheme(theme) },
-                                        contentPadding = PaddingValues(horizontal = 8.dp),
-                                    ) { Text(label, maxLines = 1, softWrap = false) }
-                                }
+                        listOf(
+                            AppTheme.SYSTEM to "System",
+                            AppTheme.DARK to "Dark",
+                            AppTheme.SUNLIGHT to "Sunlight",
+                        ).forEach { (theme, label) ->
+                            if (appTheme == theme) {
+                                FilledTonalButton(
+                                    onClick = { onSetAppTheme(theme) },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 8.dp),
+                                ) { Text(label, Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, softWrap = false) }
+                            } else {
+                                OutlinedButton(
+                                    onClick = { onSetAppTheme(theme) },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 8.dp),
+                                ) { Text(label, Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, softWrap = false) }
                             }
                         }
                     }
+                    Text("Default Reader font size")
                     Row(
                         Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Text("Default Reader font size", Modifier.weight(1f))
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            listOf(0.9f to "Small", 1f to "Normal", 1.15f to "Large").forEach { (scale, label) ->
-                                if (kotlin.math.abs(readerDefaultFontScale - scale) < 0.01f) {
-                                    FilledTonalButton(
-                                        onClick = { onSetReaderDefaultFontScale(scale) },
-                                        contentPadding = PaddingValues(horizontal = 8.dp),
-                                    ) { Text(label, maxLines = 1, softWrap = false) }
-                                } else {
-                                    OutlinedButton(
-                                        onClick = { onSetReaderDefaultFontScale(scale) },
-                                        contentPadding = PaddingValues(horizontal = 8.dp),
-                                    ) { Text(label, maxLines = 1, softWrap = false) }
-                                }
+                        listOf(0.9f to "Small", 1f to "Normal", 1.15f to "Large").forEach { (scale, label) ->
+                            if (kotlin.math.abs(readerDefaultFontScale - scale) < 0.01f) {
+                                FilledTonalButton(
+                                    onClick = { onSetReaderDefaultFontScale(scale) },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 8.dp),
+                                ) { Text(label, Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, softWrap = false) }
+                            } else {
+                                OutlinedButton(
+                                    onClick = { onSetReaderDefaultFontScale(scale) },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 8.dp),
+                                ) { Text(label, Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, softWrap = false) }
                             }
                         }
                     }
