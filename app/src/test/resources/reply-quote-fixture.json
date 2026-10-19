@@ -1,0 +1,74 @@
+[
+  {
+    "name": "short single line",
+    "quoted": "Hello",
+    "reply": "my answer",
+    "expected": "> Hello\n\nmy answer"
+  },
+  {
+    "name": "multi-line",
+    "quoted": "First\nSecond",
+    "reply": "yes",
+    "expected": "> First\n> Second\n\nyes"
+  },
+  {
+    "name": "exactly 10 lines",
+    "quoted": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10",
+    "reply": "ok",
+    "expected": "> 1\n> 2\n> 3\n> 4\n> 5\n> 6\n> 7\n> 8\n> 9\n> 10\n\nok"
+  },
+  {
+    "name": "11+ lines",
+    "quoted": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12",
+    "reply": "ok",
+    "expected": "> 1\n> 2\n> 3\n> 4\n> 5\n> 6\n> 7\n> 8\n> 9\n> 10\n> …\n\nok"
+  },
+  {
+    "name": "blank lines inside",
+    "quoted": "\n \nFirst\n\n  \nLast\n\n",
+    "reply": "reply",
+    "expected": "> First\n>\n>\n> Last\n\nreply"
+  },
+  {
+    "name": "trailing whitespace",
+    "quoted": "  Indented  \nNext\t \n",
+    "reply": " reply  ",
+    "expected": ">   Indented\n> Next\n\n reply  "
+  },
+  {
+    "name": "Markdown and code",
+    "quoted": "# Title\n```kt\nval a = \">\"\n```",
+    "reply": "**yes**",
+    "expected": "> # Title\n> ```kt\n> val a = \">\"\n> ```\n\n**yes**"
+  },
+  {
+    "name": "non-ASCII",
+    "quoted": "Kraków\n你好 👋",
+    "reply": "Dziękuję",
+    "expected": "> Kraków\n> 你好 👋\n\nDziękuję"
+  },
+  {
+    "name": "null quote",
+    "quoted": null,
+    "reply": " unchanged  ",
+    "expected": " unchanged  "
+  },
+  {
+    "name": "blank quote",
+    "quoted": " \n\t",
+    "reply": " unchanged  ",
+    "expected": " unchanged  "
+  },
+  {
+    "name": "blank reply",
+    "quoted": "Hello",
+    "reply": " \n\t",
+    "expected": ""
+  },
+  {
+    "name": "CRLF",
+    "quoted": "\r\nHello \r\nWorld\r\n",
+    "reply": "ok",
+    "expected": "> Hello\n> World\n\nok"
+  }
+]

@@ -31,6 +31,7 @@ fun ChatBubble(
     isUser: Boolean,
     sunlight: Boolean,
     modifier: Modifier = Modifier,
+    contentModifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
     BoxWithConstraints(modifier.fillMaxWidth()) {
@@ -41,6 +42,7 @@ fun ChatBubble(
         }
         Box(
             bubbleModifier
+                .then(contentModifier)
                 .clip(RoundedCornerShape(ChatBubbleRadius))
                 .background(chatBubbleColor(isUser, sunlight)),
         ) {
