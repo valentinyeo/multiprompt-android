@@ -13,6 +13,7 @@ import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.ReaderStatus
+import dev.multiprompt.companion.reader.ChatHistoryCache
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.reader.TranscriptMessage
 import dev.multiprompt.companion.security.SecretStore
@@ -99,7 +100,11 @@ private fun ReaderFixture(material3: Boolean, sunlight: Boolean) {
     val context = LocalContext.current
     val secrets = remember { SecretStore(context) }
     val connection = remember {
-        SessionReaderConnection(SshRepository(secrets), testHost, testSession.name).apply {
+        SessionReaderConnection(
+            SshRepository(secrets), testHost, testSession.name,
+            historyScript = byteArrayOf(),
+            historyCache = ChatHistoryCache(context.cacheDir.resolve("m3-chat-history")),
+        ).apply {
             ReflectionHelpers.getField<MutableStateFlow<ReaderState>>(this, "_state").value = ReaderState(
                 status = ReaderStatus.Live,
                 transcript = listOf(
