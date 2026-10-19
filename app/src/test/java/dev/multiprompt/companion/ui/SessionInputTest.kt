@@ -51,7 +51,7 @@ class SessionInputTest {
                     onSessionInput = { f.model.stampSessionInput(f.session) },
                     technicalMode = false, onTechnicalModeChanged = {}, sunlightMode = false,
                     onSetAppTheme = {}, onResetFontScale = { 1f }, sessionActionError = null,
-                    onClearSessionActionError = {}, onForget = {}, onShowEtaAccuracy = {},
+                    onClearSessionActionError = {}, onForget = {}, onShowEtaAccuracy = {}, onReleaseNotes = {},
                 )
             }
         }
