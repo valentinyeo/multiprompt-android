@@ -4,4 +4,4 @@ cd "$(dirname "$0")/.."
 node --test tools/root-files.test.js tools/strip-comments.test.js tools/release-status.test.js
 node tools/root-files.mjs
 node tools/strip-comments.mjs --check
-"${GRADLE:-./gradlew}" --no-daemon lintDebug test
+"${GRADLE:-./gradlew}" --no-daemon -Dorg.gradle.jvmargs=-Xmx3g lintDebug test testM3UnitTest

@@ -46,8 +46,9 @@ fun MarkdownText(
 ) {
     val blocks = remember(text) { MarkdownParser.parse(text) }
     val codeBg = color.copy(alpha = 0.10f)
-    val lineHeight = (fontSize.value * 1.5f).sp
-    androidx.compose.material3.ProvideTextStyle(androidx.compose.ui.text.TextStyle(fontFamily = ChatFontFamily)) {
+    val scale = if (LocalMaterial3.current) fontSize.value / MaterialTheme.typography.bodyLarge.fontSize.value else 1f
+    val lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, scale)
+    androidx.compose.material3.ProvideTextStyle(androidx.compose.ui.text.TextStyle(fontFamily = chatFontFamily())) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         blocks.forEach { block ->
             when (block) {
@@ -57,8 +58,8 @@ fun MarkdownText(
                 )
                 is MdBlock.Heading -> Text(
                     markdownAnnotated(block.runs, linkColor, codeBg),
-                    fontSize = (fontSize.value * headingScale(block.level)).sp,
-                    lineHeight = (fontSize.value * headingScale(block.level) * 1.35f).sp,
+                    fontSize = if (LocalMaterial3.current) MaterialTheme.typography.titleMedium.fontSize * scale else (fontSize.value * headingScale(block.level)).sp,
+                    lineHeight = if (LocalMaterial3.current) MaterialTheme.typography.titleMedium.lineHeight * scale else (fontSize.value * headingScale(block.level) * 1.35f).sp,
                     fontWeight = FontWeight.Bold,
                     color = color,
                     modifier = Modifier.padding(top = 4.dp),
@@ -88,7 +89,7 @@ fun MarkdownText(
                 is MdBlock.Code -> Box(
                     Modifier
                         .fillMaxWidth()
-                        .background(codeBg, RoundedCornerShape(4.dp))
+                        .background(codeBg, chromeShape(RoundedCornerShape(4.dp)))
                         .horizontalScroll(rememberScrollState())
                         .padding(10.dp),
                 ) {
@@ -124,14 +125,14 @@ private fun MarkdownTable(
     val columns = maxOf(table.header.size, table.rows.maxOfOrNull { it.size } ?: 0)
     Column(
         Modifier.horizontalScroll(rememberScrollState())
-            .background(color.copy(alpha = 0.05f), RoundedCornerShape(4.dp)),
+            .background(color.copy(alpha = 0.05f), chromeShape(RoundedCornerShape(4.dp))),
     ) {
         (listOf(table.header) + table.rows).forEachIndexed { rowIndex, row ->
             Row {
                 for (c in 0 until columns) {
                     Text(
                         markdownAnnotated(row.getOrNull(c).orEmpty(), linkColor, codeBg),
-                        fontSize = (fontSize.value * 0.92f).sp,
+                        fontSize = if (LocalMaterial3.current) MaterialTheme.typography.bodyMedium.fontSize * (fontSize.value / MaterialTheme.typography.bodyLarge.fontSize.value) else (fontSize.value * 0.92f).sp,
                         fontWeight = if (rowIndex == 0) FontWeight.Bold else FontWeight.Normal,
                         color = color,
                         modifier = Modifier.width(cell).padding(horizontal = 8.dp, vertical = 5.dp),

@@ -1087,7 +1087,16 @@ internal fun SessionsScreen(
     crashReport: CrashReport?,
     onClearCrashReport: () -> Unit,
     onAddHost: () -> Unit,
+    material3: Boolean = BuildConfig.MATERIAL3,
+) = MultipromptTheme(
+    sunlight = when (appTheme) {
+        AppTheme.SYSTEM -> !isSystemInDarkTheme()
+        AppTheme.DARK -> false
+        AppTheme.SUNLIGHT -> true
+    },
+    material3 = material3,
 ) {
+    val sunlight = appTheme == AppTheme.SUNLIGHT || (appTheme == AppTheme.SYSTEM && !isSystemInDarkTheme())
     var workspaceDialogVisible by remember { mutableStateOf(false) }
     var workspaceName by remember { mutableStateOf("") }
     var workspaceError by remember { mutableStateOf<String?>(null) }
@@ -1159,124 +1168,128 @@ internal fun SessionsScreen(
         )
     }
     if (settingsVisible) {
-        AlertDialog(
-            onDismissRequest = { settingsVisible = false },
-            title = { Text("Session list settings") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Text("Newest sessions at bottom", Modifier.weight(1f))
-                        Switch(
-                            checked = state.newestSessionsAtBottom,
-                            onCheckedChange = onSetNewestSessionsAtBottom,
-                        )
-                    }
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Text("All split on right", Modifier.weight(1f))
-                        Switch(
-                            checked = state.allSplitOnRight,
-                            onCheckedChange = onSetAllSplitOnRight,
-                        )
-                    }
-                    Text("Theme")
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        listOf(
-                            AppTheme.SYSTEM to "System",
-                            AppTheme.DARK to "Dark",
-                            AppTheme.SUNLIGHT to "Sunlight",
-                        ).forEach { (theme, label) ->
-                            if (appTheme == theme) {
-                                FilledTonalButton(
-                                    onClick = { onSetAppTheme(theme) },
-                                    modifier = Modifier.weight(1f),
-                                ) { Text(label) }
-                            } else {
-                                OutlinedButton(
-                                    onClick = { onSetAppTheme(theme) },
-                                    modifier = Modifier.weight(1f),
-                                ) { Text(label) }
-                            }
-                        }
-                    }
-                    Text("Default Reader font size")
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        listOf(0.9f to "Small", 1f to "Normal", 1.15f to "Large").forEach { (scale, label) ->
-                            if (kotlin.math.abs(readerDefaultFontScale - scale) < 0.01f) {
-                                FilledTonalButton(
-                                    onClick = { onSetReaderDefaultFontScale(scale) },
-                                    modifier = Modifier.weight(1f),
-                                ) { Text(label) }
-                            } else {
-                                OutlinedButton(
-                                    onClick = { onSetReaderDefaultFontScale(scale) },
-                                    modifier = Modifier.weight(1f),
-                                ) { Text(label) }
-                            }
-                        }
-                    }
-                    crashReport?.let {
-                        HorizontalDivider()
-                        Text(
-                            "A crash report from the previous launch is available.",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            OutlinedButton(onClick = { crashReportVisible = true }) {
-                                Text("View report")
-                            }
-                            TextButton(onClick = onClearCrashReport) { Text("Dismiss") }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { settingsVisible = false }) { Text("Done") }
-            },
-        )
-    }
-    if (crashReportVisible) {
-        crashReport?.let { report ->
+        MultipromptTheme(sunlight = sunlight, material3 = false) {
             AlertDialog(
-                onDismissRequest = { crashReportVisible = false },
-                title = { Text("Crash report") },
+                onDismissRequest = { settingsVisible = false },
+                title = { Text("Session list settings") },
                 text = {
-                    SelectionContainer {
-                        Text(
-                            report.asText(),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 360.dp)
-                                .verticalScroll(rememberScrollState()),
-                            fontSize = 11.sp,
-                        )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text("Newest sessions at bottom", Modifier.weight(1f))
+                            Switch(
+                                checked = state.newestSessionsAtBottom,
+                                onCheckedChange = onSetNewestSessionsAtBottom,
+                            )
+                        }
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text("All split on right", Modifier.weight(1f))
+                            Switch(
+                                checked = state.allSplitOnRight,
+                                onCheckedChange = onSetAllSplitOnRight,
+                            )
+                        }
+                        Text("Theme")
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            listOf(
+                                AppTheme.SYSTEM to "System",
+                                AppTheme.DARK to "Dark",
+                                AppTheme.SUNLIGHT to "Sunlight",
+                            ).forEach { (theme, label) ->
+                                if (appTheme == theme) {
+                                    FilledTonalButton(
+                                        onClick = { onSetAppTheme(theme) },
+                                        modifier = Modifier.weight(1f),
+                                    ) { Text(label) }
+                                } else {
+                                    OutlinedButton(
+                                        onClick = { onSetAppTheme(theme) },
+                                        modifier = Modifier.weight(1f),
+                                    ) { Text(label) }
+                                }
+                            }
+                        }
+                        Text("Default Reader font size")
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            listOf(0.9f to "Small", 1f to "Normal", 1.15f to "Large").forEach { (scale, label) ->
+                                if (kotlin.math.abs(readerDefaultFontScale - scale) < 0.01f) {
+                                    FilledTonalButton(
+                                        onClick = { onSetReaderDefaultFontScale(scale) },
+                                        modifier = Modifier.weight(1f),
+                                    ) { Text(label) }
+                                } else {
+                                    OutlinedButton(
+                                        onClick = { onSetReaderDefaultFontScale(scale) },
+                                        modifier = Modifier.weight(1f),
+                                    ) { Text(label) }
+                                }
+                            }
+                        }
+                        crashReport?.let {
+                            HorizontalDivider()
+                            Text(
+                                "A crash report from the previous launch is available.",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                OutlinedButton(onClick = { crashReportVisible = true }) {
+                                    Text("View report")
+                                }
+                                TextButton(onClick = onClearCrashReport) { Text("Dismiss") }
+                            }
+                        }
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setPrimaryClip(ClipData.newPlainText("multiprompt crash report", report.asText()))
-                        crashReportVisible = false
-                    }) { Text("Copy report") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { crashReportVisible = false }) { Text("Close") }
+                    TextButton(onClick = { settingsVisible = false }) { Text("Done") }
                 },
             )
+        }
+    }
+    if (crashReportVisible) {
+        MultipromptTheme(sunlight = sunlight, material3 = false) {
+            crashReport?.let { report ->
+                AlertDialog(
+                    onDismissRequest = { crashReportVisible = false },
+                    title = { Text("Crash report") },
+                    text = {
+                        SelectionContainer {
+                            Text(
+                                report.asText(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 360.dp)
+                                    .verticalScroll(rememberScrollState()),
+                                fontSize = 11.sp,
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("multiprompt crash report", report.asText()))
+                            crashReportVisible = false
+                        }) { Text("Copy report") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { crashReportVisible = false }) { Text("Close") }
+                    },
+                )
+            }
         }
     }
     reminderPromptSession?.let { session ->
@@ -1450,7 +1463,11 @@ internal fun SessionsScreen(
     } else {
         emptyList()
     }
-    Column(Modifier.fillMaxSize().imePadding()) {
+    Column(
+        Modifier.fillMaxSize()
+            .then(if (LocalMaterial3.current) Modifier.background(MaterialTheme.colorScheme.background) else Modifier)
+            .imePadding(),
+    ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1788,13 +1805,14 @@ private fun AgentIcon(
             glyph,
             color = agentAccent(agent),
             fontFamily = FontFamily.SansSerif,
-            fontSize = 16.sp,
+            fontSize = if (LocalMaterial3.current) MaterialTheme.typography.titleMedium.fontSize else 16.sp,
             fontWeight = FontWeight.SemiBold,
         )
     }
 }
 
-private fun agentAccent(agent: AgentKind): Color = when (agent) {
+@Composable
+private fun agentAccent(agent: AgentKind): Color = if (LocalMaterial3.current) MaterialTheme.colorScheme.primary else when (agent) {
     AgentKind.CLAUDE -> Color(0xFFD97757)
     AgentKind.CODEX -> Color(0xFF10A37F)
     AgentKind.PI -> Color(0xFFA78BFA)
@@ -1810,7 +1828,7 @@ private fun AgentBadge(agent: AgentKind) {
         Modifier
             .background(
                 agentAccent(agent).copy(alpha = 0.16f),
-                RoundedCornerShape(percent = 50),
+                chromeShape(RoundedCornerShape(percent = 50)),
             ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -1922,12 +1940,12 @@ private fun SessionCard(
                         modifier = Modifier
                             .background(
                                 MaterialTheme.colorScheme.secondaryContainer,
-                                RoundedCornerShape(percent = 50),
+                                chromeShape(RoundedCornerShape(percent = 50)),
                             )
                             .padding(horizontal = 6.dp, vertical = 2.dp),
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        fontSize = 10.sp,
-                        lineHeight = 12.sp,
+                        fontSize = chromeFontSize(10.sp),
+                        lineHeight = chromeLineHeight(12.sp),
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                     )
@@ -1939,12 +1957,12 @@ private fun SessionCard(
                             .widthIn(max = 88.dp)
                             .background(
                                 MaterialTheme.colorScheme.surfaceVariant,
-                                RoundedCornerShape(percent = 50),
+                                chromeShape(RoundedCornerShape(percent = 50)),
                             )
                             .padding(horizontal = 5.dp, vertical = 2.dp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 9.sp,
-                        lineHeight = 11.sp,
+                        fontSize = chromeFontSize(9.sp),
+                        lineHeight = chromeLineHeight(11.sp),
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -2093,7 +2111,7 @@ private fun DissolvedSessionCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ReaderScreen(
+internal fun ReaderScreen(
     connection: SessionReaderConnection,
     dictation: DeepgramDictation,
     screencast: ScreencastUploader,
@@ -2126,7 +2144,8 @@ private fun ReaderScreen(
     onClearSessionActionError: () -> Unit,
     onForget: () -> Unit,
     onShowEtaAccuracy: () -> Unit,
-) {
+    material3: Boolean = BuildConfig.MATERIAL3,
+) = MultipromptTheme(sunlight = sunlightMode, material3 = material3) {
     val reader by connection.state.collectAsState()
     val transcript = reader.transcript.takeUnless { technicalMode }
     var etaNowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -2836,7 +2855,7 @@ private fun ReaderScreen(
                             .height(3.dp)
                             .background(
                                 MaterialTheme.colorScheme.surfaceVariant,
-                                RoundedCornerShape(2.dp),
+                                chromeShape(RoundedCornerShape(2.dp)),
                             ),
                     ) {
                         Box(
@@ -2845,7 +2864,7 @@ private fun ReaderScreen(
                                 .height(3.dp)
                                 .background(
                                     MaterialTheme.colorScheme.primary,
-                                    RoundedCornerShape(2.dp),
+                                    chromeShape(RoundedCornerShape(2.dp)),
                                 ),
                         )
                     }
@@ -2948,7 +2967,7 @@ private fun ReaderScreen(
                     },
                     minLines = 1,
                     maxLines = 6,
-                    shape = ControlShape,
+                    shape = chromeShape(ControlShape),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = { submitPrompt() }),
                     readOnly = dictationActive,
@@ -3142,7 +3161,7 @@ private fun ReaderScreen(
                     Modifier
                         .background(
                             MaterialTheme.colorScheme.errorContainer,
-                            RoundedCornerShape(8.dp),
+                            chromeShape(RoundedCornerShape(8.dp)),
                         )
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -3204,11 +3223,11 @@ private fun ReaderScreen(
                 }.orEmpty()
             }
             var expandedReaderBlocks by remember(connection) { mutableStateOf(emptySet<String>()) }
-            val transcriptFontSize = (14f * transcriptZoom).sp
+            val transcriptFontSize = chatFontSize((14f * transcriptZoom).sp, transcriptZoom)
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surface, chromeShape(RoundedCornerShape(10.dp)))
                     .padding(6.dp)
                     .transformable(state = transcriptTransform, canPan = { false }),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -3231,7 +3250,7 @@ private fun ReaderScreen(
                     )
                     Row(
                         Modifier
-                            .background(connectionColor, RoundedCornerShape(percent = 50))
+                            .background(connectionColor, chromeShape(RoundedCornerShape(percent = 50)))
                             .padding(horizontal = 8.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -3261,7 +3280,7 @@ private fun ReaderScreen(
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.tertiaryContainer, RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.tertiaryContainer, chromeShape(RoundedCornerShape(8.dp)))
                             .padding(horizontal = 10.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -3323,7 +3342,7 @@ private fun ReaderScreen(
                 }
                 transcript?.forEach { message ->
                     val isUser = message.role == "user"
-                    val bodyColor = chatTextColor(sunlightMode)
+                    val bodyColor = chatTextColor(sunlightMode, isUser)
                     key(connection, message.role, message.timestamp, message.text) {
                         ReplyableBubble(
                             isUser = isUser,
@@ -3334,16 +3353,16 @@ private fun ReaderScreen(
                         ) {
                             Text(
                                 if (isUser) "You" else session.agent.label,
-                                fontFamily = ChatFontFamily,
-                                fontSize = (transcriptFontSize.value - 3f).coerceAtLeast(8f).sp,
+                                fontFamily = chatFontFamily(),
+                                fontSize = chromeFontSize((transcriptFontSize.value - 3f).coerceAtLeast(8f).sp),
                                 color = chatHintColor(sunlightMode),
                             )
                             if (isUser) {
                                 Text(
-                                    terminalLinks(message.text, sunlightMode),
-                                    fontFamily = ChatFontFamily,
+                                    terminalLinks(message.text, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
+                                    fontFamily = chatFontFamily(),
                                     fontSize = transcriptFontSize,
-                                    lineHeight = (transcriptFontSize.value * 1.5f).sp,
+                                    lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
                                     color = bodyColor,
                                 )
                             } else {
@@ -3351,14 +3370,14 @@ private fun ReaderScreen(
                                     text = message.text,
                                     fontSize = transcriptFontSize,
                                     color = bodyColor,
-                                    linkColor = terminalBlue(sunlightMode),
+                                    linkColor = chatLinkColor(terminalBlue(sunlightMode)),
                                 )
                             }
                             message.timestamp?.let { timestamp ->
                                 Text(
                                     formatChatTime(timestamp),
-                                    fontFamily = ChatFontFamily,
-                                    fontSize = (transcriptFontSize.value - 3f).coerceAtLeast(8f).sp,
+                                    fontFamily = chatFontFamily(),
+                                    fontSize = chromeFontSize((transcriptFontSize.value - 3f).coerceAtLeast(8f).sp),
                                     color = chatHintColor(sunlightMode),
                                 )
                             }
@@ -3369,23 +3388,23 @@ private fun ReaderScreen(
                     ChatBubble(isUser = true, sunlight = sunlightMode) {
                         Text(
                             "You · queued",
-                            fontFamily = ChatFontFamily,
-                            fontSize = (transcriptFontSize.value - 3f).coerceAtLeast(8f).sp,
+                            fontFamily = chatFontFamily(),
+                            fontSize = chromeFontSize((transcriptFontSize.value - 3f).coerceAtLeast(8f).sp),
                             color = chatHintColor(sunlightMode),
                         )
                         SelectionContainer {
                             Text(
-                                terminalLinks(text, sunlightMode),
-                                fontFamily = ChatFontFamily,
+                                terminalLinks(text, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
+                                fontFamily = chatFontFamily(),
                                 fontSize = transcriptFontSize,
-                                lineHeight = (transcriptFontSize.value * 1.5f).sp,
+                                lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
                                 color = chatTextColor(sunlightMode),
                             )
                         }
                         Text(
                             "The agent reads it after its current step",
-                            fontFamily = ChatFontFamily,
-                            fontSize = (transcriptFontSize.value - 3f).coerceAtLeast(8f).sp,
+                            fontFamily = chatFontFamily(),
+                            fontSize = chromeFontSize((transcriptFontSize.value - 3f).coerceAtLeast(8f).sp),
                             color = chatHintColor(sunlightMode),
                         )
                     }
@@ -3418,10 +3437,10 @@ private fun ReaderScreen(
                                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         run.forEach { part ->
                                             Text(
-                                                terminalLinks(part.text, sunlightMode),
-                                                fontFamily = ChatFontFamily,
+                                                terminalLinks(part.text, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
+                                                fontFamily = chatFontFamily(),
                                                 fontSize = transcriptFontSize,
-                                                lineHeight = (transcriptFontSize.value * 1.5f).sp,
+                                                lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
                                                 color = chatTextColor(sunlightMode),
                                             )
                                         }
@@ -3438,10 +3457,10 @@ private fun ReaderScreen(
                                 gate = replyGate,
                             ) {
                                 Text(
-                                    terminalLinks(block.text, sunlightMode),
-                                    fontFamily = ChatFontFamily,
+                                    terminalLinks(block.text, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
+                                    fontFamily = chatFontFamily(),
                                     fontSize = transcriptFontSize,
-                                    lineHeight = (transcriptFontSize.value * 1.5f).sp,
+                                    lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
                                     color = chatTextColor(sunlightMode),
                                 )
                             }
@@ -3488,7 +3507,7 @@ private fun ReaderCollapsibleBlock(
     ).joinToString(" · ")
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(ChatBubbleRadius),
+        shape = chatShape(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
         ),
@@ -3539,8 +3558,8 @@ private fun ReaderCollapsibleBlock(
                             terminalLinks(block.text, sunlightMode),
                             modifier = Modifier.fillMaxWidth().padding(12.dp),
                             fontFamily = FontFamily.Default,
-                            fontSize = (12f * fontScale).sp,
-                            lineHeight = (1.45f * 12f * fontScale).sp,
+                            fontSize = chatFontSize((12f * fontScale).sp, fontScale),
+                            lineHeight = chatLineHeight((1.45f * 12f * fontScale).sp, fontScale),
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                     }
@@ -4191,8 +4210,12 @@ private fun Context.readSmallFile(uri: Uri, maxBytes: Int): ByteArray {
     }
 }
 
-private fun terminalLinks(value: String, sunlight: Boolean, onDark: Boolean = false): AnnotatedString {
-    val linkColor = if (onDark) LinkOnDark else terminalBlue(sunlight)
+private fun terminalLinks(
+    value: String,
+    sunlight: Boolean,
+    onDark: Boolean = false,
+    linkColor: Color = if (onDark) LinkOnDark else terminalBlue(sunlight),
+): AnnotatedString {
     val builder = AnnotatedString.Builder(value)
     value.lineSequence().fold(0) { offset, line ->
         val trimmed = line.trimStart()
@@ -4349,8 +4372,8 @@ private fun HarnessStatusBar(
         Text(
             parts.joinToString("  ·  "),
             style = MaterialTheme.typography.labelSmall,
-            fontSize = 10.sp,
-            lineHeight = 12.sp,
+            fontSize = chromeFontSize(10.sp),
+            lineHeight = chromeLineHeight(12.sp),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
