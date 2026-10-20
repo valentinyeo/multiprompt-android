@@ -10,6 +10,8 @@ import dev.multiprompt.companion.account.AccountAuth
 import dev.multiprompt.companion.account.AccountHttp
 import dev.multiprompt.companion.account.AccountHttpClient
 import dev.multiprompt.companion.account.AccountReply
+import dev.multiprompt.companion.account.CrashReportUpload
+import dev.multiprompt.companion.data.CrashReport
 import dev.multiprompt.companion.security.SecretStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -63,6 +65,10 @@ class SyncAuthManager(context: Context, private val http: AccountHttp = AccountH
             if (reply.status !in listOf(200, 409)) throw IOException("Account request failed (${reply.status}); retry when online")
             reply
         }
+    }
+
+    suspend fun uploadCrashReport(report: CrashReport, markUploaded: (String) -> Unit) = withContext(Dispatchers.IO) {
+        mutex.withLock { CrashReportUpload(http, auth).upload(report, markUploaded) }
     }
 
     suspend fun signOut() = withContext(Dispatchers.IO) {

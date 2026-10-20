@@ -48,6 +48,8 @@ Data flow for the core feature:
 5. `TerminalConnection` — its own long-lived PTY (`xterm-256color`) attaches with tmux `ignore-size`. The phone stays out of tmux's size calculation, so it cannot shrink the desktop pane.
 6. `DeepgramDictation` — streams 16 kHz mono PCM from `AudioRecord` to Deepgram and exposes interim/final transcript state. Its API key is stored only through `SecretStore`; never add it to Git, Gradle properties, `BuildConfig`, or release assets.
 
+7. `CrashReportStore` — persists crash-time metadata and stable ids; pending reports upload on startup/sign-in through account auth on IO, and failed uploads retain login and reports (including dismissed reports). Debug-only crash proof: `adb shell am start -n dev.multiprompt.companion.debug/dev.multiprompt.companion.DebugCrashActivity`.
+
 ### Security invariants — do not relax these
 
 - **Host keys fail closed.** `SshRepository.PinningHostKeyVerifier` pins type + SHA-256 fingerprint from `HostProfile`. An unknown or changed key throws `SshProblem.HostKeyRequired` and the UI makes the user compare and trust it explicitly. Never auto-accept.

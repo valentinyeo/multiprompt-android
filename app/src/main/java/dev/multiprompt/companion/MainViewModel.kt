@@ -47,6 +47,7 @@ import dev.multiprompt.companion.update.UpdateManager
 import dev.multiprompt.companion.update.UpdateRelease
 import dev.multiprompt.companion.upload.ScreencastUploader
 import dev.multiprompt.companion.ui.AppTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
@@ -191,7 +192,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             shellFontSize = sessionReads.shellFontSize(),
             appTheme = sessionReads.appTheme(),
             dissolvedSessions = dissolvedStore.load(),
-            crashReport = crashReportStore.load(),
+            crashReport = crashReportStore.loadForDisplay(),
         ).let { initial ->
             initial.copy(selectedWorkspaceId = if (null in initial.visibleWorkspaceSplitIds) null else initial.visibleWorkspaceSplitIds.first())
         },
@@ -220,6 +221,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         RetiredHosts.hostsToRemove(_state.value.hosts).forEach(::deleteHost)
+        uploadCrashReport()
         updates.check()
         if (_state.value.hosts.isNotEmpty()) refresh()
         viewModelScope.launch {
@@ -294,8 +296,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(sessionActionError = null) }
     }
 
+    private fun uploadCrashReport() {
+        viewModelScope.launch(Dispatchers.IO) {
+            crashReportStore.loadPending().forEach { report ->
+                syncAuth.uploadCrashReport(report, crashReportStore::markUploaded)
+            }
+        }
+    }
+
     fun clearCrashReport() {
-        crashReportStore.clear()
+        crashReportStore.dismiss()
+        uploadCrashReport()
         _state.update { it.copy(crashReport = null) }
     }
 
@@ -1384,6 +1395,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     usedStampThrottle = UsedStampThrottle(pendingLayout?.base)
                     _state.update { it.copy(signedIn = true, accountError = null) }
                     publishAccountLayout()
+                    uploadCrashReport()
                     syncAccount()
                 }
                 is SyncAuthManager.TokenResult.Failure ->
@@ -1469,6 +1481,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val finishedLogin = syncAuth.finishPending()
                 if (generation != accountGeneration) return@launch
                 if (finishedLogin) {
+                    uploadCrashReport()
                     pendingLayout = accountStore.load(syncAuth.accountId())
                     usedStampThrottle = UsedStampThrottle(pendingLayout?.base)
                     publishAccountLayout()

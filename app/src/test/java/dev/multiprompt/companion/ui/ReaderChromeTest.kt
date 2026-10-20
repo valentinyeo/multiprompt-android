@@ -34,6 +34,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.After
@@ -170,11 +171,13 @@ class ReaderChromeTest {
         val hardwareAccelerated = view.isHardwareAccelerated
         ReflectionHelpers.setField(attachInfo, "mHardwareAccelerated", false)
         val redraw = CoroutineScope(UnconfinedTestDispatcher(scheduler)).launch {
-            delay(16)
-            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(32))
-            view.draw(Canvas(Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)))
-            view.viewTreeObserver.dispatchOnDraw()
-            shadowOf(Looper.getMainLooper()).idle()
+            while (isActive) {
+                delay(16)
+                shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(32))
+                view.draw(Canvas(Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)))
+                view.viewTreeObserver.dispatchOnDraw()
+                shadowOf(Looper.getMainLooper()).idle()
+            }
         }
         val bitmap = try {
             root.captureToImage().asAndroidBitmap()
