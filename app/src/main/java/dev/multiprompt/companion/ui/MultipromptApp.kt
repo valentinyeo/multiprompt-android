@@ -83,6 +83,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material3.Badge
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -203,6 +204,7 @@ import dev.multiprompt.companion.skills.SkillModel
 import dev.multiprompt.companion.skills.SkillSnapshot
 import dev.multiprompt.companion.skills.SkillStore
 import dev.multiprompt.companion.data.ReminderTimeParser
+import dev.multiprompt.companion.data.UnreadCount
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.SessionSearch
 import dev.multiprompt.companion.ssh.HostKeyWarning
@@ -1771,6 +1773,7 @@ internal fun SessionsScreen(
                         .takeIf { state.selectedWorkspaceId == null },
                     etaLabel = state.sessionEtas[key]?.label(etaNowMillis),
                     unread = key in state.unreadSessionKeys,
+                    unreadCount = state.unreadCounts[key] ?: 1,
                     archived = key in state.archivedSessionKeys,
                     starred = starred,
                     onToggleFavorite = if (tab != null && state.signedIn) {
@@ -2001,6 +2004,7 @@ private fun SessionCard(
     workspaceName: String?,
     etaLabel: String?,
     unread: Boolean,
+    unreadCount: Int,
     archived: Boolean,
     starred: Boolean,
     onToggleFavorite: (() -> Unit)?,
@@ -2171,13 +2175,15 @@ private fun SessionCard(
                             maxLines = 1,
                         )
                         if (unread) {
-                            Box(
-                                Modifier
-                                    .widthIn(min = 20.dp)
-                                    .height(20.dp)
-                                    .background(MaterialTheme.colorScheme.primary, CircleShape)
-                                    .semantics { contentDescription = "Unread" },
-                            )
+                            Badge(
+                                modifier = Modifier.semantics {
+                                    contentDescription = "${unreadCount.coerceAtLeast(1)} unread messages"
+                                },
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
+                            ) {
+                                Text(UnreadCount.label(unreadCount))
+                            }
                         }
                     }
                 }
