@@ -9,7 +9,7 @@ object AccountHostMap {
     fun resolve(hosts: List<HostProfile>, overrides: Map<Int, String>): Map<Int, HostProfile> = buildMap {
         for (slot in 0..2) {
             val explicit = overrides[slot]
-            val host = if (explicit != null) hosts.firstOrNull { it.id == explicit } else {
+            val host = if (explicit != null) hosts.firstOrNull { it.id == explicit && (slot != 0 || it.username == "valentin") } else {
                 val candidates = hosts.filter {
                     val label = "${it.label} ${it.hostname}".lowercase(java.util.Locale.ROOT)
                     when (slot) {
@@ -20,7 +20,7 @@ object AccountHostMap {
                 }
                 candidates.singleOrNull()
             }
-            if (host != null && (explicit != null || values.none { it.id == host.id })) put(slot, host)
+            if (host != null && values.none { it.id == host.id }) put(slot, host)
         }
     }
 

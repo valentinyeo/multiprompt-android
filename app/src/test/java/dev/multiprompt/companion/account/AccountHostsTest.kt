@@ -15,7 +15,7 @@ import java.util.UUID
 
 class AccountHostsTest {
     private val key = "ssh-ed25519 " + Base64.getEncoder().encodeToString("public-host-key".toByteArray())
-    private fun host(slot: Int = 0) = AccountHost(slot, "Account server", "example.com", 2222, "alice", listOf(key))
+    private fun host(slot: Int = 0) = AccountHost(slot, "Account server", "example.com", 2222, "valentin", listOf(key))
     private fun local() = HostProfile(label = "Device server", hostname = "device.example", username = "bob",
         keySecretId = "private-key-data", passphraseSecretId = "private-passphrase", hostKeyType = "ssh-rsa", hostKeyFingerprint = "SHA256:device")
 
@@ -40,7 +40,7 @@ class AccountHostsTest {
     }
 
     @Test fun existingMappedProfileIsUntouchedIncludingEndpointCredentialsAndTrust() {
-        val existing = local()
+        val existing = local().copy(username = "valentin")
         val result = AccountHosts.merge(listOf(host()), listOf(existing), mapOf(0 to existing.id))
         assertEquals(listOf(existing), result.profiles)
         assertSame(existing, result.profiles.single())
@@ -49,15 +49,42 @@ class AccountHostsTest {
         assertEquals(listOf(inferred), AccountHosts.merge(listOf(host()), listOf(inferred), emptyMap()).profiles)
     }
 
-    @Test fun sameHostnamePortAndUserReuseProfileWithoutChangingItOrCreatingDuplicate() {
-        val existing = local().copy(hostname = "EXAMPLE.com", port = 2222, username = "alice")
+    @Test fun sameHostnamePortAndUserReuseProfileWithoutMappingItToTwoSlots() {
+        val existing = local().copy(hostname = "EXAMPLE.com", port = 2222, username = "valentin")
         val result = AccountHosts.merge(listOf(host(), host(1)), listOf(existing), mapOf(0 to "deleted"))
         assertEquals(listOf(existing), result.profiles)
-        assertEquals(mapOf(0 to existing.id, 1 to existing.id), result.overrides)
-        assertEquals(mapOf(0 to existing, 1 to existing), AccountHostMap.resolve(result.profiles, result.overrides))
+        assertEquals(mapOf(0 to existing.id), result.overrides)
+        assertEquals(mapOf(0 to existing), AccountHostMap.resolve(result.profiles, result.overrides))
+        val occupied = AccountHosts.merge(listOf(host(1)), listOf(existing), mapOf(2 to existing.id))
+        assertEquals(listOf(existing), occupied.profiles)
+        assertEquals(mapOf(2 to existing.id), occupied.overrides)
         for (different in listOf(existing.copy(port = 22), existing.copy(username = "bob"))) {
             assertEquals(2, AccountHosts.merge(listOf(host()), listOf(different), emptyMap()).profiles.size)
         }
+    }
+
+    @Test fun slotZeroWithAnotherUserIsNeitherImportedNorMapped() {
+        val remote = host().copy(user = "alice")
+        val fresh = AccountHosts.merge(listOf(remote), emptyList(), emptyMap())
+        assertTrue(fresh.profiles.isEmpty())
+        assertTrue(fresh.overrides.isEmpty())
+        val existing = local().copy(hostname = remote.hostname, port = remote.port, username = remote.user)
+        val result = AccountHosts.merge(listOf(remote), listOf(existing), emptyMap())
+        assertEquals(listOf(existing), result.profiles)
+        assertTrue(result.overrides.isEmpty())
+        assertTrue(AccountHostMap.resolve(result.profiles, result.overrides).isEmpty())
+    }
+
+    @Test fun publishingKeepsAccountEntriesUnchangedAndOnlyFillsMissingSlots() {
+        val keys = listOf(key, "ssh-rsa " + Base64.getEncoder().encodeToString("second-key".toByteArray()),
+            "ecdsa-sha2-nistp256 " + Base64.getEncoder().encodeToString("third-key".toByteArray()))
+        val account = host().copy(name = "Hetzner", hostname = "VPS.example", hostKeys = keys)
+        val phone = local().copy(label = "vps", hostname = "vps.example", username = "valentin", hostKeys = listOf(key))
+        val missing = local()
+        val outgoing = AccountHosts.publish(listOf(account), mapOf(0 to phone, 1 to missing))
+        assertEquals(listOf(account, AccountHosts.outgoing(mapOf(1 to missing)).single()), outgoing)
+        assertSame(account, outgoing[0])
+        assertEquals(listOf(account), AccountHosts.parse(AccountLayout(hosts = outgoing).json().getJSONArray("hosts")).filter { it.slot == 0 })
     }
 
     @Test fun invalidEntriesAreIgnoredWithoutDiscardingValidNeighbors() {

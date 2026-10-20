@@ -69,7 +69,7 @@ object AccountHosts {
         val mapping = AccountHostMap.resolve(profiles, overrides).toMutableMap()
         val nextOverrides = overrides.toMutableMap()
         remote.forEach { host ->
-            if (mapping[host.slot] != null) return@forEach
+            if (mapping[host.slot] != null || (host.slot == 0 && host.user != "valentin")) return@forEach
             val profile = next.firstOrNull { it.hostname.equals(host.hostname, ignoreCase = true) && it.port == host.port && it.username == host.user }
                 ?: run {
                     val firstKey = host.hostKeys.firstOrNull()
@@ -80,6 +80,7 @@ object AccountHosts {
                             "SHA256:" + Base64.getEncoder().withoutPadding().encodeToString(MessageDigest.getInstance("SHA-256").digest(Base64.getDecoder().decode(it.substringAfter(' '))))
                         }).also(next::add)
                 }
+            if (mapping.values.any { it.id == profile.id }) return@forEach
             mapping[host.slot] = profile
             nextOverrides[host.slot] = profile.id
         }
@@ -91,5 +92,5 @@ object AccountHosts {
     }))
 
     fun publish(remote: List<AccountHost>?, mapping: Map<Int, HostProfile>): List<AccountHost> =
-        (remote.orEmpty().associateBy { it.slot } + outgoing(mapping).associateBy { it.slot }).values.sortedBy { it.slot }
+        (outgoing(mapping).associateBy { it.slot } + remote.orEmpty().associateBy { it.slot }).values.sortedBy { it.slot }
 }

@@ -52,7 +52,7 @@ class AccountHostsAppTest {
     private val requests = Collections.synchronizedList(mutableListOf<Request>())
     private val puts = Collections.synchronizedList(mutableListOf<JSONObject>())
     private val key = "ssh-ed25519 " + Base64.getEncoder().encodeToString("public-host-key".toByteArray())
-    private val remoteHost = AccountHost(0, "Account server", "example.com", 2222, "alice", listOf(key))
+    private val remoteHost = AccountHost(0, "Account server", "example.com", 2222, "valentin", listOf(key))
     private var remote = AccountLayout(1, hosts = listOf(remoteHost))
     private var conflict = false
 
@@ -136,18 +136,25 @@ class AccountHostsAppTest {
         }
         compose.setContent { MultipromptTheme { MultipromptApp(model) } }
         compose.onNodeWithText("Account server").assertIsDisplayed()
-        compose.onNodeWithText("alice@example.com:2222").assertIsDisplayed()
+        compose.onNodeWithText("valentin@example.com:2222").assertIsDisplayed()
         sync()
         compose.runOnIdle { assertEquals(1, HostStore(app).load().size) }
     }
 
-    @Test fun deviceWinsAndPublishesOnlyPublicMetadataAcrossConflictAndRetry() {
+    @Test fun accountEntriesWinAndPhoneOnlyFillsMissingSlotsAcrossConflictAndRetry() {
         setup()
-        val local = HostProfile(label = "Device server", hostname = "device.example", port = 2200, username = "bob",
+        val keys = listOf(key, "ssh-rsa " + Base64.getEncoder().encodeToString("second-key".toByteArray()),
+            "ecdsa-sha2-nistp256 " + Base64.getEncoder().encodeToString("third-key".toByteArray()))
+        val authoritative = remoteHost.copy(name = "Hetzner", hostname = "VPS.example", hostKeys = keys)
+        val local = HostProfile(label = "vps", hostname = "vps.example", port = authoritative.port, username = "valentin",
             keySecretId = "private-key-data", passphraseSecretId = "private-passphrase", hostKeys = listOf(key))
+        val missing = HostProfile(label = "Contabo UK", hostname = "contabo.example", username = "bob", hostKeys = listOf(key))
         compose.runOnIdle {
+            remote = remote.copy(hosts = listOf(authoritative))
             app.hostStore.upsert(local)
+            app.hostStore.upsert(missing)
             AccountLayoutStore(app).setHost(0, local.id)
+            AccountLayoutStore(app).setHost(1, missing.id)
             conflict = true
         }
         sync()
@@ -157,17 +164,19 @@ class AccountHostsAppTest {
             assertEquals(2, puts.size)
             assertEquals(listOf("GET", "PUT", "GET", "PUT"), requests.map { it.method })
             puts.forEach { body ->
-                val hosts = body.getJSONObject("layout").getJSONArray("hosts")
-                assertEquals("Device server", hosts.getJSONObject(0).getString("name"))
-                assertEquals("device.example", hosts.getJSONObject(0).getString("hostname"))
-                assertEquals("bob", hosts.getJSONObject(0).getString("user"))
-                assertEquals(key, hosts.getJSONObject(0).getJSONArray("host_keys").getString(0))
+                val outgoing = AccountHosts.parse(body.getJSONObject("layout").getJSONArray("hosts"))
+                assertEquals(authoritative, outgoing.single { it.slot == 0 })
+                assertEquals(AccountHost(1, missing.label, missing.hostname, missing.port, missing.username, listOf(key)),
+                    outgoing.single { it.slot == 1 })
                 assertFalse(body.toString().contains(local.keySecretId))
                 assertFalse(body.toString().contains(local.passphraseSecretId!!))
             }
             requests.forEach { assertTrue(it.header("X-Layout-Features")!!.split(',').contains("hosts")) }
-            assertEquals(setOf(0, 2), model.state.value.accountHosts.keys)
+            assertEquals(setOf(0, 1, 2), model.state.value.accountHosts.keys)
+            assertEquals(authoritative, remote.hosts!!.single { it.slot == 0 })
         }
+        sync()
+        compose.runOnIdle { assertEquals(2, puts.size) }
     }
 
     @Test fun sameEndpointUsesExistingStoredProfileAndRetainsLocalTrust() {
