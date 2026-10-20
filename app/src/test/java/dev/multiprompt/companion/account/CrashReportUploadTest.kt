@@ -91,10 +91,34 @@ class CrashReportUploadTest {
         assertTrue(body!!.getString("stack_trace").contains("MainViewModel.kt:42"))
     }
 
+    @Test fun legacyTraceUsesSameAllowlistWithoutUploadingExceptionMessages() {
+        signIn()
+        val trace = """
+            java.lang.IllegalStateException: secret message host.example
+                at dev.multiprompt.companion.MainViewModel.load(MainViewModel.kt:42)
+                at private.host.example.load(private-session:123)
+            Caused by: java.io.IOException: token abc
+                at java.io.InputStream.read(InputStream.java:100)
+        """.trimIndent()
+        for (uploadTrace in listOf("", " \n\t")) {
+            upload(report.copy(stackTrace = trace, uploadStackTrace = uploadTrace))
+            assertEquals("java.lang.IllegalStateException", body!!.getString("summary"))
+            assertEquals("java.lang.IllegalStateException\n" +
+                "at dev.multiprompt.companion.MainViewModel.load(MainViewModel.kt:42)\n" +
+                "Caused by: java.io.IOException\n" +
+                "at java.io.InputStream.read(InputStream.java:100)", body!!.getString("stack_trace"))
+            val sent = body!!.toString()
+            for (secret in listOf("secret", "host.example", "token abc", "private-session")) {
+                assertTrue("positive control: $secret", trace.contains(secret))
+                assertFalse(secret, sent.contains(secret))
+            }
+        }
+    }
+
     @Test fun unsafeOrEmptyTraceHasNonemptySafeFallbackAndBoundedUtf8Body() {
         signIn()
         for (trace in listOf("", "🔑\"\n".repeat(16000), "private session contents")) {
-            upload(report.copy(uploadStackTrace = trace, appVersion = "😀".repeat(65), androidVersion = "\"\n".repeat(65)))
+            upload(report.copy(stackTrace = trace, uploadStackTrace = trace, appVersion = "😀".repeat(65), androidVersion = "\"\n".repeat(65)))
             assertEquals("No safe stack frames available", body!!.getString("stack_trace"))
             assertEquals("Android application crash", body!!.getString("summary"))
             assertTrue(body!!.getString("app_version").length <= 64)

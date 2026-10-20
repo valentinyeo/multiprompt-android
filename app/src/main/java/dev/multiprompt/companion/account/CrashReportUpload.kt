@@ -11,7 +11,7 @@ class CrashReportUpload(private val http: AccountHttp, private val auth: Account
             return
         }
         try {
-            val lines = report.uploadStackTrace.lineSequence().mapNotNull { line ->
+            val lines = report.uploadStackTrace.ifBlank { report.stackTrace }.lineSequence().mapNotNull { line ->
                 val trimmed = line.trim()
                 frame.matchEntire(trimmed)?.value ?: exception.matchEntire(trimmed)?.let {
                     it.groupValues[1] + it.groupValues[2]
