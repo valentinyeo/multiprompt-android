@@ -12,7 +12,7 @@ fun interface AccountHttp {
     fun request(method: String, path: String, token: String?, body: JSONObject?): AccountReply
 }
 
-data class AccountReply(val status: Int, val json: JSONObject)
+data class AccountReply(val status: Int, val json: JSONObject, val layoutFeatures: String? = null)
 
 class AccountHttpClient(
     private val client: OkHttpClient = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
@@ -32,7 +32,7 @@ class AccountHttpClient(
             val json = runCatching { JSONObject(text) }.getOrElse {
                 if (reply.isSuccessful) throw IOException("Invalid account response") else JSONObject()
             }
-            return AccountReply(reply.code, json)
+            return AccountReply(reply.code, json, reply.header("X-Layout-Features"))
         }
     }
 

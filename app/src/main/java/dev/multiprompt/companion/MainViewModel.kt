@@ -1446,7 +1446,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun saveAccountLayout(value: PendingLayout) {
         val account = syncAuth.accountId() ?: throw IllegalStateException("Sign in before editing account workspaces")
         val mapping = AccountHostMap.resolve(_state.value.hosts, accountStore.hostOverrides())
-        val next = value.copy(edited = value.edited.copy(hosts = AccountHosts.publish(value.edited.hosts, mapping)))
+        val next = value.copy(
+            base = if (syncAuth.supportsHosts) value.base else value.base.copy(hosts = null),
+            edited = value.edited.copy(hosts = if (syncAuth.supportsHosts) AccountHosts.publish(value.edited.hosts, mapping) else null),
+        )
         accountStore.save(account, next)
         pendingLayout = next
         publishAccountLayout()
@@ -1477,6 +1480,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun importAccountHosts(layout: AccountLayout) {
+        if (!syncAuth.supportsHosts) return
         val local = hosts.load()
         val overrides = accountStore.hostOverrides()
         val merged = AccountHosts.merge(layout.hosts.orEmpty(), local, overrides)
@@ -1511,7 +1515,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 var retryConflict = false
                 while (pendingLayout?.let { it.dirty && (retryConflict || usedStampThrottle.shouldPush(it)) } == true && retries++ < 4) {
                     val sent = pendingLayout!!.edited
-                    val reply = syncAuth.request("PUT", "/v1/layout", JSONObject().put("base_revision", remote.revision).put("layout", sent.copy(hosts = AccountHosts.publish(remote.hosts, _state.value.accountHosts)).json()))
+                    val reply = syncAuth.request("PUT", "/v1/layout", JSONObject().put("base_revision", remote.revision).put("layout", sent.copy(hosts = if (syncAuth.supportsHosts) AccountHosts.publish(remote.hosts, _state.value.accountHosts) else null).json()))
                     if (generation != accountGeneration) return@launch
                     retryConflict = reply.status == 409
                     if (retryConflict) {

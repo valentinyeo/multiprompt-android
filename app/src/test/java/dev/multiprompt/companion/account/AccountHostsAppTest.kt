@@ -55,6 +55,8 @@ class AccountHostsAppTest {
     private val remoteHost = AccountHost(0, "Account server", "example.com", 2222, "valentin", listOf(key))
     private var remote = AccountLayout(1, hosts = listOf(remoteHost))
     private var conflict = false
+    private var features: String? = "favorite,used,visits,input,settings,hosts"
+    private var featureHeader = "X-Layout-Features"
 
     @After fun close() {
         compose.runOnIdle { models.clear() }
@@ -65,7 +67,7 @@ class AccountHostsAppTest {
         if (::app.isInitialized) app.deepgramDictation.close()
     }
 
-    private fun setup() {
+    private fun setup(profiles: List<HostProfile> = emptyList()) {
         compose.runOnIdle {
             app = MultipromptApplication()
             ReflectionHelpers.callInstanceMethod<Unit>(app, "attach",
@@ -74,15 +76,18 @@ class AccountHostsAppTest {
                 app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit()
             }
             app.getSharedPreferences("updates", Context.MODE_PRIVATE).edit().putLong("last_check_ms", System.currentTimeMillis()).commit()
+            profiles.forEach(app.hostStore::upsert)
             model = MainViewModel(app).also { models.put("main", it) }
-            assertTrue(model.state.value.hosts.isEmpty())
+            assertEquals(profiles, model.state.value.hosts)
             client = OkHttpClient.Builder().addInterceptor { chain ->
                 val request = chain.request().also(requests::add)
                 var status = 200
                 if (request.method == "PUT") {
                     val body = JSONObject(Buffer().apply { request.body!!.writeTo(this) }.readUtf8())
                     puts.add(body)
-                    if (conflict) {
+                    if (features?.split(',')?.map { it.trim() }?.contains("hosts") != true && body.getJSONObject("layout").has("hosts")) {
+                        status = 400
+                    } else if (conflict) {
                         conflict = false
                         remote = remote.copy(revision = remote.revision + 1,
                             hosts = remote.hosts.orEmpty() + remoteHost.copy(slot = 2, name = "Another server", hostname = "another.example"))
@@ -91,10 +96,12 @@ class AccountHostsAppTest {
                         assertEquals(remote.revision, body.getLong("base_revision"))
                         val incoming = AccountLayout.parse(body.getJSONObject("layout"))
                         remote = incoming.copy(revision = remote.revision + 1,
-                            hosts = (remote.hosts.orEmpty().associateBy { it.slot } + incoming.hosts.orEmpty().associateBy { it.slot }).values.sortedBy { it.slot })
+                            hosts = if (incoming.hosts == null) remote.hosts else
+                                (remote.hosts.orEmpty().associateBy { it.slot } + incoming.hosts.associateBy { it.slot }).values.sortedBy { it.slot })
                     }
                 } else assertEquals("GET", request.method)
                 Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(status).message("OK")
+                    .apply { features?.let { header(featureHeader, it) } }
                     .body(JSONObject().put("revision", remote.revision).put("layout", remote.json()).toString().toResponseBody()).build()
             }.build()
             val http = AccountHttpClient(client)
@@ -142,6 +149,8 @@ class AccountHostsAppTest {
     }
 
     @Test fun accountEntriesWinAndPhoneOnlyFillsMissingSlotsAcrossConflictAndRetry() {
+        featureHeader = "x-LaYoUt-FeAtUrEs"
+        features = " favorite, used , visits,input, settings , hosts "
         setup()
         val keys = listOf(key, "ssh-rsa " + Base64.getEncoder().encodeToString("second-key".toByteArray()),
             "ecdsa-sha2-nistp256 " + Base64.getEncoder().encodeToString("third-key".toByteArray()))
@@ -177,6 +186,55 @@ class AccountHostsAppTest {
         }
         sync()
         compose.runOnIdle { assertEquals(2, puts.size) }
+    }
+
+    @Test fun serverWithoutHostsAcceptsLayoutPutWithMappedProfiles() {
+        features = "favorite,used,visits,input,settings"
+        remote = remote.copy(hosts = null)
+        val local = HostProfile(label = "Phone server", hostname = "phone.example", username = "valentin")
+        setup(listOf(local))
+        compose.runOnIdle { AccountLayoutStore(app).setHost(0, local.id) }
+        sync()
+        compose.runOnIdle {
+            assertEquals(local, model.state.value.accountHosts[0])
+            assertTrue(puts.isEmpty())
+            assertNull(model.editAccountLayout { it.copy(workspaces = listOf("Phone workspace")) })
+        }
+        sync()
+        compose.runOnIdle {
+            assertFalse(puts.single().getJSONObject("layout").has("hosts"))
+            assertEquals(listOf("Phone workspace"), remote.workspaces)
+        }
+    }
+
+    @Test fun rollbackToServerWithoutHostsStopsPublishingMappedProfiles() {
+        setup()
+        sync()
+        compose.runOnIdle {
+            assertEquals(1, model.state.value.hosts.size)
+            features = null
+            remote = remote.copy(hosts = null)
+        }
+        sync()
+        compose.runOnIdle {
+            assertNull(model.editAccountLayout { it.copy(workspaces = listOf("After rollback")) })
+        }
+        sync()
+        compose.runOnIdle {
+            assertFalse(puts.single().getJSONObject("layout").has("hosts"))
+            assertEquals(listOf("After rollback"), remote.workspaces)
+        }
+    }
+
+    @Test fun unadvertisedHostsAreNotImported() {
+        features = "favorite,used,visits,input,settings,ghosts"
+        setup()
+        sync()
+        compose.runOnIdle {
+            assertTrue(model.state.value.hosts.isEmpty())
+            assertTrue(HostStore(app).load().isEmpty())
+            assertTrue(puts.isEmpty())
+        }
     }
 
     @Test fun sameEndpointUsesExistingStoredProfileAndRetainsLocalTrust() {
