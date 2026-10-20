@@ -37,6 +37,7 @@ data class PresentedHostKey(
     val type: String,
     val fingerprint: String,
     val changed: Boolean,
+    val publicKey: String? = null,
 )
 
 sealed class SshProblem(message: String) : Exception(message) {
@@ -101,7 +102,7 @@ class SshRepository(private val secrets: SecretStore) {
     }
 
     suspend fun connect(host: HostProfile): SshClient = withContext(Dispatchers.IO) {
-        val probe = PinningHostKeyVerifier(host.hostKeyType, host.hostKeyFingerprint)
+        val probe = PinningHostKeyVerifier(host.hostKeyType, host.hostKeyFingerprint, host.hostKeys)
         val client = SshClient(
             SshClientConfig {
                 this.host = host.hostname
@@ -532,6 +533,7 @@ class SshRepository(private val secrets: SecretStore) {
     private class PinningHostKeyVerifier(
         private val expectedType: String?,
         private val expectedFingerprint: String?,
+        private val expectedKeys: List<String>,
     ) : HostKeyVerifier {
         @Volatile
         var presented: PresentedHostKey? = null
@@ -539,14 +541,19 @@ class SshRepository(private val secrets: SecretStore) {
 
         override suspend fun verify(key: PublicKey): Boolean {
             val fingerprint = KeyFingerprint.sha256(key.encoded)
-            val accepted = expectedFingerprint != null &&
-                expectedType == key.type &&
-                expectedFingerprint == fingerprint
+            val publicKey = "${key.type} ${Base64.getEncoder().encodeToString(key.encoded)}"
+            val accepted = expectedKeys.any { trusted ->
+                trusted.substringBefore(' ') == key.type && runCatching {
+                    Base64.getDecoder().decode(trusted.substringAfter(' ')).contentEquals(key.encoded)
+                }.getOrDefault(false)
+            } || (expectedFingerprint != null &&
+                expectedType == key.type && expectedFingerprint == fingerprint)
             if (!accepted) {
                 presented = PresentedHostKey(
                     type = key.type,
                     fingerprint = fingerprint,
-                    changed = expectedFingerprint != null,
+                    changed = expectedFingerprint != null || expectedKeys.isNotEmpty(),
+                    publicKey = publicKey,
                 )
             }
             return accepted

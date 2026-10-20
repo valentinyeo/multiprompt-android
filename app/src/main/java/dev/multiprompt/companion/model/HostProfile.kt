@@ -8,10 +8,11 @@ data class HostProfile(
     val hostname: String,
     val port: Int = 22,
     val username: String,
-    val keySecretId: String,
+    val keySecretId: String = "host_key_$id",
     val passphraseSecretId: String? = null,
     val hostKeyType: String? = null,
     val hostKeyFingerprint: String? = null,
+    val hostKeys: List<String> = emptyList(),
 )
 
 data class HostDraft(
