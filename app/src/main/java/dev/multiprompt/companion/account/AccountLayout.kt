@@ -25,8 +25,10 @@ data class AccountLayout(
     val workspaces: List<String> = emptyList(),
     val tabs: List<AccountTab> = emptyList(),
     val settings: Map<String, Boolean>? = null,
+    val hosts: List<AccountHost>? = null,
 ) {
     fun validate(): AccountLayout {
+        require(hosts == null || AccountHosts.parse(JSONArray(hosts.map { it.json() })) == hosts) { "Invalid layout hosts" }
         require(settings == null || settings.keys.all { it in setOf("frequent", "favorites", "all", "frequent_first") }) { "Invalid layout settings" }
         require(revision >= 0 && workspaces.size <= 9 && tabs.size <= 256) { "Invalid layout capacity or revision" }
         require(workspaces.distinct().size == workspaces.size && workspaces.all {
@@ -45,9 +47,9 @@ data class AccountLayout(
     fun json(): JSONObject = JSONObject().put("schema", 1).put("revision", revision)
         .put("workspaces", JSONArray(workspaces.map { JSONObject().put("name", it) }))
         .put("tabs", JSONArray(tabs.map { it.json() }))
-        .apply { settings?.let { put("settings", JSONObject(it)) } }
+        .apply { settings?.let { put("settings", JSONObject(it)) }; hosts?.let { put("hosts", JSONArray(it.map { host -> host.json() })) } }
 
-    fun sameContent(other: AccountLayout): Boolean = workspaces == other.workspaces && tabs == other.tabs && settings == other.settings
+    fun sameContent(other: AccountLayout): Boolean = workspaces == other.workspaces && tabs == other.tabs && settings == other.settings && hosts.orEmpty() == other.hosts.orEmpty()
 
     fun renameTab(identity: String, name: String): AccountLayout = copy(tabs = tabs.map {
         if (it.identity == identity) it.copy(name = name, manual = true) else it
@@ -87,7 +89,7 @@ data class AccountLayout(
         fun parse(json: JSONObject): AccountLayout {
             val required = setOf("schema", "revision", "workspaces", "tabs")
             val keys = json.keys().asSequence().toSet()
-            require(keys.containsAll(required) && (keys - required).all { it == "settings" } && json.get("schema") == 1)
+            require(keys.containsAll(required) && (keys - required).all { it in setOf("settings", "hosts") } && json.get("schema") == 1)
             val settings = if (json.has("settings")) {
                 val value = json.get("settings")
                 require(value is JSONObject)
@@ -133,7 +135,7 @@ data class AccountLayout(
                 } else null
                 AccountTab(t.getString("name"), t.getString("tmux_session"), host.toInt(), t.getString("workspace"),
                     t.optBoolean("manual", false), if (t.has("favorite")) t.getBoolean("favorite") else null, (used as? Number)?.toLong(), visits, (input as? Number)?.toLong())
-            }, settings).validate()
+            }, settings, if (json.has("hosts")) AccountHosts.parse(json.opt("hosts")) else null).validate()
         }
 
         fun response(json: JSONObject): AccountLayout {

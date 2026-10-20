@@ -26,6 +26,7 @@ class HostStore(context: Context) {
                             passphraseSecretId = item.optString("passphraseSecretId").ifBlank { null },
                             hostKeyType = item.optString("hostKeyType").ifBlank { null },
                             hostKeyFingerprint = item.optString("hostKeyFingerprint").ifBlank { null },
+                            hostKeys = item.optJSONArray("hostKeys")?.let { keys -> (0 until keys.length()).map { keys.getString(it) } }.orEmpty(),
                         ),
                     )
                 }
@@ -55,7 +56,8 @@ class HostStore(context: Context) {
                     .put("keySecretId", host.keySecretId)
                     .put("passphraseSecretId", host.passphraseSecretId ?: "")
                     .put("hostKeyType", host.hostKeyType ?: "")
-                    .put("hostKeyFingerprint", host.hostKeyFingerprint ?: ""),
+                    .put("hostKeyFingerprint", host.hostKeyFingerprint ?: "")
+                    .put("hostKeys", JSONArray(host.hostKeys)),
             )
         }
         preferences.edit().putString(KEY_HOSTS, array.toString()).apply()

@@ -39,6 +39,13 @@ class AccountHostMapTest {
         assertNull(AccountHostMap.sessionFor(tab, emptyList(), emptyMap()))
     }
 
+    @Test fun explicitOverridesRejectOtherUsersAtSlotZeroAndNeverReuseProfiles() {
+        assertNull(AccountHostMap.resolve(hosts, mapOf(0 to inne.id))[0])
+        assertNull(AccountHostMap.resolve(hosts, mapOf(0 to agent.id))[0])
+        assertEquals(mapOf(0 to valentin), AccountHostMap.resolve(listOf(valentin), mapOf(0 to valentin.id, 1 to valentin.id)))
+        assertEquals(mapOf(1 to contabo), AccountHostMap.resolve(listOf(contabo), mapOf(1 to contabo.id, 2 to contabo.id)))
+    }
+
     @Test fun offlineAccountTabsRemainOpenableAndMembershipNeverComesFromCwd() {
         val mapping = AccountHostMap.resolve(hosts, emptyMap())
         val session = AccountHostMap.sessionFor(tab, emptyList(), mapping)!!

@@ -27,6 +27,7 @@ import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.skills.SkillStore
 import dev.multiprompt.companion.auth.SyncAuthManager
 import android.content.Intent
+import dev.multiprompt.companion.account.AccountHosts
 import dev.multiprompt.companion.account.AccountHostMap
 import dev.multiprompt.companion.account.AccountLayout
 import dev.multiprompt.companion.account.FREQUENT_SPLIT_ID
@@ -394,6 +395,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             passphraseSecretId = passphraseSecretId,
             hostKeyType = if (connectionIdentityChanged) null else existing?.hostKeyType,
             hostKeyFingerprint = if (connectionIdentityChanged) null else existing?.hostKeyFingerprint,
+            hostKeys = if (connectionIdentityChanged) emptyList() else existing?.hostKeys.orEmpty(),
         )
         hosts.upsert(profile)
         _state.update {
@@ -503,6 +505,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             host.copy(
                 hostKeyType = presented.type,
                 hostKeyFingerprint = presented.fingerprint,
+                hostKeys = listOfNotNull(presented.publicKey),
             ),
         )
         _state.update {
@@ -1442,8 +1445,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun saveAccountLayout(value: PendingLayout) {
         val account = syncAuth.accountId() ?: throw IllegalStateException("Sign in before editing account workspaces")
-        accountStore.save(account, value)
-        pendingLayout = value
+        val mapping = AccountHostMap.resolve(_state.value.hosts, accountStore.hostOverrides())
+        val next = value.copy(
+            base = if (syncAuth.supportsHosts) value.base else value.base.copy(hosts = null),
+            edited = value.edited.copy(hosts = if (syncAuth.supportsHosts) AccountHosts.publish(value.edited.hosts, mapping) else null),
+        )
+        accountStore.save(account, next)
+        pendingLayout = next
         publishAccountLayout()
     }
 
@@ -1471,6 +1479,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         editAccountLayout { it.closeTab(tab.identity) }?.let { error -> _state.update { it.copy(accountError = error) } }
     }
 
+    private fun importAccountHosts(layout: AccountLayout) {
+        if (!syncAuth.supportsHosts) return
+        val local = hosts.load()
+        val overrides = accountStore.hostOverrides()
+        val merged = AccountHosts.merge(layout.hosts.orEmpty(), local, overrides)
+        merged.profiles.filter { profile -> local.none { it.id == profile.id } }.forEach(hosts::upsert)
+        merged.overrides.filter { (slot, id) -> overrides[slot] != id }.forEach { (slot, id) -> accountStore.setHost(slot, id) }
+        _state.update { it.copy(hosts = hosts.load()) }
+    }
+
     fun syncAccount() {
         if (accountRequestRunning) return
         accountRequestRunning = true
@@ -1490,22 +1508,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { it.copy(signedIn = true) }
                 var remote = AccountLayout.response(syncAuth.request("GET", "/v1/layout").json)
                 if (generation != accountGeneration) return@launch
+                importAccountHosts(remote)
                 usedStampThrottle.observe(remote)
                 saveAccountLayout(pendingLayout?.pull(remote) ?: PendingLayout(remote))
                 var retries = 0
                 var retryConflict = false
                 while (pendingLayout?.let { it.dirty && (retryConflict || usedStampThrottle.shouldPush(it)) } == true && retries++ < 4) {
                     val sent = pendingLayout!!.edited
-                    val reply = syncAuth.request("PUT", "/v1/layout", JSONObject().put("base_revision", remote.revision).put("layout", sent.json()))
+                    val reply = syncAuth.request("PUT", "/v1/layout", JSONObject().put("base_revision", remote.revision).put("layout", sent.copy(hosts = if (syncAuth.supportsHosts) AccountHosts.publish(remote.hosts, _state.value.accountHosts) else null).json()))
                     if (generation != accountGeneration) return@launch
                     retryConflict = reply.status == 409
                     if (retryConflict) {
                         remote = AccountLayout.response(syncAuth.request("GET", "/v1/layout").json)
                         if (generation != accountGeneration) return@launch
+                        importAccountHosts(remote)
                         usedStampThrottle.observe(remote)
                         saveAccountLayout(pendingLayout!!.pull(remote))
                     } else {
                         remote = AccountLayout.response(reply.json)
+                        importAccountHosts(remote)
                         usedStampThrottle.observe(remote)
                         saveAccountLayout(pendingLayout!!.acknowledge(sent, remote))
                     }
