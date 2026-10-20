@@ -75,13 +75,13 @@ class AccountAuth(
         return true
     }
 
-    fun accessToken(): String {
+    fun accessToken(clearRejectedSession: Boolean = true): String {
         val stored = read(TOKENS)?.let(::JSONObject) ?: throw AccountSignInRequired()
         if (clock() < stored.getLong("expires_at") - 60_000) return stored.getString("access_token")
         val reply = http.request("POST", "/oauth/token", null, JSONObject().put("grant_type", "refresh_token")
             .put("refresh_token", stored.getString("refresh_token")))
         if (reply.status in listOf(400, 401) && reply.json.optString("error") == "invalid_grant") {
-            write(TOKENS, null)
+            if (clearRejectedSession) write(TOKENS, null)
             throw AccountSignInRequired()
         }
         saveTokens(reply)
