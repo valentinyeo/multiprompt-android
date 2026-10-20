@@ -3,6 +3,8 @@ package dev.multiprompt.companion.data
 import android.content.Context
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.ui.AppTheme
+import dev.multiprompt.companion.ssh.TmuxText
+import org.json.JSONObject
 
 class SessionReadStore(context: Context) {
     private val preferences = context.getSharedPreferences("session_read_state", Context.MODE_PRIVATE)
@@ -10,12 +12,41 @@ class SessionReadStore(context: Context) {
     fun isUnread(session: TmuxSession): Boolean =
         session.lastActivityEpochSeconds > preferences.getLong(key(session.hostId, session.name), 0L)
 
+    fun unreadCountState(session: TmuxSession): UnreadCount.State = runCatching {
+        val stored = preferences.getString("$UNREAD_COUNT_PREFIX${key(session.hostId, session.name)}", null)
+            ?: return UnreadCount.State()
+        val json = JSONObject(stored)
+        UnreadCount.State(
+            count = json.getInt("count"),
+            lastActivity = if (json.has("activity")) json.getLong("activity") else null,
+            lastCountedActivity = json.getLong("counted"),
+            wasWorking = json.getBoolean("working"),
+        )
+    }.getOrDefault(UnreadCount.State())
+
+    fun saveUnreadCountState(session: TmuxSession, state: UnreadCount.State) {
+        preferences.edit().putString(
+            "$UNREAD_COUNT_PREFIX${key(session.hostId, session.name)}",
+            JSONObject()
+                .put("count", state.count)
+                .put("activity", state.lastActivity)
+                .put("counted", state.lastCountedActivity)
+                .put("working", state.wasWorking)
+                .toString(),
+        ).apply()
+    }
+
     fun markRead(session: TmuxSession) {
         val readAt = maxOf(session.lastActivityEpochSeconds, System.currentTimeMillis() / 1000)
         preferences.edit().putLong(key(session.hostId, session.name), readAt).apply()
+        saveUnreadCountState(session, UnreadCount.read(
+            unreadCountState(session), session.lastActivityEpochSeconds,
+            TmuxText.isWaitingForInput(session.preview, session.agent),
+        ))
     }
 
     fun markUnread(session: TmuxSession) {
+        saveUnreadCountState(session, UnreadCount.unread(unreadCountState(session)))
         preferences.edit()
             .putLong(key(session.hostId, session.name), session.lastActivityEpochSeconds - 1)
             .apply()
@@ -35,6 +66,7 @@ class SessionReadStore(context: Context) {
     }
 
     fun archiveUntil(session: TmuxSession, resumeAtEpochSeconds: Long?) {
+        markRead(session)
         val archivedAt = maxOf(session.lastActivityEpochSeconds, System.currentTimeMillis() / 1000)
         val editor = preferences.edit()
             .putLong(key(session.hostId, session.name), archivedAt)
@@ -160,6 +192,7 @@ class SessionReadStore(context: Context) {
         preferences.all.keys
             .filter {
                 it.startsWith(prefix) ||
+                    it.startsWith("$UNREAD_COUNT_PREFIX$prefix") ||
                     it.startsWith("$ARCHIVE_PREFIX$prefix") ||
                     it.startsWith("$ARCHIVE_UNTIL_PREFIX$prefix") ||
                     it.startsWith("$FONT_SCALE_PREFIX$prefix") ||
@@ -172,6 +205,7 @@ class SessionReadStore(context: Context) {
     }
 
     companion object {
+        private const val UNREAD_COUNT_PREFIX = "unread_count::"
         private const val ARCHIVE_PREFIX = "archive::"
         private const val ARCHIVE_UNTIL_PREFIX = "archive_until::"
         private const val FONT_SCALE_PREFIX = "font_scale::"

@@ -69,16 +69,21 @@ class Material3LookTest(private val screen: M3Screen, private val sunlight: Bool
             assertTrue("tab=${tab.boundsInRoot} row=${row.boundsInRoot}", tab.boundsInRoot.bottom <= row.boundsInRoot.top)
             assertTrue("row=${row.boundsInRoot}", row.boundsInRoot.height >= 72f)
             val title = compose.onNodeWithText("claude-reader", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-            val badgeNode = compose.onNodeWithContentDescription("Unread", useUnmergedTree = true).fetchSemanticsNode()
+            val badgeNode = compose.onNodeWithContentDescription("1 unread messages", useUnmergedTree = true).fetchSemanticsNode()
             val badge = badgeNode.boundsInRoot
             val time = compose.onAllNodesWithTag("Session activity", useUnmergedTree = true).fetchSemanticsNodes()
                 .single { it.boundsInRoot.top <= badge.top && it.boundsInRoot.bottom < badge.bottom }.boundsInRoot
             assertTrue("title=$title badge=$badge", badge.left >= title.right)
             assertTrue("time=$time badge=$badge", badge.top >= time.bottom)
             assertEquals(time.right, badge.right, 0.01f)
-            assertTrue("badge=$badge", badge.width >= 20f)
-            assertEquals(20f, badge.height, 0.01f)
-            assertTrue(badgeNode.config.getOrElse(SemanticsProperties.Text) { emptyList() }.isEmpty())
+            assertTrue("badge=$badge", badge.width >= 16f)
+            assertTrue("badge=$badge", badge.height >= 16f)
+            val badgeLayouts = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithText("1", useUnmergedTree = true)
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(badgeLayouts) }
+            assertEquals(1, badgeLayouts.single().lineCount)
+            assertEquals(11f, badgeLayouts.single().layoutInput.style.fontSize.value)
+            assertEquals(16f, badgeLayouts.single().layoutInput.style.lineHeight.value)
             val texts = compose.onAllNodes(SemanticsMatcher("all") { true }, useUnmergedTree = true).fetchSemanticsNodes()
                 .flatMap { it.config.getOrElse(SemanticsProperties.Text) { emptyList() } }.map { it.text }
             assertTrue("Avatar initials must be decorative: $texts", "C" !in texts && "CR" !in texts && "CT" !in texts)

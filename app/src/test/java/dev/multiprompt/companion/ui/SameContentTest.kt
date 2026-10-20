@@ -70,16 +70,19 @@ class SameContentTest(private val screen: M3Screen, private val sunlight: Boolea
     private fun regions(material3: Boolean): Map<String, List<String>> {
         val nodes = compose.onAllNodes(SemanticsMatcher("all") { true }, useUnmergedTree = true).fetchSemanticsNodes()
         val activities = nodes.filter { it.config.getOrElse(SemanticsProperties.TestTag) { "" } == "Session activity" }
-        val badges = nodes.filter { it.config.getOrElse(SemanticsProperties.ContentDescription) { emptyList() } == listOf("Unread") }
+        val badges = nodes.filter { it.config.getOrElse(SemanticsProperties.ContentDescription) { emptyList() } == listOf("1 unread messages") }
         val inbox = screen != M3Screen.SESSION && screen != M3Screen.SESSION_MENU
         val rowCount = if (screen == M3Screen.INBOX_SEARCH || screen == M3Screen.INBOX_SPLITS) 1 else 2
         assertEquals(if (material3 && inbox) rowCount else 0, activities.size)
         assertEquals(if (material3 && inbox) 1 else 0, badges.size)
         fun ancestors(node: SemanticsNode) = generateSequence(node) { it.parent }
         fun subtree(node: SemanticsNode): List<SemanticsNode> = listOf(node) + node.children.flatMap { subtree(it) }
+        val badgeText = badges.flatMap { subtree(it) }
+            .flatMap { it.config.getOrElse(SemanticsProperties.Text) { emptyList() } }.map { it.text }
+        assertEquals(if (material3 && inbox) listOf("1") else emptyList<String>(), badgeText)
         fun tokens(node: SemanticsNode): List<String> = buildList {
             if (node.config.getOrElse(SemanticsProperties.TestTag) { "" } == "Session activity" ||
-                node.config.getOrElse(SemanticsProperties.ContentDescription) { emptyList() } == listOf("Unread")) return@buildList
+                ancestors(node).any { it.config.getOrElse(SemanticsProperties.ContentDescription) { emptyList() } == listOf("1 unread messages") }) return@buildList
             node.config.getOrElse(SemanticsProperties.Text) { emptyList() }.forEach { add("text:${it.text}") }
             node.config.getOrElse(SemanticsProperties.ContentDescription) { emptyList() }.forEach { add("description:$it") }
             node.config.getOrElseNullable(SemanticsProperties.EditableText) { null }?.let { add("editable:${it.text}") }

@@ -14,6 +14,7 @@ import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.model.DissolvedSession
 import dev.multiprompt.companion.model.RemoteDirectory
 import dev.multiprompt.companion.model.RefreshMerge
+import dev.multiprompt.companion.data.UnreadCount
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.RetiredHosts
 import dev.multiprompt.companion.data.SessionSearch
@@ -81,6 +82,7 @@ data class AppUiState(
     val reader: SessionReaderConnection? = null,
     val readerSession: TmuxSession? = null,
     val unreadSessionKeys: Set<String> = emptySet(),
+    val unreadCounts: Map<String, Int> = emptyMap(),
     val archivedSessionKeys: Set<String> = emptySet(),
     val sessionBucket: SessionBucket = SessionBucket.OPEN,
     val dissolvedSessions: List<DissolvedSession> = emptyList(),
@@ -463,6 +465,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 terminalFromReader = it.terminalFromReader && it.terminalSession?.hostId != host.id,
                 readerSwipeOrder = it.readerSwipeOrder.filterNot { key -> key.startsWith(sessionPrefix) },
                 unreadSessionKeys = it.unreadSessionKeys.filterNot { key -> key.startsWith(sessionPrefix) }.toSet(),
+                unreadCounts = it.unreadCounts.filterKeys { key -> !key.startsWith(sessionPrefix) },
                 archivedSessionKeys = it.archivedSessionKeys.filterNot { key -> key.startsWith(sessionPrefix) }.toSet(),
                 sessionWorkspaceIds = it.sessionWorkspaceIds.filterKeys { key -> !key.startsWith(sessionPrefix) },
                 sessionInteractionEpochSeconds = it.sessionInteractionEpochSeconds.filterKeys { key -> !key.startsWith(sessionPrefix) },
@@ -607,6 +610,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             .toMap()
+        val unreadKeys = sessions
+            .filter { SessionReadStore.key(it.hostId, it.name) !in archivedKeys }
+            .filter { TmuxText.isWaitingForInput(it.preview, it.agent) }
+            .filter(sessionReads::isUnread)
+            .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) }
+        val unreadCounts = sessions.associate { session ->
+            val key = SessionReadStore.key(session.hostId, session.name)
+            val stored = sessionReads.unreadCountState(session)
+            val counted = if (answered[session.hostId]?.error == null && session.hostId in answered) UnreadCount.step(
+                stored,
+                activity = session.lastActivityEpochSeconds,
+                waiting = TmuxText.isWaitingForInput(session.preview, session.agent),
+                unread = sessionReads.isUnread(session),
+            ) else stored
+            if (counted != stored) sessionReads.saveUnreadCountState(session, counted)
+            key to UnreadCount.displayed(counted.count, key in unreadKeys)
+        }
         return current.copy(
             sessions = sessions,
             sessionEtas = if (final) sessionEtas else current.sessionEtas + sessionEtas,
@@ -629,11 +649,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             pendingHostKeys = results.mapNotNull { result ->
                 result.hostKey?.let { result.hostId to it }
             }.toMap(),
-            unreadSessionKeys = sessions
-                .filter { SessionReadStore.key(it.hostId, it.name) !in archivedKeys }
-                .filter { TmuxText.isWaitingForInput(it.preview, it.agent) }
-                .filter(sessionReads::isUnread)
-                .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) },
+            unreadSessionKeys = unreadKeys,
+            unreadCounts = unreadCounts,
             archivedSessionKeys = archivedKeys,
             workspaces = orderedWorkspaces,
             workspaceSplitIds = workspaceSplitIds,
@@ -721,6 +738,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 userSelectedSessionKey = key.takeIf { userInitiated },
                 readerSwipeOrder = swipeOrder,
                 unreadSessionKeys = it.unreadSessionKeys - key,
+                unreadCounts = it.unreadCounts - key,
             )
         }
     }
@@ -729,13 +747,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val session = _state.value.readerSession ?: return
         sessionReads.markRead(session)
         val key = SessionReadStore.key(session.hostId, session.name)
-        _state.update { it.copy(unreadSessionKeys = it.unreadSessionKeys - key) }
+        _state.update { it.copy(unreadSessionKeys = it.unreadSessionKeys - key, unreadCounts = it.unreadCounts - key) }
     }
 
     fun markSessionUnread(session: TmuxSession) {
         sessionReads.markUnread(session)
         val key = SessionReadStore.key(session.hostId, session.name)
-        _state.update { it.copy(unreadSessionKeys = it.unreadSessionKeys + key) }
+        _state.update {
+            it.copy(
+                unreadSessionKeys = it.unreadSessionKeys + key,
+                unreadCounts = it.unreadCounts + (key to sessionReads.unreadCountState(session).count),
+            )
+        }
     }
 
     fun archiveSession(session: TmuxSession) {
@@ -745,6 +768,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             it.copy(
                 archivedSessionKeys = it.archivedSessionKeys + key,
                 unreadSessionKeys = it.unreadSessionKeys - key,
+                unreadCounts = it.unreadCounts - key,
             )
         }
     }
@@ -756,6 +780,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             it.copy(
                 archivedSessionKeys = it.archivedSessionKeys + key,
                 unreadSessionKeys = it.unreadSessionKeys - key,
+                unreadCounts = it.unreadCounts - key,
             )
         }
     }
@@ -970,6 +995,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 },
                 sessionWorkspaceIds = it.sessionWorkspaceIds - key,
                 unreadSessionKeys = it.unreadSessionKeys - key,
+                unreadCounts = it.unreadCounts - key,
                 archivedSessionKeys = it.archivedSessionKeys - key,
                 sessionInteractionEpochSeconds = it.sessionInteractionEpochSeconds - key,
                 reader = if (readerWasOpen) null else it.reader,
@@ -1018,6 +1044,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             terminal = if (terminalWasOpen) null else it.terminal,
                             terminalSession = if (terminalWasOpen) null else it.terminalSession,
                             unreadSessionKeys = it.unreadSessionKeys - key,
+                            unreadCounts = it.unreadCounts - key,
                             archivedSessionKeys = it.archivedSessionKeys - key,
                             sessionWorkspaceIds = it.sessionWorkspaceIds - key,
                             dissolvedSessions = dissolved?.let { record ->
@@ -1159,6 +1186,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 } + session),
                 archivedSessionKeys = current.archivedSessionKeys - key,
                 unreadSessionKeys = current.unreadSessionKeys - key,
+                unreadCounts = current.unreadCounts - key,
                 newSession = null,
                 sessionActionError = null,
             )
