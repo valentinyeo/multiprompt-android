@@ -32,8 +32,8 @@ class CrashReportUploadTest {
         { key, value -> if (value == null) storage.remove(key) else storage[key] = value }, { 10_000L })
     private val uploader = CrashReportUpload(http, auth)
     private var uploaded: String? = null
-    private val report = CrashReport(1234567890L, "main", "test crash", "trace", "12345678-abcd",
-        "0.1.213 (100213)", "15 (SDK 35)")
+    private val report = CrashReport(1234567890L, "main", "test crash", "java.lang.RuntimeException: test crash\n\tat dev.multiprompt.companion.MainViewModel.test(MainViewModel.kt:42)", "12345678-abcd",
+        "0.1.213 (100213)", "15 (SDK 35)", uploadStackTrace = "java.lang.RuntimeException\nat dev.multiprompt.companion.MainViewModel.test(MainViewModel.kt:42)")
 
     private fun signIn() { storage[AccountAuth.TOKENS] = tokens("a").put("expires_at", 610_000L).toString() }
     private fun upload(value: CrashReport = report) = uploader.upload(value) { uploaded = it }
@@ -49,18 +49,69 @@ class CrashReportUploadTest {
         assertEquals(report.appVersion, json.getString("app_version"))
         assertEquals(report.androidVersion, json.getString("android_version"))
         assertEquals(report.threadName, json.getString("thread"))
-        assertEquals(report.summary, json.getString("summary"))
-        assertEquals(report.stackTrace, json.getString("stack_trace"))
+        assertEquals("java.lang.RuntimeException", json.getString("summary"))
+        assertEquals("java.lang.RuntimeException\nat dev.multiprompt.companion.MainViewModel.test(MainViewModel.kt:42)", json.getString("stack_trace"))
     }
 
     @Test fun truncatesEveryBoundedFieldAtContractCaps() {
+        val type = "java.lang." + "E".repeat(2000) + "Exception"
+        val trace = type + "\n" + "\tat dev.multiprompt.companion.MainViewModel.test(MainViewModel.kt:42)\n".repeat(300)
         signIn(); upload(report.copy(threadName = "t".repeat(201), summary = "s".repeat(2001),
-            stackTrace = "x".repeat(16001), appVersion = "a".repeat(65), androidVersion = "v".repeat(65)))
-        assertEquals("t".repeat(200), body!!.getString("thread"))
-        assertEquals("s".repeat(2000), body!!.getString("summary"))
-        assertEquals("x".repeat(16000), body!!.getString("stack_trace"))
+            uploadStackTrace = trace, appVersion = "a".repeat(65), androidVersion = "v".repeat(65)))
+        assertEquals("background", body!!.getString("thread"))
+        assertEquals(type.take(2000), body!!.getString("summary"))
+        assertEquals(16000, body!!.getString("stack_trace").length)
         assertEquals("a".repeat(64), body!!.getString("app_version"))
         assertEquals("v".repeat(64), body!!.getString("android_version"))
+        assertTrue(body!!.toString().toByteArray(Charsets.UTF_8).size <= 32 * 1024)
+    }
+
+    @Test fun neverUploadsMessagesSessionContentHostNamesKeysOrTokens() {
+        signIn()
+        val secrets = listOf("prod.private.example", "session content: launch secret project", "ssh-ed25519 AAAATESTKEY",
+            "-----BEGIN OPENSSH PRIVATE KEY-----", "a".repeat(43), "r".repeat(43))
+        val privateText = secrets.joinToString("\n")
+        upload(report.copy(threadName = privateText, summary = privateText,
+            stackTrace = "java.lang.RuntimeException: $privateText\n" +
+                "\tat dev.multiprompt.companion.MainViewModel.test(MainViewModel.kt:42)\n" +
+                "Caused by: java.io.IOException: $privateText\n" +
+                "\tat secret.host.example.command(private-session:123)\n" +
+                "Suppressed: java.lang.IllegalStateException: $privateText",
+            uploadStackTrace = "java.lang.RuntimeException\nat dev.multiprompt.companion.MainViewModel.test(MainViewModel.kt:42)\nCaused by: java.io.IOException\nSuppressed: java.lang.IllegalStateException"))
+        val sent = body!!.toString()
+        val unsafeBody = JSONObject().put("summary", privateText).put("stack_trace", privateText).toString()
+        secrets.forEach {
+            assertTrue("positive control: $it", unsafeBody.contains(it))
+            assertFalse(it, sent.contains(it))
+        }
+        assertEquals("background", body!!.getString("thread"))
+        assertEquals("java.lang.RuntimeException", body!!.getString("summary"))
+        assertTrue(body!!.getString("stack_trace").contains("Caused by: java.io.IOException"))
+        assertTrue(body!!.getString("stack_trace").contains("Suppressed: java.lang.IllegalStateException"))
+        assertTrue(body!!.getString("stack_trace").contains("MainViewModel.kt:42"))
+    }
+
+    @Test fun unsafeOrEmptyTraceHasNonemptySafeFallbackAndBoundedUtf8Body() {
+        signIn()
+        for (trace in listOf("", "🔑\"\n".repeat(16000), "private session contents")) {
+            upload(report.copy(uploadStackTrace = trace, appVersion = "😀".repeat(65), androidVersion = "\"\n".repeat(65)))
+            assertEquals("No safe stack frames available", body!!.getString("stack_trace"))
+            assertEquals("Android application crash", body!!.getString("summary"))
+            assertTrue(body!!.getString("app_version").length <= 64)
+            assertFalse(body!!.getString("app_version").last().isHighSurrogate())
+            assertTrue(body!!.getString("android_version").length <= 64)
+            assertTrue(body!!.toString().toByteArray(Charsets.UTF_8).size <= 32 * 1024)
+        }
+    }
+
+    @Test fun invalidIdIsMarkedWithoutSendingAPermanentlyInvalidRequest() {
+        signIn()
+        for (id in listOf("short", "a".repeat(65), "private.host.example")) {
+            uploaded = null
+            upload(report.copy(id = id))
+            assertEquals(id, uploaded)
+        }
+        assertTrue(requests.isEmpty())
     }
 
     @Test fun createdMarksUploaded() {
@@ -75,12 +126,23 @@ class CrashReportUploadTest {
     @Test fun failuresIncluding404KeepPendingAndLogin() {
         signIn()
         val before = storage.getValue(AccountAuth.TOKENS)
-        for (status in listOf(400, 404, 413, 429, 500, 503, 200)) {
+        for (status in listOf(404, 413, 429, 500, 503)) {
             reply = AccountReply(status, JSONObject())
             upload()
             assertNull(uploaded)
             assertEquals(before, storage[AccountAuth.TOKENS])
         }
+    }
+
+    @Test fun permanentBadRequestMarksUploaded() {
+        signIn(); reply = AccountReply(400, JSONObject().put("error", "invalid_crash_report"))
+        upload(); assertEquals(report.id, uploaded); assertTrue(auth.hasSession())
+    }
+
+    @Test fun networkFailureDuringRefreshKeepsReportAndLogin() {
+        signIn(); auth.invalidateAccess()
+        failure = IOException("offline"); upload()
+        assertNull(uploaded); assertTrue(auth.hasSession())
     }
 
     @Test fun ioExceptionKeepsPendingAndDoesNotThrowOrClearLogin() {

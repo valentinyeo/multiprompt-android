@@ -64,11 +64,11 @@ class SignInGateTest {
 
     @After
     fun closeModels() {
-        compose.runOnIdle { models.clear() }
+        compose.runOnUiThread { models.clear() }
     }
 
     private fun render(signedIn: Boolean = false) {
-        compose.runOnIdle {
+        compose.runOnUiThread {
             val application = MultipromptApplication()
             ReflectionHelpers.callInstanceMethod<Unit>(
                 application, "attach",

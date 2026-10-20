@@ -47,6 +47,7 @@ import dev.multiprompt.companion.update.UpdateManager
 import dev.multiprompt.companion.update.UpdateRelease
 import dev.multiprompt.companion.upload.ScreencastUploader
 import dev.multiprompt.companion.ui.AppTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
@@ -296,9 +297,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun uploadCrashReport() {
-        viewModelScope.launch {
-            val report = crashReportStore.load()?.takeUnless { it.uploaded } ?: return@launch
-            syncAuth.uploadCrashReport(report, crashReportStore::markUploaded)
+        viewModelScope.launch(Dispatchers.IO) {
+            crashReportStore.loadPending().forEach { report ->
+                syncAuth.uploadCrashReport(report, crashReportStore::markUploaded)
+            }
         }
     }
 
