@@ -22,7 +22,7 @@ fun DeviceApprovalPrompt(
     onDeny: () -> Unit,
 ) {
     AlertDialog(
-        onDismissRequest = { if (!busy) onDeny() },
+        onDismissRequest = {},
         title = { Text("Approve this device?") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

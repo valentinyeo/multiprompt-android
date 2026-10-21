@@ -1,6 +1,7 @@
 package dev.multiprompt.companion.ui
 
 import android.app.Application
+import android.view.MotionEvent
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -14,6 +15,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowDialog
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class, qualifiers = "w390dp-h844dp-mdpi")
@@ -101,6 +103,24 @@ class DeviceApprovalPromptTest {
         compose.onNodeWithText("No").assertIsEnabled()
         compose.runOnIdle { error.value = null }
         compose.onNodeWithText("Could not add this device. Try again.").assertDoesNotExist()
+    }
+
+    @Test
+    fun tappingOutsideDoesNotDenyOrClosePrompt() {
+        render()
+        compose.runOnIdle {
+            val event = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_OUTSIDE, -1f, -1f, 0)
+            try {
+                assertEquals(true, ShadowDialog.getLatestDialog().onTouchEvent(event))
+            } finally {
+                event.recycle()
+            }
+            assertEquals(0, approvals)
+            assertEquals(0, denials)
+        }
+        compose.onNodeWithText("Approve this device?").assertIsDisplayed()
+        compose.onNodeWithText("No").performClick()
+        compose.runOnIdle { assertEquals(1, denials) }
     }
 
     @Test

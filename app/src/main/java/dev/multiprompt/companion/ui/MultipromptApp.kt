@@ -225,6 +225,7 @@ import dev.multiprompt.companion.terminal.TerminalInputTracker
 
 @Composable
 fun MultipromptApp(viewModel: MainViewModel) {
+    val state by viewModel.state.collectAsState()
     val updateState by viewModel.updates.state.collectAsState()
     LaunchedEffect(Unit) {
         while (true) {
@@ -234,6 +235,15 @@ fun MultipromptApp(viewModel: MainViewModel) {
     }
     Box(Modifier.fillMaxSize()) {
         AppScreens(viewModel)
+        if (state.signedIn) state.pendingDevice?.let { device ->
+            DeviceApprovalPrompt(
+                device = device,
+                busy = state.deviceApprovalBusy,
+                error = state.deviceApprovalError,
+                onApprove = viewModel::approveDevice,
+                onDeny = viewModel::denyDevice,
+            )
+        }
         UpdateBanner(
             state = updateState,
             onInstall = { release -> viewModel.updates.install(release) },

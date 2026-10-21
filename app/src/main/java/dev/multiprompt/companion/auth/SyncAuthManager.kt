@@ -13,6 +13,7 @@ import dev.multiprompt.companion.account.AccountReply
 import dev.multiprompt.companion.account.CrashReportUpload
 import dev.multiprompt.companion.data.CrashReport
 import dev.multiprompt.companion.security.SecretStore
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -37,6 +38,10 @@ class SyncAuthManager(context: Context, private val http: AccountHttp = AccountH
 
     fun hasSession(): Boolean = auth.hasSession()
     fun accountId(): String? = auth.accountId()
+
+    fun accessToken(): String = runBlocking {
+        mutex.withLock { auth.accessToken(clearRejectedSession = false) }
+    }
 
     suspend fun buildAuthorizationIntent(): Intent = withContext(Dispatchers.IO) {
         mutex.withLock {
