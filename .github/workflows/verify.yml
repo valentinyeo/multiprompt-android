@@ -23,6 +23,7 @@ jobs:
     timeout-minutes: 35
     env:
       EVIDENCE: ${{ github.workspace }}/verification-evidence
+      VERIFY_FEATURE: ${{ inputs.feature }}
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
     steps:
       - uses: actions/checkout@v4
@@ -63,7 +64,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
             adb install -r -g app/build/outputs/apk/debug/app-debug.apk
-            .claude/skills/verify-multiprompt-android/scripts/drive.sh '${{ inputs.feature }}'
+            .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"
       - name: Stop recorded fixture processes and retain logs
         if: always()
         run: .claude/skills/verify-multiprompt-android/scripts/cleanup.sh

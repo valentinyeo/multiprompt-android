@@ -5,7 +5,7 @@ set -euo pipefail
 mkdir -p "$EVIDENCE"
 exec > >(tee -a "$EVIDENCE/cleanup.txt") 2>&1
 status=0
-if command -v adb >/dev/null; then
+if command -v adb >/dev/null && adb get-state >/dev/null 2>&1; then
     adb logcat -d > "$EVIDENCE/logcat.txt" 2>&1 || true
     adb shell rm -f /sdcard/Download/verify-key.pem /sdcard/verify-ui.xml /sdcard/verify-doctor.xml || true
 fi
@@ -16,7 +16,11 @@ if [[ -d "$FIXTURE" ]]; then
         if [[ -f "$FIXTURE/$name.pid" ]]; then
             pid=$(cat "$FIXTURE/$name.pid")
             [[ "$pid" =~ ^[0-9]+$ ]]
-            if ! sudo kill "$pid"; then status=1; fi
+            if sudo kill "$pid"; then
+                printf 'STOPPED %s pid=%s\n' "$name" "$pid"
+            else
+                status=1
+            fi
         fi
     done
     rm -f "$FIXTURE/user-key" "$FIXTURE/user-key.pub" "$FIXTURE/host-key" "$FIXTURE/host-key.pub"
