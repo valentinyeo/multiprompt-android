@@ -25,11 +25,16 @@ if mode == "contains":
 if len(matches) != 1:
     raise SystemExit(f"Ambiguous {mode}: {value} ({len(matches)})")
 node = matches[0]
+if node.get("enabled") == "false":
+    raise SystemExit("Selector is disabled")
 if mode != "field":
-    while node.get("clickable") != "true" and node in parents:
-        node = parents[node]
-    if node.get("clickable") != "true" or node.get("enabled") == "false":
-        raise SystemExit("Selector has no enabled clickable ancestor")
+    ancestor = node
+    while ancestor.get("clickable") != "true" and ancestor in parents:
+        ancestor = parents[ancestor]
+    if ancestor.get("clickable") == "true":
+        if ancestor.get("enabled") == "false":
+            raise SystemExit("Selector ancestor is disabled")
+        node = ancestor
 numbers = list(map(int, re.findall(r"\d+", node.get("bounds", ""))))
 if len(numbers) != 4 or numbers[2] <= numbers[0] or numbers[3] <= numbers[1]:
     raise SystemExit("Empty selector bounds")

@@ -100,6 +100,7 @@ tap_text 'Import private key'
 wait_for_text 'Recent'
 shot key-picker
 tap_desc 'Show roots'
+shot picker-roots
 tap_text Downloads
 wait_for_text verify-key.pem
 tap_text verify-key.pem
@@ -165,7 +166,7 @@ tap_text 'Interrupt session'
 wait_receipt VERIFY_INTERRUPTED_528
 wait_for_text VERIFY_INTERRUPTED_528
 shot interrupt-result
-sudo cp /home/verifyssh/receipts.txt "$EVIDENCE/receipts.txt"
+sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt"
 sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt"
 grep -Fx VERIFY_INTERRUPTED_528 "$EVIDENCE/receipts.txt"
 printf 'FEATURE VERIFIED: %s\n' "$feature"

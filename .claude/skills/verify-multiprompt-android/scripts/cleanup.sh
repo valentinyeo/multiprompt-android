@@ -9,8 +9,8 @@ if command -v adb >/dev/null && timeout 10s adb get-state >/dev/null 2>&1; then
     timeout 10s adb shell rm -f /sdcard/Download/verify-key.pem /sdcard/verify-ui.xml /sdcard/verify-doctor.xml || true
 fi
 if [[ -d "$FIXTURE" ]]; then
-    sudo cp "$FIXTURE/sshd.log" "$EVIDENCE/sshd.log" 2>/dev/null || true
-    sudo cp /home/verifyssh/receipts.txt "$EVIDENCE/receipts.txt" 2>/dev/null || true
+    sudo cat "$FIXTURE/sshd.log" > "$EVIDENCE/sshd.log" 2>/dev/null || true
+    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt" 2>/dev/null || true
     for name in tmux sshd; do
         if [[ -f "$FIXTURE/$name.pid" ]]; then
             pid=$(cat "$FIXTURE/$name.pid")
