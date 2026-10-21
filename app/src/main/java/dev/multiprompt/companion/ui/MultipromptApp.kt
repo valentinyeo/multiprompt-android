@@ -299,6 +299,7 @@ private fun AppScreens(viewModel: MainViewModel) {
     val updateState by viewModel.updates.state.collectAsState()
     val context = LocalContext.current
     var inboxVisible by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(StartScreen.INBOX_ON_LAUNCH) }
+    var useWithoutAccount by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val systemDark = isSystemInDarkTheme()
     val sunlight = when (state.appTheme) {
         AppTheme.SYSTEM -> !systemDark
@@ -333,10 +334,11 @@ private fun AppScreens(viewModel: MainViewModel) {
         }
     }
 
-    if (!state.signedIn) {
+    if (!state.signedIn && !(BuildConfig.DEBUG && useWithoutAccount)) {
         SignInScreen(
             error = state.accountError,
             onSignIn = { viewModel.signInAccount { context.startActivity(it) } },
+            onUseWithoutAccount = if (BuildConfig.DEBUG) ({ useWithoutAccount = true }) else null,
             onReleaseNotes = viewModel::openReleaseNotes,
         )
         return
@@ -698,7 +700,12 @@ private fun AppScreens(viewModel: MainViewModel) {
 }
 
 @Composable
-private fun SignInScreen(error: String?, onSignIn: () -> Unit, onReleaseNotes: () -> Unit) {
+private fun SignInScreen(
+    error: String?,
+    onSignIn: () -> Unit,
+    onUseWithoutAccount: (() -> Unit)?,
+    onReleaseNotes: () -> Unit,
+) {
     Surface(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(24.dp)) {
             Column(
@@ -713,6 +720,9 @@ private fun SignInScreen(error: String?, onSignIn: () -> Unit, onReleaseNotes: (
                     textAlign = TextAlign.Center,
                 )
                 Button(onClick = onSignIn) { Text("Sign in") }
+                if (BuildConfig.DEBUG && onUseWithoutAccount != null) {
+                    TextButton(onClick = onUseWithoutAccount) { Text("Use without account (debug)") }
+                }
                 if (error != null) {
                     Text(error, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
                 }
