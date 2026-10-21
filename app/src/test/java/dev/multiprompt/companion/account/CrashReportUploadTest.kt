@@ -163,6 +163,21 @@ class CrashReportUploadTest {
         upload(); assertEquals(report.id, uploaded); assertTrue(auth.hasSession())
     }
 
+    @Test fun unrelatedBadRequestKeepsPendingForRetry() {
+        signIn()
+        for (json in listOf(JSONObject(), JSONObject().put("error", "invalid_grant"),
+            JSONObject().put("error", "service_unavailable"))) {
+            reply = AccountReply(400, json)
+            upload()
+            assertNull(uploaded)
+            assertTrue(auth.hasSession())
+        }
+        reply = AccountReply(201, JSONObject().put("stored", true))
+        upload()
+        assertEquals(report.id, uploaded)
+        assertEquals(4, requests.size)
+    }
+
     @Test fun networkFailureDuringRefreshKeepsReportAndLogin() {
         signIn(); auth.invalidateAccess()
         failure = IOException("offline"); upload()

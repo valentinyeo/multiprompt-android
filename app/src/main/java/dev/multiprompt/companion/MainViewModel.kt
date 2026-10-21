@@ -1620,12 +1620,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val finishedLogin = syncAuth.finishPending()
                 if (generation != accountGeneration) return@launch
                 if (finishedLogin) {
-                    uploadCrashReport()
                     pendingLayout = accountStore.load(syncAuth.accountId())
                     usedStampThrottle = UsedStampThrottle(pendingLayout?.base)
                     publishAccountLayout()
                 }
                 if (!syncAuth.hasSession()) return@launch
+                uploadCrashReport()
                 _state.update { it.copy(signedIn = true) }
                 syncDeviceKeys()
                 var remote = AccountLayout.response(syncAuth.request("GET", "/v1/layout").json)

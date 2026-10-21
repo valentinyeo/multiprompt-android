@@ -164,7 +164,8 @@ class CrashReportStoreTest {
                 store.save(report)
                 if (dismissed) store.dismiss()
                 val uploader = uploader(AccountHttp { _, _, _, _ ->
-                    AccountReply(status, JSONObject().put("duplicate", status == 200))
+                    AccountReply(status, JSONObject().put("duplicate", status == 200)
+                        .apply { if (status == 400) put("error", "invalid_crash_report") })
                 })
                 store.loadPending().forEach { uploader.upload(it, store::markUploaded) }
                 assertTrue("status=$status dismissed=$dismissed", CrashReportStore(context).loadPending().isEmpty())
