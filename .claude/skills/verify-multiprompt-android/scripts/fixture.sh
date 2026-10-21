@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+: "${FIXTURE:?Set fixture directory outside evidence}"
+: "${EVIDENCE:?Set evidence directory}"
+mkdir -p "$FIXTURE" "$EVIDENCE"
+sudo apt-get update -qq
+sudo apt-get install -y openssh-server tmux
+sudo useradd -m -s /bin/bash verifyssh
+sudo usermod -p x verifyssh
+ssh-keygen -q -t ed25519 -N '' -C verify-ephemeral -f "$FIXTURE/user-key"
+ssh-keygen -q -t ed25519 -N '' -C verify-ephemeral -f "$FIXTURE/host-key"
+ssh-keygen -lf "$FIXTURE/host-key.pub" -E sha256 | awk '{print $2}' > "$EVIDENCE/host-fingerprint.txt"
+sudo install -d -m 700 -o verifyssh -g verifyssh /home/verifyssh/.ssh
+sudo install -m 600 -o verifyssh -g verifyssh "$FIXTURE/user-key.pub" /home/verifyssh/.ssh/authorized_keys
+sudo install -d -m 755 /run/sshd
+cat > "$FIXTURE/sshd_config" <<CONFIG
+Port 2222
+ListenAddress 0.0.0.0
+HostKey $FIXTURE/host-key
+PidFile $FIXTURE/sshd.pid
+AuthorizedKeysFile .ssh/authorized_keys
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+AuthenticationMethods publickey
+PermitRootLogin no
+AllowUsers verifyssh
+UsePAM no
+PrintMotd no
+LogLevel VERBOSE
+CONFIG
+sudo /usr/sbin/sshd -t -f "$FIXTURE/sshd_config"
+sudo /usr/sbin/sshd -f "$FIXTURE/sshd_config" -E "$FIXTURE/sshd.log"
+sudo install -m 755 "$(dirname "$0")/console.py" /home/verifyssh/console.py
+sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'python3 -u /home/verifyssh/console.py /home/verifyssh/receipts.txt'
+sudo -u verifyssh tmux display-message -p '#{pid}' > "$FIXTURE/tmux.pid"
+sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/fixture-start.txt"
+printf 'SSH FIXTURE READY\n'
