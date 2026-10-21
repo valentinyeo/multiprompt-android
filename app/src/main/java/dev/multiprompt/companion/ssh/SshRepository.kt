@@ -8,7 +8,9 @@ import dev.multiprompt.companion.model.RemoteDirectory
 import dev.multiprompt.companion.model.RemoteListing
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.model.DissolvedSession
-import dev.multiprompt.companion.security.SecretStore
+import dev.multiprompt.companion.security.SecretStorage
+import dev.multiprompt.companion.account.DeviceKeys
+import dev.multiprompt.companion.account.DeviceKeyStore
 import dev.multiprompt.companion.reader.TranscriptProtocol
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import java.util.Base64
@@ -54,7 +56,7 @@ sealed class SshProblem(message: String) : Exception(message) {
     class Authentication(message: String) : SshProblem(message)
 }
 
-class SshRepository(private val secrets: SecretStore) {
+class SshRepository(private val secrets: SecretStorage) {
     data class StreamSnapshot(
         val output: String,
         val screenOutput: String,
@@ -118,12 +120,13 @@ class SshRepository(private val secrets: SecretStore) {
             throw SshProblem.Connection("Could not connect to ${host.label}: $result")
         }
 
-        val privateKey = secrets.get(host.keySecretId)
+        val hostPrivateKey = secrets.get(host.keySecretId)
+        val privateKey = hostPrivateKey ?: secrets.get(DeviceKeyStore.SECRET_ID)
             ?: run {
                 client.disconnect()
                 throw SshProblem.Authentication("The imported private key is missing")
             }
-        val passphrase = host.passphraseSecretId
+        val passphrase = (if (hostPrivateKey != null) host.passphraseSecretId else null)
             ?.let(secrets::get)
             ?.toString(Charsets.UTF_8)
             ?.ifBlank { null }
@@ -133,6 +136,16 @@ class SshRepository(private val secrets: SecretStore) {
             throw SshProblem.Authentication("SSH key authentication failed: $auth")
         }
         client
+    }
+
+    suspend fun runDeviceKeyCommand(host: HostProfile, command: String): Boolean = withContext(Dispatchers.IO) {
+        require(DeviceKeys.validCommand(command)) { "Invalid device key command" }
+        withTimeout(CONNECTION_TIMEOUT_MS) {
+            withAuthenticatedClient(host) { client ->
+                execute(client, command).requireSuccess("change the device key")
+                true
+            }
+        }
     }
 
     suspend fun captureSession(client: SshClient, sessionName: String): String {

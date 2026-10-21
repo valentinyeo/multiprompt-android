@@ -2,6 +2,7 @@ package dev.multiprompt.companion
 
 import android.app.Application
 import android.os.SystemClock
+import android.util.Log
 import dev.multiprompt.companion.account.DWELL
 import dev.multiprompt.companion.account.VisitDwell
 import androidx.lifecycle.AndroidViewModel
@@ -39,6 +40,10 @@ import dev.multiprompt.companion.account.isFavoriteSession
 import dev.multiprompt.companion.account.AccountLayoutStore
 import dev.multiprompt.companion.account.AccountTab
 import dev.multiprompt.companion.account.PendingLayout
+import dev.multiprompt.companion.account.DeviceKeyEntry
+import dev.multiprompt.companion.account.DeviceKeyStatus
+import dev.multiprompt.companion.ui.PendingDevice
+import dev.multiprompt.companion.ui.sshKeyFingerprint
 import org.json.JSONObject
 import dev.multiprompt.companion.ssh.PresentedHostKey
 import dev.multiprompt.companion.ssh.SshProblem
@@ -48,7 +53,11 @@ import dev.multiprompt.companion.update.UpdateManager
 import dev.multiprompt.companion.update.UpdateRelease
 import dev.multiprompt.companion.upload.ScreencastUploader
 import dev.multiprompt.companion.ui.AppTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
@@ -95,6 +104,9 @@ data class AppUiState(
     val accountPending: Boolean = false,
     val accountError: String? = null,
     val accountHosts: Map<Int, HostProfile> = emptyMap(),
+    val pendingDevice: PendingDevice? = null,
+    val deviceApprovalBusy: Boolean = false,
+    val deviceApprovalError: String? = null,
     val workspaces: List<Workspace> = emptyList(),
     val workspaceSplitIds: List<String?> = listOf(null),
     val selectedWorkspaceId: String? = null,
@@ -176,6 +188,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val foreground = MutableStateFlow(false)
     private var accountRequestRunning = false
     private var accountGeneration = 0
+    private val deviceKeyMutex = Mutex()
+    private var deviceKeyRefreshRunning = false
+    private var pendingDeviceEntry: DeviceKeyEntry? = null
     private val initialWorkspaces = pendingLayout?.edited?.workspaces.orEmpty().map { Workspace(id = it, name = it, hostId = "", remotePath = "") }
     private val _state = MutableStateFlow(
         AppUiState(
@@ -1410,9 +1425,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun signOutAccount() {
         accountGeneration++
         pendingLayout = null
+        pendingDeviceEntry = null
         usedStampThrottle = UsedStampThrottle()
         _state.update { it.copy(signedIn = false, accountLayout = null, accountPending = false,
-            accountError = null, workspaces = emptyList(), workspaceSplitIds = listOf(null), sessionWorkspaceIds = emptyMap()) }
+            accountError = null, pendingDevice = null, deviceApprovalBusy = false, deviceApprovalError = null,
+            workspaces = emptyList(), workspaceSplitIds = listOf(null), sessionWorkspaceIds = emptyMap()) }
         viewModelScope.launch { syncAuth.signOut() }
     }
 
@@ -1489,6 +1506,110 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(hosts = hosts.load()) }
     }
 
+    private fun syncDeviceKeys() {
+        if (!syncAuth.hasSession() || deviceKeyRefreshRunning || _state.value.deviceApprovalBusy) return
+        deviceKeyRefreshRunning = true
+        val generation = accountGeneration
+        viewModelScope.launch {
+            try {
+                deviceKeyMutex.withLock {
+                    if (generation != accountGeneration || _state.value.deviceApprovalBusy) return@withLock
+                    val listing = withContext(Dispatchers.IO) {
+                        val publicKey = app.deviceKeyStore.ensure()
+                        if (app.deviceKeyClient.publish(publicKey) == null) null else app.deviceKeyClient.list()
+                    }
+                    if (generation != accountGeneration || _state.value.deviceApprovalBusy) return@withLock
+                    val entry = listing?.keys?.firstOrNull {
+                        it.status == DeviceKeyStatus.PENDING && it.deviceId != listing.deviceId
+                    }
+                    pendingDeviceEntry = entry
+                    _state.update { current ->
+                        current.copy(
+                            pendingDevice = entry?.let { PendingDevice(it.deviceId, it.name, sshKeyFingerprint(it.publicKey)) },
+                            deviceApprovalError = current.deviceApprovalError.takeIf { current.pendingDevice?.id == entry?.deviceId },
+                        )
+                    }
+                    if (listing != null) withContext(Dispatchers.IO) {
+                        app.deviceApproval.cleanupRevoked(listing, hosts.load()).forEach {
+                            Log.w("DeviceKeys", "Could not remove a revoked device key from ${it.host.label}")
+                        }
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+            } finally {
+                deviceKeyRefreshRunning = false
+            }
+        }
+    }
+
+    fun approveDevice() {
+        val entry = pendingDeviceEntry ?: return
+        if (!_state.value.signedIn || _state.value.deviceApprovalBusy) return
+        val generation = accountGeneration
+        _state.update { it.copy(deviceApprovalBusy = true, deviceApprovalError = null) }
+        viewModelScope.launch {
+            var approved = false
+            try {
+                val result = deviceKeyMutex.withLock {
+                    if (generation != accountGeneration) return@launch
+                    withContext(Dispatchers.IO) { app.deviceApproval.approve(entry, hosts.load()) }
+                }
+                if (generation != accountGeneration) return@launch
+                approved = result.approved
+                if (approved) {
+                    pendingDeviceEntry = null
+                    _state.update { it.copy(pendingDevice = null) }
+                } else {
+                    val names = result.failures.map { it.host.label }.distinct().joinToString(", ")
+                    val error = if (names.isEmpty()) "Could not approve this device. Try again."
+                        else "Could not add it to $names. Try again."
+                    _state.update { it.copy(deviceApprovalError = error) }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (generation == accountGeneration) _state.update {
+                    it.copy(deviceApprovalError = "Could not approve this device. Try again.")
+                }
+            } finally {
+                if (generation == accountGeneration) {
+                    _state.update { it.copy(deviceApprovalBusy = false) }
+                    if (approved) syncDeviceKeys()
+                }
+            }
+        }
+    }
+
+    fun denyDevice() {
+        val entry = pendingDeviceEntry ?: return
+        if (!_state.value.signedIn || _state.value.deviceApprovalBusy) return
+        val generation = accountGeneration
+        _state.update { it.copy(deviceApprovalBusy = true, deviceApprovalError = null) }
+        viewModelScope.launch {
+            try {
+                val denied = deviceKeyMutex.withLock {
+                    if (generation != accountGeneration) return@launch
+                    withContext(Dispatchers.IO) { app.deviceApproval.deny(entry) }
+                }
+                if (generation != accountGeneration) return@launch
+                if (denied) {
+                    pendingDeviceEntry = null
+                    _state.update { it.copy(pendingDevice = null) }
+                } else _state.update { it.copy(deviceApprovalError = "Could not decline this device. Try again.") }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (generation == accountGeneration) _state.update {
+                    it.copy(deviceApprovalError = "Could not decline this device. Try again.")
+                }
+            } finally {
+                if (generation == accountGeneration) _state.update { it.copy(deviceApprovalBusy = false) }
+            }
+        }
+    }
+
     fun syncAccount() {
         if (accountRequestRunning) return
         accountRequestRunning = true
@@ -1506,6 +1627,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 if (!syncAuth.hasSession()) return@launch
                 _state.update { it.copy(signedIn = true) }
+                syncDeviceKeys()
                 var remote = AccountLayout.response(syncAuth.request("GET", "/v1/layout").json)
                 if (generation != accountGeneration) return@launch
                 importAccountHosts(remote)

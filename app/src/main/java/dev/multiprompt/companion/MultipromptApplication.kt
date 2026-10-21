@@ -13,6 +13,11 @@ import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.security.SecretStore
 import dev.multiprompt.companion.ssh.SshRepository
 import dev.multiprompt.companion.skills.SkillStore
+import dev.multiprompt.companion.account.AccountHttp
+import dev.multiprompt.companion.account.AccountHttpClient
+import dev.multiprompt.companion.account.DeviceApproval
+import dev.multiprompt.companion.account.DeviceKeyClient
+import dev.multiprompt.companion.account.DeviceKeyStore
 import dev.multiprompt.companion.auth.SyncAuthManager
 import dev.multiprompt.companion.update.UpdateManager
 import dev.multiprompt.companion.upload.ScreencastUploader
@@ -43,5 +48,9 @@ class MultipromptApplication : Application() {
     val updateManager by lazy { UpdateManager(this) }
     val screencastUploader by lazy { ScreencastUploader(this, secretStore) }
     val skillStore by lazy { SkillStore(this) }
-    val syncAuth by lazy { SyncAuthManager(this) }
+    val accountHttp: AccountHttp by lazy { AccountHttpClient() }
+    val syncAuth by lazy { SyncAuthManager(this, accountHttp) }
+    val deviceKeyStore by lazy { DeviceKeyStore(secretStore) }
+    val deviceKeyClient by lazy { DeviceKeyClient(accountHttp, syncAuth::accessToken) }
+    val deviceApproval by lazy { DeviceApproval(deviceKeyClient, sshRepository::runDeviceKeyCommand) }
 }
