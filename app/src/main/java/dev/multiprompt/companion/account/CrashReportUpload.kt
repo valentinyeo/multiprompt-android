@@ -34,7 +34,8 @@ class CrashReportUpload(private val http: AccountHttp, private val auth: Account
                 auth.invalidateAccess()
                 reply = http.request("POST", "/v1/crash-reports", auth.accessToken(clearRejectedSession = false), body)
             }
-            if (reply.status == 400 || reply.status in 200..299) markUploaded(report.id)
+            if (reply.status in 200..299 ||
+                (reply.status == 400 && reply.json.optString("error") == "invalid_crash_report")) markUploaded(report.id)
         } catch (_: Exception) {
         }
     }
