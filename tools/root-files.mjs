@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
 
-export const allowed = new Set(['.gitattributes', '.github', '.gitignore', '.gitleaks.toml', 'CLAUDE.md', 'README.md', 'app', 'build.gradle.kts', 'docs', 'gradle', 'gradle.properties', 'gradlew', 'gradlew.bat', 'keystore.properties.example', 'scripts', 'settings.gradle.kts', 'skillsrepo', 'third_party', 'tools', 'worker']);
+export const allowed = new Set(['.claude', '.gitattributes', '.github', '.gitignore', '.gitleaks.toml', 'CLAUDE.md', 'README.md', 'app', 'build.gradle.kts', 'docs', 'gradle', 'gradle.properties', 'gradlew', 'gradlew.bat', 'keystore.properties.example', 'scripts', 'settings.gradle.kts', 'skillsrepo', 'third_party', 'tools', 'worker']);
 
 export function unexpected(paths) {
   return [...new Set(paths.map(p => p.split('/')[0]))].filter(name => name && !allowed.has(name)).sort();

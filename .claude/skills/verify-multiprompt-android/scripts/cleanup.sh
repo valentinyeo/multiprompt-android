@@ -5,9 +5,8 @@ set -euo pipefail
 mkdir -p "$EVIDENCE"
 exec > >(tee -a "$EVIDENCE/cleanup.txt") 2>&1
 status=0
-if command -v adb >/dev/null && adb get-state >/dev/null 2>&1; then
-    adb logcat -d > "$EVIDENCE/logcat.txt" 2>&1 || true
-    adb shell rm -f /sdcard/Download/verify-key.pem /sdcard/verify-ui.xml /sdcard/verify-doctor.xml || true
+if command -v adb >/dev/null && timeout 10s adb get-state >/dev/null 2>&1; then
+    timeout 10s adb shell rm -f /sdcard/Download/verify-key.pem /sdcard/verify-ui.xml /sdcard/verify-doctor.xml || true
 fi
 if [[ -d "$FIXTURE" ]]; then
     sudo cp "$FIXTURE/sshd.log" "$EVIDENCE/sshd.log" 2>/dev/null || true

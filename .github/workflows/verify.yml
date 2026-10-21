@@ -66,6 +66,7 @@ jobs:
             adb install -r -g app/build/outputs/apk/debug/app-debug.apk
             .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"
       - name: Stop recorded fixture processes and retain logs
+        timeout-minutes: 2
         if: always()
         run: .claude/skills/verify-multiprompt-android/scripts/cleanup.sh
       - name: Upload evidence even on failure

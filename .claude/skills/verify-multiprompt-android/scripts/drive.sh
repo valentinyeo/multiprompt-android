@@ -15,7 +15,7 @@ set -x
 package=dev.multiprompt.companion.debug
 step=0
 dump_ui() {
-    adb shell uiautomator dump /sdcard/verify-ui.xml >/dev/null
+    timeout 20s adb shell uiautomator dump /sdcard/verify-ui.xml >/dev/null
     adb pull /sdcard/verify-ui.xml "$EVIDENCE/current.xml" >/dev/null
 }
 shot() {
@@ -29,7 +29,7 @@ finish() {
     trap - EXIT
     set +e
     shot "exit-$code"
-    adb logcat -d > "$EVIDENCE/logcat.txt"
+    timeout 15s adb logcat -d > "$EVIDENCE/logcat.txt"
     printf 'DRIVER EXIT: %s\n' "$code"
     exit "$code"
 }

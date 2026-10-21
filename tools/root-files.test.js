@@ -4,7 +4,7 @@ const api = import('./root-files.mjs');
 
 test('known top-level entries pass', async () => {
   const { unexpected } = await api;
-  assert.deepEqual(unexpected(['app/src/main/A.kt', 'CLAUDE.md', 'gradle/libs.versions.toml', '']), []);
+  assert.deepEqual(unexpected(['.claude/skills/verify-multiprompt-android/SKILL.md', 'app/src/main/A.kt', 'CLAUDE.md', 'gradle/libs.versions.toml', '']), []);
 });
 
 test('scratch output at the root fails', async () => {
