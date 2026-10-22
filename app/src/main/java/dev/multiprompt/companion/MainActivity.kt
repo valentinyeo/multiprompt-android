@@ -1,5 +1,7 @@
 package dev.multiprompt.companion
 
+// IGSH-583 planted comment, CI must fail on this line
+
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
