@@ -4,12 +4,14 @@ import android.app.Application
 import android.content.Context
 import androidx.lifecycle.ViewModelStore
 import dev.multiprompt.companion.data.HostStore
+import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.ssh.PresentedHostKey
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -108,6 +110,68 @@ class HostKeyDismissalTest {
         assertFalse(host.id in state.pendingHostKeys)
         assertEquals(presented, state.pendingHostKeys[other.id])
         assertTrue(state.hostErrors.keys.containsAll(listOf(host.id, other.id)))
+    }
+
+    @Test
+    fun dismissingKeepsTheSshErrorVisibleAndStoresTypeWithFingerprint() {
+        model.dismissHostKey(host.id)
+        assertEquals(error, model.state.value.hostErrors[host.id])
+        assertEquals("${presented.type} ${presented.fingerprint}", HostStore(application).load().single().dismissedHostKeyFingerprint)
+    }
+
+    @Test
+    fun trustingADifferentKeyClearsThePreviousDismissal() {
+        model.dismissHostKey(host.id)
+        val different = presented.copy(fingerprint = "SHA256:another", publicKey = "ssh-ed25519 YW5vdGhlcg==")
+        setState(model.state.value.copy(pendingHostKeys = mapOf(host.id to different), refreshing = true))
+        model.trustHostKey(host.id)
+        val trusted = HostStore(application).load().single()
+        assertNull(trusted.dismissedHostKeyFingerprint)
+        assertEquals(different.type, trusted.hostKeyType)
+        assertEquals(different.fingerprint, trusted.hostKeyFingerprint)
+        assertEquals(listOf(different.publicKey), trusted.hostKeys)
+    }
+
+    @Test
+    fun editingHostnameClearsDismissal() {
+        model.dismissHostKey(host.id)
+        setState(model.state.value.copy(refreshing = true))
+        model.saveHost(HostDraft(host.id, host.label, "new.example.com", host.port.toString(), host.username), null)
+        val edited = HostStore(application).load().single()
+        assertNull(edited.dismissedHostKeyFingerprint)
+        val state = refresh(model.state.value, listOf(edited), mapOf(host.id to presented))
+        assertEquals(presented, state.pendingHostKeys[host.id])
+    }
+
+    @Test
+    fun editingPortClearsDismissal() {
+        model.dismissHostKey(host.id)
+        setState(model.state.value.copy(refreshing = true))
+        model.saveHost(HostDraft(host.id, host.label, host.hostname, "2222", host.username), null)
+        assertNull(HostStore(application).load().single().dismissedHostKeyFingerprint)
+    }
+
+    @Test
+    fun editingLabelPreservesDismissal() {
+        model.dismissHostKey(host.id)
+        setState(model.state.value.copy(refreshing = true))
+        model.saveHost(HostDraft(host.id, "Renamed", host.hostname, host.port.toString(), host.username), null)
+        val edited = HostStore(application).load().single()
+        assertEquals("${presented.type} ${presented.fingerprint}", edited.dismissedHostKeyFingerprint)
+        val state = refresh(model.state.value, listOf(edited), mapOf(host.id to presented))
+        assertFalse(host.id in state.pendingHostKeys)
+    }
+
+    @Test
+    fun legacyHostStoreWithoutDismissalStillShowsWarning() {
+        val preferences = application.getSharedPreferences("hosts", Context.MODE_PRIVATE)
+        val stored = org.json.JSONArray(preferences.getString("profiles_json", null))
+        stored.getJSONObject(0).remove("dismissedHostKeyFingerprint")
+        preferences.edit().putString("profiles_json", stored.toString()).commit()
+        val reloaded = HostStore(application).load()
+        assertNull(reloaded.single().dismissedHostKeyFingerprint)
+        val state = refresh(AppUiState(hosts = reloaded), reloaded, mapOf(host.id to presented))
+        assertEquals(presented, state.pendingHostKeys[host.id])
     }
 
     private fun setState(state: AppUiState) {

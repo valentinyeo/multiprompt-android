@@ -13,6 +13,7 @@ data class HostProfile(
     val hostKeyType: String? = null,
     val hostKeyFingerprint: String? = null,
     val hostKeys: List<String> = emptyList(),
+    val dismissedHostKeyFingerprint: String? = null,
 )
 
 data class HostDraft(
