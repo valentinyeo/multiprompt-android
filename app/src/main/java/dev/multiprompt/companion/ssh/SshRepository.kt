@@ -423,6 +423,7 @@ class SshRepository(private val secrets: SecretStorage) {
                             .stdout.trim()
                             .lineSequence()
                             .firstOrNull { it.isNotBlank() }
+                            ?.takeIf { DissolvedSession.validClaudeSessionId(it) }
                     }
                 }
             } catch (cancelled: CancellationException) {

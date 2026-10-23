@@ -14,6 +14,10 @@ data class DissolvedSession(
     val key: String get() = "$hostId::$tmuxSessionName"
 
     companion object {
+        private val CLAUDE_SESSION_ID = Regex("^[A-Za-z0-9-]{1,64}$")
+
+        fun validClaudeSessionId(id: String): Boolean = CLAUDE_SESSION_ID.matches(id)
+
         fun from(
             session: TmuxSession,
             workspaceId: String?,
@@ -28,7 +32,7 @@ data class DissolvedSession(
                 workingDirectory = session.workingDirectory,
                 resumeCommand = when (session.agent) {
                     AgentKind.CLAUDE -> claudeSessionId
-                        ?.takeIf(String::isNotBlank)
+                        ?.takeIf(::validClaudeSessionId)
                         ?.let { "claude --resume $it" }
                         ?: "claude --continue"
                     AgentKind.CODEX -> "codex resume --last"

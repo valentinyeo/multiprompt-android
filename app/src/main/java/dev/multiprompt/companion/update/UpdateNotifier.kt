@@ -100,4 +100,14 @@ class UpdateCheckWorker(
     }
 }
 
-internal fun readBounded(reader: Reader, limit: Int): String = reader.readText().take(limit)
+internal fun readBounded(reader: Reader, limit: Int): String {
+    require(limit >= 0)
+    val result = StringBuilder()
+    val buffer = CharArray(minOf(8192, limit))
+    while (result.length < limit) {
+        val count = reader.read(buffer, 0, minOf(buffer.size, limit - result.length))
+        if (count < 0) break
+        result.append(buffer, 0, count)
+    }
+    return result.toString()
+}

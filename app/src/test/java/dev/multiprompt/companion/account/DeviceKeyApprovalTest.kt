@@ -88,7 +88,7 @@ class DeviceKeyApprovalTest {
         }
         val result = approval.approve(entry, hosts)
         assertFalse(result.approved)
-        assertEquals(hosts, ran)
+        assertEquals(hosts + hosts, ran)
         assertEquals(hosts.take(2), result.failures.map { it.host })
         assertEquals(listOf("other", "other"), result.failures.map { it.deviceId })
         assertEquals("offline", result.failures[0].message)
@@ -109,9 +109,16 @@ class DeviceKeyApprovalTest {
         }
     }
 
-    @Test fun denyNeverRunsAHostCommand() {
-        val approval = DeviceApproval(client) { _, _ -> error("Deny cannot execute SSH") }
-        assertTrue(runBlocking { approval.deny(entry, hosts) })
+    @Test fun denyRunsEveryHostCommandBeforeServerDecision() = runBlocking {
+        val ran = mutableListOf<HostProfile>()
+        val approval = DeviceApproval(client) { host, command ->
+            assertTrue(decisions.isEmpty())
+            assertEquals(DeviceKeys.removeCommand(entry.publicKey), command)
+            ran.add(host)
+            true
+        }
+        assertTrue(approval.deny(entry, hosts))
+        assertEquals(hosts, ran)
         assertEquals(listOf("/v1/device-keys/other/deny"), decisions)
     }
 
@@ -125,9 +132,10 @@ class DeviceKeyApprovalTest {
             host != hosts[1]
         }
         val failures = approval.cleanupRevoked(listing, hosts)
-        assertEquals(revoked.flatMap { key -> hosts.map { it.id to DeviceKeys.removeCommand(key.publicKey) } }, ran)
-        assertEquals(4, failures.size)
-        assertEquals(listOf("other", "other", "second", "second"), failures.map { it.deviceId })
+        val removed = revoked + entry.copy(status = DeviceKeyStatus.DENIED)
+        assertEquals(removed.flatMap { key -> hosts.map { it.id to DeviceKeys.removeCommand(key.publicKey) } }, ran)
+        assertEquals(6, failures.size)
+        assertEquals(listOf("other", "other", "second", "second", "other", "other"), failures.map { it.deviceId })
         assertTrue(decisions.isEmpty())
         assertTrue(DeviceApproval(client) { _, _ -> true }.cleanupRevoked(listing, hosts).isEmpty())
         assertTrue(approval.cleanupRevoked(listing, emptyList()).isEmpty())

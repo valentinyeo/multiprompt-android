@@ -16,13 +16,20 @@ class DeviceApproval(
         require(entry.status == DeviceKeyStatus.PENDING && DeviceKeys.validDeviceId(entry.deviceId)) { "Device key is not pending" }
         require(hosts.isNotEmpty()) { "Add a host before approving a device" }
         val failures = execute(entry, hosts, DeviceKeys.addCommand(entry.publicKey))
-        Result(failures.isEmpty() && client.approve(entry.deviceId), failures)
+        if (failures.isNotEmpty()) {
+            execute(entry, hosts, DeviceKeys.removeCommand(entry.publicKey))
+            return@withContext Result(false, failures)
+        }
+        Result(client.approve(entry.deviceId), failures)
     }
 
-    suspend fun deny(entry: DeviceKeyEntry, hosts: List<HostProfile>): Boolean = client.deny(entry.deviceId)
+    suspend fun deny(entry: DeviceKeyEntry, hosts: List<HostProfile>): Boolean = withContext(Dispatchers.IO) {
+        execute(entry, hosts, DeviceKeys.removeCommand(entry.publicKey))
+        client.deny(entry.deviceId)
+    }
 
     suspend fun cleanupRevoked(listing: DeviceKeyListing, hosts: List<HostProfile>): List<HostFailure> = withContext(Dispatchers.IO) {
-        listing.keys.filter { it.status == DeviceKeyStatus.REVOKED }.flatMap { entry ->
+        listing.keys.filter { it.status == DeviceKeyStatus.REVOKED || it.status == DeviceKeyStatus.DENIED }.flatMap { entry ->
             execute(entry, hosts, DeviceKeys.removeCommand(entry.publicKey))
         }
     }

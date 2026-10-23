@@ -36,8 +36,10 @@ jobs:
 
       - name: Resolve version
         shell: bash
+        env:
+          REQUESTED: ${{ inputs.version_name }}
         run: |
-          requested='${{ inputs.version_name }}'
+          requested="$REQUESTED"
           if [[ -n "$requested" ]]; then
             version_name="$requested"
           else

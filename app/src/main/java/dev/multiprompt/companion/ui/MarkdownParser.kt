@@ -190,7 +190,11 @@ object MarkdownParser {
         return merge(runs)
     }
 
-    private fun parseInto(s: String, style: InlineRun, out: MutableList<InlineRun>) {
+    private fun parseInto(s: String, style: InlineRun, out: MutableList<InlineRun>, depth: Int = 0) {
+        if (depth > 16) {
+            out += style.copy(text = s)
+            return
+        }
         val buf = StringBuilder()
         fun flush() {
             if (buf.isNotEmpty()) { addPlain(buf.toString(), style, out); buf.clear() }
@@ -215,7 +219,7 @@ object MarkdownParser {
                     val link = matchLink(s, i)
                     if (link != null) {
                         flush()
-                        parseInto(link.label, style.copy(url = link.url), out)
+                        parseInto(link.label, style.copy(url = link.url), out, depth + 1)
                         i = link.end
                     } else { buf.append(c); i++ }
                 }
@@ -228,7 +232,7 @@ object MarkdownParser {
                     if (close > 0 && opensOk) {
                         flush()
                         val inner = s.substring(i + n, close)
-                        parseInto(inner, if (n == 2) style.copy(bold = true) else style.copy(italic = true), out)
+                        parseInto(inner, if (n == 2) style.copy(bold = true) else style.copy(italic = true), out, depth + 1)
                         i = close + n
                     } else { buf.append(s, i, i + n); i += n }
                 }
@@ -236,7 +240,7 @@ object MarkdownParser {
                     val close = s.indexOf("~~", i + 2)
                     if (close > 0) {
                         flush()
-                        parseInto(s.substring(i + 2, close), style.copy(strike = true), out)
+                        parseInto(s.substring(i + 2, close), style.copy(strike = true), out, depth + 1)
                         i = close + 2
                     } else { buf.append("~~"); i += 2 }
                 }
