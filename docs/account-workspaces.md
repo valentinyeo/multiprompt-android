@@ -43,6 +43,7 @@ Each row shows membership or “Not in a workspace”, with an Add/Move action.
 Inbox shows gold stars synced with the laptop; signed-in account tabs offer Star/Unstar.
 The ★ Favorites split stays just after All and shows only starred account sessions.
 Android negotiates favorite metadata and preserves absent values without inventing stars.
+Optional boolean `muted` on a tab hides that session from every Inbox split and unread count; it stays in the workspace list. Android sends `muted` in `X-Layout-Features` and never drops it on push.
 
 Frequent is the first split. It includes sessions with input in the last 24 hours
 (inclusive), or at least three watch-only looks in the last six hours. Future
@@ -51,7 +52,7 @@ Like other splits it follows newest-at-bottom; with that setting on, the newest
 key is the bottom on-screen row. Selection uses stable IDs, not stored indices.
 Old `used` stamps never qualify a session.
 
-Android negotiates `X-Layout-Features: favorite,used,visits,input`. Optional `input`
+Android negotiates `X-Layout-Features: favorite,muted,used,visits,input`. Optional `input`
 is a non-negative safe-integer Unix millisecond timestamp, merged by maximum
 across pulls, conflicts and acknowledgements; omission preserves known input.
 Composer sends, voice sends, reader commands and terminal keystrokes stamp both
