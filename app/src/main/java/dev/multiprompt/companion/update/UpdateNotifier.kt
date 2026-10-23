@@ -16,6 +16,7 @@ import androidx.work.WorkerParameters
 import dev.multiprompt.companion.BuildConfig
 import dev.multiprompt.companion.MainActivity
 import dev.multiprompt.companion.R
+import java.io.Reader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.TimeUnit
@@ -91,10 +92,12 @@ class UpdateCheckWorker(
             connection.connect()
             require(connection.url.protocol == "https")
             require(connection.responseCode in 200..299)
-            val raw = connection.inputStream.bufferedReader().use { it.readText().take(64 * 1024) }
+            val raw = connection.inputStream.bufferedReader().use { readBounded(it, 64 * 1024) }
             UpdateRelease.parse(raw)
         } finally {
             connection.disconnect()
         }
     }
 }
+
+internal fun readBounded(reader: Reader, limit: Int): String = reader.readText().take(limit)

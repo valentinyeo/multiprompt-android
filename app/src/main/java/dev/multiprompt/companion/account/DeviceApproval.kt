@@ -19,7 +19,7 @@ class DeviceApproval(
         Result(failures.isEmpty() && client.approve(entry.deviceId), failures)
     }
 
-    fun deny(entry: DeviceKeyEntry): Boolean = client.deny(entry.deviceId)
+    suspend fun deny(entry: DeviceKeyEntry, hosts: List<HostProfile>): Boolean = client.deny(entry.deviceId)
 
     suspend fun cleanupRevoked(listing: DeviceKeyListing, hosts: List<HostProfile>): List<HostFailure> = withContext(Dispatchers.IO) {
         listing.keys.filter { it.status == DeviceKeyStatus.REVOKED }.flatMap { entry ->

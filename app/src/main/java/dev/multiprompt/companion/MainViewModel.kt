@@ -1608,7 +1608,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val denied = deviceKeyMutex.withLock {
                     if (generation != accountGeneration) return@launch
-                    withContext(Dispatchers.IO) { app.deviceApproval.deny(entry) }
+                    withContext(Dispatchers.IO) { app.deviceApproval.deny(entry, hosts.load()) }
                 }
                 if (generation != accountGeneration) return@launch
                 if (denied) {

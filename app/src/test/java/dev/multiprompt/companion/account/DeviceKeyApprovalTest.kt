@@ -20,6 +20,50 @@ class DeviceKeyApprovalTest {
         AccountReply(status, JSONObject().put("status", if (path.endsWith("/approve")) "approved" else "denied"))
     }) { "token" }
 
+    @Test fun keyChangesRemoveKeysFromEveryHostWhenNotApproved() = runBlocking {
+        val installed = mutableSetOf<String>()
+        val ran = mutableListOf<Pair<String, String>>()
+        val add = DeviceKeys.addCommand(entry.publicKey)
+        val remove = DeviceKeys.removeCommand(entry.publicKey)
+        val approval = DeviceApproval(client) { host, command ->
+            assertTrue(decisions.isEmpty())
+            ran.add(host.id to command)
+            when (command) {
+                add -> {
+                    installed.add(host.id)
+                    host != hosts[1]
+                }
+                remove -> {
+                    installed.remove(host.id)
+                    true
+                }
+                else -> error("Unexpected command")
+            }
+        }
+        val result = approval.approve(entry, hosts)
+        assertFalse(result.approved)
+        assertEquals(listOf(hosts[1]), result.failures.map { it.host })
+        assertEquals(hosts.map { it.id to add } + hosts.map { it.id to remove }, ran)
+        assertTrue(installed.isEmpty())
+        assertTrue(decisions.isEmpty())
+
+        installed.addAll(hosts.map { it.id })
+        ran.clear()
+        assertTrue(approval.deny(entry, hosts))
+        assertEquals(hosts.map { it.id to remove }, ran)
+        assertTrue(installed.isEmpty())
+        assertEquals(listOf("/v1/device-keys/other/deny"), decisions)
+
+        decisions.clear()
+        installed.addAll(hosts.map { it.id })
+        ran.clear()
+        val listing = DeviceKeyListing("self", listOf(entry.copy(status = DeviceKeyStatus.DENIED)))
+        assertTrue(approval.cleanupRevoked(listing, hosts).isEmpty())
+        assertEquals(hosts.map { it.id to remove }, ran)
+        assertTrue(installed.isEmpty())
+        assertTrue(decisions.isEmpty())
+    }
+
     @Test fun approveInstallsEveryHostBeforeServerDecision() = runBlocking {
         val ran = mutableListOf<HostProfile>()
         val approval = DeviceApproval(client) { host, command ->
@@ -61,13 +105,13 @@ class DeviceKeyApprovalTest {
             val result = approval.approve(entry, hosts)
             assertFalse(result.approved)
             assertTrue(result.failures.isEmpty())
-            assertFalse(approval.deny(entry))
+            assertFalse(approval.deny(entry, hosts))
         }
     }
 
     @Test fun denyNeverRunsAHostCommand() {
         val approval = DeviceApproval(client) { _, _ -> error("Deny cannot execute SSH") }
-        assertTrue(approval.deny(entry))
+        assertTrue(runBlocking { approval.deny(entry, hosts) })
         assertEquals(listOf("/v1/device-keys/other/deny"), decisions)
     }
 
