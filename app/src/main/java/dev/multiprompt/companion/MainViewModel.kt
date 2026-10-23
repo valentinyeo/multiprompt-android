@@ -37,6 +37,7 @@ import dev.multiprompt.companion.account.UsedStampThrottle
 import dev.multiprompt.companion.account.FAVORITES_SPLIT_ID
 import dev.multiprompt.companion.account.inboxSplitIds
 import dev.multiprompt.companion.account.isFavoriteSession
+import dev.multiprompt.companion.account.isHiddenAsMuted
 import dev.multiprompt.companion.account.isMutedSession
 import dev.multiprompt.companion.account.AccountLayoutStore
 import dev.multiprompt.companion.account.AccountTab
@@ -1697,7 +1698,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     private fun visibleInboxSessions(state: AppUiState): List<TmuxSession> = state.sessions
-        .filterNot { isMutedSession(it, state.accountLayout, state.accountHosts) }
+        .filterNot { isHiddenAsMuted(it, state.accountLayout, state.accountHosts, state.selectedWorkspaceId) }
         .filter { session ->
             val key = SessionReadStore.key(session.hostId, session.name)
             val archived = key in state.archivedSessionKeys
