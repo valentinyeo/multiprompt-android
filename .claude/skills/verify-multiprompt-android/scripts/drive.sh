@@ -54,6 +54,16 @@ dismiss_system_anr() {
         adb shell input tap "$x" "$y"
     fi
 }
+doctor() {
+    local attempt
+    for attempt in {1..30}; do
+        dump_ui
+        if ! python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "isn't responding" >/dev/null 2>&1; then break; fi
+        dismiss_system_anr
+        sleep 2
+    done
+    "$scripts/doctor.sh"
+}
 wait_for_text() {
     local attempt
     for attempt in {1..30}; do
@@ -105,7 +115,7 @@ wait_receipt() {
 }
 adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
 wait_for_text 'Sign in to see your servers, workspaces and sessions.'
-"$scripts/doctor.sh"
+doctor
 dump_ui
 python3 "$scripts/ui.py" "$EVIDENCE/current.xml" version "$EXPECTED_VERSION" > "$EVIDENCE/version-label.txt"
 shot sign-in
@@ -222,7 +232,7 @@ PYROTATE
         sleep 1
     done
     wait_for_text Inbox
-    "$scripts/doctor.sh"
+    doctor
     connections_before=$(sudo awk '/Connection from / {n++} END {print n+0}' "$FIXTURE/sshd.log")
     refresh_inbox
     require_dismissed "$connections_before"
