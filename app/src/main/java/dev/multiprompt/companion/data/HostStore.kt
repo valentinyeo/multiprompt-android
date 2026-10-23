@@ -26,6 +26,7 @@ class HostStore(context: Context) {
                             passphraseSecretId = item.optString("passphraseSecretId").ifBlank { null },
                             hostKeyType = item.optString("hostKeyType").ifBlank { null },
                             hostKeyFingerprint = item.optString("hostKeyFingerprint").ifBlank { null },
+                            dismissedHostKeyFingerprint = item.optString("dismissedHostKeyFingerprint").ifBlank { null },
                             hostKeys = item.optJSONArray("hostKeys")?.let { keys -> (0 until keys.length()).map { keys.getString(it) } }.orEmpty(),
                         ),
                     )
@@ -57,6 +58,7 @@ class HostStore(context: Context) {
                     .put("passphraseSecretId", host.passphraseSecretId ?: "")
                     .put("hostKeyType", host.hostKeyType ?: "")
                     .put("hostKeyFingerprint", host.hostKeyFingerprint ?: "")
+                    .put("dismissedHostKeyFingerprint", host.dismissedHostKeyFingerprint ?: "")
                     .put("hostKeys", JSONArray(host.hostKeys)),
             )
         }

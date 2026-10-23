@@ -411,6 +411,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             hostKeyType = if (connectionIdentityChanged) null else existing?.hostKeyType,
             hostKeyFingerprint = if (connectionIdentityChanged) null else existing?.hostKeyFingerprint,
             hostKeys = if (connectionIdentityChanged) emptyList() else existing?.hostKeys.orEmpty(),
+            dismissedHostKeyFingerprint = if (connectionIdentityChanged) null else existing?.dismissedHostKeyFingerprint,
         )
         hosts.upsert(profile)
         _state.update {
@@ -445,6 +446,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 id = id,
                 label = "${source.label} ($user)",
                 username = user,
+                dismissedHostKeyFingerprint = null,
                 keySecretId = keySecretId,
                 passphraseSecretId = passphraseSecretId,
             ),
@@ -521,6 +523,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 hostKeyType = presented.type,
                 hostKeyFingerprint = presented.fingerprint,
                 hostKeys = listOfNotNull(presented.publicKey),
+                dismissedHostKeyFingerprint = null,
             ),
         )
         _state.update {
@@ -534,10 +537,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun dismissHostKey(hostId: String) {
+        val presented = _state.value.pendingHostKeys[hostId] ?: return
+        val host = _state.value.hosts.firstOrNull { it.id == hostId } ?: return
+        hosts.upsert(host.copy(dismissedHostKeyFingerprint = "${presented.type} ${presented.fingerprint}"))
         _state.update {
             it.copy(
+                hosts = hosts.load(),
                 pendingHostKeys = it.pendingHostKeys - hostId,
-                hostErrors = it.hostErrors - hostId,
             )
         }
     }
@@ -676,7 +682,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             cachedHostIds = merged.cachedHostIds,
             updatingHostIds = merged.updatingHostIds,
             pendingHostKeys = results.mapNotNull { result ->
-                result.hostKey?.let { result.hostId to it }
+                result.hostKey?.takeUnless { key ->
+                    current.hosts.firstOrNull { it.id == result.hostId }?.dismissedHostKeyFingerprint ==
+                        "${key.type} ${key.fingerprint}"
+                }?.let { result.hostId to it }
             }.toMap(),
             unreadSessionKeys = unreadKeys,
             unreadCounts = unreadCounts,

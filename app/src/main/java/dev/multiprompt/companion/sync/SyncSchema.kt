@@ -11,7 +11,7 @@ object SyncSchema {
 
     private val HOST_FIELDS = listOf(
         "id", "label", "hostname", "port", "username",
-        "keySecretId", "passphraseSecretId", "hostKeyType", "hostKeyFingerprint",
+        "keySecretId", "passphraseSecretId", "hostKeyType", "hostKeyFingerprint", "dismissedHostKeyFingerprint",
     )
     private val WORKSPACE_FIELDS = listOf("id", "name", "hostId", "remotePath")
     private val SESSION_STATE_KEYS = listOf("lastReadAt", "archivedAt", "resumeAt")
@@ -26,6 +26,7 @@ object SyncSchema {
         val passphraseSecretId: String? = null,
         val hostKeyType: String? = null,
         val hostKeyFingerprint: String? = null,
+        val dismissedHostKeyFingerprint: String? = null,
     )
 
     data class SyncWorkspace(
@@ -61,6 +62,9 @@ object SyncSchema {
             append(",\"passphraseSecretId\":").append(host.passphraseSecretId?.let(::jsonString) ?: "null")
             append(",\"hostKeyType\":").append(jsonString(host.hostKeyType ?: ""))
             append(",\"hostKeyFingerprint\":").append(jsonString(host.hostKeyFingerprint ?: ""))
+            host.dismissedHostKeyFingerprint?.let {
+                append(",\"dismissedHostKeyFingerprint\":").append(jsonString(it))
+            }
             append("}")
         }
         append("]}")
@@ -82,6 +86,7 @@ object SyncSchema {
                         passphraseSecretId = item.optString("passphraseSecretId").ifBlank { null },
                         hostKeyType = item.optString("hostKeyType").ifBlank { null },
                         hostKeyFingerprint = item.optString("hostKeyFingerprint").ifBlank { null },
+                        dismissedHostKeyFingerprint = item.optString("dismissedHostKeyFingerprint").ifBlank { null },
                     ),
                 )
             }
