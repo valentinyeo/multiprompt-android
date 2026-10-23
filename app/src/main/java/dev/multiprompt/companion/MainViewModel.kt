@@ -37,6 +37,7 @@ import dev.multiprompt.companion.account.UsedStampThrottle
 import dev.multiprompt.companion.account.FAVORITES_SPLIT_ID
 import dev.multiprompt.companion.account.inboxSplitIds
 import dev.multiprompt.companion.account.isFavoriteSession
+import dev.multiprompt.companion.account.isMutedSession
 import dev.multiprompt.companion.account.AccountLayoutStore
 import dev.multiprompt.companion.account.AccountTab
 import dev.multiprompt.companion.account.PendingLayout
@@ -651,6 +652,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             .toMap()
         val unreadKeys = sessions
+            .filterNot { isMutedSession(it, current.accountLayout, mapping) }
             .filter { SessionReadStore.key(it.hostId, it.name) !in archivedKeys }
             .filter { TmuxText.isWaitingForInput(it.preview, it.agent) }
             .filter(sessionReads::isUnread)
@@ -1695,6 +1697,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     private fun visibleInboxSessions(state: AppUiState): List<TmuxSession> = state.sessions
+        .filterNot { isMutedSession(it, state.accountLayout, state.accountHosts) }
         .filter { session ->
             val key = SessionReadStore.key(session.hostId, session.name)
             val archived = key in state.archivedSessionKeys

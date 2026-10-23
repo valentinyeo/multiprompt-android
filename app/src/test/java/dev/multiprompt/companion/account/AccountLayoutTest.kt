@@ -187,4 +187,43 @@ class AccountLayoutTest {
         assertThrows(IllegalArgumentException::class.java) { capped.recordVisit(one.identity, -1) }
     }
 
+
+    private fun mutedLayout(muted: Boolean?, name: String = "One", revision: Int = 1): JSONObject {
+        val json = JSONObject("""{"schema":1,"revision":$revision,"workspaces":[{"name":"Other"}],"tabs":[{"kind":"tmux","name":"$name","tmux_session":"one","tmux_host":0,"workspace":"Other"}]}""")
+        muted?.let { json.getJSONArray("tabs").getJSONObject(0).put("muted", it) }
+        return json
+    }
+
+    @Test fun mutedRoundTripsAndAbsentStaysAbsent() {
+        for (muted in listOf(true, false)) {
+            val parsed = AccountLayout.parse(mutedLayout(muted))
+            assertEquals(muted, parsed.json().getJSONArray("tabs").getJSONObject(0).get("muted"))
+            assertEquals(parsed, AccountLayout.parse(JSONObject(parsed.json().toString())))
+        }
+        assertFalse(AccountLayout.parse(mutedLayout(null)).json().getJSONArray("tabs").getJSONObject(0).has("muted"))
+    }
+
+    @Test fun mutedMustBeBoolean() {
+        val json = mutedLayout(null)
+        json.getJSONArray("tabs").getJSONObject(0).put("muted", "yes")
+        assertThrows(IllegalArgumentException::class.java) { AccountLayout.parse(json) }
+    }
+
+    @Test fun remoteMutedSurvivesPullWhenPhoneOnlyRenamed() {
+        val base = AccountLayout.parse(mutedLayout(null))
+        val edited = AccountLayout.parse(mutedLayout(null, "Phone rename"))
+        val remote = AccountLayout.parse(mutedLayout(true, revision = 2))
+        val tab = PendingLayout(base, edited).pull(remote).edited.json().getJSONArray("tabs").getJSONObject(0)
+        assertEquals("Phone rename", tab.getString("name"))
+        assertEquals(true, tab.get("muted"))
+    }
+
+    @Test fun mutedSurvivesAcknowledgeOfAPhoneEdit() {
+        val base = AccountLayout.parse(mutedLayout(true))
+        val edited = AccountLayout.parse(mutedLayout(true, "Phone rename"))
+        val remote = AccountLayout.parse(mutedLayout(true, "Phone rename", 2))
+        val acknowledged = PendingLayout(base, edited).acknowledge(edited, remote)
+        assertEquals(true, acknowledged.edited.json().getJSONArray("tabs").getJSONObject(0).get("muted"))
+        assertEquals(true, acknowledged.base.json().getJSONArray("tabs").getJSONObject(0).get("muted"))
+    }
 }

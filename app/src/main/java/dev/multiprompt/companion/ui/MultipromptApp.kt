@@ -175,6 +175,7 @@ import dev.multiprompt.companion.account.FREQUENT_SPLIT_ID
 import dev.multiprompt.companion.account.frequentSessions
 import dev.multiprompt.companion.account.FAVORITES_SPLIT_ID
 import dev.multiprompt.companion.account.isFavoriteSession
+import dev.multiprompt.companion.account.isMutedSession
 import dev.multiprompt.companion.AppSection
 import dev.multiprompt.companion.AppUiState
 import dev.multiprompt.companion.SessionBucket
@@ -1469,9 +1470,9 @@ internal fun SessionsScreen(
                         }
                         val splitName = workspace?.name ?: "All"
                         val sessionCount = if (splitId == null) {
-                            state.sessions.size
+                            state.sessions.count { !isMutedSession(it, state.accountLayout, state.accountHosts) }
                         } else {
-                            state.sessionWorkspaceIds.values.count { it == splitId }
+                            state.sessions.count { !isMutedSession(it, state.accountLayout, state.accountHosts) && state.sessionWorkspaceIds[SessionReadStore.key(it.hostId, it.name)] == splitId }
                         }
                         Row(
                             Modifier.fillMaxWidth(),
@@ -1547,6 +1548,7 @@ internal fun SessionsScreen(
     val normalizedQuery = searchQuery.trim()
     val workspaceNames = state.workspaces.associate { it.id to it.name }
     val matchingSessions = state.sessions
+        .filterNot { isMutedSession(it, state.accountLayout, state.accountHosts) }
         .filter { session ->
             val key = SessionReadStore.key(session.hostId, session.name)
             state.sessionBucket != SessionBucket.ARCHIVE &&

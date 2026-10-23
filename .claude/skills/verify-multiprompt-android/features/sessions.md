@@ -11,6 +11,7 @@ Inbox lists the real tmux sessions on saved trusted hosts, with output previews 
 - `sessions-frequent`: **Frequent** uses account-mapped input within 24 h, otherwise three 10 s watch visits within 6 h; not every discovered session qualifies (not automated).
 - `sessions-badge`: new assistant message count, not just an unread dot; requires an agent transcript (not automated).
 - `sessions-settings`: **Session list actions → Settings** opens **Session list settings**; see [split switch journey](session-settings.md), blocked without OTP/layout.
+- `sessions-muted`: a tab with `muted: true` in the account layout never appears in any Inbox split, bucket, count or unread badge, yet stays in the workspace list (not automated).
 - `sessions-new`: New session host/folder/mode picker (not automated).
 
 ## How to get to it (user POV)

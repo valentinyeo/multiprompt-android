@@ -13,11 +13,12 @@ data class AccountTab(
     val used: Long? = null,
     val visits: List<Long>? = null,
     val input: Long? = null,
+    val muted: Boolean? = null,
 ) {
     val identity: String get() = "$host:${session.lowercase(java.util.Locale.ROOT)}"
     fun json(): JSONObject = JSONObject().put("kind", "tmux").put("name", name)
         .put("tmux_session", session).put("tmux_host", host).put("workspace", workspace).put("manual", manual)
-        .apply { favorite?.let { put("favorite", it) }; used?.let { put("used", it) }; input?.let { put("input", it) }; visits?.let { put("visits", JSONArray(it)) } }
+        .apply { favorite?.let { put("favorite", it) }; muted?.let { put("muted", it) }; used?.let { put("used", it) }; input?.let { put("input", it) }; visits?.let { put("visits", JSONArray(it)) } }
 }
 
 data class AccountLayout(
@@ -111,12 +112,13 @@ data class AccountLayout(
                 val t = tabs.getJSONObject(it)
                 val required = setOf("kind", "name", "tmux_session", "tmux_host", "workspace")
                 val keys = t.keys().asSequence().toSet()
-                require(keys.containsAll(required) && (keys - required).all { it in setOf("manual", "favorite", "used", "visits", "input") } && t.get("kind") == "tmux")
+                require(keys.containsAll(required) && (keys - required).all { it in setOf("manual", "favorite", "muted", "used", "visits", "input") } && t.get("kind") == "tmux")
                 require(listOf("name", "tmux_session", "workspace").all { key -> t.get(key) is String })
                 val host = t.get("tmux_host")
                 require(host is Number && host.toDouble() == host.toInt().toDouble())
                 require(!t.has("manual") || t.get("manual") is Boolean)
                 require(!t.has("favorite") || t.get("favorite") is Boolean)
+                require(!t.has("muted") || t.get("muted") is Boolean)
                 val used = if (t.has("used")) t.get("used") else null
                 require(!t.has("used") || used is Number && used.toLong() in 0..9_007_199_254_740_991L &&
                     used.toString().toBigDecimalOrNull()?.compareTo(used.toLong().toBigDecimal()) == 0)
@@ -134,7 +136,8 @@ data class AccountLayout(
                     }
                 } else null
                 AccountTab(t.getString("name"), t.getString("tmux_session"), host.toInt(), t.getString("workspace"),
-                    t.optBoolean("manual", false), if (t.has("favorite")) t.getBoolean("favorite") else null, (used as? Number)?.toLong(), visits, (input as? Number)?.toLong())
+                    t.optBoolean("manual", false), if (t.has("favorite")) t.getBoolean("favorite") else null, (used as? Number)?.toLong(), visits, (input as? Number)?.toLong(),
+                    if (t.has("muted")) t.getBoolean("muted") else null)
             }, settings, if (json.has("hosts")) AccountHosts.parse(json.opt("hosts")) else null).validate()
         }
 
@@ -161,6 +164,7 @@ data class AccountLayout(
                     manual = if (e.name != b.name || e.manual != b.manual) e.manual else r.manual,
                     workspace = if (e.workspace != b.workspace) e.workspace else r.workspace,
                     favorite = if (e.favorite != b.favorite) e.favorite else r.favorite,
+                    muted = if (e.muted != b.muted) e.muted else r.muted,
                     used = listOfNotNull(b.used, e.used, r.used).maxOrNull(),
                     input = listOfNotNull(b.input, e.input, r.input).maxOrNull(),
                     visits = mergeVisits(b.visits, e.visits, r.visits),
