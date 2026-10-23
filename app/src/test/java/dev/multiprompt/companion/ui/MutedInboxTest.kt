@@ -61,11 +61,11 @@ class MutedInboxTest {
         compose.onNodeWithText("quiet_runner").assertDoesNotExist()
     }
 
-    @Test fun mutedSessionIsNotInTheFavoritesInbox() {
+    @Test fun mutedStarredSessionStaysInFavorites() {
         state.value = state.value.copy(selectedWorkspaceId = FAVORITES_SPLIT_ID)
         render()
         compose.onNodeWithText("visible_one").assertIsDisplayed()
-        compose.onNodeWithText("quiet_runner").assertDoesNotExist()
+        compose.onNodeWithText("quiet_runner").assertIsDisplayed()
     }
 
     @Test fun mutedSessionStaysInItsWorkspaceList() {
