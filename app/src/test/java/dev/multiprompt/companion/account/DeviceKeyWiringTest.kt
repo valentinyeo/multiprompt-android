@@ -215,21 +215,22 @@ class DeviceKeyWiringTest {
         sync()
         compose.runOnIdle { model.approveDevice() }
         settled()
-        assertEquals(profiles, commands.map { it.first })
+        assertEquals(profiles + profiles, commands.map { it.first })
+        assertEquals(profiles.map { it to DeviceKeys.removeCommand(other.publicKey) }, commands.drop(profiles.size))
         assertFalse(requests.contains("POST /v1/device-keys/laptop/approve"))
         assertEquals("Could not add it to Contabo UK. Try again.", model.state.value.deviceApprovalError)
         assertEquals(other.deviceId, model.state.value.pendingDevice?.id)
         assertTrue(model.state.value.signedIn)
     }
 
-    @Test fun noDeniesAndClearsWithoutSsh() {
+    @Test fun noDeniesAndRemovesTheKeyFromEverySavedHost() {
         setup()
         sync()
         compose.setContent { MultipromptTheme { MultipromptApp(model) } }
         compose.onNodeWithText("No").performClick()
         settled()
         assertTrue(requests.contains("POST /v1/device-keys/laptop/deny"))
-        assertTrue(commands.isEmpty())
+        assertEquals(profiles.map { it to DeviceKeys.removeCommand(other.publicKey) }, commands)
         assertNull(model.state.value.pendingDevice)
         compose.onNodeWithText("Approve this device?").assertDoesNotExist()
     }
