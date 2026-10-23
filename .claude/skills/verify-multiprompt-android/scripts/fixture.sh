@@ -28,6 +28,7 @@ AllowUsers verifyssh
 UsePAM no
 PrintMotd no
 LogLevel VERBOSE
+PerSourcePenalties no
 CONFIG
 sudo /usr/sbin/sshd -t -f "$FIXTURE/sshd_config"
 sudo /usr/sbin/sshd -f "$FIXTURE/sshd_config" -E "$FIXTURE/sshd.log"
