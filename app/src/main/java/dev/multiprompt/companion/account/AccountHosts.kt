@@ -1,5 +1,6 @@
 package dev.multiprompt.companion.account
 
+import dev.multiprompt.companion.data.RetiredHosts
 import dev.multiprompt.companion.model.HostProfile
 import org.json.JSONArray
 import org.json.JSONObject
@@ -69,6 +70,7 @@ object AccountHosts {
         val mapping = AccountHostMap.resolve(profiles, overrides).toMutableMap()
         val nextOverrides = overrides.toMutableMap()
         remote.forEach { host ->
+            if (RetiredHosts.isRetired(host.hostname)) return@forEach
             if (host.slot == 0 && host.user != "valentin") return@forEach
             val profile = mapping[host.slot] ?: run {
                 val matched = next.firstOrNull { it.hostname.equals(host.hostname, ignoreCase = true) && it.port == host.port && it.username == host.user }
