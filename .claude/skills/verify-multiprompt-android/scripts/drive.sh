@@ -170,13 +170,12 @@ if sudo grep -q 'Accepted publickey' "$FIXTURE/sshd.log"; then
     printf 'FAIL: authentication occurred before explicit trust\n' >&2
     exit 1
 fi
-for trust_attempt in 1 2 3; do
-    tap_text 'Trust and connect'
-    if wait_for_text verify-session; then break; fi
-    printf 'Trust tap %s did not pin the host; the dialog was still shown\n' "$trust_attempt" | tee -a "$EVIDENCE/trust-retries.txt"
-    shot "trust-retry-$trust_attempt"
-    [[ "$trust_attempt" -lt 3 ]]
-done
+tap_text 'Trust and connect'
+if ! wait_for_text verify-session; then
+    printf 'Trust tap 1 did not pin the host; the dialog was still shown\n' | tee -a "$EVIDENCE/trust-retries.txt"
+    shot trust-retry-1
+    exit 1
+fi
 shot sessions
 sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
 if [[ "$feature" == hosts.md ]]; then

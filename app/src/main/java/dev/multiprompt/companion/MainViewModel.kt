@@ -186,6 +186,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var pendingLayout = accountStore.load(syncAuth.accountId())
     private var usedStampThrottle = UsedStampThrottle(pendingLayout?.base)
     private val foreground = MutableStateFlow(false)
+    private var trustRefreshQueued = false
     private var accountRequestRunning = false
     private var accountGeneration = 0
     private val deviceKeyMutex = Mutex()
@@ -533,7 +534,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 hostErrors = it.hostErrors - hostId,
             )
         }
-        refresh()
+        if (_state.value.refreshing) trustRefreshQueued = true else refresh()
     }
 
     fun dismissHostKey(hostId: String) {
@@ -578,6 +579,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 sessionCache.save(result.hostId, result.sessions)
             }
             _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = true) }
+            if (trustRefreshQueued) {
+                trustRefreshQueued = false
+                refresh()
+            }
         }
     }
 
@@ -681,10 +686,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }.toMap(),
             cachedHostIds = merged.cachedHostIds,
             updatingHostIds = merged.updatingHostIds,
-            pendingHostKeys = results.mapNotNull { result ->
+            pendingHostKeys = current.pendingHostKeys.filterKeys { hostId ->
+                hostId !in answered && current.hosts.any { it.id == hostId }
+            } + results.mapNotNull { result ->
+                val host = current.hosts.firstOrNull { it.id == result.hostId } ?: return@mapNotNull null
                 result.hostKey?.takeUnless { key ->
-                    current.hosts.firstOrNull { it.id == result.hostId }?.dismissedHostKeyFingerprint ==
-                        "${key.type} ${key.fingerprint}"
+                    (host.hostKeyType == key.type && host.hostKeyFingerprint == key.fingerprint) ||
+                        host.dismissedHostKeyFingerprint == "${key.type} ${key.fingerprint}"
                 }?.let { result.hostId to it }
             }.toMap(),
             unreadSessionKeys = unreadKeys,
