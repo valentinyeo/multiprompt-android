@@ -1518,7 +1518,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val local = hosts.load()
         val overrides = accountStore.hostOverrides()
         val merged = AccountHosts.merge(layout.hosts.orEmpty(), local, overrides)
-        merged.profiles.filter { profile -> local.none { it.id == profile.id } }.forEach(hosts::upsert)
+        merged.profiles.filter { profile -> local.none { it.id == profile.id && it.label == profile.label } }.forEach(hosts::upsert)
         merged.overrides.filter { (slot, id) -> overrides[slot] != id }.forEach { (slot, id) -> accountStore.setHost(slot, id) }
         _state.update { it.copy(hosts = hosts.load()) }
     }

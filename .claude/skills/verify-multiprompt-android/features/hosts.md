@@ -5,6 +5,7 @@ A user adds an SSH host, imports a private key, explicitly compares and trusts i
 ## Sub-features
 
 - `host-add`: label, address, username and port form.
+- Account-pulled hosts take the account's name (proof: `AccountHostNamesTest`; account OTP sign-in is not reachable in the emulator journey).
 - `host-import`: real Android document-picker key import.
 - `host-first-trust`: compare ed25519 fingerprint before public-key authentication.
 - `host-pinned`: host list retains the pinned fingerprint.

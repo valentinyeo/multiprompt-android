@@ -168,8 +168,8 @@ class AccountHostsAppTest {
         }
         sync()
         compose.runOnIdle {
-            assertEquals(local, app.hostStore.load().first { it.id == local.id })
-            assertEquals(local, model.state.value.accountHosts[0])
+            assertEquals(local.copy(label = authoritative.name), app.hostStore.load().first { it.id == local.id })
+            assertEquals(local.copy(label = authoritative.name), model.state.value.accountHosts[0])
             assertEquals(2, puts.size)
             assertEquals(listOf("GET", "PUT", "GET", "PUT"), requests.map { it.method })
             puts.forEach { body ->
@@ -244,9 +244,9 @@ class AccountHostsAppTest {
         compose.runOnIdle { app.hostStore.upsert(existing) }
         sync()
         compose.runOnIdle {
-            assertEquals(listOf(existing), HostStore(app).load())
+            assertEquals(listOf(existing.copy(label = remoteHost.name)), HostStore(app).load())
             assertEquals(existing.id, AccountLayoutStore(app).hostOverrides()[0])
-            assertEquals(existing, model.state.value.accountHosts[0])
+            assertEquals(existing.copy(label = remoteHost.name), model.state.value.accountHosts[0])
         }
     }
 

@@ -39,22 +39,40 @@ class AccountHostsTest {
         assertEquals(result, AccountHosts.merge(remote, result.profiles, result.overrides))
     }
 
-    @Test fun existingMappedProfileIsUntouchedIncludingEndpointCredentialsAndTrust() {
+    @Test fun existingMappedProfileTakesAccountNameButRetainsEndpointCredentialsAndTrust() {
         val existing = local().copy(username = "valentin")
+        val renamed = existing.copy(label = host().name)
         val result = AccountHosts.merge(listOf(host()), listOf(existing), mapOf(0 to existing.id))
-        assertEquals(listOf(existing), result.profiles)
-        assertSame(existing, result.profiles.single())
-        assertEquals(existing, AccountHostMap.resolve(result.profiles, result.overrides)[0])
+        assertEquals(listOf(renamed), result.profiles)
+        assertEquals(mapOf(0 to existing.id), result.overrides)
+        assertEquals(renamed, AccountHostMap.resolve(result.profiles, result.overrides)[0])
         val inferred = existing.copy(label = "Hetzner", username = "valentin")
-        assertEquals(listOf(inferred), AccountHosts.merge(listOf(host()), listOf(inferred), emptyMap()).profiles)
+        val automatic = AccountHosts.merge(listOf(host()), listOf(inferred), emptyMap())
+        assertEquals(listOf(renamed), automatic.profiles)
+        assertEquals(mapOf(0 to renamed), AccountHostMap.resolve(automatic.profiles, automatic.overrides))
+        assertEquals(automatic, AccountHosts.merge(listOf(host()), automatic.profiles, automatic.overrides))
+    }
+
+    @Test fun inferredSlotStaysMappedAfterAccountNameDropsTheProviderClue() {
+        val existing = local().copy(label = "Contabo UK")
+        val remote = host(1).copy(name = "Backup server")
+        val result = AccountHosts.merge(listOf(remote), listOf(existing), emptyMap())
+        assertEquals(listOf(existing.copy(label = remote.name)), result.profiles)
+        assertEquals(mapOf(1 to existing.id), result.overrides)
+        assertEquals(mapOf(1 to result.profiles.single()), AccountHostMap.resolve(result.profiles, result.overrides))
+        val renamed = remote.copy(name = "Archive server")
+        val again = AccountHosts.merge(listOf(renamed), result.profiles, result.overrides)
+        assertEquals(listOf(existing.copy(label = renamed.name)), again.profiles)
+        assertEquals(result.overrides, again.overrides)
     }
 
     @Test fun sameHostnamePortAndUserReuseProfileWithoutMappingItToTwoSlots() {
         val existing = local().copy(hostname = "EXAMPLE.com", port = 2222, username = "valentin")
         val result = AccountHosts.merge(listOf(host(), host(1)), listOf(existing), mapOf(0 to "deleted"))
-        assertEquals(listOf(existing), result.profiles)
+        val renamed = existing.copy(label = host().name)
+        assertEquals(listOf(renamed), result.profiles)
         assertEquals(mapOf(0 to existing.id), result.overrides)
-        assertEquals(mapOf(0 to existing), AccountHostMap.resolve(result.profiles, result.overrides))
+        assertEquals(mapOf(0 to renamed), AccountHostMap.resolve(result.profiles, result.overrides))
         val occupied = AccountHosts.merge(listOf(host(1)), listOf(existing), mapOf(2 to existing.id))
         assertEquals(listOf(existing), occupied.profiles)
         assertEquals(mapOf(2 to existing.id), occupied.overrides)
