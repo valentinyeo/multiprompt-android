@@ -23,6 +23,7 @@ Numbered PNG/XML pairs show action and result. The transcript records commands a
 
 - [Sign in](sign-in.md): real account browser handoff; OTP remains manual.
 - [Hosts](hosts.md): add VPS, import encrypted-at-rest key, compare/trust and retain the host identity.
+- [Retired hosts](hosts-retired.md): a saved host at a retired server address is gone after relaunch; account sync never adds it back.
 - [Changed host key](host-changed-key.md): compare a rotated identity, persist Not now and refuse authentication.
 - [Sessions](sessions.md): authenticated tmux discovery and search.
 - [Session settings](session-settings.md): full-screen split switches; saving is blocked without account OTP and a pulled layout.

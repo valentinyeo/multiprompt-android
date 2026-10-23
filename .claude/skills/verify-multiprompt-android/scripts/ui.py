@@ -10,14 +10,14 @@ matches = []
 for node in root.iter("node"):
     if mode in ("text", "absent", "version") and value == node.get("text"):
         matches.append(node)
-    elif mode == "contains" and value in node.get("text", ""):
+    elif mode in ("contains", "lacks") and value in node.get("text", ""):
         matches.append(node)
     elif mode in ("desc", "checked", "unchecked") and value == node.get("content-desc"):
         matches.append(node)
     elif mode == "field" and node.get("class") == "android.widget.EditText":
         if any(value == item.get("text") or value == item.get("content-desc") for item in node.iter()):
             matches.append(node)
-if mode == "absent":
+if mode in ("absent", "lacks"):
     if not any(n.get("package") == "dev.multiprompt.companion.debug" for n in root.iter("node")):
         raise SystemExit("App UI is missing")
     if matches:

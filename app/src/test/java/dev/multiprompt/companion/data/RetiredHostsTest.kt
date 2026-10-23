@@ -23,6 +23,16 @@ class RetiredHostsTest {
     }
 
     @Test
+    fun selectsTheRetiredInneCroServerWhateverItsLabelOrUserAndKeepsHetzner() {
+        val cro = host("Inne CRO", "45.151.123.11", "valentin")
+        val renamed = host("Old server", " 45.151.123.11 ", "root")
+        val hetzner = host("Hetzner", "46.224.218.39", "valentin")
+        val croLabelElsewhere = host("Inne CRO", "46.224.218.39", "inne")
+
+        assertEquals(listOf(cro, renamed), RetiredHosts.hostsToRemove(listOf(cro, hetzner, renamed, croLabelElsewhere)))
+    }
+
+    @Test
     fun matchesTheWholeHostnameNotLabelsOrAddressPrefixes() {
         val sameLabel = host("Inne Agent", "46.224.218.39", "valentin")
         val addressInLabel = host("157.173.109.227", "example.com", "agent")

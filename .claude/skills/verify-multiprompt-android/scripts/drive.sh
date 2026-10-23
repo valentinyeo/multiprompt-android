@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    sign-in.md|hosts.md|host-changed-key.md|sessions.md|session-reader.md|terminal.md) ;;
+    sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|terminal.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -97,6 +97,22 @@ wait_for_absence() {
     printf 'Timed out waiting for absence of %s\n' "$1" >&2
     return 1
 }
+relaunch_app() {
+    adb shell am force-stop "$package"
+    adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
+    for attempt in {1..30}; do
+        printf 'Relaunch navigation attempt %s/30\n' "$attempt"
+        dump_ui
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains Inbox >/dev/null 2>&1; then break; fi
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text 'Use without account (debug)' >/dev/null 2>&1; then
+            tap_text 'Use without account (debug)'
+            break
+        fi
+        sleep 1
+    done
+    wait_for_text Inbox
+    doctor
+}
 refresh_inbox() {
     tap_desc 'Session list actions'
     tap_text Refresh
@@ -146,6 +162,55 @@ tap_desc 'Session list actions'
 tap_text Hosts
 tap_desc 'Add host'
 wait_for_text 'Add VPS'
+if [[ "$feature" == hosts-retired.md ]]; then
+    retired=45.151.123.11
+    sudo iptables -I OUTPUT -d "$retired" -p tcp -j REJECT --reject-with tcp-reset
+    sudo iptables -S OUTPUT | tee "$EVIDENCE/retired-address-blocked.txt"
+    grep -F -- "-d $retired/32" "$EVIDENCE/retired-address-blocked.txt"
+    fill Label 'Inne%sCRO'
+    fill 'Hostname or IP' "$retired"
+    fill Username valentin
+    fill Port 22
+    adb push "$FIXTURE/user-key" /sdcard/Download/verify-key.pem
+    tap_text 'Import private key'
+    wait_for_text 'Recent'
+    tap_desc 'Show roots'
+    tap_text Downloads
+    wait_for_text verify-key.pem
+    tap_text verify-key.pem
+    wait_for_text 'Key:'
+    shot retired-form
+    tap_text 'Save and connect'
+    wait_for_text Inbox
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent 'Trust Inne CRO?'
+    tap_desc 'Session list actions'
+    tap_text Hosts
+    wait_for_text 'Inne CRO'
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "valentin@$retired:22"
+    shot retired-host-saved
+    relaunch_app
+    for attempt in {1..10}; do
+        dump_ui
+        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains Inbox
+        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" lacks unreachable
+        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" lacks 'Inne CRO'
+        sleep 1
+    done
+    shot relaunched-inbox
+    tap_desc 'Session list actions'
+    tap_text Hosts
+    for attempt in {1..30}; do
+        if select_node desc 'Add host' >/dev/null 2>&1; then break; fi
+        sleep 1
+    done
+    select_node desc 'Add host'
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" lacks 'Inne CRO'
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" lacks "$retired"
+    shot relaunched-hosts
+    sudo iptables -L OUTPUT -v -n | tee "$EVIDENCE/retired-address-attempts.txt"
+    printf 'RETIRED HOST REMOVED ON RELAUNCH VERIFIED\n'
+    exit 0
+fi
 fill Label Verify
 fill 'Hostname or IP' 10.0.2.2
 fill Username verifyssh
@@ -227,20 +292,7 @@ PYROTATE
     refresh_inbox
     require_dismissed "$connections_before"
     shot changed-key-dismissed
-    adb shell am force-stop "$package"
-    adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
-    for attempt in {1..30}; do
-        printf 'Relaunch navigation attempt %s/30\n' "$attempt"
-        dump_ui
-        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains Inbox >/dev/null 2>&1; then break; fi
-        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text 'Use without account (debug)' >/dev/null 2>&1; then
-            tap_text 'Use without account (debug)'
-            break
-        fi
-        sleep 1
-    done
-    wait_for_text Inbox
-    doctor
+    relaunch_app
     connections_before=$(sudo awk '/Connection from / {n++} END {print n+0}' "$FIXTURE/sshd.log")
     refresh_inbox
     require_dismissed "$connections_before"

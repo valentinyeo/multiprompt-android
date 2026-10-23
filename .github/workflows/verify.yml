@@ -10,6 +10,7 @@ on:
         options:
           - sign-in.md
           - hosts.md
+          - hosts-retired.md
           - host-changed-key.md
           - sessions.md
           - session-reader.md
