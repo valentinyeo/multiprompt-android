@@ -160,6 +160,30 @@ class AccountHostsTest {
             HostProfile(label = host().name, hostname = host().hostname, port = host().port, username = host().user, hostKeys = listOf(key)))))
     }
 
+    @Test fun retiredInneCroServerFromTheAccountIsNeverAddedOrMappedWhileHetznerStillMerges() {
+        val hetzner = AccountHost(0, "Hetzner", "46.224.218.39", 22, "valentin", listOf(key))
+        val cro = AccountHost(2, "Inne CRO", "45.151.123.11", 22, "valentin")
+        val remote = AccountHosts.parse(JSONArray(listOf(hetzner, cro).map { it.json() }))
+        assertEquals(listOf(hetzner, cro), remote)
+        val result = AccountHosts.merge(remote, emptyList(), emptyMap())
+        val profile = result.profiles.single()
+        assertEquals("46.224.218.39", profile.hostname)
+        assertEquals("Hetzner", profile.label)
+        assertEquals(mapOf(0 to profile.id), result.overrides)
+        val mapping = AccountHostMap.resolve(result.profiles, result.overrides)
+        assertEquals(setOf(0), mapping.keys)
+        assertNull(mapping[2])
+        assertEquals(result, AccountHosts.merge(remote, result.profiles, result.overrides))
+    }
+
+    @Test fun staleSlotOverrideForTheRemovedInneCroProfileDoesNotBringItBack() {
+        val cro = AccountHost(2, "Inne CRO", "45.151.123.11", 22, "valentin")
+        val result = AccountHosts.merge(listOf(cro), emptyList(), mapOf(2 to "removed-profile"))
+        assertEquals(emptyList<HostProfile>(), result.profiles)
+        assertEquals(mapOf(2 to "removed-profile"), result.overrides)
+        assertNull(AccountHostMap.resolve(result.profiles, result.overrides)[2])
+    }
+
     @Test fun getAndPutNegotiateHostsWithoutDroppingExistingFeatures() {
         val requests = mutableListOf<Request>()
         val client = OkHttpClient.Builder().addInterceptor { chain ->

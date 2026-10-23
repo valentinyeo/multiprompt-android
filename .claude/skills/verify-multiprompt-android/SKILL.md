@@ -45,7 +45,7 @@ The workflow calls, on its fresh GitHub emulator only:
 
 Every journey requires the exact `EXPECTED_VERSION` text and `Version <version>, open release notes` description immediately after doctor, saving `version-label.txt` (no added `v` prefix). On Sign in this label is at the bottom, not beside a menu.
 
-All SSH journeys first capture Sign in, choose **Use without account (debug)**, open **Session list actions → Hosts → Add host**, fill the real form, open **Import private key**, and select the adb-pushed `verify-key.pem` through Android's real document picker. They compare the displayed `ssh-ed25519 SHA256:…` against the job-generated host fingerprint before choosing **Trust and connect**. An accepted SSH authentication before that action fails the driver.
+All SSH journeys first capture Sign in, choose **Use without account (debug)**, open **Session list actions → Hosts → Add host**, fill the real form, open **Import private key**, and select the adb-pushed `verify-key.pem` through Android's real document picker. They compare the displayed `ssh-ed25519 SHA256:…` against the job-generated host fingerprint before choosing **Trust and connect**. An accepted SSH authentication before that action fails the driver. `hosts-retired.md` is the exception: it saves a host at the retired address `45.151.123.11` (blocked on the runner with iptables), force-stops and relaunches, and requires the host card and any "unreachable" banner to be gone; it never trusts or connects.
 
 `host-changed-key.md` rotates only the recorded fixture sshd, then checks **Session list actions → Refresh → Not now**, repeat refresh and force-stop/relaunch. It requires the new fingerprint, unchanged original pin and no further authentication. Session list settings ([session-settings.md](features/session-settings.md)) is mapped but not dispatchable: saving a split switch needs account OTP and a pulled layout, which CI cannot reach.
 
@@ -79,6 +79,7 @@ All helpers are executable. These setup/interaction commands are **GitHub-job-on
 .claude/skills/verify-multiprompt-android/scripts/fixture.sh
 .claude/skills/verify-multiprompt-android/scripts/doctor.sh
 .claude/skills/verify-multiprompt-android/scripts/drive.sh hosts.md
+.claude/skills/verify-multiprompt-android/scripts/drive.sh hosts-retired.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh host-changed-key.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh sessions.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh session-reader.md
