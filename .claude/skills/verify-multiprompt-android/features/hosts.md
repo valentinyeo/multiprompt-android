@@ -22,7 +22,7 @@ Preconditions: fresh GitHub fixture, doctor passes, no saved hosts. Use `feature
 - `fill Label Verify`, `fill 'Hostname or IP' 10.0.2.2`, `fill Username verifyssh`, `fill Port 2222` use editable labels in fresh UI XML.
 - `adb push "$FIXTURE/user-key" /sdcard/Download/verify-key.pem` prepares a disposable file, not app state. `tap_text 'Import private key'`, `tap_desc 'Show roots'`, `tap_text Downloads`, `tap_text verify-key.pem` exercise the system picker. `Key:` confirms import; capture `key-picker` and `key-imported`.
 - `tap_text 'Save and connect'` must yield `Trust Verify?`. `compare-host-key` must show exactly the generated `ssh-ed25519` fingerprint. The driver rejects any SSH authentication recorded before trust.
-- `tap_text 'Trust and connect'` must reveal `verify-session` and the server must record accepted public-key authentication.
+- A single `tap_text 'Trust and connect'` must reveal `verify-session` and the server must record accepted public-key authentication. Failure writes `trust-retries.txt`, captures `trust-retry-1` and exits without retrying.
 - Reopen Hosts through the overflow menu; `wait_for_text "Pinned $fingerprint"` and `pinned-host` prove the saved identity from a second user-facing view.
 
 ## Gotchas
