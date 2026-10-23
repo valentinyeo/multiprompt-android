@@ -1,6 +1,6 @@
 ---
 name: verify-multiprompt-android
-description: Verify multiprompt Android's Jetpack Compose mobile UI on GitHub's emulator when proving SSH host setup, tmux sessions, reader actions, terminal fallback or sign-in entry.
+description: Verify multiprompt Android's Jetpack Compose mobile UI on GitHub's emulator when proving SSH host setup, tmux sessions, reader actions, terminal fallback, changed host identities, session settings or sign-in entry.
 ---
 
 # Verify multiprompt Android
@@ -41,15 +41,19 @@ The workflow calls, on its fresh GitHub emulator only:
 .claude/skills/verify-multiprompt-android/scripts/drive.sh session-reader.md
 ```
 
-`EVIDENCE`, `FIXTURE` and `EXPECTED_VERSION` come from the workflow. Pass any filename in the feature index. `drive.sh` has small `tap_text`, `tap_desc`, `wait_for_text`, `dump_ui` and `shot` functions. It dumps `uiautomator` XML before locating an exact text or contentDescription and taps the matched clickable ancestor's bounds (or the exact enabled text node for native picker rows that do not expose a clickable ancestor) using `adb shell input`. Editable fields are found by class and their label/placeholder. Missing or ambiguous selectors fail instead of falling back to blind coordinates. Existing Compose accessibility text suffices; no test-only state setters or UI instrumentation are used.
+`EVIDENCE`, `FIXTURE` and `EXPECTED_VERSION` come from the workflow. Pass any filename in the feature index. `drive.sh` has small `tap_text`, `tap_desc`, `wait_for_text`, `dump_ui` and `shot` functions. It dumps `uiautomator` XML before locating an exact text or contentDescription and taps the matched clickable ancestor's bounds (or the exact enabled text node for native picker rows that do not expose a clickable ancestor) using `adb shell input`. Editable fields are found by class and their label/placeholder. Missing or ambiguous selectors fail instead of falling back to blind coordinates. While waiting, a system **isn't responding** dialog from the slow emulator is answered with **Wait** and logged in `system-anr.txt`; before launch the driver sets the emulator's `hide_error_dialogs` so other apps' ANR dialogs cannot cover the app (an app crash still fails doctor and shows in `logcat.txt`), and doctor runs at most three times, each failure logged in `doctor-retries.txt`. After doctor it waits up to 60 s for the emulator to reach `10.0.2.2` (logged in `network-wait.txt`) and fails as blocked otherwise. **Trust and connect** is retried at most three times when the dialog is still shown afterwards, each retry logged in `trust-retries.txt` with a screenshot: the 10 s background refresh briefly removes and re-adds the trust dialog, so a tap can land in that gap (app bug, tracked separately). Existing Compose accessibility text suffices; no test-only state setters or UI instrumentation are used.
+
+Every journey requires the exact `EXPECTED_VERSION` text and `Version <version>, open release notes` description immediately after doctor, saving `version-label.txt` (no added `v` prefix). On Sign in this label is at the bottom, not beside a menu.
 
 All SSH journeys first capture Sign in, choose **Use without account (debug)**, open **Session list actions → Hosts → Add host**, fill the real form, open **Import private key**, and select the adb-pushed `verify-key.pem` through Android's real document picker. They compare the displayed `ssh-ed25519 SHA256:…` against the job-generated host fingerprint before choosing **Trust and connect**. An accepted SSH authentication before that action fails the driver.
 
+`host-changed-key.md` rotates only the recorded fixture sshd, then checks **Session list actions → Refresh → Not now**, repeat refresh and force-stop/relaunch. It requires the new fingerprint, unchanged original pin and no further authentication. Session list settings ([session-settings.md](features/session-settings.md)) is mapped but not dispatchable: saving a split switch needs account OTP and a pulled layout, which CI cannot reach.
+
 ## Evidence
 
-Use the pstack proof standard: real user path; action plus resulting state; independently checked side effects; no test-only setters. A final screenshot alone is not proof. The reader recipe records the draft and Send, menu actions and resulting output, plus runner-side receipts and tmux capture. Host setup records the document picker/import, comparison dialog, authenticated session list and pinned identity. Terminal proof requires both attached status and a real tmux client. Sign-in proves only browser handoff, never OTP completion.
+Use the pstack proof standard: real user path; action plus resulting state; independently checked side effects; no test-only setters. A final screenshot alone is not proof. The reader recipe records the draft and Send, menu actions and resulting output, plus runner-side receipts and tmux capture. Host setup records the document picker/import, comparison dialog, authenticated session list and pinned identity. Terminal proof requires both attached status and a real tmux client. Split settings cannot be proven by debug offline entry. Sign-in proves only browser handoff, never OTP completion.
 
-The driver uses `adb exec-out screencap -p`, `adb shell uiautomator dump` and `adb logcat -d`. The always-uploaded artifact is `verify-<feature>-<run-id>`; it contains numbered PNG/XML pairs, `driver-transcript.txt` (commands and driver exit), `doctor.xml`, package/activity metadata, `logcat.txt`, `revision.txt`, `build.txt`, SSH fingerprint/auth/log evidence and feature-specific receipts/captures. Private keys and APKs are outside the artifact and never uploaded.
+The driver uses `adb exec-out screencap -p`, `adb shell uiautomator dump` and `adb logcat -d`. The always-uploaded artifact is `verify-<feature>-<run-id>`; it contains numbered PNG/XML pairs, `driver-transcript.txt` (commands and driver exit), `doctor.xml`, package/activity metadata, `logcat.txt`, `revision.txt`, `build.txt`, visible version evidence, SSH fingerprint/auth/log evidence and feature-specific receipts/captures. Private keys and APKs are outside the artifact and never uploaded.
 
 ```bash
 gh run download <id> -R valentinyeo/multiprompt-android
@@ -65,7 +69,7 @@ The driver EXIT trap captures the final UI and logcat on both success and failur
 .claude/skills/verify-multiprompt-android/scripts/cleanup.sh
 ```
 
-It copies SSH logs and console receipts into evidence, kills only the tmux and sshd PIDs recorded by fixture setup, removes the generated private/public key files and tries to remove the emulator's imported file. It never kills by process name. The fresh hosted runner's disposal removes the user's Keystore, imported app secrets and fixture user; evidence survives in the uploaded artifact. Do not cancel the job as a substitute for normal cleanup.
+It copies SSH logs and console receipts into evidence, kills only the tmux and sshd PIDs recorded by fixture setup, removes the generated private/public key files (including the rotated host key) and tries to remove the emulator's imported file. It never kills by process name. The fresh hosted runner's disposal removes the user's Keystore, imported app secrets and fixture user; evidence survives in the uploaded artifact. Do not cancel the job as a substitute for normal cleanup.
 
 ## Helpers
 
@@ -75,6 +79,7 @@ All helpers are executable. These setup/interaction commands are **GitHub-job-on
 .claude/skills/verify-multiprompt-android/scripts/fixture.sh
 .claude/skills/verify-multiprompt-android/scripts/doctor.sh
 .claude/skills/verify-multiprompt-android/scripts/drive.sh hosts.md
+.claude/skills/verify-multiprompt-android/scripts/drive.sh host-changed-key.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh sessions.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh session-reader.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh terminal.md

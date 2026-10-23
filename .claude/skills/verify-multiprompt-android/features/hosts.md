@@ -8,7 +8,7 @@ A user adds an SSH host, imports a private key, explicitly compares and trusts i
 - `host-import`: real Android document-picker key import.
 - `host-first-trust`: compare ed25519 fingerprint before public-key authentication.
 - `host-pinned`: host list retains the pinned fingerprint.
-- `host-maintain`: edit, replace key, add another user, delete and changed-key warning (not automated).
+- `host-maintain`: edit, replace key, add another user, delete (not automated); changed-key dismissal has its own [journey](host-changed-key.md).
 
 ## How to get to it (user POV)
 

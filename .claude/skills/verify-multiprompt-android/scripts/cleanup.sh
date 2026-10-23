@@ -22,7 +22,7 @@ if [[ -d "$FIXTURE" ]]; then
             fi
         fi
     done
-    rm -f "$FIXTURE/user-key" "$FIXTURE/user-key.pub" "$FIXTURE/host-key" "$FIXTURE/host-key.pub"
+    rm -f "$FIXTURE/user-key" "$FIXTURE/user-key.pub" "$FIXTURE/host-key" "$FIXTURE/host-key.pub" "$FIXTURE/rotated-host-key" "$FIXTURE/rotated-host-key.pub"
 fi
 printf 'CLEANUP COMPLETE: evidence retained; status=%s\n' "$status"
 exit "$status"

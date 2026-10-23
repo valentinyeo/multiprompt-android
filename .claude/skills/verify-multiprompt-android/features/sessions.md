@@ -8,6 +8,9 @@ Inbox lists the real tmux sessions on saved trusted hosts, with output previews 
 - `sessions-search`: matching query and clear/close search (automated).
 - `sessions-reader-entry`: tap a session card (covered by reader and terminal recipes).
 - `sessions-manage`: Inbox/Waiting/Archive buckets, reminders and session actions (not automated).
+- `sessions-frequent`: **Frequent** uses account-mapped input within 24 h, otherwise three 10 s watch visits within 6 h; not every discovered session qualifies (not automated).
+- `sessions-badge`: new assistant message count, not just an unread dot; requires an agent transcript (not automated).
+- `sessions-settings`: **Session list actions → Settings** opens **Session list settings**; see [split switch journey](session-settings.md), blocked without OTP/layout.
 - `sessions-new`: New session host/folder/mode picker (not automated).
 
 ## How to get to it (user POV)
@@ -19,9 +22,9 @@ Inbox opens after account sign-in or debug offline entry. Return from Hosts usin
 Preconditions: fresh fixture; use `feature=sessions.md`. The driver performs the entire hosts recipe through compare/trust and public-key authentication first.
 
 - `wait_for_text verify-session` and `shot sessions` prove the real fixture is discovered. `ssh-auth.txt` independently proves authentication.
-- `tap_desc 'Search sessions'` opens search. `fill 'Search all sessions' verify-session` enters the fixture name through adb input. `wait_for_text verify-session` and `shot search-match` capture query and matching result.
-- `tap_desc 'Close session search'` removes the query and search field. `shot search-cleared` captures the original discovered list again.
-- Inspect the XML as well as the screenshot: the typed query alone must not be mistaken for a matching card.
+- `tap_desc 'Search sessions'` opens search. `fill 'Search all sessions' verify-session` enters the fixture name through adb input. `wait_for_text '1 result across all splits'`, `wait_for_text verify-session` and `shot search-match` capture query and matching result.
+- `tap_desc 'Close session search'` removes the query and search field; the driver asserts `Search all sessions` is absent. `shot search-cleared` captures the original discovered list again.
+- Results start beneath the search box and above the keyboard; current automation closes the keyboard before its shot, so inspect that layout manually. Inspect the XML as well as the screenshot: the typed query alone must not be mistaken for a matching card.
 
 ## Gotchas
 
