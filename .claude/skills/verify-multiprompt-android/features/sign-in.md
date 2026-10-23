@@ -6,6 +6,9 @@ Sign in opens the account service in a Custom Tab for Cloudflare Access email OT
 
 - `account-entry`: Sign in screen and browser handoff (automated).
 - `account-return`: OTP, state/PKCE callback and persistent user login (not automated).
+- `account-servers`: account-backed hosts after OTP and host-sync capability (not automated).
+- `account-device-approval`: **Approve this device? → Approve / No** on an existing signed-in device (not automated).
+- `account-crash-upload`: pending reports upload on startup/sign-in; requires a queued crash and service receipt (not automated).
 - `account-sync-entry`: Sign in to sync from the session overflow menu (not automated).
 
 ## How to get to it (user POV)
@@ -17,7 +20,7 @@ A fresh install opens Sign in. After entering the debug-only offline mode, **Ses
 Preconditions: fresh GitHub emulator and debug APK; doctor passes on the Sign in activity.
 
 - Dispatch `gh workflow run verify.yml -R valentinyeo/multiprompt-android --ref <branch> -f feature=sign-in.md`.
-- The driver waits for text `Sign in to see your servers`, captures `sign-in`, and calls `tap_text 'Sign in'`.
+- The driver waits for text containing `Sign in to see your servers, workspaces and sessions.`, captures `sign-in`, and calls `tap_text 'Sign in'`.
 - It requires a resumed Chrome activity and captures `access-browser` PNG/XML plus browser activity metadata. Inspect the browser screenshot and XML for the actual account/Access destination; a browser process alone is not OTP proof.
 - A human with an authorized account can finish email OTP and inspect the app's returned account state. CI never fabricates the callback or tokens.
 

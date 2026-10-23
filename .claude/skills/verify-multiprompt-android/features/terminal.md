@@ -6,6 +6,8 @@ The embedded terminal opens an independent SSH PTY attached to the selected tmux
 
 - `terminal-open`: explicit reader-menu terminal entry and real tmux client attachment.
 - `terminal-shortcuts`: double-tap title/output or use a session card's terminal action (not automated).
+- `terminal-zoom`: starts at readable system body size; pinch 8–28 sp saved per device, sideways pan for wide panes (not automated).
+- `terminal-history`: swipe down into tmux scrollback without desktop copy mode; **Jump to live** or overscroll newest to return (not automated).
 - `terminal-input`: keyboard interaction, history and return to live view (not automated).
 
 ## How to get to it (user POV)
@@ -23,4 +25,4 @@ Preconditions: fresh fixture; dispatch `feature=terminal.md`. Driver imports the
 
 ## Gotchas
 
-Status text alone does not prove a real attachment; require the runner-side client record and screenshot. The terminal uses a separate connection and tmux ignore-size, so it must not resize the desktop pane. This recipe does not yet measure resize behavior, type terminal input, open history or exercise double-tap alternatives. Do not report those paths as covered. The driver never substitutes a terminal emulator screenshot for native reader proof.
+Status text alone does not prove a real attachment; require the runner-side client record and screenshot. The terminal uses a separate connection and tmux ignore-size, so it must not resize the desktop pane. This recipe does not yet measure resize behavior, type terminal input, open history, pinch/pan or exercise double-tap alternatives. Do not report those paths as covered. The driver never substitutes a terminal emulator screenshot for native reader proof.
