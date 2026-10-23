@@ -63,6 +63,13 @@ doctor() {
         sleep 2
     done
     "$scripts/doctor.sh"
+    for attempt in {1..30}; do
+        if adb shell ping -c 1 -W 2 10.0.2.2 >/dev/null 2>&1; then return; fi
+        printf 'Emulator network not up yet, attempt %s/30\n' "$attempt" | tee -a "$EVIDENCE/network-wait.txt"
+        sleep 2
+    done
+    printf 'BLOCKED: emulator cannot reach 10.0.2.2\n' >&2
+    return 1
 }
 wait_for_text() {
     local attempt
