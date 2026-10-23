@@ -46,10 +46,19 @@ tap_node() {
 }
 tap_text() { tap_node text "$1"; }
 tap_desc() { tap_node desc "$1"; }
+dismiss_system_anr() {
+    if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "isn't responding" >/dev/null 2>&1; then
+        printf 'System ANR dialog dismissed with Wait\n' | tee -a "$EVIDENCE/system-anr.txt"
+        point=$(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Wait)
+        read -r x y <<< "$point"
+        adb shell input tap "$x" "$y"
+    fi
+}
 wait_for_text() {
     local attempt
     for attempt in {1..30}; do
         if select_node contains "$1" >/dev/null 2>&1; then return; fi
+        dismiss_system_anr
         sleep 1
     done
     printf 'Timed out waiting for %s\n' "$1" >&2
@@ -142,8 +151,13 @@ if sudo grep -q 'Accepted publickey' "$FIXTURE/sshd.log"; then
     printf 'FAIL: authentication occurred before explicit trust\n' >&2
     exit 1
 fi
-tap_text 'Trust and connect'
-wait_for_text verify-session
+for trust_attempt in 1 2 3; do
+    tap_text 'Trust and connect'
+    if wait_for_text verify-session; then break; fi
+    printf 'Trust tap %s did not pin the host; the dialog was still shown\n' "$trust_attempt" | tee -a "$EVIDENCE/trust-retries.txt"
+    shot "trust-retry-$trust_attempt"
+    [[ "$trust_attempt" -lt 3 ]]
+done
 shot sessions
 sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
 if [[ "$feature" == hosts.md ]]; then
@@ -186,8 +200,7 @@ PYROTATE
     [[ "$new_pid" =~ ^[0-9]+$ && "$new_pid" -gt 1 && "$new_pid" != "$old_pid" ]]
     sudo kill -0 "$new_pid"
     printf '%s\n' "$new_pid" > "$EVIDENCE/rotated-sshd-pid.txt"
-    refresh_inbox
-    wait_for_text 'SSH host key changed'
+    wait_for_text 'SSH host key changed' || { refresh_inbox; wait_for_text 'SSH host key changed'; }
     shot changed-host-key
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "Now: ssh-ed25519 $rotated"
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "Saved: ssh-ed25519 $fingerprint"
