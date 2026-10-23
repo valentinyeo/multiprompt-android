@@ -28,6 +28,16 @@ class DissolvedSessionTest {
     }
 
     @Test
+    fun onlyBoundedIdsResumeAnExactConversation() {
+        for (id in listOf("abc;touch x", "\$(id)", "", "a".repeat(65), "abc_def", "abc\n")) {
+            assertEquals("claude --continue", DissolvedSession.from(session("claude-work"), null, "", id).resumeCommand)
+        }
+        for (id in listOf("462717f8-6e8b-46bf-ab93-de7095ed3618", "a", "A0-".repeat(21) + "z")) {
+            assertEquals("claude --resume $id", DissolvedSession.from(session("claude-work"), null, "", id).resumeCommand)
+        }
+    }
+
+    @Test
     fun everyAgentThatCanContinueGetsAResumeCommand() {
         assertEquals(
             "claude --continue",

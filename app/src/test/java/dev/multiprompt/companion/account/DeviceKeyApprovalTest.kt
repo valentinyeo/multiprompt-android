@@ -20,6 +20,50 @@ class DeviceKeyApprovalTest {
         AccountReply(status, JSONObject().put("status", if (path.endsWith("/approve")) "approved" else "denied"))
     }) { "token" }
 
+    @Test fun keyChangesRemoveKeysFromEveryHostWhenNotApproved() = runBlocking {
+        val installed = mutableSetOf<String>()
+        val ran = mutableListOf<Pair<String, String>>()
+        val add = DeviceKeys.addCommand(entry.publicKey)
+        val remove = DeviceKeys.removeCommand(entry.publicKey)
+        val approval = DeviceApproval(client) { host, command ->
+            assertTrue(decisions.isEmpty())
+            ran.add(host.id to command)
+            when (command) {
+                add -> {
+                    installed.add(host.id)
+                    host != hosts[1]
+                }
+                remove -> {
+                    installed.remove(host.id)
+                    true
+                }
+                else -> error("Unexpected command")
+            }
+        }
+        val result = approval.approve(entry, hosts)
+        assertFalse(result.approved)
+        assertEquals(listOf(hosts[1]), result.failures.map { it.host })
+        assertEquals(hosts.map { it.id to add } + hosts.map { it.id to remove }, ran)
+        assertTrue(installed.isEmpty())
+        assertTrue(decisions.isEmpty())
+
+        installed.addAll(hosts.map { it.id })
+        ran.clear()
+        assertTrue(approval.deny(entry, hosts))
+        assertEquals(hosts.map { it.id to remove }, ran)
+        assertTrue(installed.isEmpty())
+        assertEquals(listOf("/v1/device-keys/other/deny"), decisions)
+
+        decisions.clear()
+        installed.addAll(hosts.map { it.id })
+        ran.clear()
+        val listing = DeviceKeyListing("self", listOf(entry.copy(status = DeviceKeyStatus.DENIED)))
+        assertTrue(approval.cleanupRevoked(listing, hosts).isEmpty())
+        assertEquals(hosts.map { it.id to remove }, ran)
+        assertTrue(installed.isEmpty())
+        assertTrue(decisions.isEmpty())
+    }
+
     @Test fun approveInstallsEveryHostBeforeServerDecision() = runBlocking {
         val ran = mutableListOf<HostProfile>()
         val approval = DeviceApproval(client) { host, command ->
@@ -44,7 +88,7 @@ class DeviceKeyApprovalTest {
         }
         val result = approval.approve(entry, hosts)
         assertFalse(result.approved)
-        assertEquals(hosts, ran)
+        assertEquals(hosts + hosts, ran)
         assertEquals(hosts.take(2), result.failures.map { it.host })
         assertEquals(listOf("other", "other"), result.failures.map { it.deviceId })
         assertEquals("offline", result.failures[0].message)
@@ -61,13 +105,20 @@ class DeviceKeyApprovalTest {
             val result = approval.approve(entry, hosts)
             assertFalse(result.approved)
             assertTrue(result.failures.isEmpty())
-            assertFalse(approval.deny(entry))
+            assertFalse(approval.deny(entry, hosts))
         }
     }
 
-    @Test fun denyNeverRunsAHostCommand() {
-        val approval = DeviceApproval(client) { _, _ -> error("Deny cannot execute SSH") }
-        assertTrue(approval.deny(entry))
+    @Test fun denyRunsEveryHostCommandBeforeServerDecision() = runBlocking {
+        val ran = mutableListOf<HostProfile>()
+        val approval = DeviceApproval(client) { host, command ->
+            assertTrue(decisions.isEmpty())
+            assertEquals(DeviceKeys.removeCommand(entry.publicKey), command)
+            ran.add(host)
+            true
+        }
+        assertTrue(approval.deny(entry, hosts))
+        assertEquals(hosts, ran)
         assertEquals(listOf("/v1/device-keys/other/deny"), decisions)
     }
 
@@ -81,9 +132,10 @@ class DeviceKeyApprovalTest {
             host != hosts[1]
         }
         val failures = approval.cleanupRevoked(listing, hosts)
-        assertEquals(revoked.flatMap { key -> hosts.map { it.id to DeviceKeys.removeCommand(key.publicKey) } }, ran)
-        assertEquals(4, failures.size)
-        assertEquals(listOf("other", "other", "second", "second"), failures.map { it.deviceId })
+        val removed = revoked + entry.copy(status = DeviceKeyStatus.DENIED)
+        assertEquals(removed.flatMap { key -> hosts.map { it.id to DeviceKeys.removeCommand(key.publicKey) } }, ran)
+        assertEquals(6, failures.size)
+        assertEquals(listOf("other", "other", "second", "second", "other", "other"), failures.map { it.deviceId })
         assertTrue(decisions.isEmpty())
         assertTrue(DeviceApproval(client) { _, _ -> true }.cleanupRevoked(listing, hosts).isEmpty())
         assertTrue(approval.cleanupRevoked(listing, emptyList()).isEmpty())

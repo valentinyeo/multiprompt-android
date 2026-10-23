@@ -7,6 +7,32 @@ import org.junit.Test
 class MarkdownParserTest {
     private fun inline(s: String) = MarkdownParser.parseInline(s)
 
+    @Test fun deeplyNestedInlineTextKeepsContentAndNormalStyles() {
+        val links = "[".repeat(20000) + "x" + "](u)".repeat(20000)
+        val emphasis = buildString {
+            repeat(5000) { append(if (it % 2 == 0) "**" else "_") }
+            append("x")
+            for (i in 4999 downTo 0) append(if (i % 2 == 0) "**" else "_")
+        }
+        var failure: Throwable? = null
+        val thread = Thread(null, {
+            try {
+                for (text in listOf(links, emphasis)) {
+                    assertTrue(inline(text).joinToString("") { it.text }.contains("x"))
+                }
+            } catch (caught: Throwable) {
+                failure = caught
+            }
+        }, "nested", 256L * 1024)
+        thread.start()
+        thread.join()
+        failure?.let { throw it }
+        assertEquals(
+            listOf(InlineRun("bold ", bold = true), InlineRun("link", bold = true, url = "u")),
+            inline("**bold [link](u)**"),
+        )
+    }
+
     @Test fun boldItalicCodeStrike() {
         val runs = inline("a **b** *c* `d` ~~e~~ f")
         assertEquals(listOf("a ", "b", " ", "c", " ", "d", " ", "e", " f"), runs.map { it.text })
