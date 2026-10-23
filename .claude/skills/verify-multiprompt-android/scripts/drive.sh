@@ -56,13 +56,14 @@ dismiss_system_anr() {
 }
 doctor() {
     local attempt
-    for attempt in {1..30}; do
+    for attempt in 1 2 3; do
         dump_ui
-        if ! python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "isn't responding" >/dev/null 2>&1; then break; fi
         dismiss_system_anr
-        sleep 2
+        if "$scripts/doctor.sh"; then break; fi
+        printf 'Doctor attempt %s failed\n' "$attempt" | tee -a "$EVIDENCE/doctor-retries.txt"
+        [[ "$attempt" -lt 3 ]]
+        sleep 3
     done
-    "$scripts/doctor.sh"
     for attempt in {1..30}; do
         if adb shell ping -c 1 -W 2 10.0.2.2 >/dev/null 2>&1; then return; fi
         printf 'Emulator network not up yet, attempt %s/30\n' "$attempt" | tee -a "$EVIDENCE/network-wait.txt"
@@ -120,6 +121,7 @@ wait_receipt() {
     done
     return 1
 }
+adb shell settings put global hide_error_dialogs 1
 adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
 wait_for_text 'Sign in to see your servers, workspaces and sessions.'
 doctor
