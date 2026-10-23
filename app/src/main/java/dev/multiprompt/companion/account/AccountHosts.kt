@@ -69,19 +69,24 @@ object AccountHosts {
         val mapping = AccountHostMap.resolve(profiles, overrides).toMutableMap()
         val nextOverrides = overrides.toMutableMap()
         remote.forEach { host ->
-            if (mapping[host.slot] != null || (host.slot == 0 && host.user != "valentin")) return@forEach
-            val profile = next.firstOrNull { it.hostname.equals(host.hostname, ignoreCase = true) && it.port == host.port && it.username == host.user }
-                ?: run {
-                    val firstKey = host.hostKeys.firstOrNull()
-                    HostProfile(label = host.name, hostname = host.hostname, port = host.port, username = host.user,
-                        hostKeys = host.hostKeys,
-                        hostKeyType = firstKey?.substringBefore(' '),
-                        hostKeyFingerprint = firstKey?.let {
-                            "SHA256:" + Base64.getEncoder().withoutPadding().encodeToString(MessageDigest.getInstance("SHA-256").digest(Base64.getDecoder().decode(it.substringAfter(' '))))
-                        }).also(next::add)
-                }
-            if (mapping.values.any { it.id == profile.id }) return@forEach
-            mapping[host.slot] = profile
+            if (host.slot == 0 && host.user != "valentin") return@forEach
+            val profile = mapping[host.slot] ?: run {
+                val matched = next.firstOrNull { it.hostname.equals(host.hostname, ignoreCase = true) && it.port == host.port && it.username == host.user }
+                    ?: run {
+                        val firstKey = host.hostKeys.firstOrNull()
+                        HostProfile(label = host.name, hostname = host.hostname, port = host.port, username = host.user,
+                            hostKeys = host.hostKeys,
+                            hostKeyType = firstKey?.substringBefore(' '),
+                            hostKeyFingerprint = firstKey?.let {
+                                "SHA256:" + Base64.getEncoder().withoutPadding().encodeToString(MessageDigest.getInstance("SHA-256").digest(Base64.getDecoder().decode(it.substringAfter(' '))))
+                            }).also(next::add)
+                    }
+                if (mapping.values.any { it.id == matched.id }) return@forEach
+                matched
+            }
+            val renamed = profile.copy(label = host.name)
+            next[next.indexOfFirst { it.id == profile.id }] = renamed
+            mapping[host.slot] = renamed
             nextOverrides[host.slot] = profile.id
         }
         return Merge(next, nextOverrides)

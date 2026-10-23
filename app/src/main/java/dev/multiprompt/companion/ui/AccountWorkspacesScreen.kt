@@ -218,7 +218,8 @@ internal fun AccountWorkspacesScreen(
             Text("Host 0 must use valentin's outer tmux. Inne tabs attach there, not directly to inne. SSH keys stay local.")
             AccountHostMap.labels.forEachIndexed { slot, label ->
                 var expanded by remember { mutableStateOf(false) }
-                TextButton(onClick = { expanded = true }) { Text("$slot · $label: ${state.accountHosts[slot]?.let { "${it.label} (${it.username})" } ?: "Not mapped"}") }
+                val name = layout?.hosts?.firstOrNull { it.slot == slot }?.name ?: label
+                TextButton(onClick = { expanded = true }) { Text("$slot · $name: ${state.accountHosts[slot]?.let { "${it.label} (${it.username})" } ?: "Not mapped"}") }
                 DropdownMenu(expanded, { expanded = false }) {
                     DropdownMenuItem(text = { Text("Automatic") }, onClick = { viewModel.mapAccountHost(slot, null); expanded = false })
                     state.hosts.filter { slot != 0 || it.username == "valentin" }.forEach { host ->
