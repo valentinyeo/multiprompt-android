@@ -653,8 +653,15 @@ def wire_row(message):
     return json.dumps(message, ensure_ascii=True, separators=(",", ":"))
 
 
+def load_line(raw):
+    try:
+        return json.loads(raw)
+    except (ValueError, UnicodeError):
+        return None
+
+
 def asks_question(raw, agent):
-    message = conversation_event(json.loads(raw), agent)
+    message = conversation_event(load_line(raw), agent)
     return message is not None and message.get("role") == "user"
 
 
@@ -667,13 +674,14 @@ def read_tail(source, size, agent, captured=None):
     offset = base
     for raw in reversed(older.splitlines(keepends=True)):
         offset -= len(raw)
-        message = conversation_event(json.loads(raw), agent)
+        event = load_line(raw)
+        message = conversation_event(event, agent)
         if message is None:
-            shown += sum(len(wire_row(row)) + 1 for row in tool_events(json.loads(raw), agent))
+            shown += sum(len(wire_row(row)) + 1 for row in tool_events(event, agent))
             if shown > TAIL_BYTES:
                 break
             continue
-        shown += sum(len(wire_row(row)) + 1 for row in [message, *tool_events(json.loads(raw), agent)])
+        shown += sum(len(wire_row(row)) + 1 for row in [message, *tool_events(event, agent)])
         if shown > TAIL_BYTES:
             break
         if message.get("role") == "user":
@@ -1109,7 +1117,7 @@ def response(q, source=None, as_owner=False):
         groups = []
         consumed = base
         for raw in data.splitlines(keepends=True):
-            event = json.loads(raw)
+            event = load_line(raw)
             message = conversation_event(event, agent)
             if IGSH_349_QUEUED_STAMP_FROM_QUEUE and agent == "claude" and isinstance(event, dict):
                 attachment = event.get("attachment") or {}
