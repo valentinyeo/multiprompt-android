@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import dev.multiprompt.companion.reader.ChatHistoryCache
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.ReaderStatus
@@ -87,13 +88,14 @@ class ReaderActionsMenuTest {
         openMenu()
         val remind = compose.onNodeWithText("Remind me").assertIsDisplayed()
         compose.mainClock.autoAdvance = false
-        remind.performClick()
+        remind.performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.mainClock.advanceTimeByFrame()
         compose.mainClock.advanceTimeByFrame()
         scheduler.runCurrent()
         println(compose.onAllNodes(SemanticsMatcher("all") { true }, useUnmergedTree = true).fetchSemanticsNodes()
             .joinToString("\n") { "${it.id} ${it.boundsInRoot} ${it.config}" })
-        compose.onNodeWithText("Tomorrow · 9:00 AM").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithText("Tomorrow · 9:00 AM").performScrollTo().assertIsDisplayed()
+            .performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.mainClock.advanceTimeByFrame()
         compose.mainClock.advanceTimeByFrame()
         compose.runOnIdle {
