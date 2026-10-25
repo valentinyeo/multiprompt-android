@@ -2,6 +2,9 @@ package dev.multiprompt.companion.ui
 
 import android.app.Application
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.test.performSemanticsAction
+import org.robolectric.shadows.ShadowDialog
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onNodeWithTag
@@ -95,7 +98,20 @@ class ReaderActionsMenuTest {
     @Test fun remindFromOverflowOpensTheExistingPickerAndDispatchesItsDueTime() {
         render(material3 = true)
         openMenu()
-        compose.onNodeWithText("Remind me").assertIsDisplayed().performClick()
+        val remind = compose.onNodeWithText("Remind me").assertIsDisplayed()
+        compose.mainClock.autoAdvance = false
+        remind.performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.runOnUiThread { Snapshot.sendApplyNotifications() }
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeByFrame()
+        scheduler.runCurrent()
+        compose.runOnUiThread {
+            val dialog = checkNotNull(ShadowDialog.getLatestDialog())
+            val metrics = dialog.context.resources.displayMetrics
+            println("Reminder window: ${dialog.window?.decorView?.width}x${dialog.window?.decorView?.height}")
+            dialog.window?.setLayout(metrics.widthPixels, metrics.heightPixels)
+        }
+        compose.mainClock.autoAdvance = true
         compose.onNodeWithText("Tomorrow · 9:00 AM").performScrollTo().assertIsDisplayed().performClick()
         compose.runOnIdle {
             assertEquals(1, reminders.size)
