@@ -200,6 +200,7 @@ import dev.multiprompt.companion.data.CrashReport
 import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.dictation.DictationStatus
+import dev.multiprompt.companion.dictation.DictationState
 import dev.multiprompt.companion.reader.QueuedMessages
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
@@ -2539,7 +2540,7 @@ internal fun ReaderScreen(
     val sessionKey = SessionReadStore.key(session.hostId, session.name)
     val sharedDictationState by dictation.state.collectAsState()
     val dictationState = sharedDictationState.takeIf { it.sessionKey == sessionKey }
-        ?: dev.multiprompt.companion.dictation.DictationState(configured = sharedDictationState.configured)
+        ?: DictationState(configured = sharedDictationState.configured)
     var promptField by remember(connection) { mutableStateOf(TextFieldValue("")) }
     var replyTo by remember(connection, session.hostId, session.name) { mutableStateOf<String?>(null) }
     var replyAuthor by remember(connection, session.hostId, session.name) { mutableStateOf("") }

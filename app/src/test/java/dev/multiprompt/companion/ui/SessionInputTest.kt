@@ -140,8 +140,8 @@ class SessionInputTest {
             }
         }
         compose.runOnIdle {
-            assertEquals(listOf("typed 0", "spoken 0", "typed 2", "spoken 2"), other.state.value.sentPrompts)
-            assertEquals(listOf("typed 1", "spoken 1", "typed 3", "spoken 3"), connection.state.value.sentPrompts)
+            assertEquals(listOf("typed 0", "spoken 0", "typed 2", "spoken 2"), other.state.value.sentRecord.map { it.text })
+            assertEquals(listOf("typed 1", "spoken 1", "typed 3", "spoken 3"), connection.state.value.sentRecord.map { it.text })
         }
     }
 
