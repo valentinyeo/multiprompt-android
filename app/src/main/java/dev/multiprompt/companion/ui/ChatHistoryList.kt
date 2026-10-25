@@ -1,5 +1,8 @@
 package dev.multiprompt.companion.ui
 
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -121,7 +124,7 @@ internal fun ChatHistoryList(
         state = listState,
         reverseLayout = true,
         verticalArrangement = Arrangement.spacedBy(if (LocalReaderStyle.current) ReaderMessageSpacing else 10.dp),
-        contentPadding = if (LocalReaderStyle.current) androidx.compose.foundation.layout.PaddingValues(top = ReaderFloatingInset, bottom = ReaderMessageSpacing) else androidx.compose.foundation.layout.PaddingValues(),
+        contentPadding = if (LocalReaderStyle.current) androidx.compose.foundation.layout.PaddingValues(top = ReaderFloatingInset + WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = ReaderMessageSpacing) else androidx.compose.foundation.layout.PaddingValues(),
     ) {
         itemsIndexed(queuedMessages.asReversed(), key = { index, text -> "queued:$index:$text" }) { _, text ->
             HistoryBubble(text, "user", "Queued", fontScale, sunlight, replyGate, onReply)

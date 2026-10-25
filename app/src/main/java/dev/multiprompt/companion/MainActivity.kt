@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.SystemBarStyle
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -21,7 +22,7 @@ class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         setContent {
             val state by viewModel.state.collectAsState()
             val systemDark = isSystemInDarkTheme()
@@ -32,7 +33,6 @@ class MainActivity : ComponentActivity() {
             }
             SideEffect {
                 WindowCompat.getInsetsController(window, window.decorView).apply {
-                    isAppearanceLightStatusBars = sunlight
                     isAppearanceLightNavigationBars = sunlight
                 }
             }
