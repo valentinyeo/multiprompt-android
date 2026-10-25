@@ -69,7 +69,7 @@ class ReaderSessionRoutingTest {
                 compose.onNodeWithText("Message this session").performTextInput("TYPED_$suffix")
                 compose.onNodeWithContentDescription("Send prompt").performClick()
                 compose.waitUntil(30_000) { connection.state.value.completedActions == 1L }
-                compose.runOnIdle { voice.value = DictationState(DictationStatus.LISTENING, "VOICE_$suffix", true) }
+                compose.runOnIdle { voice.value = DictationState(DictationStatus.LISTENING, "VOICE_$suffix", true, sessionKey = "${host.id}::${if (target) b.name else a.name}") }
                 compose.onNodeWithContentDescription("Send prompt").performClick()
                 compose.waitUntil(30_000) { connection.state.value.completedActions == 2L }
             }
@@ -77,7 +77,7 @@ class ReaderSessionRoutingTest {
             compose.runOnIdle {
                 app.deepgramDictation.javaClass.getDeclaredField("stopping").apply { isAccessible = true }
                     .setBoolean(app.deepgramDictation, true)
-                voice.value = DictationState(DictationStatus.FINISHING, "LATE_ONLY_A", true)
+                voice.value = DictationState(DictationStatus.FINISHING, "LATE_ONLY_A", true, sessionKey = "${host.id}::${a.name}")
             }
             compose.onNodeWithContentDescription("Send prompt").performClick()
             compose.runOnIdle { switched = true }

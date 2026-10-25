@@ -2536,7 +2536,10 @@ internal fun ReaderScreen(
             delay(1_000)
         }
     }
-    val dictationState by dictation.state.collectAsState()
+    val sessionKey = SessionReadStore.key(session.hostId, session.name)
+    val sharedDictationState by dictation.state.collectAsState()
+    val dictationState = sharedDictationState.takeIf { it.sessionKey == sessionKey }
+        ?: dev.multiprompt.companion.dictation.DictationState(configured = sharedDictationState.configured)
     var promptField by remember(connection) { mutableStateOf(TextFieldValue("")) }
     var replyTo by remember(connection, session.hostId, session.name) { mutableStateOf<String?>(null) }
     var replyAuthor by remember(connection, session.hostId, session.name) { mutableStateOf("") }
@@ -2668,7 +2671,7 @@ internal fun ReaderScreen(
     ) { granted ->
         if (granted) {
             microphoneError = null
-            dictation.start()
+            dictation.start(sessionKey)
         } else {
             microphoneError = "Microphone permission is required for voice input"
         }
@@ -2680,7 +2683,7 @@ internal fun ReaderScreen(
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         ) {
-            dictation.start()
+            dictation.start(sessionKey)
         } else {
             microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
@@ -2708,10 +2711,12 @@ internal fun ReaderScreen(
             if (fresh != null) skillSnapshot = fresh
         }
         onDispose {
-            if (dictation.state.value.status in setOf(DictationStatus.CONNECTING, DictationStatus.LISTENING, DictationStatus.FINISHING)) {
-                android.widget.Toast.makeText(context, "Dictation stopped: session changed", android.widget.Toast.LENGTH_SHORT).show()
+            if (dictation.state.value.sessionKey == sessionKey) {
+                if (dictation.state.value.status in setOf(DictationStatus.CONNECTING, DictationStatus.LISTENING, DictationStatus.FINISHING)) {
+                    android.widget.Toast.makeText(context, "Dictation stopped: session changed", android.widget.Toast.LENGTH_SHORT).show()
+                }
+                dictation.discard()
             }
-            dictation.discard()
         }
     }
     val sendCurrentPrompt = {

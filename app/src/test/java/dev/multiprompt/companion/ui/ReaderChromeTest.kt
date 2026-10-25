@@ -139,7 +139,7 @@ class ReaderChromeTest {
         val dictationState: MutableStateFlow<DictationState> = f.field(f.app.deepgramDictation, "_state")
         val dictationLevel: MutableStateFlow<Float> = f.field(f.app.deepgramDictation, "_level")
         compose.runOnIdle {
-            dictationState.value = DictationState(status = DictationStatus.LISTENING, configured = true)
+            dictationState.value = DictationState(status = DictationStatus.LISTENING, configured = true, sessionKey = "${f.host.id}::${f.session.name}")
             dictationLevel.value = 0.7f
         }
         compose.onNodeWithText("Message this session").assertDoesNotExist()
@@ -161,7 +161,7 @@ class ReaderChromeTest {
         }
         compose.onNodeWithTag("dictation-stop").assertDoesNotExist()
         compose.onNodeWithContentDescription("Start dictation").assertIsDisplayed()
-        compose.runOnIdle { dictationState.value = DictationState(status = DictationStatus.LISTENING, configured = true) }
+        compose.runOnIdle { dictationState.value = DictationState(status = DictationStatus.LISTENING, configured = true, sessionKey = "${f.host.id}::${f.session.name}") }
         compose.onNodeWithTag("dictation-send").performClick()
         compose.runOnIdle {
             assertTrue("send button stops dictation", f.app.deepgramDictation.state.value.status == DictationStatus.IDLE)

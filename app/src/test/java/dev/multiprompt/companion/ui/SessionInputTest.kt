@@ -88,13 +88,13 @@ class SessionInputTest {
         compose.runOnIdle {
             f.app.deepgramDictation.javaClass.getDeclaredField("stopping").apply { isAccessible = true }
                 .setBoolean(f.app.deepgramDictation, true)
-            dictation.value = DictationState(DictationStatus.FINISHING, "spoken", true)
+            dictation.value = DictationState(DictationStatus.FINISHING, "spoken", true, sessionKey = "${f.host.id}::one")
         }
         compose.runOnIdle { assertNull(input()) }
         compose.onNodeWithContentDescription("Send prompt").performClick()
         compose.runOnIdle { assertNull(input()) }
         val before = System.currentTimeMillis()
-        compose.runOnIdle { dictation.value = DictationState(DictationStatus.IDLE, "spoken final", true) }
+        compose.runOnIdle { dictation.value = DictationState(DictationStatus.IDLE, "spoken final", true, sessionKey = "${f.host.id}::one") }
         compose.runOnIdle {
             assertTrue(input()!! >= before)
             assertEquals(listOf("spoken final"), connection.state.value.sentPrompts)
@@ -104,7 +104,7 @@ class SessionInputTest {
     @Test fun voiceSendWithoutASocketSubmitsWhenStopImmediatelyEndsDictation() {
         render()
         val dictation = f.field<MutableStateFlow<DictationState>>(f.app.deepgramDictation, "_state")
-        compose.runOnIdle { dictation.value = DictationState(DictationStatus.LISTENING, "spoken", true) }
+        compose.runOnIdle { dictation.value = DictationState(DictationStatus.LISTENING, "spoken", true, sessionKey = "${f.host.id}::one") }
         compose.runOnIdle { assertNull(input()) }
         val before = System.currentTimeMillis()
         compose.onNodeWithContentDescription("Send prompt").performClick()
@@ -124,11 +124,12 @@ class SessionInputTest {
             compose.onNodeWithContentDescription("Send prompt").performClick()
             compose.runOnIdle {
                 val visible = if (switched) other else connection
+                assertEquals("typed $index", visible.state.value.sentPrompts.lastOrNull())
                 f.field<MutableStateFlow<dev.multiprompt.companion.reader.ReaderState>>(visible, "_state").value =
                     visible.state.value.copy(completedActions = visible.state.value.completedActions + 1)
             }
             compose.runOnIdle {
-                dictation.value = DictationState(DictationStatus.LISTENING, "spoken $index", true)
+                dictation.value = DictationState(DictationStatus.LISTENING, "spoken $index", true, sessionKey = "${f.host.id}::${if (switched) "two" else "one"}")
             }
             compose.onNodeWithTag("dictation-session-line").assertTextEquals("Messaging ${if (index % 2 == 0) "two" else "one"}")
             compose.onNodeWithContentDescription("Send prompt").performClick()
@@ -147,7 +148,7 @@ class SessionInputTest {
     @Test fun activeVoiceFromThePreviousScreenNeverBecomesTheNewSessionsDraft() {
         render()
         val dictation = f.field<MutableStateFlow<DictationState>>(f.app.deepgramDictation, "_state")
-        compose.runOnIdle { dictation.value = DictationState(DictationStatus.LISTENING, "only for one", true) }
+        compose.runOnIdle { dictation.value = DictationState(DictationStatus.LISTENING, "only for one", true, sessionKey = "${f.host.id}::one") }
         compose.runOnIdle { switched = true }
         compose.onNodeWithText("only for one").assertDoesNotExist()
         compose.onNodeWithText("Message this session").performTextInput("only for two")
@@ -164,7 +165,7 @@ class SessionInputTest {
         compose.runOnIdle {
             f.app.deepgramDictation.javaClass.getDeclaredField("stopping").apply { isAccessible = true }
                 .setBoolean(f.app.deepgramDictation, true)
-            dictation.value = DictationState(DictationStatus.FINISHING, "only for one", true)
+            dictation.value = DictationState(DictationStatus.FINISHING, "only for one", true, sessionKey = "${f.host.id}::one")
         }
         compose.onNodeWithContentDescription("Send prompt").performClick()
         compose.runOnIdle { switched = true }
