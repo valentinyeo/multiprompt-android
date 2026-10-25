@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|terminal.md) ;;
+    sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|terminal.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -310,6 +310,45 @@ fi
 if [[ "$feature" == sessions.md || "$feature" == session-reader.md ]]; then
     adb shell cmd uimode night yes
     sleep 2
+fi
+if [[ "$feature" == session-routing.md ]]; then
+    wait_for_text verify-other
+    tap_text verify-session
+    wait_for_text 'Messaging verify-session'
+    fill 'Message this session' UI_ONLY_A
+    tap_desc 'Send prompt'
+    wait_receipt 'VERIFY_RECEIVED:UI_ONLY_A'
+    shot session-a-sent
+    tap_desc Back
+    wait_for_text Inbox
+    tap_text verify-other
+    wait_for_text 'Messaging verify-other'
+    fill 'Message this session' UI_ONLY_B
+    tap_desc 'Send prompt'
+    for attempt in {1..30}; do
+        if sudo grep -Fx 'VERIFY_RECEIVED:UI_ONLY_B' /home/verifyssh/other-receipts.txt; then break; fi
+        sleep 1
+    done
+    sudo grep -Fx 'VERIFY_RECEIVED:UI_ONLY_B' /home/verifyssh/other-receipts.txt
+    shot session-b-sent
+    adb install -r -g app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+    adb shell am instrument -w -r -e class dev.multiprompt.companion.ui.ReaderSessionRoutingTest \
+        dev.multiprompt.companion.debug.test/androidx.test.runner.AndroidJUnitRunner | tee "$EVIDENCE/routing-instrumentation.txt"
+    grep -F 'OK (1 test)' "$EVIDENCE/routing-instrumentation.txt"
+    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/session-a-receipts.txt"
+    sudo cat /home/verifyssh/other-receipts.txt > "$EVIDENCE/session-b-receipts.txt"
+    python3 - "$EVIDENCE" <<'PYRECEIPTS'
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+a = (root / 'session-a-receipts.txt').read_text().splitlines()
+b = (root / 'session-b-receipts.txt').read_text().splitlines()
+assert a == ['VERIFY_RECEIVED:' + text for text in ('UI_ONLY_A', 'TYPED_A', 'VOICE_A')], a
+assert b == ['VERIFY_RECEIVED:' + text for text in ('UI_ONLY_B', 'TYPED_B', 'VOICE_B', 'AFTER_SWITCH_B')], b
+print('EMULATOR_ROUTING_OK')
+PYRECEIPTS
+    adb pull /sdcard/Android/data/dev.multiprompt.companion.debug/files/routing-b.png "$EVIDENCE/routing-b.png"
+    exit 0
 fi
 if [[ "$feature" == sessions.md ]]; then
     tap_desc 'Search sessions'

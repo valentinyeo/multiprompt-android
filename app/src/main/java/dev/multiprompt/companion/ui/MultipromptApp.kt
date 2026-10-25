@@ -3231,6 +3231,10 @@ internal fun ReaderScreen(
                 replyTo?.let { quoted ->
                     ReplyQuoteBar(message = quoted, author = replyAuthor, onCancel = { replyTo = null })
                 }
+                if (!dictationActive) {
+                    Text("Messaging ${session.displayName}", style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 if (dictationActive) {
                     DictationBar(
                         sessionName = session.displayName,
