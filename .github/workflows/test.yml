@@ -72,14 +72,9 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: |
-            mkdir -p build
-            status=0
-            gradle --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.multiprompt.companion.ui.ChatImagePreviewTest || status=$?
-            adb logcat -d > build/image-preview-logcat.txt
-            adb exec-out screencap -p > build/image-preview-screen.png
-            if [ "$status" -eq 0 ]; then adb pull /sdcard/Android/data/dev.multiprompt.companion.debug/files/image-unfurl.png build/image-unfurl.png; fi
-            exit "$status"
+          script: bash tools/check-image-preview.sh
+        env:
+          GRADLE: gradle
       - uses: actions/upload-artifact@v4
         if: always()
         with:
