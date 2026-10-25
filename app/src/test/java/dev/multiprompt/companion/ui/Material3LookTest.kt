@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.text.TextLayoutResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -36,7 +37,11 @@ class Material3LookTest(private val screen: M3Screen, private val sunlight: Bool
         val clickable = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsActions.OnClick), useUnmergedTree = true).fetchSemanticsNodes()
         assertTrue(clickable.isNotEmpty())
         clickable.forEach { node ->
-            val bounds = node.touchBoundsInRoot
+            val target = compose.onNode(SemanticsMatcher("node ${node.id}") { it.id == node.id }, useUnmergedTree = true)
+            if (generateSequence(node.parent) { it.parent }.any { SemanticsProperties.IsPopup in it.config }) {
+                target.performScrollTo()
+            }
+            val bounds = target.fetchSemanticsNode().touchBoundsInRoot
             assertTrue("screen=$screen ${node.config} touch=$bounds", bounds.width >= 48f && bounds.height >= 48f)
         }
         if (screen == M3Screen.SESSION || screen == M3Screen.SESSION_MENU) {

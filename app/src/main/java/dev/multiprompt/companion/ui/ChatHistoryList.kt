@@ -154,7 +154,7 @@ private fun HistoryBubble(
     val isUser = role == "user"
     ReplyableBubble(isUser = isUser, sunlight = sunlight, text = text,
         onReply = { onReply(it, isUser) }, gate = gate) {
-        Text(author, fontFamily = chatFontFamily(), fontSize = (fontSize.value - 3f).coerceAtLeast(8f).sp,
+        Text(author, fontFamily = chatFontFamily(), fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp,
             color = chatHintColor(sunlight))
         if (isUser) {
             Text(terminalLinks(text, sunlight), fontFamily = chatFontFamily(), fontSize = fontSize,
@@ -164,7 +164,7 @@ private fun HistoryBubble(
         }
         if (timestamp.isNotEmpty()) {
             Text(formatChatTime(timestamp), fontFamily = chatFontFamily(),
-                fontSize = (fontSize.value - 3f).coerceAtLeast(8f).sp, color = chatHintColor(sunlight))
+                fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp, color = chatHintColor(sunlight))
         }
     }
 }

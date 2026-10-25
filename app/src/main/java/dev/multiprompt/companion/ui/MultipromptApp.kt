@@ -2372,11 +2372,11 @@ internal fun ReaderTopBar(
                 .padding(ReaderScreenPadding),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            IconButton(onClick = onBack, modifier = Modifier.size(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)) {
+            IconButton(onClick = onBack, modifier = Modifier.size(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
             }
             Box {
-                IconButton(onClick = onMenuClick, modifier = Modifier.size(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)) {
+                IconButton(onClick = onMenuClick, modifier = Modifier.size(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)) {
                     Icon(Icons.Default.MoreVert, "Session actions")
                 }
                 menuContent()
@@ -2966,7 +2966,7 @@ internal fun ReaderScreen(
         floatingActionButtonPosition = androidx.compose.material3.FabPosition.Center,
         floatingActionButton = {
             if (if (historyChat) chatListState.canScrollBackward else scrollState.canScrollForward) {
-                FloatingActionButton(onClick = scrollLive, modifier = Modifier.size(ReaderJumpSize), shape = CircleShape, containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                FloatingActionButton(onClick = scrollLive, modifier = Modifier.size(ReaderJumpSize), shape = CircleShape, containerColor = MaterialTheme.colorScheme.surfaceContainerHighest) {
                     Icon(Icons.Default.KeyboardArrowDown, "Jump to newest")
                 }
             }
@@ -3183,10 +3183,10 @@ internal fun ReaderScreen(
                 Modifier
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surface)
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .padding(horizontal = ReaderScreenPadding, vertical = ReaderControlSpacing)
                     .imePadding()
                     .navigationBarsPadding(),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
             ) {
                 reader.eta?.let { eta ->
                     Box(
@@ -3259,7 +3259,7 @@ internal fun ReaderScreen(
                         IconButton(
                             onClick = { attachMenuExpanded = true },
                             enabled = !reader.sending && !dictationActive && !imageUploading,
-                            modifier = Modifier.size(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
+                            modifier = Modifier.size(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape),
                         ) {
                             if (imageUploading) CircularProgressIndicator(Modifier.size(ReaderBadgeSize), strokeWidth = 2.dp)
                             else Icon(Icons.Default.Add, "Attach")
@@ -3293,79 +3293,79 @@ internal fun ReaderScreen(
                             },
                         )
                     }
-                OutlinedTextField(
-                    value = promptField,
-                    onValueChange = { promptField = it },
-                    modifier = Modifier.weight(1f).heightIn(min = ReaderComposerHeight).focusRequester(promptFocusRequester),
-                    filled = true,
-                    placeholder = {
-                        Text("Message this session", maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    },
-                    minLines = 1,
-                    maxLines = 6,
-                    shape = ReaderComposerShape,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { submitPrompt() }),
-                    readOnly = dictationActive,
-                    trailingIcon = {
-                        val sendEnabled = !reader.sending &&
-                            pendingPromptAction == null &&
-                            !sendAfterDictation &&
-                            (prompt.isNotBlank() || attachedSkill != null || imageAttachments.isNotEmpty() || dictationActive)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
-                                onClick = {
-                                    if (dictationActive) {
-                                        dictation.stop()
-                                    } else if (dictationState.configured) {
-                                        startDictation()
-                                    } else {
-                                        apiKeyDialogVisible = true
+                    OutlinedTextField(
+                        value = promptField,
+                        onValueChange = { promptField = it },
+                        modifier = Modifier.weight(1f).heightIn(min = ReaderComposerHeight).focusRequester(promptFocusRequester),
+                        filled = true,
+                        placeholder = {
+                            Text("Message this session", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        },
+                        minLines = 1,
+                        maxLines = 6,
+                        shape = ReaderComposerShape,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = { submitPrompt() }),
+                        readOnly = dictationActive,
+                        trailingIcon = {
+                            val sendEnabled = !reader.sending &&
+                                pendingPromptAction == null &&
+                                !sendAfterDictation &&
+                                (prompt.isNotBlank() || attachedSkill != null || imageAttachments.isNotEmpty() || dictationActive)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = {
+                                        if (dictationActive) {
+                                            dictation.stop()
+                                        } else if (dictationState.configured) {
+                                            startDictation()
+                                        } else {
+                                            apiKeyDialogVisible = true
+                                        }
+                                    },
+                                    enabled = !reader.sending,
+                                ) {
+                                    when (dictationState.status) {
+                                        DictationStatus.CONNECTING, DictationStatus.FINISHING -> {
+                                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                        }
+                                        DictationStatus.LISTENING -> {
+                                            Icon(Icons.Default.Stop, "Stop dictation")
+                                        }
+                                        else -> {
+                                            Icon(Icons.Default.Mic, "Start dictation")
+                                        }
                                     }
-                                },
-                                enabled = !reader.sending,
-                            ) {
-                                when (dictationState.status) {
-                                    DictationStatus.CONNECTING, DictationStatus.FINISHING -> {
+                                }
+                                IconButton(
+                                    onClick = submitPrompt,
+                                    enabled = sendEnabled,
+                                    modifier = Modifier
+                                        .minimumInteractiveComponentSize().size(ReaderSendSize)
+                                        .background(
+                                            if (LocalMaterial3.current || sendEnabled) MaterialTheme.colorScheme.primary else {
+                                                MaterialTheme.colorScheme.surfaceVariant
+                                            },
+                                            CircleShape,
+                                        ),
+                                ) {
+                                    if (reader.sending || sendAfterDictation) {
                                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                                    }
-                                    DictationStatus.LISTENING -> {
-                                        Icon(Icons.Default.Stop, "Stop dictation")
-                                    }
-                                    else -> {
-                                        Icon(Icons.Default.Mic, "Start dictation")
+                                    } else {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.Send,
+                                            "Send prompt",
+                                            tint = if (LocalMaterial3.current || sendEnabled) MaterialTheme.colorScheme.onPrimary else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                        )
                                     }
                                 }
                             }
-                            IconButton(
-                                onClick = submitPrompt,
-                                enabled = sendEnabled,
-                                modifier = Modifier
-                                    .minimumInteractiveComponentSize().size(ReaderSendSize)
-                                    .background(
-                                        if (LocalMaterial3.current || sendEnabled) MaterialTheme.colorScheme.primary else {
-                                            MaterialTheme.colorScheme.surfaceVariant
-                                        },
-                                        CircleShape,
-                                    ),
-                            ) {
-                                if (reader.sending || sendAfterDictation) {
-                                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                                } else {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.Send,
-                                        "Send prompt",
-                                        tint = if (LocalMaterial3.current || sendEnabled) MaterialTheme.colorScheme.onPrimary else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                    },
-                )
+                        },
+                    )
                     Box(
-                        Modifier.width(ReaderWaveformWidth).height(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHigh, ReaderComposerShape)
+                        Modifier.width(ReaderWaveformWidth).height(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHighest, ReaderComposerShape)
                             .testTag("reader-waveform"),
                         contentAlignment = Alignment.Center,
                     ) {

@@ -21,9 +21,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class, qualifiers = "w390dp-h844dp-mdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ReaderStyleTest {
     @get:Rule val compose = createComposeRule()
 
@@ -40,6 +42,7 @@ class ReaderStyleTest {
                     SideEffect {
                         assertEquals(Material3DarkColors, outer)
                         assertEquals(Color(0xFF101010), colors.background)
+                        assertEquals(Color(0xFF303030), colors.surfaceContainerHighest)
                         assertEquals(Color(0xFF242424), user)
                         assertEquals(user, agent)
                         assertEquals(FontFamily.SansSerif, family)
@@ -63,6 +66,23 @@ class ReaderStyleTest {
             assertEquals(FontFamily.SansSerif, style.fontFamily)
             assertEquals(16f, style.fontSize.value)
             assertEquals(26f, style.lineHeight.value)
+        }
+    }
+
+    @Test fun markdownKeepsSystemFontAndThemeSizesWhenZoomed() {
+        compose.setContent {
+            MultipromptTheme(readerStyle = true) {
+                MarkdownText("# Heading\n\nInline `code`\n\n```\ncode sample\n```", ReaderTextSize * 1.5f, ReaderForeground, ReaderChoiceBlue)
+            }
+        }
+        listOf(Triple("Heading", 30f, 45f), Triple("Inline code", 24f, 39f), Triple("code sample", 21f, 33f)).forEach { (text, size, height) ->
+            val layouts = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            val layout = layouts.single()
+            assertEquals(FontFamily.SansSerif, layout.layoutInput.style.fontFamily)
+            assertEquals(size, layout.layoutInput.style.fontSize.value)
+            assertEquals(height, layout.layoutInput.style.lineHeight.value)
+            if (text == "Inline code") assertTrue(layout.layoutInput.text.spanStyles.any { it.item.fontFamily == FontFamily.SansSerif })
         }
     }
 

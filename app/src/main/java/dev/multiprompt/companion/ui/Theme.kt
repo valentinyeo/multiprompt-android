@@ -41,6 +41,7 @@ val ChatFontFamily = FontFamily(
 
 internal val ReaderBackground = Color(0xFF101010)
 internal val ReaderCard = Color(0xFF242424)
+internal val ReaderControl = Color(0xFF303030)
 internal val ReaderForeground = Color(0xFFF2F2F2)
 internal val ReaderHint = Color(0xFFA5A5A5)
 internal val ReaderChoiceBlue = Color(0xFF8AB4F8)
@@ -59,6 +60,11 @@ internal val ReaderJumpSize = 40.dp
 internal val ReaderFloatingInset = 72.dp
 internal val ReaderTextSize = 16.sp
 internal val ReaderLineHeight = 26.sp
+internal val ReaderMetaTextSize = 12.sp
+internal val ReaderHeadingTextSize = 20.sp
+internal val ReaderHeadingLineHeight = 30.sp
+internal val ReaderCodeTextSize = 14.sp
+internal val ReaderCodeLineHeight = 22.sp
 internal val ReaderBadgeSize = 24.dp
 internal val ReaderBadgeTextSize = 12.sp
 internal val ReaderBadgeGap = 8.dp
@@ -255,6 +261,7 @@ fun MultipromptTheme(
             background = ReaderBackground, surface = ReaderBackground,
             onBackground = ReaderForeground, onSurface = ReaderForeground,
             surfaceContainer = ReaderCard, surfaceContainerHigh = ReaderCard,
+            surfaceContainerHighest = ReaderControl,
             surfaceVariant = ReaderCard, onSurfaceVariant = ReaderHint,
             primary = ReaderChoiceBlue, onPrimary = ReaderBackground,
         )

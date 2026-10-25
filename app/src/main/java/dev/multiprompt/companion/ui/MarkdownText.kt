@@ -65,8 +65,8 @@ fun MarkdownText(
                 )
                 is MdBlock.Heading -> Text(
                     markdownAnnotated(block.runs, linkColor, codeBg, codeFontFamily),
-                    fontSize = if (LocalMaterial3.current) MaterialTheme.typography.titleMedium.fontSize * scale else (fontSize.value * headingScale(block.level)).sp,
-                    lineHeight = if (LocalMaterial3.current) MaterialTheme.typography.titleMedium.lineHeight * scale else (fontSize.value * headingScale(block.level) * 1.35f).sp,
+                    fontSize = if (LocalReaderStyle.current) ReaderHeadingTextSize * scale else if (LocalMaterial3.current) MaterialTheme.typography.titleMedium.fontSize * scale else (fontSize.value * headingScale(block.level)).sp,
+                    lineHeight = if (LocalReaderStyle.current) ReaderHeadingLineHeight * scale else if (LocalMaterial3.current) MaterialTheme.typography.titleMedium.lineHeight * scale else (fontSize.value * headingScale(block.level) * 1.35f).sp,
                     fontWeight = FontWeight.Bold,
                     color = color,
                     modifier = Modifier.padding(top = 4.dp),
@@ -109,7 +109,7 @@ fun MarkdownText(
                     Box(Modifier.width(3.dp).fillMaxHeight().background(if (LocalMaterial3.current) MaterialTheme.colorScheme.primary else color.copy(alpha = 0.4f)))
                     Text(
                         markdownAnnotated(block.runs, linkColor, codeBg, codeFontFamily),
-                        fontSize = if (LocalMaterial3.current) 13.sp else fontSize, lineHeight = lineHeight,
+                        fontSize = if (LocalMaterial3.current && !LocalReaderStyle.current) 13.sp else fontSize, lineHeight = lineHeight,
                         color = if (LocalMaterial3.current) MaterialTheme.colorScheme.onSurfaceVariant else color.copy(alpha = 0.85f),
                         fontStyle = if (LocalMaterial3.current) FontStyle.Normal else FontStyle.Italic,
                         modifier = Modifier.padding(start = 10.dp).weight(1f),
@@ -125,8 +125,8 @@ fun MarkdownText(
                     Text(
                         block.text,
                         fontFamily = codeFontFamily,
-                        fontSize = (fontSize.value * 0.88f).sp,
-                        lineHeight = (fontSize.value * 1.35f).sp,
+                        fontSize = if (LocalReaderStyle.current) ReaderCodeTextSize * scale else (fontSize.value * 0.88f).sp,
+                        lineHeight = if (LocalReaderStyle.current) ReaderCodeLineHeight * scale else (fontSize.value * 1.35f).sp,
                         color = color,
                         softWrap = false,
                     )
@@ -164,7 +164,8 @@ private fun MarkdownTable(
                 for (c in 0 until columns) {
                     Text(
                         markdownAnnotated(row.getOrNull(c).orEmpty(), linkColor, codeBg, if (LocalReaderStyle.current) FontFamily.SansSerif else FontFamily.Monospace),
-                        fontSize = if (LocalMaterial3.current) MaterialTheme.typography.bodyMedium.fontSize * (fontSize.value / 15f) else (fontSize.value * 0.92f).sp,
+                        fontSize = if (LocalReaderStyle.current) ReaderCodeTextSize * (fontSize.value / ReaderTextSize.value) else if (LocalMaterial3.current) MaterialTheme.typography.bodyMedium.fontSize * (fontSize.value / 15f) else (fontSize.value * 0.92f).sp,
+                        lineHeight = if (LocalReaderStyle.current) ReaderCodeLineHeight * (fontSize.value / ReaderTextSize.value) else TextUnit.Unspecified,
                         fontWeight = if (rowIndex == 0) { if (LocalMaterial3.current) FontWeight.SemiBold else FontWeight.Bold } else FontWeight.Normal,
                         color = color,
                         modifier = Modifier.testTag("md-cell").padding(horizontal = 8.dp, vertical = 5.dp),

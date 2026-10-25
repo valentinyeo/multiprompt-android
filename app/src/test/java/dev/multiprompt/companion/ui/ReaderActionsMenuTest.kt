@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import dev.multiprompt.companion.reader.ChatHistoryCache
 import dev.multiprompt.companion.reader.ReaderState
+import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
@@ -23,9 +24,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class, qualifiers = "w390dp-h844dp-mdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ReaderActionsMenuTest {
     @get:Rule val compose = createComposeRule()
     private lateinit var f: SessionActivityFixture
@@ -44,7 +47,7 @@ class ReaderActionsMenuTest {
     @After fun cleanup() { connection.close(); f.close() }
 
     private fun render(material3: Boolean = false, sending: Boolean = false) {
-        f.field<MutableStateFlow<ReaderState>>(connection, "_state").value = ReaderState(sending = sending)
+        f.field<MutableStateFlow<ReaderState>>(connection, "_state").value = ReaderState(status = ReaderStatus.Live, sending = sending)
         compose.setContent {
             ReaderScreen(
                 connection = connection, dictation = f.app.deepgramDictation,
