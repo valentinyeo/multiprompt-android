@@ -18,6 +18,8 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollTo
+import dev.multiprompt.companion.dictation.DictationState
+import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.reader.ChatHistory
 import dev.multiprompt.companion.reader.ChatHistoryCache
@@ -128,6 +130,34 @@ class ReaderChromeTest {
         compose.onNodeWithContentDescription("Session actions").performClick()
         compose.onNodeWithText("Current: $modelLabel").assertIsDisplayed()
         compose.onNodeWithText("Current: $modelLabel · waiting for input").assertDoesNotExist()
+    }
+
+    @Test fun dictatingReplacesTheMessageBoxWithThreeBigControls() {
+        render()
+        compose.onNodeWithContentDescription("Start dictation").assertIsDisplayed()
+        compose.onNodeWithTag("dictation-stop").assertDoesNotExist()
+        val dictationState: MutableStateFlow<DictationState> = f.field(f.app.deepgramDictation, "_state")
+        val dictationLevel: MutableStateFlow<Float> = f.field(f.app.deepgramDictation, "_level")
+        compose.runOnIdle {
+            dictationState.value = DictationState(status = DictationStatus.LISTENING, configured = true)
+            dictationLevel.value = 0.7f
+        }
+        compose.onNodeWithText("Message this session").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Start dictation").assertDoesNotExist()
+        compose.onNodeWithTag("dictation-stop").assertIsDisplayed()
+        compose.onNodeWithTag("dictation-send").assertIsDisplayed()
+        compose.onNodeWithTag("dictation-timer").assertIsDisplayed()
+        compose.onNodeWithTag("dictation-session-line").assertIsDisplayed()
+        val stop = compose.onNodeWithTag("dictation-stop").getUnclippedBoundsInRoot()
+        val meter = compose.onNodeWithTag("dictation-meter").getUnclippedBoundsInRoot()
+        val send = compose.onNodeWithTag("dictation-send").getUnclippedBoundsInRoot()
+        assertTrue("stop, meter, send read left to right on one row: $stop $meter $send",
+            stop.right <= meter.left && meter.right <= send.left && stop.top == meter.top && meter.top == send.top)
+        assertTrue("controls are big: ${stop.height}", stop.height.value >= 56f)
+        screenshot("dictating")
+        compose.runOnIdle { dictationState.value = DictationState(configured = true); dictationLevel.value = 0f }
+        compose.onNodeWithTag("dictation-stop").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Start dictation").assertIsDisplayed()
     }
 
     @Test fun historyMenuIsOnlyAvailableForAlternateScreenSessions() {
