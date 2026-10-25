@@ -1,22 +1,10 @@
 package dev.multiprompt.companion.ui
 
 import android.app.Application
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
-import androidx.compose.ui.test.hasSetTextAction
-import androidx.compose.ui.test.onNode
-import dev.multiprompt.companion.ssh.TmuxText
-import androidx.compose.ui.test.performSemanticsAction
-import org.robolectric.shadows.ShadowDialog
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.semantics.SemanticsActions
+import dev.multiprompt.companion.ssh.TmuxText
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.reader.ChatHistoryConnection
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
@@ -32,7 +20,6 @@ import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -50,14 +37,9 @@ class ReaderProgressBarTest {
     @get:Rule val compose = createComposeRule(effectContext = UnconfinedTestDispatcher(scheduler))
     private lateinit var f: SessionActivityFixture
     private lateinit var connection: SessionReaderConnection
-    private var archives = 0
-    private var waits = 0
-    private val reminders = mutableListOf<Long?>()
-    private val archived = mutableStateOf(false)
-
     @Before fun setup() {
         f = SessionActivityFixture()
-        val cache = ChatHistoryCache(f.app.cacheDir.resolve("actions-history"))
+        val cache = ChatHistoryCache(f.app.cacheDir.resolve("progress-bar-history"))
         connection = SessionReaderConnection(f.app.sshRepository, f.host, f.session.name,
             agent = AgentKind.CLAUDE, historyScript = byteArrayOf(), historyCache = cache)
         val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, f.session.name, f.session.workingDirectory)
@@ -69,37 +51,37 @@ class ReaderProgressBarTest {
 
     @After fun cleanup() { connection.close(); f.close() }
 
-    private fun render(material3: Boolean = false, sending: Boolean = false) {
-        f.field<MutableStateFlow<ReaderState>>(connection, "_state").value = ReaderState(status = ReaderStatus.Live, sending = sending)
+    private fun render() {
+        f.field<MutableStateFlow<ReaderState>>(connection, "_state").value = ReaderState(status = ReaderStatus.Live, sending = false)
         compose.setContent {
             ReaderScreen(
                 connection = connection, dictation = f.app.deepgramDictation,
                 screencast = f.app.screencastUploader, skills = f.app.skillStore,
                 signedIn = true, onSignIn = {}, onSignOut = {}, session = f.session.copy(paneCommand = "claude"),
-                unread = false, archived = archived.value, initialFontScale = 1f,
-                onBack = {}, onMarkRead = {}, onArchiveToggle = { waits++; archived.value = !archived.value },
-                onRemind = { reminders.add(it) }, onOpenTerminal = {}, onSwitchSession = {},
-                onFontScaleChanged = {}, onRename = { null }, onDissolve = { archives++ }, onEnd = {},
+                unread = false, archived = false, initialFontScale = 1f,
+                onBack = {}, onMarkRead = {}, onArchiveToggle = {},
+                onRemind = {}, onOpenTerminal = {}, onSwitchSession = {},
+                onFontScaleChanged = {}, onRename = { null }, onDissolve = {}, onEnd = {},
                 onSessionInteraction = {}, onSessionInput = {}, technicalMode = false,
                 onTechnicalModeChanged = {}, sunlightMode = false, onSetAppTheme = {},
                 onResetFontScale = { 1f }, sessionActionError = null, onClearSessionActionError = {},
-                onForget = {}, onShowEtaAccuracy = {}, onReleaseNotes = {}, material3 = material3,
+                onForget = {}, onShowEtaAccuracy = {}, onReleaseNotes = {}, material3 = false,
             )
         }
     }
 
     @Test fun etaDoesNotAddABarAboveComposerWhileIdleOrSending() {
         render()
-        val composer = compose.onNode(hasSetTextAction())
-        val idleBounds = composer.getUnclippedBoundsInRoot()
+        val viewport = compose.onNodeWithTag("chat-history")
+        val idleBounds = viewport.getUnclippedBoundsInRoot()
         val reader = f.field<MutableStateFlow<ReaderState>>(connection, "_state")
         for (sending in listOf(false, true)) {
             compose.runOnIdle {
                 reader.value = reader.value.copy(sending = sending,
                     eta = TmuxText.SessionEta(System.currentTimeMillis() + 120_000, 240_000, ""))
             }
-            assertEquals("ETA must not move the composer (sending=$sending)",
-                idleBounds, composer.getUnclippedBoundsInRoot())
+            assertEquals("ETA must not shrink chat above the composer (sending=$sending)",
+                idleBounds, viewport.getUnclippedBoundsInRoot())
             compose.runOnIdle { reader.value = reader.value.copy(eta = null) }
         }
     }
