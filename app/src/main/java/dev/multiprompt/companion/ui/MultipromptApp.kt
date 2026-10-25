@@ -3365,11 +3365,11 @@ internal fun ReaderScreen(
                         },
                     )
                     Box(
-                        Modifier.width(ReaderWaveformWidth).height(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHighest, ReaderComposerShape)
+                        Modifier.width(ReaderWaveformWidth).height(ReaderControlSize).background(ReaderWaveformBackground, ReaderComposerShape)
                             .testTag("reader-waveform"),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Default.GraphicEq, null)
+                        Icon(Icons.Default.GraphicEq, null, tint = ReaderWaveformForeground)
                     }
                 }
                 (microphoneError ?: dictationState.error ?: imageUploadError)?.let { message ->

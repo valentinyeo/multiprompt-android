@@ -97,7 +97,7 @@ class ReaderStyleTest {
             assertEquals(24f, badge.width, 0.01f)
             val layouts = mutableListOf<TextLayoutResult>()
             compose.onNodeWithText(letter).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
-            assertEquals(ReaderChoiceBlue, layouts.single().layoutInput.style.color)
+            assertEquals(Color.White, layouts.single().layoutInput.style.color)
         }
         val badge = compose.onNodeWithTag("reader-choice-1").fetchSemanticsNode().boundsInRoot
         val option = compose.onNodeWithText("First option").assertIsDisplayed().fetchSemanticsNode().boundsInRoot

@@ -85,11 +85,11 @@ fun MarkdownText(
                         }
                         Box(
                             Modifier.padding(end = ReaderBadgeGap).width(ReaderBadgeSize).height(ReaderBadgeSize)
-                                .background(ReaderChoiceBackground, androidx.compose.foundation.shape.CircleShape)
+                                .background(ReaderChoiceBackground, ReaderBadgeShape)
                                 .testTag("reader-choice-$number"),
                             contentAlignment = androidx.compose.ui.Alignment.Center,
                         ) {
-                            Text(letter, fontSize = ReaderBadgeTextSize, color = ReaderChoiceBlue)
+                            Text(letter, fontSize = ReaderBadgeTextSize, color = ReaderBadgeForeground)
                         }
                     } else {
                         Text(
