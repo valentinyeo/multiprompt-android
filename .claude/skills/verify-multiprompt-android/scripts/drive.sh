@@ -317,6 +317,18 @@ if [[ "$feature" == sessions.md ]]; then
     wait_for_absence 'Search all sessions'
     wait_for_text verify-session
     shot search-cleared
+    dump_ui
+    if grep -F 'content-desc="Session actions"' "$EVIDENCE/current.xml"; then
+        printf 'Inbox row still has a per-row menu button\n' >&2
+        exit 1
+    fi
+    read -r row_x row_y <<< "$(select_node text verify-session)"
+    adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 800
+    wait_for_text 'Mark unread'
+    wait_for_text 'End session'
+    shot row-long-press-actions
+    adb shell input keyevent KEYCODE_BACK
+    wait_for_absence 'End session'
     exit 0
 fi
 tap_text verify-session

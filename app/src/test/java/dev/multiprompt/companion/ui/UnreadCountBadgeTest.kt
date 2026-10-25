@@ -72,14 +72,14 @@ class UnreadCountBadgeTest {
     }
 
     @Test
-    fun classicRowShowsNoNumericBadge() {
+    fun classicRowShowsSameNumericBadge() {
         render()
         compose.onNodeWithText("3", useUnmergedTree = true).assertIsDisplayed()
         compose.runOnIdle { material3.value = false }
         compose.onNodeWithText(session.displayName).assertIsDisplayed()
-        compose.onNodeWithText("3", useUnmergedTree = true).assertDoesNotExist()
-        compose.onNodeWithContentDescription("3 unread messages", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText("3", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithContentDescription("3 unread messages", useUnmergedTree = true).assertIsDisplayed()
         compose.runOnIdle { state.value = state.value.copy(unreadCounts = mapOf(key to 150)) }
-        compose.onNodeWithText("99+", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText("99+", useUnmergedTree = true).assertIsDisplayed()
     }
 }
