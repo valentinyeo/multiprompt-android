@@ -7,6 +7,8 @@ status=0
 adb logcat -d > build/image-preview-logcat.txt
 adb exec-out screencap -p > build/image-preview-screen.png
 if [ "$status" -eq 0 ]; then
-  adb pull /sdcard/Android/data/dev.multiprompt.companion.debug/files/image-unfurl.png build/image-unfurl.png
+  image=$(find app/build/outputs -type f -name image-unfurl.png -print -quit)
+  test -n "$image"
+  cp "$image" build/image-unfurl.png
 fi
 exit "$status"

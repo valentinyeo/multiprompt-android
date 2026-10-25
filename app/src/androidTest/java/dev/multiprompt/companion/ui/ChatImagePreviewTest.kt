@@ -80,7 +80,10 @@ class ChatImagePreviewTest {
         compose.onNodeWithText(image, substring = true).assertIsDisplayed()
         compose.onNodeWithText(broken, substring = true).assertIsDisplayed()
         compose.onNodeWithContentDescription("Image preview: $broken").assertDoesNotExist()
-        val output = File(context.getExternalFilesDir(null), "image-unfurl.png")
+        val output = File(checkNotNull(InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")) {
+            "Gradle must provide the instrumentation output directory"
+        }, "image-unfurl.png")
+        check(output.parentFile?.mkdirs() == true || output.parentFile?.isDirectory == true)
         output.outputStream().use {
             compose.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
         }
