@@ -144,6 +144,20 @@ class SessionInputTest {
         }
     }
 
+    @Test fun activeVoiceFromThePreviousScreenNeverBecomesTheNewSessionsDraft() {
+        render()
+        val dictation = f.field<MutableStateFlow<DictationState>>(f.app.deepgramDictation, "_state")
+        compose.runOnIdle { dictation.value = DictationState(DictationStatus.LISTENING, "only for one", true) }
+        compose.runOnIdle { switched = true }
+        compose.onNodeWithText("only for one").assertDoesNotExist()
+        compose.onNodeWithText("Message this session").performTextInput("only for two")
+        compose.onNodeWithContentDescription("Send prompt").performClick()
+        compose.runOnIdle {
+            assertTrue(connection.state.value.sentPrompts.isEmpty())
+            assertEquals(listOf("only for two"), other.state.value.sentPrompts)
+        }
+    }
+
     @Test fun switchingDuringFinalizationDiscardsVoiceInsteadOfSendingToTheNewSession() {
         render()
         val dictation = f.field<MutableStateFlow<DictationState>>(f.app.deepgramDictation, "_state")
