@@ -3,10 +3,13 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
+
+sys.dont_write_bytecode = True
 
 spec = importlib.util.spec_from_file_location(
     "reader", Path(__file__).resolve().parents[1] / "app/src/main/assets/chat_history_reader.py")

@@ -288,39 +288,25 @@ def claude_session_metadata(pid):
     return (sid if isinstance(sid, str) and SESSION_ID.fullmatch(sid) else None,
             cwd if isinstance(cwd, str) and cwd else None)
 
-def claude_transcript_for_cwd(cwd):
-    folder = HOME / ".claude/projects" / claude_project_folder(cwd)
-    if not folder.is_dir():
-        return None
-    return newest_jsonl(folder.glob("*.jsonl"))
-
-def codex_transcript_for_cwd(cwd):
-
-    root = HOME / ".codex/sessions"
-    if not root.is_dir():
-        return None
-    best = None
-    best_mtime = -1.0
+def open_codex_transcript(pid):
+    matches = []
     try:
-        candidates = list(root.rglob("rollout-*.jsonl"))
+        for fd in Path(f"/proc/{pid}/fd").iterdir():
+            try:
+                path = Path(os.readlink(fd))
+                if (path.suffix != ".jsonl" or not path.name.startswith("rollout-") or
+                        (HOME / ".codex/sessions").resolve() not in path.resolve().parents):
+                    continue
+                with path.open(encoding="utf-8") as source:
+                    meta = json.loads(source.readline())
+                sid = meta.get("payload", {}).get("id")
+                if isinstance(sid, str) and SESSION_ID.fullmatch(sid):
+                    matches.append((sid, path))
+            except (OSError, ValueError, AttributeError):
+                pass
     except OSError:
-        return None
-    for path in candidates:
-        try:
-            with path.open("r", encoding="utf-8") as source:
-                meta = json.loads(source.readline())
-            payload = meta.get("payload") if isinstance(meta, dict) else None
-            if not isinstance(payload, dict) or payload.get("cwd") != cwd:
-                continue
-            sid = payload.get("id") or payload.get("session_id")
-            if not isinstance(sid, str) or not SESSION_ID.fullmatch(sid):
-                continue
-            mtime = path.stat().st_mtime
-        except (OSError, ValueError):
-            continue
-        if mtime > best_mtime:
-            best, best_mtime = (sid, path), mtime
-    return best
+        pass
+    return matches[0] if len(matches) == 1 else None
 
 def resolve_tmux_agent(agent, name, pid=None):
 
@@ -348,13 +334,8 @@ def resolve_tmux_agent(agent, name, pid=None):
         if sid:
             path = conversation_path("claude", sid, cwd) if cwd else None
             return (sid, path) if path is not None else None
-        fallback = claude_transcript_for_cwd(cwd) if cwd else None
-        if fallback is None:
-            return None
-        return fallback.stem, fallback
-    if cwd is None:
         return None
-    return codex_transcript_for_cwd(cwd)
+    return open_codex_transcript(pid)
 
 
 def conversation_event(event, agent):

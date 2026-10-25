@@ -2522,7 +2522,8 @@ internal fun ReaderScreen(
     onShowEtaAccuracy: () -> Unit,
     onReleaseNotes: () -> Unit,
     material3: Boolean = LocalMaterial3.current,
-) = MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
+) = key(connection) {
+    MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
     val reader by connection.state.collectAsState()
     val transcript = reader.transcript.takeUnless { technicalMode }
     val historyAgent = TranscriptProtocol.supports(session.agent)
@@ -2707,6 +2708,9 @@ internal fun ReaderScreen(
             if (fresh != null) skillSnapshot = fresh
         }
         onDispose {
+            if (dictation.state.value.status in setOf(DictationStatus.CONNECTING, DictationStatus.LISTENING, DictationStatus.FINISHING)) {
+                android.widget.Toast.makeText(context, "Dictation stopped: session changed", android.widget.Toast.LENGTH_SHORT).show()
+            }
             dictation.discard()
         }
     }
@@ -3755,6 +3759,7 @@ internal fun ReaderScreen(
             }
         }
     }
+}
 }
 
 @Composable
