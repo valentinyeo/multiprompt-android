@@ -3187,27 +3187,6 @@ internal fun ReaderScreen(
                     .navigationBarsPadding(),
                 verticalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
             ) {
-                reader.eta?.let { eta ->
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(3.dp)
-                            .background(
-                                MaterialTheme.colorScheme.surfaceVariant,
-                                chromeShape(RoundedCornerShape(2.dp)),
-                            ),
-                    ) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth(eta.fillFraction(etaNowMillis))
-                                .height(3.dp)
-                                .background(
-                                    MaterialTheme.colorScheme.primary,
-                                    chromeShape(RoundedCornerShape(2.dp)),
-                                ),
-                        )
-                    }
-                }
                 if (imageAttachments.isNotEmpty()) {
                     Row(
                         Modifier
