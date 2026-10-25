@@ -32,7 +32,7 @@ import org.robolectric.annotation.GraphicsMode
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34], application = Application::class, qualifiers = "w390dp-h844dp-mdpi")
+@Config(sdk = [35], application = Application::class, qualifiers = "w390dp-h844dp-mdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ReaderActionsMenuTest {
     private val scheduler = TestCoroutineScheduler()

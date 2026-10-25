@@ -261,14 +261,16 @@ fun MultipromptTheme(
     content: @Composable () -> Unit,
 ) {
     val colors = when {
-        readerStyle && !sunlight -> Material3DarkColors.copy(
-            background = ReaderBackground, surface = ReaderBackground,
-            onBackground = ReaderForeground, onSurface = ReaderForeground,
-            surfaceContainer = ReaderCard, surfaceContainerHigh = ReaderCard,
-            surfaceContainerHighest = ReaderControl,
-            surfaceVariant = ReaderCard, onSurfaceVariant = ReaderHint,
-            primary = ReaderChoiceBlue, onPrimary = ReaderBackground,
-        )
+        readerStyle && !sunlight -> remember {
+            Material3DarkColors.copy(
+                background = ReaderBackground, surface = ReaderBackground,
+                onBackground = ReaderForeground, onSurface = ReaderForeground,
+                surfaceContainer = ReaderCard, surfaceContainerHigh = ReaderCard,
+                surfaceContainerHighest = ReaderControl,
+                surfaceVariant = ReaderCard, onSurfaceVariant = ReaderHint,
+                primary = ReaderChoiceBlue, onPrimary = ReaderBackground,
+            )
+        }
         !material3 -> if (sunlight) SunlightColors else MultipromptColors
         sunlight -> Material3LightColors
         else -> Material3DarkColors
