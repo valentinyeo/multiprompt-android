@@ -6,6 +6,8 @@ status=0
 mkdir -p build/top-fade-shots
 for name in inbox-top inbox-scrolled chat-top chat-scrolled; do
   adb pull "/data/local/tmp/top-fade-proof/$name.png" build/top-fade-shots/
+  test -f "build/top-fade-shots/$name.png"
+  test -s "build/top-fade-shots/$name.png"
 done
 if [ "$status" -ne 0 ]; then exit "$status"; fi
 if [ "${RELEASE_SMOKE:-false}" = true ]; then

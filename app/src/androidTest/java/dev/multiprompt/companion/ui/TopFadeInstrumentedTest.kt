@@ -83,9 +83,12 @@ class TopFadeInstrumentedTest {
 
     private fun screenshot(name: String) {
         val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
-        val output = instrumentation.uiAutomation.executeShellCommand(
-            "mkdir -p /data/local/tmp/top-fade-proof && screencap -p /data/local/tmp/top-fade-proof/$name.png",
-        )
-        android.os.ParcelFileDescriptor.AutoCloseInputStream(output).use { it.readBytes() }
+        listOf(
+            "mkdir -p /data/local/tmp/top-fade-proof",
+            "screencap -p /data/local/tmp/top-fade-proof/$name.png",
+        ).forEach { command ->
+            val output = instrumentation.uiAutomation.executeShellCommand(command)
+            android.os.ParcelFileDescriptor.AutoCloseInputStream(output).use { it.readBytes() }
+        }
     }
 }
