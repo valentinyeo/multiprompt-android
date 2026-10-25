@@ -3674,19 +3674,22 @@ internal fun ReaderScreen(
                             gate = replyGate,
                         ) {
                             if (isUser) {
-                                Text(
-                                    terminalLinks(message.text, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
-                                    fontFamily = chatFontFamily(),
-                                    fontSize = transcriptFontSize,
-                                    lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
-                                    color = bodyColor,
-                                )
+                                ChatLinkText(message.text) { line ->
+                                    Text(
+                                        terminalLinks(line, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
+                                        fontFamily = chatFontFamily(),
+                                        fontSize = transcriptFontSize,
+                                        lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
+                                        color = bodyColor,
+                                    )
+                                }
                             } else {
                                 MarkdownText(
                                     text = message.text,
                                     fontSize = transcriptFontSize,
                                     color = bodyColor,
                                     linkColor = chatLinkColor(terminalBlue(sunlightMode)),
+                                    imagePreviews = true,
                                 )
                             }
                         }
@@ -3701,13 +3704,15 @@ internal fun ReaderScreen(
                             color = chatHintColor(sunlightMode),
                         )
                         SelectionContainer {
-                            Text(
-                                terminalLinks(text, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
-                                fontFamily = chatFontFamily(),
-                                fontSize = transcriptFontSize,
-                                lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
-                                color = chatTextColor(sunlightMode),
-                            )
+                            ChatLinkText(text) { line ->
+                                Text(
+                                    terminalLinks(line, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
+                                    fontFamily = chatFontFamily(),
+                                    fontSize = transcriptFontSize,
+                                    lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
+                                    color = chatTextColor(sunlightMode),
+                                )
+                            }
                         }
                         Text(
                             "The agent reads it after its current step",
@@ -3744,13 +3749,15 @@ internal fun ReaderScreen(
                                 ) {
                                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         run.forEach { part ->
-                                            Text(
-                                                terminalLinks(part.text, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
-                                                fontFamily = chatFontFamily(),
-                                                fontSize = transcriptFontSize,
-                                                lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
-                                                color = chatTextColor(sunlightMode),
-                                            )
+                                            ChatLinkText(part.text) { line ->
+                                                Text(
+                                                    terminalLinks(line, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
+                                                    fontFamily = chatFontFamily(),
+                                                    fontSize = transcriptFontSize,
+                                                    lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
+                                                    color = chatTextColor(sunlightMode),
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -3764,13 +3771,15 @@ internal fun ReaderScreen(
                                 onReply = { chooseReply(it, true) },
                                 gate = replyGate,
                             ) {
-                                Text(
-                                    terminalLinks(block.text, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
-                                    fontFamily = chatFontFamily(),
-                                    fontSize = transcriptFontSize,
-                                    lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
-                                    color = chatTextColor(sunlightMode),
-                                )
+                                ChatLinkText(block.text) { line ->
+                                    Text(
+                                        terminalLinks(line, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
+                                        fontFamily = chatFontFamily(),
+                                        fontSize = transcriptFontSize,
+                                        lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
+                                        color = chatTextColor(sunlightMode),
+                                    )
+                                }
                             }
                         }
                         TmuxText.ReaderBlockKind.CODE,

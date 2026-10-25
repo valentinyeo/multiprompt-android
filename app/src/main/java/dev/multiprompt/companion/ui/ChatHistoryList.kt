@@ -160,10 +160,12 @@ private fun HistoryBubble(
                 color = chatHintColor(sunlight))
         }
         if (isUser) {
-            Text(terminalLinks(text, sunlight), fontFamily = chatFontFamily(), fontSize = fontSize,
-                lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, fontScale), color = chatTextColor(sunlight))
+            ChatLinkText(text) { line ->
+                Text(terminalLinks(line, sunlight), fontFamily = chatFontFamily(), fontSize = fontSize,
+                    lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, fontScale), color = chatTextColor(sunlight))
+            }
         } else {
-            MarkdownText(text = text, fontSize = fontSize, color = chatTextColor(sunlight), linkColor = chatLinkColor(terminalBlue(sunlight)))
+            MarkdownText(text = text, fontSize = fontSize, color = chatTextColor(sunlight), linkColor = chatLinkColor(terminalBlue(sunlight)), imagePreviews = true)
         }
     }
 }
