@@ -16,6 +16,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -84,6 +85,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Image as OutlinedImage
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Badge
@@ -3260,14 +3263,23 @@ internal fun ReaderScreen(
                             IconButton(
                                 onClick = { attachMenuExpanded = true },
                                 enabled = !reader.sending && !dictationActive && !imageUploading,
-                                modifier = Modifier.size(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape),
+                                modifier = Modifier.size(ReaderControlSize)
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
+                                    .border(ReaderOutlineWidth, ReaderOutline, CircleShape),
                             ) {
                                 if (imageUploading) CircularProgressIndicator(Modifier.size(ReaderBadgeSize), strokeWidth = 2.dp)
                                 else Icon(Icons.Default.Add, "Attach")
                             }
-                            DropdownMenu(expanded = attachMenuExpanded, onDismissRequest = { attachMenuExpanded = false }) {
+                            DropdownMenu(
+                                expanded = attachMenuExpanded,
+                                onDismissRequest = { attachMenuExpanded = false },
+                                shape = ReaderMenuShape,
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                border = BorderStroke(ReaderOutlineWidth, ReaderOutline),
+                            ) {
                                 DropdownMenuItem(
                                     text = { Text("Add image") },
+                                    leadingIcon = { Icon(Icons.Outlined.OutlinedImage, null) },
                                     onClick = {
                                         attachMenuExpanded = false
                                         if (screencast.configured) imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
@@ -3276,6 +3288,7 @@ internal fun ReaderScreen(
                                 )
                                 DropdownMenuItem(
                                     text = { Text("Use skill") },
+                                    leadingIcon = { Icon(Icons.Outlined.AutoAwesome, null) },
                                     onClick = { attachMenuExpanded = false; skillMenuExpanded = true },
                                 )
                             }

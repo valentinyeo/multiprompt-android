@@ -377,6 +377,15 @@ fi
 tap_text verify-session
 wait_for_text VERIFY_READY_528
 shot reader-ready
+if [[ "$feature" == session-reader.md ]]; then
+    tap_desc 'Attach'
+    wait_for_text 'Add image'
+    wait_for_text 'Use skill'
+    shot attach-menu
+    adb shell input keyevent KEYCODE_BACK
+    wait_for_absence 'Add image'
+    shot attach-closed
+fi
 if [[ "$feature" == terminal.md ]]; then
     tap_desc 'Session actions'
     tap_text 'Open live terminal'

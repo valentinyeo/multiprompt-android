@@ -23,6 +23,7 @@ Tap `verify-session` in Inbox. **Message this session** is the composer and **Se
 Preconditions: fresh fixture; dispatch `feature=session-reader.md`. The driver first performs the complete real host import and trust journey, then opens the discovered session card.
 
 - `tap_text verify-session`; `wait_for_text VERIFY_READY_528`; `shot reader-ready` capture a native reader of the real console.
+- `tap_desc 'Attach'`; require `Add image` and `Use skill`; capture `attach-menu` (outlined + button, outlined menu card with line icons); back closes it; capture `attach-closed`.
 - `fill 'Message this session' VERIFY_SENT_528`; `shot send-draft`; `tap_desc 'Send prompt'`. Require both the visible `VERIFY_RECEIVED:VERIFY_SENT_528` and the same line in the fixture's receipts; capture `send-result`.
 - `tap_desc 'Session actions'`; capture `enter-action`; `tap_text 'Enter / approve'`. Require `VERIFY_ENTER_528` in receipts and native output; capture `enter-result`.
 - Open **Session actions** again; capture `interrupt-action`; `tap_text 'Interrupt session'`. The actual process must receive SIGINT and record `VERIFY_INTERRUPTED_528`; capture `interrupt-result` after the same text appears in the app.
