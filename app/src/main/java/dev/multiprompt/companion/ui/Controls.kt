@@ -90,7 +90,7 @@ fun OutlinedTextField(
     singleLine = singleLine,
     maxLines = maxLines,
     minLines = minLines,
-    shape = RoundedCornerShape(28.dp),
+    shape = if (LocalReaderStyle.current) ReaderComposerShape else RoundedCornerShape(28.dp),
     textStyle = MaterialTheme.typography.bodyLarge,
     colors = TextFieldDefaults.colors(
         focusedContainerColor = if (search) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainer,
@@ -154,7 +154,7 @@ fun OutlinedTextField(
     singleLine = singleLine,
     maxLines = maxLines,
     minLines = minLines,
-    shape = RoundedCornerShape(28.dp),
+    shape = if (LocalReaderStyle.current) ReaderComposerShape else RoundedCornerShape(28.dp),
     textStyle = MaterialTheme.typography.bodyLarge,
     colors = TextFieldDefaults.colors(
         focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,

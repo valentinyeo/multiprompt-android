@@ -52,18 +52,19 @@ fun MarkdownText(
 ) {
     val blocks = remember(text) { MarkdownParser.parse(text) }
     val codeBg = color.copy(alpha = 0.10f)
-    val scale = if (LocalMaterial3.current) fontSize.value / 15f else 1f
+    val codeFontFamily = if (LocalReaderStyle.current) FontFamily.SansSerif else FontFamily.Monospace
+    val scale = if (LocalReaderStyle.current) fontSize.value / ReaderTextSize.value else if (LocalMaterial3.current) fontSize.value / 15f else 1f
     val lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, scale)
     androidx.compose.material3.ProvideTextStyle(androidx.compose.ui.text.TextStyle(fontFamily = chatFontFamily())) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         blocks.forEach { block ->
             when (block) {
                 is MdBlock.Paragraph -> Text(
-                    markdownAnnotated(block.runs, linkColor, codeBg),
+                    markdownAnnotated(block.runs, linkColor, codeBg, codeFontFamily),
                     fontSize = fontSize, lineHeight = lineHeight, color = color,
                 )
                 is MdBlock.Heading -> Text(
-                    markdownAnnotated(block.runs, linkColor, codeBg),
+                    markdownAnnotated(block.runs, linkColor, codeBg, codeFontFamily),
                     fontSize = if (LocalMaterial3.current) MaterialTheme.typography.titleMedium.fontSize * scale else (fontSize.value * headingScale(block.level)).sp,
                     lineHeight = if (LocalMaterial3.current) MaterialTheme.typography.titleMedium.lineHeight * scale else (fontSize.value * headingScale(block.level) * 1.35f).sp,
                     fontWeight = FontWeight.Bold,
@@ -71,13 +72,34 @@ fun MarkdownText(
                     modifier = Modifier.padding(top = 4.dp),
                 )
                 is MdBlock.ListItem -> Row(Modifier.padding(start = (block.depth * 16).dp)) {
+                    val number = block.marker.removeSuffix(".").toIntOrNull()
+                    if (LocalReaderStyle.current && number != null && number > 0) {
+                        val letter = remember(number) {
+                            var ordinal = number
+                            buildString {
+                                while (ordinal > 0) {
+                                    insert(0, ('A'.code + (ordinal - 1) % 26).toChar())
+                                    ordinal = (ordinal - 1) / 26
+                                }
+                            }
+                        }
+                        Box(
+                            Modifier.padding(end = ReaderBadgeGap).width(ReaderBadgeSize).height(ReaderBadgeSize)
+                                .background(ReaderChoiceBackground, androidx.compose.foundation.shape.CircleShape)
+                                .testTag("reader-choice-$number"),
+                            contentAlignment = androidx.compose.ui.Alignment.Center,
+                        ) {
+                            Text(letter, fontSize = ReaderBadgeTextSize, color = ReaderChoiceBlue)
+                        }
+                    } else {
+                        Text(
+                            block.marker,
+                            fontSize = fontSize, lineHeight = lineHeight, color = color,
+                            modifier = Modifier.width(if (block.marker.length > 2) 28.dp else 18.dp),
+                        )
+                    }
                     Text(
-                        block.marker,
-                        fontSize = fontSize, lineHeight = lineHeight, color = color,
-                        modifier = Modifier.width(if (block.marker.length > 2) 28.dp else 18.dp),
-                    )
-                    Text(
-                        markdownAnnotated(block.runs, linkColor, codeBg),
+                        markdownAnnotated(block.runs, linkColor, codeBg, codeFontFamily),
                         fontSize = fontSize, lineHeight = lineHeight, color = color,
                         modifier = Modifier.weight(1f),
                     )
@@ -86,7 +108,7 @@ fun MarkdownText(
                     .then(if (LocalMaterial3.current) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp)) else Modifier)) {
                     Box(Modifier.width(3.dp).fillMaxHeight().background(if (LocalMaterial3.current) MaterialTheme.colorScheme.primary else color.copy(alpha = 0.4f)))
                     Text(
-                        markdownAnnotated(block.runs, linkColor, codeBg),
+                        markdownAnnotated(block.runs, linkColor, codeBg, codeFontFamily),
                         fontSize = if (LocalMaterial3.current) 13.sp else fontSize, lineHeight = lineHeight,
                         color = if (LocalMaterial3.current) MaterialTheme.colorScheme.onSurfaceVariant else color.copy(alpha = 0.85f),
                         fontStyle = if (LocalMaterial3.current) FontStyle.Normal else FontStyle.Italic,
@@ -102,7 +124,7 @@ fun MarkdownText(
                 ) {
                     Text(
                         block.text,
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = codeFontFamily,
                         fontSize = (fontSize.value * 0.88f).sp,
                         lineHeight = (fontSize.value * 1.35f).sp,
                         color = color,
@@ -141,7 +163,7 @@ private fun MarkdownTable(
             rows.forEachIndexed { rowIndex, row ->
                 for (c in 0 until columns) {
                     Text(
-                        markdownAnnotated(row.getOrNull(c).orEmpty(), linkColor, codeBg),
+                        markdownAnnotated(row.getOrNull(c).orEmpty(), linkColor, codeBg, if (LocalReaderStyle.current) FontFamily.SansSerif else FontFamily.Monospace),
                         fontSize = if (LocalMaterial3.current) MaterialTheme.typography.bodyMedium.fontSize * (fontSize.value / 15f) else (fontSize.value * 0.92f).sp,
                         fontWeight = if (rowIndex == 0) { if (LocalMaterial3.current) FontWeight.SemiBold else FontWeight.Bold } else FontWeight.Normal,
                         color = color,
@@ -193,13 +215,13 @@ private fun headingScale(level: Int): Float = when (level) {
     else -> 1.0f
 }
 
-internal fun markdownAnnotated(runs: List<InlineRun>, linkColor: Color, codeBg: Color): AnnotatedString =
+internal fun markdownAnnotated(runs: List<InlineRun>, linkColor: Color, codeBg: Color, codeFontFamily: FontFamily = FontFamily.Monospace): AnnotatedString =
     buildAnnotatedString {
         runs.forEach { run ->
             val style = SpanStyle(
                 fontWeight = if (run.bold) FontWeight.Bold else null,
                 fontStyle = if (run.italic) FontStyle.Italic else null,
-                fontFamily = if (run.code) FontFamily.Monospace else null,
+                fontFamily = if (run.code) codeFontFamily else null,
                 background = if (run.code) codeBg else Color.Unspecified,
                 textDecoration = if (run.strike) TextDecoration.LineThrough else null,
             )

@@ -65,6 +65,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Close
@@ -2365,6 +2366,24 @@ internal fun ReaderTopBar(
     onBack: () -> Unit = {},
 ) {
     var modelMenuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
+    if (LocalReaderStyle.current) {
+        Row(
+            Modifier.fillMaxWidth().testTag("reader-floating-controls").statusBarsPadding()
+                .padding(ReaderScreenPadding),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            IconButton(onClick = onBack, modifier = Modifier.size(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+            }
+            Box {
+                IconButton(onClick = onMenuClick, modifier = Modifier.size(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)) {
+                    Icon(Icons.Default.MoreVert, "Session actions")
+                }
+                menuContent()
+            }
+        }
+        return
+    }
     TopAppBar(
         expandedHeight = if (LocalMaterial3.current) 64.dp else androidx.compose.material3.TopAppBarDefaults.TopAppBarExpandedHeight,
         navigationIcon = {
@@ -2505,7 +2524,7 @@ internal fun ReaderScreen(
     onShowEtaAccuracy: () -> Unit,
     onReleaseNotes: () -> Unit,
     material3: Boolean = LocalMaterial3.current,
-) = MultipromptTheme(sunlight = sunlightMode, material3 = material3) {
+) = MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
     val reader by connection.state.collectAsState()
     val transcript = reader.transcript.takeUnless { technicalMode }
     val historyAgent = TranscriptProtocol.supports(session.agent)
@@ -2553,7 +2572,6 @@ internal fun ReaderScreen(
     var historyDialogOpen by remember(connection) { mutableStateOf(false) }
     var skillSnapshot by remember(connection) { mutableStateOf(skills.loadFromCache()) }
     var attachedSkill by remember(connection) { mutableStateOf<Skill?>(null) }
-    var dissolveDialogVisible by remember(connection) { mutableStateOf(false) }
     var endDialogVisible by remember(connection) { mutableStateOf(false) }
     var renameDialogVisible by remember(connection) { mutableStateOf(false) }
     var reminderDialogVisible by remember(connection) { mutableStateOf(false) }
@@ -2812,22 +2830,6 @@ internal fun ReaderScreen(
             },
         )
     }
-    if (dissolveDialogVisible) {
-        AlertDialog(
-            onDismissRequest = { dissolveDialogVisible = false },
-            title = { Text("Archive ${session.displayName}?") },
-            text = { Text("This ends its tmux session but saves the name and resume command so it can be restored later.") },
-            confirmButton = {
-                Button(onClick = {
-                    dissolveDialogVisible = false
-                    onDissolve()
-                }) { Text("Archive") }
-            },
-            dismissButton = {
-                TextButton(onClick = { dissolveDialogVisible = false }) { Text("Cancel") }
-            },
-        )
-    }
     if (endDialogVisible) {
         AlertDialog(
             onDismissRequest = { endDialogVisible = false },
@@ -2954,12 +2956,17 @@ internal fun ReaderScreen(
             readerScope.launch { connection.exitHistory() }
         }
     }
+    val statusLabel = listOfNotNull(
+        reader.eta?.let { "ETA ${it.label(etaNowMillis)}" },
+        "waiting for input".takeIf { reader.waitingForInput },
+    ).joinToString(" · ").ifEmpty { null }
     BackHandler(onBack = onBack)
     Scaffold(
         modifier = Modifier.horizontalSwipe(onSwitchSession, suppressRight = replyGate::suppressRight),
+        floatingActionButtonPosition = androidx.compose.material3.FabPosition.Center,
         floatingActionButton = {
             if (if (historyChat) chatListState.canScrollBackward else scrollState.canScrollForward) {
-                FloatingActionButton(onClick = scrollLive, modifier = Modifier.size(if (LocalMaterial3.current) 48.dp else 40.dp)) {
+                FloatingActionButton(onClick = scrollLive, modifier = Modifier.size(ReaderJumpSize), shape = CircleShape, containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
                     Icon(Icons.Default.KeyboardArrowDown, "Jump to newest")
                 }
             }
@@ -2969,10 +2976,7 @@ internal fun ReaderScreen(
                 onBack = onBack,
                 session = session,
                 modelLabel = runtimeDetails.label,
-                statusLabel = listOfNotNull(
-                    reader.eta?.let { "ETA ${it.label(etaNowMillis)}" },
-                    "waiting for input".takeIf { reader.waitingForInput },
-                ).joinToString(" · ").ifEmpty { null },
+                statusLabel = statusLabel,
                 onModelCommand = sendModelCommand,
                 onOpenTerminal = onOpenTerminal,
                 onReleaseNotes = onReleaseNotes,
@@ -2982,6 +2986,51 @@ internal fun ReaderScreen(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false },
                     ) {
+                        DropdownMenuItem(
+                            text = { Text("Archive session") },
+                            onClick = { menuExpanded = false; onDissolve() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Remind me") },
+                            onClick = { menuExpanded = false; reminderDialogVisible = true },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (archived) "Return to open" else "Waiting") },
+                            onClick = { menuExpanded = false; onArchiveToggle() },
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text(listOfNotNull(runtimeDetails.label, statusLabel).joinToString(" · ").ifEmpty { "Model / effort" }) },
+                            enabled = false,
+                            onClick = {},
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Current: ${runtimeDetails.label ?: "Unknown"}") },
+                            enabled = false,
+                            onClick = {},
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Open model picker (/model)") },
+                            onClick = { menuExpanded = false; sendModelCommand("/model") },
+                        )
+                        if (session.agent == AgentKind.CLAUDE) {
+                            listOf("Opus", "Sonnet", "Fable").forEach { model ->
+                                DropdownMenuItem(
+                                    text = { Text("Use Claude $model") },
+                                    onClick = { menuExpanded = false; sendModelCommand("/model ${model.lowercase()}") },
+                                )
+                            }
+                            listOf("low", "medium", "high", "xhigh", "max").forEach { level ->
+                                DropdownMenuItem(
+                                    text = { Text("Set effort: $level") },
+                                    onClick = { menuExpanded = false; sendModelCommand("/effort $level") },
+                                )
+                            }
+                        }
+                        DropdownMenuItem(
+                            text = { Text("Release notes") },
+                            onClick = { menuExpanded = false; onReleaseNotes() },
+                        )
                         if (reader.alternateOn) {
                             DropdownMenuItem(
                                 text = { Text("Session history") },
@@ -3033,13 +3082,6 @@ internal fun ReaderScreen(
                                 },
                             )
                         }
-                        DropdownMenuItem(
-                            text = { Text(if (archived) "Return to open" else "Waiting and open next") },
-                            onClick = {
-                                menuExpanded = false
-                                onArchiveToggle()
-                            },
-                        )
                         DropdownMenuItem(
                             text = { Text("Open live terminal") },
                             onClick = {
@@ -3093,13 +3135,6 @@ internal fun ReaderScreen(
                             },
                         )
                         HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text("Archive session", color = MaterialTheme.colorScheme.error) },
-                            onClick = {
-                                menuExpanded = false
-                                dissolveDialogVisible = true
-                            },
-                        )
                         DropdownMenuItem(
                             text = { Text("End session", color = MaterialTheme.colorScheme.error) },
                             onClick = {
@@ -3174,38 +3209,6 @@ internal fun ReaderScreen(
                         )
                     }
                 }
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    OutlinedButton(
-                        onClick = onDissolve,
-                        modifier = Modifier.weight(1f).then(if (LocalMaterial3.current) Modifier.height(40.dp) else Modifier),
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
-                    ) {
-                        Icon(Icons.Default.Archive, null, Modifier.size(if (LocalMaterial3.current) 20.dp else 18.dp))
-                        Spacer(Modifier.size(4.dp))
-                        Text("Archive", maxLines = 1, softWrap = false)
-                    }
-                    OutlinedButton(
-                        onClick = { reminderDialogVisible = true },
-                        modifier = Modifier.weight(1f).then(if (LocalMaterial3.current) Modifier.height(40.dp) else Modifier),
-                        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 8.dp),
-                    ) {
-                        Icon(Icons.Default.Schedule, null, Modifier.size(if (LocalMaterial3.current) 20.dp else 18.dp))
-                        Spacer(Modifier.size(4.dp))
-                        Text("Remind", maxLines = 1, softWrap = false)
-                    }
-                    OutlinedButton(
-                        onClick = onArchiveToggle,
-                        modifier = Modifier.weight(1f).then(if (LocalMaterial3.current) Modifier.height(40.dp) else Modifier),
-                        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 8.dp),
-                    ) {
-                        Icon(Icons.Default.Sync, null, Modifier.size(if (LocalMaterial3.current) 20.dp else 18.dp))
-                        Spacer(Modifier.size(2.dp))
-                        Text(if (archived) "Open" else "Wait", maxLines = 1, softWrap = false)
-                    }
-                }
                 if (imageAttachments.isNotEmpty()) {
                     Row(
                         Modifier
@@ -3247,17 +3250,60 @@ internal fun ReaderScreen(
                 replyTo?.let { quoted ->
                     ReplyQuoteBar(message = quoted, author = replyAuthor, onCancel = { replyTo = null })
                 }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
+                ) {
+                    Box {
+                        IconButton(
+                            onClick = { attachMenuExpanded = true },
+                            enabled = !reader.sending && !dictationActive && !imageUploading,
+                            modifier = Modifier.size(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
+                        ) {
+                            if (imageUploading) CircularProgressIndicator(Modifier.size(ReaderBadgeSize), strokeWidth = 2.dp)
+                            else Icon(Icons.Default.Add, "Attach")
+                        }
+                        DropdownMenu(expanded = attachMenuExpanded, onDismissRequest = { attachMenuExpanded = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Add image") },
+                                onClick = {
+                                    attachMenuExpanded = false
+                                    if (screencast.configured) imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                    else imageKeyDialogVisible = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Use skill") },
+                                onClick = { attachMenuExpanded = false; skillMenuExpanded = true },
+                            )
+                        }
+                        SkillPickerMenu(
+                            expanded = skillMenuExpanded,
+                            snapshot = skillSnapshot,
+                            onDismiss = { skillMenuExpanded = false },
+                            onSelect = { skill ->
+                                skillMenuExpanded = false
+                                attachedSkill = skill
+                                val marker = "/${skill.name} "
+                                promptField = if (promptField.text.startsWith("/")) {
+                                    val rest = promptField.text.substringAfter(' ', "")
+                                    TextFieldValue(marker + rest, selection = TextRange(marker.length + rest.length))
+                                } else TextFieldValue(marker + promptField.text, selection = TextRange(marker.length))
+                            },
+                        )
+                    }
                 OutlinedTextField(
                     value = promptField,
                     onValueChange = { promptField = it },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = if (LocalMaterial3.current) 56.dp else 0.dp).focusRequester(promptFocusRequester),
-                    filled = LocalMaterial3.current,
+                    modifier = Modifier.weight(1f).heightIn(min = ReaderComposerHeight).focusRequester(promptFocusRequester),
+                    filled = true,
                     placeholder = {
-                        Text("Message this session")
+                        Text("Message this session", maxLines = 1, overflow = TextOverflow.Ellipsis)
                     },
                     minLines = 1,
                     maxLines = 6,
-                    shape = chromeShape(ControlShape),
+                    shape = ReaderComposerShape,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = { submitPrompt() }),
                     readOnly = dictationActive,
@@ -3267,67 +3313,6 @@ internal fun ReaderScreen(
                             !sendAfterDictation &&
                             (prompt.isNotBlank() || attachedSkill != null || imageAttachments.isNotEmpty() || dictationActive)
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box {
-                                IconButton(
-                                    onClick = { attachMenuExpanded = true },
-                                    enabled = !reader.sending && !dictationActive && !imageUploading,
-                                ) {
-                                    if (imageUploading) {
-                                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                                    } else {
-                                        Icon(Icons.Default.Add, "Attach")
-                                    }
-                                }
-                                DropdownMenu(
-                                    expanded = attachMenuExpanded,
-                                    onDismissRequest = { attachMenuExpanded = false },
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("Add image") },
-                                        leadingIcon = { Icon(Icons.Default.Image, null, Modifier.size(if (LocalMaterial3.current) 20.dp else 18.dp)) },
-                                        onClick = {
-                                            attachMenuExpanded = false
-                                            if (screencast.configured) {
-                                                imagePicker.launch(
-                                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                                                )
-                                            } else {
-                                                imageKeyDialogVisible = true
-                                            }
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Use skill") },
-                                        leadingIcon = { Icon(Icons.Default.Build, null, Modifier.size(if (LocalMaterial3.current) 20.dp else 18.dp)) },
-                                        onClick = {
-                                            attachMenuExpanded = false
-                                            skillMenuExpanded = true
-                                        },
-                                    )
-                                }
-                                SkillPickerMenu(
-                                    expanded = skillMenuExpanded,
-                                    snapshot = skillSnapshot,
-                                    onDismiss = { skillMenuExpanded = false },
-                                    onSelect = { skill ->
-                                        skillMenuExpanded = false
-                                        attachedSkill = skill
-                                        val marker = "/${skill.name} "
-                                        promptField = if (promptField.text.startsWith("/")) {
-                                            val rest = promptField.text.substringAfter(' ', "")
-                                            TextFieldValue(
-                                                marker + rest,
-                                                selection = TextRange(marker.length + rest.length),
-                                            )
-                                        } else {
-                                            TextFieldValue(
-                                                marker + promptField.text,
-                                                selection = TextRange(marker.length),
-                                            )
-                                        }
-                                    },
-                                )
-                            }
                             IconButton(
                                 onClick = {
                                     if (dictationActive) {
@@ -3356,7 +3341,7 @@ internal fun ReaderScreen(
                                 onClick = submitPrompt,
                                 enabled = sendEnabled,
                                 modifier = Modifier
-                                    .then(if (LocalMaterial3.current) Modifier.minimumInteractiveComponentSize().size(40.dp) else Modifier.padding(2.dp))
+                                    .minimumInteractiveComponentSize().size(ReaderSendSize)
                                     .background(
                                         if (LocalMaterial3.current || sendEnabled) MaterialTheme.colorScheme.primary else {
                                             MaterialTheme.colorScheme.surfaceVariant
@@ -3379,6 +3364,14 @@ internal fun ReaderScreen(
                         }
                     },
                 )
+                    Box(
+                        Modifier.width(ReaderWaveformWidth).height(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHigh, ReaderComposerShape)
+                            .testTag("reader-waveform"),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Default.GraphicEq, null)
+                    }
+                }
                 (microphoneError ?: dictationState.error ?: imageUploadError)?.let { message ->
                     Text(
                         message,
@@ -3414,7 +3407,7 @@ internal fun ReaderScreen(
                 onSessionUsed = { onSessionInteraction(); onSessionInput() },
                 listState = chatListState,
                 followRequest = followRequest,
-                modifier = Modifier.padding(padding).padding(horizontal = 4.dp, vertical = 10.dp)
+                modifier = Modifier.padding(bottom = padding.calculateBottomPadding()).statusBarsPadding().padding(horizontal = ReaderScreenPadding)
                     .transformable(state = transcriptTransform, canPan = { false })
                     .pointerInput(onOpenTerminal) {
                         detectTapGestures(onDoubleTap = { onOpenTerminal() })
@@ -3422,16 +3415,16 @@ internal fun ReaderScreen(
             )
         } else Column(
             Modifier
-                .padding(padding)
+                .padding(bottom = padding.calculateBottomPadding()).statusBarsPadding()
                 .fillMaxSize()
                 .nestedScroll(overscrollLoader)
                 .readerScroll(scrollState, followRequest)
                 .pointerInput(onOpenTerminal) {
                     detectTapGestures(onDoubleTap = { onOpenTerminal() })
                 }
-                .padding(horizontal = 4.dp, vertical = 10.dp),
+                .padding(horizontal = ReaderScreenPadding).padding(top = ReaderFloatingInset, bottom = ReaderMessageSpacing),
             horizontalAlignment = Alignment.Start,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(ReaderMessageSpacing),
         ) {
             if (!historyAgent && transcript == null && reader.alternateOn) {
                 OutlinedButton(

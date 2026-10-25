@@ -23,6 +23,7 @@ private val LocalChatUser = staticCompositionLocalOf { false }
 
 @Composable
 fun chatBubbleColor(isUser: Boolean, sunlight: Boolean): Color = when {
+    LocalReaderStyle.current -> MaterialTheme.colorScheme.surfaceContainerHigh
     LocalMaterial3.current -> if (isUser) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent
     isUser && sunlight -> ChatBubbleUserLight
     isUser -> ChatBubbleUserDark
@@ -32,14 +33,14 @@ fun chatBubbleColor(isUser: Boolean, sunlight: Boolean): Color = when {
 
 @Composable
 fun chatTextColor(sunlight: Boolean, isUser: Boolean = LocalChatUser.current): Color = when {
-    LocalMaterial3.current -> MaterialTheme.colorScheme.onSurface
+    LocalReaderStyle.current || LocalMaterial3.current -> MaterialTheme.colorScheme.onSurface
     sunlight -> ChatTextLight
     else -> ChatTextDark
 }
 
 @Composable
 fun chatHintColor(sunlight: Boolean): Color = when {
-    LocalMaterial3.current -> MaterialTheme.colorScheme.onSurfaceVariant
+    LocalReaderStyle.current || LocalMaterial3.current -> MaterialTheme.colorScheme.onSurfaceVariant
     sunlight -> Color(0xFF4A4D52)
     else -> ChatHintDark
 }
@@ -53,7 +54,9 @@ fun ChatBubble(
     content: @Composable () -> Unit,
 ) {
     BoxWithConstraints(modifier.fillMaxWidth()) {
-        val bubbleModifier = if (isUser) {
+        val bubbleModifier = if (LocalReaderStyle.current) {
+            Modifier.align(Alignment.CenterStart).fillMaxWidth()
+        } else if (isUser) {
             Modifier.align(Alignment.CenterEnd).widthIn(max = maxWidth * ChatUserMaxWidthFraction)
         } else {
             Modifier.align(Alignment.CenterStart).fillMaxWidth()
@@ -61,16 +64,16 @@ fun ChatBubble(
         Box(
             bubbleModifier
                 .then(contentModifier)
-                .clip(if (LocalMaterial3.current) androidx.compose.foundation.shape.RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomEnd = if (isUser) 4.dp else 20.dp, bottomStart = 20.dp) else chatShape())
+                .clip(if (LocalReaderStyle.current) ReaderCardShape else if (LocalMaterial3.current) androidx.compose.foundation.shape.RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomEnd = if (isUser) 4.dp else 20.dp, bottomStart = 20.dp) else chatShape())
                 .background(chatBubbleColor(isUser, sunlight)),
         ) {
             CompositionLocalProvider(LocalChatUser provides isUser) {
                 ProvideTextStyle(
-                    if (LocalMaterial3.current) MaterialTheme.typography.bodyLarge.copy(color = chatTextColor(sunlight), fontSize = 15.sp, lineHeight = 22.sp) else {
+                    if (LocalReaderStyle.current) MaterialTheme.typography.bodyLarge.copy(color = chatTextColor(sunlight), fontSize = ReaderTextSize, lineHeight = ReaderLineHeight) else if (LocalMaterial3.current) MaterialTheme.typography.bodyLarge.copy(color = chatTextColor(sunlight), fontSize = 15.sp, lineHeight = 22.sp) else {
                         androidx.compose.material3.LocalTextStyle.current
                     },
                 ) {
-                    Column(Modifier.padding(horizontal = if (LocalMaterial3.current) 16.dp else 12.dp, vertical = 10.dp)) { content() }
+                    Column(if (LocalReaderStyle.current) Modifier.padding(ReaderCardPadding) else Modifier.padding(horizontal = if (LocalMaterial3.current) 16.dp else 12.dp, vertical = 10.dp)) { content() }
                 }
             }
         }

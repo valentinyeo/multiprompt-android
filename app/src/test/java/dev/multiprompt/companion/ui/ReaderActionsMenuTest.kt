@@ -3,6 +3,9 @@ package dev.multiprompt.companion.ui
 import android.app.Application
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -76,7 +79,7 @@ class ReaderActionsMenuTest {
         compose.onNodeWithText("Tomorrow · 9:00 AM").assertIsDisplayed().performClick()
         compose.runOnIdle {
             assertEquals(1, reminders.size)
-            assertTrue(reminders.single()!! > System.currentTimeMillis() / 1000)
+            assertEquals(dev.multiprompt.companion.data.ReminderTimeParser.tomorrowMorning(java.time.ZonedDateTime.now()).toEpochSecond(), reminders.single())
             assertEquals(0, archives)
             assertEquals(0, waits)
         }
@@ -92,6 +95,20 @@ class ReaderActionsMenuTest {
         openMenu()
         compose.onNodeWithText("Return to open").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(2, waits); assertTrue(!archived.value); assertEquals(0, archives) }
+    }
+
+    @Test fun composerHasInsideMicrophoneOutsidePlusAndDecorativeWaveform() {
+        render()
+        val input = compose.onNode(hasSetTextAction()).fetchSemanticsNode().boundsInRoot
+        val mic = compose.onNodeWithContentDescription("Start dictation").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val plus = compose.onNodeWithContentDescription("Attach").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val waveform = compose.onNodeWithTag("reader-waveform").assertIsDisplayed().fetchSemanticsNode()
+        assertTrue(mic.left >= input.left && mic.right <= input.right && mic.top >= input.top && mic.bottom <= input.bottom)
+        assertTrue(plus.right < input.left)
+        assertTrue(waveform.boundsInRoot.left > input.right)
+        assertTrue(SemanticsActions.OnClick !in waveform.config)
+        compose.onNodeWithContentDescription("Back").assertIsDisplayed()
+        compose.onNodeWithText(f.session.displayName).assertDoesNotExist()
     }
 
     @Test fun sessionActionsAreNotDuplicatedAboveTheComposer() {

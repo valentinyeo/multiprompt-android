@@ -44,25 +44,24 @@ class Material3LookTest(private val screen: M3Screen, private val sunlight: Bool
             listOf("Scroll agent history up", "Open agent history", "Back to live").forEach {
                 compose.onNodeWithContentDescription(it).assertDoesNotExist()
             }
-            val titleLayouts = mutableListOf<TextLayoutResult>()
-            compose.onNodeWithText("claude-reader", useUnmergedTree = true)
-                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(titleLayouts) }
-            assertEquals(22f, titleLayouts.single().layoutInput.style.fontSize.value)
-            val subtitleLayouts = mutableListOf<TextLayoutResult>()
-            compose.onNodeWithText("Opus 5.5 · medium · waiting for input", useUnmergedTree = true)
-                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(subtitleLayouts) }
-            val subtitleStyle = subtitleLayouts.single().layoutInput.style
-            assertEquals(12f, subtitleStyle.fontSize.value)
-            assertEquals(if (sunlight) Material3LightColors.onSurfaceVariant else Material3DarkColors.onSurfaceVariant, subtitleStyle.color)
+            compose.onNodeWithText("claude-reader", useUnmergedTree = true).assertDoesNotExist()
+            val back = compose.onNodeWithContentDescription("Back").fetchSemanticsNode().boundsInRoot
+            val menu = compose.onNodeWithContentDescription("Session actions").fetchSemanticsNode().boundsInRoot
+            assertEquals(48f, back.width, 0.01f)
+            assertEquals(48f, menu.width, 0.01f)
+            assertEquals(back.top, menu.top, 0.01f)
             val send = compose.onNodeWithContentDescription("Send prompt").fetchSemanticsNode().boundsInRoot
             assertEquals(40f, send.width, 0.01f)
             assertEquals(40f, send.height, 0.01f)
             val field = compose.onNode(hasSetTextAction()).fetchSemanticsNode().boundsInRoot
             assertTrue("composer=$field", field.height >= 56f)
             listOf("Archive", "Remind", "Wait").forEach { label ->
-                val target = compose.onNodeWithText(label).fetchSemanticsNode().touchBoundsInRoot
-                assertTrue("$label=$target", target.height >= 48f)
+                compose.onNodeWithText(label).assertDoesNotExist()
             }
+            val mic = compose.onNodeWithContentDescription("Start dictation").fetchSemanticsNode().boundsInRoot
+            val attach = compose.onNodeWithContentDescription("Attach").fetchSemanticsNode().boundsInRoot
+            assertTrue("microphone=$mic composer=$field", mic.left >= field.left && mic.right <= field.right && mic.top >= field.top && mic.bottom <= field.bottom)
+            assertTrue("attach=$attach composer=$field", attach.right < field.left)
         } else {
             val tab = compose.onNodeWithText("All").fetchSemanticsNode()
             val row = compose.onNodeWithText("claude-reader").fetchSemanticsNode()
