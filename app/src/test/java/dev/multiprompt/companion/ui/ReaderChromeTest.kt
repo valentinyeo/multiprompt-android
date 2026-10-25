@@ -155,9 +155,17 @@ class ReaderChromeTest {
             stop.right <= meter.left && meter.right <= send.left && stop.top == meter.top && meter.top == send.top)
         assertTrue("controls are big: ${stop.height}", stop.height.value >= 56f)
         screenshot("dictating")
-        compose.runOnIdle { dictationState.value = DictationState(configured = true); dictationLevel.value = 0f }
+        compose.onNodeWithTag("dictation-stop").performClick()
+        compose.runOnIdle {
+            assertTrue("stop button stops dictation", f.app.deepgramDictation.state.value.status == DictationStatus.IDLE)
+        }
         compose.onNodeWithTag("dictation-stop").assertDoesNotExist()
         compose.onNodeWithContentDescription("Start dictation").assertIsDisplayed()
+        compose.runOnIdle { dictationState.value = DictationState(status = DictationStatus.LISTENING, configured = true) }
+        compose.onNodeWithTag("dictation-send").performClick()
+        compose.runOnIdle {
+            assertTrue("send button stops dictation", f.app.deepgramDictation.state.value.status == DictationStatus.IDLE)
+        }
     }
 
     @Test fun historyMenuIsOnlyAvailableForAlternateScreenSessions() {

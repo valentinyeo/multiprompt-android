@@ -20,7 +20,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -130,11 +129,13 @@ private fun DictationClock(color: Color) {
 
 @Composable
 private fun LevelDotsRow(level: StateFlow<Float>, color: Color) {
-    val current by level.collectAsState()
     val history = remember { mutableStateListOf<Float>() }
-    LaunchedEffect(current) {
-        history.add(current)
-        while (history.size > LevelDots) history.removeAt(0)
+    LaunchedEffect(level) {
+        while (true) {
+            history.add(level.value)
+            while (history.size > LevelDots) history.removeAt(0)
+            delay(80)
+        }
     }
     val lit = AudioLevel.litDots(history, LevelDots)
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {

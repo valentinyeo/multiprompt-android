@@ -45,6 +45,20 @@ class DeepgramDictationTest {
     }
 
     @Test
+    fun levelFollowsTheMicrophoneAndDropsToZeroOnStop() {
+        val fixture = Fixture()
+        fixture.dictation.use { dictation ->
+            dictation.start()
+            fixture.mic.feed(1, voiced = false)
+            assertEquals(0f, dictation.level.value, 0f)
+            fixture.mic.feed(1, voiced = true)
+            assertTrue(dictation.level.value > 0.3f)
+            dictation.onAppBackgrounded()
+            assertEquals(0f, dictation.level.value, 0f)
+        }
+    }
+
+    @Test
     fun gateClosesSocketButKeepsListeningAndAcceptsLateTranscriptsAfterReopening() {
         val fixture = Fixture()
         fixture.dictation.use { dictation ->

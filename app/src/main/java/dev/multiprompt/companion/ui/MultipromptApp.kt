@@ -3253,7 +3253,7 @@ internal fun ReaderScreen(
                     DictationBar(
                         sessionName = session.displayName,
                         level = dictation.level,
-                        sending = reader.sending || sendAfterDictation,
+                        sending = reader.sending || sendAfterDictation || pendingPromptAction != null,
                         onStop = { dictation.stop() },
                         onSend = submitPrompt,
                         onJumpToNewest = scrollLive,
