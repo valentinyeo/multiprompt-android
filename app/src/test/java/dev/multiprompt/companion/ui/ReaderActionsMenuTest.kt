@@ -11,7 +11,12 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import dev.multiprompt.companion.model.AgentKind
+import dev.multiprompt.companion.reader.ChatHistoryConnection
+import dev.multiprompt.companion.reader.ChatHistoryProtocol
+import dev.multiprompt.companion.reader.ChatHistoryState
 import dev.multiprompt.companion.reader.ChatHistoryCache
+import org.robolectric.util.ReflectionHelpers
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
@@ -46,8 +51,14 @@ class ReaderActionsMenuTest {
 
     @Before fun setup() {
         f = SessionActivityFixture()
+        val cache = ChatHistoryCache(f.app.cacheDir.resolve("actions-history"))
         connection = SessionReaderConnection(f.app.sshRepository, f.host, f.session.name,
-            historyScript = byteArrayOf(), historyCache = ChatHistoryCache(f.app.cacheDir.resolve("actions-history")))
+            agent = AgentKind.CLAUDE, historyScript = byteArrayOf(), historyCache = cache)
+        val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, f.session.name, f.session.workingDirectory)
+        val chat = ChatHistoryConnection(f.app.sshRepository, f.host, identity, byteArrayOf(), cache)
+        f.field<MutableStateFlow<ChatHistoryState>>(chat, "_state").value = ChatHistoryState(loaded = true)
+        ReflectionHelpers.setField(connection, "historyIdentity", identity)
+        ReflectionHelpers.setField(connection, "historyConnection", chat)
     }
 
     @After fun cleanup() { connection.close(); f.close() }
@@ -58,7 +69,7 @@ class ReaderActionsMenuTest {
             ReaderScreen(
                 connection = connection, dictation = f.app.deepgramDictation,
                 screencast = f.app.screencastUploader, skills = f.app.skillStore,
-                signedIn = true, onSignIn = {}, onSignOut = {}, session = f.session,
+                signedIn = true, onSignIn = {}, onSignOut = {}, session = f.session.copy(paneCommand = "claude"),
                 unread = false, archived = archived.value, initialFontScale = 1f,
                 onBack = {}, onMarkRead = {}, onArchiveToggle = { waits++; archived.value = !archived.value },
                 onRemind = { reminders.add(it) }, onOpenTerminal = {}, onSwitchSession = {},
