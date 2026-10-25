@@ -34,6 +34,7 @@ import dev.multiprompt.companion.reader.ChatHistoryMessage
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -102,7 +103,7 @@ class ChatImagePreviewTest {
     fun assistantImageLoadsOnScrollAndUsesCache() {
         val image = "https://screencast2.com/VkDx2.png?inline-preview"
         val requested = AtomicBoolean(false)
-        val cached = AtomicBoolean(false)
+        val networkLoads = AtomicInteger(0)
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         SingletonImageLoader.setUnsafe(ImageLoader.Builder(context).eventListener(object : EventListener() {
             override fun onError(request: ImageRequest, result: ErrorResult) {
@@ -113,7 +114,7 @@ class ChatImagePreviewTest {
                 if (request.data == image) requested.set(true)
             }
             override fun onSuccess(request: ImageRequest, result: SuccessResult) {
-                if (request.data == image && result.dataSource != DataSource.NETWORK) cached.set(true)
+                if (request.data == image && result.dataSource == DataSource.NETWORK) networkLoads.incrementAndGet()
             }
         }).build())
         val messages = listOf(ChatHistoryMessage("old", "assistant", "[Screenshot]($image)", "", 0, 1)) +
@@ -136,7 +137,11 @@ class ChatImagePreviewTest {
         compose.onNodeWithTag("chat-history").performScrollToIndex(0)
         compose.onNodeWithContentDescription("Image preview: $image").assertDoesNotExist()
         compose.onNodeWithTag("chat-history").performScrollToIndex(40)
-        compose.waitUntil(30_000) { cached.get() }
+        compose.waitUntil(30_000) {
+            compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Image preview: $image"))
+                .fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithContentDescription("Image preview: $image").assertIsDisplayed()
+        assertEquals("Scrolling back must reuse the image without another network load", 1, networkLoads.get())
     }
 }
