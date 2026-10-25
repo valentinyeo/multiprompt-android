@@ -16,9 +16,9 @@ okhttp = "5.3.0"
 browser = "1.9.0"
 work = "2.11.2"
 material = "1.14.0"
-testRunner = "1.7.0"
 
 [libraries]
+androidx-test-rules = { module = "androidx.test:rules", version.ref = "androidxTestRunner" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTestRunner" }
 material-color-utilities = { module = "com.google.android.material:material", version.ref = "material" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }

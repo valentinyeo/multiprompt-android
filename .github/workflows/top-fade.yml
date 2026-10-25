@@ -41,10 +41,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           script: |
-            gradle --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.multiprompt.companion.ui.TopFadeInstrumentedTest
-      - name: Collect emulator screenshots
-        if: always()
-        run: adb pull /sdcard/Android/data/dev.multiprompt.companion.debug/files/ build/top-fade-shots
+            status=0; gradle --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.multiprompt.companion.ui.TopFadeInstrumentedTest || status=$?; adb pull /sdcard/Android/data/dev.multiprompt.companion.debug/files/ build/top-fade-shots; exit "$status"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
