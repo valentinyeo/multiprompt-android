@@ -3645,12 +3645,6 @@ internal fun ReaderScreen(
                             onReply = { chooseReply(it, isUser) },
                             gate = replyGate,
                         ) {
-                            Text(
-                                if (isUser) "You" else session.agent.label,
-                                fontFamily = chatFontFamily(),
-                                fontSize = chromeFontSize((transcriptFontSize.value - 3f).coerceAtLeast(8f).sp),
-                                color = chatHintColor(sunlightMode),
-                            )
                             if (isUser) {
                                 Text(
                                     terminalLinks(message.text, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
@@ -3667,21 +3661,13 @@ internal fun ReaderScreen(
                                     linkColor = chatLinkColor(terminalBlue(sunlightMode)),
                                 )
                             }
-                            message.timestamp?.let { timestamp ->
-                                Text(
-                                    formatChatTime(timestamp),
-                                    fontFamily = chatFontFamily(),
-                                    fontSize = chromeFontSize((transcriptFontSize.value - 3f).coerceAtLeast(8f).sp),
-                                    color = chatHintColor(sunlightMode),
-                                )
-                            }
                         }
                     }
                 }
                 queuedMessages.forEach { text ->
                     ChatBubble(isUser = true, sunlight = sunlightMode) {
                         Text(
-                            "You · queued",
+                            "Queued",
                             fontFamily = chatFontFamily(),
                             fontSize = chromeFontSize((transcriptFontSize.value - 3f).coerceAtLeast(8f).sp),
                             color = chatHintColor(sunlightMode),

@@ -43,8 +43,8 @@ class ReaderStyleTest {
                         assertEquals(Material3DarkColors, outer)
                         assertEquals(Color(0xFF101010), colors.background)
                         assertEquals(Color(0xFF303030), colors.surfaceContainerHighest)
-                        assertEquals(Color(0xFF242424), user)
-                        assertEquals(user, agent)
+                        assertEquals(Color(0xFF3A3A3A), user)
+                        assertEquals(Color(0xFF242424), agent)
                         assertEquals(FontFamily.SansSerif, family)
                         assertEquals(ReaderCardShape, shape)
                     }
@@ -57,8 +57,9 @@ class ReaderStyleTest {
         }
         val user = compose.onNodeWithText("User message").fetchSemanticsNode().boundsInRoot
         val agent = compose.onNodeWithText("Agent message").fetchSemanticsNode().boundsInRoot
-        assertEquals(user.left, agent.left, 0.01f)
-        assertEquals(16f, user.left, 0.01f)
+        assertEquals(16f, agent.left, 0.01f)
+        assertEquals(374f, user.right, 0.5f)
+        assertTrue(user.left > agent.left)
         listOf("User message", "Agent message").forEach { text ->
             val layouts = mutableListOf<TextLayoutResult>()
             compose.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
