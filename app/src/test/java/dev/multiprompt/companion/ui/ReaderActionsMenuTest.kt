@@ -107,9 +107,8 @@ class ReaderActionsMenuTest {
         scheduler.runCurrent()
         compose.runOnUiThread {
             val dialog = checkNotNull(ShadowDialog.getLatestDialog())
-            val metrics = dialog.context.resources.displayMetrics
-            println("Reminder window: ${dialog.window?.decorView?.width}x${dialog.window?.decorView?.height}")
-            dialog.window?.setLayout(metrics.widthPixels, metrics.heightPixels)
+            val viewport = dialog.context.resources.displayMetrics
+            checkNotNull(dialog.window).setLayout(viewport.widthPixels, viewport.heightPixels)
         }
         compose.mainClock.autoAdvance = true
         compose.onNodeWithText("Tomorrow · 9:00 AM").performScrollTo().assertIsDisplayed().performClick()
