@@ -72,8 +72,8 @@ fun MarkdownText(
                     modifier = Modifier.padding(top = 4.dp),
                 )
                 is MdBlock.ListItem -> Row(Modifier.padding(start = (block.depth * 16).dp)) {
-                    val number = block.marker.removeSuffix(".").toIntOrNull()
-                    if (LocalReaderStyle.current && number != null && number > 0) {
+                    val number = block.marker.removeSuffix(".").toIntOrNull() ?: 0
+                    if (LocalReaderStyle.current && number > 0) {
                         val letter = remember(number) {
                             var ordinal = number
                             buildString {

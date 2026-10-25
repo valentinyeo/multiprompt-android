@@ -39,3 +39,12 @@ jobs:
         env:
           GRADLE: gradle
         run: tools/check.sh
+
+      - name: Upload chat screenshots and JVM results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chat-regression-proof
+          path: |
+            app/build/reports/igsh-844/*.png
+            app/build/test-results/test*UnitTest/*.xml

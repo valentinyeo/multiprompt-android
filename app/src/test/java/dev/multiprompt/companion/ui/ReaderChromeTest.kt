@@ -79,7 +79,9 @@ class ReaderChromeTest {
         history = f.field(chat, "_state")
         history.value = ChatHistoryState(loaded = true, history = ChatHistory(sid = "chrome", rows =
             List(messageCount) { index ->
-                ChatHistoryProtocol.Row("user", "Message $index", "$index", "", index.toLong(), index + 1L)
+                ChatHistoryProtocol.Row(if (index % 2 == 0) "user" else "assistant",
+                    "Message $index" + if (index == messageCount - 1) "\n\n1. First option\n2. Second option" else "",
+                    "$index", "", index.toLong(), index + 1L)
             }))
     }
 
@@ -113,6 +115,7 @@ class ReaderChromeTest {
         compose.onNodeWithText("$modelLabel · waiting for input", useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithText(f.session.displayName, useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithText("Disconnected · retrying").assertDoesNotExist()
+        screenshot("chat-live")
         compose.onNodeWithTag("chat-history").performScrollToIndex(messageCount - 1)
         val bar = compose.onNodeWithTag("reader-floating-controls").getUnclippedBoundsInRoot()
         val viewport = compose.onNodeWithTag("chat-history").getUnclippedBoundsInRoot()
@@ -169,7 +172,7 @@ class ReaderChromeTest {
         compose.onNodeWithText("Disconnected · retrying").assertDoesNotExist()
     }
 
-    private fun screenshot() {
+    private fun screenshot(name: String = "chat-view") {
         val root = compose.onRoot()
         val view = (root.fetchSemanticsNode().root as ViewRootForTest).view.rootView
         val attachInfo = ReflectionHelpers.getField<Any>(view, "mAttachInfo")
@@ -190,7 +193,7 @@ class ReaderChromeTest {
             redraw.cancel()
             ReflectionHelpers.setField(attachInfo, "mHardwareAccelerated", hardwareAccelerated)
         }
-        val output = File("build/reports/igsh-428/chat-view.png")
+        val output = File("build/reports/igsh-844/$name.png")
         checkNotNull(output.parentFile).mkdirs()
         output.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
         assertTrue(output.isFile && output.length() > 0)
