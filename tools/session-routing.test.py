@@ -42,12 +42,19 @@ class SessionRoutingTest(unittest.TestCase):
         os.utime(path, (200 if newer else 100, 200 if newer else 100))
         return path
 
-    def process(self, path=None):
-        program = "import sys; f=open(sys.argv[1]) if sys.argv[1] else None; print('ready',flush=True); input()"
-        process = subprocess.Popen(["python3", "-c", program, str(path) if path else ""],
+    def process(self, path=None, wrapper=False, duplicate=False):
+        program = "import sys; f=open(sys.argv[1]) if sys.argv[1] else None; g=open(sys.argv[1]) if sys.argv[2]=='yes' else None; print('ready',flush=True); input()"
+        command = ["python3", "-c", program, str(path) if path else "", "yes" if duplicate else "no"]
+        if wrapper:
+            executable = self.home / "codex"
+            executable.symlink_to(sys.executable)
+            command[0] = str(executable)
+            command = ["python3", "-c", "import subprocess,sys; sys.exit(subprocess.call(sys.argv[1:]))", *command]
+        process = subprocess.Popen(command,
                                    cwd=self.cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
         def cleanup():
-            process.terminate()
+            process.stdin.write("\n")
+            process.stdin.flush()
             process.wait(timeout=5)
             process.stdin.close()
             process.stdout.close()
@@ -75,6 +82,15 @@ class SessionRoutingTest(unittest.TestCase):
         own = self.transcript("codex", "session-a")
         self.transcript("codex", "session-b", newer=True)
         self.assertEqual(("session-a", own), reader.resolve_tmux_agent("codex", "session-a", self.process(own)))
+
+    def test_codex_launcher_uses_its_native_child_not_a_workspace_neighbour(self):
+        own = self.transcript("codex", "session-a")
+        self.transcript("codex", "session-b", newer=True)
+        self.assertEqual(("session-a", own), reader.resolve_tmux_agent("codex", "session-a", self.process(own, wrapper=True)))
+
+    def test_duplicate_descriptors_do_not_make_a_single_codex_session_ambiguous(self):
+        own = self.transcript("codex", "session-a")
+        self.assertEqual(("session-a", own), reader.resolve_tmux_agent("codex", "session-a", self.process(own, duplicate=True)))
 
 
 if __name__ == "__main__":

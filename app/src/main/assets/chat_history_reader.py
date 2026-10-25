@@ -289,9 +289,15 @@ def claude_session_metadata(pid):
             cwd if isinstance(cwd, str) and cwd else None)
 
 def open_codex_transcript(pid):
-    matches = []
-    try:
-        for fd in Path(f"/proc/{pid}/fd").iterdir():
+    matches = set()
+    owners = [pid] + [child for child, (parent, argv) in process_table().items()
+                      if parent == pid and argv and process_basename(argv[0]) == "codex"]
+    for owner in owners:
+        try:
+            descriptors = list(Path(f"/proc/{owner}/fd").iterdir())
+        except OSError:
+            continue
+        for fd in descriptors:
             try:
                 path = Path(os.readlink(fd))
                 if (path.suffix != ".jsonl" or not path.name.startswith("rollout-") or
@@ -301,12 +307,10 @@ def open_codex_transcript(pid):
                     meta = json.loads(source.readline())
                 sid = meta.get("payload", {}).get("id")
                 if isinstance(sid, str) and SESSION_ID.fullmatch(sid):
-                    matches.append((sid, path))
+                    matches.add((sid, path))
             except (OSError, ValueError, AttributeError):
                 pass
-    except OSError:
-        pass
-    return matches[0] if len(matches) == 1 else None
+    return next(iter(matches)) if len(matches) == 1 else None
 
 def resolve_tmux_agent(agent, name, pid=None):
 
