@@ -2078,7 +2078,6 @@ private fun SessionCard(
         },
     )
     val title: @Composable RowScope.() -> Unit = {
-        AgentIcon(session.agent)
         if (starred) FavoriteDot()
         Text(
             session.displayName,
@@ -2177,8 +2176,11 @@ private fun SessionCard(
                     )
                     .heightIn(min = 88.dp)
                     .padding(horizontal = 16.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                Box(Modifier.width(20.dp).padding(top = 2.dp), contentAlignment = Alignment.TopCenter) {
+                    AgentIcon(session.agent)
+                }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         title()

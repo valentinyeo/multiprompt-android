@@ -307,6 +307,10 @@ PYROTATE
     printf 'CHANGED KEY DISMISSAL VERIFIED; no authentication after rotation\n'
     exit 0
 fi
+if [[ "$feature" == sessions.md || "$feature" == session-reader.md ]]; then
+    adb shell cmd uimode night yes
+    sleep 2
+fi
 if [[ "$feature" == sessions.md ]]; then
     tap_desc 'Search sessions'
     fill 'Search all sessions' verify-session
