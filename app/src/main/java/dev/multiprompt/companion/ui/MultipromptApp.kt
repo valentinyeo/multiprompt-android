@@ -17,7 +17,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -124,7 +127,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.onClick
@@ -1176,6 +1178,7 @@ internal fun SessionsScreen(
         AppTheme.SUNLIGHT -> true
     },
     material3 = material3,
+    readerStyle = !material3,
 ) {
     val sunlight = appTheme == AppTheme.SUNLIGHT || (appTheme == AppTheme.SYSTEM && !isSystemInDarkTheme())
     var workspaceDialogVisible by remember { mutableStateOf(false) }
@@ -1584,7 +1587,7 @@ internal fun SessionsScreen(
     }
     Column(
         Modifier.fillMaxSize()
-            .then(if (LocalMaterial3.current) Modifier.background(MaterialTheme.colorScheme.background) else Modifier)
+            .background(MaterialTheme.colorScheme.background)
             .imePadding(),
     ) {
         Row(
@@ -1640,6 +1643,7 @@ internal fun SessionsScreen(
                 IconButton(
                     enabled = !state.creatingSession,
                     onClick = onStartNewSession,
+                    modifier = Modifier.roundOutlined(),
                 ) {
                     if (state.creatingSession) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -1647,13 +1651,16 @@ internal fun SessionsScreen(
                         Icon(Icons.Default.Add, "New session")
                     }
                 }
-                IconButton(onClick = {
-                    searchVisible = !searchVisible
-                    if (!searchVisible) {
-                        searchQuery = ""
-                        focusManager.clearFocus()
-                    }
-                }) {
+                IconButton(
+                    onClick = {
+                        searchVisible = !searchVisible
+                        if (!searchVisible) {
+                            searchQuery = ""
+                            focusManager.clearFocus()
+                        }
+                    },
+                    modifier = Modifier.roundOutlined(),
+                ) {
                     Icon(
                         if (searchVisible) Icons.Default.Close else Icons.Default.Search,
                         if (searchVisible) "Close session search" else "Search sessions",
@@ -1684,8 +1691,12 @@ internal fun SessionsScreen(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    modifier = Modifier.fillMaxWidth().then(if (LocalMaterial3.current) Modifier.height(56.dp) else Modifier).focusRequester(searchFocusRequester),
-                    filled = LocalMaterial3.current,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .then(if (LocalReaderStyle.current) Modifier.border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f), ReaderComposerShape) else Modifier)
+                        .focusRequester(searchFocusRequester),
+                    filled = true,
                     search = true,
                     placeholder = { Text("Search all sessions") },
                     leadingIcon = { Icon(Icons.Default.Search, null) },
@@ -1777,7 +1788,7 @@ internal fun SessionsScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .horizontalSwipe(onSwitchWorkspace, PointerEventPass.Final),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = if (LocalMaterial3.current) 0.dp else 8.dp, vertical = 4.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp),
             reverseLayout = normalizedQuery.isBlank() && state.newestSessionsAtBottom,
         ) {
             state.hostErrors.forEach { (hostId, error) ->
@@ -1963,6 +1974,15 @@ private fun ReminderDialog(
 }
 
 @Composable
+private fun Modifier.roundOutlined(): Modifier = if (LocalReaderStyle.current) {
+    size(ReaderControlSize)
+        .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
+        .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f), CircleShape)
+} else {
+    this
+}
+
+@Composable
 private fun AgentIcon(
     agent: AgentKind,
     modifier: Modifier = Modifier.size(20.dp),
@@ -2020,6 +2040,7 @@ private fun AgentBadge(agent: AgentKind) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SessionCard(
     session: TmuxSession,
@@ -2057,13 +2078,12 @@ private fun SessionCard(
         },
     )
     val title: @Composable RowScope.() -> Unit = {
-        AgentIcon(session.agent)
         if (starred) FavoriteDot()
         Text(
             session.displayName,
             modifier = Modifier.weight(1f),
-            style = if (LocalMaterial3.current) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium,
-            fontWeight = if (LocalMaterial3.current) FontWeight.Medium else if (unread) FontWeight.Bold else FontWeight.Normal,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = if (unread) FontWeight.Bold else FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -2103,6 +2123,19 @@ private fun SessionCard(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        val previewLine = SessionPreview.line(session.preview)
+        if (previewLine.isNotEmpty()) {
+            Text(
+                previewLine,
+                modifier = Modifier.weight(1f).testTag("Session preview"),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        } else {
+            Spacer(Modifier.weight(1f))
+        }
     }
     SwipeToDismissBox(
         state = dismissState,
@@ -2132,58 +2165,25 @@ private fun SessionCard(
             }
         },
     ) {
-        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+        Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .clickable(onClick = onClick)
-                    .then(if (LocalMaterial3.current) Modifier.heightIn(min = 72.dp) else Modifier)
-                    .padding(
-                        start = if (LocalMaterial3.current) 16.dp else 12.dp,
-                        end = if (LocalMaterial3.current) 16.dp else 2.dp,
-                        top = if (LocalMaterial3.current) 12.dp else 3.dp,
-                        bottom = if (LocalMaterial3.current) 12.dp else 3.dp,
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(9.dp),
-            ) {
-                if (LocalMaterial3.current) {
-                    Box(
-                        Modifier.size(40.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape).clearAndSetSemantics {},
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            session.displayName.split(Regex("\\s+")).filter(String::isNotBlank).take(2).joinToString("") { it.take(1).uppercase() },
-                            modifier = Modifier.clearAndSetSemantics {},
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            fontWeight = FontWeight.Medium,
-                        )
-                    }
-                }
-                if (!LocalMaterial3.current) {
-                    Box(
-                        Modifier
-                            .size(7.dp)
-                            .background(
-                                if (unread) MaterialTheme.colorScheme.primary else Color.Transparent,
-                                CircleShape,
-                            ),
+                    .combinedClickable(
+                        onClick = onClick,
+                        onLongClickLabel = "Session actions",
+                        onLongClick = { menuExpanded = true },
                     )
+                    .heightIn(min = 88.dp)
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(Modifier.width(20.dp).padding(top = 2.dp), contentAlignment = Alignment.TopCenter) {
+                    AgentIcon(session.agent)
                 }
-                if (LocalMaterial3.current) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), content = title)
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), content = metadata)
-                    }
-                } else {
-                    title()
-                    metadata()
-                }
-                if (LocalMaterial3.current) {
-                    Column(
-                        horizontalAlignment = Alignment.End,
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        title()
                         Text(
                             DateUtils.getRelativeTimeSpanString(
                                 session.lastActivityEpochSeconds * 1000,
@@ -2197,6 +2197,9 @@ private fun SessionCard(
                             lineHeight = 16.sp,
                             maxLines = 1,
                         )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        metadata()
                         if (unread) {
                             Badge(
                                 modifier = Modifier.semantics {
@@ -2210,101 +2213,97 @@ private fun SessionCard(
                         }
                     }
                 }
-                Box {
-                    IconButton(onClick = { menuExpanded = true }) {
-                        Icon(Icons.Default.MoreVert, "Session actions")
-                    }
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false },
-                    ) {
-                        onToggleFavorite?.let { toggle ->
-                            DropdownMenuItem(
-                                text = { Text(if (starred) "Unstar" else "Star") },
-                                onClick = {
-                                    menuExpanded = false
-                                    toggle()
-                                },
-                            )
-                        }
+            }
+            Box(Modifier.align(Alignment.TopEnd)) {
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                ) {
+                    onToggleFavorite?.let { toggle ->
                         DropdownMenuItem(
-                            text = { Text(if (archived) "Return to open" else "Waiting") },
+                            text = { Text(if (starred) "Unstar" else "Star") },
                             onClick = {
                                 menuExpanded = false
-                                onArchiveToggle()
-                            },
-                        )
-                        if (!archived) {
-                            DropdownMenuItem(
-                                text = { Text("Remind me") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onRemind()
-                                },
-                            )
-                        }
-                        DropdownMenuItem(
-                            text = { Text("End session", color = MaterialTheme.colorScheme.error) },
-                            onClick = {
-                                menuExpanded = false
-                                onEnd()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Remove from list") },
-                            onClick = {
-                                menuExpanded = false
-                                onForget()
-                            },
-                        )
-                        if (!unread && !archived) {
-                            DropdownMenuItem(
-                                text = { Text("Mark unread") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onMarkUnread()
-                                },
-                            )
-                        }
-                        if (!archived && session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {
-                            DropdownMenuItem(
-                                text = { Text("Rename") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onRename()
-                                },
-                            )
-                        }
-                        if (!archived) {
-                            workspaces.forEach { workspace ->
-                                DropdownMenuItem(
-                                    text = { Text("Move to ${workspace.name}") },
-                                    onClick = {
-                                        menuExpanded = false
-                                        onMove(workspace)
-                                    },
-                                )
-                            }
-                        }
-                        DropdownMenuItem(
-                            text = { Text("Pure terminal output") },
-                            onClick = {
-                                menuExpanded = false
-                                onOpenTerminal()
-                            },
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text("Archive session", color = MaterialTheme.colorScheme.error) },
-                            onClick = {
-                                menuExpanded = false
-                                onDissolve()
+                                toggle()
                             },
                         )
                     }
+                    DropdownMenuItem(
+                        text = { Text(if (archived) "Return to open" else "Waiting") },
+                        onClick = {
+                            menuExpanded = false
+                            onArchiveToggle()
+                        },
+                    )
+                    if (!archived) {
+                        DropdownMenuItem(
+                            text = { Text("Remind me") },
+                            onClick = {
+                                menuExpanded = false
+                                onRemind()
+                            },
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text("End session", color = MaterialTheme.colorScheme.error) },
+                        onClick = {
+                            menuExpanded = false
+                            onEnd()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Remove from list") },
+                        onClick = {
+                            menuExpanded = false
+                            onForget()
+                        },
+                    )
+                    if (!unread && !archived) {
+                        DropdownMenuItem(
+                            text = { Text("Mark unread") },
+                            onClick = {
+                                menuExpanded = false
+                                onMarkUnread()
+                            },
+                        )
+                    }
+                    if (!archived && session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {
+                        DropdownMenuItem(
+                            text = { Text("Rename") },
+                            onClick = {
+                                menuExpanded = false
+                                onRename()
+                            },
+                        )
+                    }
+                    if (!archived) {
+                        workspaces.forEach { workspace ->
+                            DropdownMenuItem(
+                                text = { Text("Move to ${workspace.name}") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onMove(workspace)
+                                },
+                            )
+                        }
+                    }
+                    DropdownMenuItem(
+                        text = { Text("Pure terminal output") },
+                        onClick = {
+                            menuExpanded = false
+                            onOpenTerminal()
+                        },
+                    )
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text("Archive session", color = MaterialTheme.colorScheme.error) },
+                        onClick = {
+                            menuExpanded = false
+                            onDissolve()
+                        },
+                    )
                 }
             }
-            if (!LocalMaterial3.current) HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
         }
     }
 }

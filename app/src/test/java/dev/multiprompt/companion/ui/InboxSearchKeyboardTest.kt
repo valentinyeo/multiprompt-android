@@ -160,7 +160,7 @@ class InboxSearchKeyboardTest {
         compose.onNodeWithContentDescription("Close session search").performClick()
         val first = compose.onNodeWithText(newest).getUnclippedBoundsInRoot()
         val viewport = list().getUnclippedBoundsInRoot()
-        assertEquals("Non-search newest session remains at bottom", viewport.bottom.value, first.bottom.value + 5f, 1f)
+        assertEquals("Non-search newest session remains at bottom", viewport.bottom.value, first.bottom.value + 4f, 1f)
         val older = compose.onNodeWithText("match older").getUnclippedBoundsInRoot()
         assertTrue("Non-search order must stay reversed", older.bottom <= first.top)
     }

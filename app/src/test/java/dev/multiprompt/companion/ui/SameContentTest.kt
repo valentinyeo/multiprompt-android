@@ -47,11 +47,11 @@ class SameContentTest(private val screen: M3Screen, private val sunlight: Boolea
             key(material3.value) { M3TestScreen(screen, material3.value, sunlight) }
         }
         compose.openM3Screen(screen)
-        val classic = regions(material3 = false)
+        val classic = regions()
         assertTrue("Fixture must expose text and descriptions", classic.getValue("all").any { it.startsWith("text:") } && classic.getValue("all").any { it.startsWith("description:") })
         compose.runOnIdle { material3.value = true }
         compose.openM3Screen(screen)
-        val m3 = regions(material3 = true)
+        val m3 = regions()
         if (screen == M3Screen.SESSION || screen == M3Screen.SESSION_MENU) {
             assertTrue(classic.getValue("chat messages").isNotEmpty())
         } else {
@@ -67,19 +67,19 @@ class SameContentTest(private val screen: M3Screen, private val sunlight: Boolea
         }
     }
 
-    private fun regions(material3: Boolean): Map<String, List<String>> {
+    private fun regions(): Map<String, List<String>> {
         val nodes = compose.onAllNodes(SemanticsMatcher("all") { true }, useUnmergedTree = true).fetchSemanticsNodes()
         val activities = nodes.filter { it.config.getOrElse(SemanticsProperties.TestTag) { "" } == "Session activity" }
         val badges = nodes.filter { it.config.getOrElse(SemanticsProperties.ContentDescription) { emptyList() } == listOf("1 unread messages") }
         val inbox = screen != M3Screen.SESSION && screen != M3Screen.SESSION_MENU
         val rowCount = if (screen == M3Screen.INBOX_SEARCH || screen == M3Screen.INBOX_SPLITS) 1 else 2
-        assertEquals(if (material3 && inbox) rowCount else 0, activities.size)
-        assertEquals(if (material3 && inbox) 1 else 0, badges.size)
+        assertEquals(if (inbox) rowCount else 0, activities.size)
+        assertEquals(if (inbox) 1 else 0, badges.size)
         fun ancestors(node: SemanticsNode) = generateSequence(node) { it.parent }
         fun subtree(node: SemanticsNode): List<SemanticsNode> = listOf(node) + node.children.flatMap { subtree(it) }
         val badgeText = badges.flatMap { subtree(it) }
             .flatMap { it.config.getOrElse(SemanticsProperties.Text) { emptyList() } }.map { it.text }
-        assertEquals(if (material3 && inbox) listOf("1") else emptyList<String>(), badgeText)
+        assertEquals(if (inbox) listOf("1") else emptyList<String>(), badgeText)
         fun tokens(node: SemanticsNode): List<String> = buildList {
             if (node.config.getOrElse(SemanticsProperties.TestTag) { "" } == "Session activity" ||
                 ancestors(node).any { it.config.getOrElse(SemanticsProperties.ContentDescription) { emptyList() } == listOf("1 unread messages") }) return@buildList

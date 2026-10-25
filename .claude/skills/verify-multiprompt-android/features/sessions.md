@@ -25,6 +25,7 @@ Preconditions: fresh fixture; use `feature=sessions.md`. The driver performs the
 - `wait_for_text verify-session` and `shot sessions` prove the real fixture is discovered. `ssh-auth.txt` independently proves authentication.
 - `tap_desc 'Search sessions'` opens search. `fill 'Search all sessions' verify-session` enters the fixture name through adb input. `wait_for_text '1 result across all splits'`, `wait_for_text verify-session` and `shot search-match` capture query and matching result.
 - `tap_desc 'Close session search'` removes the query and search field; the driver asserts `Search all sessions` is absent. `shot search-cleared` captures the original discovered list again.
+- After the search is cleared the driver asserts the Inbox row has no per-row `Session actions` button, long-presses the `verify-session` row, waits for `Mark unread` and `End session`, takes `shot row-long-press-actions`, then presses back to close the menu. The row shows the name, a dim one-line preview and the time.
 - Results start beneath the search box and above the keyboard; current automation closes the keyboard before its shot, so inspect that layout manually. Inspect the XML as well as the screenshot: the typed query alone must not be mistaken for a matching card.
 
 ## Gotchas
