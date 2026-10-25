@@ -124,11 +124,10 @@ internal fun ChatHistoryList(
         contentPadding = if (LocalReaderStyle.current) androidx.compose.foundation.layout.PaddingValues(top = ReaderFloatingInset, bottom = ReaderMessageSpacing) else androidx.compose.foundation.layout.PaddingValues(),
     ) {
         itemsIndexed(queuedMessages.asReversed(), key = { index, text -> "queued:$index:$text" }) { _, text ->
-            HistoryBubble(text, "user", "", "You · queued", fontScale, sunlight, replyGate, onReply)
+            HistoryBubble(text, "user", "Queued", fontScale, sunlight, replyGate, onReply)
         }
         items(messages.asReversed(), key = { it.key }, contentType = { it.role }) { message ->
-            HistoryBubble(message.text, message.role, message.timestamp,
-                if (message.role == "user") "You" else agent.label, fontScale, sunlight, replyGate, onReply)
+            HistoryBubble(message.text, message.role, "", fontScale, sunlight, replyGate, onReply)
         }
         if (messages.isEmpty() && queuedMessages.isEmpty()) {
             item(key = "empty") {
@@ -143,8 +142,7 @@ internal fun ChatHistoryList(
 private fun HistoryBubble(
     text: String,
     role: String,
-    timestamp: String,
-    author: String,
+    note: String,
     fontScale: Float,
     sunlight: Boolean,
     gate: ReplySwipeGate,
@@ -154,17 +152,15 @@ private fun HistoryBubble(
     val isUser = role == "user"
     ReplyableBubble(isUser = isUser, sunlight = sunlight, text = text,
         onReply = { onReply(it, isUser) }, gate = gate) {
-        Text(author, fontFamily = chatFontFamily(), fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp,
-            color = chatHintColor(sunlight))
+        if (note.isNotEmpty()) {
+            Text(note, fontFamily = chatFontFamily(), fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp,
+                color = chatHintColor(sunlight))
+        }
         if (isUser) {
             Text(terminalLinks(text, sunlight), fontFamily = chatFontFamily(), fontSize = fontSize,
                 lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, fontScale), color = chatTextColor(sunlight))
         } else {
             MarkdownText(text = text, fontSize = fontSize, color = chatTextColor(sunlight), linkColor = chatLinkColor(terminalBlue(sunlight)))
-        }
-        if (timestamp.isNotEmpty()) {
-            Text(formatChatTime(timestamp), fontFamily = chatFontFamily(),
-                fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp, color = chatHintColor(sunlight))
         }
     }
 }

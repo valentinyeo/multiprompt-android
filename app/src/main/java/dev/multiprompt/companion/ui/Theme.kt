@@ -41,6 +41,7 @@ val ChatFontFamily = FontFamily(
 
 internal val ReaderBackground = Color(0xFF101010)
 internal val ReaderCard = Color(0xFF242424)
+internal val ReaderUserCard = Color(0xFF3A3A3A)
 internal val ReaderControl = Color(0xFF303030)
 internal val ReaderForeground = Color(0xFFF2F2F2)
 internal val ReaderHint = Color(0xFFA5A5A5)
@@ -72,6 +73,7 @@ internal val ReaderBadgeGap = 8.dp
 
 val ChatBubbleRadius = 4.dp
 const val ChatUserMaxWidthFraction = 0.7f
+const val ChatAgentMaxWidthFraction = 0.85f
 val ChatBubbleUserDark = Color(0xFF353535)
 val ChatBubbleAgentDark = Color(0xFF242424)
 val ChatBubbleUserLight = Color(0xFFE5E5E5)

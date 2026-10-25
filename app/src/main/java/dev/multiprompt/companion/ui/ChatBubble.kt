@@ -23,7 +23,7 @@ private val LocalChatUser = staticCompositionLocalOf { false }
 
 @Composable
 fun chatBubbleColor(isUser: Boolean, sunlight: Boolean): Color = when {
-    LocalReaderStyle.current -> MaterialTheme.colorScheme.surfaceContainerHigh
+    LocalReaderStyle.current -> if (isUser) ReaderUserCard else ReaderCard
     LocalMaterial3.current -> if (isUser) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent
     isUser && sunlight -> ChatBubbleUserLight
     isUser -> ChatBubbleUserDark
@@ -54,10 +54,10 @@ fun ChatBubble(
     content: @Composable () -> Unit,
 ) {
     BoxWithConstraints(modifier.fillMaxWidth()) {
-        val bubbleModifier = if (LocalReaderStyle.current) {
-            Modifier.align(Alignment.CenterStart).fillMaxWidth()
-        } else if (isUser) {
+        val bubbleModifier = if (isUser) {
             Modifier.align(Alignment.CenterEnd).widthIn(max = maxWidth * ChatUserMaxWidthFraction)
+        } else if (LocalReaderStyle.current) {
+            Modifier.align(Alignment.CenterStart).widthIn(max = maxWidth * ChatAgentMaxWidthFraction)
         } else {
             Modifier.align(Alignment.CenterStart).fillMaxWidth()
         }
