@@ -39,6 +39,40 @@ val ChatFontFamily = FontFamily(
     Font(R.font.ibm_plex_sans_bold, FontWeight.SemiBold),
 )
 
+internal val ReaderBackground = Color(0xFF101010)
+internal val ReaderCard = Color(0xFF242424)
+internal val ReaderControl = Color(0xFF303030)
+internal val ReaderForeground = Color(0xFFF2F2F2)
+internal val ReaderHint = Color(0xFFA5A5A5)
+internal val ReaderChoiceBlue = Color(0xFF8AB4F8)
+internal val ReaderChoiceBackground = Color(0xFF156FD1)
+internal val ReaderBadgeForeground = Color(0xFFFFFFFF)
+internal val ReaderWaveformBackground = Color(0xFFFFFFFF)
+internal val ReaderWaveformForeground = Color(0xFF101010)
+internal val ReaderBadgeShape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
+internal val ReaderCardShape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp)
+internal val ReaderComposerShape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
+internal val ReaderCardPadding = 16.dp
+internal val ReaderScreenPadding = 12.dp
+internal val ReaderMessageSpacing = 12.dp
+internal val ReaderControlSize = 48.dp
+internal val ReaderControlSpacing = 8.dp
+internal val ReaderComposerHeight = 56.dp
+internal val ReaderWaveformWidth = 56.dp
+internal val ReaderSendSize = 40.dp
+internal val ReaderJumpSize = 40.dp
+internal val ReaderFloatingInset = 72.dp
+internal val ReaderTextSize = 16.sp
+internal val ReaderLineHeight = 26.sp
+internal val ReaderMetaTextSize = 12.sp
+internal val ReaderHeadingTextSize = 20.sp
+internal val ReaderHeadingLineHeight = 30.sp
+internal val ReaderCodeTextSize = 14.sp
+internal val ReaderCodeLineHeight = 22.sp
+internal val ReaderBadgeSize = 24.dp
+internal val ReaderBadgeTextSize = 12.sp
+internal val ReaderBadgeGap = 8.dp
+
 val ChatBubbleRadius = 4.dp
 const val ChatUserMaxWidthFraction = 0.7f
 val ChatBubbleUserDark = Color(0xFF353535)
@@ -217,22 +251,35 @@ internal val Material3DarkColors = darkColorScheme(
 )
 
 val LocalMaterial3 = staticCompositionLocalOf { false }
+internal val LocalReaderStyle = staticCompositionLocalOf { false }
 
 @Composable
 fun MultipromptTheme(
     sunlight: Boolean = false,
     material3: Boolean = BuildConfig.MATERIAL3,
+    readerStyle: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val colors = when {
+        readerStyle && !sunlight -> remember {
+            Material3DarkColors.copy(
+                background = ReaderBackground, surface = ReaderBackground,
+                onBackground = ReaderForeground, onSurface = ReaderForeground,
+                surfaceContainer = ReaderCard, surfaceContainerHigh = ReaderCard,
+                surfaceContainerHighest = ReaderControl,
+                surfaceVariant = ReaderCard, onSurfaceVariant = ReaderHint,
+                primary = ReaderChoiceBlue, onPrimary = ReaderBackground,
+            )
+        }
         !material3 -> if (sunlight) SunlightColors else MultipromptColors
         sunlight -> Material3LightColors
         else -> Material3DarkColors
     }
-    val typography = if (material3) material3Typography() else MaterialTheme.typography
+    val typography = if (readerStyle || material3) material3Typography(systemFont = readerStyle) else MaterialTheme.typography
     CompositionLocalProvider(
         LocalMaterial3 provides material3,
-        LocalContentColor provides if (material3) colors.onBackground else LocalContentColor.current,
+        LocalReaderStyle provides readerStyle,
+        LocalContentColor provides if (readerStyle || material3) colors.onBackground else LocalContentColor.current,
     ) {
         MaterialTheme(
             colorScheme = colors,
@@ -244,13 +291,13 @@ fun MultipromptTheme(
 }
 
 @Composable
-internal fun chatFontFamily(): FontFamily = if (LocalMaterial3.current) MaterialTheme.typography.bodyLarge.fontFamily ?: FontFamily.SansSerif else ChatFontFamily
+internal fun chatFontFamily(): FontFamily = if (LocalReaderStyle.current) FontFamily.SansSerif else if (LocalMaterial3.current) MaterialTheme.typography.bodyLarge.fontFamily ?: FontFamily.SansSerif else ChatFontFamily
 
 @Composable
 internal fun chromeShape(classic: Shape): Shape = if (LocalMaterial3.current) MaterialTheme.shapes.small else classic
 
 @Composable
-internal fun chatShape(): Shape = if (LocalMaterial3.current) MaterialTheme.shapes.medium else {
+internal fun chatShape(): Shape = if (LocalReaderStyle.current) ReaderCardShape else if (LocalMaterial3.current) MaterialTheme.shapes.medium else {
     androidx.compose.foundation.shape.RoundedCornerShape(ChatBubbleRadius)
 }
 
@@ -264,19 +311,20 @@ internal fun chromeLineHeight(classic: TextUnit): TextUnit =
 
 @Composable
 internal fun chatFontSize(classic: TextUnit, scale: Float = 1f): TextUnit =
-    if (LocalMaterial3.current) 15.sp * scale else classic
+    if (LocalReaderStyle.current) ReaderTextSize * scale else if (LocalMaterial3.current) 15.sp * scale else classic
 
 @Composable
 internal fun chatLineHeight(classic: TextUnit, scale: Float = 1f): TextUnit =
-    if (LocalMaterial3.current) 22.sp * scale else classic
+    if (LocalReaderStyle.current) ReaderLineHeight * scale else if (LocalMaterial3.current) 22.sp * scale else classic
 
 @Composable
 internal fun chatLinkColor(classic: Color): Color = if (LocalMaterial3.current) MaterialTheme.colorScheme.primary else classic
 
 @Composable
-private fun material3Typography(): Typography {
+private fun material3Typography(systemFont: Boolean = false): Typography {
     val context = LocalContext.current
-    val family = remember(context) {
+    val family = remember(context, systemFont) {
+        if (systemFont) return@remember FontFamily.SansSerif
         val provider = GoogleFont.Provider(
             providerAuthority = "com.google.android.gms.fonts",
             providerPackage = "com.google.android.gms",

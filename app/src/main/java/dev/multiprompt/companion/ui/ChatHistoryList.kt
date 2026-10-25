@@ -120,7 +120,8 @@ internal fun ChatHistoryList(
         modifier = modifier.fillMaxSize().testTag("chat-history"),
         state = listState,
         reverseLayout = true,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(if (LocalReaderStyle.current) ReaderMessageSpacing else 10.dp),
+        contentPadding = if (LocalReaderStyle.current) androidx.compose.foundation.layout.PaddingValues(top = ReaderFloatingInset, bottom = ReaderMessageSpacing) else androidx.compose.foundation.layout.PaddingValues(),
     ) {
         itemsIndexed(queuedMessages.asReversed(), key = { index, text -> "queued:$index:$text" }) { _, text ->
             HistoryBubble(text, "user", "", "You · queued", fontScale, sunlight, replyGate, onReply)
@@ -153,7 +154,7 @@ private fun HistoryBubble(
     val isUser = role == "user"
     ReplyableBubble(isUser = isUser, sunlight = sunlight, text = text,
         onReply = { onReply(it, isUser) }, gate = gate) {
-        Text(author, fontFamily = chatFontFamily(), fontSize = (fontSize.value - 3f).coerceAtLeast(8f).sp,
+        Text(author, fontFamily = chatFontFamily(), fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp,
             color = chatHintColor(sunlight))
         if (isUser) {
             Text(terminalLinks(text, sunlight), fontFamily = chatFontFamily(), fontSize = fontSize,
@@ -163,7 +164,7 @@ private fun HistoryBubble(
         }
         if (timestamp.isNotEmpty()) {
             Text(formatChatTime(timestamp), fontFamily = chatFontFamily(),
-                fontSize = (fontSize.value - 3f).coerceAtLeast(8f).sp, color = chatHintColor(sunlight))
+                fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp, color = chatHintColor(sunlight))
         }
     }
 }

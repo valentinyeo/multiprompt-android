@@ -17,6 +17,7 @@ import androidx.compose.ui.test.onParent
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollTo
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.reader.ChatHistory
 import dev.multiprompt.companion.reader.ChatHistoryCache
@@ -78,7 +79,9 @@ class ReaderChromeTest {
         history = f.field(chat, "_state")
         history.value = ChatHistoryState(loaded = true, history = ChatHistory(sid = "chrome", rows =
             List(messageCount) { index ->
-                ChatHistoryProtocol.Row("user", "Message $index", "$index", "", index.toLong(), index + 1L)
+                ChatHistoryProtocol.Row(if (index % 2 == 0) "user" else "assistant",
+                    "Message $index" + if (index == messageCount - 1) "\n\n1. First option\n2. Second option" else "",
+                    "$index", "", index.toLong(), index + 1L)
             }))
     }
 
@@ -103,22 +106,26 @@ class ReaderChromeTest {
         }
     }
 
-    @Test fun chatGivesMessagesTheSpaceBelowTheTopBar() {
+    @Test fun chatScrollsUnderFloatingControlsWithoutATitleBar() {
         render()
         compose.onNodeWithText("Conversation").assertDoesNotExist()
         listOf("Scroll agent history up", "Open agent history", "Back to live").forEach {
             compose.onNodeWithContentDescription(it).assertDoesNotExist()
         }
-        compose.onNodeWithText("$modelLabel · waiting for input", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("$modelLabel · waiting for input", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText(f.session.displayName, useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithText("Disconnected · retrying").assertDoesNotExist()
+        screenshot("chat-live")
         compose.onNodeWithTag("chat-history").performScrollToIndex(messageCount - 1)
-        val bar = compose.onNodeWithTag("reader-top-bar").getUnclippedBoundsInRoot()
+        val bar = compose.onNodeWithTag("reader-floating-controls").getUnclippedBoundsInRoot()
+        val viewport = compose.onNodeWithTag("chat-history").getUnclippedBoundsInRoot()
+        assertTrue("Conversation must extend under controls: $viewport $bar", viewport.top < bar.bottom)
         val message = compose.onNodeWithText("Message 0", useUnmergedTree = true)
             .assertIsDisplayed().onParent().getUnclippedBoundsInRoot()
         val gap = (message.top - bar.bottom).value
         assertTrue("First message must start within 24dp below the bar, gap=${gap}dp", gap in 0f..24f)
         screenshot()
-        compose.onNodeWithText(f.session.displayName, useUnmergedTree = true).performClick()
+        compose.onNodeWithContentDescription("Session actions").performClick()
         compose.onNodeWithText("Current: $modelLabel").assertIsDisplayed()
         compose.onNodeWithText("Current: $modelLabel · waiting for input").assertDoesNotExist()
     }
@@ -128,7 +135,7 @@ class ReaderChromeTest {
         compose.onNodeWithContentDescription("Session actions").performClick()
         compose.onNodeWithText("Session history").assertDoesNotExist()
         compose.runOnIdle { reader.value = reader.value.copy(alternateOn = true) }
-        compose.onNodeWithText("Session history").assertIsDisplayed()
+        compose.onNodeWithText("Session history").performScrollTo().assertIsDisplayed()
         listOf("Scroll agent history up", "Open agent history", "Back to live").forEach {
             compose.onNodeWithContentDescription(it).assertDoesNotExist()
         }
@@ -140,8 +147,9 @@ class ReaderChromeTest {
         compose.runOnIdle { assertTrue(!f.field<Boolean>(connection, "historyMode")) }
     }
 
-    @Test fun subtitleJoinsOnlyAvailableModelEtaAndWaitingParts() {
+    @Test fun menuStatusJoinsOnlyAvailableModelEtaAndWaitingParts() {
         render()
+        compose.onNodeWithContentDescription("Session actions").performClick()
         compose.runOnIdle {
             reader.value = reader.value.copy(eta = TmuxText.SessionEta(System.currentTimeMillis() + 200_000, 240_000, ""))
         }
@@ -164,7 +172,7 @@ class ReaderChromeTest {
         compose.onNodeWithText("Disconnected · retrying").assertDoesNotExist()
     }
 
-    private fun screenshot() {
+    private fun screenshot(name: String = "chat-view") {
         val root = compose.onRoot()
         val view = (root.fetchSemanticsNode().root as ViewRootForTest).view.rootView
         val attachInfo = ReflectionHelpers.getField<Any>(view, "mAttachInfo")
@@ -185,7 +193,7 @@ class ReaderChromeTest {
             redraw.cancel()
             ReflectionHelpers.setField(attachInfo, "mHardwareAccelerated", hardwareAccelerated)
         }
-        val output = File("build/reports/igsh-428/chat-view.png")
+        val output = File("build/reports/igsh-844/$name.png")
         checkNotNull(output.parentFile).mkdirs()
         output.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
         assertTrue(output.isFile && output.length() > 0)
