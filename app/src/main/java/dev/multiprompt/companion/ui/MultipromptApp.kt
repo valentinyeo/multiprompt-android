@@ -39,6 +39,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.PaddingValues
@@ -470,7 +473,7 @@ private fun AppScreens(viewModel: MainViewModel) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
-            Column(Modifier.statusBarsPadding()) {
+            Column(if (state.section == AppSection.SESSIONS && inboxVisible && updateState !is UpdateState.Available) Modifier else Modifier.statusBarsPadding()) {
                 if (state.section != AppSection.SESSIONS) {
                     Header(
                         refreshing = state.refreshing,
@@ -494,7 +497,9 @@ private fun AppScreens(viewModel: MainViewModel) {
             }
         },
     ) { padding ->
-        Box(Modifier.padding(padding).fillMaxSize()) {
+        Box(Modifier.padding(padding)
+            .then(if (state.section == AppSection.SESSIONS && inboxVisible) Modifier.consumeWindowInsets(PaddingValues(top = padding.calculateTopPadding())) else Modifier)
+            .fillMaxSize()) {
             when (state.section) {
                 AppSection.SESSIONS -> if (!inboxVisible) AccountWorkspacesScreen(viewModel, onInbox = { inboxVisible = true }, onReleaseNotes = viewModel::openReleaseNotes) else SessionsScreen(
                     state = state,
@@ -1586,210 +1591,251 @@ internal fun SessionsScreen(
     } else {
         emptyList()
     }
-    Column(
-        Modifier.fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .imePadding(),
-    ) {
-        Row(
-            Modifier.fillMaxWidth()
-                .then(if (LocalMaterial3.current) Modifier.height(64.dp) else Modifier)
-                .padding(horizontal = 8.dp, vertical = if (LocalMaterial3.current) 0.dp else 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box {
-                TextButton(
-                    onClick = { bucketMenuExpanded = true },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+    Scaffold(
+        modifier = Modifier.fillMaxSize().imePadding(),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopFade {
+                Row(
+                    Modifier.fillMaxWidth()
+                        .then(if (LocalMaterial3.current) Modifier.height(64.dp) else Modifier)
+                        .padding(horizontal = 8.dp, vertical = if (LocalMaterial3.current) 0.dp else 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        when (state.sessionBucket) {
-                            SessionBucket.OPEN -> "Inbox"
-                            SessionBucket.WAITING -> "Waiting"
-                            SessionBucket.ARCHIVE -> "Archive"
-                        },
-                        style = if (LocalMaterial3.current) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
-                        fontWeight = if (LocalMaterial3.current) FontWeight.Normal else FontWeight.SemiBold,
-                    )
-                    Icon(Icons.Default.ExpandMore, "Switch session bucket")
-                }
-                DropdownMenu(
-                    expanded = bucketMenuExpanded,
-                    onDismissRequest = { bucketMenuExpanded = false },
-                ) {
-                    listOf(
-                        SessionBucket.OPEN to "Inbox",
-                        SessionBucket.WAITING to "Waiting",
-                        SessionBucket.ARCHIVE to "Archive",
-                    ).forEach { (bucket, label) ->
-                        DropdownMenuItem(
-                            text = { Text(label) },
+                    Box {
+                        TextButton(
+                            onClick = { bucketMenuExpanded = true },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        ) {
+                            Text(
+                                when (state.sessionBucket) {
+                                    SessionBucket.OPEN -> "Inbox"
+                                    SessionBucket.WAITING -> "Waiting"
+                                    SessionBucket.ARCHIVE -> "Archive"
+                                },
+                                style = if (LocalMaterial3.current) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
+                                fontWeight = if (LocalMaterial3.current) FontWeight.Normal else FontWeight.SemiBold,
+                            )
+                            Icon(Icons.Default.ExpandMore, "Switch session bucket")
+                        }
+                        DropdownMenu(
+                            expanded = bucketMenuExpanded,
+                            onDismissRequest = { bucketMenuExpanded = false },
+                        ) {
+                            listOf(
+                                SessionBucket.OPEN to "Inbox",
+                                SessionBucket.WAITING to "Waiting",
+                                SessionBucket.ARCHIVE to "Archive",
+                            ).forEach { (bucket, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    onClick = {
+                                        bucketMenuExpanded = false
+                                        onSelectSessionBucket(bucket)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    Row(
+                        Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (state.refreshing) {
+                            CircularProgressIndicator(Modifier.padding(12.dp).size(20.dp), strokeWidth = 2.dp)
+                        }
+                        IconButton(
+                            enabled = !state.creatingSession,
+                            onClick = onStartNewSession,
+                            modifier = Modifier.roundOutlined(),
+                        ) {
+                            if (state.creatingSession) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Default.Add, "New session")
+                            }
+                        }
+                        IconButton(
                             onClick = {
-                                bucketMenuExpanded = false
-                                onSelectSessionBucket(bucket)
+                                searchVisible = !searchVisible
+                                if (!searchVisible) {
+                                    searchQuery = ""
+                                    focusManager.clearFocus()
+                                }
                             },
+                            modifier = Modifier.roundOutlined(),
+                        ) {
+                            Icon(
+                                if (searchVisible) Icons.Default.Close else Icons.Default.Search,
+                                if (searchVisible) "Close session search" else "Search sessions",
+                            )
+                        }
+                        VersionLabel(
+                            onClick = onReleaseNotes,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        InboxOverflowMenu(
+                            signedIn = signedIn,
+                            onSignIn = onSignIn,
+                            onSignOut = onSignOut,
+                            onSettings = { settingsVisible = true },
+                            onArrangeSplits = { splitOrderDialogVisible = true },
+                            onNewWorkspace = {
+                                workspaceError = null
+                                workspaceDialogVisible = true
+                            },
+                            onRefresh = onRefresh,
+                            onHosts = { onSelectSection(AppSection.HOSTS) },
+                            onUpdate = { onSelectSection(AppSection.UPDATE) },
                         )
                     }
                 }
-            }
-            Row(
-                Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (state.refreshing) {
-                    CircularProgressIndicator(Modifier.padding(12.dp).size(20.dp), strokeWidth = 2.dp)
-                }
-                IconButton(
-                    enabled = !state.creatingSession,
-                    onClick = onStartNewSession,
-                    modifier = Modifier.roundOutlined(),
-                ) {
-                    if (state.creatingSession) {
-                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    } else {
-                        Icon(Icons.Default.Add, "New session")
+                if (searchVisible) {
+                    Column(Modifier.padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp)
+                                .then(if (LocalReaderStyle.current) Modifier.border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f), ReaderComposerShape) else Modifier)
+                                .focusRequester(searchFocusRequester),
+                            filled = true,
+                            search = true,
+                            placeholder = { Text("Search all sessions") },
+                            leadingIcon = { Icon(Icons.Default.Search, null) },
+                            trailingIcon = if (searchQuery.isNotEmpty()) {
+                                {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(Icons.Default.Close, "Clear search")
+                                    }
+                                }
+                            } else {
+                                null
+                            },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                        )
+                        if (normalizedQuery.isNotBlank()) {
+                            Text(
+                                "${visibleSessions.size} ${if (visibleSessions.size == 1) "result" else "results"} across all splits",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
-                IconButton(
-                    onClick = {
-                        searchVisible = !searchVisible
-                        if (!searchVisible) {
-                            searchQuery = ""
-                            focusManager.clearFocus()
+                if (LocalMaterial3.current) {
+                    ScrollableTabRow(
+                        selectedTabIndex = displayedWorkspaceSplitIds.indexOf(state.selectedWorkspaceId).coerceAtLeast(0),
+                        edgePadding = 16.dp,
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.primary,
+                        indicator = { positions ->
+                            val index = displayedWorkspaceSplitIds.indexOf(state.selectedWorkspaceId).coerceAtLeast(0)
+                            Box(
+                                Modifier.tabIndicatorOffset(positions[index]).height(3.dp)
+                                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)),
+                            )
+                        },
+                        divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant) },
+                    ) {
+                        displayedWorkspaceSplitIds.forEach { id ->
+                            Tab(
+                                selected = state.selectedWorkspaceId == id,
+                                onClick = { onSelectWorkspace(id) },
+                                modifier = Modifier.height(48.dp),
+                                selectedContentColor = MaterialTheme.colorScheme.primary,
+                                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (id == FAVORITES_SPLIT_ID) {
+                                            FavoriteDot()
+                                            Spacer(Modifier.width(6.dp))
+                                        }
+                                        Text(
+                                            when (id) {
+                                                null -> "All"
+                                                FAVORITES_SPLIT_ID -> "Favorites"
+                                                FREQUENT_SPLIT_ID -> "Frequent"
+                                                else -> state.workspaces.firstOrNull { it.id == id }?.name.orEmpty()
+                                            },
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Medium,
+                                        )
+                                    }
+                                },
+                            )
                         }
-                    },
-                    modifier = Modifier.roundOutlined(),
-                ) {
-                    Icon(
-                        if (searchVisible) Icons.Default.Close else Icons.Default.Search,
-                        if (searchVisible) "Close session search" else "Search sessions",
+                    }
+                }
+                if (state.updatingHostIds.isNotEmpty()) {
+                    UpdatingSessionsNotice(hostLabels = state.updatingHostIds.mapNotNull { hostLabels[it] })
+                }
+                if (state.cachedHostIds.isNotEmpty()) {
+                    CachedSessionsNotice(
+                        hostLabels = state.cachedHostIds.mapNotNull { hostLabels[it] },
+                        onRetry = onRefresh,
+                        retryEnabled = !state.refreshing,
                     )
                 }
-                VersionLabel(
-                    onClick = onReleaseNotes,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                InboxOverflowMenu(
-                    signedIn = signedIn,
-                    onSignIn = onSignIn,
-                    onSignOut = onSignOut,
-                    onSettings = { settingsVisible = true },
-                    onArrangeSplits = { splitOrderDialogVisible = true },
-                    onNewWorkspace = {
-                        workspaceError = null
-                        workspaceDialogVisible = true
-                    },
-                    onRefresh = onRefresh,
-                    onHosts = { onSelectSection(AppSection.HOSTS) },
-                    onUpdate = { onSelectSection(AppSection.UPDATE) },
-                )
+                state.sessionActionError?.let { error ->
+                    DismissibleError(message = error, onDismiss = onClearSessionActionError)
+                }
             }
-        }
-        if (searchVisible) {
-            Column(Modifier.padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    modifier = Modifier
+        },
+        bottomBar = {
+            if (!LocalMaterial3.current) {
+                Column(
+                    Modifier
                         .fillMaxWidth()
-                        .height(56.dp)
-                        .then(if (LocalReaderStyle.current) Modifier.border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f), ReaderComposerShape) else Modifier)
-                        .focusRequester(searchFocusRequester),
-                    filled = true,
-                    search = true,
-                    placeholder = { Text("Search all sessions") },
-                    leadingIcon = { Icon(Icons.Default.Search, null) },
-                    trailingIcon = if (searchQuery.isNotEmpty()) {
-                        {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Close, "Clear search")
+                        .background(MaterialTheme.colorScheme.surface)
+                        .navigationBarsPadding(),
+                ) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(splitScrollState).padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        displayedWorkspaceSplitIds.forEach { id ->
+                            val name = when (id) {
+                                null -> "All"
+                                FAVORITES_SPLIT_ID -> "Favorites"
+                                FREQUENT_SPLIT_ID -> "Frequent"
+                                else -> state.workspaces.firstOrNull { it.id == id }?.name.orEmpty()
                             }
-                        }
-                    } else {
-                        null
-                    },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                )
-                if (normalizedQuery.isNotBlank()) {
-                    Text(
-                        "${visibleSessions.size} ${if (visibleSessions.size == 1) "result" else "results"} across all splits",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-        if (LocalMaterial3.current) {
-            ScrollableTabRow(
-                selectedTabIndex = displayedWorkspaceSplitIds.indexOf(state.selectedWorkspaceId).coerceAtLeast(0),
-                edgePadding = 16.dp,
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.primary,
-                indicator = { positions ->
-                    val index = displayedWorkspaceSplitIds.indexOf(state.selectedWorkspaceId).coerceAtLeast(0)
-                    Box(
-                        Modifier.tabIndicatorOffset(positions[index]).height(3.dp)
-                            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)),
-                    )
-                },
-                divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant) },
-            ) {
-                displayedWorkspaceSplitIds.forEach { id ->
-                    Tab(
-                        selected = state.selectedWorkspaceId == id,
-                        onClick = { onSelectWorkspace(id) },
-                        modifier = Modifier.height(48.dp),
-                        selectedContentColor = MaterialTheme.colorScheme.primary,
-                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            val label: @Composable RowScope.() -> Unit = {
                                 if (id == FAVORITES_SPLIT_ID) {
                                     FavoriteDot()
                                     Spacer(Modifier.width(6.dp))
                                 }
-                                Text(
-                                    when (id) {
-                                        null -> "All"
-                                        FAVORITES_SPLIT_ID -> "Favorites"
-                                        FREQUENT_SPLIT_ID -> "Frequent"
-                                        else -> state.workspaces.firstOrNull { it.id == id }?.name.orEmpty()
-                                    },
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium,
-                                )
+                                Text(name)
                             }
-                        },
-                    )
+                            if (state.selectedWorkspaceId == id) {
+                                FilledTonalButton(onClick = { onSelectWorkspace(id) }, content = label)
+                            } else {
+                                TextButton(onClick = { onSelectWorkspace(id) }, content = label)
+                            }
+                        }
+                    }
                 }
             }
-        }
-        if (state.updatingHostIds.isNotEmpty()) {
-            UpdatingSessionsNotice(hostLabels = state.updatingHostIds.mapNotNull { hostLabels[it] })
-        }
-        if (state.cachedHostIds.isNotEmpty()) {
-            CachedSessionsNotice(
-                hostLabels = state.cachedHostIds.mapNotNull { hostLabels[it] },
-                onRetry = onRefresh,
-                retryEnabled = !state.refreshing,
-            )
-        }
-        state.sessionActionError?.let { error ->
-            DismissibleError(message = error, onDismiss = onClearSessionActionError)
-        }
+        },
+    ) { padding ->
         if (state.hosts.isEmpty()) {
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            Box(Modifier.fillMaxSize().padding(padding)) {
                 EmptyState("Connect your first VPS", "Import an SSH key, then the app will discover tmux sessions.", onAddHost)
             }
         } else LazyColumn(
             Modifier
-                .weight(1f)
-                .fillMaxWidth()
+                .fillMaxSize()
+                .padding(bottom = padding.calculateBottomPadding())
                 .horizontalSwipe(onSwitchWorkspace, PointerEventPass.Final),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp),
+            contentPadding = PaddingValues(top = padding.calculateTopPadding() + 4.dp, bottom = 4.dp),
             reverseLayout = normalizedQuery.isBlank() && state.newestSessionsAtBottom,
         ) {
             state.hostErrors.forEach { (hostId, error) ->
@@ -1853,42 +1899,6 @@ internal fun SessionsScreen(
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                }
-            }
-        }
-        if (!LocalMaterial3.current) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
-                    .navigationBarsPadding(),
-            ) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(splitScrollState).padding(horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    displayedWorkspaceSplitIds.forEach { id ->
-                        val name = when (id) {
-                            null -> "All"
-                            FAVORITES_SPLIT_ID -> "Favorites"
-                            FREQUENT_SPLIT_ID -> "Frequent"
-                            else -> state.workspaces.firstOrNull { it.id == id }?.name.orEmpty()
-                        }
-                        val label: @Composable RowScope.() -> Unit = {
-                            if (id == FAVORITES_SPLIT_ID) {
-                                FavoriteDot()
-                                Spacer(Modifier.width(6.dp))
-                            }
-                            Text(name)
-                        }
-                        if (state.selectedWorkspaceId == id) {
-                            FilledTonalButton(onClick = { onSelectWorkspace(id) }, content = label)
-                        } else {
-                            TextButton(onClick = { onSelectWorkspace(id) }, content = label)
-                        }
-                    }
                 }
             }
         }
@@ -2366,19 +2376,21 @@ internal fun ReaderTopBar(
 ) {
     var modelMenuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     if (LocalReaderStyle.current) {
-        Row(
-            Modifier.fillMaxWidth().testTag("reader-floating-controls").statusBarsPadding()
-                .padding(ReaderScreenPadding),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            IconButton(onClick = onBack, modifier = Modifier.size(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-            }
-            Box {
-                IconButton(onClick = onMenuClick, modifier = Modifier.size(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)) {
-                    Icon(Icons.Default.MoreVert, "Session actions")
+        TopFade {
+            Row(
+                Modifier.fillMaxWidth().testTag("reader-floating-controls")
+                    .padding(ReaderScreenPadding),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                IconButton(onClick = onBack, modifier = Modifier.size(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                 }
-                menuContent()
+                Box {
+                    IconButton(onClick = onMenuClick, modifier = Modifier.size(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)) {
+                        Icon(Icons.Default.MoreVert, "Session actions")
+                    }
+                    menuContent()
+                }
             }
         }
         return
@@ -3402,7 +3414,7 @@ internal fun ReaderScreen(
                 onSessionUsed = { onSessionInteraction(); onSessionInput() },
                 listState = chatListState,
                 followRequest = followRequest,
-                modifier = Modifier.padding(bottom = padding.calculateBottomPadding()).statusBarsPadding().padding(horizontal = ReaderScreenPadding)
+                modifier = Modifier.padding(bottom = padding.calculateBottomPadding()).padding(horizontal = ReaderScreenPadding)
                     .transformable(state = transcriptTransform, canPan = { false })
                     .pointerInput(onOpenTerminal) {
                         detectTapGestures(onDoubleTap = { onOpenTerminal() })
@@ -3410,14 +3422,14 @@ internal fun ReaderScreen(
             )
         } else Column(
             Modifier
-                .padding(bottom = padding.calculateBottomPadding()).statusBarsPadding()
+                .padding(bottom = padding.calculateBottomPadding())
                 .fillMaxSize()
                 .nestedScroll(overscrollLoader)
                 .readerScroll(scrollState, followRequest)
                 .pointerInput(onOpenTerminal) {
                     detectTapGestures(onDoubleTap = { onOpenTerminal() })
                 }
-                .padding(horizontal = ReaderScreenPadding).padding(top = ReaderFloatingInset, bottom = ReaderMessageSpacing),
+                .padding(horizontal = ReaderScreenPadding).padding(top = ReaderFloatingInset + WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = ReaderMessageSpacing),
             horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.spacedBy(ReaderMessageSpacing),
         ) {

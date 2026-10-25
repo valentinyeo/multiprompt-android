@@ -9,6 +9,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      release_smoke:
+        description: Install and verify the published signed APK after screen tests
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -35,18 +40,19 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - uses: reactivecircus/android-emulator-runner@v2
+        env:
+          RELEASE_SMOKE: ${{ inputs.release_smoke }}
         with:
           api-level: 35
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          script: |
-            status=0; gradle --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.multiprompt.companion.ui.TopFadeInstrumentedTest || status=$?; adb pull /sdcard/Android/data/dev.multiprompt.companion.debug/files/ build/top-fade-shots; exit "$status"
+          script: tools/top-fade-proof.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: top-fade-emulator-proof
           path: |
-            build/top-fade-shots/*.png
+            build/top-fade-shots/**
             app/build/reports/androidTests/connected/debug/**
             app/build/outputs/androidTest-results/connected/debug/**

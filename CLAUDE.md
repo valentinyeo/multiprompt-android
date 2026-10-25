@@ -14,6 +14,8 @@ A single Android app (`dev.multiprompt.companion`) that SSHes straight into publ
 ./gradlew testDebugUnitTest --tests '*TmuxParserTest*'   # single test class
 ```
 
+Emulator scroll-under proof: `tools/top-fade-proof.sh`. GitHub runs it in `top-fade.yml`. Dispatch with `release_smoke=true` to verify the published APK.
+
 Requires JDK 17 and Android SDK 36. Before every push run `tools/check.sh`: it is exactly what CI runs on every pull request and push to `main` (`.github/workflows/test.yml`).
 
 | Rule | Enforced by |
@@ -74,5 +76,5 @@ Debug builds use applicationId suffix `.debug`, so they are a different package 
 ## Conventions
 
 - Add dependencies via `gradle/libs.versions.toml`, never inline coordinates.
-- Business logic that can be tested on the JVM (parsing, manifest validation) lives in pure objects/data classes with tests in `app/src/test`; there is no instrumentation test suite.
+- Business logic that can be tested on the JVM (parsing, manifest validation) lives in pure objects/data classes with tests in `app/src/test`; emulator UI checks live in `app/src/androidTest`.
 - Suspend + `Dispatchers.IO` for all SSH work; the ViewModel exposes only state, the UI never touches `SshRepository` directly.

@@ -36,6 +36,27 @@ class TopFadeInstrumentedTest {
 
     @Test fun chatScrollsUnderTheStatusBarFade() = verify(FadeScreen.SESSION, "chat", "Message 0", chat = true)
 
+    @Test fun fadeBlendsOverContentWithoutAnOpaqueCutoff() {
+        compose.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MultipromptTheme {
+                    Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Red)) {
+                        TopFade { Spacer(Modifier.height(56.dp)) }
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        val fade = compose.onNodeWithTag("top-fade", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val density = compose.activity.resources.displayMetrics.density
+        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
+        val blend = bitmap.getPixel(1, (fade.bottom + 12 * density).toInt())
+        val below = bitmap.getPixel(1, (fade.bottom + 26 * density).toInt())
+        assertTrue("Fade must blend with the content beneath it", Color.red(blend) in 17..254)
+        assertEquals("Content below the fade remains untouched", Color.RED, below)
+        bitmap.recycle()
+    }
+
     @Suppress("DEPRECATION")
     private fun verify(screen: FadeScreen, name: String, first: String, chat: Boolean = false) {
         compose.activityRule.scenario.onActivity { activity ->
