@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -84,8 +85,17 @@ class ReaderActionsMenuTest {
     @Test fun remindFromOverflowOpensTheExistingPickerAndDispatchesItsDueTime() {
         render(material3 = true)
         openMenu()
-        compose.onNodeWithText("Remind me").assertIsDisplayed().performClick()
+        val remind = compose.onNodeWithText("Remind me").assertIsDisplayed()
+        compose.mainClock.autoAdvance = false
+        remind.performClick()
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeByFrame()
+        scheduler.runCurrent()
+        println(compose.onAllNodes(SemanticsMatcher("all") { true }, useUnmergedTree = true).fetchSemanticsNodes()
+            .joinToString("\n") { "${it.id} ${it.boundsInRoot} ${it.config}" })
         compose.onNodeWithText("Tomorrow · 9:00 AM").performScrollTo().assertIsDisplayed().performClick()
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeByFrame()
         compose.runOnIdle {
             assertEquals(1, reminders.size)
             assertEquals(dev.multiprompt.companion.data.ReminderTimeParser.tomorrowMorning(java.time.ZonedDateTime.now()).toEpochSecond(), reminders.single())
