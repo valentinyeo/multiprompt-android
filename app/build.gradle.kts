@@ -133,6 +133,8 @@ dependencies {
     implementation(libs.connectbot.ssh)
     implementation(libs.bouncycastle)
     implementation(libs.okhttp)
+    implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
     implementation(libs.androidx.browser)
     implementation(libs.androidx.work)
 
