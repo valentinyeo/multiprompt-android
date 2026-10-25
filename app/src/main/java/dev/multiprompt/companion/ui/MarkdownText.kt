@@ -49,6 +49,7 @@ fun MarkdownText(
     color: Color,
     linkColor: Color,
     modifier: Modifier = Modifier,
+    imagePreviews: Boolean = false,
 ) {
     val blocks = remember(text) { MarkdownParser.parse(text) }
     val codeBg = color.copy(alpha = 0.10f)
@@ -59,10 +60,15 @@ fun MarkdownText(
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         blocks.forEach { block ->
             when (block) {
-                is MdBlock.Paragraph -> Text(
-                    markdownAnnotated(block.runs, linkColor, codeBg, codeFontFamily),
-                    fontSize = fontSize, lineHeight = lineHeight, color = color,
-                )
+                is MdBlock.Paragraph -> if (imagePreviews) {
+                    ChatImageRuns(block.runs) { runs ->
+                        Text(markdownAnnotated(runs, linkColor, codeBg, codeFontFamily),
+                            fontSize = fontSize, lineHeight = lineHeight, color = color)
+                    }
+                } else {
+                    Text(markdownAnnotated(block.runs, linkColor, codeBg, codeFontFamily),
+                        fontSize = fontSize, lineHeight = lineHeight, color = color)
+                }
                 is MdBlock.Heading -> Text(
                     markdownAnnotated(block.runs, linkColor, codeBg, codeFontFamily),
                     fontSize = if (LocalReaderStyle.current) ReaderHeadingTextSize * scale else if (LocalMaterial3.current) MaterialTheme.typography.titleMedium.fontSize * scale else (fontSize.value * headingScale(block.level)).sp,
@@ -136,6 +142,16 @@ fun MarkdownText(
                     Modifier.fillMaxWidth().padding(vertical = 4.dp).height(1.dp)
                         .background(color.copy(alpha = 0.3f)),
                 )
+            }
+            if (imagePreviews) {
+                val runs = when (block) {
+                    is MdBlock.Heading -> block.runs
+                    is MdBlock.ListItem -> block.runs
+                    is MdBlock.Quote -> block.runs
+                    is MdBlock.Table -> block.header.flatten() + block.rows.flatten().flatten()
+                    else -> emptyList()
+                }
+                ChatImagePreviews(runs)
             }
         }
     }

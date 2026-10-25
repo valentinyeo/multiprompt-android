@@ -14,6 +14,11 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.pinch
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import coil3.EventListener
@@ -21,9 +26,14 @@ import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.request.ErrorResult
 import coil3.request.ImageRequest
+import coil3.request.SuccessResult
+import coil3.decode.DataSource
 import dev.multiprompt.companion.reader.ChatHistoryMessage
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -36,8 +46,12 @@ class ChatImagePreviewTest {
         val image = "https://screencast2.com/VkDx2.png"
         val broken = "https://screencast2.com/igsh-876-missing.png"
         val failed = AtomicBoolean(false)
+        val successes = AtomicInteger(0)
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         SingletonImageLoader.setUnsafe(ImageLoader.Builder(context).eventListener(object : EventListener() {
+            override fun onSuccess(request: ImageRequest, result: SuccessResult) {
+                if (request.data == image) successes.incrementAndGet()
+            }
             override fun onError(request: ImageRequest, result: ErrorResult) {
                 if (request.data == broken) failed.set(true)
             }
@@ -68,7 +82,53 @@ class ChatImagePreviewTest {
         }
         compose.onNodeWithContentDescription("Image preview: $image").performClick()
         compose.onNodeWithContentDescription("Full screen image").assertIsDisplayed()
+        compose.waitUntil(30_000) { successes.get() >= 2 }
+        val before = compose.onNodeWithContentDescription("Full screen image").captureToImage().asAndroidBitmap().copy(Bitmap.Config.ARGB_8888, false)
+        compose.onNodeWithContentDescription("Full screen image").performTouchInput {
+            pinch(Offset(center.x - 30f, center.y), Offset(center.x - 180f, center.y),
+                Offset(center.x + 30f, center.y), Offset(center.x + 180f, center.y))
+        }
+        val after = compose.onNodeWithContentDescription("Full screen image").captureToImage().asAndroidBitmap()
+        assertFalse("Pinch must change the displayed image", before.sameAs(after))
         compose.onNodeWithContentDescription("Close image").performClick()
         compose.onNodeWithContentDescription("Full screen image").assertDoesNotExist()
+    }
+
+
+    @Test
+    fun assistantImageLoadsOnScrollAndUsesCache() {
+        val image = "https://screencast2.com/VkDx2.png?inline-preview"
+        val requested = AtomicBoolean(false)
+        val cached = AtomicBoolean(false)
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        SingletonImageLoader.setUnsafe(ImageLoader.Builder(context).eventListener(object : EventListener() {
+            override fun onStart(request: ImageRequest) {
+                if (request.data == image) requested.set(true)
+            }
+            override fun onSuccess(request: ImageRequest, result: SuccessResult) {
+                if (request.data == image && result.dataSource != DataSource.NETWORK) cached.set(true)
+            }
+        }).build())
+        val messages = listOf(ChatHistoryMessage("old", "assistant", "[Screenshot]($image)", "", 0, 1)) +
+            (1..40).map { ChatHistoryMessage("m$it", "user", "Message $it", "", it.toLong(), it + 1L) }
+        compose.setContent {
+            MaterialTheme {
+                ChatHistoryList(messages = messages, modifier = Modifier.background(Color.White), sunlight = true)
+            }
+        }
+        compose.runOnIdle { assertFalse("Offscreen images must not load", requested.get()) }
+        compose.onNodeWithTag("chat-history").performScrollToIndex(40)
+        compose.waitUntil(60_000) {
+            compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Image preview: $image"))
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithContentDescription("Image preview: $image").assertIsDisplayed()
+        compose.onNodeWithText("Screenshot").assertIsDisplayed()
+        assertTrue(requested.get())
+        compose.onNodeWithTag("chat-history").performScrollToIndex(0)
+        compose.onNodeWithContentDescription("Image preview: $image").assertDoesNotExist()
+        compose.onNodeWithTag("chat-history").performScrollToIndex(40)
+        compose.waitUntil(30_000) { cached.get() }
+        compose.onNodeWithContentDescription("Image preview: $image").assertIsDisplayed()
     }
 }
