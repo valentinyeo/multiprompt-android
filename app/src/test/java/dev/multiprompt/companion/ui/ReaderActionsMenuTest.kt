@@ -16,6 +16,9 @@ import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -27,11 +30,13 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class, qualifiers = "w390dp-h844dp-mdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ReaderActionsMenuTest {
-    @get:Rule val compose = createComposeRule()
+    private val scheduler = TestCoroutineScheduler()
+    @get:Rule val compose = createComposeRule(effectContext = UnconfinedTestDispatcher(scheduler))
     private lateinit var f: SessionActivityFixture
     private lateinit var connection: SessionReaderConnection
     private var archives = 0
@@ -79,17 +84,8 @@ class ReaderActionsMenuTest {
     @Test fun remindFromOverflowOpensTheExistingPickerAndDispatchesItsDueTime() {
         render(material3 = true)
         openMenu()
-        val remind = compose.onNodeWithText("Remind me").assertIsDisplayed()
-        compose.mainClock.autoAdvance = false
-        remind.performClick()
-        compose.mainClock.advanceTimeByFrame()
-        compose.mainClock.advanceTimeByFrame()
-        val tomorrow = compose.onNodeWithText("Tomorrow · 9:00 AM").performScrollTo()
-        compose.mainClock.advanceTimeByFrame()
-        println("Reminder option bounds: ${tomorrow.fetchSemanticsNode().boundsInRoot}")
-        tomorrow.assertIsDisplayed().performClick()
-        compose.mainClock.advanceTimeByFrame()
-        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithText("Remind me").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Tomorrow · 9:00 AM").performScrollTo().assertIsDisplayed().performClick()
         compose.runOnIdle {
             assertEquals(1, reminders.size)
             assertEquals(dev.multiprompt.companion.data.ReminderTimeParser.tomorrowMorning(java.time.ZonedDateTime.now()).toEpochSecond(), reminders.single())

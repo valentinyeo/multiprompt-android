@@ -22,7 +22,7 @@ All verification is reviewed from source and GitHub Actions evidence. No local t
   EVIDENCE: pending
 
 - [x] G6: No new code comments, dependencies, timeout, cap, blocking state or telephone mode; all styling tokens live in ui/Theme.kt.
-  EVIDENCE: Reviewed complete origin/main diff: no dependency, ViewModel, SSH, reader connection, dictation, worker or desktop changes. Existing send/attach/mic enabled expressions are retained; archive/remind/wait have no new enabled conditions. The waveform is a non-clickable Box. New colours, radii, spacing, control dimensions and typography are Theme.kt tokens. GitHub Actions run 40209679429 passed the no-comments and root-file checks. No local Android build, test, emulator, adb or gate scripts were run; the reminder fixture only controls animation frames and adds no timeout.
+  EVIDENCE: Reviewed complete origin/main diff: no dependency, ViewModel, SSH, reader connection, dictation, worker or desktop changes. Existing send/attach/mic enabled expressions are retained; archive/remind/wait have no new enabled conditions. The waveform is a non-clickable Box. New colours, radii, spacing, control dimensions and typography are Theme.kt tokens. GitHub Actions run 40209679429 passed the no-comments and root-file checks. No local Android build, test, emulator, adb or gate scripts were run; the reminder fixture uses the repository's native-renderer/test-dispatcher pattern and adds no timeout.
 
 - [ ] G7: Changes committed and pushed; PR has the required title, change description, red/green evidence and CI tools/check.sh note, and remains unmerged.
   EVIDENCE: pending
