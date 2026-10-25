@@ -78,8 +78,11 @@ class ReaderActionsMenuTest {
     @Test fun remindFromOverflowOpensTheExistingPickerAndDispatchesItsDueTime() {
         render(material3 = true)
         openMenu()
+        compose.mainClock.autoAdvance = false
         compose.onNodeWithText("Remind me").assertIsDisplayed().performClick()
+        compose.mainClock.advanceTimeByFrame()
         compose.onNodeWithText("Tomorrow · 9:00 AM").assertIsDisplayed().performClick()
+        compose.mainClock.advanceTimeByFrame()
         compose.runOnIdle {
             assertEquals(1, reminders.size)
             assertEquals(dev.multiprompt.companion.data.ReminderTimeParser.tomorrowMorning(java.time.ZonedDateTime.now()).toEpochSecond(), reminders.single())
