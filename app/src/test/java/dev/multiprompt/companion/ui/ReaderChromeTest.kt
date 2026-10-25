@@ -153,7 +153,7 @@ class ReaderChromeTest {
         val send = compose.onNodeWithTag("dictation-send").getUnclippedBoundsInRoot()
         assertTrue("stop, meter, send read left to right on one row: $stop $meter $send",
             stop.right <= meter.left && meter.right <= send.left && stop.top == meter.top && meter.top == send.top)
-        assertTrue("controls are big: ${stop.height}", stop.height.value >= 56f)
+        assertTrue("controls are big: ${stop.bottom - stop.top}", (stop.bottom - stop.top).value >= 56f)
         screenshot("dictating")
         compose.onNodeWithTag("dictation-stop").performClick()
         compose.runOnIdle {
