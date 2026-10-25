@@ -46,6 +46,7 @@ jobs:
       - name: Build debug APK
         run: |
           mkdir -p "$EVIDENCE"
+          python3 -m pip install Pillow
           printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/revision.txt"
           gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="0.1.2-verify.$GITHUB_RUN_NUMBER" assembleDebug 2>&1 | tee "$EVIDENCE/build.txt"
       - name: Enable KVM
