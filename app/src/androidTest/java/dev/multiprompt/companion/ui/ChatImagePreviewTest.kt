@@ -16,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
@@ -129,7 +130,8 @@ class ChatImagePreviewTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithContentDescription("Image preview: $image").assertIsDisplayed()
-        compose.onNodeWithText("Screenshot").assertIsDisplayed()
+        compose.onNodeWithText("Screenshot").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("Image preview: $image").assertIsDisplayed()
         assertTrue(requested.get())
         compose.onNodeWithTag("chat-history").performScrollToIndex(0)
         compose.onNodeWithContentDescription("Image preview: $image").assertDoesNotExist()
