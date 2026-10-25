@@ -43,8 +43,8 @@ class ReaderStyleTest {
                         assertEquals(Material3DarkColors, outer)
                         assertEquals(Color(0xFF101010), colors.background)
                         assertEquals(Color(0xFF303030), colors.surfaceContainerHighest)
-                        assertEquals(Color(0xFF242424), user)
-                        assertEquals(user, agent)
+                        assertEquals(Color(0xFF3A3A3A), user)
+                        assertEquals(Color(0xFF242424), agent)
                         assertEquals(FontFamily.SansSerif, family)
                         assertEquals(ReaderCardShape, shape)
                     }
