@@ -65,7 +65,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
-import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Close
@@ -3364,13 +3363,6 @@ internal fun ReaderScreen(
                             }
                         },
                     )
-                    Box(
-                        Modifier.width(ReaderWaveformWidth).height(ReaderControlSize).background(ReaderWaveformBackground, ReaderComposerShape)
-                            .testTag("reader-waveform"),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(Icons.Default.GraphicEq, null, tint = ReaderWaveformForeground)
-                    }
                 }
                 (microphoneError ?: dictationState.error ?: imageUploadError)?.let { message ->
                     Text(

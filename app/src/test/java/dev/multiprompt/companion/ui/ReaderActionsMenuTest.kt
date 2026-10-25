@@ -132,16 +132,14 @@ class ReaderActionsMenuTest {
         compose.runOnIdle { assertEquals(2, waits); assertTrue(!archived.value); assertEquals(0, archives) }
     }
 
-    @Test fun composerHasInsideMicrophoneOutsidePlusAndDecorativeWaveform() {
+    @Test fun composerHasInsideMicrophoneOutsidePlusAndNoWaveform() {
         render()
         val input = compose.onNode(hasSetTextAction()).fetchSemanticsNode().boundsInRoot
         val mic = compose.onNodeWithContentDescription("Start dictation").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val plus = compose.onNodeWithContentDescription("Attach").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        val waveform = compose.onNodeWithTag("reader-waveform").assertIsDisplayed().fetchSemanticsNode()
         assertTrue(mic.left >= input.left && mic.right <= input.right && mic.top >= input.top && mic.bottom <= input.bottom)
         assertTrue(plus.right < input.left)
-        assertTrue(waveform.boundsInRoot.left > input.right)
-        assertTrue(SemanticsActions.OnClick !in waveform.config)
+        compose.onNodeWithTag("reader-waveform").assertDoesNotExist()
         compose.onNodeWithContentDescription("Back").assertIsDisplayed()
         compose.onNodeWithText(f.session.displayName).assertDoesNotExist()
     }
