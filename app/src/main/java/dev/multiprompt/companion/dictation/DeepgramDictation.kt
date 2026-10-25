@@ -59,6 +59,8 @@ class DeepgramDictation(
         DictationState(configured = secrets.get(API_KEY_SECRET_ID) != null),
     )
     val state: StateFlow<DictationState> = _state.asStateFlow()
+    private val _level = MutableStateFlow(0f)
+    val level: StateFlow<Float> = _level.asStateFlow()
 
     private class Stream {
         val pendingAudio = ByteArrayOutputStream()
@@ -197,6 +199,7 @@ class DeepgramDictation(
                             fail("The microphone could not be read")
                             return@launch
                         }
+                        _level.value = AudioLevel.of(buffer, count)
                         gate?.process(buffer, count)?.forEach { action ->
                             if (recorder === mic && !stopping) handleAction(action, apiKey)
                         }
@@ -243,6 +246,7 @@ class DeepgramDictation(
     }
 
     private fun stopRecorder() {
+        _level.value = 0f
         val activeRecorder = recorder
         recorder = null
         runCatching { activeRecorder?.stop() }
