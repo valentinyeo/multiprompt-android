@@ -28,7 +28,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
@@ -47,8 +47,9 @@ internal fun ChatImagePreviews(runs: List<InlineRun>) {
         var expanded by remember(url) { mutableStateOf(false) }
         val view = LocalView.current
         Box(Modifier.fillMaxWidth().onGloballyPositioned {
-            val bounds = it.boundsInWindow()
-            if (bounds.top < view.height && bounds.bottom >= 0f && bounds.right > 0f && bounds.left < view.width) {
+            val position = it.positionInWindow()
+            if (position.y < view.height && position.y + it.size.height >= 0f &&
+                position.x + it.size.width > 0f && position.x < view.width) {
                 visible = true
             }
         }) {

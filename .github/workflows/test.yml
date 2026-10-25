@@ -73,14 +73,20 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: |
-            gradle --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.multiprompt.companion.ui.ChatImagePreviewTest
             mkdir -p build
-            adb pull /sdcard/Android/data/dev.multiprompt.companion.debug/files/image-unfurl.png build/image-unfurl.png
+            status=0
+            gradle --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.multiprompt.companion.ui.ChatImagePreviewTest || status=$?
+            adb logcat -d > build/image-preview-logcat.txt
+            adb exec-out screencap -p > build/image-preview-screen.png
+            if [ "$status" -eq 0 ]; then adb pull /sdcard/Android/data/dev.multiprompt.companion.debug/files/image-unfurl.png build/image-unfurl.png; fi
+            exit "$status"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: image-preview-emulator
           path: |
             build/image-unfurl.png
+            build/image-preview-logcat.txt
+            build/image-preview-screen.png
             app/build/reports/androidTests/connected
           if-no-files-found: error

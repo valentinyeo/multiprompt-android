@@ -1,6 +1,7 @@
 package dev.multiprompt.companion.ui
 
 import android.graphics.Bitmap
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +54,7 @@ class ChatImagePreviewTest {
                 if (request.data == image) successes.incrementAndGet()
             }
             override fun onError(request: ImageRequest, result: ErrorResult) {
+                Log.e("ImagePreviewTest", "Image request failed: ${request.data}", result.throwable)
                 if (request.data == broken) failed.set(true)
             }
         }).build())
@@ -102,7 +104,11 @@ class ChatImagePreviewTest {
         val cached = AtomicBoolean(false)
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         SingletonImageLoader.setUnsafe(ImageLoader.Builder(context).eventListener(object : EventListener() {
+            override fun onError(request: ImageRequest, result: ErrorResult) {
+                Log.e("ImagePreviewTest", "Image request failed: ${request.data}", result.throwable)
+            }
             override fun onStart(request: ImageRequest) {
+                Log.i("ImagePreviewTest", "Image request started: ${request.data}")
                 if (request.data == image) requested.set(true)
             }
             override fun onSuccess(request: ImageRequest, result: SuccessResult) {
