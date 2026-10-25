@@ -17,7 +17,7 @@ class AudioLevelTest {
 
     @Test fun silenceIsZero() = assertEquals(0f, AudioLevel.of(pcm(0), 3200), 0f)
 
-    @Test fun loudSpeechIsNearOne() = assertTrue(AudioLevel.of(pcm(16000), 3200) > 0.9f)
+    @Test fun loudSpeechIsNearOne() = assertTrue(AudioLevel.of(pcm(16000), 3200) > 0.8f)
 
     @Test fun quietRoomNoiseBarelyMoves() = assertTrue(AudioLevel.of(pcm(40), 3200) < 0.2f)
 

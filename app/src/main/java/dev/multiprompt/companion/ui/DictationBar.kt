@@ -98,7 +98,7 @@ internal fun DictationBar(
         Box(
             Modifier.size(DictationBarHeight).clip(CircleShape).background(Color(0xFFF2F2F2))
                 .clickable(enabled = !sending, onClick = onSend)
-                .semantics { contentDescription = "Stop and send" }
+                .semantics { contentDescription = "Send prompt" }
                 .testTag("dictation-send"),
             contentAlignment = Alignment.Center,
         ) {
