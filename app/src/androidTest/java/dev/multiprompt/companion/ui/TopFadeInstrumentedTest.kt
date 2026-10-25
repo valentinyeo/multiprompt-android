@@ -20,7 +20,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.core.view.WindowCompat
 import dev.multiprompt.companion.MainActivity
-import java.io.File
 import androidx.test.rule.GrantPermissionRule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -84,9 +83,9 @@ class TopFadeInstrumentedTest {
 
     private fun screenshot(name: String) {
         val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
-        val bitmap = instrumentation.uiAutomation.takeScreenshot()
-        val target = File(compose.activity.getExternalFilesDir(null), "$name.png")
-        target.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
-        bitmap.recycle()
+        val output = instrumentation.uiAutomation.executeShellCommand(
+            "mkdir -p /data/local/tmp/top-fade-proof && screencap -p /data/local/tmp/top-fade-proof/$name.png",
+        )
+        android.os.ParcelFileDescriptor.AutoCloseInputStream(output).use { it.readBytes() }
     }
 }

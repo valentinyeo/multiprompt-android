@@ -5,7 +5,7 @@ status=0
 "${GRADLE:-gradle}" --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.multiprompt.companion.ui.TopFadeInstrumentedTest || status=$?
 mkdir -p build/top-fade-shots
 for name in inbox-top inbox-scrolled chat-top chat-scrolled; do
-  adb pull "/sdcard/Android/data/dev.multiprompt.companion.debug/files/$name.png" build/top-fade-shots/
+  adb pull "/data/local/tmp/top-fade-proof/$name.png" build/top-fade-shots/
 done
 if [ "$status" -ne 0 ]; then exit "$status"; fi
 if [ "${RELEASE_SMOKE:-false}" = true ]; then
