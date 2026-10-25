@@ -5,6 +5,7 @@ The native reader streams output and lets a user send a prompt, send Enter/appro
 ## Sub-features
 
 - `reader-output`: live native output from the SSH/tmux stream.
+- `reader-no-progress-bar`: active ETA has no blue strip above the composer, idle and sending; send spinner remains.
 - `reader-send`: compose and send a message with a server-side receipt.
 - `reader-enter`: send an empty Enter from the actions menu.
 - `reader-interrupt`: interrupt the real foreground tmux process.

@@ -331,9 +331,25 @@ if [[ "$feature" == terminal.md ]]; then
     shot terminal-attached
     exit 0
 fi
+sudo -u verifyssh mkdir -p /home/verifyssh/.local/state/multiprompt
+sudo -u verifyssh python3 -c 'import json,time; json.dump({"verify-session":{"started_at":int(time.time())-120,"est_seconds":240}},open("/home/verifyssh/.local/state/multiprompt/eta-open.json","w"))'
+tap_desc 'Session actions'
+wait_for_text 'ETA'
+adb shell input keyevent KEYCODE_BACK
+shot eta-idle
+python3 "$scripts/no-chat-bar.py" "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-eta-idle.png" idle
+sudo -u verifyssh tee /home/verifyssh/send-delay.sh >/dev/null <<'DELAY'
+#!/usr/bin/env bash
+case "$SSH_ORIGINAL_COMMAND" in *mp_buffer=*) sleep 15 ;; esac
+exec bash -c "$SSH_ORIGINAL_COMMAND"
+DELAY
+sudo chmod 755 /home/verifyssh/send-delay.sh
+sudo sed -i 's|^|command="/home/verifyssh/send-delay.sh" |' /home/verifyssh/.ssh/authorized_keys
 fill 'Message this session' VERIFY_SENT_528
 shot send-draft
 tap_desc 'Send prompt'
+shot eta-sending
+python3 "$scripts/no-chat-bar.py" "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-eta-sending.png" sending
 wait_receipt 'VERIFY_RECEIVED:VERIFY_SENT_528'
 wait_for_text 'VERIFY_RECEIVED:VERIFY_SENT_528'
 shot send-result
