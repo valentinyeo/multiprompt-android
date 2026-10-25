@@ -1,0 +1,107 @@
+package dev.multiprompt.companion.ui
+
+import android.app.Application
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import dev.multiprompt.companion.reader.ChatHistoryCache
+import dev.multiprompt.companion.reader.ReaderState
+import dev.multiprompt.companion.reader.SessionReaderConnection
+import kotlinx.coroutines.flow.MutableStateFlow
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35], application = Application::class, qualifiers = "w390dp-h844dp-mdpi")
+class ReaderActionsMenuTest {
+    @get:Rule val compose = createComposeRule()
+    private lateinit var f: SessionActivityFixture
+    private lateinit var connection: SessionReaderConnection
+    private var archives = 0
+    private var waits = 0
+    private val reminders = mutableListOf<Long?>()
+    private val archived = mutableStateOf(false)
+
+    @Before fun setup() {
+        f = SessionActivityFixture()
+        connection = SessionReaderConnection(f.app.sshRepository, f.host, f.session.name,
+            historyScript = byteArrayOf(), historyCache = ChatHistoryCache(f.app.cacheDir.resolve("actions-history")))
+    }
+
+    @After fun cleanup() { connection.close(); f.close() }
+
+    private fun render(material3: Boolean = false, sending: Boolean = false) {
+        f.field<MutableStateFlow<ReaderState>>(connection, "_state").value = ReaderState(sending = sending)
+        compose.setContent {
+            ReaderScreen(
+                connection = connection, dictation = f.app.deepgramDictation,
+                screencast = f.app.screencastUploader, skills = f.app.skillStore,
+                signedIn = true, onSignIn = {}, onSignOut = {}, session = f.session,
+                unread = false, archived = archived.value, initialFontScale = 1f,
+                onBack = {}, onMarkRead = {}, onArchiveToggle = { waits++; archived.value = !archived.value },
+                onRemind = { reminders.add(it) }, onOpenTerminal = {}, onSwitchSession = {},
+                onFontScaleChanged = {}, onRename = { null }, onDissolve = { archives++ }, onEnd = {},
+                onSessionInteraction = {}, onSessionInput = {}, technicalMode = false,
+                onTechnicalModeChanged = {}, sunlightMode = false, onSetAppTheme = {},
+                onResetFontScale = { 1f }, sessionActionError = null, onClearSessionActionError = {},
+                onForget = {}, onShowEtaAccuracy = {}, onReleaseNotes = {}, material3 = material3,
+            )
+        }
+    }
+
+    private fun openMenu() { compose.onNodeWithContentDescription("Session actions").performClick() }
+
+    @Test fun archiveFromOverflowKeepsTheExistingDirectArchiveBehaviour() {
+        render()
+        openMenu()
+        compose.onNodeWithText("Archive session").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals(1, archives); assertEquals(0, waits); assertTrue(reminders.isEmpty()) }
+        compose.onNodeWithText("Archive session").assertDoesNotExist()
+    }
+
+    @Test fun remindFromOverflowOpensTheExistingPickerAndDispatchesItsDueTime() {
+        render(material3 = true)
+        openMenu()
+        compose.onNodeWithText("Remind me").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Tomorrow · 9:00 AM").assertIsDisplayed().performClick()
+        compose.runOnIdle {
+            assertEquals(1, reminders.size)
+            assertTrue(reminders.single()!! > System.currentTimeMillis() / 1000)
+            assertEquals(0, archives)
+            assertEquals(0, waits)
+        }
+        compose.onNodeWithText("Tomorrow · 9:00 AM").assertDoesNotExist()
+    }
+
+    @Test fun waitingFromOverflowTogglesBackToOpenEvenWhileSending() {
+        render(sending = true)
+        openMenu()
+        compose.onNodeWithText("Waiting").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals(1, waits); assertTrue(archived.value) }
+        compose.onNodeWithText("Return to open").assertDoesNotExist()
+        openMenu()
+        compose.onNodeWithText("Return to open").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals(2, waits); assertTrue(!archived.value); assertEquals(0, archives) }
+    }
+
+    @Test fun sessionActionsAreNotDuplicatedAboveTheComposer() {
+        render(material3 = true)
+        listOf("Archive", "Remind", "Wait", "Open", "Archive session", "Remind me", "Waiting").forEach {
+            compose.onNodeWithText(it).assertDoesNotExist()
+        }
+        openMenu()
+        listOf("Archive session", "Remind me", "Waiting").forEach {
+            compose.onNodeWithText(it).assertIsDisplayed()
+        }
+    }
+}
