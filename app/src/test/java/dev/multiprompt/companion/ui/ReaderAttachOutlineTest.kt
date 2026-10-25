@@ -14,7 +14,6 @@ import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.reader.ChatHistoryCache
@@ -91,7 +90,7 @@ class ReaderAttachOutlineTest {
     }
 
     private fun capture(node: SemanticsNodeInteraction, name: String): Bitmap {
-        val view = (compose.onRoot().fetchSemanticsNode().root as ViewRootForTest).view.rootView
+        val view = (node.fetchSemanticsNode().root as ViewRootForTest).view.rootView
         val attachInfo = ReflectionHelpers.getField<Any>(view, "mAttachInfo")
         val hardwareAccelerated = view.isHardwareAccelerated
         ReflectionHelpers.setField(attachInfo, "mHardwareAccelerated", false)
