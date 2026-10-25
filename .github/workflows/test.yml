@@ -35,6 +35,9 @@ jobs:
         with:
           gradle-version: "9.5.1"
 
+      - name: Focused chat menu regression
+        run: gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*ReaderActionsMenuTest*'
+
       - name: Root files, comments, lint and unit tests
         env:
           GRADLE: gradle

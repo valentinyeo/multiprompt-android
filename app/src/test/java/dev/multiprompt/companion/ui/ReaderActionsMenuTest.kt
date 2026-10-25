@@ -10,6 +10,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import dev.multiprompt.companion.reader.ChatHistoryCache
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.ReaderStatus
@@ -83,7 +84,10 @@ class ReaderActionsMenuTest {
         remind.performClick()
         compose.mainClock.advanceTimeByFrame()
         compose.mainClock.advanceTimeByFrame()
-        compose.onNodeWithText("Tomorrow · 9:00 AM").assertIsDisplayed().performClick()
+        val tomorrow = compose.onNodeWithText("Tomorrow · 9:00 AM").performScrollTo()
+        compose.mainClock.advanceTimeByFrame()
+        println("Reminder option bounds: ${tomorrow.fetchSemanticsNode().boundsInRoot}")
+        tomorrow.assertIsDisplayed().performClick()
         compose.mainClock.advanceTimeByFrame()
         compose.mainClock.advanceTimeByFrame()
         compose.runOnIdle {
