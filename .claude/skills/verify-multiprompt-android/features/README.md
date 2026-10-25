@@ -27,6 +27,7 @@ Numbered PNG/XML pairs show action and result. The transcript records commands a
 - [Changed host key](host-changed-key.md): compare a rotated identity, persist Not now and refuse authentication.
 - [Sessions](sessions.md): authenticated tmux discovery and search.
 - [Session settings](session-settings.md): full-screen split switches; saving is blocked without account OTP and a pulled layout.
+- [Session routing](session-routing.md): Inbox and swipe switching, typed and simulated dictated sends, independent SSH receipts.
 - [Session reader](session-reader.md): native output, Send, Enter/approve and Interrupt, with independent console receipts.
 - [Terminal](terminal.md): real SSH PTY/tmux fallback attachment.
 

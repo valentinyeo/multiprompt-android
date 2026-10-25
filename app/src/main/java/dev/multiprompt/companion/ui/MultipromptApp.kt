@@ -200,6 +200,7 @@ import dev.multiprompt.companion.data.CrashReport
 import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.dictation.DictationStatus
+import dev.multiprompt.companion.dictation.DictationState
 import dev.multiprompt.companion.reader.QueuedMessages
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
@@ -2522,7 +2523,8 @@ internal fun ReaderScreen(
     onShowEtaAccuracy: () -> Unit,
     onReleaseNotes: () -> Unit,
     material3: Boolean = LocalMaterial3.current,
-) = MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
+) = key(connection) {
+    MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
     val reader by connection.state.collectAsState()
     val transcript = reader.transcript.takeUnless { technicalMode }
     val historyAgent = TranscriptProtocol.supports(session.agent)
@@ -2535,7 +2537,10 @@ internal fun ReaderScreen(
             delay(1_000)
         }
     }
-    val dictationState by dictation.state.collectAsState()
+    val sessionKey = SessionReadStore.key(session.hostId, session.name)
+    val sharedDictationState by dictation.state.collectAsState()
+    val dictationState = sharedDictationState.takeIf { it.sessionKey == sessionKey }
+        ?: DictationState(configured = sharedDictationState.configured)
     var promptField by remember(connection) { mutableStateOf(TextFieldValue("")) }
     var replyTo by remember(connection, session.hostId, session.name) { mutableStateOf<String?>(null) }
     var replyAuthor by remember(connection, session.hostId, session.name) { mutableStateOf("") }
@@ -2667,7 +2672,7 @@ internal fun ReaderScreen(
     ) { granted ->
         if (granted) {
             microphoneError = null
-            dictation.start()
+            dictation.start(sessionKey)
         } else {
             microphoneError = "Microphone permission is required for voice input"
         }
@@ -2679,7 +2684,7 @@ internal fun ReaderScreen(
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         ) {
-            dictation.start()
+            dictation.start(sessionKey)
         } else {
             microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
@@ -2707,7 +2712,12 @@ internal fun ReaderScreen(
             if (fresh != null) skillSnapshot = fresh
         }
         onDispose {
-            dictation.discard()
+            if (dictation.state.value.sessionKey == sessionKey) {
+                if (dictation.state.value.status in setOf(DictationStatus.CONNECTING, DictationStatus.LISTENING, DictationStatus.FINISHING)) {
+                    android.widget.Toast.makeText(context, "Dictation stopped: session changed", android.widget.Toast.LENGTH_SHORT).show()
+                }
+                dictation.discard()
+            }
         }
     }
     val sendCurrentPrompt = {
@@ -3226,6 +3236,10 @@ internal fun ReaderScreen(
                 }
                 replyTo?.let { quoted ->
                     ReplyQuoteBar(message = quoted, author = replyAuthor, onCancel = { replyTo = null })
+                }
+                if (!dictationActive) {
+                    Text("Messaging ${session.displayName}", style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (dictationActive) {
                     DictationBar(
@@ -3755,6 +3769,7 @@ internal fun ReaderScreen(
             }
         }
     }
+}
 }
 
 @Composable

@@ -14,6 +14,7 @@ on:
           - host-changed-key.md
           - sessions.md
           - session-reader.md
+          - session-routing.md
           - terminal.md
 
 permissions:
@@ -49,6 +50,9 @@ jobs:
           python3 -m pip install Pillow
           printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/revision.txt"
           gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="0.1.2-verify.$GITHUB_RUN_NUMBER" assembleDebug 2>&1 | tee "$EVIDENCE/build.txt"
+      - name: Build routing instrumentation
+        if: inputs.feature == 'session-routing.md'
+        run: gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g assembleDebugAndroidTest
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules

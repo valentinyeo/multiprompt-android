@@ -40,6 +40,7 @@ data class DictationState(
     val transcript: String = "",
     val configured: Boolean = false,
     val error: String? = null,
+    val sessionKey: String? = null,
 )
 
 class DeepgramDictation(
@@ -96,8 +97,9 @@ class DeepgramDictation(
     }
 
     @Synchronized
-    fun start() {
+    fun start(sessionKey: String) {
         if (_state.value.status in ACTIVE_STATUSES) return
+        _state.value = DictationState(configured = _state.value.configured, sessionKey = sessionKey)
         if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED
         ) {
@@ -108,7 +110,7 @@ class DeepgramDictation(
             ?.toString(Charsets.UTF_8)
             ?.takeIf(String::isNotBlank)
             ?: run {
-                _state.value = DictationState(configured = false, error = "Add a Deepgram API key")
+                _state.value = DictationState(configured = false, error = "Add a Deepgram API key", sessionKey = sessionKey)
                 return
             }
 
@@ -118,7 +120,7 @@ class DeepgramDictation(
         stopping = false
         gate = SpeechGate()
         usageRecorded = false
-        _state.value = DictationState(status = DictationStatus.LISTENING, configured = true)
+        _state.value = DictationState(status = DictationStatus.LISTENING, configured = true, sessionKey = sessionKey)
         val mic = try {
             micFactory()
         } catch (_: SecurityException) {

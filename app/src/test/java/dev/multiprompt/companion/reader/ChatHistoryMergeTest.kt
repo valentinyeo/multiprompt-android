@@ -124,6 +124,18 @@ class ChatHistoryMergeTest {
     }
 
     @Test
+    fun cacheFromUnboundTranscriptDiscoveryIsNeverShownAfterUpgrade() {
+        val directory = temporary.newFolder("legacy-cache")
+        val cache = ChatHistoryCache(directory)
+        cache.save("host/session-a", ChatHistory().apply(page("tail", listOf(row(0, "Wrong session B")))))
+        val file = directory.listFiles()!!.single()
+        val lines = file.readLines()
+        file.writeText(JSONObject(lines.first()).put("version", 1).toString() + "\n" +
+            lines.drop(1).joinToString("\n", postfix = "\n"))
+        assertNull("Previously guessed transcripts must be fetched again using process identity", cache.restore("host/session-a"))
+    }
+
+    @Test
     fun boundedPrivateCacheRestoresCursorAndEvictsOldSessionsWithoutPlaintextNames() {
         val directory = temporary.newFolder("cache")
         val cache = ChatHistoryCache(directory, sessionBytes = 4096, totalBytes = 7000)

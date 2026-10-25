@@ -29,7 +29,7 @@ class DeepgramDictationTest {
     fun backgroundEntryPointSynchronouslyStopsAndReleasesSilentMicrophone() {
         val fixture = Fixture()
         fixture.dictation.use { dictation ->
-            dictation.start()
+            dictation.start("test-session")
             fixture.mic.feed(1, voiced = false)
             assertEquals(DictationStatus.LISTENING, dictation.state.value.status)
             assertEquals(1, fixture.mic.starts)
@@ -48,7 +48,7 @@ class DeepgramDictationTest {
     fun levelFollowsTheMicrophoneAndDropsToZeroOnStop() {
         val fixture = Fixture()
         fixture.dictation.use { dictation ->
-            dictation.start()
+            dictation.start("test-session")
             fixture.mic.feed(1, voiced = false)
             assertEquals(0f, dictation.level.value, 0f)
             fixture.mic.feed(1, voiced = true)
@@ -62,7 +62,7 @@ class DeepgramDictationTest {
     fun gateClosesSocketButKeepsListeningAndAcceptsLateTranscriptsAfterReopening() {
         val fixture = Fixture()
         fixture.dictation.use { dictation ->
-            dictation.start()
+            dictation.start("test-session")
             fixture.mic.feed(10, voiced = false)
             assertTrue(fixture.sockets.isEmpty())
             fixture.mic.feed(10, voiced = true)
@@ -102,7 +102,7 @@ class DeepgramDictationTest {
     fun gateClosedFailureIsIgnoredEvenWithoutANewSocket() {
         val fixture = Fixture()
         fixture.dictation.use { dictation ->
-            dictation.start()
+            dictation.start("test-session")
             fixture.mic.feed(10, voiced = true)
             val first = fixture.sockets.single()
             first.open()
@@ -120,7 +120,7 @@ class DeepgramDictationTest {
     fun pendingGateClosedSocketFlushesItsOwnAudioAndControlsWhenOpenedLate() {
         val fixture = Fixture()
         fixture.dictation.use { dictation ->
-            dictation.start()
+            dictation.start("test-session")
             fixture.mic.feed(10, voiced = true)
             val first = fixture.sockets.single()
             fixture.mic.feed(61, voiced = false)
@@ -143,7 +143,7 @@ class DeepgramDictationTest {
     fun euFailureFallsBackToGlobalWithoutLosingBufferedAudio() {
         val fixture = Fixture()
         fixture.dictation.use { dictation ->
-            dictation.start()
+            dictation.start("test-session")
             fixture.mic.feed(10, voiced = true)
             val eu = fixture.sockets.single()
             assertEquals("api.eu.deepgram.com", eu.request().url.host)
@@ -160,7 +160,7 @@ class DeepgramDictationTest {
     fun stopBeforeSocketOpensNeverReturnsToListeningOnOpen() {
         val fixture = Fixture()
         fixture.dictation.use { dictation ->
-            dictation.start()
+            dictation.start("test-session")
             fixture.mic.feed(10, voiced = true)
             dictation.stop()
             assertEquals(DictationStatus.FINISHING, dictation.state.value.status)
@@ -177,7 +177,7 @@ class DeepgramDictationTest {
     fun forgottenSilentMicStopsWithoutOpeningASocket() {
         val fixture = Fixture()
         fixture.dictation.use { dictation ->
-            dictation.start()
+            dictation.start("test-session")
             fixture.mic.feed(450, voiced = false, awaitDrain = false)
             assertTrue(fixture.mic.released.await(5, TimeUnit.SECONDS))
             synchronized(dictation) {
@@ -193,7 +193,7 @@ class DeepgramDictationTest {
     fun zeroByteReadsBackOffThenResumeAudioAndRemainCancellable() {
         val fixture = Fixture()
         fixture.dictation.use { dictation ->
-            dictation.start()
+            dictation.start("test-session")
             val elapsed = fixture.mic.feedZeroReads(12)
             assertTrue("Zero reads took ${elapsed}ms", elapsed >= 100)
             assertEquals(DictationStatus.LISTENING, dictation.state.value.status)

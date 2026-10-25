@@ -39,6 +39,7 @@ The workflow calls, on its fresh GitHub emulator only:
 
 ```bash
 .claude/skills/verify-multiprompt-android/scripts/drive.sh session-reader.md
+.claude/skills/verify-multiprompt-android/scripts/drive.sh session-routing.md
 ```
 
 `EVIDENCE`, `FIXTURE` and `EXPECTED_VERSION` come from the workflow. Pass any filename in the feature index. `drive.sh` has small `tap_text`, `tap_desc`, `wait_for_text`, `dump_ui` and `shot` functions. It dumps `uiautomator` XML before locating an exact text or contentDescription and taps the matched clickable ancestor's bounds (or the exact enabled text node for native picker rows that do not expose a clickable ancestor) using `adb shell input`. Editable fields are found by class and their label/placeholder. Missing or ambiguous selectors fail instead of falling back to blind coordinates. While waiting, a system **isn't responding** dialog from the slow emulator is answered with **Wait** and logged in `system-anr.txt`; before launch the driver sets the emulator's `hide_error_dialogs` so other apps' ANR dialogs cannot cover the app (an app crash still fails doctor and shows in `logcat.txt`), and doctor runs at most three times, each failure logged in `doctor-retries.txt`. After doctor it waits up to 60 s for the emulator to reach `10.0.2.2` (logged in `network-wait.txt`) and fails as blocked otherwise. A single **Trust and connect** tap must reach `verify-session`; failure is logged in `trust-retries.txt`, captured as `trust-retry-1`, and fails the journey without retrying. Existing Compose accessibility text suffices; no test-only state setters or UI instrumentation are used.
@@ -83,6 +84,7 @@ All helpers are executable. These setup/interaction commands are **GitHub-job-on
 .claude/skills/verify-multiprompt-android/scripts/drive.sh host-changed-key.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh sessions.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh session-reader.md
+.claude/skills/verify-multiprompt-android/scripts/drive.sh session-routing.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh terminal.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh sign-in.md
 .claude/skills/verify-multiprompt-android/scripts/cleanup.sh

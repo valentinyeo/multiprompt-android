@@ -140,6 +140,9 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     add("m3Implementation", libs.androidx.compose.ui.test.manifest)
     testImplementation(libs.material.color.utilities) { isTransitive = false }
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.test.runner)
     testImplementation(libs.junit)
     testImplementation(libs.json)
     testImplementation(libs.androidx.compose.ui.test.junit4)
