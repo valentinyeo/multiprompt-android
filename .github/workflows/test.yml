@@ -48,3 +48,11 @@ jobs:
           path: |
             app/build/reports/igsh-844/*.png
             app/build/test-results/test*UnitTest/*.xml
+
+      - name: Upload render screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: render-screenshots
+          path: app/build/reports/igsh-844/*.png
+          if-no-files-found: ignore
