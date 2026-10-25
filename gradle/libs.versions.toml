@@ -16,6 +16,7 @@ okhttp = "5.3.0"
 browser = "1.9.0"
 work = "2.11.2"
 material = "1.14.0"
+testRunner = "1.7.0"
 
 [libraries]
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTestRunner" }
