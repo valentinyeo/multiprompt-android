@@ -5,6 +5,7 @@ on:
     paths:
       - 'app/**'
       - 'gradle/**'
+      - 'tools/top-fade-proof.sh'
       - '.github/workflows/top-fade.yml'
   push:
     branches: [main]

@@ -17,7 +17,7 @@ if [ "${RELEASE_SMOKE:-false}" = true ]; then
   curl -fsSL "$(jq -er '.apkUrl' "$manifest")" -o build/published.apk
   printf '%s  build/published.apk\n' "$(jq -er '.sha256' "$manifest")" | sha256sum --check
   test "$(stat -c%s build/published.apk)" = "$(jq -er '.sizeBytes' "$manifest")"
-  adb install -r build/published.apk
+  adb install -r -g build/published.apk
   adb shell am start -W -n dev.multiprompt.companion/dev.multiprompt.companion.MainActivity
   adb shell uiautomator dump /sdcard/release-window.xml
   adb shell dumpsys package dev.multiprompt.companion > build/top-fade-shots/installed-package.txt
