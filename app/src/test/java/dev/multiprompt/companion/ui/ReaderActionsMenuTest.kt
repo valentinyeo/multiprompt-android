@@ -1,21 +1,16 @@
 package dev.multiprompt.companion.ui
 
 import android.app.Application
-import android.os.Looper
-import androidx.compose.runtime.snapshots.Snapshot
-import org.robolectric.Shadows.shadowOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performSemanticsAction
 import dev.multiprompt.companion.reader.ChatHistoryCache
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.ReaderStatus
@@ -37,7 +32,7 @@ import org.robolectric.annotation.GraphicsMode
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [35], application = Application::class, qualifiers = "w390dp-h844dp-mdpi")
+@Config(sdk = [34], application = Application::class, qualifiers = "w390dp-h844dp-mdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ReaderActionsMenuTest {
     private val scheduler = TestCoroutineScheduler()
@@ -89,28 +84,8 @@ class ReaderActionsMenuTest {
     @Test fun remindFromOverflowOpensTheExistingPickerAndDispatchesItsDueTime() {
         render(material3 = true)
         openMenu()
-        val remind = compose.onNodeWithText("Remind me").assertIsDisplayed()
-        compose.mainClock.autoAdvance = false
-        remind.performSemanticsAction(SemanticsActions.OnClick) { it() }
-        compose.runOnUiThread {
-            Snapshot.sendApplyNotifications()
-            shadowOf(Looper.getMainLooper()).idle()
-        }
-        compose.mainClock.advanceTimeByFrame()
-        compose.mainClock.advanceTimeByFrame()
-        scheduler.runCurrent()
-        compose.runOnUiThread { shadowOf(Looper.getMainLooper()).idle() }
-        compose.mainClock.advanceTimeByFrame()
-        println(compose.onAllNodes(SemanticsMatcher("all") { true }, useUnmergedTree = true).fetchSemanticsNodes()
-            .joinToString("\n") { "${it.id} ${it.boundsInRoot} ${it.config}" })
-        compose.onNodeWithText("Tomorrow · 9:00 AM").performScrollTo().assertIsDisplayed()
-            .performSemanticsAction(SemanticsActions.OnClick) { it() }
-        compose.runOnUiThread {
-            Snapshot.sendApplyNotifications()
-            shadowOf(Looper.getMainLooper()).idle()
-        }
-        compose.mainClock.advanceTimeByFrame()
-        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithText("Remind me").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Tomorrow · 9:00 AM").performScrollTo().assertIsDisplayed().performClick()
         compose.runOnIdle {
             assertEquals(1, reminders.size)
             assertEquals(dev.multiprompt.companion.data.ReminderTimeParser.tomorrowMorning(java.time.ZonedDateTime.now()).toEpochSecond(), reminders.single())
