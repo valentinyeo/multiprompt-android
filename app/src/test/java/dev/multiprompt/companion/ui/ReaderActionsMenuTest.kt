@@ -1,6 +1,9 @@
 package dev.multiprompt.companion.ui
 
 import android.app.Application
+import android.os.Looper
+import androidx.compose.runtime.snapshots.Snapshot
+import org.robolectric.Shadows.shadowOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasSetTextAction
@@ -89,13 +92,23 @@ class ReaderActionsMenuTest {
         val remind = compose.onNodeWithText("Remind me").assertIsDisplayed()
         compose.mainClock.autoAdvance = false
         remind.performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.runOnUiThread {
+            Snapshot.sendApplyNotifications()
+            shadowOf(Looper.getMainLooper()).idle()
+        }
         compose.mainClock.advanceTimeByFrame()
         compose.mainClock.advanceTimeByFrame()
         scheduler.runCurrent()
+        compose.runOnUiThread { shadowOf(Looper.getMainLooper()).idle() }
+        compose.mainClock.advanceTimeByFrame()
         println(compose.onAllNodes(SemanticsMatcher("all") { true }, useUnmergedTree = true).fetchSemanticsNodes()
             .joinToString("\n") { "${it.id} ${it.boundsInRoot} ${it.config}" })
         compose.onNodeWithText("Tomorrow · 9:00 AM").performScrollTo().assertIsDisplayed()
             .performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.runOnUiThread {
+            Snapshot.sendApplyNotifications()
+            shadowOf(Looper.getMainLooper()).idle()
+        }
         compose.mainClock.advanceTimeByFrame()
         compose.mainClock.advanceTimeByFrame()
         compose.runOnIdle {
