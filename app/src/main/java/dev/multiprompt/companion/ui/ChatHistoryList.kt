@@ -39,6 +39,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.model.AgentKind
+import dev.multiprompt.companion.reader.ChatReactions
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.ssh.ClaudeQuestion
 import dev.multiprompt.companion.reader.ChatHistoryMessage
@@ -65,6 +66,7 @@ internal fun ChatHistoryView(
     sessionName: String,
     unreadMessageKey: String?,
     onMarkUnread: (String) -> Unit,
+    onReaction: ((ChatHistoryMessage, ChatReactions.Emoji) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val history = remember(connection, agent, workingDirectory) { connection.chatHistory(agent, workingDirectory) }
@@ -111,6 +113,8 @@ internal fun ChatHistoryView(
             sessionName = sessionName,
             unreadMessageKey = unreadMessageKey,
             onMarkUnread = onMarkUnread,
+            onReaction = onReaction,
+            collapsePendingReactions = reader.actionError == null,
             onNearTop = history::nearTop,
             listState = listState,
             followRequest = followRequest,
@@ -140,17 +144,24 @@ internal fun ChatHistoryList(
     unreadMessageKey: String? = null,
     onMarkUnread: (String) -> Unit = {},
     hasOlder: Boolean = false,
+    onReaction: ((ChatHistoryMessage, ChatReactions.Emoji) -> Unit)? = null,
+    collapsePendingReactions: Boolean = true,
 ) {
+    val presentation = remember(messages, agent, collapsePendingReactions) {
+        if (agent == AgentKind.CLAUDE) ChatReactions.present(messages, collapsePendingReactions)
+        else ChatReactions.Presentation(messages, emptyMap())
+    }
     val nearTop by rememberUpdatedState(onNearTop)
     var pendingJump by remember { mutableStateOf<ReplyJump?>(null) }
     var highlightedKey by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
-    LaunchedEffect(pendingJump, messages, hasOlder, loaded, question) {
+    LaunchedEffect(pendingJump, presentation.messages, hasOlder, loaded, question) {
         val request = pendingJump ?: return@LaunchedEffect
-        val keys = messages.map { it.key }
-        val texts = messages.map { it.text }
-        val before = messages.indexOfFirst { it.key == request.message.key }.takeIf { it >= 0 }
-            ?: messages.indexOfLast { it.role == request.message.role && it.text == request.message.text }
+        val visible = presentation.messages
+        val keys = visible.map { it.key }
+        val texts = visible.map { it.text }
+        val before = visible.indexOfFirst { it.key == request.message.key }.takeIf { it >= 0 }
+            ?: visible.indexOfLast { it.role == request.message.role && it.text == request.message.text }
         val source = ReplyQuote.sourceIndex(texts, before, request.reply.quoted)
         if (source != null) {
             highlightedKey = keys[source]
@@ -199,7 +210,7 @@ internal fun ChatHistoryList(
                 QuestionChoices(question, enabled = onQuestionChoice != null, error = questionError) { onQuestionChoice?.invoke(it) == true }
             }
         }
-        items(messages.asReversed(), key = { it.key }, contentType = { it.role }) { message ->
+        items(presentation.messages.asReversed(), key = { it.key }, contentType = { it.role }) { message ->
             Column {
                 if (message.key == unreadMessageKey) {
                     Text("New", color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
@@ -209,10 +220,14 @@ internal fun ChatHistoryList(
                     key = message.key, highlighted = highlightedKey == message.key,
                     onJump = { pendingJump = ReplyJump(message, it) },
                     onChoice = onChoice.takeIf { message.key == newest?.key && message.role == "assistant" },
-                    selectedAnswer = selectedAnswers[message.key])
+                    selectedAnswer = selectedAnswers[message.key],
+                    reactions = presentation.badges[message.key].orEmpty(),
+                    onReaction = if (agent == AgentKind.CLAUDE && message.role == "assistant" && onReaction != null) {
+                        { emoji -> onReaction(message, emoji) }
+                    } else null)
             }
         }
-        if (messages.isEmpty()) {
+        if (presentation.messages.isEmpty()) {
             item(key = "empty") {
                 Text(if (loaded) "No messages yet" else "Loading conversation…", fontSize = fontSize,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp))
@@ -238,6 +253,8 @@ private fun HistoryBubble(
     onJump: (ReplyQuote.Reply) -> Unit,
     onChoice: ((String) -> Boolean)? = null,
     selectedAnswer: String? = null,
+    reactions: Set<ChatReactions.Emoji> = emptySet(),
+    onReaction: ((ChatReactions.Emoji) -> Unit)? = null,
 ) {
     val fontSize = chatFontSize((14f * fontScale).sp, fontScale)
     val isUser = role == "user"
@@ -257,7 +274,7 @@ private fun HistoryBubble(
             modifier = Modifier.alpha(if (pending) 0.5f else 1f),
             onReply = { onReply(it, isUser) }, gate = gate,
             messageId = messageId, sessionName = sessionName, onMarkUnread = onMarkUnread,
-            highlighted = highlighted) {
+            highlighted = highlighted, reactions = reactions, onReaction = onReaction) {
             if (pending) {
                 Text("Queued", fontFamily = chatFontFamily(), fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp,
                     color = chatHintColor(sunlight))

@@ -68,6 +68,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.testTag
+import dev.multiprompt.companion.reader.ChatReactions
 import kotlin.math.abs
 
 internal class ReplySwipeGate {
@@ -91,6 +93,8 @@ internal fun ReplyableBubble(
     sessionName: String = "",
     onMarkUnread: () -> Unit = {},
     highlighted: Boolean = false,
+    reactions: Set<ChatReactions.Emoji> = emptySet(),
+    onReaction: ((ChatReactions.Emoji) -> Unit)? = null,
     content: @Composable (selectable: Boolean) -> Unit,
 ) {
     var selectable by remember { mutableStateOf(false) }
@@ -152,7 +156,19 @@ internal fun ReplyableBubble(
             .semantics { replySelectable = selectable }
             .then(gestures),
     ) {
-        Column { content(false) }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            content(false)
+            if (reactions.isNotEmpty()) {
+                Row(
+                    Modifier.testTag("reaction-badges:$messageId")
+                        .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(12.dp))
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    ChatReactions.Emoji.entries.filter { it in reactions }.forEach { Text(it.text, fontSize = 16.sp) }
+                }
+            }
+        }
     }
     if (menuExpanded) {
         ModalBottomSheet(
@@ -179,6 +195,18 @@ internal fun ReplyableBubble(
                     ) {
                         Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
                         Text(label, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+                if (!isUser && onReaction != null) {
+                    group {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            ChatReactions.Emoji.entries.forEach { emoji ->
+                                TextButton(
+                                    onClick = { menuExpanded = false; onReaction(emoji) },
+                                    modifier = Modifier.testTag("reaction-${emoji.name.lowercase()}"),
+                                ) { Text(emoji.text, fontSize = 28.sp) }
+                            }
+                        }
                     }
                 }
                 group {
