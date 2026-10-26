@@ -43,6 +43,7 @@ finish() {
         adb devices
         sudo dmesg | grep -iE "segfault|qemu|oom|killed process" | tail -20
         ls -la /tmp/android-runner /var/crash /var/lib/systemd/coredump
+        sudo coredumpctl list --no-pager
         sudo journalctl --no-pager -n 40 -g "qemu|coredump|apport"
     } > "$EVIDENCE/load-at-exit.txt" 2>&1
     sudo cat /home/verifyssh/commands.log > "$EVIDENCE/commands.txt" 2>/dev/null
