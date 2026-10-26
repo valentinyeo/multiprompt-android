@@ -117,6 +117,33 @@ class ReplyReferenceTest {
             .toString())
     }
 
+    @Test
+    fun jumpingToAnOversizedSourceShowsItsBeginning() {
+        val source = "Beginning of the tall original " + "long original message words ".repeat(160)
+        val messages = (1..20).map { ChatHistoryMessage("older-$it", "assistant", "Older message $it", "", it.toLong(), it + 1L) } +
+            ChatHistoryMessage("tall-source", "assistant", source, "", 21, 22) +
+            (23..55).map { ChatHistoryMessage("later-$it", "assistant", "Later message $it", "", it.toLong(), it + 1L) } +
+            ChatHistoryMessage("reply", "user", ReplyQuote.compose(source, "Answer to tall original"), "", 56, 57)
+        compose.setContent {
+            MaterialTheme { ChatHistoryList(messages, sunlight = true, modifier = Modifier.background(Color.White)) }
+        }
+        compose.onNodeWithContentDescription("Jump to original message").performClick()
+        val original = compose.onNodeWithTag("chat-message-tall-source")
+        original.assertIsDisplayed()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Original message"))
+        val bounds = original.getUnclippedBoundsInRoot()
+        val viewport = compose.onRoot().getUnclippedBoundsInRoot()
+        assertTrue(bounds.height > viewport.height)
+        assertTrue(bounds.top >= viewport.top)
+        screenshot("reply-tall-source.png")
+        output("reply-tall-layout.json").writeText(JSONObject()
+            .put("sourceHeight", bounds.height.value)
+            .put("viewportHeight", viewport.height.value)
+            .put("sourceTop", bounds.top.value)
+            .put("viewportTop", viewport.top.value)
+            .toString())
+    }
+
     private fun screenshot(name: String) {
         output(name).outputStream().use {
             compose.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
