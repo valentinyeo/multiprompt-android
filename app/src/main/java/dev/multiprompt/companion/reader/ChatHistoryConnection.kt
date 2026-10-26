@@ -38,6 +38,7 @@ class ChatHistoryConnection(
     private val wake = Channel<Unit>(Channel.CONFLATED)
     private val resyncs = Channel<CompletableDeferred<Unit>>(Channel.UNLIMITED)
     private var job: Job? = null
+    @Volatile private var resyncing: CompletableDeferred<Unit>? = null
     @Volatile private var nearTop = false
     @Volatile private var awaitingMessages = false
     private val cacheKey = listOf(host.id, host.hostname, host.port.toString(), host.username,
@@ -55,7 +56,7 @@ class ChatHistoryConnection(
     }
 
     fun resync(): CompletableDeferred<Unit> = CompletableDeferred<Unit>().also {
-        resyncs.trySend(it)
+        if (resyncs.trySend(it).isFailure) it.cancel()
         wake.trySend(Unit)
     }
 
@@ -67,7 +68,6 @@ class ChatHistoryConnection(
             }
             var retryDelay = 2_000L
             var requestId = 0L
-            var resyncing: CompletableDeferred<Unit>? = null
             while (isActive) {
                 try {
                     val client = withTimeout(20_000L) { repository.connect(host) }
@@ -111,6 +111,8 @@ class ChatHistoryConnection(
     override fun close() {
         wake.close()
         resyncs.close()
+        resyncing?.cancel()
+        generateSequence { resyncs.tryReceive().getOrNull() }.forEach { it.cancel() }
         scope.cancel()
     }
 }
