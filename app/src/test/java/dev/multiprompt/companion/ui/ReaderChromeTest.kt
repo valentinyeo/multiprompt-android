@@ -9,6 +9,7 @@ import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -42,6 +43,7 @@ import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.After
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -132,10 +134,12 @@ class ReaderChromeTest {
         compose.onNodeWithText("Current: $modelLabel · waiting for input").assertDoesNotExist()
     }
 
-    @Test fun dictatingReplacesTheMessageBoxWithThreeBigControls() {
+    @Test fun dictatingKeepsTheMessageBoxHeight() {
         render()
         compose.onNodeWithContentDescription("Start dictation").assertIsDisplayed()
         compose.onNodeWithTag("dictation-stop").assertDoesNotExist()
+        val before = compose.onNode(hasSetTextAction()).getUnclippedBoundsInRoot()
+        screenshot("dictation-before")
         val dictationState: MutableStateFlow<DictationState> = f.field(f.app.deepgramDictation, "_state")
         val dictationLevel: MutableStateFlow<Float> = f.field(f.app.deepgramDictation, "_level")
         compose.runOnIdle {
@@ -154,14 +158,22 @@ class ReaderChromeTest {
         val send = compose.onNodeWithTag("dictation-send").getUnclippedBoundsInRoot()
         assertTrue("stop, meter, send read left to right on one row: $stop $meter $send",
             stop.right <= meter.left && meter.right <= send.left && stop.top == meter.top && meter.top == send.top)
-        assertTrue("controls are big: ${stop.bottom - stop.top}", (stop.bottom - stop.top).value >= 56f)
-        screenshot("dictating")
+        screenshot("dictation-during")
+        listOf(stop, meter, send).forEach { control ->
+            assertEquals("dictation control matches message box height", before.bottom - before.top, control.bottom - control.top)
+            assertEquals("bottom bar must not jump", before.top, control.top)
+            assertEquals("bottom bar stays anchored", before.bottom, control.bottom)
+        }
         compose.onNodeWithTag("dictation-stop").performClick()
         compose.runOnIdle {
             assertTrue("stop button stops dictation", f.app.deepgramDictation.state.value.status == DictationStatus.IDLE)
         }
         compose.onNodeWithTag("dictation-stop").assertDoesNotExist()
         compose.onNodeWithContentDescription("Start dictation").assertIsDisplayed()
+        val after = compose.onNode(hasSetTextAction()).getUnclippedBoundsInRoot()
+        assertEquals("message box returns at the same bounds", before, after)
+        screenshot("dictation-after")
+        println("DICTATION_GEOMETRY before=$before during=$stop meter=$meter send=$send after=$after")
         compose.runOnIdle { dictationState.value = DictationState(status = DictationStatus.LISTENING, configured = true, sessionKey = "${f.host.id}::${f.session.name}") }
         compose.onNodeWithTag("dictation-send").performClick()
         compose.runOnIdle {

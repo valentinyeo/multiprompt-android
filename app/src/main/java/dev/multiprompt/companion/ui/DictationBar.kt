@@ -37,7 +37,6 @@ import dev.multiprompt.companion.dictation.AudioLevel
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.delay
 
-private val DictationBarHeight = 64.dp
 private const val LevelDots = 14
 
 @Composable
@@ -50,20 +49,20 @@ internal fun DictationBar(
     val dark = Color(0xFF2B2B2B)
     val onDark = Color.White
     Row(
-        Modifier.fillMaxWidth().padding(top = 8.dp),
+        Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
     ) {
         Box(
-            Modifier.weight(1f).height(DictationBarHeight).clip(RoundedCornerShape(32.dp)).background(dark)
+            Modifier.weight(1f).height(ReaderComposerHeight).clip(ReaderComposerShape).background(dark)
                 .clickable(enabled = !sending, onClick = onStop)
                 .semantics { contentDescription = "Stop dictation" }
                 .testTag("dictation-stop"),
             contentAlignment = Alignment.Center,
-        ) { Box(Modifier.size(24.dp).background(onDark, RoundedCornerShape(4.dp))) }
+        ) { Box(Modifier.size(ReaderBadgeSize).background(onDark, RoundedCornerShape(4.dp))) }
         Row(
-            Modifier.weight(1.4f).height(DictationBarHeight).clip(RoundedCornerShape(32.dp)).background(dark)
-                .padding(horizontal = 20.dp).testTag("dictation-meter"),
+            Modifier.weight(1.4f).height(ReaderComposerHeight).clip(ReaderComposerShape).background(dark)
+                .padding(horizontal = 12.dp).testTag("dictation-meter"),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -71,14 +70,14 @@ internal fun DictationBar(
             LevelDotsRow(level, onDark)
         }
         Box(
-            Modifier.size(DictationBarHeight).clip(CircleShape).background(Color(0xFFF2F2F2))
+            Modifier.size(ReaderComposerHeight).clip(CircleShape).background(Color(0xFFF2F2F2))
                 .clickable(enabled = !sending, onClick = onSend)
                 .semantics { contentDescription = "Send prompt" }
                 .testTag("dictation-send"),
             contentAlignment = Alignment.Center,
         ) {
-            if (sending) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp, color = Color.Black)
-            else Icon(Icons.Default.ArrowUpward, null, Modifier.size(32.dp), tint = Color.Black)
+            if (sending) CircularProgressIndicator(Modifier.size(ReaderBadgeSize), strokeWidth = 2.dp, color = Color.Black)
+            else Icon(Icons.Default.ArrowUpward, null, Modifier.size(ReaderBadgeSize), tint = Color.Black)
         }
     }
 }
@@ -96,7 +95,7 @@ private fun DictationClock(color: Color) {
     Text(
         AudioLevel.timer(elapsed),
         color = color,
-        fontSize = 26.sp,
+        fontSize = 18.sp,
         fontWeight = FontWeight.Medium,
         modifier = Modifier.testTag("dictation-timer"),
     )
@@ -113,9 +112,9 @@ private fun LevelDotsRow(level: StateFlow<Float>, color: Color) {
         }
     }
     val lit = AudioLevel.litDots(history, LevelDots)
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
         lit.forEach { on ->
-            Box(Modifier.size(if (on) 7.dp else 4.dp).background(if (on) color else color.copy(alpha = 0.45f), CircleShape))
+            Box(Modifier.size(if (on) 4.dp else 2.dp).background(if (on) color else color.copy(alpha = 0.45f), CircleShape))
         }
     }
 }
