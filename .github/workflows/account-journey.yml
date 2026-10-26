@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 40
     env:
       EVIDENCE: ${{ github.workspace }}/account-journey-evidence
-      FIXTURE: ${{ runner.temp }}/journey-fixture
+      FIXTURE: ${{ github.workspace }}-journey-fixture
       MULTIPROMPT_DIR: ${{ github.workspace }}/multiprompt
     steps:
       - uses: actions/checkout@v4
