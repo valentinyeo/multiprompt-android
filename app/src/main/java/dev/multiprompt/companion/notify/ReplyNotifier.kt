@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.core.app.NotificationCompat
 import dev.multiprompt.companion.MainActivity
 import dev.multiprompt.companion.R
@@ -13,6 +14,7 @@ import dev.multiprompt.companion.data.SessionReadStore
 object ReplyNotifier {
     const val CHANNEL_ID = "replies"
     const val GROUP_KEY = "dev.multiprompt.companion.REPLIES"
+    const val ACTION_OPEN_REPLY = "dev.multiprompt.companion.OPEN_REPLY"
     const val EXTRA_HOST_ID = "reply_host_id"
     const val EXTRA_SESSION_NAME = "reply_session_name"
     private const val SESSION_NOTIFICATION_ID = 1
@@ -26,6 +28,8 @@ object ReplyNotifier {
 
     fun openIntent(context: Context, hostId: String, sessionName: String): Intent =
         Intent(context, MainActivity::class.java).apply {
+            action = ACTION_OPEN_REPLY
+            data = Uri.fromParts("session", SessionReadStore.key(hostId, sessionName), null)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(EXTRA_HOST_ID, hostId)
             putExtra(EXTRA_SESSION_NAME, sessionName)
@@ -68,9 +72,12 @@ object ReplyNotifier {
         manager.notify(SUMMARY_ID, summary)
     }
 
-    fun cancel(context: Context, key: String) {
+    fun cancel(context: Context, key: String) = cancel(context, setOf(key))
+
+    fun cancel(context: Context, keys: Set<String>) {
+        if (keys.isEmpty()) return
         val manager = context.getSystemService(NotificationManager::class.java)
-        manager.cancel(key, SESSION_NOTIFICATION_ID)
-        if (activeKeys(context).isEmpty()) manager.cancel(SUMMARY_ID)
+        keys.forEach { manager.cancel(it, SESSION_NOTIFICATION_ID) }
+        if ((activeKeys(context) - keys).isEmpty()) manager.cancel(SUMMARY_ID)
     }
 }

@@ -99,6 +99,7 @@ data class AppUiState(
     val readerSession: TmuxSession? = null,
     val unreadSessionKeys: Set<String> = emptySet(),
     val unreadCounts: Map<String, Int> = emptyMap(),
+    val repliedSessionKeys: Set<String> = emptySet(),
     val archivedSessionKeys: Set<String> = emptySet(),
     val sessionBucket: SessionBucket = SessionBucket.OPEN,
     val dissolvedSessions: List<DissolvedSession> = emptyList(),
@@ -191,7 +192,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var pendingLayout = accountStore.load(syncAuth.accountId())
     private var usedStampThrottle = UsedStampThrottle(pendingLayout?.base)
     private val foreground = MutableStateFlow(false)
-    private var lastReplyCounts: Map<String, Int>? = null
+    private var replyNotificationsBaselined = false
     private var pendingNotificationKey: String? = null
     private var trustRefreshQueued = false
     private var accountRequestRunning = false
@@ -591,6 +592,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = true) }
             openPendingNotificationSession()
+            pendingNotificationKey = null
             syncReplyNotifications()
             if (trustRefreshQueued) {
                 trustRefreshQueued = false
@@ -606,9 +608,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             null
         }
-        val plan = ReplyNotificationPolicy.plan(lastReplyCounts, state.unreadCounts, front, ReplyNotifier.activeKeys(app))
-        lastReplyCounts = state.unreadCounts
-        plan.cancel.forEach { ReplyNotifier.cancel(app, it) }
+        val plan = ReplyNotificationPolicy.plan(
+            replyNotificationsBaselined,
+            state.repliedSessionKeys,
+            state.unreadCounts,
+            front,
+            ReplyNotifier.activeKeys(app),
+        )
+        replyNotificationsBaselined = true
+        _state.update { it.copy(repliedSessionKeys = emptySet()) }
+        ReplyNotifier.cancel(app, plan.cancel)
         plan.notify.forEach { key ->
             val session = state.sessions.firstOrNull { SessionReadStore.key(it.hostId, it.name) == key } ?: return@forEach
             val preview = SessionPreview.line(session.preview).ifBlank { "New reply" }
@@ -698,6 +707,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .filter { TmuxText.isWaitingForInput(it.preview, it.agent) }
             .filter(sessionReads::isUnread)
             .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) }
+        val replied = mutableSetOf<String>()
         val unreadCounts = sessions.associate { session ->
             val key = SessionReadStore.key(session.hostId, session.name)
             val stored = sessionReads.unreadCountState(session)
@@ -708,6 +718,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 unread = sessionReads.isUnread(session),
             ) else stored
             if (counted != stored) sessionReads.saveUnreadCountState(session, counted)
+            if (counted.count > stored.count) replied += key
             key to UnreadCount.displayed(counted.count, key in unreadKeys)
         }
         return current.copy(
@@ -740,6 +751,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }.toMap(),
             unreadSessionKeys = unreadKeys,
             unreadCounts = unreadCounts,
+            repliedSessionKeys = current.repliedSessionKeys + replied,
             archivedSessionKeys = archivedKeys,
             workspaces = orderedWorkspaces,
             workspaceSplitIds = workspaceSplitIds,
@@ -1411,6 +1423,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             it.hostId == session.hostId && it.name == session.name
         } == true
         noteSessionInteraction(session)
+        ReplyNotifier.cancel(app, SessionReadStore.key(session.hostId, session.name))
         _state.value.terminal?.close()
         val terminal = TerminalConnection(
             repository = ssh,

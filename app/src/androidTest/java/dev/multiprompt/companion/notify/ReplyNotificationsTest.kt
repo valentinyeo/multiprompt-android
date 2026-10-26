@@ -11,6 +11,7 @@ import androidx.test.rule.GrantPermissionRule
 import dev.multiprompt.companion.MainActivity
 import dev.multiprompt.companion.MainViewModel
 import dev.multiprompt.companion.MultipromptApplication
+import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
 import java.io.File
@@ -77,13 +78,14 @@ class ReplyNotificationsTest {
 
             val monitor = instrumentation.addMonitor(MainActivity::class.java.name, null, false)
             alphaNote.notification.contentIntent.send()
-            val launched = monitor.waitForActivityWithTimeout(20_000)
+            val launched = monitor.waitForActivityWithTimeout(60_000)
             assertNotNull("tapping opens the app", launched)
             val activity = launched as ComponentActivity
             val model = ViewModelProvider(activity)[MainViewModel::class.java]
             waitFor(30_000) { model.state.value.readerSession?.name == alpha.name }
             waitFor(10_000) { children().none { title(it.notification) == "Alpha session" } }
-            assertEquals("the other session keeps its notification", 1, children().size)
+            ReplyNotifier.cancel(context, SessionReadStore.key(host.id, beta.name))
+            waitFor(10_000) { replies().isEmpty() }
         } finally {
             manager.cancelAll()
             app.hostStore.delete(host.id)

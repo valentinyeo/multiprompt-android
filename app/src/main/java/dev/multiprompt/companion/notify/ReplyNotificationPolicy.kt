@@ -4,16 +4,16 @@ object ReplyNotificationPolicy {
     data class Plan(val notify: List<String>, val cancel: Set<String>)
 
     fun plan(
-        previous: Map<String, Int>?,
+        baselined: Boolean,
+        replied: Set<String>,
         current: Map<String, Int>,
         frontKey: String?,
         active: Set<String>,
     ): Plan {
         val cancel = active.filterTo(linkedSetOf()) { key -> key == frontKey || (current[key] ?: 0) <= 0 }
-        if (previous == null) return Plan(emptyList(), cancel)
-        val notify = current
-            .filter { (key, count) -> key != frontKey && count > (previous[key] ?: 0) }
-            .keys
+        if (!baselined) return Plan(emptyList(), cancel)
+        val notify = replied
+            .filter { key -> key != frontKey && (current[key] ?: 0) > 0 }
             .sorted()
         return Plan(notify, cancel)
     }
