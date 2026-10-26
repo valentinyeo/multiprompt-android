@@ -15,6 +15,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.height
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.multiprompt.companion.reader.ChatHistoryMessage
 import java.io.File
