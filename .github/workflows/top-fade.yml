@@ -35,6 +35,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.1'
+      - name: Install emulator exit tracer
+        run: sudo apt-get update && sudo apt-get install -y strace
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -50,7 +52,10 @@ jobs:
           ram-size: 2048M
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -verbose > /tmp/top-fade-emulator.log 2>&1
           disable-animations: true
-          script: tools/top-fade-proof.sh
+          script: |
+            mkdir -p build/top-fade-diagnostics
+            sudo strace -f -e trace=process -e signal=all -p "$(pgrep -f '^/usr/local/lib/android/sdk/emulator/qemu/linux-x86_64/qemu-system-x86_64')" -o /tmp/top-fade-exit.txt > /tmp/top-fade-tracer.txt 2>&1 &
+            tools/top-fade-proof.sh
       - name: Retain emulator diagnostics
         if: always()
         run: |
@@ -58,6 +63,7 @@ jobs:
           if [ -f /tmp/top-fade-emulator.log ]; then
             cp /tmp/top-fade-emulator.log build/top-fade-diagnostics/emulator.txt
           fi
+          sudo cp /tmp/top-fade-{exit,tracer}.txt build/top-fade-diagnostics/
           sudo dmesg -T > build/top-fade-diagnostics/kernel.txt
           free -m > build/top-fade-diagnostics/memory.txt
           ps -eo pid,ppid,stat,rss,args > build/top-fade-diagnostics/processes.txt
