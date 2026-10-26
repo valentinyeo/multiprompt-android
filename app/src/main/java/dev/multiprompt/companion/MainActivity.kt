@@ -1,8 +1,8 @@
 package dev.multiprompt.companion
 
 import android.content.Intent
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
-import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -10,6 +10,9 @@ import androidx.activity.SystemBarStyle
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.view.WindowCompat
@@ -25,7 +28,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
-        val darkStatusBarContrast = Build.VERSION.SDK_INT >= 29 && window.isStatusBarContrastEnforced
+        val darkWindowBackground = window.decorView.background
         setContent {
             val state by viewModel.state.collectAsState()
             val systemDark = isSystemInDarkTheme()
@@ -34,14 +37,18 @@ class MainActivity : ComponentActivity() {
                 AppTheme.DARK -> false
                 AppTheme.SUNLIGHT -> true
             }
-            SideEffect {
-                if (Build.VERSION.SDK_INT >= 29) window.isStatusBarContrastEnforced = !sunlight && darkStatusBarContrast
-                WindowCompat.getInsetsController(window, window.decorView).apply {
-                    isAppearanceLightStatusBars = sunlight
-                    isAppearanceLightNavigationBars = sunlight
-                }
-            }
             MultipromptTheme(sunlight = sunlight, material3 = false) {
+                val background = MaterialTheme.colorScheme.background
+                val windowBackground = remember(sunlight, background) {
+                    if (sunlight) ColorDrawable(background.toArgb()) else darkWindowBackground
+                }
+                SideEffect {
+                    window.setBackgroundDrawable(windowBackground)
+                    WindowCompat.getInsetsController(window, window.decorView).apply {
+                        isAppearanceLightStatusBars = sunlight
+                        isAppearanceLightNavigationBars = sunlight
+                    }
+                }
                 LaunchedEffect(Unit) {
                     if (intent.getBooleanExtra(EXTRA_OPEN_UPDATE, false)) {
                         viewModel.select(AppSection.UPDATE)
