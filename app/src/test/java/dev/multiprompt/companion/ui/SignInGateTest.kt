@@ -117,7 +117,7 @@ class SignInGateTest {
     fun signedInShowsApp() {
         render(signedIn = true)
         compose.onNodeWithText("Inbox").assertIsDisplayed()
-        compose.onNodeWithText("All").assertIsDisplayed()
+        compose.onNodeWithText("All").assertIsDisplayed().performClick()
         compose.onNodeWithText("Private session").assertIsDisplayed()
         compose.onNodeWithContentDescription("Session list actions").assertIsDisplayed()
         compose.onNodeWithText("Sign in").assertDoesNotExist()
