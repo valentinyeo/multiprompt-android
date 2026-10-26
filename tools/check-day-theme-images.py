@@ -9,7 +9,7 @@ SCREENS = {
     "inbox": ("inbox", "session 0", "session 1"),
     "menu": ("settings", "arrange splits"),
     "settings": ("session list settings", "default reader font size"),
-    "chat": ("message 0", "messaging claude reader"),
+    "chat": ("message 0", "claude reader"),
 }
 
 

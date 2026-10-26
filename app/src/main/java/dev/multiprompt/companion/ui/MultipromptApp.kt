@@ -2321,11 +2321,20 @@ internal fun ReaderTopBar(
             Row(
                 Modifier.fillMaxWidth().testTag("reader-floating-controls")
                     .padding(ReaderScreenPadding),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
             ) {
                 IconButton(onClick = onBack, modifier = Modifier.size(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                 }
+                Text(
+                    session.displayName,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Box {
                     IconButton(onClick = onMenuClick, modifier = Modifier.size(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)) {
                         Icon(Icons.Default.MoreVert, "Session actions")
@@ -3190,18 +3199,12 @@ internal fun ReaderScreen(
                 replyTo?.let { quoted ->
                     ReplyQuoteBar(message = quoted, author = replyAuthor, onCancel = { replyTo = null })
                 }
-                if (!dictationActive) {
-                    Text("Messaging ${session.displayName}", style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
                 if (dictationActive) {
                     DictationBar(
-                        sessionName = session.displayName,
                         level = dictation.level,
                         sending = reader.sending || sendAfterDictation || pendingPromptAction != null,
                         onStop = { dictation.stop() },
                         onSend = submitPrompt,
-                        onJumpToNewest = scrollLive,
                     )
                 } else {
                     Row(

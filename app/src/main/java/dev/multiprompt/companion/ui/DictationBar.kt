@@ -13,10 +13,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,7 +31,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.dictation.AudioLevel
@@ -45,35 +42,13 @@ private const val LevelDots = 14
 
 @Composable
 internal fun DictationBar(
-    sessionName: String,
     level: StateFlow<Float>,
     sending: Boolean,
     onStop: () -> Unit,
     onSend: () -> Unit,
-    onJumpToNewest: () -> Unit,
 ) {
     val dark = Color(0xFF2B2B2B)
     val onDark = Color.White
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(
-            "Messaging $sessionName",
-            modifier = Modifier.weight(1f).testTag("dictation-session-line"),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Box(
-            Modifier.size(36.dp).clip(CircleShape).background(dark)
-                .clickable(onClick = onJumpToNewest)
-                .semantics { contentDescription = "Jump to newest" },
-            contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Default.KeyboardArrowDown, null, tint = onDark) }
-    }
     Row(
         Modifier.fillMaxWidth().padding(top = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

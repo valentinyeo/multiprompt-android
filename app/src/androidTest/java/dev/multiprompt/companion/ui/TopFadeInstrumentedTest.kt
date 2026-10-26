@@ -12,9 +12,14 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToIndex
@@ -36,6 +41,36 @@ class TopFadeInstrumentedTest {
     @Test fun inboxScrollsUnderTheStatusBarFade() = verify(FadeScreen.INBOX_LIST, "inbox", "Session 0")
 
     @Test fun chatScrollsUnderTheStatusBarFade() = verify(FadeScreen.SESSION, "chat", "Message 0", chat = true)
+
+    @Test fun chatHeadlineReplacesMessagingLabel() = verifyHeadline("Mini Boss CEO", "chat-headline", false)
+
+    @Test fun longChatHeadlineKeepsMenuVisible() = verifyHeadline(
+        "Mini Boss CEO with a very long session name that must not hide the session menu",
+        "chat-headline-long",
+        true,
+    )
+
+    private fun verifyHeadline(name: String, screenshotName: String, ellipsized: Boolean) {
+        compose.activityRule.scenario.onActivity { activity ->
+            activity.setContent { FadeTestScreen(FadeScreen.SESSION, material3 = false, sunlight = false, sessionName = name) }
+        }
+        compose.waitForIdle()
+        screenshot(screenshotName)
+        val headline = compose.onNodeWithText(name, useUnmergedTree = true).assertIsDisplayed()
+        val titleBounds = headline.fetchSemanticsNode().boundsInRoot
+        val back = compose.onNodeWithContentDescription("Back").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val menu = compose.onNodeWithContentDescription("Session actions").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val fade = compose.onNodeWithTag("reader-floating-controls").fetchSemanticsNode().boundsInRoot
+        assertTrue("Headline must be between back and menu", titleBounds.left >= back.right && titleBounds.right <= menu.left)
+        assertTrue("Headline must remain in the top fade", titleBounds.top >= fade.top && titleBounds.bottom <= fade.bottom)
+        assertTrue("Menu must retain its full width", menu.width >= back.width && menu.right <= fade.right)
+        compose.onAllNodes(hasText("Messaging", substring = true)).assertCountEquals(0)
+        val layouts = mutableListOf<TextLayoutResult>()
+        headline.fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+        assertEquals(1, layouts.single().lineCount)
+        assertEquals(ellipsized, layouts.single().isLineEllipsized(0))
+        assertEquals(ReaderForeground, layouts.single().layoutInput.style.color)
+    }
 
     @Test fun fadeBlendsOverContentWithoutAnOpaqueCutoff() {
         compose.activityRule.scenario.onActivity { activity ->

@@ -6,6 +6,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -49,7 +50,7 @@ class Material3LookTest(private val screen: M3Screen, private val sunlight: Bool
             listOf("Scroll agent history up", "Open agent history", "Back to live").forEach {
                 compose.onNodeWithContentDescription(it).assertDoesNotExist()
             }
-            compose.onNodeWithText("claude-reader", useUnmergedTree = true).assertDoesNotExist()
+            compose.onNodeWithText("claude-reader", useUnmergedTree = true).assertIsDisplayed()
             val back = compose.onNodeWithContentDescription("Back").fetchSemanticsNode().boundsInRoot
             val menu = compose.onNodeWithContentDescription("Session actions").fetchSemanticsNode().boundsInRoot
             assertEquals(48f, back.width, 0.01f)

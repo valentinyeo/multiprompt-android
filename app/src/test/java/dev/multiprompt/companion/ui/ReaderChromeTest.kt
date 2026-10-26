@@ -108,14 +108,14 @@ class ReaderChromeTest {
         }
     }
 
-    @Test fun chatScrollsUnderFloatingControlsWithoutATitleBar() {
+    @Test fun chatScrollsUnderFloatingControlsWithSessionHeadline() {
         render()
         compose.onNodeWithText("Conversation").assertDoesNotExist()
         listOf("Scroll agent history up", "Open agent history", "Back to live").forEach {
             compose.onNodeWithContentDescription(it).assertDoesNotExist()
         }
         compose.onNodeWithText("$modelLabel · waiting for input", useUnmergedTree = true).assertDoesNotExist()
-        compose.onNodeWithText(f.session.displayName, useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText(f.session.displayName, useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithText("Disconnected · retrying").assertDoesNotExist()
         screenshot("chat-live")
         compose.onNodeWithTag("chat-history").performScrollToIndex(messageCount - 1)
@@ -147,7 +147,8 @@ class ReaderChromeTest {
         compose.onNodeWithTag("dictation-stop").assertIsDisplayed()
         compose.onNodeWithTag("dictation-send").assertIsDisplayed()
         compose.onNodeWithTag("dictation-timer").assertIsDisplayed()
-        compose.onNodeWithTag("dictation-session-line").assertIsDisplayed()
+        compose.onNodeWithText(f.session.displayName, useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("Messaging", substring = true).assertDoesNotExist()
         val stop = compose.onNodeWithTag("dictation-stop").getUnclippedBoundsInRoot()
         val meter = compose.onNodeWithTag("dictation-meter").getUnclippedBoundsInRoot()
         val send = compose.onNodeWithTag("dictation-send").getUnclippedBoundsInRoot()

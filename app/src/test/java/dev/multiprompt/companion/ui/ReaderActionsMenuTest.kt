@@ -141,7 +141,7 @@ class ReaderActionsMenuTest {
         assertTrue(plus.right < input.left)
         compose.onNodeWithTag("reader-waveform").assertDoesNotExist()
         compose.onNodeWithContentDescription("Back").assertIsDisplayed()
-        compose.onNodeWithText(f.session.displayName).assertDoesNotExist()
+        compose.onNodeWithText(f.session.displayName).assertIsDisplayed()
     }
 
     @Test fun sessionActionsAreNotDuplicatedAboveTheComposer() {

@@ -65,7 +65,7 @@ class ReaderSessionRoutingTest {
                 else compose.runOnIdle { switched = false }
                 val connection = if (target) second else first
                 val suffix = if (target) "B" else "A"
-                compose.onNodeWithText("Messaging ${if (target) b.name else a.name}").assertIsDisplayed()
+                compose.onNodeWithText(if (target) b.name else a.name).assertIsDisplayed()
                 compose.onNodeWithText("Message this session").performTextInput("TYPED_$suffix")
                 compose.onNodeWithContentDescription("Send prompt").performClick()
                 compose.waitUntil(30_000) { connection.state.value.completedActions == 1L }
@@ -85,7 +85,7 @@ class ReaderSessionRoutingTest {
             compose.onNodeWithText("Message this session").performTextInput("AFTER_SWITCH_B")
             compose.onNodeWithContentDescription("Send prompt").performClick()
             compose.waitUntil(30_000) { second.state.value.completedActions == 3L }
-            compose.onNodeWithText("Messaging verify-other").assertIsDisplayed()
+            compose.onNodeWithText("verify-other").assertIsDisplayed()
             val image = compose.onRoot().captureToImage().asAndroidBitmap()
             File(app.getExternalFilesDir(null), "routing-b.png").outputStream().use {
                 image.compress(Bitmap.CompressFormat.PNG, 100, it)
