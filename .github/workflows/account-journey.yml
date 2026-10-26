@@ -22,6 +22,8 @@ jobs:
     timeout-minutes: 40
     env:
       EVIDENCE: ${{ github.workspace }}/account-journey-evidence
+      FIXTURE: ${{ runner.temp }}/journey-fixture
+      MULTIPROMPT_DIR: ${{ github.workspace }}/multiprompt
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -46,14 +48,14 @@ jobs:
           npx wrangler deploy --dry-run --outdir .build
       - name: Build debug app pointed at the local service
         run: gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PaccountOrigin=http://10.0.2.2:8787 assembleDebug assembleDebugAndroidTest
+      - name: Start the ssh and tmux fixture
+        run: bash tools/account-journey/fixture.sh
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - uses: reactivecircus/android-emulator-runner@v2
-        env:
-          MULTIPROMPT_DIR: ${{ github.workspace }}/multiprompt
         with:
           api-level: 35
           arch: x86_64
