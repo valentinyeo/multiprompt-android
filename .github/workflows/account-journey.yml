@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: valentinyeo/multiprompt
-          ref: ceo/IGSH-963-desktop
+          ref: master
           path: multiprompt
       - uses: actions/setup-node@v4
         with:
