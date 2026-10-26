@@ -1854,9 +1854,6 @@ internal fun SessionsScreen(
                 SessionCard(
                     session = session,
                     workspaces = state.workspaces,
-                    workspaceName = workspaceNames[state.sessionWorkspaceIds[key]]
-                        .takeIf { state.selectedWorkspaceId == null },
-                    etaLabel = state.sessionEtas[key]?.label(etaNowMillis),
                     unread = key in state.unreadSessionKeys,
                     unreadCount = state.unreadCounts[key] ?: 1,
                     archived = key in state.archivedSessionKeys,
@@ -2060,8 +2057,6 @@ private fun AgentBadge(agent: AgentKind) {
 private fun SessionCard(
     session: TmuxSession,
     workspaces: List<Workspace>,
-    workspaceName: String?,
-    etaLabel: String?,
     unread: Boolean,
     unreadCount: Int,
     archived: Boolean,
@@ -2093,7 +2088,6 @@ private fun SessionCard(
         },
     )
     val title: @Composable RowScope.() -> Unit = {
-        if (starred) FavoriteDot()
         Text(
             session.displayName,
             modifier = Modifier.weight(1f),
@@ -2102,55 +2096,6 @@ private fun SessionCard(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-    }
-    val metadata: @Composable RowScope.() -> Unit = {
-        etaLabel?.let { label ->
-            Text(
-                "ETA $label",
-                modifier = Modifier
-                    .background(
-                        MaterialTheme.colorScheme.secondaryContainer,
-                        chromeShape(RoundedCornerShape(percent = 50)),
-                    )
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                fontSize = chromeFontSize(10.sp),
-                lineHeight = chromeLineHeight(12.sp),
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-            )
-        }
-        workspaceName?.let { name ->
-            Text(
-                name,
-                modifier = Modifier
-                    .widthIn(max = 88.dp)
-                    .background(
-                        MaterialTheme.colorScheme.surfaceVariant,
-                        chromeShape(RoundedCornerShape(percent = 50)),
-                    )
-                    .padding(horizontal = 5.dp, vertical = 2.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = chromeFontSize(9.sp),
-                lineHeight = chromeLineHeight(11.sp),
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        val previewLine = SessionPreview.line(session.preview)
-        if (previewLine.isNotEmpty()) {
-            Text(
-                previewLine,
-                modifier = Modifier.weight(1f).testTag("Session preview"),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        } else {
-            Spacer(Modifier.weight(1f))
-        }
     }
     SwipeToDismissBox(
         state = dismissState,
@@ -2189,43 +2134,35 @@ private fun SessionCard(
                         onLongClickLabel = "Session actions",
                         onLongClick = { menuExpanded = true },
                     )
-                    .heightIn(min = 88.dp)
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                    .heightIn(min = 56.dp)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Box(Modifier.width(20.dp).padding(top = 2.dp), contentAlignment = Alignment.TopCenter) {
-                    AgentIcon(session.agent)
-                }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        title()
-                        Text(
-                            DateUtils.getRelativeTimeSpanString(
-                                session.lastActivityEpochSeconds * 1000,
-                                System.currentTimeMillis(),
-                                DateUtils.MINUTE_IN_MILLIS,
-                                DateUtils.FORMAT_ABBREV_RELATIVE,
-                            ).toString(),
-                            modifier = Modifier.testTag("Session activity"),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 11.sp,
-                            lineHeight = 16.sp,
-                            maxLines = 1,
-                        )
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        metadata()
-                        if (unread) {
-                            Badge(
-                                modifier = Modifier.semantics {
-                                    contentDescription = "${unreadCount.coerceAtLeast(1)} unread messages"
-                                },
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary,
-                            ) {
-                                Text(UnreadCount.label(unreadCount))
-                            }
-                        }
+                AgentIcon(session.agent)
+                title()
+                Text(
+                    DateUtils.getRelativeTimeSpanString(
+                        session.lastActivityEpochSeconds * 1000,
+                        System.currentTimeMillis(),
+                        DateUtils.MINUTE_IN_MILLIS,
+                        DateUtils.FORMAT_ABBREV_RELATIVE,
+                    ).toString(),
+                    modifier = Modifier.testTag("Session activity"),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp,
+                    maxLines = 1,
+                )
+                if (unread) {
+                    Badge(
+                        modifier = Modifier.semantics {
+                            contentDescription = "${unreadCount.coerceAtLeast(1)} unread messages"
+                        },
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ) {
+                        Text(UnreadCount.label(unreadCount))
                     }
                 }
             }

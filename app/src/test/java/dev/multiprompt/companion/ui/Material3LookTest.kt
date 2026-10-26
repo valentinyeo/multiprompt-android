@@ -71,15 +71,15 @@ class Material3LookTest(private val screen: M3Screen, private val sunlight: Bool
             val tab = compose.onNodeWithText("All").fetchSemanticsNode()
             val row = compose.onNodeWithText("claude-reader").fetchSemanticsNode()
             assertTrue("tab=${tab.boundsInRoot} row=${row.boundsInRoot}", tab.boundsInRoot.bottom <= row.boundsInRoot.top)
-            assertTrue("row=${row.boundsInRoot}", row.boundsInRoot.height >= 72f)
+            assertTrue("row=${row.boundsInRoot}", row.boundsInRoot.height in 48f..56f)
             val title = compose.onNodeWithText("claude-reader", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
             val badgeNode = compose.onNodeWithContentDescription("1 unread messages", useUnmergedTree = true).fetchSemanticsNode()
             val badge = badgeNode.boundsInRoot
             val time = compose.onAllNodesWithTag("Session activity", useUnmergedTree = true).fetchSemanticsNodes()
-                .single { it.boundsInRoot.top <= badge.top && it.boundsInRoot.bottom < badge.bottom }.boundsInRoot
+                .single { kotlin.math.abs(it.boundsInRoot.center.y - badge.center.y) < 1f }.boundsInRoot
             assertTrue("title=$title badge=$badge", badge.left >= title.right)
-            assertTrue("time=$time badge=$badge", badge.top >= time.bottom)
-            assertEquals(time.right, badge.right, 0.01f)
+            assertEquals("time=$time badge=$badge", time.center.y, badge.center.y, 0.01f)
+            assertTrue("time=$time badge=$badge", badge.left > time.right)
             assertTrue("badge=$badge", badge.width >= 16f)
             assertTrue("badge=$badge", badge.height >= 16f)
             val badgeLayouts = mutableListOf<TextLayoutResult>()
