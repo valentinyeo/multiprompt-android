@@ -21,6 +21,7 @@ import dev.multiprompt.companion.account.DeviceKeyStore
 import dev.multiprompt.companion.auth.SyncAuthManager
 import dev.multiprompt.companion.update.UpdateManager
 import dev.multiprompt.companion.upload.ScreencastUploader
+import dev.multiprompt.companion.notify.ReplyNotifier
 import dev.multiprompt.companion.update.UpdateNotifier
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import java.security.Security
@@ -32,6 +33,7 @@ class MultipromptApplication : Application() {
         Security.insertProviderAt(BouncyCastleProvider(), 1)
         crashReportStore.install()
         UpdateNotifier.initialize(this)
+        ReplyNotifier.initialize(this)
     }
 
     val hostStore by lazy { HostStore(this) }
