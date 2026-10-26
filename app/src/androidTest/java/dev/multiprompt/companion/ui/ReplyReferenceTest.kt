@@ -133,12 +133,14 @@ class ReplyReferenceTest {
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Original message"))
         val bounds = original.getUnclippedBoundsInRoot()
         val viewport = compose.onRoot().getUnclippedBoundsInRoot()
-        assertTrue(bounds.height > viewport.height)
+        val sourceHeight = bounds.bottom - bounds.top
+        val viewportHeight = viewport.bottom - viewport.top
+        assertTrue(sourceHeight > viewportHeight)
         assertTrue(bounds.top >= viewport.top)
         screenshot("reply-tall-source.png")
         output("reply-tall-layout.json").writeText(JSONObject()
-            .put("sourceHeight", bounds.height.value)
-            .put("viewportHeight", viewport.height.value)
+            .put("sourceHeight", sourceHeight.value)
+            .put("viewportHeight", viewportHeight.value)
             .put("sourceTop", bounds.top.value)
             .put("viewportTop", viewport.top.value)
             .toString())
