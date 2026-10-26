@@ -140,6 +140,7 @@ jobs:
           name: reply-notifications-emulator
           path: |
             build/reply-notifications-shade.png
+            build/favorite-only-notifications-shade.png
             build/reply-notifications-logcat.txt
             build/reply-notifications-screen.png
             app/build/reports/androidTests/connected

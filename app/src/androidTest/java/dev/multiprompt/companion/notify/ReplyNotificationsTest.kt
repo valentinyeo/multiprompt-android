@@ -5,6 +5,17 @@ import android.app.Notification
 import android.app.NotificationManager
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import dev.multiprompt.companion.AppUiState
+import dev.multiprompt.companion.account.AccountAuth
+import dev.multiprompt.companion.account.AccountHttp
+import dev.multiprompt.companion.account.AccountLayout
+import dev.multiprompt.companion.account.AccountReply
+import dev.multiprompt.companion.account.AccountTab
+import dev.multiprompt.companion.account.PendingLayout
+import org.json.JSONObject
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
@@ -44,6 +55,77 @@ class ReplyNotificationsTest {
         }
     }
 
+    @Test fun onlyFavoriteRepliesAppearAndUnfavoritingClearsThem() {
+        val app = context.applicationContext as MultipromptApplication
+        val host = HostProfile("favorite-proof", "Hetzner", "127.0.0.1", username = "valentin", keySecretId = "missing")
+        val alpha = TmuxSession(host.id, "alpha", 1, 0, 0, title = "Favorite alpha")
+        val beta = TmuxSession(host.id, "beta", 1, 0, 0, title = "Runner beta")
+        val alphaKey = SessionReadStore.key(host.id, alpha.name)
+        val betaKey = SessionReadStore.key(host.id, beta.name)
+        val layout = AccountLayout(workspaces = listOf("Other"), tabs = listOf(
+            AccountTab("Favorite alpha", "alpha", 0, "Other", favorite = true),
+            AccountTab("Runner beta", "beta", 0, "Other"),
+        ))
+        val authField = app.syncAuth.javaClass.getDeclaredField("auth").apply { isAccessible = true }
+        val originalAuth = authField.get(app.syncAuth)
+        var model: MainViewModel? = null
+        fun reply() = instrumentation.runOnMainSync {
+            val current = checkNotNull(model)
+            val stateField = current.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+            @Suppress("UNCHECKED_CAST")
+            val state = stateField.get(current) as MutableStateFlow<AppUiState>
+            state.value = state.value.copy(repliedSessionKeys = setOf(alphaKey, betaKey), unreadCounts = mapOf(alphaKey to 1, betaKey to 1))
+            current.javaClass.getDeclaredMethod("syncReplyNotifications").apply { isAccessible = true }.invoke(current)
+        }
+        fun favorite(name: String, enabled: Boolean) = instrumentation.runOnMainSync {
+            assertEquals(null, checkNotNull(model).editAccountLayout { it.setFavorite("0:$name", enabled) })
+        }
+        manager.cancelAll()
+        try {
+            instrumentation.runOnMainSync {
+                app.getSharedPreferences("updates", android.content.Context.MODE_PRIVATE).edit().putLong("last_check_ms", System.currentTimeMillis()).commit()
+                val current = MainViewModel(app)
+                model = current
+                val auth = AccountAuth("test://callback", object : AccountHttp {
+                    override fun request(method: String, path: String, token: String?, body: JSONObject?): AccountReply = error("No account network expected")
+                }, { if (it == AccountAuth.TOKENS) "{\"account_id\":\"notification-proof\"}" else null }, { _, _ -> })
+                authField.set(app.syncAuth, auth)
+                current.javaClass.getDeclaredField("accountRequestRunning").apply { isAccessible = true }.set(current, true)
+                current.javaClass.getDeclaredField("pendingLayout").apply { isAccessible = true }.set(current, PendingLayout(layout))
+                current.javaClass.getDeclaredField("replyNotificationsBaselined").apply { isAccessible = true }.set(current, true)
+                val stateField = current.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+                @Suppress("UNCHECKED_CAST")
+                val state = stateField.get(current) as MutableStateFlow<AppUiState>
+                state.value = current.state.value.copy(hosts = listOf(host), sessions = listOf(alpha, beta), signedIn = true,
+                    accountLayout = layout, accountHosts = mapOf(0 to host))
+            }
+            reply()
+            waitFor(10_000) { children().isNotEmpty() }
+            assertEquals("only the favorite may notify", setOf(alphaKey), ReplyNotifier.activeKeys(context))
+            assertEquals("Favorite alpha", title(children().single().notification))
+            val shade = File(checkNotNull(InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")), "favorite-only-notifications-shade.png")
+            shade.parentFile?.mkdirs()
+            instrumentation.uiAutomation.executeShellCommand("cmd statusbar expand-notifications").close()
+            Thread.sleep(2_000)
+            shade.outputStream().use { instrumentation.uiAutomation.takeScreenshot().compress(Bitmap.CompressFormat.PNG, 100, it) }
+            instrumentation.uiAutomation.executeShellCommand("cmd statusbar collapse").close()
+            favorite("alpha", false)
+            waitFor(10_000) { replies().isEmpty() }
+            favorite("beta", true)
+            assertTrue("favoriting alone must not replay old replies", replies().isEmpty())
+            reply()
+            waitFor(10_000) { ReplyNotifier.activeKeys(context) == setOf(betaKey) }
+            favorite("beta", false)
+            waitFor(10_000) { replies().isEmpty() }
+            reply()
+            assertTrue("no favorites means no reply notifications", replies().isEmpty())
+        } finally {
+            instrumentation.uiAutomation.executeShellCommand("cmd statusbar collapse").close()
+            instrumentation.runOnMainSync { model?.viewModelScope?.cancel(); authField.set(app.syncAuth, originalAuth) }
+            manager.cancelAll()
+        }
+    }
+
     @Test fun twoRepliesInOneSessionShowOneGroupedNotificationAndTapOpensIt() {
         val app = context.applicationContext as MultipromptApplication
         val host = HostProfile(label = "Notify", hostname = "127.0.0.1", username = "nobody")
@@ -52,6 +134,7 @@ class ReplyNotificationsTest {
         app.hostStore.upsert(host)
         app.sessionCacheStore.save(host.id, listOf(alpha, beta))
         manager.cancelAll()
+        var opened: ComponentActivity? = null
         try {
             ReplyNotifier.show(context, host.id, alpha.name, "Alpha session", "first reply from alpha")
             ReplyNotifier.show(context, host.id, alpha.name, "Alpha session", "second reply from alpha")
@@ -81,12 +164,15 @@ class ReplyNotificationsTest {
             val launched = monitor.waitForActivityWithTimeout(60_000)
             assertNotNull("tapping opens the app", launched)
             val activity = launched as ComponentActivity
+            opened = activity
             val model = ViewModelProvider(activity)[MainViewModel::class.java]
             waitFor(30_000) { model.state.value.readerSession?.name == alpha.name }
             waitFor(10_000) { children().none { title(it.notification) == "Alpha session" } }
             ReplyNotifier.cancel(context, SessionReadStore.key(host.id, beta.name))
             waitFor(10_000) { replies().isEmpty() }
         } finally {
+            instrumentation.runOnMainSync { opened?.finish() }
+            instrumentation.waitForIdleSync()
             manager.cancelAll()
             app.hostStore.delete(host.id)
             app.sessionCacheStore.removeHost(host.id)
