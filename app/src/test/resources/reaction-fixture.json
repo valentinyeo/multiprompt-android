@@ -1,0 +1,20 @@
+[
+  {
+    "emoji": "👍",
+    "id": "msg_first",
+    "text": "  Same\nfirst words  ",
+    "expected": "👍 to: Same first words [mp:6d8e353d25c5fe23]"
+  },
+  {
+    "emoji": "👎",
+    "id": "msg_second",
+    "text": "Same first words",
+    "expected": "👎 to: Same first words [mp:983056b4a6c7ffef]"
+  },
+  {
+    "emoji": "❤️",
+    "id": "réponse-🙂",
+    "text": "  Über the build 🙂  ",
+    "expected": "❤️ to: Über the build 🙂 [mp:e9f223bf60c17fff]"
+  }
+]

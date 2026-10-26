@@ -3398,6 +3398,15 @@ internal fun ReaderScreen(
                 sunlight = sunlightMode,
                 replyGate = replyGate,
                 onReply = chooseReply,
+                onReaction = { message, emoji ->
+                    val line = dev.multiprompt.companion.reader.ChatReactions.format(emoji, message.requestId, message.text)
+                    if (line != null && connection.sendPrompt(line)) {
+                        onSessionInteraction()
+                        onSessionInput()
+                    } else {
+                        android.widget.Toast.makeText(context, "Could not send the reaction", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                },
                 sessionName = session.displayName,
                 unreadMessageKey = unreadMessageKey,
                 onMarkUnread = onMarkUnreadFrom,

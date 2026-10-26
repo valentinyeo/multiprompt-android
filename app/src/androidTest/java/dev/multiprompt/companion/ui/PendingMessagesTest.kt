@@ -81,7 +81,7 @@ class PendingMessagesTest {
                         Text("Pending messages · Claude")
                         ChatHistoryView(connection, state, identity.agent, identity.cwd, 1f, false,
                             ReplySwipeGate(), { _, _ -> }, {}, rememberLazyListState(), 0, "Claude", null, {},
-                            Modifier.weight(1f))
+                            modifier = Modifier.weight(1f))
                         Button(onClick = { assertTrue(connection.sendPrompt(prompt)) }) { Text("Send while busy") }
                     }
                 }
