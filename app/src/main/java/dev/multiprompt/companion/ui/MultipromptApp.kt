@@ -1485,9 +1485,9 @@ internal fun SessionsScreen(
                         }
                         val splitName = workspace?.name ?: "All"
                         val sessionCount = if (splitId == null) {
-                            state.sessions.count { !isMutedSession(it, state.accountLayout, state.accountHosts) }
+                            state.inboxSessions.count { !isMutedSession(it, state.accountLayout, state.accountHosts) }
                         } else {
-                            state.sessions.count { !isMutedSession(it, state.accountLayout, state.accountHosts) && state.sessionWorkspaceIds[SessionReadStore.key(it.hostId, it.name)] == splitId }
+                            state.inboxSessions.count { !isMutedSession(it, state.accountLayout, state.accountHosts) && state.sessionWorkspaceIds[SessionReadStore.key(it.hostId, it.name)] == splitId }
                         }
                         Row(
                             Modifier.fillMaxWidth(),
@@ -1562,7 +1562,7 @@ internal fun SessionsScreen(
     }
     val normalizedQuery = searchQuery.trim()
     val workspaceNames = state.workspaces.associate { it.id to it.name }
-    val matchingSessions = state.sessions
+    val matchingSessions = state.inboxSessions
         .filterNot { isHiddenAsMuted(it, state.accountLayout, state.accountHosts, state.selectedWorkspaceId) }
         .filter { session ->
             val key = SessionReadStore.key(session.hostId, session.name)

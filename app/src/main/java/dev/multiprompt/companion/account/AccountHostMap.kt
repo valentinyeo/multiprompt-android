@@ -1,5 +1,6 @@
 package dev.multiprompt.companion.account
 
+import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
 
@@ -34,4 +35,19 @@ object AccountHostMap {
         val live = inventory.firstOrNull { it.hostId == host.id && it.name.equals(tab.session, ignoreCase = true) }
         return (live ?: TmuxSession(host.id, tab.session, 1, 0, 0)).copy(title = tab.name, windowName = tab.name, accountName = tab.name)
     }
+
+    fun withAccountSessions(inventory: List<TmuxSession>, layout: AccountLayout?, mapping: Map<Int, HostProfile>): List<TmuxSession> {
+        if (layout == null) return inventory
+        val missing = layout.tabs.mapNotNull { tab ->
+            val host = mapping[tab.host] ?: return@mapNotNull null
+            if (inventory.any { it.hostId == host.id && it.name.equals(tab.session, ignoreCase = true) }) null
+            else sessionFor(tab, inventory, mapping)
+        }
+        return inventory + missing
+    }
+
+    fun workspaceAssignments(inventory: List<TmuxSession>, layout: AccountLayout?, mapping: Map<Int, HostProfile>): Map<String, String> =
+        withAccountSessions(inventory, layout, mapping).mapNotNull { session ->
+            layout?.let { tabFor(session, it, mapping) }?.let { SessionReadStore.key(session.hostId, session.name) to it.workspace }
+        }.toMap()
 }
