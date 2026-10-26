@@ -90,6 +90,8 @@ jobs:
           api-level: 35
           arch: x86_64
           profile: pixel_2
+          ram-size: 2048M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
           disable-animations: true
           script: bash tools/check-image-preview.sh && bash tools/check-day-theme.sh
         env:
@@ -130,6 +132,8 @@ jobs:
           api-level: 35
           arch: x86_64
           profile: pixel_2
+          ram-size: 2048M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
           disable-animations: true
           script: bash tools/check-reply-notifications.sh
         env:
@@ -170,6 +174,8 @@ jobs:
           api-level: 35
           arch: x86_64
           profile: pixel_2
+          ram-size: 2048M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
           disable-animations: true
           script: bash tools/check-session-rows.sh
         env:
@@ -207,6 +213,8 @@ jobs:
           api-level: 35
           arch: x86_64
           profile: pixel_2
+          ram-size: 2048M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
           disable-animations: true
           script: bash tools/check-message-actions.sh
         env:
@@ -246,6 +254,8 @@ jobs:
           api-level: 35
           arch: x86_64
           profile: pixel_2
+          ram-size: 2048M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
           disable-animations: true
           script: bash tools/check-approved-style.sh
         env:
@@ -257,6 +267,8 @@ jobs:
           api-level: 35
           arch: x86_64
           profile: pixel_2
+          ram-size: 2048M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
           disable-animations: true
           script: bash tools/check-approved-style.sh
         env:

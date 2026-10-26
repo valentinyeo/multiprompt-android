@@ -2130,8 +2130,8 @@ private fun SessionCard(
                         onLongClickLabel = "Session actions",
                         onLongClick = { menuExpanded = true },
                     )
-                    .heightIn(min = 52.dp)
-                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                    .heightIn(min = if (LocalReaderStyle.current) 52.dp else 56.dp)
+                    .padding(horizontal = if (LocalReaderStyle.current) 20.dp else 16.dp, vertical = if (LocalReaderStyle.current) 10.dp else 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {

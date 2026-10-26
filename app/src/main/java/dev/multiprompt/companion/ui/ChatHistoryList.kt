@@ -118,14 +118,15 @@ internal fun ChatHistoryView(
             onMarkUnread = onMarkUnread,
             onReaction = onReaction,
             collapsePendingReactions = reader.actionError == null,
+            working = reader.sending || TmuxText.readerBlocks(reader.screenOutput, agent).any {
+                it.kind == TmuxText.ReaderBlockKind.PROGRESS && isTransientProgress(it.text)
+            },
             onNearTop = history::nearTop,
             listState = listState,
             followRequest = followRequest,
             modifier = Modifier.weight(1f),
         )
-        if (reader.sending || TmuxText.readerBlocks(reader.screenOutput, agent).any {
-            it.kind == TmuxText.ReaderBlockKind.PROGRESS && isTransientProgress(it.text)
-        }) WorkingDots()
+
     }
 }
 
@@ -152,6 +153,7 @@ internal fun ChatHistoryList(
     hasOlder: Boolean = false,
     onReaction: ((ChatHistoryMessage, ChatReactions.Emoji) -> Unit)? = null,
     collapsePendingReactions: Boolean = true,
+    working: Boolean = false,
 ) {
     val presentation = remember(messages, agent, collapsePendingReactions) {
         if (agent == AgentKind.CLAUDE) ChatReactions.present(messages, collapsePendingReactions)
@@ -171,7 +173,7 @@ internal fun ChatHistoryList(
         val source = ReplyQuote.sourceIndex(texts, before, request.reply.quoted)
         if (source != null) {
             highlightedKey = keys[source]
-            listState.scrollToItem(keys.lastIndex - source + if (question != null) 1 else 0)
+            listState.scrollToItem(keys.lastIndex - source + (if (question != null) 1 else 0) + (if (working) 1 else 0))
             pendingJump = null
         } else if (before < 0 || (!hasOlder && loaded)) {
             pendingJump = null
@@ -211,6 +213,7 @@ internal fun ChatHistoryList(
         verticalArrangement = Arrangement.spacedBy(if (LocalReaderStyle.current) ReaderMessageSpacing else 10.dp),
         contentPadding = if (LocalReaderStyle.current) androidx.compose.foundation.layout.PaddingValues(top = ReaderFloatingInset + WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = ReaderMessageSpacing) else androidx.compose.foundation.layout.PaddingValues(),
     ) {
+        if (working) item(key = "working") { WorkingDots() }
         if (question != null) {
             item(key = "active-question") {
                 QuestionChoices(question, enabled = onQuestionChoice != null, error = questionError) { onQuestionChoice?.invoke(it) == true }
