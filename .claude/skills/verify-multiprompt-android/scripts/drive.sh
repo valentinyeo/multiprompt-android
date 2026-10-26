@@ -315,7 +315,7 @@ if [[ "$feature" == session-routing.md ]]; then
     wait_for_text verify-other
     tap_text verify-session
     wait_for_text 'Messaging verify-session'
-    fill 'Message this session' UI_ONLY_A
+    fill 'Message verify-session' UI_ONLY_A
     tap_desc 'Send prompt'
     wait_receipt 'VERIFY_RECEIVED:UI_ONLY_A'
     shot session-a-sent
@@ -323,7 +323,7 @@ if [[ "$feature" == session-routing.md ]]; then
     wait_for_text Inbox
     tap_text verify-other
     wait_for_text 'Messaging verify-other'
-    fill 'Message this session' UI_ONLY_B
+    fill 'Message verify-other' UI_ONLY_B
     tap_desc 'Send prompt'
     for attempt in {1..30}; do
         if sudo grep -Fx 'VERIFY_RECEIVED:UI_ONLY_B' /home/verifyssh/other-receipts.txt; then break; fi
@@ -540,7 +540,7 @@ fi
 if [[ "$feature" == chat-reactions.md ]]; then
     wait_for_text 'FIRST REPLY'
     wait_for_text 'SECOND REPLY'
-    fill 'Message this session' 'draft%sstays%shere'
+    fill 'Message verify-session' 'draft%sstays%shere'
     shot reactions-before
     read -r reaction_x reaction_y <<< "$(python3 "$scripts/reactions.py" point "$EVIDENCE/current.xml")"
     adb shell input swipe "$reaction_x" "$reaction_y" "$reaction_x" "$reaction_y" 900
@@ -619,7 +619,7 @@ exec bash -c "$SSH_ORIGINAL_COMMAND"
 DELAY
 sudo chmod 755 /home/verifyssh/send-delay.sh
 sudo sed -i 's|^|command="/home/verifyssh/send-delay.sh" |' /home/verifyssh/.ssh/authorized_keys
-fill 'Message this session' VERIFY_SENT_528
+fill 'Message verify-session' VERIFY_SENT_528
 shot send-draft
 tap_desc 'Send prompt'
 shot eta-sending
