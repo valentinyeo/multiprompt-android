@@ -455,6 +455,7 @@ if [[ "$feature" == native-skills.md ]]; then
     fi
     wait_for_text '/personal-note'
     wait_for_text '/qa:verify-native'
+    wait_for_absence '/late-native'
     if select_node contains '/hidden-native' >/dev/null 2>&1; then exit 1; fi
     shot native-slash-list
     adb shell input text rev
@@ -476,6 +477,7 @@ if [[ "$feature" == native-skills.md ]]; then
     tap_text Skill
     wait_for_text '/review-native'
     wait_for_text '/qa:verify-native'
+    wait_for_text '/late-native'
     shot native-plus-same-list
     tap_text '/qa:verify-native'
     shot native-plugin-inserted
@@ -530,7 +532,7 @@ for label, required in [('native-inserted', '/review-native '), ('native-plugin-
     xml = ET.parse(next(root.glob('*-' + label + '.xml'))).getroot()
     fields = [n for n in xml.iter('node') if n.get('class') == 'android.widget.EditText' and n.get('package') == 'dev.multiprompt.companion.debug']
     assert len(fields) == 1 and fields[0].get('text') == required, (label, fields)
-(root / 'native-result.json').write_text(json.dumps(dict(status='passed', slash=True, filtered=True, plus_same_list=True, native_only=True, model='Sonnet 5.5', effort='high', draft_preserved=True, image_picker=True, upload_exercised=False), indent=2))
+(root / 'native-result.json').write_text(json.dumps(dict(status='passed', slash=True, filtered=True, plus_same_list=True, fresh_native_skills=True, native_only=True, model='Sonnet 5.5', effort='high', draft_preserved=True, image_picker=True, upload_exercised=False), indent=2))
 print('NATIVE_SKILLS_MODEL_EFFORT_PROVEN')
 NATIVE
     exit 0

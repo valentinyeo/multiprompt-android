@@ -12,7 +12,7 @@ It creates actual user/project/plugin skill directories and session metadata. Mo
 2. Type `/`; require project `/review-native`, user `/personal-note` and enabled plugin `/qa:verify-native` above the box. Hidden skills stay absent.
 3. Keep typing `rev`; require only the matching row. Tap it and verify exact `/review-native ` editor contents.
 4. Send `/review-native investigation`; compare the independently recorded SSH receipt.
-5. Type a draft; open **Attach → Skill**. Require the same rows. Pick the plugin skill and send; exact native command retains the draft.
+5. Type a draft; open **Attach → Skill**. Require the same rows and `/late-native`, created since the first send. Pick the plugin skill and send; exact native command retains the draft.
 6. Keep another draft; open **Attach → Model → Use Claude Sonnet**. Check actual tmux receipt and observed session label.
 7. Open **Attach → Effort → Set effort: high**. Check actual receipt and reopen **Model** and **Effort** to require observed `Current: Sonnet 5.5` and `Current: high`.
 8. Open **Attach → Add image**. Save the inert fixture upload setting through the real UI and require Android's Photos picker. Cancel; verify the draft stayed intact.

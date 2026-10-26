@@ -70,6 +70,14 @@ admin=$(json admin_key)
 member=$(json workspace_key)
 other=$(json other_key)
 
+network_ready=false
+for attempt in {1..30}; do
+    if adb shell ping -c 1 -W 2 10.0.2.2 >/dev/null 2>&1; then network_ready=true; break; fi
+    printf 'Waiting for emulator host network: %s/30\n' "$attempt"
+    sleep 1
+done
+if [ "$network_ready" != true ]; then printf 'Emulator cannot reach fixture host\n' >&2; exit 1; fi
+
 adb shell settings put global hide_error_dialogs 1
 adb shell am instrument -w -e class dev.multiprompt.companion.account.SeedAccountDeviceTest \
     -e refresh_token "$(json refresh_token)" -e account_id "$(json account)" -e device_id journey-device \

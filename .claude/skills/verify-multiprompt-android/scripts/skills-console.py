@@ -51,6 +51,10 @@ for line in sys.stdin:
     text = line.rstrip("\r\n")
     with receipts.open("a", encoding="utf-8") as output:
         output.write("VERIFY_RECEIVED:" + text + "\n")
+    if text == "/review-native investigation":
+        late = cwd / ".claude/skills/late-native/SKILL.md"
+        late.parent.mkdir(parents=True, exist_ok=True)
+        late.write_text("---\nname: late-native\ndescription: Added during this session\n---\nBODY_MUST_NOT_BE_INJECTED\n")
     if text.startswith("/model "):
         model = text.split()[1].capitalize()
     elif text.startswith("/effort "):

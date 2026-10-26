@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 
-def metadata(path, fallback):
+def metadata(path, fallback, use_name):
     text = path.read_text(encoding="utf-8-sig")
     values = {}
     if text.startswith("---\n"):
@@ -23,7 +23,7 @@ def metadata(path, fallback):
                 values[active] = "" if value in ("|", ">", "|-", ">-") else value
     if values.get("user-invocable", "").lower() == "false":
         return None
-    name = values.get("name") or fallback
+    name = (values.get("name") or fallback) if use_name else fallback
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_./:-]*", name):
         return None
     return dict(name=name, description=" ".join(values.get("description", "").split()))
@@ -33,11 +33,12 @@ def scan(root, namespace=""):
     result = {}
     if not root.is_dir():
         return result
-    paths = sorted(root.glob("*/SKILL.md")) if root.name == "skills" else sorted(root.rglob("*.md"))
+    is_skill = root.name == "skills"
+    paths = sorted(root.glob("*/SKILL.md")) if is_skill else sorted(root.rglob("*.md"))
     for path in paths:
-        fallback = path.parent.name if path.name == "SKILL.md" else str(path.relative_to(root).with_suffix("")).replace(os.sep, ":")
+        fallback = path.parent.name if is_skill else str(path.relative_to(root).with_suffix("")).replace(os.sep, ":")
         try:
-            row = metadata(path, fallback)
+            row = metadata(path, fallback, is_skill)
         except (OSError, UnicodeError):
             continue
         if row is not None:

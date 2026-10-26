@@ -61,6 +61,10 @@ class NativeSkillsTest(unittest.TestCase):
         self.write(self.cwd / ".claude/commands/review/security.md", "---\ndescription: Check safety\n---\nbody")
         self.assertEqual(skills.discover(self.home, self.cwd), [dict(name="review:security", description="Check safety")])
 
+    def test_command_name_comes_from_filename_not_skill_frontmatter(self):
+        self.write(self.cwd / ".claude/commands/check.md", "---\nname: A descriptive title\ndescription: Native command\n---\nbody")
+        self.assertEqual(skills.discover(self.home, self.cwd), [dict(name="check", description="Native command")])
+
     def test_only_enabled_applicable_plugins_with_namespace(self):
         install = self.home / "plugin-v1"
         self.write(install / "skills/test/SKILL.md", "---\nname: test\ndescription: Plugin test\n---\nbody")

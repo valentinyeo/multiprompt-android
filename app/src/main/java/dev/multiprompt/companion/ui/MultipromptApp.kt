@@ -2515,6 +2515,9 @@ internal fun ReaderScreen(
         promptFocusRequester.requestFocus()
     }
     val prompt = promptField.text
+    val skillQuery = if (session.agent == AgentKind.CLAUDE && promptField.selection.collapsed) {
+        NativeSkills.query(prompt, promptField.selection.start)
+    } else null
     val setPrompt: (String) -> Unit = { value ->
         promptField = TextFieldValue(value, selection = TextRange(value.length))
     }
@@ -2695,8 +2698,8 @@ internal fun ReaderScreen(
             }
         }
     }
-    LaunchedEffect(connection) {
-        if (session.agent == AgentKind.CLAUDE) {
+    LaunchedEffect(connection, skillQuery != null) {
+        if (skillQuery != null) {
             connection.loadSkills(context.assets.open("native_skills.py").use { it.readBytes() })
         }
     }
@@ -3205,9 +3208,6 @@ internal fun ReaderScreen(
                 Modifier.imePadding().padding(horizontal = ReaderScreenPadding, vertical = ReaderControlSpacing),
                 verticalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
             ) {
-                val skillQuery = if (session.agent == AgentKind.CLAUDE && promptField.selection.collapsed) {
-                    NativeSkills.query(prompt, promptField.selection.start)
-                } else null
                 if (skillQuery != null && !dictationActive) {
                     NativeSkillPicker(
                         skills = NativeSkills.matches(reader.nativeSkills, skillQuery),
