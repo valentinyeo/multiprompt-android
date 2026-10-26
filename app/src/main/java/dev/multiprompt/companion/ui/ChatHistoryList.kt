@@ -167,7 +167,7 @@ internal fun ChatHistoryList(
             highlightedKey = null
         }
     }
-    val atBottom = !listState.canScrollBackward
+    val atBottom = !listState.canScrollBackward && pendingJump == null
     val newest = messages.lastOrNull()
     val selectedAnswers = remember(messages) {
         messages.zipWithNext().filter { (reply, answer) -> reply.role == "assistant" && answer.role == "user" && !answer.pending }
