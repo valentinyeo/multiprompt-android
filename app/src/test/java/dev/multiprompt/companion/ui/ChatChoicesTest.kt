@@ -45,7 +45,9 @@ class ChatChoicesTest {
         compose.setContent {
             MaterialTheme {
                 CompositionLocalProvider(LocalReaderStyle provides readerStyle) {
-                    ChatHistoryList(messages = messages.value, queuedMessages = queued.value,
+                    ChatHistoryList(messages = messages.value + queued.value.map {
+                        ChatHistoryMessage("queued:${it.hashCode()}", "user", it, "", 0, 0, pending = true)
+                    },
                         onChoice = { if (accept) sent.add(it); accept })
                 }
             }
