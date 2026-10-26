@@ -62,7 +62,7 @@ def render():
     bottom = ["─" * 60, "❯ " + first, *("  " + row for row in rows[1:]), "─" * 60, "  ? for shortcuts"]
     height = shutil.get_terminal_size().lines
     lines = top + [""] * max(0, height - len(top) - len(bottom)) + bottom
-    sys.stdout.write("\x1b[2J\x1b[H" + "\r\n".join(lines))
+    sys.stdout.write("\x1b[H" + "\x1b[K\r\n".join(lines) + "\x1b[K")
     sys.stdout.flush()
 
 
