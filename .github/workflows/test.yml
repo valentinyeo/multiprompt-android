@@ -1,6 +1,12 @@
 name: Android tests
 
 on:
+  workflow_dispatch:
+    inputs:
+      baseline_ref:
+        description: Optional original commit for before and after theme proof
+        type: string
+        required: false
   pull_request:
   push:
     branches: [main]
@@ -54,6 +60,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -72,14 +80,16 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: bash tools/check-image-preview.sh
+          script: bash tools/check-image-preview.sh && bash tools/check-day-theme.sh
         env:
           GRADLE: gradle
+          DAY_THEME_BASE_REF: ${{ inputs.baseline_ref }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: image-preview-emulator
           path: |
+            build/day-theme/
             build/image-unfurl.png
             build/image-preview-logcat.txt
             build/image-preview-screen.png
