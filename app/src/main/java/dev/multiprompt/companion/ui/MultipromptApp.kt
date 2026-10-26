@@ -2666,8 +2666,8 @@ internal fun ReaderScreen(
             pendingPromptAction = null
         }
     }
-    LaunchedEffect(reader.actionError) {
-        if (reader.actionError != null) {
+    LaunchedEffect(reader.failedActions) {
+        if (reader.failedActions > 0) {
             pendingPromptAction = null
             sentDraft?.let { draft ->
                 setPrompt(draft.restoredPrompt(prompt))

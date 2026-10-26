@@ -43,6 +43,7 @@ data class ReaderState(
     val actionError: String? = null,
     val lastUpdatedAtMillis: Long = 0,
     val completedActions: Long = 0,
+    val failedActions: Long = 0,
     val waitingForInput: Boolean = false,
     val lastFailure: String? = null,
     val eta: TmuxText.SessionEta? = null,
@@ -376,12 +377,15 @@ class SessionReaderConnection(
             }
             _state.update { it.copy(completedActions = it.completedActions + 1) }
         } catch (timeout: TimeoutCancellationException) {
-            _state.update { it.copy(actionError = "The send timed out") }
+            _state.update { it.copy(actionError = "The send timed out", failedActions = it.failedActions + 1) }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (throwable: Throwable) {
             _state.update {
-                it.copy(actionError = throwable.message ?: throwable::class.java.simpleName)
+                it.copy(
+                    actionError = throwable.message ?: throwable::class.java.simpleName,
+                    failedActions = it.failedActions + 1,
+                )
             }
         } finally {
             _state.update { it.copy(sending = false) }
