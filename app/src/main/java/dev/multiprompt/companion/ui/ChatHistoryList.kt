@@ -128,6 +128,10 @@ internal fun ChatHistoryList(
     val nearTop by rememberUpdatedState(onNearTop)
     val atBottom = !listState.canScrollBackward
     val newest = messages.lastOrNull()
+    val selectedAnswers = remember(messages) {
+        messages.zipWithNext().filter { (reply, answer) -> reply.role == "assistant" && answer.role == "user" && !answer.pending }
+            .associate { (reply, answer) -> reply.key to answer.text }
+    }
     LaunchedEffect(newest?.key, newest?.text, newest?.pending, question) {
         if (atBottom) listState.scrollToItem(0)
     }
@@ -161,7 +165,8 @@ internal fun ChatHistoryList(
                 }
                 HistoryBubble(message.text, message.role, message.pending, fontScale, sunlight, replyGate, onReply,
                     messageId = message.requestId, sessionName = sessionName, onMarkUnread = { onMarkUnread(message.key) },
-                    onChoice = onChoice.takeIf { message.key == newest?.key && message.role == "assistant" })
+                    onChoice = onChoice.takeIf { message.key == newest?.key && message.role == "assistant" },
+                    selectedAnswer = selectedAnswers[message.key])
             }
         }
         if (messages.isEmpty()) {
@@ -186,6 +191,7 @@ private fun HistoryBubble(
     sessionName: String = "",
     onMarkUnread: () -> Unit = {},
     onChoice: ((String) -> Boolean)? = null,
+    selectedAnswer: String? = null,
 ) {
     val fontSize = chatFontSize((14f * fontScale).sp, fontScale)
     val isUser = role == "user"
@@ -203,7 +209,7 @@ private fun HistoryBubble(
                     lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, fontScale), color = chatTextColor(sunlight))
             }
         } else {
-            MarkdownText(text = text, fontSize = fontSize, color = chatTextColor(sunlight), linkColor = chatLinkColor(terminalBlue(sunlight)), imagePreviews = true, onChoice = onChoice)
+            MarkdownText(text = text, fontSize = fontSize, color = chatTextColor(sunlight), linkColor = chatLinkColor(terminalBlue(sunlight)), imagePreviews = true, onChoice = onChoice, selectedAnswer = selectedAnswer)
         }
     }
 }

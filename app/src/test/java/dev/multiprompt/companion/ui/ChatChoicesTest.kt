@@ -73,6 +73,15 @@ class ChatChoicesTest {
     }
 
     @Test
+    fun reloadedTranscriptRestoresChosenOptionWithoutLocalTapState() {
+        messages.value = messages.value + ChatHistoryMessage("user", "user", "B: $second", "", 1, 2)
+        render(readerStyle = true)
+        compose.onNodeWithText(second).assertIsSelected().assertIsNotEnabled()
+        compose.onNodeWithText(first).assertIsNotEnabled()
+        compose.runOnIdle { assertEquals(emptyList<String>(), sent) }
+    }
+
+    @Test
     fun letteredOptionsSendTheirLabelAndDescription() {
         messages.value = listOf(messages.value.single().copy(text = "A) **Create a new account.** Keep work separate.\nB) **Use your own account.** Keep the current setup."))
         render()

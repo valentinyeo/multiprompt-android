@@ -57,11 +57,19 @@ fun MarkdownText(
     modifier: Modifier = Modifier,
     imagePreviews: Boolean = false,
     onChoice: ((String) -> Boolean)? = null,
+    selectedAnswer: String? = null,
 ) {
     val readerStyle = LocalReaderStyle.current
     val blocks = remember(text) { MarkdownParser.parse(text) }
     val choices = remember(blocks) { ChatChoices.indices(blocks) }
-    var selectedChoice by rememberSaveable(text) { mutableStateOf<Int?>(null) }
+    var pendingChoice by rememberSaveable(text) { mutableStateOf<Int?>(null) }
+    val confirmedChoice = remember(blocks, choices, selectedAnswer) {
+        choices.firstOrNull { index ->
+            val item = blocks[index] as MdBlock.ListItem
+            selectedAnswer != null && (selectedAnswer == ChatChoices.answer(item, true) || selectedAnswer == ChatChoices.answer(item, false))
+        }
+    }
+    val selectedChoice = confirmedChoice ?: pendingChoice
     val codeBg = color.copy(alpha = 0.10f)
     val codeFontFamily = if (LocalReaderStyle.current) FontFamily.SansSerif else FontFamily.Monospace
     val scale = if (LocalReaderStyle.current) fontSize.value / ReaderTextSize.value else if (LocalMaterial3.current) fontSize.value / 15f else 1f
@@ -95,7 +103,7 @@ fun MarkdownText(
                         .then(if (isChoice) Modifier.fillMaxWidth()
                             .background(if (chosen) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent, ReaderBadgeShape)
                             .selectable(selected = chosen, enabled = enabled, role = Role.RadioButton) {
-                                if (selectedChoice == null && onChoice?.invoke(ChatChoices.answer(block, readerStyle)) == true) selectedChoice = blockIndex
+                                if (confirmedChoice == null && pendingChoice == null && onChoice?.invoke(ChatChoices.answer(block, readerStyle)) == true) pendingChoice = blockIndex
                             }.padding(vertical = 8.dp, horizontal = 4.dp) else Modifier)) {
                         val label = ChatChoices.label(block.marker, LocalReaderStyle.current)
                         val numbered = block.marker.removeSuffix(".").toIntOrNull() ?: 0
