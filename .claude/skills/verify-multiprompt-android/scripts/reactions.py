@@ -50,6 +50,8 @@ crop = image.crop(tuple(badge))
 colors = sorted(crop.getcolors(crop.width * crop.height) or [], reverse=True)
 assert len(colors) > 3 and crop.width * crop.height - colors[0][0] > 20, "badge glyph must be painted"
 quoted = [node.get("text") for node in nodes if "👍 to:" in node.get("text", "")]
+replies = [node.get("text") for node in nodes if "Reaction received." in node.get("text", "")]
+assert not replies, ("the session reply to a matched reaction must stay hidden", replies)
 if stage == "fallback":
     assert len(quoted) == 1 and "Unavailable reply" in quoted[0], quoted
 else:

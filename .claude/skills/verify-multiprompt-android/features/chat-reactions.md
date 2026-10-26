@@ -5,6 +5,7 @@
 - Three reactions in the existing message sheet.
 - One quoted send through real SSH and tmux.
 - One badge; no extra matched message bubble.
+- The session's single answer to a reaction stays hidden; other replies show.
 - Stable reply identity after restart.
 - Unmatched reaction lines remain visible.
 - Existing composer drafts stay unchanged.
@@ -18,7 +19,7 @@ Long-press a Claude reply. Choose 👍, 👎 or ❤️. The badge stays on that 
 Dispatch `verify.yml` with `feature=chat-reactions.md`.
 The existing host-import and fingerprint comparison run first. The fixture provides two replies with identical prefixes. Its foreground process records every received message.
 
-The driver keeps a draft, long-presses the first reply, checks all three choices, and selects 👍. It requires one quoted transport receipt. UI XML and screenshots require one badge between the first and second replies, no new reaction bubble, and the unchanged draft. The driver restarts the app and repeats the target check. An unmatched transcript line must remain visible.
+The driver keeps a draft, long-presses the first reply, checks all three choices, and selects 👍. It requires one quoted transport receipt. UI XML and screenshots require one badge between the first and second replies, no new reaction bubble, no "Reaction received." answer bubble, and the unchanged draft. The driver restarts the app and repeats the target check. An unmatched transcript line must remain visible.
 
 For the negative control, set `app_ref` to the pre-feature commit. The same journey must fail with `IGSH975_REACTIONS_MISSING` after opening the real sheet.
 
