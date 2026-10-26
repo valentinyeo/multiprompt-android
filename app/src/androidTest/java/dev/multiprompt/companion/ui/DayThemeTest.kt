@@ -81,6 +81,9 @@ class DayThemeTest {
         output.mkdirs()
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
         automation.takeScreenshot().let { bitmap ->
+            if (sunlight && Color(bitmap.getPixel(bitmap.width / 2, 1)).luminance() < 0.9f) {
+                problems += "$name status surface stays dark"
+            }
             File(output, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
             bitmap.recycle()
         }

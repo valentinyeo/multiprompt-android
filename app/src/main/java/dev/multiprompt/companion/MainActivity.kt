@@ -2,6 +2,7 @@ package dev.multiprompt.companion
 
 import android.content.Intent
 import android.os.Bundle
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -24,6 +25,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
+        val darkStatusBarContrast = Build.VERSION.SDK_INT >= 29 && window.isStatusBarContrastEnforced
         setContent {
             val state by viewModel.state.collectAsState()
             val systemDark = isSystemInDarkTheme()
@@ -33,6 +35,7 @@ class MainActivity : ComponentActivity() {
                 AppTheme.SUNLIGHT -> true
             }
             SideEffect {
+                if (Build.VERSION.SDK_INT >= 29) window.isStatusBarContrastEnforced = !sunlight && darkStatusBarContrast
                 WindowCompat.getInsetsController(window, window.decorView).apply {
                     isAppearanceLightStatusBars = sunlight
                     isAppearanceLightNavigationBars = sunlight
