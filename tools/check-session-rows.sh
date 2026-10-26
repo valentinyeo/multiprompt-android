@@ -17,7 +17,7 @@ run_rows() {
   cp "$result"/* "build/session-rows/$phase/"
   return "$status"
 }
-git show 5204eda:app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt > "$file"
+git diff 5204eda bb4192b -- "$file" | git apply --reverse --include="$file"
 if run_rows before; then
   echo 'Original rows unexpectedly passed' >&2
   exit 1

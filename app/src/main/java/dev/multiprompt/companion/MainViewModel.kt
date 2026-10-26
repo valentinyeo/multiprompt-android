@@ -97,6 +97,7 @@ data class AppUiState(
     val userSelectedSessionKey: String? = null,
     val reader: SessionReaderConnection? = null,
     val readerSession: TmuxSession? = null,
+    val readerUnreadMessageKey: String? = null,
     val unreadSessionKeys: Set<String> = emptySet(),
     val unreadCounts: Map<String, Int> = emptyMap(),
     val repliedSessionKeys: Set<String> = emptySet(),
@@ -817,6 +818,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 .map { SessionReadStore.key(it.hostId, it.name) }
         }
         noteSessionInteraction(session)
+        val unreadMessageKey = sessionReads.unreadMessageKey(session)
         sessionReads.markRead(session)
         val key = SessionReadStore.key(session.hostId, session.name)
         ReplyNotifier.cancel(app, key)
@@ -837,6 +839,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 terminalSession = null,
                 reader = reader,
                 readerSession = session,
+                readerUnreadMessageKey = unreadMessageKey,
                 userSelectedSessionKey = key.takeIf { userInitiated },
                 readerSwipeOrder = swipeOrder,
                 unreadSessionKeys = it.unreadSessionKeys - key,
@@ -850,7 +853,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         sessionReads.markRead(session)
         val key = SessionReadStore.key(session.hostId, session.name)
         ReplyNotifier.cancel(app, key)
-        _state.update { it.copy(unreadSessionKeys = it.unreadSessionKeys - key, unreadCounts = it.unreadCounts - key) }
+        _state.update { it.copy(readerUnreadMessageKey = null, unreadSessionKeys = it.unreadSessionKeys - key, unreadCounts = it.unreadCounts - key) }
+    }
+
+    fun markReaderUnreadFrom(messageKey: String) {
+        val session = _state.value.readerSession ?: return
+        sessionReads.markUnreadFrom(session, messageKey)
+        markSessionUnread(session)
+        _state.update { it.copy(readerUnreadMessageKey = messageKey) }
     }
 
     fun markSessionUnread(session: TmuxSession) {

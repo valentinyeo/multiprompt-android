@@ -48,6 +48,9 @@ internal fun ChatHistoryView(
     onSessionUsed: () -> Unit,
     listState: LazyListState,
     followRequest: Int,
+    sessionName: String,
+    unreadMessageKey: String?,
+    onMarkUnread: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val history = remember(connection, agent, workingDirectory) { connection.chatHistory(agent, workingDirectory) }
@@ -79,6 +82,9 @@ internal fun ChatHistoryView(
             sunlight = sunlight,
             replyGate = replyGate,
             onReply = onReply,
+            sessionName = sessionName,
+            unreadMessageKey = unreadMessageKey,
+            onMarkUnread = onMarkUnread,
             onNearTop = history::nearTop,
             listState = listState,
             followRequest = followRequest,
@@ -101,6 +107,9 @@ internal fun ChatHistoryList(
     onNearTop: (Boolean) -> Unit = {},
     listState: LazyListState = rememberLazyListState(),
     followRequest: Int = 0,
+    sessionName: String = "",
+    unreadMessageKey: String? = null,
+    onMarkUnread: (String) -> Unit = {},
 ) {
     val nearTop by rememberUpdatedState(onNearTop)
     val atBottom = !listState.canScrollBackward
@@ -127,10 +136,22 @@ internal fun ChatHistoryList(
         contentPadding = if (LocalReaderStyle.current) androidx.compose.foundation.layout.PaddingValues(top = ReaderFloatingInset + WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = ReaderMessageSpacing) else androidx.compose.foundation.layout.PaddingValues(),
     ) {
         itemsIndexed(queuedMessages.asReversed(), key = { index, text -> "queued:$index:$text" }) { _, text ->
-            HistoryBubble(text, "user", "Queued", fontScale, sunlight, replyGate, onReply)
+            Column {
+                if (unreadMessageKey == "queued:${text.hashCode()}") {
+                    Text("New", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 8.dp))
+                }
+                HistoryBubble(text, "user", "Queued", fontScale, sunlight, replyGate, onReply,
+                    sessionName = sessionName, onMarkUnread = { onMarkUnread("queued:${text.hashCode()}") })
+            }
         }
         items(messages.asReversed(), key = { it.key }, contentType = { it.role }) { message ->
-            HistoryBubble(message.text, message.role, "", fontScale, sunlight, replyGate, onReply)
+            Column {
+                if (message.key == unreadMessageKey) {
+                    Text("New", color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+                }
+                HistoryBubble(message.text, message.role, "", fontScale, sunlight, replyGate, onReply,
+                    messageId = message.requestId, sessionName = sessionName, onMarkUnread = { onMarkUnread(message.key) })
+            }
         }
         if (messages.isEmpty() && queuedMessages.isEmpty()) {
             item(key = "empty") {
@@ -150,11 +171,15 @@ private fun HistoryBubble(
     sunlight: Boolean,
     gate: ReplySwipeGate,
     onReply: (String, Boolean) -> Unit,
+    messageId: String = "",
+    sessionName: String = "",
+    onMarkUnread: () -> Unit = {},
 ) {
     val fontSize = chatFontSize((14f * fontScale).sp, fontScale)
     val isUser = role == "user"
     ReplyableBubble(isUser = isUser, sunlight = sunlight, text = text,
-        onReply = { onReply(it, isUser) }, gate = gate) {
+        onReply = { onReply(it, isUser) }, gate = gate,
+        messageId = messageId, sessionName = sessionName, onMarkUnread = onMarkUnread) {
         if (note.isNotEmpty()) {
             Text(note, fontFamily = chatFontFamily(), fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp,
                 color = chatHintColor(sunlight))

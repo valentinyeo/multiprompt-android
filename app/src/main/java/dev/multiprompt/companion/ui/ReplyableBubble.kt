@@ -1,5 +1,29 @@
 package dev.multiprompt.companion.ui
 
+import android.content.Intent
+import android.widget.Toast
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.MarkChatUnread
+import androidx.compose.material.icons.filled.Reply
+import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Tag
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import dev.multiprompt.companion.BuildConfig
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
@@ -16,7 +40,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -51,6 +74,7 @@ internal class ReplySwipeGate {
 internal val ReplySelectable = SemanticsPropertyKey<Boolean>("ReplySelectable")
 internal var SemanticsPropertyReceiver.replySelectable by ReplySelectable
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ReplyableBubble(
     isUser: Boolean,
@@ -59,6 +83,9 @@ internal fun ReplyableBubble(
     onReply: (String) -> Unit,
     gate: ReplySwipeGate,
     modifier: Modifier = Modifier,
+    messageId: String = "",
+    sessionName: String = "",
+    onMarkUnread: () -> Unit = {},
     content: @Composable (selectable: Boolean) -> Unit,
 ) {
     var selectable by remember { mutableStateOf(false) }
@@ -67,6 +94,8 @@ internal fun ReplyableBubble(
     val owner = remember { Any() }
     val currentReply by rememberUpdatedState { onReply(text) }
     val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    val confirm: (String) -> Unit = { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
     DisposableEffect(gate, owner) {
         onDispose { if (gate.owner === owner) gate.owner = null }
     }
@@ -117,27 +146,71 @@ internal fun ReplyableBubble(
             .semantics { replySelectable = selectable }
             .then(gestures),
     ) {
-        Box {
-            if (selectable) {
-                SelectionContainer { Column { content(true) } }
-            } else {
-                Column { content(false) }
-            }
-            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                DropdownMenuItem(text = { Text("Reply") }, onClick = {
-                    menuExpanded = false
-                    currentReply()
-                })
-                DropdownMenuItem(text = { Text("Copy") }, onClick = {
-                    menuExpanded = false
-                    clipboard.setText(AnnotatedString(text))
-                })
-                DropdownMenuItem(text = { Text("Select text") }, onClick = {
-                    menuExpanded = false
-                    selectable = true
-                })
+        Column { content(false) }
+    }
+    if (menuExpanded) {
+        ModalBottomSheet(
+            onDismissRequest = { menuExpanded = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
+            Column(
+                Modifier.fillMaxWidth().heightIn(min = (LocalConfiguration.current.screenHeightDp * 0.46f).dp)
+                    .verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                @Composable
+                fun group(content: @Composable () -> Unit) {
+                    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(16.dp))) {
+                        content()
+                    }
+                }
+                @Composable
+                fun action(label: String, icon: ImageVector, run: () -> Unit) {
+                    Row(
+                        Modifier.fillMaxWidth().clickable { menuExpanded = false; run() }.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
+                        Text(label, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+                group {
+                    action("Reply", Icons.Default.Reply) { currentReply(); confirm("Reply added") }
+                    action("Mark as unread", Icons.Default.MarkChatUnread) { onMarkUnread(); confirm("Marked as unread") }
+                }
+                group {
+                    action("Copy", Icons.Default.ContentCopy) { clipboard.setText(AnnotatedString(text)); confirm("Copied") }
+                    action("Select Text", Icons.Default.SelectAll) { selectable = true; confirm("Select text to copy") }
+                    action("Copy Request ID", Icons.Default.Tag) {
+                        if (messageId.isNotBlank()) {
+                            clipboard.setText(AnnotatedString(messageId)); confirm("Request ID copied")
+                        } else {
+                            confirm("No transcript ID for this message yet")
+                        }
+                    }
+                }
+                group {
+                    action("Report", Icons.Default.Flag) {
+                        val report = "Session: $sessionName\nMessage ID: ${messageId.ifBlank { "Not available yet" }}\nApp: ${BuildConfig.VERSION_NAME}\n\n$text"
+                        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, report)
+                        }, "Report message"))
+                        confirm("Choose where to share")
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
             }
         }
+    }
+    if (selectable) {
+        AlertDialog(
+            onDismissRequest = { selectable = false },
+            title = { Text("Select Text") },
+            text = { SelectionContainer { Text(text, Modifier.verticalScroll(rememberScrollState())) } },
+            confirmButton = { TextButton(onClick = { selectable = false }) { Text("Done") } },
+        )
     }
 }
 

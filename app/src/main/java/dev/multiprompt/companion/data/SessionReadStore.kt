@@ -36,7 +36,16 @@ class SessionReadStore(context: Context) {
         ).apply()
     }
 
+    fun unreadMessageKey(session: TmuxSession): String? =
+        preferences.getString("$UNREAD_MESSAGE_PREFIX${key(session.hostId, session.name)}", null)
+
+    fun markUnreadFrom(session: TmuxSession, messageKey: String) {
+        markUnread(session)
+        preferences.edit().putString("$UNREAD_MESSAGE_PREFIX${key(session.hostId, session.name)}", messageKey).apply()
+    }
+
     fun markRead(session: TmuxSession) {
+        preferences.edit().remove("$UNREAD_MESSAGE_PREFIX${key(session.hostId, session.name)}").apply()
         val readAt = maxOf(session.lastActivityEpochSeconds, System.currentTimeMillis() / 1000)
         preferences.edit().putLong(key(session.hostId, session.name), readAt).apply()
         saveUnreadCountState(session, UnreadCount.read(
@@ -193,6 +202,7 @@ class SessionReadStore(context: Context) {
             .filter {
                 it.startsWith(prefix) ||
                     it.startsWith("$UNREAD_COUNT_PREFIX$prefix") ||
+                    it.startsWith("$UNREAD_MESSAGE_PREFIX$prefix") ||
                     it.startsWith("$ARCHIVE_PREFIX$prefix") ||
                     it.startsWith("$ARCHIVE_UNTIL_PREFIX$prefix") ||
                     it.startsWith("$FONT_SCALE_PREFIX$prefix") ||
@@ -205,6 +215,7 @@ class SessionReadStore(context: Context) {
     }
 
     companion object {
+        private const val UNREAD_MESSAGE_PREFIX = "unread_message::"
         private const val UNREAD_COUNT_PREFIX = "unread_count::"
         private const val ARCHIVE_PREFIX = "archive::"
         private const val ARCHIVE_UNTIL_PREFIX = "archive_until::"
