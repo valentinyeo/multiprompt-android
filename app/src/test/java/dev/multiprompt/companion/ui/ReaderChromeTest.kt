@@ -160,7 +160,7 @@ class ReaderChromeTest {
             stop.right <= meter.left && meter.right <= send.left && stop.top == meter.top && meter.top == send.top)
         screenshot("dictation-during")
         listOf(stop, meter, send).forEach { control ->
-            assertEquals("dictation control matches message box height", before.height, control.height)
+            assertEquals("dictation control matches message box height", before.bottom - before.top, control.bottom - control.top)
             assertEquals("bottom bar must not jump", before.top, control.top)
             assertEquals("bottom bar stays anchored", before.bottom, control.bottom)
         }
