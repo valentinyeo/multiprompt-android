@@ -9,11 +9,12 @@ object ReplyNotificationPolicy {
         current: Map<String, Int>,
         frontKey: String?,
         active: Set<String>,
+        favorites: Set<String>,
     ): Plan {
-        val cancel = active.filterTo(linkedSetOf()) { key -> key == frontKey || (current[key] ?: 0) <= 0 }
+        val cancel = active.filterTo(linkedSetOf()) { key -> key !in favorites || key == frontKey || (current[key] ?: 0) <= 0 }
         if (!baselined) return Plan(emptyList(), cancel)
         val notify = replied
-            .filter { key -> key != frontKey && (current[key] ?: 0) > 0 }
+            .filter { key -> key in favorites && key != frontKey && (current[key] ?: 0) > 0 }
             .sorted()
         return Plan(notify, cancel)
     }

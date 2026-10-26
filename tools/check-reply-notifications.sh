@@ -10,5 +10,8 @@ if [ "$status" -eq 0 ]; then
   image=$(find app/build/outputs -type f -name reply-notifications-shade.png -print -quit)
   test -n "$image"
   cp "$image" build/reply-notifications-shade.png
+  favorite=$(find app/build/outputs -type f -name favorite-only-notifications-shade.png -print -quit)
+  test -n "$favorite"
+  cp "$favorite" build/favorite-only-notifications-shade.png
 fi
 exit "$status"
