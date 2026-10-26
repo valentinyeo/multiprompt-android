@@ -138,6 +138,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
@@ -2022,7 +2023,7 @@ private fun AgentIcon(
 }
 
 @Composable
-private fun agentAccent(agent: AgentKind): Color = if (LocalMaterial3.current) MaterialTheme.colorScheme.primary else when (agent) {
+private fun agentAccent(agent: AgentKind): Color = if (LocalMaterial3.current || MaterialTheme.colorScheme.background.luminance() > 0.5f) MaterialTheme.colorScheme.primary else when (agent) {
     AgentKind.CLAUDE -> Color(0xFFD97757)
     AgentKind.CODEX -> Color(0xFF10A37F)
     AgentKind.PI -> Color(0xFFA78BFA)

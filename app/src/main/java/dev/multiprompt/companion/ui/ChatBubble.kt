@@ -23,6 +23,7 @@ private val LocalChatUser = staticCompositionLocalOf { false }
 
 @Composable
 fun chatBubbleColor(isUser: Boolean, sunlight: Boolean): Color = when {
+    LocalReaderStyle.current && sunlight -> if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
     LocalReaderStyle.current -> if (isUser) ReaderUserCard else ReaderCard
     LocalMaterial3.current -> if (isUser) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent
     isUser && sunlight -> ChatBubbleUserLight

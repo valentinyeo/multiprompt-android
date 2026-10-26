@@ -16,7 +16,8 @@ run_theme() {
 }
 if [ -n "${DAY_THEME_BASE_REF:-}" ]; then
   base=$(git rev-parse --verify "$DAY_THEME_BASE_REF^{commit}")
-  files=(app/src/main/java/dev/multiprompt/companion/ui/Theme.kt app/src/main/java/dev/multiprompt/companion/ui/ChatBubble.kt app/src/main/java/dev/multiprompt/companion/ui/TopFade.kt app/src/main/java/dev/multiprompt/companion/MainActivity.kt)
+  printf 'DAY_THEME_BASE_COMMIT=%s\n' "$base"
+  files=(app/src/main/java/dev/multiprompt/companion/ui/Theme.kt app/src/main/java/dev/multiprompt/companion/ui/ChatBubble.kt app/src/main/java/dev/multiprompt/companion/ui/TopFade.kt app/src/main/java/dev/multiprompt/companion/MainActivity.kt app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt)
   mkdir -p build/day-theme/source
   restore() {
     for file in "${files[@]}"; do cp "build/day-theme/source/$(basename "$file")" "$file"; done

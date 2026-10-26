@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
             }
             SideEffect {
                 WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = sunlight
                     isAppearanceLightNavigationBars = sunlight
                 }
             }
