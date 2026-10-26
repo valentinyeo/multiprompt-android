@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Surface
 import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
@@ -85,15 +87,13 @@ class MessageActionsTest {
         val output = File(checkNotNull(InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")), "message-actions-$name.png")
         check(output.parentFile?.mkdirs() == true || output.parentFile?.isDirectory == true)
         compose.waitForIdle()
-        when (name) {
-            "sheet" -> compose.onNode(isDialog()).captureToImage()
-            "reply" -> compose.onNodeWithText("Reply to Claude").captureToImage()
-            "unread" -> compose.onNodeWithText("New").captureToImage()
+        val bitmap = if (name == "sheet") {
+            compose.onNode(isDialog()).captureToImage()
+            InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+        } else {
+            compose.onRoot().captureToImage().asAndroidBitmap()
         }
-        InstrumentationRegistry.getInstrumentation().uiAutomation.waitForIdle(2500, 15_000)
-        output.outputStream().use {
-            assertTrue(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot().compress(Bitmap.CompressFormat.PNG, 100, it))
-        }
+        output.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
     }
 
     @Test
