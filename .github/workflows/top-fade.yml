@@ -50,14 +50,22 @@ jobs:
           ram-size: 2048M
           disable-animations: true
           script: tools/top-fade-proof.sh
-      - name: Report emulator memory failures
-        if: failure()
-        run: sudo dmesg -T | grep -Ei "out of memory|oom|killed process" || true
+      - name: Retain emulator diagnostics
+        if: always()
+        run: |
+          mkdir -p build/top-fade-diagnostics
+          sudo dmesg -T > build/top-fade-diagnostics/kernel.txt
+          free -m > build/top-fade-diagnostics/memory.txt
+          ps -eo pid,ppid,stat,rss,args > build/top-fade-diagnostics/processes.txt
+          if [ -d /tmp/android-runner ]; then
+            cp -a /tmp/android-runner build/top-fade-diagnostics/crashes
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: top-fade-emulator-proof
           path: |
             build/top-fade-shots/**
+            build/top-fade-diagnostics/**
             app/build/reports/androidTests/connected/debug/**
             app/build/outputs/androidTest-results/connected/debug/**
