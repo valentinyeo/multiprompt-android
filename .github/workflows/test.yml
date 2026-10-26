@@ -80,6 +80,8 @@ jobs:
         run: |
           python3 -m pip install Pillow
           sudo apt-get update && sudo apt-get install -y tesseract-ocr
+      - name: Build test APKs before starting the emulator
+        run: gradle --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2g -Pkotlin.compiler.execution.strategy=in-process assembleDebug assembleDebugAndroidTest
       - name: Enable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -262,6 +264,11 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      - name: Build original screen APKs before starting the emulator
+        run: bash tools/check-approved-style.sh prepare
+        env:
+          GRADLE: gradle
+          STYLE_PHASE: before
       - name: Reject unapproved original screens
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -275,6 +282,11 @@ jobs:
         env:
           GRADLE: gradle
           STYLE_PHASE: before
+      - name: Build approved screen APKs before restarting the emulator
+        run: bash tools/check-approved-style.sh prepare
+        env:
+          GRADLE: gradle
+          STYLE_PHASE: after
       - name: Verify approved screens
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -288,6 +300,13 @@ jobs:
         env:
           GRADLE: gradle
           STYLE_PHASE: after
+      - name: Capture host memory and emulator exit evidence
+        if: always()
+        run: |
+          mkdir -p build/approved-style/diagnostics
+          sudo dmesg -T > build/approved-style/diagnostics/kernel.txt
+          free -m > build/approved-style/diagnostics/memory.txt
+          ps -eo pid,ppid,stat,rss,args > build/approved-style/diagnostics/processes.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
