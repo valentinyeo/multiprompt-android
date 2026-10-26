@@ -23,7 +23,7 @@ Tap `verify-session` in Inbox. **Message verify-session** is the composer and **
 Preconditions: fresh fixture; dispatch `feature=session-reader.md`. The driver first performs the complete real host import and trust journey, then opens the discovered session card.
 
 - `tap_text verify-session`; `wait_for_text VERIFY_READY_528`; `shot reader-ready` capture a native reader of the real console.
-- `tap_desc 'Attach'`; require `Add image` and `Use skill`; capture `attach-menu` (outlined + button, outlined menu card with line icons); back closes it; capture `attach-closed`.
+- `tap_desc 'Attach'`; require `Add image`, the only row a non-Claude session shows (Skill, Model and Effort appear for Claude sessions only and are covered by `native-skills.md`); capture `attach-menu` (outlined + button, outlined menu card with line icons); back closes it; capture `attach-closed`.
 - `fill 'Message verify-session' VERIFY_SENT_528`; `shot send-draft`; `tap_desc 'Send prompt'`. Require both the visible `VERIFY_RECEIVED:VERIFY_SENT_528` and the same line in the fixture's receipts; capture `send-result`.
 - The fixture delays the SSH send by 15 s. Right after the tap, `send-timing.py` requires the message on screen, the composer empty and the logcat marks `message_added` and `box_cleared_frame` within 100 ms of the tap.
 - `tap_desc 'Session actions'`; capture `enter-action`; `tap_text 'Enter / approve'`. Require `VERIFY_ENTER_528` in receipts and native output; capture `enter-result`.
