@@ -72,7 +72,7 @@ subprocess.run([os.environ['ANDROID_HOME'] + '/build-tools/36.0.0/apksigner', 'v
 print('SIGNED_DAY_THEME_UPDATE_OK', manifest['versionName'], manifest['commit'])
 PYTHON
   adb shell cmd uimode night no
-  adb install -r build/day-theme/released.apk
+  adb install -r -g build/day-theme/released.apk
   adb shell am start -W -n dev.multiprompt.companion/.MainActivity
   adb shell uiautomator dump /sdcard/day-theme.xml
   adb pull /sdcard/day-theme.xml build/day-theme/release-screen.xml
