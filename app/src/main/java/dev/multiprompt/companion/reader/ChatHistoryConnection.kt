@@ -3,6 +3,7 @@ package dev.multiprompt.companion.reader
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.ssh.SshRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -35,6 +36,7 @@ class ChatHistoryConnection(
     private val _state = MutableStateFlow(ChatHistoryState())
     val state: StateFlow<ChatHistoryState> = _state.asStateFlow()
     private val wake = Channel<Unit>(Channel.CONFLATED)
+    private val resyncs = Channel<CompletableDeferred<Unit>>(Channel.UNLIMITED)
     private var job: Job? = null
     @Volatile private var nearTop = false
     @Volatile private var awaitingMessages = false
@@ -52,6 +54,11 @@ class ChatHistoryConnection(
         if (value) wake.trySend(Unit)
     }
 
+    fun resync(): CompletableDeferred<Unit> = CompletableDeferred<Unit>().also {
+        resyncs.trySend(it)
+        wake.trySend(Unit)
+    }
+
     fun start() {
         if (job != null) return
         job = scope.launch {
@@ -60,6 +67,7 @@ class ChatHistoryConnection(
             }
             var retryDelay = 2_000L
             var requestId = 0L
+            var resyncing: CompletableDeferred<Unit>? = null
             while (isActive) {
                 try {
                     val client = withTimeout(20_000L) { repository.connect(host) }
@@ -67,7 +75,8 @@ class ChatHistoryConnection(
                         repository.streamChatHistory(client, script) { exchange ->
                             var wasOlder = false
                             while (isActive) {
-                                val current = _state.value.history
+                                resyncing = resyncing ?: resyncs.tryReceive().getOrNull()
+                                val current = if (resyncing != null) ChatHistory() else _state.value.history
                                 val before = if (nearTop && !wasOlder && !current.more) current.start else 0
                                 requestId++
                                 val page = ChatHistoryProtocol.parse(
@@ -77,6 +86,8 @@ class ChatHistoryConnection(
                                 val next = current.apply(page)
                                 _state.value = ChatHistoryState(next, loaded = true)
                                 if (next != current) runCatching { cache.save(cacheKey, next) }
+                                resyncing?.complete(Unit)
+                                resyncing = null
                                 retryDelay = 2_000L
                                 wasOlder = page.mode == "older"
                                 if (!next.more && !(nearTop && next.start > 0)) {
@@ -99,6 +110,7 @@ class ChatHistoryConnection(
 
     override fun close() {
         wake.close()
+        resyncs.close()
         scope.cancel()
     }
 }
