@@ -91,7 +91,8 @@ class DayThemeTest {
             File(output, "window.txt").writeText(android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().use { it.readText() })
         }
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()
-        automation.syncInputTransactions()
+        if (name.endsWith("-menu")) compose.onNodeWithText("Settings").captureToImage()
+        automation.waitForIdle(100, 5_000)
         automation.takeScreenshot().let { bitmap ->
             if (sunlight && Color(bitmap.getPixel(bitmap.width / 2, 1)).luminance() < 0.9f) {
                 problems += "$name status surface stays dark"
