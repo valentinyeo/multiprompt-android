@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md) ;;
+    sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -402,6 +402,56 @@ CHOICES
 fi
 wait_for_text VERIFY_READY_528
 shot reader-ready
+if [[ "$feature" == chat-reactions.md ]]; then
+    wait_for_text 'FIRST REPLY'
+    wait_for_text 'SECOND REPLY'
+    fill 'Message this session' 'draft%sstays%shere'
+    shot reactions-before
+    read -r reaction_x reaction_y <<< "$(python3 "$scripts/reactions.py" point "$EVIDENCE/current.xml")"
+    adb shell input swipe "$reaction_x" "$reaction_y" "$reaction_x" "$reaction_y" 900
+    shot reactions-menu
+    if ! wait_for_text '👍'; then
+        printf 'IGSH975_REACTIONS_MISSING\n' >&2
+        exit 1
+    fi
+    wait_for_text '👎'
+    wait_for_text '❤️'
+    tap_text '👍'
+    wait_for_absence 'Report'
+    for attempt in {1..30}; do
+        dump_ui
+        if grep -F 'content-desc="Reactions: 👍"' "$EVIDENCE/current.xml" >/dev/null; then break; fi
+        sleep 1
+    done
+    shot reactions-badge
+    python3 "$scripts/reactions.py" check "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-reactions-badge.png" badge "$EVIDENCE/reactions-result.json"
+    for attempt in {1..30}; do
+        if sudo test -s /home/verifyssh/receipts.txt; then break; fi
+        sleep 1
+    done
+    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/reaction-receipts.txt"
+    python3 "$scripts/reactions.py" transport "$EVIDENCE/reaction-receipts.txt" "$EVIDENCE/reaction-transport.json"
+    relaunch_app
+    tap_text verify-session
+    wait_for_text 'FIRST REPLY'
+    wait_for_text 'SECOND REPLY'
+    for attempt in {1..30}; do
+        dump_ui
+        if grep -F 'content-desc="Reactions: 👍"' "$EVIDENCE/current.xml" >/dev/null; then break; fi
+        sleep 1
+    done
+    shot reactions-restart
+    python3 "$scripts/reactions.py" check "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-reactions-restart.png" restart "$EVIDENCE/reactions-result.json"
+    sudo -u verifyssh python3 /home/verifyssh/reaction-console.py append-unmatched
+    wait_for_text 'Unavailable reply'
+    shot reactions-fallback
+    python3 "$scripts/reactions.py" check "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-reactions-fallback.png" fallback "$EVIDENCE/reactions-result.json"
+    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/reaction-receipts.txt"
+    python3 "$scripts/reactions.py" transport "$EVIDENCE/reaction-receipts.txt" "$EVIDENCE/reaction-transport.json"
+    sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-reaction-work/a1b2c3d4-0975-4000-8000-000000000975.jsonl > "$EVIDENCE/reaction-transcript.jsonl"
+    printf 'ANDROID_REACTIONS_REAL_SSH_RESTART_PROVEN\n'
+    exit 0
+fi
 if [[ "$feature" == session-reader.md ]]; then
     tap_desc 'Attach'
     wait_for_text 'Add image'

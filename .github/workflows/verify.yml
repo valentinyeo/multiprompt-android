@@ -15,11 +15,21 @@ on:
           - sessions.md
           - session-reader.md
           - chat-choices.md
+          - chat-reactions.md
           - session-routing.md
           - terminal.md
+      app_ref:
+        description: Optional pinned app source for the unchanged journey negative control or published source
+        required: false
+        type: string
+      update_baseline_run:
+        description: Earlier reactions workflow run holding the signed update baseline
+        required: false
+        type: string
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   verify:
@@ -29,6 +39,7 @@ jobs:
       EVIDENCE: ${{ github.workspace }}/verification-evidence
       VERIFY_FEATURE: ${{ inputs.feature }}
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
+      UPDATE_BASELINE_RUN: ${{ inputs.update_baseline_run }}
     steps:
       - uses: actions/checkout@v4
       - name: Prepare verification paths
@@ -45,12 +56,38 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
+      - uses: actions/checkout@v4
+        if: inputs.app_ref != ''
+        with:
+          ref: ${{ inputs.app_ref }}
+          path: app-source
+      - name: Capture signed update baseline
+        if: inputs.feature == 'chat-reactions.md' && inputs.update_baseline_run == ''
+        run: |
+          mkdir -p "$EVIDENCE/signed-update-baseline"
+          curl -fsSL https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion-update.json -o "$EVIDENCE/signed-update-baseline/manifest.json"
+          curl -fsSL "$(jq -er '.apkUrl' "$EVIDENCE/signed-update-baseline/manifest.json")" -o "$EVIDENCE/signed-update-baseline/app.apk"
+          printf '%s  %s\n' "$(jq -er '.sha256' "$EVIDENCE/signed-update-baseline/manifest.json")" "$EVIDENCE/signed-update-baseline/app.apk" | sha256sum --check
+      - name: Restore signed update baseline
+        if: inputs.update_baseline_run != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASELINE_RUN: ${{ inputs.update_baseline_run }}
+        run: |
+          [[ "$BASELINE_RUN" =~ ^[0-9]+$ ]]
+          gh run download "$BASELINE_RUN" --repo "$GITHUB_REPOSITORY" --name "verify-chat-reactions.md-$BASELINE_RUN" --dir "$RUNNER_TEMP/update-baseline"
+          cp -a "$RUNNER_TEMP/update-baseline/signed-update-baseline" "$EVIDENCE/"
       - name: Build debug APK
         run: |
           mkdir -p "$EVIDENCE"
           python3 -m pip install Pillow
           printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/revision.txt"
-          gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="0.1.2-verify.$GITHUB_RUN_NUMBER" assembleDebug 2>&1 | tee "$EVIDENCE/build.txt"
+          app_source="$GITHUB_WORKSPACE"
+          if [ -d "$GITHUB_WORKSPACE/app-source" ]; then app_source="$GITHUB_WORKSPACE/app-source"; fi
+          git -C "$app_source" rev-parse HEAD > "$EVIDENCE/app-source-sha.txt"
+          gradle -p "$app_source" --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="0.1.2-verify.$GITHUB_RUN_NUMBER" assembleDebug 2>&1 | tee "$EVIDENCE/build.txt"
+          echo "VERIFY_APK=$app_source/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
+          sha256sum "$app_source/app/build/outputs/apk/debug/app-debug.apk" > "$EVIDENCE/app-apk-sha256.txt"
       - name: Build routing instrumentation
         if: inputs.feature == 'session-routing.md'
         run: gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g assembleDebugAndroidTest
@@ -81,8 +118,9 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            adb install -r -g app/build/outputs/apk/debug/app-debug.apk
+            adb install -r -g "$VERIFY_APK"
             .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"
+            if [ -n "$UPDATE_BASELINE_RUN" ]; then .claude/skills/verify-multiprompt-android/scripts/update-reaction-release.sh; fi
       - name: Stop recorded fixture processes and retain logs
         timeout-minutes: 2
         if: always()

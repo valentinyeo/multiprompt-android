@@ -29,6 +29,7 @@ Numbered PNG/XML pairs show action and result. The transcript records commands a
 - [Session settings](session-settings.md): full-screen split switches; saving is blocked without account OTP and a pulled layout.
 - [Session routing](session-routing.md): Inbox and swipe switching, typed and simulated dictated sends, independent SSH receipts.
 - [Chat choices](chat-choices.md): latest-reply option taps and live question number keys, with independent SSH/tmux receipts.
+- [Claude reactions](chat-reactions.md): quoted sends, one badge, restart identity, fallback and signed update offers.
 - [Session reader](session-reader.md): native output, Send, Enter/approve and Interrupt, with independent console receipts.
 - [Terminal](terminal.md): real SSH PTY/tmux fallback attachment.
 

@@ -63,6 +63,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.AnnotatedString
@@ -159,13 +160,15 @@ internal fun ReplyableBubble(
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             content(false)
             if (reactions.isNotEmpty()) {
+                val shown = ChatReactions.Emoji.entries.filter { it in reactions }
                 Row(
                     Modifier.testTag("reaction-badges:$messageId")
+                        .semantics { contentDescription = "Reactions: " + shown.joinToString(" ") { it.text } }
                         .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(12.dp))
                         .padding(horizontal = 8.dp, vertical = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    ChatReactions.Emoji.entries.filter { it in reactions }.forEach { Text(it.text, fontSize = 16.sp) }
+                    shown.forEach { Text(it.text, fontSize = 16.sp) }
                 }
             }
         }
