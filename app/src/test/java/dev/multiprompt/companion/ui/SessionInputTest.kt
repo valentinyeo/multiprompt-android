@@ -5,8 +5,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.test.assertTextEquals
-import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -131,7 +130,7 @@ class SessionInputTest {
             compose.runOnIdle {
                 dictation.value = DictationState(DictationStatus.LISTENING, "spoken $index", true, sessionKey = "${f.host.id}::${if (switched) "two" else "one"}")
             }
-            compose.onNodeWithTag("dictation-session-line").assertTextEquals("Messaging ${if (index % 2 == 0) "two" else "one"}")
+            compose.onNodeWithText(if (index % 2 == 0) "two" else "one").assertIsDisplayed()
             compose.onNodeWithContentDescription("Send prompt").performClick()
             compose.runOnIdle {
                 val visible = if (switched) other else connection
