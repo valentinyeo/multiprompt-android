@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -21,12 +23,19 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.draw.alpha
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.model.AgentKind
@@ -36,6 +45,9 @@ import dev.multiprompt.companion.reader.ChatHistoryMessage
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.delay
+
+private data class ReplyJump(val message: ChatHistoryMessage, val reply: ReplyQuote.Reply)
 
 @Composable
 internal fun ChatHistoryView(
@@ -82,6 +94,7 @@ internal fun ChatHistoryView(
         ChatHistoryList(
             messages = messages,
             loaded = state.loaded,
+            hasOlder = !state.loaded || state.history.start > 0 || state.history.more,
             agent = agent,
             fontScale = fontScale,
             sunlight = sunlight,
@@ -126,9 +139,35 @@ internal fun ChatHistoryList(
     sessionName: String = "",
     unreadMessageKey: String? = null,
     onMarkUnread: (String) -> Unit = {},
+    hasOlder: Boolean = false,
 ) {
     val nearTop by rememberUpdatedState(onNearTop)
-    val atBottom = !listState.canScrollBackward
+    var pendingJump by remember { mutableStateOf<ReplyJump?>(null) }
+    var highlightedKey by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    LaunchedEffect(pendingJump, messages, hasOlder, loaded, question) {
+        val request = pendingJump ?: return@LaunchedEffect
+        val keys = messages.map { it.key }
+        val texts = messages.map { it.text }
+        val before = messages.indexOfFirst { it.key == request.message.key }.takeIf { it >= 0 }
+            ?: messages.indexOfLast { it.role == request.message.role && it.text == request.message.text }
+        val source = ReplyQuote.sourceIndex(texts, before, request.reply.quoted)
+        if (source != null) {
+            highlightedKey = keys[source]
+            listState.scrollToItem(keys.lastIndex - source + if (question != null) 1 else 0)
+            pendingJump = null
+        } else if (before < 0 || (!hasOlder && loaded)) {
+            pendingJump = null
+            android.widget.Toast.makeText(context, "Original message not found", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+    LaunchedEffect(highlightedKey) {
+        if (highlightedKey != null) {
+            delay(2_000)
+            highlightedKey = null
+        }
+    }
+    val atBottom = !listState.canScrollBackward && pendingJump == null
     val newest = messages.lastOrNull()
     val selectedAnswers = remember(messages) {
         messages.zipWithNext().filter { (reply, answer) -> reply.role == "assistant" && answer.role == "user" && !answer.pending }
@@ -143,7 +182,7 @@ internal fun ChatHistoryList(
     LaunchedEffect(listState) {
         snapshotFlow {
             val info = listState.layoutInfo
-            info.totalItemsCount > 0 && (info.visibleItemsInfo.maxOfOrNull { it.index } ?: 0) >= info.totalItemsCount - 8
+            pendingJump != null || (info.totalItemsCount > 0 && (info.visibleItemsInfo.maxOfOrNull { it.index } ?: 0) >= info.totalItemsCount - 8)
         }.distinctUntilChanged().collect { nearTop(it) }
     }
     DisposableEffect(Unit) { onDispose { nearTop(false) } }
@@ -167,6 +206,8 @@ internal fun ChatHistoryList(
                 }
                 HistoryBubble(message.text, message.role, message.pending, fontScale, sunlight, replyGate, onReply,
                     messageId = message.requestId, sessionName = sessionName, onMarkUnread = { onMarkUnread(message.key) },
+                    key = message.key, highlighted = highlightedKey == message.key,
+                    onJump = { pendingJump = ReplyJump(message, it) },
                     onChoice = onChoice.takeIf { message.key == newest?.key && message.role == "assistant" },
                     selectedAnswer = selectedAnswers[message.key])
             }
@@ -192,26 +233,43 @@ private fun HistoryBubble(
     messageId: String = "",
     sessionName: String = "",
     onMarkUnread: () -> Unit = {},
+    key: String,
+    highlighted: Boolean,
+    onJump: (ReplyQuote.Reply) -> Unit,
     onChoice: ((String) -> Boolean)? = null,
     selectedAnswer: String? = null,
 ) {
     val fontSize = chatFontSize((14f * fontScale).sp, fontScale)
     val isUser = role == "user"
-    ReplyableBubble(isUser = isUser, sunlight = sunlight, text = text,
-        modifier = Modifier.alpha(if (pending) 0.5f else 1f),
-        onReply = { onReply(it, isUser) }, gate = gate,
-        messageId = messageId, sessionName = sessionName, onMarkUnread = onMarkUnread) {
-        if (pending) {
-            Text("Queued", fontFamily = chatFontFamily(), fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp,
-                color = chatHintColor(sunlight))
+    val reply = remember(text, isUser) { if (isUser) ReplyQuote.parse(text) else null }
+    val start = remember { BringIntoViewRequester() }
+    LaunchedEffect(highlighted) {
+        if (highlighted) {
+            withFrameNanos { }
+            start.bringIntoView(Rect(0f, 0f, 1f, 1f))
         }
-        if (isUser) {
-            ChatLinkText(text) { line ->
-                Text(terminalLinks(line, sunlight), fontFamily = chatFontFamily(), fontSize = fontSize,
-                    lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, fontScale), color = chatTextColor(sunlight))
+    }
+    Column(Modifier.testTag("chat-message-$key").bringIntoViewRequester(start).then(
+        if (highlighted) Modifier.semantics { stateDescription = "Original message" } else Modifier,
+    )) {
+        if (reply != null) ReplyReference(reply, sunlight, fontScale, Modifier.alpha(if (pending) 0.5f else 1f)) { onJump(reply) }
+        ReplyableBubble(isUser = isUser, sunlight = sunlight, text = text,
+            modifier = Modifier.alpha(if (pending) 0.5f else 1f),
+            onReply = { onReply(it, isUser) }, gate = gate,
+            messageId = messageId, sessionName = sessionName, onMarkUnread = onMarkUnread,
+            highlighted = highlighted) {
+            if (pending) {
+                Text("Queued", fontFamily = chatFontFamily(), fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp,
+                    color = chatHintColor(sunlight))
             }
-        } else {
-            MarkdownText(text = text, fontSize = fontSize, color = chatTextColor(sunlight), linkColor = chatLinkColor(terminalBlue(sunlight)), imagePreviews = true, onChoice = onChoice, selectedAnswer = selectedAnswer)
+            if (isUser) {
+                ChatLinkText(reply?.body ?: text) { line ->
+                    Text(terminalLinks(line, sunlight), fontFamily = chatFontFamily(), fontSize = fontSize,
+                        lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, fontScale), color = chatTextColor(sunlight))
+                }
+            } else {
+                MarkdownText(text = text, fontSize = fontSize, color = chatTextColor(sunlight), linkColor = chatLinkColor(terminalBlue(sunlight)), imagePreviews = true, onChoice = onChoice, selectedAnswer = selectedAnswer)
+            }
         }
     }
 }
