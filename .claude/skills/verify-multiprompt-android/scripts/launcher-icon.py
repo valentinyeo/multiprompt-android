@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+import json
+import re
+import sys
+import xml.etree.ElementTree as ET
+from PIL import Image
+
+APP_PACKAGE = "dev.multiprompt.companion.debug"
+LABEL = "multiprompt"
+
+
+def bounds(node):
+    values = [int(n) for n in re.findall(r"-?\d+", node.get("bounds", ""))]
+    assert len(values) == 4 and values[2] > values[0] and values[3] > values[1], values
+    return values
+
+
+def launcher_cells(path):
+    root = ET.parse(path).getroot()
+    return [n for n in root.iter("node") if n.get("text") == LABEL and n.get("package") != APP_PACKAGE]
+
+
+def measure(image):
+    width, height = image.size
+    pixels = image.convert("RGB").load()
+    total = width * height
+    white = dark = cyan = 0
+    for y in range(height):
+        for x in range(width):
+            r, g, b = pixels[x, y]
+            if min(r, g, b) >= 215:
+                white += 1
+            if max(r, g, b) <= 44:
+                dark += 1
+            if b >= 200 and r <= 170 and g >= 150:
+                cyan += 1
+    return {"white": white / total, "dark": dark / total, "cyan": cyan / total}
+
+
+def verdict(stats):
+    reasons = []
+    if stats["white"] < 0.10:
+        reasons.append(f"white head area {stats['white']:.3f} is below 0.10")
+    if stats["dark"] < 0.04:
+        reasons.append(f"dark tile and visor area {stats['dark']:.3f} is below 0.04")
+    if stats["cyan"] > 0.005:
+        reasons.append(f"old cyan glyph pixels {stats['cyan']:.3f} are above 0.005")
+    return reasons
+
+
+def icon_region(cell_bounds):
+    left, top, right, bottom = cell_bounds
+    height = bottom - top
+    return (left, top, right, top + int(height * 0.62))
+
+
+mode = sys.argv[1]
+if mode == "find":
+    cells = launcher_cells(sys.argv[2])
+    if len(cells) != 1:
+        raise SystemExit(f"Expected one launcher cell labelled {LABEL}, found {len(cells)}")
+    print(cells[0].get("bounds"))
+    raise SystemExit(0)
+
+if mode == "check":
+    xml_path, screenshot, crop_path, result_path = sys.argv[2:6]
+    cells = launcher_cells(xml_path)
+    assert len(cells) == 1, f"Expected one launcher cell labelled {LABEL}, found {len(cells)}"
+    region = icon_region(bounds(cells[0]))
+    crop = Image.open(screenshot).convert("RGB").crop(region)
+    crop.save(crop_path)
+    stats = measure(crop)
+    reasons = verdict(stats)
+    result = {"cell": cells[0].get("bounds"), "region": list(region), "stats": stats, "failures": reasons}
+    with open(result_path, "w", encoding="utf-8") as handle:
+        json.dump(result, handle, indent=2)
+    if reasons:
+        raise SystemExit("LAUNCHER_ICON_NOT_ROBOT: " + "; ".join(reasons))
+    print("LAUNCHER_ICON_IS_ROBOT")
+    raise SystemExit(0)
+
+raise SystemExit(f"Unknown mode: {mode}")

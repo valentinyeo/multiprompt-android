@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md) ;;
+    sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -137,6 +137,30 @@ wait_receipt() {
     done
     return 1
 }
+launcher_icon() {
+    local size w h attempt
+    size=$(adb shell wm size | grep -Eo '[0-9]+x[0-9]+' | tail -1)
+    w=${size%x*}
+    h=${size#*x}
+    adb shell input keyevent KEYCODE_HOME
+    sleep 3
+    shot launcher-home
+    adb shell input swipe $((w / 2)) $((h * 9 / 10)) $((w / 2)) $((h / 5)) 300
+    sleep 2
+    for attempt in {1..8}; do
+        dump_ui
+        if python3 "$scripts/launcher-icon.py" find "$EVIDENCE/current.xml"; then break; fi
+        adb shell input swipe $((w / 2)) $((h * 8 / 10)) $((w / 2)) $((h / 4)) 300
+        sleep 2
+    done
+    shot launcher-drawer
+    python3 "$scripts/launcher-icon.py" check "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-launcher-drawer.png" "$EVIDENCE/launcher-icon-crop.png" "$EVIDENCE/launcher-icon-result.json"
+    local aapt2
+    aapt2=$(find "$ANDROID_HOME/build-tools" -name aapt2 | sort | tail -1)
+    "$aapt2" dump xmltree --file res/mipmap-anydpi-v26/ic_launcher.xml "$VERIFY_APK" | tee "$EVIDENCE/adaptive-icon-tree.txt"
+    grep -q 'monochrome' "$EVIDENCE/adaptive-icon-tree.txt"
+    printf 'ANDROID_LAUNCHER_ROBOT_ICON_PROVEN\n'
+}
 adb shell settings put global hide_error_dialogs 1
 adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
 wait_for_text 'Sign in to see your servers, workspaces and sessions.'
@@ -144,6 +168,10 @@ doctor
 dump_ui
 python3 "$scripts/ui.py" "$EVIDENCE/current.xml" version "$EXPECTED_VERSION" > "$EVIDENCE/version-label.txt"
 shot sign-in
+if [[ "$feature" == launcher-icon.md ]]; then
+    launcher_icon
+    exit 0
+fi
 if [[ "$feature" == sign-in.md ]]; then
     tap_text 'Sign in'
     for attempt in {1..30}; do

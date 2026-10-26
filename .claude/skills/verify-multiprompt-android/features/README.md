@@ -35,6 +35,7 @@ Numbered PNG/XML pairs show action and result. The transcript records commands a
 - [Resync chat](chat-resync.md): the three-dot Resync chat entry clears stale Queued labels, keeps the draft, resends nothing.
 - [Session reader](session-reader.md): native output, Send, Enter/approve and Interrupt, with independent console receipts.
 - [Terminal](terminal.md): real SSH PTY/tmux fallback attachment.
+- [Launcher icon](launcher-icon.md): the robot launcher icon in the emulator's app drawer, with the themed-icon layer present in the built APK.
 
 ## Shipped but not automated
 

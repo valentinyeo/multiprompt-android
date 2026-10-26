@@ -27,6 +27,7 @@ on:
           - chat-resync.md
           - session-routing.md
           - terminal.md
+          - launcher-icon.md
       expect_native_missing:
         description: Require the original app to reject the native slash journey
         required: false
