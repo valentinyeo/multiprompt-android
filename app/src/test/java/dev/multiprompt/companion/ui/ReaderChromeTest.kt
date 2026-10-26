@@ -124,6 +124,8 @@ class ReaderChromeTest {
         val bar = compose.onNodeWithTag("reader-floating-controls").getUnclippedBoundsInRoot()
         val viewport = compose.onNodeWithTag("chat-history").getUnclippedBoundsInRoot()
         assertTrue("Conversation must extend under controls: $viewport $bar", viewport.top < bar.bottom)
+        val composer = compose.onNode(hasSetTextAction()).getUnclippedBoundsInRoot()
+        assertTrue("Conversation must scroll behind composer: $viewport $composer", viewport.bottom >= composer.bottom)
         val message = compose.onNodeWithText("Message 0", useUnmergedTree = true)
             .assertIsDisplayed().onParent().getUnclippedBoundsInRoot()
         val gap = (message.top - bar.bottom).value

@@ -3397,7 +3397,8 @@ internal fun ReaderScreen(
                 onSessionUsed = { onSessionInteraction(); onSessionInput() },
                 listState = chatListState,
                 followRequest = followRequest,
-                modifier = Modifier.padding(bottom = padding.calculateBottomPadding()).padding(horizontal = ReaderScreenPadding)
+                bottomPadding = padding.calculateBottomPadding(),
+                modifier = Modifier.padding(horizontal = ReaderScreenPadding)
                     .transformable(state = transcriptTransform, canPan = { false })
                     .pointerInput(onOpenTerminal) {
                         detectTapGestures(onDoubleTap = { onOpenTerminal() })
@@ -3405,14 +3406,13 @@ internal fun ReaderScreen(
             )
         } else Column(
             Modifier
-                .padding(bottom = padding.calculateBottomPadding())
                 .fillMaxSize()
                 .nestedScroll(overscrollLoader)
                 .readerScroll(scrollState, followRequest)
                 .pointerInput(onOpenTerminal) {
                     detectTapGestures(onDoubleTap = { onOpenTerminal() })
                 }
-                .padding(horizontal = ReaderScreenPadding).padding(top = ReaderFloatingInset + WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = ReaderMessageSpacing),
+                .padding(horizontal = ReaderScreenPadding).padding(top = ReaderFloatingInset + WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = ReaderMessageSpacing + padding.calculateBottomPadding()),
             horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.spacedBy(ReaderMessageSpacing),
         ) {

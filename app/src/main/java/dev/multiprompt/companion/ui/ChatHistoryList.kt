@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.model.AgentKind
@@ -70,6 +71,7 @@ internal fun ChatHistoryView(
     unreadMessageKey: String?,
     onMarkUnread: (String) -> Unit,
     onReaction: ((ChatHistoryMessage, ChatReactions.Emoji) -> Unit)? = null,
+    bottomPadding: Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
     val history = remember(connection, agent, workingDirectory) { connection.chatHistory(agent, workingDirectory) }
@@ -125,6 +127,7 @@ internal fun ChatHistoryView(
             listState = listState,
             followRequest = followRequest,
             modifier = Modifier.weight(1f),
+            bottomPadding = bottomPadding,
         )
 
     }
@@ -154,6 +157,7 @@ internal fun ChatHistoryList(
     onReaction: ((ChatHistoryMessage, ChatReactions.Emoji) -> Unit)? = null,
     collapsePendingReactions: Boolean = true,
     working: Boolean = false,
+    bottomPadding: Dp = 0.dp,
 ) {
     val presentation = remember(messages, agent, collapsePendingReactions) {
         if (agent == AgentKind.CLAUDE) ChatReactions.present(messages, collapsePendingReactions)
@@ -211,7 +215,7 @@ internal fun ChatHistoryList(
         state = listState,
         reverseLayout = true,
         verticalArrangement = Arrangement.spacedBy(if (LocalReaderStyle.current) ReaderMessageSpacing else 10.dp),
-        contentPadding = if (LocalReaderStyle.current) androidx.compose.foundation.layout.PaddingValues(top = ReaderFloatingInset + WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = ReaderMessageSpacing) else androidx.compose.foundation.layout.PaddingValues(),
+        contentPadding = if (LocalReaderStyle.current) androidx.compose.foundation.layout.PaddingValues(top = ReaderFloatingInset + WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = ReaderMessageSpacing + bottomPadding) else androidx.compose.foundation.layout.PaddingValues(bottom = bottomPadding),
     ) {
         if (working) item(key = "working") { WorkingDots() }
         if (question != null) {
