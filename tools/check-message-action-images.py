@@ -16,3 +16,18 @@ for name, labels in expected.items():
     for label in labels:
         assert re.sub(r'\W+', ' ', label).lower() in words, f'{name}: missing visible {label}'
     print('MESSAGE_ACTION_IMAGE_OK', name)
+
+notes = {
+    'collapsed': ('Hax Runner 10 to Mini Boss CEO', 'Chief Of Staff to Mini Boss CEO', 'My own typed question'),
+    'expanded': ('Hax Runner 10 to Mini Boss CEO', 'native journey is now fully green'),
+    'folded': ('Hax Runner 10 to Mini Boss CEO', 'My own typed question'),
+}
+for name, labels in notes.items():
+    image = root / f'session-note-{name}.png'
+    text = subprocess.check_output(['tesseract', str(image), 'stdout'], text=True, stderr=subprocess.DEVNULL)
+    words = re.sub(r'\W+', ' ', text).lower()
+    for label in labels:
+        assert re.sub(r'\W+', ' ', label).lower() in words, f'session-note {name}: missing visible {label}'
+    if name != 'expanded':
+        assert 'native journey is now fully green' not in words, f'session-note {name}: message text visible'
+    print('SESSION_NOTE_IMAGE_OK', name)
