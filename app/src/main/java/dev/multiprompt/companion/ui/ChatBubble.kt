@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -75,6 +76,7 @@ fun ChatBubble(
     sunlight: Boolean,
     modifier: Modifier = Modifier,
     contentModifier: Modifier = Modifier,
+    highlighted: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     BoxWithConstraints(modifier.fillMaxWidth()) {
@@ -89,7 +91,7 @@ fun ChatBubble(
             bubbleModifier
                 .then(contentModifier)
                 .chatBubbleSurface(
-                    chatBubbleColor(isUser, sunlight),
+                    if (highlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.24f).compositeOver(chatBubbleColor(isUser, sunlight)) else chatBubbleColor(isUser, sunlight),
                     if (LocalReaderStyle.current) ReaderCardShape else if (LocalMaterial3.current) androidx.compose.foundation.shape.RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomEnd = if (isUser) 4.dp else 20.dp, bottomStart = 20.dp) else chatShape(),
                 ),
         ) {

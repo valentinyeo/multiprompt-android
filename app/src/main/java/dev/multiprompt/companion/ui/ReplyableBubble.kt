@@ -22,6 +22,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalConfiguration
 import dev.multiprompt.companion.BuildConfig
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,6 +32,8 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -61,6 +64,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -86,6 +90,7 @@ internal fun ReplyableBubble(
     messageId: String = "",
     sessionName: String = "",
     onMarkUnread: () -> Unit = {},
+    highlighted: Boolean = false,
     content: @Composable (selectable: Boolean) -> Unit,
 ) {
     var selectable by remember { mutableStateOf(false) }
@@ -141,6 +146,7 @@ internal fun ReplyableBubble(
     ChatBubble(
         isUser = isUser,
         sunlight = sunlight,
+        highlighted = highlighted,
         contentModifier = modifier
             .graphicsLayer { translationX = dragX }
             .semantics { replySelectable = selectable }
@@ -238,6 +244,36 @@ internal fun ReplyQuoteBar(
         }
         IconButton(onClick = onCancel) {
             Icon(Icons.Default.Close, contentDescription = "Cancel reply")
+        }
+    }
+}
+
+@Composable
+internal fun ReplyReference(
+    reply: ReplyQuote.Reply,
+    sunlight: Boolean,
+    fontScale: Float,
+    modifier: Modifier = Modifier,
+    onJump: () -> Unit,
+) {
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        Row(
+            Modifier.align(Alignment.CenterEnd).widthIn(max = maxWidth * ChatUserMaxWidthFraction)
+                .semantics { contentDescription = "Jump to original message" }
+                .clickable(onClick = onJump).padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(Icons.Default.Reply, contentDescription = null, tint = chatHintColor(sunlight), modifier = Modifier.size(14.dp))
+            Text(
+                reply.preview,
+                modifier = Modifier.weight(1f, fill = false).testTag("reply-reference-text"),
+                color = chatHintColor(sunlight),
+                fontSize = (12f * fontScale).sp,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
