@@ -14,6 +14,7 @@ on:
           - host-changed-key.md
           - sessions.md
           - session-reader.md
+          - chat-choices.md
           - session-routing.md
           - terminal.md
 

@@ -485,6 +485,11 @@ class SshRepository(private val secrets: SecretStorage) {
         }
     }
 
+    suspend fun answerQuestion(client: SshClient, sessionName: String, question: ClaudeQuestion, index: Int) {
+        val screen = captureSession(client, sessionName)
+        execute(client, TmuxCommands.questionAnswer(sessionName, question, screen, index)).requireSuccess("answer the question")
+    }
+
     suspend fun selectModelPickerOption(client: SshClient, sessionName: String, index: Int) {
         execute(client, TmuxCommands.modelPickerOption(sessionName, index))
             .requireSuccess("select the model picker option")

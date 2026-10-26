@@ -10,7 +10,7 @@ matches = []
 for node in root.iter("node"):
     if mode in ("text", "absent", "version") and value == node.get("text"):
         matches.append(node)
-    elif mode in ("contains", "lacks") and value in node.get("text", ""):
+    elif mode in ("contains", "lacks", "text-containing") and value in node.get("text", ""):
         matches.append(node)
     elif mode in ("desc", "checked", "unchecked") and value == node.get("content-desc"):
         matches.append(node)

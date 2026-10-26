@@ -63,6 +63,12 @@ object TmuxCommands {
         return "tmux send-keys -t ${target(sessionName)} $key"
     }
 
+    fun questionAnswer(sessionName: String, question: ClaudeQuestion, screen: String, index: Int): String {
+        require(question.options.any { it.index == index })
+        check(ClaudeQuestion.parse(screen) == question) { "This question is no longer waiting for an answer" }
+        return modelPickerOption(sessionName, index)
+    }
+
     fun modelPickerOption(sessionName: String, index: Int): String {
         require(index in 1..9) { "Model picker option must be between 1 and 9" }
         return "tmux send-keys -t ${target(sessionName)} $index"

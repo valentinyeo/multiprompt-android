@@ -30,6 +30,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.model.AgentKind
+import dev.multiprompt.companion.reader.ReaderStatus
+import dev.multiprompt.companion.ssh.ClaudeQuestion
 import dev.multiprompt.companion.reader.ChatHistoryMessage
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.SessionReaderConnection
@@ -58,6 +60,9 @@ internal fun ChatHistoryView(
     val messages = state.history.displayMessages(reader.screenOutput, agent, reader.sentRecord, System.currentTimeMillis())
     SideEffect { history.awaitingMessages(messages.any { it.pending }) }
     DisposableEffect(history) { onDispose { history.awaitingMessages(false) } }
+    val question = remember(reader.screenOutput, agent) {
+        if (agent == AgentKind.CLAUDE) ClaudeQuestion.parse(reader.screenOutput) else null
+    }
     Column(modifier.fillMaxSize()) {
         if (state.retrying) {
             Text(
@@ -82,6 +87,13 @@ internal fun ChatHistoryView(
             sunlight = sunlight,
             replyGate = replyGate,
             onReply = onReply,
+            question = question,
+            onQuestionChoice = if (!reader.sending && reader.status == ReaderStatus.Live) { option ->
+                question != null && connection.answerQuestion(question, option).also { if (it) onSessionUsed() }
+            } else null,
+            onChoice = if (question == null && !reader.sending && reader.status == ReaderStatus.Live) { answer ->
+                connection.sendPrompt(answer).also { if (it) onSessionUsed() }
+            } else null,
             sessionName = sessionName,
             unreadMessageKey = unreadMessageKey,
             onMarkUnread = onMarkUnread,
@@ -103,6 +115,9 @@ internal fun ChatHistoryList(
     sunlight: Boolean = false,
     replyGate: ReplySwipeGate = remember { ReplySwipeGate() },
     onReply: (String, Boolean) -> Unit = { _, _ -> },
+    onChoice: ((String) -> Boolean)? = null,
+    question: ClaudeQuestion? = null,
+    onQuestionChoice: ((Int) -> Boolean)? = null,
     onNearTop: (Boolean) -> Unit = {},
     listState: LazyListState = rememberLazyListState(),
     followRequest: Int = 0,
@@ -113,7 +128,7 @@ internal fun ChatHistoryList(
     val nearTop by rememberUpdatedState(onNearTop)
     val atBottom = !listState.canScrollBackward
     val newest = messages.lastOrNull()
-    LaunchedEffect(newest?.key, newest?.text, newest?.pending) {
+    LaunchedEffect(newest?.key, newest?.text, newest?.pending, question) {
         if (atBottom) listState.scrollToItem(0)
     }
     LaunchedEffect(followRequest) {
@@ -134,13 +149,19 @@ internal fun ChatHistoryList(
         verticalArrangement = Arrangement.spacedBy(if (LocalReaderStyle.current) ReaderMessageSpacing else 10.dp),
         contentPadding = if (LocalReaderStyle.current) androidx.compose.foundation.layout.PaddingValues(top = ReaderFloatingInset + WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = ReaderMessageSpacing) else androidx.compose.foundation.layout.PaddingValues(),
     ) {
+        if (question != null) {
+            item(key = "active-question") {
+                QuestionChoices(question, enabled = onQuestionChoice != null) { onQuestionChoice?.invoke(it) == true }
+            }
+        }
         items(messages.asReversed(), key = { it.key }, contentType = { it.role }) { message ->
             Column {
                 if (message.key == unreadMessageKey) {
                     Text("New", color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
                 }
                 HistoryBubble(message.text, message.role, message.pending, fontScale, sunlight, replyGate, onReply,
-                    messageId = message.requestId, sessionName = sessionName, onMarkUnread = { onMarkUnread(message.key) })
+                    messageId = message.requestId, sessionName = sessionName, onMarkUnread = { onMarkUnread(message.key) },
+                    onChoice = onChoice.takeIf { message.key == newest?.key && message.role == "assistant" })
             }
         }
         if (messages.isEmpty()) {
@@ -164,6 +185,7 @@ private fun HistoryBubble(
     messageId: String = "",
     sessionName: String = "",
     onMarkUnread: () -> Unit = {},
+    onChoice: ((String) -> Boolean)? = null,
 ) {
     val fontSize = chatFontSize((14f * fontScale).sp, fontScale)
     val isUser = role == "user"
@@ -181,7 +203,7 @@ private fun HistoryBubble(
                     lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, fontScale), color = chatTextColor(sunlight))
             }
         } else {
-            MarkdownText(text = text, fontSize = fontSize, color = chatTextColor(sunlight), linkColor = chatLinkColor(terminalBlue(sunlight)), imagePreviews = true)
+            MarkdownText(text = text, fontSize = fontSize, color = chatTextColor(sunlight), linkColor = chatLinkColor(terminalBlue(sunlight)), imagePreviews = true, onChoice = onChoice)
         }
     }
 }
