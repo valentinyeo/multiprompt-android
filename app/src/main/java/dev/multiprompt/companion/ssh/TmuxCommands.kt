@@ -107,7 +107,7 @@ def cells(line):
             while i<len(codes):
                 c=codes[i]
                 if c in ("38","48"):
-                    i+=2 if i+1<len(codes) and codes[i+1]=="5" else 4
+                    i+=3 if i+1<len(codes) and codes[i+1]=="5" else 5
                     continue
                 if c in ("","0","22"):
                     dim=False
@@ -134,7 +134,7 @@ def visible():
         words.append("".join(c for c,d in (r[1:] if n==0 else r) if not d))
     return " ".join(" ".join(words).split())
 def hint():
-    plain=" ".join("".join(c for c,_ in r) for r in box_rows())
+    plain=" ".join(" ".join("".join(c for c,_ in r) for r in box_rows()).split())
     if "select a queued message" in plain:
         return "select"
     return "edit" if "edit queued messages" in plain else "none"
@@ -150,6 +150,7 @@ def clear():
         if not visible():
             return True
         tmux("send-keys","-t",t,"C-u")
+    time.sleep(0.3)
     return not visible()
 def paste(s,enter):
     b="mp-android-cancel-%d"%time.time_ns()
@@ -163,6 +164,8 @@ def finish(status):
     print("$CANCEL_PREFIX"+status)
     sys.exit(0)
 draft=visible()
+if "[Pasted text" in draft or "[Image #" in draft:
+    finish("draft_not_restorable")
 if draft and not clear():
     finish("box_not_clear")
 state=hint()
@@ -187,7 +190,7 @@ else:
         for k in keep:
             if not paste(k,True):
                 status="requeue_failed"
-if draft and status not in ("box_not_clear","queue_mismatch") and not visible():
+if draft and not visible():
     paste(draft,False)
 finish(status)
 """.trim()
