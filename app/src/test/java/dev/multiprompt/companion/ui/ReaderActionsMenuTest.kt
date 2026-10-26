@@ -154,4 +154,51 @@ class ReaderActionsMenuTest {
             compose.onNodeWithText(it).assertIsDisplayed()
         }
     }
+
+    @Test fun overflowMenuIsClusteredIntoShortGroupsWithSubPages() {
+        render(material3 = true)
+        openMenu()
+        listOf(
+            "Enter / approve", "Interrupt session", "Open live terminal", "Rename", "Remind me", "Waiting",
+            "Archive session", "Model and effort ›", "Display ›", "More ›", "End session", "Remove from list",
+        ).forEach { compose.onNodeWithText(it).assertIsDisplayed() }
+        listOf(
+            "Set effort: low", "Set effort: max", "Use Claude Opus", "Open model picker (/model)", "Sunlight mode on",
+            "Show terminal details", "Use default font size", "Release notes", "Estimate accuracy", "Dictation API key",
+            "Screencast2 upload key", "Already read",
+        ).forEach { compose.onNodeWithText(it).assertDoesNotExist() }
+    }
+
+    @Test fun modelAndEffortSubPageHoldsModelChoicesAndBackReturnsToTheMainMenu() {
+        render(material3 = true)
+        openMenu()
+        compose.onNodeWithText("Model and effort ›").performClick()
+        listOf("Open model picker (/model)", "Use Claude Opus", "Use Claude Sonnet", "Use Claude Fable", "Set effort: low", "Set effort: max")
+            .forEach { compose.onNodeWithText(it).assertIsDisplayed() }
+        compose.onNodeWithText("Enter / approve").assertDoesNotExist()
+        compose.onNodeWithText("‹ Model and effort").performClick()
+        compose.onNodeWithText("Enter / approve").assertIsDisplayed()
+        compose.onNodeWithText("Set effort: low").assertDoesNotExist()
+    }
+
+    @Test fun displayAndMoreSubPagesHoldTheRemainingOptions() {
+        render(material3 = true)
+        openMenu()
+        compose.onNodeWithText("Display ›").performClick()
+        listOf("Show terminal details", "Sunlight mode on", "Use default font size").forEach { compose.onNodeWithText(it).assertIsDisplayed() }
+        compose.onNodeWithText("‹ Display").performClick()
+        compose.onNodeWithText("More ›").performClick()
+        listOf("Release notes", "Estimate accuracy", "Copy raw transcript", "Dictation API key", "Screencast2 upload key")
+            .forEach { compose.onNodeWithText(it).assertIsDisplayed() }
+    }
+
+    @Test fun reopeningTheMenuAlwaysStartsOnTheMainPage() {
+        render(material3 = true)
+        openMenu()
+        compose.onNodeWithText("Display ›").performClick()
+        compose.onNodeWithText("Sunlight mode on").performClick()
+        openMenu()
+        compose.onNodeWithText("Enter / approve").assertIsDisplayed()
+        compose.onNodeWithText("Sunlight mode on").assertDoesNotExist()
+    }
 }
