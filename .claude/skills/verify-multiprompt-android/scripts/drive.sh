@@ -497,6 +497,7 @@ shot send-result
 tap_desc 'Session actions'
 shot enter-action
 tap_text 'Enter / approve'
+shot enter-tapped
 wait_receipt VERIFY_ENTER_528
 wait_for_text VERIFY_ENTER_528
 shot enter-result
