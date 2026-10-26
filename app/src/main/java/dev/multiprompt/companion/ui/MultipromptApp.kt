@@ -2526,6 +2526,7 @@ internal fun ReaderScreen(
     val dictationSubmissionStarted = remember(connection) { AtomicBoolean(false) }
     var pendingPromptAction by remember(connection) { mutableStateOf<Long?>(null) }
     var sendMarkPending by remember(connection) { mutableStateOf(false) }
+    var sentDraft by remember(connection) { mutableStateOf<SentDraft?>(null) }
     var menuExpanded by remember(connection) { mutableStateOf(false) }
     var apiKeyDialogVisible by remember(connection) { mutableStateOf(false) }
     var apiKeyDraft by remember(connection) { mutableStateOf("") }
@@ -2661,13 +2662,21 @@ internal fun ReaderScreen(
     LaunchedEffect(reader.completedActions) {
         val pending = pendingPromptAction
         if (pending != null && reader.completedActions > pending) {
-            setPrompt("")
-            imageAttachments = emptyList()
+            sentDraft = null
             pendingPromptAction = null
         }
     }
     LaunchedEffect(reader.actionError) {
-        if (reader.actionError != null) pendingPromptAction = null
+        if (reader.actionError != null) {
+            pendingPromptAction = null
+            sentDraft?.let { draft ->
+                setPrompt(draft.restoredPrompt(prompt))
+                imageAttachments = draft.restoredImages(imageAttachments)
+                attachedSkill = attachedSkill ?: draft.skill
+                replyTo = replyTo ?: draft.replyTo
+            }
+            sentDraft = null
+        }
     }
     LaunchedEffect(prompt, sendMarkPending) {
         if (sendMarkPending && prompt.isEmpty()) {
@@ -2708,14 +2717,18 @@ internal fun ReaderScreen(
             pendingPromptAction == null
         ) {
             val actionCount = reader.completedActions
+            val draft = SentDraft(prompt, imageAttachments, attachedSkill, replyTo)
             if (connection.sendPrompt(composedPrompt)) {
                 SendTiming.mark("message_added")
+                sentDraft = draft
+                setPrompt("")
+                imageAttachments = emptyList()
+                attachedSkill = null
+                replyTo = null
                 sendMarkPending = true
                 onSessionInteraction()
                 onSessionInput()
                 pendingPromptAction = actionCount
-                attachedSkill = null
-                replyTo = null
             }
         }
     }
@@ -2761,7 +2774,11 @@ internal fun ReaderScreen(
                     pendingPromptAction == null
                 ) {
                     val actionCount = reader.completedActions
+                    val draft = SentDraft(finalPrompt, imageAttachments, null, replyTo)
                     if (connection.sendPrompt(composedPrompt)) {
+                        sentDraft = draft
+                        setPrompt("")
+                        imageAttachments = emptyList()
                         onSessionInteraction()
                         onSessionInput()
                         pendingPromptAction = actionCount

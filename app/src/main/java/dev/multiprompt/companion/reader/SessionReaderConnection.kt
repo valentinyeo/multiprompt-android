@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -374,6 +375,8 @@ class SessionReaderConnection(
                 }
             }
             _state.update { it.copy(completedActions = it.completedActions + 1) }
+        } catch (timeout: TimeoutCancellationException) {
+            _state.update { it.copy(actionError = "The send timed out") }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (throwable: Throwable) {
