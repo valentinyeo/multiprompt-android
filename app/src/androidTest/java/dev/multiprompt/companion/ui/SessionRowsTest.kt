@@ -55,7 +55,8 @@ class SessionRowsTest {
     ))
 
     private fun render() {
-        compose.activity.setContent {
+        compose.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
             SessionsScreen(
                 state = state.value, signedIn = true, onSignIn = {}, onSignOut = {},
                 onOpen = { opened = it.name }, onOpenTerminal = {}, onArchive = {}, onArchiveUntil = { _, _ -> },
@@ -69,6 +70,7 @@ class SessionRowsTest {
                 readerDefaultFontScale = 1f, onSetReaderDefaultFontScale = {}, crashReport = null,
                 onClearCrashReport = {}, onAddHost = {}, material3 = false, nowMillis = { 1_800_000_000_000 },
             )
+            }
         }
     }
 
