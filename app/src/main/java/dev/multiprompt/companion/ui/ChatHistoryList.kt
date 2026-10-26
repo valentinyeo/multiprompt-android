@@ -11,26 +11,26 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.reader.ChatHistoryMessage
-import dev.multiprompt.companion.reader.QueuedMessages
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -55,8 +55,9 @@ internal fun ChatHistoryView(
 ) {
     val history = remember(connection, agent, workingDirectory) { connection.chatHistory(agent, workingDirectory) }
     val state by history.state.collectAsState()
-    val transcript = remember(state.history) { state.history.messages.map { it.transcript() } }
-    val queued = QueuedMessages.pending(transcript, reader.screenOutput, agent, reader.sentRecord, System.currentTimeMillis())
+    val messages = state.history.displayMessages(reader.screenOutput, agent, reader.sentRecord, System.currentTimeMillis())
+    SideEffect { history.awaitingMessages(messages.any { it.pending }) }
+    DisposableEffect(history) { onDispose { history.awaitingMessages(false) } }
     Column(modifier.fillMaxSize()) {
         if (state.retrying) {
             Text(
@@ -74,8 +75,7 @@ internal fun ChatHistoryView(
             ) { Text(option.label + if (option.current) " · current" else "") }
         }
         ChatHistoryList(
-            messages = state.history.messages,
-            queuedMessages = queued,
+            messages = messages,
             loaded = state.loaded,
             agent = agent,
             fontScale = fontScale,
@@ -97,7 +97,6 @@ internal fun ChatHistoryView(
 internal fun ChatHistoryList(
     messages: List<ChatHistoryMessage>,
     modifier: Modifier = Modifier,
-    queuedMessages: List<String> = emptyList(),
     loaded: Boolean = true,
     agent: AgentKind = AgentKind.CLAUDE,
     fontScale: Float = 1f,
@@ -114,7 +113,7 @@ internal fun ChatHistoryList(
     val nearTop by rememberUpdatedState(onNearTop)
     val atBottom = !listState.canScrollBackward
     val newest = messages.lastOrNull()
-    LaunchedEffect(newest?.key, newest?.text, queuedMessages) {
+    LaunchedEffect(newest?.key, newest?.text, newest?.pending) {
         if (atBottom) listState.scrollToItem(0)
     }
     LaunchedEffect(followRequest) {
@@ -135,25 +134,16 @@ internal fun ChatHistoryList(
         verticalArrangement = Arrangement.spacedBy(if (LocalReaderStyle.current) ReaderMessageSpacing else 10.dp),
         contentPadding = if (LocalReaderStyle.current) androidx.compose.foundation.layout.PaddingValues(top = ReaderFloatingInset + WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = ReaderMessageSpacing) else androidx.compose.foundation.layout.PaddingValues(),
     ) {
-        itemsIndexed(queuedMessages.asReversed(), key = { index, text -> "queued:$index:$text" }) { _, text ->
-            Column {
-                if (unreadMessageKey == "queued:${text.hashCode()}") {
-                    Text("New", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 8.dp))
-                }
-                HistoryBubble(text, "user", "Queued", fontScale, sunlight, replyGate, onReply,
-                    sessionName = sessionName, onMarkUnread = { onMarkUnread("queued:${text.hashCode()}") })
-            }
-        }
         items(messages.asReversed(), key = { it.key }, contentType = { it.role }) { message ->
             Column {
                 if (message.key == unreadMessageKey) {
                     Text("New", color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
                 }
-                HistoryBubble(message.text, message.role, "", fontScale, sunlight, replyGate, onReply,
+                HistoryBubble(message.text, message.role, message.pending, fontScale, sunlight, replyGate, onReply,
                     messageId = message.requestId, sessionName = sessionName, onMarkUnread = { onMarkUnread(message.key) })
             }
         }
-        if (messages.isEmpty() && queuedMessages.isEmpty()) {
+        if (messages.isEmpty()) {
             item(key = "empty") {
                 Text(if (loaded) "No messages yet" else "Loading conversation…", fontSize = fontSize,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp))
@@ -166,7 +156,7 @@ internal fun ChatHistoryList(
 private fun HistoryBubble(
     text: String,
     role: String,
-    note: String,
+    pending: Boolean,
     fontScale: Float,
     sunlight: Boolean,
     gate: ReplySwipeGate,
@@ -178,10 +168,11 @@ private fun HistoryBubble(
     val fontSize = chatFontSize((14f * fontScale).sp, fontScale)
     val isUser = role == "user"
     ReplyableBubble(isUser = isUser, sunlight = sunlight, text = text,
+        modifier = Modifier.alpha(if (pending) 0.5f else 1f),
         onReply = { onReply(it, isUser) }, gate = gate,
         messageId = messageId, sessionName = sessionName, onMarkUnread = onMarkUnread) {
-        if (note.isNotEmpty()) {
-            Text(note, fontFamily = chatFontFamily(), fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp,
+        if (pending) {
+            Text("Queued", fontFamily = chatFontFamily(), fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp,
                 color = chatHintColor(sunlight))
         }
         if (isUser) {

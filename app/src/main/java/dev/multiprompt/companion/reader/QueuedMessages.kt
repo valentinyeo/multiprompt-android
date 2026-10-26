@@ -43,12 +43,25 @@ object QueuedMessages {
         return queued
     }
 
-    private fun normalize(text: String): String = text.replace(WHITESPACE, " ").trim()
+    internal fun accepted(text: String, sentAtMillis: Long?, rows: List<ChatHistoryProtocol.Row>, afterOffset: Long = 0): Boolean {
+        val latest = rows.lastOrNull { row ->
+            val fact = row.settlement ?: return@lastOrNull false
+            val fresh = if (sentAtMillis != null) timestampMillis(row.timestamp)?.let { it >= sentAtMillis } == true
+                else row.offset >= afterOffset
+            fresh && fact.operation != ChatHistoryProtocol.QueueOperation.REJECTED &&
+                (normalize(text) == normalize(fact.content) || fact.content.isEmpty() && fact.operation in setOf(
+                    ChatHistoryProtocol.QueueOperation.DEQUEUE, ChatHistoryProtocol.QueueOperation.POP_ALL,
+                ))
+        }?.settlement ?: return false
+        return latest.operation != ChatHistoryProtocol.QueueOperation.ENQUEUE
+    }
+
+    internal fun normalize(text: String): String = text.replace(WHITESPACE, " ").trim()
 
     private fun matches(first: String, second: String): Boolean = first == second ||
         (minOf(first.length, second.length) >= 40 && (first.startsWith(second) || second.startsWith(first)))
 
-    private fun timestampMillis(timestamp: String?): Long? = try {
+    internal fun timestampMillis(timestamp: String?): Long? = try {
         timestamp?.let { Instant.parse(it).toEpochMilli() }
     } catch (_: DateTimeParseException) {
         null

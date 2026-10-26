@@ -1,6 +1,7 @@
 package dev.multiprompt.companion.reader
 
 import dev.multiprompt.companion.reader.ChatHistoryProtocol.Row
+import dev.multiprompt.companion.model.AgentKind
 
 data class ChatHistoryMessage(
     val key: String,
@@ -10,6 +11,7 @@ data class ChatHistoryMessage(
     val offset: Long,
     val end: Long,
     val requestId: String = "",
+    val pending: Boolean = false,
 ) {
     fun transcript(): TranscriptMessage = TranscriptMessage(role, timestamp.ifEmpty { null }, text)
 }
@@ -27,6 +29,7 @@ data class ChatHistory(
     val messages: List<ChatHistoryMessage> by lazy {
         val grouped = LinkedHashMap<String, ChatHistoryMessage>()
         for (row in rows) {
+            if (row.settlement != null) continue
             val key = "$sid:$inode:${row.role}:${row.id.ifEmpty { "@${row.offset}" }}"
             val previous = grouped[key]
             val text = when {
@@ -36,9 +39,20 @@ data class ChatHistory(
                 else -> previous.text + "\n" + row.text
             }
             grouped[key] = ChatHistoryMessage(key, row.role, text, previous?.timestamp ?: row.timestamp,
-                previous?.offset ?: row.offset, row.end, row.id)
+                previous?.offset ?: row.offset, row.end, row.id,
+                row.queued && !QueuedMessages.accepted(row.text, QueuedMessages.timestampMillis(row.timestamp), rows, row.offset))
         }
         grouped.values.toList()
+    }
+
+    fun displayMessages(screenOutput: String, agent: AgentKind,
+        sent: List<QueuedMessages.SentPrompt>, nowMillis: Long): List<ChatHistoryMessage> {
+        val echoes = QueuedMessages.pending(messages.map { it.transcript() }, screenOutput, agent, sent, nowMillis).map { text ->
+            val sentAt = sent.lastOrNull { QueuedMessages.normalize(it.text) == text }?.sentAtMillis
+            ChatHistoryMessage("queued:${text.hashCode()}", "user", text, "", 0, 0,
+                pending = !QueuedMessages.accepted(text, sentAt, rows))
+        }
+        return messages + echoes
     }
 
     fun apply(page: ChatHistoryProtocol.Page): ChatHistory {
