@@ -21,6 +21,15 @@ cat "build/approved-style/$phase/emulator.log"
 result=$(find app/build/outputs -type d -name approved-style -print -quit)
 test -n "$result"
 cp "$result"/* "build/approved-style/$phase/"
+python3 - "build/approved-style/$phase" <<'PYTHON'
+from pathlib import Path
+import runpy
+import sys
+verify = runpy.run_path('tools/check-day-theme-images.py')['verify_image']
+folder = Path(sys.argv[1])
+verify(folder / 'inbox.png', 'inbox')
+verify(folder / 'chat.png', 'chat')
+PYTHON
 if [ "$phase" = before ]; then
   test "$status" -ne 0
   grep -F 'APPROVED_STYLE:' "build/approved-style/$phase/emulator.log"

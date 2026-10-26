@@ -163,7 +163,7 @@ internal fun ChatHistoryList(
     var pendingJump by remember { mutableStateOf<ReplyJump?>(null) }
     var highlightedKey by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
-    LaunchedEffect(pendingJump, presentation.messages, hasOlder, loaded, question) {
+    LaunchedEffect(pendingJump, presentation.messages, hasOlder, loaded, question, working) {
         val request = pendingJump ?: return@LaunchedEffect
         val visible = presentation.messages
         val keys = visible.map { it.key }
