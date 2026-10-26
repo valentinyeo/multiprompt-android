@@ -17,6 +17,8 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.lifecycle.ViewModelProvider
+import dev.multiprompt.companion.MainViewModel
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
 import dev.multiprompt.companion.MainActivity
@@ -33,6 +35,10 @@ class ApprovedStyleTest {
         val output = File(checkNotNull(InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")), "approved-style").apply { mkdirs() }
         val problems = mutableListOf<String>()
         val samples = mutableListOf<String>()
+        compose.activityRule.scenario.onActivity { activity ->
+            ViewModelProvider(activity)[MainViewModel::class.java].setAppTheme(AppTheme.DARK)
+        }
+        compose.waitForIdle()
         for ((name, screen) in listOf("inbox" to FadeScreen.INBOX_LIST, "chat" to FadeScreen.SESSION)) {
             compose.activityRule.scenario.onActivity { activity ->
                 activity.setContent { FadeTestScreen(screen, material3 = false, sunlight = false) }
