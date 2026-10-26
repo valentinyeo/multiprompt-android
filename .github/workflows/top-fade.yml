@@ -63,7 +63,11 @@ jobs:
           if [ -f /tmp/top-fade-emulator.log ]; then
             cp /tmp/top-fade-emulator.log build/top-fade-diagnostics/emulator.txt
           fi
-          sudo cp /tmp/top-fade-{exit,tracer}.txt build/top-fade-diagnostics/
+          for file in /tmp/top-fade-exit.txt /tmp/top-fade-tracer.txt; do
+            if [ -f "$file" ]; then
+              sudo cp "$file" build/top-fade-diagnostics/
+            fi
+          done
           sudo dmesg -T > build/top-fade-diagnostics/kernel.txt
           free -m > build/top-fade-diagnostics/memory.txt
           ps -eo pid,ppid,stat,rss,args > build/top-fade-diagnostics/processes.txt
