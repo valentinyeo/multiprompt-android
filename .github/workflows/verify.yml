@@ -1,6 +1,12 @@
 name: Verify real Android UI
 
 on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'tools/native-skills.test.py'
+      - '.claude/skills/verify-multiprompt-android/**'
+      - '.github/workflows/verify.yml'
   workflow_dispatch:
     inputs:
       feature:
@@ -17,6 +23,7 @@ on:
           - chat-choices.md
           - chat-reactions.md
           - chat-queued.md
+          - native-skills.md
           - session-routing.md
           - terminal.md
       app_ref:
@@ -38,7 +45,7 @@ jobs:
     timeout-minutes: 35
     env:
       EVIDENCE: ${{ github.workspace }}/verification-evidence
-      VERIFY_FEATURE: ${{ inputs.feature }}
+      VERIFY_FEATURE: ${{ inputs.feature || 'native-skills.md' }}
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
       UPDATE_BASELINE_RUN: ${{ inputs.update_baseline_run }}
     steps:
@@ -131,7 +138,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: verify-${{ inputs.feature }}-${{ github.run_id }}
+          name: verify-${{ env.VERIFY_FEATURE }}-${{ github.run_id }}
           path: verification-evidence/
           if-no-files-found: error
           retention-days: 7

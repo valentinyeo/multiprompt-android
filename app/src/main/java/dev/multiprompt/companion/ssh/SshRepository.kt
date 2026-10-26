@@ -462,6 +462,17 @@ class SshRepository(private val secrets: SecretStorage) {
             }
         }
 
+    suspend fun nativeSkills(host: HostProfile, sessionName: String, script: ByteArray) =
+        withContext(Dispatchers.IO) {
+            withTimeout(CONNECTION_TIMEOUT_MS) {
+                withAuthenticatedClient(host) { client ->
+                    val result = execute(client, "python3 - ${TmuxParser.shellQuote(sessionName)}", stdin = script)
+                    result.requireSuccess("read this session’s native skills")
+                    dev.multiprompt.companion.skills.NativeSkills.parse(result.stdout)
+                }
+            }
+        }
+
     suspend fun renameSession(host: HostProfile, sessionName: String, displayName: String) =
         withContext(Dispatchers.IO) {
             withTimeout(CONNECTION_TIMEOUT_MS) {

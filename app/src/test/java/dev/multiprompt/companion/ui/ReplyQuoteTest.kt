@@ -1,7 +1,5 @@
 package dev.multiprompt.companion.ui
 
-import dev.multiprompt.companion.skills.Skill
-import dev.multiprompt.companion.skills.SkillModel
 import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -41,10 +39,9 @@ class ReplyQuoteTest {
 
     @Test
     fun skillMessageKeepsTheQuoteWithTheDraft() {
-        val skill = Skill("review", "Review", "Check it", "repo", "main")
         assertEquals(
-            "> Kraków\n\nmy answer\n\n/review\n\n<skill name=\"review\">\nCheck it\n</skill>",
-            SkillModel.composeMessage(ReplyQuote.compose("Kraków", "my answer"), skill),
+            "/review > Kraków\n\nmy answer",
+            PromptComposer.composeMessage("/review my answer", emptyList(), "Kraków", listOf(dev.multiprompt.companion.skills.NativeSkill("review", "Review"))),
         )
     }
     @Test

@@ -12,7 +12,6 @@ import dev.multiprompt.companion.data.WorkspaceStore
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.security.SecretStore
 import dev.multiprompt.companion.ssh.SshRepository
-import dev.multiprompt.companion.skills.SkillStore
 import dev.multiprompt.companion.account.AccountHttp
 import dev.multiprompt.companion.account.AccountHttpClient
 import dev.multiprompt.companion.account.DeviceApproval
@@ -49,7 +48,6 @@ class MultipromptApplication : Application() {
     val deepgramDictation by lazy { DeepgramDictation(this, secretStore) }
     val updateManager by lazy { UpdateManager(this) }
     val screencastUploader by lazy { ScreencastUploader(this, secretStore) }
-    val skillStore by lazy { SkillStore(this) }
     val accountHttp: AccountHttp by lazy { AccountHttpClient() }
     val syncAuth by lazy { SyncAuthManager(this, accountHttp) }
     val deviceKeyStore by lazy { DeviceKeyStore(secretStore) }

@@ -4,7 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class SentDraftTest {
-    private val draft = SentDraft("fix the build", listOf("https://example.com/a.png"), null, "quoted")
+    private val draft = SentDraft("fix the build", listOf("https://example.com/a.png"), "quoted")
 
     @Test
     fun failedSendPutsTheTextBackInAnEmptyBox() {
@@ -19,7 +19,7 @@ class SentDraftTest {
 
     @Test
     fun failedSendWithNoTextKeepsTheCurrentBox() {
-        assertEquals("typed later", SentDraft("", emptyList(), null, null).restoredPrompt("typed later"))
+        assertEquals("typed later", SentDraft("", emptyList(), null).restoredPrompt("typed later"))
     }
 
     @Test

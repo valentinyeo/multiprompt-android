@@ -38,6 +38,9 @@ data class ReaderState(
     val screenOutput: String = "",
     val runtimeDetails: TmuxText.RuntimeDetails = TmuxText.RuntimeDetails(),
     val modelPickerOptions: List<TmuxText.ModelPickerOption> = emptyList(),
+    val nativeSkills: List<dev.multiprompt.companion.skills.NativeSkill> = emptyList(),
+    val skillsLoading: Boolean = false,
+    val skillsError: String? = null,
     val status: ReaderStatus = ReaderStatus.Connecting,
     val sending: Boolean = false,
     val actionError: String? = null,
@@ -110,6 +113,21 @@ class SessionReaderConnection(
             }
         }
         startStream()
+    }
+
+    fun loadSkills(script: ByteArray) {
+        if (agent != AgentKind.CLAUDE) return
+        _state.update { it.copy(skillsLoading = true, skillsError = null) }
+        scope.launch {
+            try {
+                val skills = repository.nativeSkills(host, tmuxSessionName, script)
+                _state.update { it.copy(nativeSkills = skills, skillsLoading = false) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _state.update { it.copy(skillsLoading = false, skillsError = "Could not load this session’s skills") }
+            }
+        }
     }
 
     fun sendPrompt(text: String): Boolean {

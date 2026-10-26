@@ -52,7 +52,7 @@ class SessionInputTest {
                 val visibleSession = if (switched) f.session.copy(name = "two") else f.session
                 ReaderScreen(
                     connection = visibleConnection, dictation = f.app.deepgramDictation,
-                    screencast = f.app.screencastUploader, skills = f.app.skillStore,
+                    screencast = f.app.screencastUploader,
                     signedIn = true, onSignIn = {}, onSignOut = {}, session = visibleSession,
                     unread = false, archived = false, initialFontScale = 1f,
                     onBack = {}, onMarkRead = {}, onArchiveToggle = {}, onRemind = {},

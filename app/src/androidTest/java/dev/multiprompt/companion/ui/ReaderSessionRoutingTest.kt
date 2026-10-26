@@ -48,7 +48,7 @@ class ReaderSessionRoutingTest {
             compose.setContent {
                 val connection = if (switched) second else first
                 ReaderScreen(connection = connection, dictation = app.deepgramDictation,
-                    screencast = app.screencastUploader, skills = app.skillStore,
+                    screencast = app.screencastUploader,
                     signedIn = true, onSignIn = {}, onSignOut = {}, session = if (switched) b else a,
                     unread = false, archived = false, initialFontScale = 1f,
                     onBack = {}, onMarkRead = {}, onArchiveToggle = {}, onRemind = {},
