@@ -40,29 +40,29 @@ val ChatFontFamily = FontFamily(
 )
 
 internal val ReaderBackground = Color(0xFF101010)
-internal val ReaderCard = Color(0xFF242424)
+internal val ReaderCard = Color(0xFF1E1E1E)
 internal val ReaderUserCard = Color(0xFF3A3A3A)
-internal val ReaderControl = Color(0xFF303030)
-internal val ReaderOutline = Color(0xFF8A8A8A)
+internal val ReaderControl = Color(0xFF1F1F1F)
+internal val ReaderOutline = Color(0xFF2E2E2E)
 internal val ReaderOutlineWidth = 1.dp
 internal val ReaderMenuShape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
 internal val ReaderForeground = Color(0xFFF2F2F2)
-internal val ReaderHint = Color(0xFFA5A5A5)
-internal val ReaderChoiceBlue = Color(0xFF8AB4F8)
+internal val ReaderHint = Color(0xFF8A8A8A)
+internal val ReaderChoiceBlue = Color(0xFF89B4F8)
 internal val ReaderChoiceBackground = Color(0xFF156FD1)
 internal val ReaderBadgeForeground = Color(0xFFFFFFFF)
 internal val ReaderBadgeShape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
-internal val ReaderCardShape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp)
+internal val ReaderCardShape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
 internal val ReaderComposerShape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
 internal val ReaderCardPadding = 16.dp
 internal val ReaderScreenPadding = 12.dp
-internal val ReaderMessageSpacing = 12.dp
+internal val ReaderMessageSpacing = 6.dp
 internal val ReaderControlSize = 48.dp
 internal val ReaderControlSpacing = 8.dp
 internal val ReaderComposerHeight = 56.dp
 internal val ReaderSendSize = 40.dp
 internal val ReaderJumpSize = 40.dp
-internal val ReaderFloatingInset = 72.dp
+internal val ReaderFloatingInset = 96.dp
 internal val ReaderTextSize = 16.sp
 internal val ReaderLineHeight = 26.sp
 internal val ReaderMetaTextSize = 12.sp
@@ -274,9 +274,10 @@ fun MultipromptTheme(
             Material3DarkColors.copy(
                 background = ReaderBackground, surface = ReaderBackground,
                 onBackground = ReaderForeground, onSurface = ReaderForeground,
-                surfaceContainer = ReaderCard, surfaceContainerHigh = ReaderCard,
+                surfaceContainer = ReaderControl, surfaceContainerHigh = ReaderControl,
                 surfaceContainerHighest = ReaderControl,
                 surfaceVariant = ReaderCard, onSurfaceVariant = ReaderHint,
+                outline = ReaderOutline, outlineVariant = ReaderOutline,
                 primary = ReaderChoiceBlue, onPrimary = ReaderBackground,
             )
         }

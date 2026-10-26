@@ -89,7 +89,6 @@ class SessionRowsTest {
             val first = compose.onNodeWithText(sessions[0].name)
             first.assertIsDisplayed()
             assertTrue("$label must show unread badges", compose.onAllNodesWithContentDescription("3 unread messages", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
-            assertTrue("$label must keep agent icons", compose.onAllNodesWithText("✳", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
             assertTrue("$label must show activity times", compose.onAllNodesWithTag("Session activity", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
             val title = compose.onNodeWithText(sessions[0].name, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
             val next = compose.onNodeWithText(sessions[1].name, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot

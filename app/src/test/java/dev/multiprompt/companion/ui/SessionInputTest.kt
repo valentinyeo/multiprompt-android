@@ -69,7 +69,7 @@ class SessionInputTest {
 
     @Test fun composerSendStampsInputButEditingTheDraftDoesNot() {
         render()
-        compose.onNodeWithText("Message this session").performTextInput("hello")
+        compose.onNodeWithText("Message ${if (switched) "two" else f.session.displayName}").performTextInput("hello")
         compose.runOnIdle { assertNull(input()) }
         val before = System.currentTimeMillis()
         compose.onNodeWithContentDescription("Send prompt").performClick()
@@ -119,7 +119,7 @@ class SessionInputTest {
         val dictation = f.field<MutableStateFlow<DictationState>>(f.app.deepgramDictation, "_state")
         repeat(4) { index ->
             compose.runOnIdle { switched = index % 2 == 0 }
-            compose.onNodeWithText("Message this session").performTextInput("typed $index")
+            compose.onNodeWithText("Message ${if (switched) "two" else f.session.displayName}").performTextInput("typed $index")
             compose.onNodeWithContentDescription("Send prompt").performClick()
             compose.runOnIdle {
                 val visible = if (switched) other else connection
@@ -150,7 +150,7 @@ class SessionInputTest {
         compose.runOnIdle { dictation.value = DictationState(DictationStatus.LISTENING, "only for one", true, sessionKey = "${f.host.id}::one") }
         compose.runOnIdle { switched = true }
         compose.onNodeWithText("only for one").assertDoesNotExist()
-        compose.onNodeWithText("Message this session").performTextInput("only for two")
+        compose.onNodeWithText("Message ${if (switched) "two" else f.session.displayName}").performTextInput("only for two")
         compose.onNodeWithContentDescription("Send prompt").performClick()
         compose.runOnIdle {
             assertTrue(connection.state.value.sentPrompts.isEmpty())
@@ -173,7 +173,7 @@ class SessionInputTest {
             assertTrue(connection.state.value.sentPrompts.isEmpty())
             assertTrue(other.state.value.sentPrompts.isEmpty())
         }
-        compose.onNodeWithText("Message this session").performTextInput("only for two")
+        compose.onNodeWithText("Message ${if (switched) "two" else f.session.displayName}").performTextInput("only for two")
         compose.onNodeWithContentDescription("Send prompt").performClick()
         compose.runOnIdle { assertEquals(listOf("only for two"), other.state.value.sentPrompts) }
     }

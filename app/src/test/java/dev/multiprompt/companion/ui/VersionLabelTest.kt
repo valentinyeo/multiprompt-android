@@ -208,9 +208,15 @@ class VersionLabelTest {
     }
 
     @Test
-    fun inboxVersionDoesNotDisplaceTitleOrMenuAndOpensReleaseNotes() {
+    fun inboxVersionLivesInMenuAndOpensReleaseNotes() {
         render { inbox() }
-        verifyThemes("inbox", "Inbox", "Session list actions")
+        listOf(false, true).forEachIndexed { index, light ->
+            compose.runOnIdle { sunlight.value = light }
+            compose.onNodeWithTag("app-version").assertDoesNotExist()
+            compose.onNodeWithContentDescription("Session list actions").performClick()
+            compose.onNodeWithTag("app-version").assertIsDisplayed().performClick()
+            compose.runOnIdle { assertEquals(index + 1, clicks) }
+        }
     }
 
     @Test
@@ -220,7 +226,8 @@ class VersionLabelTest {
         val menuWidth = initialMenu.right - initialMenu.left
         listOf(SessionBucket.OPEN to "Inbox", SessionBucket.WAITING to "Waiting", SessionBucket.ARCHIVE to "Archive").forEach { (bucket, title) ->
             compose.runOnIdle { inboxState.value = AppUiState(sessionBucket = bucket, refreshing = true) }
-            checkLayout(title, "Session list actions")
+            compose.onNodeWithText(title).assertIsDisplayed()
+            compose.onNodeWithTag("app-version").assertDoesNotExist()
             val menu = compose.onNodeWithContentDescription("Session list actions").getUnclippedBoundsInRoot()
             val root = compose.onRoot().getUnclippedBoundsInRoot()
             assertEquals("$title menu must retain its full width", menuWidth, menu.right - menu.left)

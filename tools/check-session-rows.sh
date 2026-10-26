@@ -17,7 +17,19 @@ run_rows() {
   cp "$result"/* "build/session-rows/$phase/"
   return "$status"
 }
-git diff 5204eda bb4192b -- "$file" | git apply --reverse --include="$file"
+python3 - "$file" <<'PYTHON'
+from pathlib import Path
+import subprocess
+import sys
+path = Path(sys.argv[1])
+current = path.read_text()
+old = subprocess.check_output(['git', 'show', '5204eda:' + str(path)], text=True)
+start = 'private fun SessionCard('
+end = '@Composable\nprivate fun DissolvedSessionCard('
+original = old[old.index(start):old.index(end)]
+original = original.replace('workspaceName: String?,', 'workspaceName: String? = null,').replace('etaLabel: String?,', 'etaLabel: String? = null,')
+path.write_text(current[:current.index(start)] + original + current[current.index(end):])
+PYTHON
 if run_rows before; then
   echo 'Original rows unexpectedly passed' >&2
   exit 1

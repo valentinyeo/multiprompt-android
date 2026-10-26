@@ -5,12 +5,14 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -36,11 +38,13 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.reader.ChatReactions
 import dev.multiprompt.companion.reader.ReaderStatus
+import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.ssh.ClaudeQuestion
 import dev.multiprompt.companion.reader.ChatHistoryMessage
 import dev.multiprompt.companion.reader.ReaderState
@@ -67,6 +71,7 @@ internal fun ChatHistoryView(
     unreadMessageKey: String?,
     onMarkUnread: (String) -> Unit,
     onReaction: ((ChatHistoryMessage, ChatReactions.Emoji) -> Unit)? = null,
+    bottomPadding: Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
     val history = remember(connection, agent, workingDirectory) { connection.chatHistory(agent, workingDirectory) }
@@ -115,11 +120,16 @@ internal fun ChatHistoryView(
             onMarkUnread = onMarkUnread,
             onReaction = onReaction,
             collapsePendingReactions = reader.actionError == null,
+            working = reader.sending || TmuxText.readerBlocks(reader.screenOutput, agent).any {
+                it.kind == TmuxText.ReaderBlockKind.PROGRESS && isTransientProgress(it.text)
+            },
             onNearTop = history::nearTop,
             listState = listState,
             followRequest = followRequest,
             modifier = Modifier.weight(1f),
+            bottomPadding = bottomPadding,
         )
+
     }
 }
 
@@ -146,6 +156,8 @@ internal fun ChatHistoryList(
     hasOlder: Boolean = false,
     onReaction: ((ChatHistoryMessage, ChatReactions.Emoji) -> Unit)? = null,
     collapsePendingReactions: Boolean = true,
+    working: Boolean = false,
+    bottomPadding: Dp = 0.dp,
 ) {
     val presentation = remember(messages, agent, collapsePendingReactions) {
         if (agent == AgentKind.CLAUDE) ChatReactions.present(messages, collapsePendingReactions)
@@ -155,7 +167,7 @@ internal fun ChatHistoryList(
     var pendingJump by remember { mutableStateOf<ReplyJump?>(null) }
     var highlightedKey by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
-    LaunchedEffect(pendingJump, presentation.messages, hasOlder, loaded, question) {
+    LaunchedEffect(pendingJump, presentation.messages, hasOlder, loaded, question, working) {
         val request = pendingJump ?: return@LaunchedEffect
         val visible = presentation.messages
         val keys = visible.map { it.key }
@@ -165,7 +177,7 @@ internal fun ChatHistoryList(
         val source = ReplyQuote.sourceIndex(texts, before, request.reply.quoted)
         if (source != null) {
             highlightedKey = keys[source]
-            listState.scrollToItem(keys.lastIndex - source + if (question != null) 1 else 0)
+            listState.scrollToItem(keys.lastIndex - source + (if (question != null) 1 else 0) + (if (working) 1 else 0))
             pendingJump = null
         } else if (before < 0 || (!hasOlder && loaded)) {
             pendingJump = null
@@ -203,18 +215,21 @@ internal fun ChatHistoryList(
         state = listState,
         reverseLayout = true,
         verticalArrangement = Arrangement.spacedBy(if (LocalReaderStyle.current) ReaderMessageSpacing else 10.dp),
-        contentPadding = if (LocalReaderStyle.current) androidx.compose.foundation.layout.PaddingValues(top = ReaderFloatingInset + WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = ReaderMessageSpacing) else androidx.compose.foundation.layout.PaddingValues(),
+        contentPadding = if (LocalReaderStyle.current) androidx.compose.foundation.layout.PaddingValues(top = ReaderFloatingInset + WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = ReaderMessageSpacing + bottomPadding) else androidx.compose.foundation.layout.PaddingValues(bottom = bottomPadding),
     ) {
+        if (working) item(key = "working") { WorkingDots() }
         if (question != null) {
             item(key = "active-question") {
                 QuestionChoices(question, enabled = onQuestionChoice != null, error = questionError) { onQuestionChoice?.invoke(it) == true }
             }
         }
-        items(presentation.messages.asReversed(), key = { it.key }, contentType = { it.role }) { message ->
+        itemsIndexed(presentation.messages.asReversed(), key = { _, message -> message.key }, contentType = { _, message -> message.role }) { index, message ->
             Column {
                 if (message.key == unreadMessageKey) {
                     Text("New", color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
                 }
+                val previous = presentation.messages.getOrNull(presentation.messages.lastIndex - index - 1)
+                if (LocalReaderStyle.current && previous != null && previous.role != message.role) Spacer(Modifier.height(10.dp))
                 HistoryBubble(message.text, message.role, message.pending, fontScale, sunlight, replyGate, onReply,
                     messageId = message.requestId, sessionName = sessionName, onMarkUnread = { onMarkUnread(message.key) },
                     key = message.key, highlighted = highlightedKey == message.key,

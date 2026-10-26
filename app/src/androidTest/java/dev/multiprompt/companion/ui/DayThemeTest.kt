@@ -5,13 +5,12 @@ import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -99,17 +98,19 @@ class DayThemeTest {
             "chat" -> "Message 0"
             else -> error("Unknown screenshot: $name")
         }
-        compose.onNodeWithText(anchor, substring = name.endsWith("-chat"))
-            .assertIsDisplayed().captureToImage()
+        compose.onNodeWithText(anchor, substring = name.endsWith("-chat")).assertIsDisplayed().captureToImage()
         automation.waitForIdle(100, 5_000)
-        automation.takeScreenshot().let { bitmap ->
+        val screen = automation.takeScreenshot()
+        screen.let { bitmap ->
             if (sunlight && Color(bitmap.getPixel(bitmap.width / 2, 1)).luminance() < 0.9f) {
                 problems += "$name status surface stays dark"
             }
             File(output, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-            bitmap.recycle()
         }
-        if (!sunlight) return
+        if (!sunlight) {
+            screen.recycle()
+            return
+        }
         val textNodes = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsActions.GetTextLayoutResult), useUnmergedTree = true)
         var checked = 0
         textNodes.fetchSemanticsNodes().forEachIndexed { index, node ->
@@ -117,11 +118,15 @@ class DayThemeTest {
             val interaction = textNodes[index]
             if (node.boundsInRoot.width <= 0 || node.boundsInRoot.height <= 0) return@forEachIndexed
             interaction.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
-            val bitmap = interaction.captureToImage().asAndroidBitmap()
-            val pixels = IntArray(bitmap.width * bitmap.height)
-            bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+            val bounds = node.boundsInRoot
+            val position = node.positionOnScreen
+            val left = position.x.toInt().coerceIn(0, screen.width - 1)
+            val top = position.y.toInt().coerceIn(0, screen.height - 1)
+            val width = bounds.width.toInt().coerceIn(1, screen.width - left)
+            val height = bounds.height.toInt().coerceIn(1, screen.height - top)
+            val pixels = IntArray(width * height)
+            screen.getPixels(pixels, 0, width, left, top, width, height)
             val background = Color(pixels.asSequence().groupingBy { it }.eachCount().maxBy { it.value }.key)
-            bitmap.recycle()
             layouts.forEach { layout ->
                 val colors = listOf(layout.layoutInput.style.color) + layout.layoutInput.text.spanStyles.map { it.item.color }
                 colors.filter { it != Color.Unspecified }.forEach { foreground ->
@@ -134,6 +139,7 @@ class DayThemeTest {
                 }
             }
         }
+        screen.recycle()
         assertTrue("$name must measure rendered text", checked > 0)
         report += "$name checked=$checked"
     }

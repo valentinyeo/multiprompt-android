@@ -34,7 +34,9 @@ private fun Color.shifted(delta: Int): Color {
 }
 
 fun chatBubbleLook(fill: Color): ChatBubbleLook =
-    if (fill.luminance() < 0.5f) ChatBubbleLook(fill.shifted(8), fill, fill.shifted(12))
+    if (fill == ReaderUserCard) ChatBubbleLook(Color(0xFF414141), fill, Color(0xFF4A4A4A))
+    else if (fill == ReaderCard) ChatBubbleLook(Color(0xFF262626), fill, ReaderOutline)
+    else if (fill.luminance() < 0.5f) ChatBubbleLook(fill.shifted(8), fill, fill.shifted(12))
     else ChatBubbleLook(fill.shifted(6), fill, fill.shifted(-22))
 
 fun Modifier.chatBubbleSurface(fill: Color, shape: Shape): Modifier {

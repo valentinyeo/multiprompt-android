@@ -151,7 +151,7 @@ class InboxSearchKeyboardTest {
         assertTrue("First result must be fully inside the list", first.top >= viewport.top && first.bottom <= viewport.bottom)
         assertTrue("List must end above keyboard", viewport.bottom.value <= keyboardTop)
         val split = compose.onNodeWithText("All").getUnclippedBoundsInRoot()
-        assertEquals("Split bar must meet keyboard without duplicate navigation padding", keyboardTop, split.bottom.value, 1f)
+        assertEquals("Floating split bar keeps its 8dp keyboard gap", keyboardTop, split.bottom.value + 8f, 1f)
     }
 
     @Test
@@ -160,7 +160,9 @@ class InboxSearchKeyboardTest {
         compose.onNodeWithContentDescription("Close session search").performClick()
         val first = compose.onNodeWithText(newest).getUnclippedBoundsInRoot()
         val viewport = list().getUnclippedBoundsInRoot()
-        assertEquals("Non-search newest session remains at bottom", viewport.bottom.value, first.bottom.value + 4f, 1f)
+        val split = compose.onNodeWithText("All").getUnclippedBoundsInRoot()
+        assertEquals("Newest session stays just above floating filters", split.top.value - 8f, first.bottom.value + 4f, 1f)
+        assertTrue("List continues behind floating filters", viewport.bottom > split.bottom)
         val older = compose.onNodeWithText("match older").getUnclippedBoundsInRoot()
         assertTrue("Non-search order must stay reversed", older.bottom <= first.top)
     }
