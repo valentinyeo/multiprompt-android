@@ -406,6 +406,8 @@ private fun AppScreens(viewModel: MainViewModel) {
             onBack = viewModel::closeReader,
             onReleaseNotes = viewModel::openReleaseNotes,
             onMarkRead = viewModel::markReaderRead,
+            unreadMessageKey = state.readerUnreadMessageKey,
+            onMarkUnreadFrom = viewModel::markReaderUnreadFrom,
             onArchiveToggle = {
                 if (SessionReadStore.key(readerSession.hostId, readerSession.name) in
                     state.archivedSessionKeys
@@ -2485,6 +2487,8 @@ internal fun ReaderScreen(
     onShowEtaAccuracy: () -> Unit,
     onReleaseNotes: () -> Unit,
     material3: Boolean = LocalMaterial3.current,
+    unreadMessageKey: String? = null,
+    onMarkUnreadFrom: (String) -> Unit = {},
 ) = key(connection) {
     MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
     val reader by connection.state.collectAsState()
@@ -3365,6 +3369,9 @@ internal fun ReaderScreen(
                 sunlight = sunlightMode,
                 replyGate = replyGate,
                 onReply = chooseReply,
+                sessionName = session.displayName,
+                unreadMessageKey = unreadMessageKey,
+                onMarkUnread = onMarkUnreadFrom,
                 onSessionUsed = { onSessionInteraction(); onSessionInput() },
                 listState = chatListState,
                 followRequest = followRequest,
@@ -3607,12 +3614,15 @@ internal fun ReaderScreen(
                     val isUser = message.role == "user"
                     val bodyColor = chatTextColor(sunlightMode, isUser)
                     key(connection, message.role, message.timestamp, message.text) {
+                        if (unreadMessageKey == "transcript:${message.role}:${message.timestamp}:${message.text.hashCode()}") Text("New", color = MaterialTheme.colorScheme.primary)
                         ReplyableBubble(
                             isUser = isUser,
                             sunlight = sunlightMode,
                             text = message.text,
                             onReply = { chooseReply(it, isUser) },
                             gate = replyGate,
+                            sessionName = session.displayName,
+                            onMarkUnread = { onMarkUnreadFrom("transcript:${message.role}:${message.timestamp}:${message.text.hashCode()}") },
                         ) {
                             if (isUser) {
                                 ChatLinkText(message.text) { line ->
@@ -3681,12 +3691,15 @@ internal fun ReaderScreen(
                                 .takeWhile { it.kind == TmuxText.ReaderBlockKind.PROSE }
                             val text = run.joinToString("\n\n") { it.text }
                             key(connection, blockKey) {
+                                if (unreadMessageKey == "block:${blockKey.hashCode()}") Text("New", color = MaterialTheme.colorScheme.primary)
                                 ReplyableBubble(
                                     isUser = false,
                                     sunlight = sunlightMode,
                                     text = text,
                                     onReply = { chooseReply(it, false) },
                                     gate = replyGate,
+                                    sessionName = session.displayName,
+                                    onMarkUnread = { onMarkUnreadFrom("block:${blockKey.hashCode()}") },
                                 ) {
                                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         run.forEach { part ->
@@ -3705,12 +3718,15 @@ internal fun ReaderScreen(
                             }
                         }
                         TmuxText.ReaderBlockKind.USER_PROMPT -> key(connection, blockKey) {
+                            if (unreadMessageKey == "block:${blockKey.hashCode()}") Text("New", color = MaterialTheme.colorScheme.primary)
                             ReplyableBubble(
                                 isUser = true,
                                 sunlight = sunlightMode,
                                 text = block.text,
                                 onReply = { chooseReply(it, true) },
                                 gate = replyGate,
+                                sessionName = session.displayName,
+                                onMarkUnread = { onMarkUnreadFrom("block:${blockKey.hashCode()}") },
                             ) {
                                 ChatLinkText(block.text) { line ->
                                     Text(

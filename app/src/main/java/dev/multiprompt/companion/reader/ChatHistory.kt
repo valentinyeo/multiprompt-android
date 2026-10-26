@@ -9,6 +9,7 @@ data class ChatHistoryMessage(
     val timestamp: String,
     val offset: Long,
     val end: Long,
+    val requestId: String = "",
 ) {
     fun transcript(): TranscriptMessage = TranscriptMessage(role, timestamp.ifEmpty { null }, text)
 }
@@ -35,7 +36,7 @@ data class ChatHistory(
                 else -> previous.text + "\n" + row.text
             }
             grouped[key] = ChatHistoryMessage(key, row.role, text, previous?.timestamp ?: row.timestamp,
-                previous?.offset ?: row.offset, row.end)
+                previous?.offset ?: row.offset, row.end, row.id)
         }
         grouped.values.toList()
     }

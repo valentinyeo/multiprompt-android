@@ -2,6 +2,8 @@ package dev.multiprompt.companion.data
 
 import android.app.Application
 import dev.multiprompt.companion.model.TmuxSession
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -15,6 +17,22 @@ class UnreadCountStoreTest {
     private val context = RuntimeEnvironment.getApplication()
     private val session = TmuxSession("host", "claude", 1, 0, 20, preview = "❯")
     private val counted = UnreadCount.State(3, 20, 20, false)
+
+    @Test
+    fun unreadMessageBoundarySurvivesRecreationAndClearsWithRead() {
+        val store = SessionReadStore(context)
+        store.markRead(session)
+        store.markUnreadFrom(session, "transcript-message")
+        val reopened = SessionReadStore(context)
+        assertTrue(reopened.isUnread(session))
+        assertEquals("transcript-message", reopened.unreadMessageKey(session))
+        assertEquals(1, reopened.unreadCountState(session).count)
+        reopened.markRead(session)
+        assertNull(SessionReadStore(context).unreadMessageKey(session))
+        store.markUnreadFrom(session, "transcript-message")
+        store.removeHost(session.hostId)
+        assertNull(SessionReadStore(context).unreadMessageKey(session))
+    }
 
     @Test
     fun stateSurvivesStoreRecreationAndReadClearsIt() {

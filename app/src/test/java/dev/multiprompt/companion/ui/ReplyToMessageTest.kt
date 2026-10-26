@@ -137,7 +137,7 @@ class ReplyToMessageTest {
         harness()
         compose.onNodeWithTag("user").performTouchInput { longClick() }
         compose.onNodeWithText("Copy").assertIsDisplayed()
-        compose.onNodeWithText("Select text").assertIsDisplayed()
+        compose.onNodeWithText("Select Text").assertIsDisplayed()
         compose.onNodeWithText("Reply").performClick()
         compose.onNodeWithText("Reply to You").assertIsDisplayed()
     }
@@ -187,7 +187,7 @@ class ReplyToMessageTest {
         harness()
         compose.onNodeWithTag("user").assert(SemanticsMatcher.expectValue(ReplySelectable, false))
         compose.onNodeWithTag("user").performTouchInput { longClick() }
-        compose.onNodeWithText("Select text").performClick()
+        compose.onNodeWithText("Select Text").performClick()
         compose.onNodeWithTag("user").assert(SemanticsMatcher.expectValue(ReplySelectable, true))
         compose.onNodeWithTag("agent").assert(SemanticsMatcher.expectValue(ReplySelectable, false))
         compose.onNodeWithText("Reply").assertDoesNotExist()

@@ -44,6 +44,7 @@ class ChatHistoryMergeTest {
             val history = client.all()
             assertTrue(client.pages > 1)
             assertEquals(720, history.messages.size)
+            assertEquals((0 until 720).map { "message-$it" }, history.messages.map { it.requestId })
             assertEquals(expected, history.messages.map { it.text })
             assertEquals(expected.first(), history.messages.first().text)
             assertEquals(720, history.messages.map { it.key }.toSet().size)
