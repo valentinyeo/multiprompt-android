@@ -1,6 +1,8 @@
 import re
 import subprocess
 import sys
+import tempfile
+from PIL import Image
 from pathlib import Path
 
 
@@ -19,6 +21,18 @@ def verify_image(path, screen):
     )
     text = " ".join(re.findall(r"[a-z0-9]+", result.stdout.lower()))
     missing = [label for label in SCREENS[screen] if label not in text]
+    if missing:
+        with Image.open(path) as image:
+            for width_fraction in (.4, .8):
+                with tempfile.NamedTemporaryFile(suffix=".png") as header:
+                    image.crop((0, int(image.height * .03), int(image.width * width_fraction), int(image.height * .13))).save(header.name)
+                    result = subprocess.run(
+                        ["tesseract", header.name, "stdout", "--psm", "6"], check=True, capture_output=True, text=True
+                    )
+                    text += " " + " ".join(re.findall(r"[a-z0-9]+", result.stdout.lower()))
+                missing = [label for label in SCREENS[screen] if label not in text]
+                if not missing:
+                    break
     if missing:
         raise ValueError(f"{path}: missing expected {screen} text: {missing}; OCR: {text}")
     print(f"NAMED_SCREEN_OK {path.name} {screen}")
