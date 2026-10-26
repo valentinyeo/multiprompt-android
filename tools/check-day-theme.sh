@@ -12,6 +12,10 @@ run_theme() {
   test -n "$result"
   mkdir -p "build/day-theme/$label"
   cp "$result"/* "build/day-theme/$label/"
+  if [ "$label" = after ] && [ "$status" -ne 0 ]; then
+    failure=$(grep -m 1 -E '(^e:|DAY_THEME_CONTRAST)' "build/day-theme/$label.log" || tail -n 1 "build/day-theme/$label.log")
+    printf '::error title=Day theme proof::%s\n' "$failure"
+  fi
   return "$status"
 }
 if [ -n "${DAY_THEME_BASE_REF:-}" ]; then
