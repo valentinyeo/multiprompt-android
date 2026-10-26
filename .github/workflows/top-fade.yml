@@ -47,8 +47,12 @@ jobs:
           api-level: 35
           arch: x86_64
           profile: pixel_6
+          ram-size: 2048M
           disable-animations: true
           script: tools/top-fade-proof.sh
+      - name: Report emulator memory failures
+        if: failure()
+        run: sudo dmesg -T | grep -Ei "out of memory|oom|killed process" || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
