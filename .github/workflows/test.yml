@@ -171,7 +171,7 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: bash tools/check-session-rows.sh
+          script: bash tools/check-session-rows.sh && bash tools/check-approved-style.sh
         env:
           GRADLE: gradle
       - uses: actions/upload-artifact@v4
@@ -179,6 +179,7 @@ jobs:
         with:
           name: session-rows-emulator
           path: |
+            build/approved-style/
             build/session-rows/
             app/build/reports/androidTests/connected
           if-no-files-found: error
