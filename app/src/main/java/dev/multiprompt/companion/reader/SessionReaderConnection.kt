@@ -362,10 +362,11 @@ class SessionReaderConnection(
             val key = QueuedMessages.normalize(request.text)
             _state.update { current ->
                 if (outcome == CancelOutcome.CANCELLED) {
-                    val index = current.sentRecord.indexOfLast { QueuedMessages.normalize(it.text) == key }
+                    val recordIndex = current.sentRecord.indexOfLast { QueuedMessages.normalize(it.text) == key }
+                    val promptIndex = current.sentPrompts.indexOfLast { QueuedMessages.normalize(it) == key }
                     current.copy(
-                        sentRecord = if (index < 0) current.sentRecord else current.sentRecord.filterIndexed { i, _ -> i != index },
-                        sentPrompts = current.sentPrompts.filter { QueuedMessages.normalize(it) != key },
+                        sentRecord = current.sentRecord.filterIndexed { i, _ -> i != recordIndex },
+                        sentPrompts = current.sentPrompts.filterIndexed { i, _ -> i != promptIndex },
                     )
                 } else {
                     current.copy(actionError = "Claude already took this message, so it cannot be cancelled")

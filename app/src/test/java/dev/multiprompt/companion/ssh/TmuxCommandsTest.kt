@@ -239,7 +239,12 @@ class TmuxCommandsTest {
         val stuck = runCatching { QueueCancel.parse(TmuxCommands.CANCEL_PREFIX + "box_not_clear\n") }.exceptionOrNull()
         val silent = runCatching { QueueCancel.parse("Traceback (most recent call last)\n") }.exceptionOrNull()
 
+        val unsupported = runCatching { QueueCancel.parse(TmuxCommands.CANCEL_PREFIX + "unsupported\n") }.exceptionOrNull()
+        val changed = runCatching { QueueCancel.parse(TmuxCommands.CANCEL_PREFIX + "queue_mismatch\n") }.exceptionOrNull()
+
         assertTrue(stuck is SshProblem.Connection)
         assertTrue(silent is SshProblem.Connection)
+        assertTrue(unsupported is SshProblem.Connection)
+        assertTrue(changed is SshProblem.Connection)
     }
 }

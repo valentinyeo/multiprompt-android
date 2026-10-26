@@ -29,6 +29,7 @@ finish() {
     trap - EXIT
     set +e
     shot "exit-$code"
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-exit.txt" 2>&1
     timeout 15s adb logcat -d > "$EVIDENCE/logcat.txt"
     printf 'DRIVER EXIT: %s\n' "$code"
     exit "$code"

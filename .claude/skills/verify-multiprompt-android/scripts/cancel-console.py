@@ -52,11 +52,12 @@ pasting = False
 
 def render():
     rows = box.split("\n") if box else [""]
-    lines = ["Claude Code", "VERIFY_READY_1010", "Ready for cancel tests.", "❯ " + rows[0]]
+    first = rows[0]
+    if queue and not box:
+        first = "\x1b[2mPress up to edit queued messages\x1b[0m"
+    lines = ["Claude Code", "VERIFY_READY_1010", "Ready for cancel tests.", "❯ " + first]
     lines += ["  " + row for row in rows[1:]]
     lines.append("─" * 60)
-    if queue:
-        lines.append("  Press up to edit queued messages")
     sys.stdout.write("\x1b[2J\x1b[H" + "\r\n".join(lines) + "\r\n")
     sys.stdout.flush()
 

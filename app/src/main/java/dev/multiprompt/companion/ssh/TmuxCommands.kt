@@ -88,62 +88,108 @@ object TmuxCommands {
         "python3 -c '$CANCEL_PYTHON' ${target(sessionName)} 2>&1"
 
     private val CANCEL_PYTHON = """
-import json,subprocess,sys,time
+import json,re,subprocess,sys,time
 t=sys.argv[1]
 q=json.load(sys.stdin)
+text=q["text"]
+keep=q["keep"]
 def tmux(*a,data=None):
     return subprocess.run(["tmux"]+list(a),input=data,capture_output=True,timeout=8)
-def box():
-    out=tmux("capture-pane","-p","-J","-t",t).stdout.decode("utf-8","replace").splitlines()
-    starts=[i for i,l in enumerate(out) if l.startswith("\u276f")]
+def cells(line):
+    out=[]
+    dim=False
+    for m in re.finditer(r"\x1b\[([0-9;]*)m|\x1b\[[0-9;?]*[A-Za-z]|(.)",line):
+        if m.group(2) is not None:
+            out.append((m.group(2),dim))
+        elif m.group(1) is not None:
+            codes=(m.group(1) or "0").split(";")
+            i=0
+            while i<len(codes):
+                c=codes[i]
+                if c in ("38","48"):
+                    i+=2 if i+1<len(codes) and codes[i+1]=="5" else 4
+                    continue
+                if c in ("","0","22"):
+                    dim=False
+                elif c=="2":
+                    dim=True
+                i+=1
+    return out
+def box_rows():
+    shown=tmux("capture-pane","-p","-e","-J","-t",t).stdout.decode("utf-8","replace").splitlines()
+    rows=[cells(l) for l in shown]
+    plain=["".join(c for c,_ in r) for r in rows]
+    starts=[i for i,l in enumerate(plain) if l.startswith("❯")]
     if not starts:
-        return ""
-    rows=[]
-    for l in out[starts[-1]:]:
-        if l.startswith("\u2500"):
+        return []
+    out=[]
+    for i in range(starts[-1],len(rows)):
+        if plain[i].startswith("─"):
             break
-        rows.append(l)
-    return " ".join(" ".join(rows)[1:].split())
+        out.append(rows[i])
+    return out
+def visible():
+    words=[]
+    for n,r in enumerate(box_rows()):
+        words.append("".join(c for c,d in (r[1:] if n==0 else r) if not d))
+    return " ".join(" ".join(words).split())
+def hint():
+    plain=" ".join("".join(c for c,_ in r) for r in box_rows())
+    if "select a queued message" in plain:
+        return "select"
+    return "edit" if "edit queued messages" in plain else "none"
 def flat(s):
     return "".join(s.split())
-def waiting():
-    return "edit queued messages" in tmux("capture-pane","-p","-J","-t",t).stdout.decode("utf-8","replace")
-def clear(text):
-    for _ in range(len(text)+2):
-        if not box():
+def matches(pulled):
+    f=flat(pulled)
+    if not f:
+        return False
+    return any("".join(flat(x) for x in keep[:i]+[text]+keep[i:])==f for i in range(len(keep)+1))
+def clear():
+    for _ in range(len(visible())+8):
+        if not visible():
             return True
         tmux("send-keys","-t",t,"C-u")
-    return not box()
-def paste(text,enter):
+    return not visible()
+def paste(s,enter):
     b="mp-android-cancel-%d"%time.time_ns()
-    tmux("load-buffer","-b",b,"-",data=text.encode("utf-8"))
-    tmux("paste-buffer","-dpr","-b",b,"-t",t)
-    if enter:
+    ok=tmux("load-buffer","-b",b,"-",data=s.encode("utf-8")).returncode==0
+    ok=ok and tmux("paste-buffer","-dpr","-b",b,"-t",t).returncode==0
+    if enter and ok:
         time.sleep(0.3)
-        tmux("send-keys","-t",t,"Enter")
+        ok=tmux("send-keys","-t",t,"Enter").returncode==0
+    return ok
 def finish(status):
     print("$CANCEL_PREFIX"+status)
     sys.exit(0)
-draft=box()
-if draft and not clear(draft):
+draft=visible()
+if draft and not clear():
     finish("box_not_clear")
-pulled=""
-if waiting():
+state=hint()
+status="ok"
+if state=="select":
+    status="unsupported"
+elif state=="none":
+    status="not_queued"
+else:
     tmux("send-keys","-t",t,"Up")
+    pulled=""
     for _ in range(20):
         time.sleep(0.1)
-        pulled=box()
+        pulled=visible()
         if pulled:
             break
-hit=bool(pulled) and flat(q["text"]) in flat(pulled)
-again=[k for k in q["keep"] if flat(k) in flat(pulled)]
-if pulled and not clear(pulled):
-    finish("box_not_clear")
-for k in again:
-    paste(k,True)
-if draft:
+    if not matches(pulled):
+        status="queue_mismatch"
+    elif not clear():
+        status="box_not_clear"
+    else:
+        for k in keep:
+            if not paste(k,True):
+                status="requeue_failed"
+if draft and status not in ("box_not_clear","queue_mismatch") and not visible():
     paste(draft,False)
-finish("ok" if hit else "not_queued")
+finish(status)
 """.trim()
 
     fun createClaudeSession(sessionName: String, remotePath: String): String =

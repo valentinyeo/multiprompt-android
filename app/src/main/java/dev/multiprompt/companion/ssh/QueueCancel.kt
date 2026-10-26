@@ -11,6 +11,8 @@ object QueueCancel {
             "ok" -> CancelOutcome.CANCELLED
             "not_queued" -> CancelOutcome.ALREADY_TAKEN
             null -> throw SshProblem.Connection("Could not cancel the message: the host did not answer")
+            "unsupported" -> throw SshProblem.Connection("This Claude version cannot cancel a queued message")
+            "queue_mismatch" -> throw SshProblem.Connection("Could not cancel the message: Claude's queue was not what the app expected, so the waiting messages are in Claude's prompt box")
             else -> throw SshProblem.Connection("Could not cancel the message: $status")
         }
     }
