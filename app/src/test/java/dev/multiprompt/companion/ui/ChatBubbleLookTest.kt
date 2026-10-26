@@ -16,6 +16,12 @@ class ChatBubbleLookTest {
     }
 
     @Test
+    fun approvedReaderBubblesKeepExactGradientAndOutline() {
+        assertEquals(ChatBubbleLook(Color(0xFF262626), Color(0xFF1E1E1E), Color(0xFF2E2E2E)), chatBubbleLook(ReaderCard))
+        assertEquals(ChatBubbleLook(Color(0xFF414141), Color(0xFF3A3A3A), Color(0xFF4A4A4A)), chatBubbleLook(ReaderUserCard))
+    }
+
+    @Test
     fun lightBubbleGetsDarkerOutlineAndLighterTop() {
         val look = chatBubbleLook(Color(0xFFF4F4F4))
         assertTrue(look.outline.luminance() < look.bottom.luminance())

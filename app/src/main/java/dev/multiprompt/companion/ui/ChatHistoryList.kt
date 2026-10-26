@@ -5,12 +5,14 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -41,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.reader.ChatReactions
 import dev.multiprompt.companion.reader.ReaderStatus
+import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.ssh.ClaudeQuestion
 import dev.multiprompt.companion.reader.ChatHistoryMessage
 import dev.multiprompt.companion.reader.ReaderState
@@ -120,6 +123,9 @@ internal fun ChatHistoryView(
             followRequest = followRequest,
             modifier = Modifier.weight(1f),
         )
+        if (reader.sending || TmuxText.readerBlocks(reader.screenOutput, agent).any {
+            it.kind == TmuxText.ReaderBlockKind.PROGRESS && isTransientProgress(it.text)
+        }) WorkingDots()
     }
 }
 
@@ -210,11 +216,13 @@ internal fun ChatHistoryList(
                 QuestionChoices(question, enabled = onQuestionChoice != null, error = questionError) { onQuestionChoice?.invoke(it) == true }
             }
         }
-        items(presentation.messages.asReversed(), key = { it.key }, contentType = { it.role }) { message ->
+        itemsIndexed(presentation.messages.asReversed(), key = { _, message -> message.key }, contentType = { _, message -> message.role }) { index, message ->
             Column {
                 if (message.key == unreadMessageKey) {
                     Text("New", color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
                 }
+                val previous = presentation.messages.getOrNull(presentation.messages.lastIndex - index - 1)
+                if (LocalReaderStyle.current && previous != null && previous.role != message.role) Spacer(Modifier.height(10.dp))
                 HistoryBubble(message.text, message.role, message.pending, fontScale, sunlight, replyGate, onReply,
                     messageId = message.requestId, sessionName = sessionName, onMarkUnread = { onMarkUnread(message.key) },
                     key = message.key, highlighted = highlightedKey == message.key,

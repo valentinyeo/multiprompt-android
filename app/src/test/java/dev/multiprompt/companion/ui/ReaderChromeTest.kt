@@ -146,7 +146,7 @@ class ReaderChromeTest {
             dictationState.value = DictationState(status = DictationStatus.LISTENING, configured = true, sessionKey = "${f.host.id}::${f.session.name}")
             dictationLevel.value = 0.7f
         }
-        compose.onNodeWithText("Message this session").assertDoesNotExist()
+        compose.onNodeWithText("Message ${f.session.displayName}").assertDoesNotExist()
         compose.onNodeWithContentDescription("Start dictation").assertDoesNotExist()
         compose.onNodeWithTag("dictation-stop").assertIsDisplayed()
         compose.onNodeWithTag("dictation-send").assertIsDisplayed()

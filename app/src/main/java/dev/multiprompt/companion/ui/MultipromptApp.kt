@@ -1613,7 +1613,10 @@ internal fun SessionsScreen(
                     Box {
                         TextButton(
                             onClick = { bucketMenuExpanded = true },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                            modifier = if (LocalReaderStyle.current) Modifier
+                                .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
+                                .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape) else Modifier,
                         ) {
                             Text(
                                 when (state.sessionBucket) {
@@ -1621,10 +1624,11 @@ internal fun SessionsScreen(
                                     SessionBucket.WAITING -> "Waiting"
                                     SessionBucket.ARCHIVE -> "Archive"
                                 },
+                                color = MaterialTheme.colorScheme.onSurface,
                                 style = if (LocalMaterial3.current) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
                                 fontWeight = if (LocalMaterial3.current) FontWeight.Normal else FontWeight.SemiBold,
                             )
-                            Icon(Icons.Default.ExpandMore, "Switch session bucket")
+                            Icon(Icons.Default.ExpandMore, "Switch session bucket", tint = MaterialTheme.colorScheme.onSurface)
                         }
                         DropdownMenu(
                             expanded = bucketMenuExpanded,
@@ -1654,17 +1658,6 @@ internal fun SessionsScreen(
                             CircularProgressIndicator(Modifier.padding(12.dp).size(20.dp), strokeWidth = 2.dp)
                         }
                         IconButton(
-                            enabled = !state.creatingSession,
-                            onClick = onStartNewSession,
-                            modifier = Modifier.roundOutlined(),
-                        ) {
-                            if (state.creatingSession) {
-                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                            } else {
-                                Icon(Icons.Default.Add, "New session")
-                            }
-                        }
-                        IconButton(
                             onClick = {
                                 searchVisible = !searchVisible
                                 if (!searchVisible) {
@@ -1679,10 +1672,17 @@ internal fun SessionsScreen(
                                 if (searchVisible) "Close session search" else "Search sessions",
                             )
                         }
-                        VersionLabel(
-                            onClick = onReleaseNotes,
-                            modifier = Modifier.weight(1f, fill = false),
-                        )
+                        IconButton(
+                            enabled = !state.creatingSession,
+                            onClick = onStartNewSession,
+                            modifier = Modifier.roundOutlined(),
+                        ) {
+                            if (state.creatingSession) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Default.Add, "New session")
+                            }
+                        }
                         InboxOverflowMenu(
                             signedIn = signedIn,
                             onSignIn = onSignIn,
@@ -1696,6 +1696,7 @@ internal fun SessionsScreen(
                             onRefresh = onRefresh,
                             onHosts = { onSelectSection(AppSection.HOSTS) },
                             onUpdate = { onSelectSection(AppSection.UPDATE) },
+                            onReleaseNotes = onReleaseNotes,
                         )
                     }
                 }
@@ -1796,15 +1797,12 @@ internal fun SessionsScreen(
         },
         bottomBar = {
             if (!LocalMaterial3.current) {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface)
-                        .navigationBarsPadding(),
-                ) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+                BottomFade {
                     Row(
-                        Modifier.fillMaxWidth().horizontalScroll(splitScrollState).padding(horizontal = 8.dp),
+                        Modifier.padding(horizontal = ReaderScreenPadding, vertical = 8.dp)
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                            .horizontalScroll(splitScrollState).padding(horizontal = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -1816,14 +1814,10 @@ internal fun SessionsScreen(
                                 else -> state.workspaces.firstOrNull { it.id == id }?.name.orEmpty()
                             }
                             val label: @Composable RowScope.() -> Unit = {
-                                if (id == FAVORITES_SPLIT_ID) {
-                                    FavoriteDot()
-                                    Spacer(Modifier.width(6.dp))
-                                }
-                                Text(name)
+                                Text(name, color = if (state.selectedWorkspaceId == id) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             if (state.selectedWorkspaceId == id) {
-                                FilledTonalButton(onClick = { onSelectWorkspace(id) }, content = label)
+                                androidx.compose.material3.FilledTonalButton(onClick = { onSelectWorkspace(id) }, colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(containerColor = if (sunlight) MaterialTheme.colorScheme.surfaceContainerHigh else Color(0xFF353535), contentColor = MaterialTheme.colorScheme.onSurface), content = label)
                             } else {
                                 TextButton(onClick = { onSelectWorkspace(id) }, content = label)
                             }
@@ -1840,9 +1834,8 @@ internal fun SessionsScreen(
         } else LazyColumn(
             Modifier
                 .fillMaxSize()
-                .padding(bottom = padding.calculateBottomPadding())
                 .horizontalSwipe(onSwitchWorkspace, PointerEventPass.Final),
-            contentPadding = PaddingValues(top = padding.calculateTopPadding() + 4.dp, bottom = 4.dp),
+            contentPadding = PaddingValues(top = padding.calculateTopPadding() + 4.dp, bottom = padding.calculateBottomPadding() + 4.dp),
             reverseLayout = normalizedQuery.isBlank() && state.newestSessionsAtBottom,
         ) {
             state.hostErrors.forEach { (hostId, error) ->
@@ -1989,10 +1982,10 @@ private fun ReminderDialog(
 }
 
 @Composable
-private fun Modifier.roundOutlined(): Modifier = if (LocalReaderStyle.current) {
+internal fun Modifier.roundOutlined(): Modifier = if (LocalReaderStyle.current) {
     size(ReaderControlSize)
         .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
-        .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f), CircleShape)
+        .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
 } else {
     this
 }
@@ -2095,7 +2088,7 @@ private fun SessionCard(
             session.displayName,
             modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodyLarge,
-            fontWeight = if (unread) FontWeight.Bold else FontWeight.Medium,
+            fontWeight = if (unread) FontWeight.Medium else FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -2137,20 +2130,14 @@ private fun SessionCard(
                         onLongClickLabel = "Session actions",
                         onLongClick = { menuExpanded = true },
                     )
-                    .heightIn(min = 56.dp)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .heightIn(min = 52.dp)
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                AgentIcon(session.agent)
                 title()
                 Text(
-                    DateUtils.getRelativeTimeSpanString(
-                        session.lastActivityEpochSeconds * 1000,
-                        System.currentTimeMillis(),
-                        DateUtils.MINUTE_IN_MILLIS,
-                        DateUtils.FORMAT_ABBREV_RELATIVE,
-                    ).toString(),
+                    sessionActivityLabel(session.lastActivityEpochSeconds, System.currentTimeMillis() / 1000),
                     modifier = Modifier.testTag("Session activity"),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp,
@@ -2327,19 +2314,22 @@ internal fun ReaderTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
             ) {
-                IconButton(onClick = onBack, modifier = Modifier.size(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)) {
+                IconButton(onClick = onBack, modifier = Modifier.roundOutlined()) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                 }
                 Text(
                     session.displayName,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
+                        .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onBackground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Box {
-                    IconButton(onClick = onMenuClick, modifier = Modifier.size(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)) {
+                    IconButton(onClick = onMenuClick, modifier = Modifier.roundOutlined()) {
                         Icon(Icons.Default.MoreVert, "Session actions")
                     }
                     menuContent()
@@ -3182,13 +3172,8 @@ internal fun ReaderScreen(
             )
         },
         bottomBar = {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(horizontal = ReaderScreenPadding, vertical = ReaderControlSpacing)
-                    .imePadding()
-                    .navigationBarsPadding(),
+            BottomFade(
+                Modifier.imePadding().padding(horizontal = ReaderScreenPadding, vertical = ReaderControlSpacing),
                 verticalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
             ) {
                 if (imageAttachments.isNotEmpty()) {
@@ -3296,10 +3281,11 @@ internal fun ReaderScreen(
                         OutlinedTextField(
                             value = promptField,
                             onValueChange = { promptField = it },
-                            modifier = Modifier.weight(1f).heightIn(min = ReaderComposerHeight).focusRequester(promptFocusRequester),
+                            modifier = Modifier.weight(1f).heightIn(min = ReaderComposerHeight)
+                                .border(1.dp, MaterialTheme.colorScheme.outline, ReaderComposerShape).focusRequester(promptFocusRequester),
                             filled = true,
                             placeholder = {
-                                Text("Message this session", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("Message ${session.displayName}", maxLines = 1, overflow = TextOverflow.Ellipsis)
                             },
                             minLines = 1,
                             maxLines = 6,
@@ -3343,9 +3329,7 @@ internal fun ReaderScreen(
                                         modifier = Modifier
                                             .minimumInteractiveComponentSize().size(ReaderSendSize)
                                             .background(
-                                                if (LocalMaterial3.current || sendEnabled) MaterialTheme.colorScheme.primary else {
-                                                    MaterialTheme.colorScheme.surfaceVariant
-                                                },
+                                                if (sunlightMode) MaterialTheme.colorScheme.surfaceContainerHigh else Color(0xFF353535),
                                                 CircleShape,
                                             ),
                                     ) {
@@ -3355,9 +3339,7 @@ internal fun ReaderScreen(
                                             Icon(
                                                 Icons.AutoMirrored.Filled.Send,
                                                 "Send prompt",
-                                                tint = if (LocalMaterial3.current || sendEnabled) MaterialTheme.colorScheme.onPrimary else {
-                                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                                },
+                                                tint = if (sendEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
                                         }
                                     }
@@ -3584,23 +3566,7 @@ internal fun ReaderScreen(
                         )
                     }
                 }
-                if (working) {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.tertiaryContainer, chromeShape(RoundedCornerShape(8.dp)))
-                            .padding(horizontal = 10.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-                        Text(
-                            "Working…",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer,
-                        )
-                    }
-                }
+                if (working) WorkingDots()
                 if (reader.modelPickerOptions.isNotEmpty()) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -3882,7 +3848,7 @@ private fun ReaderCollapsibleBlock(
     }
 }
 
-private fun isTransientProgress(value: String): Boolean = value.lineSequence().all { line ->
+internal fun isTransientProgress(value: String): Boolean = value.lineSequence().all { line ->
     val trimmed = line.trim()
     trimmed.isBlank() || listOf(
         "working", "running", "thinking", "reading", "searching", "esc to cancel",

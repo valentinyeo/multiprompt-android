@@ -66,7 +66,7 @@ class ReaderSessionRoutingTest {
                 val connection = if (target) second else first
                 val suffix = if (target) "B" else "A"
                 compose.onNodeWithText(if (target) b.name else a.name).assertIsDisplayed()
-                compose.onNodeWithText("Message this session").performTextInput("TYPED_$suffix")
+                compose.onNodeWithText("Message ${if (target) b.displayName else a.displayName}").performTextInput("TYPED_$suffix")
                 compose.onNodeWithContentDescription("Send prompt").performClick()
                 compose.waitUntil(30_000) { connection.state.value.completedActions == 1L }
                 compose.runOnIdle { voice.value = DictationState(DictationStatus.LISTENING, "VOICE_$suffix", true, sessionKey = "${host.id}::${if (target) b.name else a.name}") }
@@ -82,7 +82,7 @@ class ReaderSessionRoutingTest {
             compose.onNodeWithContentDescription("Send prompt").performClick()
             compose.runOnIdle { switched = true }
             compose.runOnIdle { assertEquals(DictationStatus.IDLE, voice.value.status) }
-            compose.onNodeWithText("Message this session").performTextInput("AFTER_SWITCH_B")
+            compose.onNodeWithText("Message ${b.displayName}").performTextInput("AFTER_SWITCH_B")
             compose.onNodeWithContentDescription("Send prompt").performClick()
             compose.waitUntil(30_000) { second.state.value.completedActions == 3L }
             compose.onNodeWithText("verify-other").assertIsDisplayed()

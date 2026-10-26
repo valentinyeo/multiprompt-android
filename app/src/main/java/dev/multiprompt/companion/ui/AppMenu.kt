@@ -76,10 +76,11 @@ internal fun InboxOverflowMenu(
     onRefresh: () -> Unit,
     onHosts: () -> Unit,
     onUpdate: () -> Unit,
+    onReleaseNotes: () -> Unit = {},
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { expanded = true }) {
+        IconButton(onClick = { expanded = true }, modifier = Modifier.roundOutlined()) {
             Icon(Icons.Default.MoreVert, "Session list actions")
         }
         DropdownMenu(
@@ -114,6 +115,10 @@ internal fun InboxOverflowMenu(
                     expanded = false
                     onRefresh()
                 },
+            )
+            DropdownMenuItem(
+                text = { VersionLabel(onClick = { expanded = false; onReleaseNotes() }) },
+                onClick = { expanded = false; onReleaseNotes() },
             )
             HorizontalDivider()
             AppMenuItems(
