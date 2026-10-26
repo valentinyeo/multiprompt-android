@@ -158,6 +158,7 @@ if [[ "$feature" == sign-in.md ]]; then
 fi
 tap_text 'Use without account (debug)'
 wait_for_text Inbox
+tap_text All
 tap_desc 'Session list actions'
 tap_text Hosts
 tap_desc 'Add host'
