@@ -112,6 +112,12 @@ jobs:
           GRADLE: gradle
           DAY_THEME_BASE_REF: ${{ inputs.baseline_ref }}
           DAY_THEME_RELEASED_UPDATE: ${{ inputs.released_update }}
+      - name: Capture day theme host memory evidence
+        if: always()
+        run: |
+          mkdir -p build/day-theme/diagnostics
+          sudo dmesg -T > build/day-theme/diagnostics/kernel.txt
+          free -m > build/day-theme/diagnostics/memory.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
