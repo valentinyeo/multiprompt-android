@@ -49,7 +49,7 @@ data class ChatHistory(
         sent: List<QueuedMessages.SentPrompt>, nowMillis: Long): List<ChatHistoryMessage> {
         val echoes = QueuedMessages.pending(messages.map { it.transcript() }, screenOutput, agent, sent, nowMillis).map { text ->
             val sentAt = sent.lastOrNull { QueuedMessages.normalize(it.text) == text }?.sentAtMillis
-            ChatHistoryMessage("queued:${text.hashCode()}", "user", text, "", 0, 0,
+            ChatHistoryMessage("@queued:$text", "user", text, "", 0, 0,
                 pending = !QueuedMessages.accepted(text, sentAt, rows))
         }
         return messages + echoes
