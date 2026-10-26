@@ -157,12 +157,12 @@ internal fun ReplyableBubble(
             .semantics { replySelectable = selectable }
             .then(gestures),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column {
             content(false)
             if (reactions.isNotEmpty()) {
                 val shown = ChatReactions.Emoji.entries.filter { it in reactions }
                 Row(
-                    Modifier.testTag("reaction-badges:$messageId")
+                    Modifier.padding(top = 6.dp).testTag("reaction-badges:$messageId")
                         .semantics { contentDescription = "Reactions: " + shown.joinToString(" ") { it.text } }
                         .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(12.dp))
                         .padding(horizontal = 8.dp, vertical = 2.dp),
