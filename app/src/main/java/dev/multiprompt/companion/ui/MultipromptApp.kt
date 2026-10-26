@@ -2999,13 +2999,18 @@ internal fun ReaderScreen(
                     ) {
                         if (menuPage != ReaderMenuPage.MAIN) {
                             DropdownMenuItem(
-                                text = { Text("‹ ${menuPage.title}") },
+                                text = { Text("‹ Back") },
                                 onClick = { menuPage = ReaderMenuPage.MAIN },
                             )
                             HorizontalDivider()
                         }
                         when (menuPage) {
                             ReaderMenuPage.MAIN -> {
+                                DropdownMenuItem(
+                                    text = { Text(listOfNotNull(runtimeDetails.label, statusLabel).joinToString(" · ").ifEmpty { "Model / effort" }) },
+                                    enabled = false,
+                                    onClick = {},
+                                )
                                 DropdownMenuItem(
                                     text = { Text("Enter / approve") },
                                     enabled = !reader.sending,
@@ -3109,7 +3114,7 @@ internal fun ReaderScreen(
                             }
                             ReaderMenuPage.MODEL -> {
                                 DropdownMenuItem(
-                                    text = { Text(listOfNotNull(runtimeDetails.label, statusLabel).joinToString(" · ").ifEmpty { "Model unknown" }) },
+                                    text = { Text("Current: ${runtimeDetails.label ?: "Unknown"}") },
                                     enabled = false,
                                     onClick = {},
                                 )
@@ -3171,13 +3176,9 @@ internal fun ReaderScreen(
                                 DropdownMenuItem(
                                     text = {
                                         Text(
-                                            if (technicalMode) {
-                                                "Copy raw transcript (${reader.output.count { it == '\n' } + 1} lines · " +
-                                                    "alt ${if (reader.alternateOn) 1 else 0} · " +
-                                                    "view ${scrollState.value}/${scrollState.maxValue})"
-                                            } else {
-                                                "Copy raw transcript"
-                                            },
+                                            "Copy raw transcript (${reader.output.count { it == '\n' } + 1} lines · " +
+                                                "alt ${if (reader.alternateOn) 1 else 0} · " +
+                                                "view ${scrollState.value}/${scrollState.maxValue})",
                                         )
                                     },
                                     onClick = {

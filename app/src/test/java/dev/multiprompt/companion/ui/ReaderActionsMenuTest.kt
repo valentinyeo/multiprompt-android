@@ -165,7 +165,7 @@ class ReaderActionsMenuTest {
         listOf(
             "Set effort: low", "Set effort: max", "Use Claude Opus", "Open model picker (/model)", "Sunlight mode on",
             "Show terminal details", "Use default font size", "Release notes", "Estimate accuracy", "Dictation API key",
-            "Screencast2 upload key", "Already read",
+            "Screencast2 upload key", "Already read", "Current: Unknown",
         ).forEach { compose.onNodeWithText(it).assertDoesNotExist() }
     }
 
@@ -176,7 +176,7 @@ class ReaderActionsMenuTest {
         listOf("Open model picker (/model)", "Use Claude Opus", "Use Claude Sonnet", "Use Claude Fable", "Set effort: low", "Set effort: max")
             .forEach { compose.onNodeWithText(it).assertIsDisplayed() }
         compose.onNodeWithText("Enter / approve").assertDoesNotExist()
-        compose.onNodeWithText("‹ Model and effort").performClick()
+        compose.onNodeWithText("‹ Back").performClick()
         compose.onNodeWithText("Enter / approve").assertIsDisplayed()
         compose.onNodeWithText("Set effort: low").assertDoesNotExist()
     }
@@ -186,10 +186,11 @@ class ReaderActionsMenuTest {
         openMenu()
         compose.onNodeWithText("Display ›").performClick()
         listOf("Show terminal details", "Sunlight mode on", "Use default font size").forEach { compose.onNodeWithText(it).assertIsDisplayed() }
-        compose.onNodeWithText("‹ Display").performClick()
+        compose.onNodeWithText("‹ Back").performClick()
         compose.onNodeWithText("More ›").performClick()
-        listOf("Release notes", "Estimate accuracy", "Copy raw transcript", "Dictation API key", "Screencast2 upload key")
+        listOf("Release notes", "Estimate accuracy", "Dictation API key", "Screencast2 upload key")
             .forEach { compose.onNodeWithText(it).assertIsDisplayed() }
+        compose.onNodeWithText("Copy raw transcript", substring = true).assertIsDisplayed()
     }
 
     @Test fun reopeningTheMenuAlwaysStartsOnTheMainPage() {

@@ -130,6 +130,7 @@ class ReaderChromeTest {
         assertTrue("First message must start within 24dp below the bar, gap=${gap}dp", gap in 0f..24f)
         screenshot()
         compose.onNodeWithContentDescription("Session actions").performClick()
+        compose.onNodeWithText("Model and effort ›").performClick()
         compose.onNodeWithText("Current: $modelLabel").assertIsDisplayed()
         compose.onNodeWithText("Current: $modelLabel · waiting for input").assertDoesNotExist()
     }
