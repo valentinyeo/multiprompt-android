@@ -7,6 +7,11 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.material3.Surface
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.onNode
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
@@ -51,7 +56,8 @@ class MessageActionsTest {
                 var quote by remember { mutableStateOf<String?>(null) }
                 var author by remember { mutableStateOf("") }
                 var unreadKey by remember { mutableStateOf<String?>(null) }
-                Column(Modifier.fillMaxSize()) {
+                Surface(Modifier.fillMaxSize()) {
+                Column(Modifier.fillMaxSize().systemBarsPadding()) {
                     Text("Message actions · Claude")
                     ChatHistoryList(
                         messages = messages,
@@ -67,6 +73,7 @@ class MessageActionsTest {
                     quote?.let { ReplyQuoteBar(it, author, { quote = null }) }
                     Text("Message Claude…")
                 }
+                }
             }
         }
     }
@@ -79,6 +86,12 @@ class MessageActionsTest {
         val output = File(checkNotNull(InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")), "message-actions-$name.png")
         check(output.parentFile?.mkdirs() == true || output.parentFile?.isDirectory == true)
         compose.waitForIdle()
+        when (name) {
+            "sheet" -> compose.onNode(isDialog()).captureToImage()
+            "reply" -> compose.onNodeWithText("Reply to Claude").captureToImage()
+            "unread" -> compose.onNodeWithText("New").captureToImage()
+        }
+        InstrumentationRegistry.getInstrumentation().uiAutomation.waitForIdle(2500, 15_000)
         output.outputStream().use {
             assertTrue(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot().compress(Bitmap.CompressFormat.PNG, 100, it))
         }
