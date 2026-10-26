@@ -50,6 +50,7 @@ class PendingMessagesTest {
     private lateinit var connection: SessionReaderConnection
     private lateinit var history: MutableStateFlow<ChatHistoryState>
     private lateinit var reader: MutableStateFlow<ReaderState>
+    private var pendingContrast = 0.0
     private val output get() = File(checkNotNull(InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")), "pending-messages")
 
     @Suppress("UNCHECKED_CAST")
@@ -104,15 +105,27 @@ class PendingMessagesTest {
         }
     }
 
+    private fun savePixels(name: String, bitmap: Bitmap) {
+        output.mkdirs()
+        File(output, "$name-text.png").outputStream().use {
+            assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+        }
+    }
+
     private fun send(): Double {
-        val normal = contrast(pixels())
+        val normalPixels = pixels()
+        savePixels("normal", normalPixels)
+        val normal = contrast(normalPixels)
         compose.runOnIdle {
             history.value = history.value.copy(history = ChatHistory("proof", 1, 100, rows = listOf(
                 ChatHistoryProtocol.Row("assistant", "Working on the previous request", "previous", "", 0, 100),
             )))
         }
         compose.onNodeWithText("Send while busy").performClick()
-        val pending = contrast(pixels())
+        val pendingPixels = pixels()
+        savePixels("pending", pendingPixels)
+        val pending = contrast(pendingPixels)
+        pendingContrast = pending
         screenshot("before-pending")
         assertTrue("Waiting bubble must be half opacity: pending=$pending normal=$normal", pending < normal * 0.75 && pending > normal * 0.25)
         return normal
@@ -144,24 +157,34 @@ class PendingMessagesTest {
             applyRow(JSONObject().put("role", "assistant").put("text", "").put("timestamp", Instant.now().toString())
                 .put("settlement", JSONObject().put("operation", "remove").put("content", prompt)))
         }
-        val accepted = contrast(pixels())
+        val acceptedPixels = pixels()
+        val accepted = contrast(acceptedPixels)
         val elapsed = SystemClock.elapsedRealtime() - acceptedAt
         assertTrue("Exact receipt must restore normal pixels: $accepted vs $normal", kotlin.math.abs(accepted - normal) < 2)
         assertTrue("Acceptance must paint within one second: ${elapsed}ms", elapsed <= 1000)
         assertTrue(history.value.history.messages.none { it.role == "user" })
+        savePixels("accepted", acceptedPixels)
         screenshot("after-accepted")
-        File(output, "result.json").writeText(JSONObject().put("acceptedAfterMs", elapsed).put("pendingContrast", "half")
+        File(output, "result.json").writeText(JSONObject().put("acceptedAfterMs", elapsed).put("pendingContrast", pendingContrast)
             .put("normalContrast", normal).put("acceptedContrast", accepted).put("status", "passed").toString())
     }
 
     @Test fun transcriptEntryRestoresBrightnessWithoutQueueReceipt() {
         harness()
         val normal = send()
+        var acceptedAt = 0L
         compose.runOnIdle {
+            acceptedAt = SystemClock.elapsedRealtime()
             applyRow(JSONObject().put("role", "user").put("text", prompt).put("id", "accepted")
                 .put("timestamp", Instant.now().toString()))
         }
-        assertEquals(normal, contrast(pixels()), 2.0)
+        val acceptedPixels = pixels()
+        val elapsed = SystemClock.elapsedRealtime() - acceptedAt
+        assertEquals(normal, contrast(acceptedPixels), 2.0)
+        assertTrue("Transcript acceptance must paint within one second: ${elapsed}ms", elapsed <= 1000)
+        savePixels("transcript", acceptedPixels)
         screenshot("after-transcript")
+        File(output, "transcript-result.json").writeText(JSONObject().put("acceptedAfterMs", elapsed)
+            .put("status", "passed").toString())
     }
 }
