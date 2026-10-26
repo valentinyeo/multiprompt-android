@@ -34,7 +34,7 @@ if [ -n "${DAY_THEME_BASE_REF:-}" ]; then
     exit 1
   fi
   test -f build/day-theme/before/contrast.txt
-  rg 'contrast=[0-3]\.|status icons do not follow' build/day-theme/before/contrast.txt
+  grep -E 'contrast=[0-3]\.|status icons do not follow' build/day-theme/before/contrast.txt
   echo DAY_THEME_RED_OK
   restore
   trap - EXIT

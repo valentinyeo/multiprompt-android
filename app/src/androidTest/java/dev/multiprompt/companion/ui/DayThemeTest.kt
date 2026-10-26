@@ -80,6 +80,16 @@ class DayThemeTest {
         compose.waitForIdle()
         output.mkdirs()
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        compose.activityRule.scenario.onActivity { activity ->
+            val content = activity.findViewById<android.view.View>(android.R.id.content)
+            val location = IntArray(2)
+            content.getLocationOnScreen(location)
+            report += "$name contentOrigin=${location.toList()} contentSize=${content.width}x${content.height} statusColor=${activity.window.statusBarColor} statusEnforced=${activity.window.isStatusBarContrastEnforced} fits=${activity.window.attributes.fitInsetsTypes}"
+        }
+        if (name == "light-sign-in") {
+            val descriptor = automation.executeShellCommand("dumpsys window windows")
+            File(output, "window.txt").writeText(android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().use { it.readText() })
+        }
         automation.takeScreenshot().let { bitmap ->
             if (sunlight && Color(bitmap.getPixel(bitmap.width / 2, 1)).luminance() < 0.9f) {
                 problems += "$name status surface stays dark"
