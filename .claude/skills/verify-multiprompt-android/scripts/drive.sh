@@ -39,6 +39,11 @@ finish() {
         uptime
         free -m
         ps -eo pid,pcpu,pmem,args --sort=-pcpu | head -8
+        pgrep -a qemu
+        adb devices
+        sudo dmesg | grep -iE "segfault|qemu|oom|killed process" | tail -20
+        ls -la /tmp/android-runner /var/crash /var/lib/systemd/coredump
+        sudo journalctl --no-pager -n 40 -g "qemu|coredump|apport"
     } > "$EVIDENCE/load-at-exit.txt" 2>&1
     sudo cat /home/verifyssh/commands.log > "$EVIDENCE/commands.txt" 2>/dev/null
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt" 2>/dev/null
