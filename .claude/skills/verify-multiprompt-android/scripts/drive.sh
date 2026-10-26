@@ -409,11 +409,11 @@ shot reader-ready
 if [[ "$feature" == chat-queued.md ]]; then
     wait_for_text 'Ready for queued messages.'
     shot queued-ready
-    fill 'Message this session' WAITING_ONE
+    fill 'Message verify-session' WAITING_ONE
     tap_desc 'Send prompt'
     wait_receipt 'VERIFY_RECEIVED:WAITING_ONE'
     wait_for_text WAITING_ONE
-    fill 'Message this session' WAITING_TWO
+    fill 'Message verify-session' WAITING_TWO
     tap_desc 'Send prompt'
     wait_receipt 'VERIFY_RECEIVED:WAITING_TWO'
     wait_for_text WAITING_TWO
