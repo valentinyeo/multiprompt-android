@@ -137,6 +137,7 @@ data class AppUiState(
     val terminalFromReader: Boolean = false,
     val newSession: NewSessionPicker? = null,
 ) {
+    val inboxSessions: List<TmuxSession> get() = AccountHostMap.withAccountSessions(sessions, accountLayout, accountHosts)
     val showFrequentSplit: Boolean get() = accountLayout?.settings?.get("frequent") ?: true
     val showFavoritesSplit: Boolean get() = accountLayout?.settings?.get("favorites") ?: true
     val showAllSplit: Boolean get() = accountLayout?.settings?.get("all") ?: true
@@ -673,11 +674,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             sessionReads.displayName(session)?.let { session.copy(title = it) } ?: session
         }
         val mapping = AccountHostMap.resolve(current.hosts, accountStore.hostOverrides())
-        val sessionWorkspaceIds = sessions.mapNotNull { session ->
-            current.accountLayout?.let { AccountHostMap.tabFor(session, it, mapping) }?.let { tab ->
-                SessionReadStore.key(session.hostId, session.name) to tab.workspace
-            }
-        }.toMap()
+        val sessionWorkspaceIds = AccountHostMap.workspaceAssignments(sessions, current.accountLayout, mapping)
         val interactionEpochSeconds = current.sessionInteractionEpochSeconds + sessions
             .mapNotNull { session ->
                 sessionReads.lastInteractedAt(session).takeIf { it > 0 }?.let {
@@ -694,7 +691,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             observations.takeIf { it > 0 }?.let { key to it }
         }.toMap()
-        val archivedKeys = sessions
+        val archivedKeys = AccountHostMap.withAccountSessions(sessions, current.accountLayout, mapping)
             .filter { session ->
                 val key = SessionReadStore.key(session.hostId, session.name)
                 sessionReads.isArchived(
@@ -1543,9 +1540,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { current ->
             val mapping = AccountHostMap.resolve(current.hosts, accountStore.hostOverrides())
             val workspaces = layout?.workspaces.orEmpty().map { Workspace(id = it, name = it, hostId = "", remotePath = "") }
-            val assignments = current.sessions.mapNotNull { session ->
-                layout?.let { AccountHostMap.tabFor(session, it, mapping) }?.let { SessionReadStore.key(session.hostId, session.name) to it.workspace }
-            }.toMap()
+            val assignments = AccountHostMap.workspaceAssignments(current.sessions, layout, mapping)
             current.copy(accountLayout = layout, accountPending = pendingLayout?.dirty == true, accountHosts = mapping,
                 workspaces = workspaces, workspaceSplitIds = listOf(null) + workspaces.map { it.id }, sessionWorkspaceIds = assignments,
                 readerSession = current.readerSession?.let { open ->
@@ -1780,7 +1775,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val hostKey: PresentedHostKey? = null,
     )
 
-    private fun visibleInboxSessions(state: AppUiState): List<TmuxSession> = state.sessions
+    private fun visibleInboxSessions(state: AppUiState): List<TmuxSession> = state.inboxSessions
         .filterNot { isHiddenAsMuted(it, state.accountLayout, state.accountHosts, state.selectedWorkspaceId) }
         .filter { session ->
             val key = SessionReadStore.key(session.hostId, session.name)

@@ -42,6 +42,33 @@ tap_text() {
     read -r x y <<< "$point"
     adb shell input tap "$x" "$y"
 }
+wait_gone() {
+    local deadline=$(( $(date +%s) + ${2:-60} ))
+    while has_text "$1" 0 "${3:-has}"; do
+        if (( $(date +%s) > deadline )); then printf 'Still showing %s\n' "$1"; shot "failure-still-${1// /-}"; return 1; fi
+        sleep 0.3
+    done
+}
+tap_split() {
+    local point x y
+    for _ in 1 2 3 4; do
+        dump_ui
+        if point=$(python3 "$here/ui.py" "$EVIDENCE/current.xml" tap "$1"); then
+            read -r x y <<< "$point"
+            adb shell input tap "$x" "$y"
+            return 0
+        fi
+        local row=0 label
+        for label in Runners Notes Work All; do
+            if point=$(python3 "$here/ui.py" "$EVIDENCE/current.xml" tap "$label"); then read -r x row <<< "$point"; break; fi
+        done
+        (( row > 0 )) || continue
+        adb shell input swipe 900 "$row" 200 "$row" 300
+    done
+    printf 'Split %s not reachable\n' "$1"
+    shot "failure-split-$1"
+    return 1
+}
 layout() {
     local key=$1; shift
     sudo -u valentin env "MULTIPROMPT_KEY=$key" "MULTIPROMPT_URL=http://127.0.0.1:8787" "$(command -v node)" /home/valentin/mp-layout.mjs "$@"
@@ -117,6 +144,27 @@ layout "$admin" open fresh-session --workspace Runners --title 'Fresh session' |
 wait_text 'fresh' 30 hasi
 open_seconds=$(python3 -c "print(round($(now) - $start, 2))")
 shot android-opened
+
+stars() { node "$here/favorites.mjs" http://127.0.0.1:8787 "$admin" "$@"; }
+stars star runner-1 ghost-fav | tee "$EVIDENCE/favorites-set.json"
+tap_split All
+wait_text runner-1 30 hasi
+shot android-split-all
+wait_text runner-2 30 hasi
+tap_split Favorites
+wait_gone runner-2 60 hasi
+wait_text runner-1 60 hasi
+shot android-split-favorites
+if ! wait_text ghost-fav 30 hasi; then
+    printf 'FAVORITES PARITY FAILED: account favorite ghost-fav has no live tmux session and is missing from the Android Favorites split\n'
+    exit 1
+fi
+shot android-favorites-with-ghost
+stars unstar runner-1 | tee "$EVIDENCE/favorites-unset.json"
+wait_gone runner-1 60 hasi
+wait_text ghost-fav 5 hasi
+shot android-favorites-after-unstar
+printf 'favorites-parity ok\n'
 
 printf '{"section_seconds": %s, "open_seconds": %s}\n' "$section_seconds" "$open_seconds" | tee "$EVIDENCE/result.json"
 python3 -c "import sys; sys.exit(0 if $section_seconds <= 10 and $open_seconds <= 10 else 1)"
