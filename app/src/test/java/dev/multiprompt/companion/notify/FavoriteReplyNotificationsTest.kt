@@ -71,6 +71,15 @@ class FavoriteReplyNotificationsTest {
         assertEquals(setOf(two), replies())
     }
 
+    @Test fun notificationFavoritesUseTheSameHostAndCaseMappingAsTheSessionList() {
+        assertNull(fixture.model.editAccountLayout { layout ->
+            layout.copy(tabs = layout.tabs.map { if (it.session == "one") it.copy(session = "ONE", favorite = true) else it })
+        })
+        shadowOf(Looper.getMainLooper()).idle()
+        reply(one, two)
+        assertEquals(setOf(one), replies())
+    }
+
     @Test fun removingFavoritesLeavesAppUpdateNotificationsAlone() {
         manager.createNotificationChannel(NotificationChannel("app_updates", "App updates", NotificationManager.IMPORTANCE_DEFAULT))
         manager.notify(99, Notification.Builder(fixture.app, "app_updates").setSmallIcon(android.R.drawable.stat_sys_download_done).setContentTitle("App update ready").build())

@@ -70,6 +70,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -229,6 +230,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val warmReaderTouchedAt = mutableMapOf<String, Long>()
 
     init {
+        viewModelScope.launch {
+            _state.map { state ->
+                state.accountLayout?.tabs.orEmpty().filter { it.favorite == true }.map { it.identity }.toSet() to state.accountHosts
+            }.distinctUntilChanged().collectLatest {
+                val active = ReplyNotifier.activeKeys(app)
+                ReplyNotifier.cancel(app, active - favoriteReplyKeys(_state.value, active))
+            }
+        }
         viewModelScope.launch {
             combine(_state, foreground) { state, active ->
                 (state.terminalSession ?: state.readerSession)?.takeIf {
@@ -602,6 +611,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun favoriteReplyKeys(state: AppUiState, keys: Set<String>): Set<String> = keys.filterTo(linkedSetOf()) { key ->
+        val session = TmuxSession(key.substringBefore("::"), key.substringAfter("::"), 1, 0, 0)
+        isFavoriteSession(session, state.accountLayout, state.accountHosts)
+    }
+
     private fun syncReplyNotifications() {
         val state = _state.value
         val front = if (foreground.value) {
@@ -609,12 +623,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             null
         }
+        val active = ReplyNotifier.activeKeys(app)
         val plan = ReplyNotificationPolicy.plan(
             replyNotificationsBaselined,
             state.repliedSessionKeys,
             state.unreadCounts,
             front,
-            ReplyNotifier.activeKeys(app),
+            active,
+            favoriteReplyKeys(state, state.unreadCounts.keys + active),
         )
         replyNotificationsBaselined = true
         _state.update { it.copy(repliedSessionKeys = emptySet()) }
