@@ -16,7 +16,7 @@ The native reader streams output and lets a user send a prompt, send Enter/appro
 
 ## How to get to it (user POV)
 
-Tap `verify-session` in Inbox. **Message this session** is the composer and **Send prompt** sends it. **Session actions → Enter / approve** and **Interrupt session** operate the remote foreground process. **Open live terminal** in that menu, or double-tapping the title/output, opens fallback terminal. The New session picker's existing-session mode and account workspaces can also open sessions when configured; these alternate entries are not covered here.
+Tap `verify-session` in Inbox. **Message verify-session** is the composer and **Send prompt** sends it. **Session actions → Enter / approve** and **Interrupt session** operate the remote foreground process. **Open live terminal** in that menu, or double-tapping the title/output, opens fallback terminal. The New session picker's existing-session mode and account workspaces can also open sessions when configured; these alternate entries are not covered here.
 
 ## Driving it with adb and UI Automator
 
@@ -24,7 +24,7 @@ Preconditions: fresh fixture; dispatch `feature=session-reader.md`. The driver f
 
 - `tap_text verify-session`; `wait_for_text VERIFY_READY_528`; `shot reader-ready` capture a native reader of the real console.
 - `tap_desc 'Attach'`; require `Add image` and `Use skill`; capture `attach-menu` (outlined + button, outlined menu card with line icons); back closes it; capture `attach-closed`.
-- `fill 'Message this session' VERIFY_SENT_528`; `shot send-draft`; `tap_desc 'Send prompt'`. Require both the visible `VERIFY_RECEIVED:VERIFY_SENT_528` and the same line in the fixture's receipts; capture `send-result`.
+- `fill 'Message verify-session' VERIFY_SENT_528`; `shot send-draft`; `tap_desc 'Send prompt'`. Require both the visible `VERIFY_RECEIVED:VERIFY_SENT_528` and the same line in the fixture's receipts; capture `send-result`.
 - The fixture delays the SSH send by 15 s. Right after the tap, `send-timing.py` requires the message on screen, the composer empty and the logcat marks `message_added` and `box_cleared_frame` within 100 ms of the tap.
 - `tap_desc 'Session actions'`; capture `enter-action`; `tap_text 'Enter / approve'`. Require `VERIFY_ENTER_528` in receipts and native output; capture `enter-result`.
 - Open **Session actions** again; capture `interrupt-action`; `tap_text 'Interrupt session'`. The actual process must receive SIGINT and record `VERIFY_INTERRUPTED_528`; capture `interrupt-result` after the same text appears in the app.
