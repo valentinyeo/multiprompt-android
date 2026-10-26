@@ -81,6 +81,7 @@ jobs:
         run: |
           mkdir -p "$EVIDENCE"
           python3 -m pip install Pillow
+          python3 .claude/skills/verify-multiprompt-android/scripts/reactions.test.py
           printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/revision.txt"
           app_source="$GITHUB_WORKSPACE"
           if [ -d "$GITHUB_WORKSPACE/app-source" ]; then app_source="$GITHUB_WORKSPACE/app-source"; fi
