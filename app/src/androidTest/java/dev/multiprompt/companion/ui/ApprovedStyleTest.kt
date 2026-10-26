@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -61,6 +62,7 @@ class ApprovedStyleTest {
                 compose.onNodeWithText("Session 12", useUnmergedTree = true).assertIsDisplayed()
                 compose.onNodeWithText("Session 0", useUnmergedTree = true).assertDoesNotExist()
                 compose.onNodeWithContentDescription("Close session search").performClick()
+                compose.onNode(hasScrollToIndexAction()).performScrollToIndex(0)
                 compose.onNodeWithText("Session 0").performTouchInput { longClick() }
                 compose.onNodeWithText("Mark unread").assertIsDisplayed()
             }
