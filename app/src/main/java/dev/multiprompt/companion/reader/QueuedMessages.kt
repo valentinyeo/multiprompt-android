@@ -56,6 +56,10 @@ object QueuedMessages {
         return latest.operation != ChatHistoryProtocol.QueueOperation.ENQUEUE
     }
 
+    internal fun answered(rows: List<ChatHistoryProtocol.Row>, afterOffset: Long): Boolean = rows.any { row ->
+        row.role == "assistant" && row.settlement == null && row.text.isNotBlank() && row.offset > afterOffset
+    }
+
     internal fun normalize(text: String): String = text.replace(WHITESPACE, " ").trim()
 
     private fun matches(first: String, second: String): Boolean = first == second ||

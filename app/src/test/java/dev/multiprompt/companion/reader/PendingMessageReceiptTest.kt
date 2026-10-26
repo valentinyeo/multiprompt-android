@@ -73,4 +73,20 @@ class PendingMessageReceiptTest {
         file.writeText(JSONObject(lines.first()).put("version", 2).toString() + "\n" + lines.drop(1).joinToString("\n", postfix = "\n"))
         assertEquals(null, cache.restore("session"))
     }
+
+    @Test fun sessionReplyClearsEveryEarlierQueuedMessage() {
+        val at = Instant.parse("2026-10-26T12:00:00Z")
+        fun queued(text: String, offset: Long) = ChatHistoryProtocol.Row("user", text, "id-$offset", at.plusSeconds(offset).toString(), offset, offset + 1, queued = true)
+        fun reply(offset: Long, text: String = "Done.") = ChatHistoryProtocol.Row("assistant", text, "reply-$offset", at.plusSeconds(offset).toString(), offset, offset + 1)
+        fun unrelatedRemoval(offset: Long) = ChatHistoryProtocol.parseRow(JSONObject()
+            .put("role", "assistant").put("text", "").put("timestamp", at.plusSeconds(offset).toString())
+            .put("offset", offset).put("end", offset + 1)
+            .put("settlement", JSONObject().put("operation", "remove").put("content", "another prompt")))
+        fun pending(vararg rows: ChatHistoryProtocol.Row) = ChatHistory(rows = rows.toList()).messages.filter { it.role == "user" }.map { it.pending }
+        assertEquals(listOf(true, true), pending(queued("one", 0), queued("two", 1), unrelatedRemoval(2)))
+        assertEquals(listOf(false, false), pending(queued("one", 0), queued("two", 1), unrelatedRemoval(2), reply(3)))
+        assertEquals(listOf(true), pending(reply(0), queued("one", 1)))
+        assertEquals(listOf(true), pending(queued("one", 0), unrelatedRemoval(1), reply(2, "  ")))
+        assertEquals(listOf(false, true), pending(queued("one", 0), reply(1), queued("two", 2)))
+    }
 }
