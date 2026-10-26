@@ -210,4 +210,36 @@ class TmuxCommandsTest {
         assertTrue(command.contains("jsonl"))
         assertTrue(command.contains("sed 's/[^A-Za-z0-9]/-/g'"))
     }
+
+    @Test
+    fun cancelQueuedQuotesTheTargetAndCarriesNoPromptText() {
+        val command = TmuxCommands.cancelQueued("a'; reboot")
+
+        assertTrue(command.startsWith("python3 -c '"))
+        assertTrue(command.endsWith(" 'a'\"'\"'; reboot:' 2>&1"))
+        assertFalse(command.contains("prompt text"))
+        val script = command.removePrefix("python3 -c '").substringBefore("' 'a'")
+        assertFalse(script.contains("'"))
+        assertTrue(script.contains(TmuxCommands.CANCEL_PREFIX))
+        assertTrue(script.contains("\"Up\""))
+        assertTrue(script.contains("json.load(sys.stdin)"))
+    }
+
+    @Test
+    fun queueCancelReadsTheOutcomeLine() {
+        val ok = "noise\n" + TmuxCommands.CANCEL_PREFIX + "ok\n"
+        val taken = TmuxCommands.CANCEL_PREFIX + "not_queued\n"
+
+        assertEquals(CancelOutcome.CANCELLED, QueueCancel.parse(ok))
+        assertEquals(CancelOutcome.ALREADY_TAKEN, QueueCancel.parse(taken))
+    }
+
+    @Test
+    fun queueCancelRefusesAnythingElse() {
+        val stuck = runCatching { QueueCancel.parse(TmuxCommands.CANCEL_PREFIX + "box_not_clear\n") }.exceptionOrNull()
+        val silent = runCatching { QueueCancel.parse("Traceback (most recent call last)\n") }.exceptionOrNull()
+
+        assertTrue(stuck is SshProblem.Connection)
+        assertTrue(silent is SshProblem.Connection)
+    }
 }

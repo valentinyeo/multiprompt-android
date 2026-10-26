@@ -2,6 +2,7 @@ package dev.multiprompt.companion.reader
 
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.AgentKind
+import dev.multiprompt.companion.ssh.CancelOutcome
 import dev.multiprompt.companion.ssh.ClaudeQuestion
 import dev.multiprompt.companion.ssh.SshRepository
 import dev.multiprompt.companion.ssh.TmuxAction
@@ -73,6 +74,7 @@ class SessionReaderConnection(
 ) : AutoCloseable {
     private sealed interface Request {
         data class Prompt(val text: String) : Request
+        data class Cancel(val text: String, val keep: List<String>) : Request
         data class Action(val action: TmuxAction) : Request
         data class ModelPickerOption(val index: Int) : Request
         data class QuestionAnswer(val question: ClaudeQuestion, val index: Int) : Request
@@ -126,6 +128,14 @@ class SessionReaderConnection(
             }
         }
         return sent
+    }
+
+    fun cancelQueued(text: String, keep: List<String>): Boolean {
+        val record = _state.value.sentRecord
+        fun original(value: String): String = record.lastOrNull {
+            QueuedMessages.normalize(it.text) == QueuedMessages.normalize(value)
+        }?.text ?: value
+        return requests.trySend(Request.Cancel(original(text), keep.map(::original))).isSuccess
     }
 
     fun sendEnter() {
@@ -341,7 +351,39 @@ class SessionReaderConnection(
         }
     }
 
+    private suspend fun runCancel(request: Request.Cancel) {
+        _state.update { it.copy(sending = true, actionError = null) }
+        try {
+            val outcome = withTimeout(REQUEST_TIMEOUT_MS) {
+                withFreshClient { client ->
+                    repository.cancelQueued(client, tmuxSessionName, request.text, request.keep)
+                }
+            }
+            val key = QueuedMessages.normalize(request.text)
+            _state.update { current ->
+                if (outcome == CancelOutcome.CANCELLED) {
+                    val index = current.sentRecord.indexOfLast { QueuedMessages.normalize(it.text) == key }
+                    current.copy(
+                        sentRecord = if (index < 0) current.sentRecord else current.sentRecord.filterIndexed { i, _ -> i != index },
+                        sentPrompts = current.sentPrompts.filter { QueuedMessages.normalize(it) != key },
+                    )
+                } else {
+                    current.copy(actionError = "Claude already took this message, so it cannot be cancelled")
+                }
+            }
+        } catch (timeout: TimeoutCancellationException) {
+            _state.update { it.copy(actionError = "The cancel timed out") }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (throwable: Throwable) {
+            _state.update { it.copy(actionError = throwable.message ?: throwable::class.java.simpleName) }
+        } finally {
+            _state.update { it.copy(sending = false) }
+        }
+    }
+
     private suspend fun runAction(request: Request) {
+        if (request is Request.Cancel) return runCancel(request)
         _state.update { it.copy(sending = true, actionError = null) }
         try {
             withTimeout(REQUEST_TIMEOUT_MS) {
@@ -350,6 +392,7 @@ class SessionReaderConnection(
                 } else null
                 withFreshClient { client ->
                     when (request) {
+                        is Request.Cancel -> Unit
                         is Request.Prompt -> repository.sendPrompt(
                             client,
                             tmuxSessionName,

@@ -34,6 +34,8 @@ import org.connectbot.sshlib.SessionExit
 import org.connectbot.sshlib.SshClient
 import org.connectbot.sshlib.SshClientConfig
 import java.io.ByteArrayOutputStream
+import org.json.JSONArray
+import org.json.JSONObject
 
 data class PresentedHostKey(
     val type: String,
@@ -329,6 +331,14 @@ class SshRepository(private val secrets: SecretStorage) {
         require(bytes.size <= MAX_PROMPT_BYTES) { "The prompt is too large" }
         execute(client, TmuxCommands.pastePrompt(sessionName), stdin = bytes)
             .requireSuccess("send the prompt")
+    }
+
+    suspend fun cancelQueued(client: SshClient, sessionName: String, text: String, keep: List<String>): CancelOutcome {
+        require(text.isNotBlank()) { "Nothing to cancel" }
+        val body = JSONObject().put("text", text).put("keep", JSONArray(keep)).toString().toByteArray(Charsets.UTF_8)
+        require(body.size <= MAX_PROMPT_BYTES * 4) { "The queued messages are too large to cancel" }
+        val result = execute(client, TmuxCommands.cancelQueued(sessionName), stdin = body)
+        return QueueCancel.parse(result.stdout)
     }
 
     suspend fun performAction(client: SshClient, sessionName: String, action: TmuxAction) {

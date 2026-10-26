@@ -119,6 +119,10 @@ internal fun ChatHistoryView(
             unreadMessageKey = unreadMessageKey,
             onMarkUnread = onMarkUnread,
             onReaction = onReaction,
+            onCancelPending = if (!reader.sending && reader.status == ReaderStatus.Live) { target ->
+                val keep = messages.filter { it.role == "user" && it.pending && it.key != target.key }.map { it.text }
+                connection.cancelQueued(target.text, keep)
+            } else null,
             collapsePendingReactions = reader.actionError == null,
             working = reader.sending || TmuxText.readerBlocks(reader.screenOutput, agent).any {
                 it.kind == TmuxText.ReaderBlockKind.PROGRESS && isTransientProgress(it.text)
@@ -155,6 +159,7 @@ internal fun ChatHistoryList(
     onMarkUnread: (String) -> Unit = {},
     hasOlder: Boolean = false,
     onReaction: ((ChatHistoryMessage, ChatReactions.Emoji) -> Unit)? = null,
+    onCancelPending: ((ChatHistoryMessage) -> Unit)? = null,
     collapsePendingReactions: Boolean = true,
     working: Boolean = false,
     bottomPadding: Dp = 0.dp,
@@ -239,6 +244,9 @@ internal fun ChatHistoryList(
                     reactions = presentation.badges[message.key].orEmpty(),
                     onReaction = if (agent == AgentKind.CLAUDE && message.role == "assistant" && onReaction != null) {
                         { emoji -> onReaction(message, emoji) }
+                    } else null,
+                    onCancel = if (message.role == "user" && message.pending && onCancelPending != null) {
+                        { onCancelPending(message) }
                     } else null)
             }
         }
@@ -270,6 +278,7 @@ private fun HistoryBubble(
     selectedAnswer: String? = null,
     reactions: Set<ChatReactions.Emoji> = emptySet(),
     onReaction: ((ChatReactions.Emoji) -> Unit)? = null,
+    onCancel: (() -> Unit)? = null,
 ) {
     val fontSize = chatFontSize((14f * fontScale).sp, fontScale)
     val isUser = role == "user"
@@ -294,7 +303,7 @@ private fun HistoryBubble(
             modifier = Modifier.alpha(if (pending) 0.5f else 1f),
             onReply = { onReply(it, isUser) }, gate = gate,
             messageId = messageId, sessionName = sessionName, onMarkUnread = onMarkUnread,
-            highlighted = highlighted, reactions = reactions, onReaction = onReaction) {
+            highlighted = highlighted, reactions = reactions, onReaction = onReaction, onCancel = onCancel) {
             if (pending) {
                 Text("Queued", fontFamily = chatFontFamily(), fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp,
                     color = chatHintColor(sunlight))

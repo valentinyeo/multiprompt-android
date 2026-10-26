@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md) ;;
+    sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|chat-cancel.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -398,6 +398,65 @@ print("CHOICE SEND AND QUESTION KEY VERIFIED")
 CHOICES
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt"
     printf 'FEATURE VERIFIED: %s\n' "$feature"
+    exit 0
+fi
+if [[ "$feature" == chat-cancel.md ]]; then
+    wait_for_text VERIFY_READY_1010
+    wait_for_text 'Ready for cancel tests.'
+    shot cancel-ready
+    for word in CANCEL_KEEP_ONE CANCEL_TARGET_TWO CANCEL_KEEP_THREE; do
+        fill 'Message verify-session' "$word"
+        tap_desc 'Send prompt'
+        wait_receipt "VERIFY_RECEIVED:$word"
+        wait_for_text "$word"
+    done
+    shot cancel-waiting
+    python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 3 WAITING
+    read -r cancel_x cancel_y <<< "$(select_node text CANCEL_TARGET_TWO)"
+    adb shell input swipe "$cancel_x" "$cancel_y" "$cancel_x" "$cancel_y" 900
+    if ! wait_for_text 'Cancel message'; then
+        shot cancel-menu-missing
+        printf 'IGSH1010_CANCEL_NOT_OFFERED\n' >&2
+        exit 1
+    fi
+    shot cancel-menu
+    tap_text 'Cancel message'
+    wait_for_absence CANCEL_TARGET_TWO
+    shot cancel-cancelled
+    python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 2 AFTER_CANCEL
+    wait_for_text CANCEL_KEEP_ONE
+    wait_for_text CANCEL_KEEP_THREE
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-after-cancel.txt"
+    sudo -u verifyssh python3 /home/verifyssh/cancel-console.py take-in
+    sleep 3
+    sudo -u verifyssh python3 /home/verifyssh/cancel-console.py reply
+    wait_for_text 'Everything that was queued is received.'
+    for attempt in {1..30}; do
+        dump_ui
+        if python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 0 DELIVERED >/dev/null 2>&1; then break; fi
+        sleep 1
+    done
+    shot cancel-delivered
+    python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 0 DELIVERED
+    sudo cat /home/verifyssh/submitted.txt > "$EVIDENCE/cancel-submitted.txt"
+    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/cancel-receipts.txt"
+    sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-cancel-work/a1b2c3d4-1010-4000-8000-000000001010.jsonl > "$EVIDENCE/cancel-transcript.jsonl"
+    printf 'VERIFY_SUBMITTED:CANCEL_KEEP_ONE\nVERIFY_SUBMITTED:CANCEL_KEEP_THREE\n' > "$EVIDENCE/cancel-expected-submitted.txt"
+    if ! diff "$EVIDENCE/cancel-expected-submitted.txt" "$EVIDENCE/cancel-submitted.txt"; then
+        printf 'IGSH1010_CANCELLED_TEXT_REACHED_SESSION\n' >&2
+        exit 1
+    fi
+    if grep -E 'queued_command.*CANCEL_TARGET_TWO|"type": ?"(user|assistant)".*CANCEL_TARGET_TWO' "$EVIDENCE/cancel-transcript.jsonl"; then
+        printf 'IGSH1010_CANCELLED_TEXT_REACHED_SESSION\n' >&2
+        exit 1
+    fi
+    read -r delivered_x delivered_y <<< "$(select_node text CANCEL_KEEP_ONE)"
+    adb shell input swipe "$delivered_x" "$delivered_y" "$delivered_x" "$delivered_y" 900
+    wait_for_text 'Copy'
+    shot cancel-delivered-menu
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent 'Cancel message'
+    adb shell input keyevent KEYCODE_BACK
+    printf 'ANDROID_CANCEL_QUEUED_VERIFIED\n'
     exit 0
 fi
 if [[ "$feature" == chat-queued.md ]]; then

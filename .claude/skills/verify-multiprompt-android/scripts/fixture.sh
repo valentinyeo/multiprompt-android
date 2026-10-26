@@ -44,6 +44,10 @@ elif [[ "${VERIFY_FEATURE:-}" == chat-queued.md ]]; then
     sudo install -m 755 "$(dirname "$0")/queued-console.py" /home/verifyssh/queued-console.py
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/queued-console.py /home/verifyssh/receipts.txt'
+elif [[ "${VERIFY_FEATURE:-}" == chat-cancel.md ]]; then
+    sudo install -m 755 "$(dirname "$0")/cancel-console.py" /home/verifyssh/cancel-console.py
+    sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
+    sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/cancel-console.py /home/verifyssh/receipts.txt'
 else
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'python3 -u /home/verifyssh/console.py /home/verifyssh/receipts.txt'
 fi

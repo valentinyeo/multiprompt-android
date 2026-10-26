@@ -82,6 +82,70 @@ object TmuxCommands {
             "sleep 0.3 && " +
             "tmux send-keys -t ${target(sessionName)} Enter"
 
+    const val CANCEL_PREFIX = "__MP_TMUX_CANCEL__"
+
+    fun cancelQueued(sessionName: String): String =
+        "python3 -c '$CANCEL_PYTHON' ${target(sessionName)} 2>&1"
+
+    private val CANCEL_PYTHON = """
+import json,subprocess,sys,time
+t=sys.argv[1]
+q=json.load(sys.stdin)
+def tmux(*a,data=None):
+    return subprocess.run(["tmux"]+list(a),input=data,capture_output=True,timeout=8)
+def box():
+    out=tmux("capture-pane","-p","-J","-t",t).stdout.decode("utf-8","replace").splitlines()
+    starts=[i for i,l in enumerate(out) if l.startswith("\u276f")]
+    if not starts:
+        return ""
+    rows=[]
+    for l in out[starts[-1]:]:
+        if l.startswith("\u2500"):
+            break
+        rows.append(l)
+    return " ".join(" ".join(rows)[1:].split())
+def flat(s):
+    return "".join(s.split())
+def waiting():
+    return "edit queued messages" in tmux("capture-pane","-p","-J","-t",t).stdout.decode("utf-8","replace")
+def clear(text):
+    for _ in range(len(text)+2):
+        if not box():
+            return True
+        tmux("send-keys","-t",t,"C-u")
+    return not box()
+def paste(text,enter):
+    b="mp-android-cancel-%d"%time.time_ns()
+    tmux("load-buffer","-b",b,"-",data=text.encode("utf-8"))
+    tmux("paste-buffer","-dpr","-b",b,"-t",t)
+    if enter:
+        time.sleep(0.3)
+        tmux("send-keys","-t",t,"Enter")
+def finish(status):
+    print("$CANCEL_PREFIX"+status)
+    sys.exit(0)
+draft=box()
+if draft and not clear(draft):
+    finish("box_not_clear")
+pulled=""
+if waiting():
+    tmux("send-keys","-t",t,"Up")
+    for _ in range(20):
+        time.sleep(0.1)
+        pulled=box()
+        if pulled:
+            break
+hit=bool(pulled) and flat(q["text"]) in flat(pulled)
+again=[k for k in q["keep"] if flat(k) in flat(pulled)]
+if pulled and not clear(pulled):
+    finish("box_not_clear")
+for k in again:
+    paste(k,True)
+if draft:
+    paste(draft,False)
+finish("ok" if hit else "not_queued")
+""".trim()
+
     fun createClaudeSession(sessionName: String, remotePath: String): String =
         createAgentSession(sessionName, remotePath, AgentHarness.CLAUDE)
 

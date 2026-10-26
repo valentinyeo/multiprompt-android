@@ -17,6 +17,7 @@ on:
           - chat-choices.md
           - chat-reactions.md
           - chat-queued.md
+          - chat-cancel.md
           - session-routing.md
           - terminal.md
       app_ref:

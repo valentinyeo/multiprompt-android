@@ -30,6 +30,7 @@ Numbered PNG/XML pairs show action and result. The transcript records commands a
 - [Session routing](session-routing.md): Inbox and swipe switching, typed and simulated dictated sends, independent SSH receipts.
 - [Chat choices](chat-choices.md): latest-reply option taps and live question number keys, with independent SSH/tmux receipts.
 - [Queued label](chat-queued.md): sent messages show Queued until taken in and answered, then return to normal.
+- [Cancel a queued message](chat-cancel.md): long-press a Queued message, cancel it before Claude takes it in, and prove Claude never receives it.
 - [Claude reactions](chat-reactions.md): quoted sends, one badge, restart identity, fallback and signed update offers.
 - [Session reader](session-reader.md): native output, Send, Enter/approve and Interrupt, with independent console receipts.
 - [Terminal](terminal.md): real SSH PTY/tmux fallback attachment.

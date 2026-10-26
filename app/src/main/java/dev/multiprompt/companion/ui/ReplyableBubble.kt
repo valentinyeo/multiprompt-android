@@ -96,6 +96,7 @@ internal fun ReplyableBubble(
     highlighted: Boolean = false,
     reactions: Set<ChatReactions.Emoji> = emptySet(),
     onReaction: ((ChatReactions.Emoji) -> Unit)? = null,
+    onCancel: (() -> Unit)? = null,
     content: @Composable (selectable: Boolean) -> Unit,
 ) {
     var selectable by remember { mutableStateOf(false) }
@@ -210,6 +211,11 @@ internal fun ReplyableBubble(
                                 ) { Text(emoji.text, fontSize = 28.sp) }
                             }
                         }
+                    }
+                }
+                if (onCancel != null) {
+                    group {
+                        action("Cancel message", Icons.Default.Close) { onCancel() }
                     }
                 }
                 group {
