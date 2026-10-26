@@ -2,6 +2,10 @@
 
 Sign in opens the account service in a Custom Tab for Cloudflare Access email OTP, then returns through the app callback. It is distinct from SSH public-key authentication.
 
+## Day-theme appearance
+
+The native Sign in page follows the selected theme, including dark status icons on light backgrounds. `DayThemeTest` captures this page in both themes alongside Inbox, chat, menu and settings. `tools/check-day-theme.sh` can install the published signed update and capture its real Sign in page. This does not prove email OTP or account return.
+
 ## Sub-features
 
 - `account-entry`: Sign in screen and browser handoff (automated).

@@ -121,7 +121,8 @@ private fun ReaderFixture(material3: Boolean, sunlight: Boolean) {
             field<MutableStateFlow<ChatHistoryState>>(history, "_state").value = ChatHistoryState(
                 history = ChatHistory(sid = "fixture", inode = 1, offset = 2, rows = List(40) { index ->
                     ChatHistoryProtocol.Row(if (index % 2 == 0) "user" else "assistant",
-                        "Message $index\n\nA longer reply to show the conversation scrolling under the top controls.",
+                        "Message $index\n\nA longer reply to show the conversation scrolling under the top controls." +
+                            if (index % 2 == 1) "\n\n```\nval ready = true\n```\n\n[Project](https://example.com)" else "",
                         "$index", "", index.toLong(), index + 1L)
                 }
                 ),

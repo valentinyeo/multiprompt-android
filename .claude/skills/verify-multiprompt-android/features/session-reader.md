@@ -29,6 +29,12 @@ Preconditions: fresh fixture; dispatch `feature=session-reader.md`. The driver f
 - Open **Session actions** again; capture `interrupt-action`; `tap_text 'Interrupt session'`. The actual process must receive SIGINT and record `VERIFY_INTERRUPTED_528`; capture `interrupt-result` after the same text appears in the app.
 - `receipts.txt` and `tmux-final.txt` independently corroborate all three mutations. Cleanup retains them, SSH logs and all PNG/XML pairs.
 
+## Day-theme appearance
+
+The reader uses light theme roles for message cards, code, controls and composer. The top fade uses the page background. Dark reader colors remain unchanged. `DayThemeTest` in `test.yml` captures five screens and measures rendered light-text contrast, including code and links. Dispatch that workflow with `baseline_ref` to capture before/after screens and compare dark pixels. The signed-update input also installs the published release on its emulator.
+
+The SSH journey above proves transport and actions, not chat appearance. Its console has no supported agent transcript. Account OTP remains outside both appearance and SSH evidence.
+
 ## Gotchas
 
 The console accepts text instead of executing it as shell commands. Receipts are written only by the remote foreground process, never by the driver. Merely seeing locally echoed input is not send proof. Enter and Interrupt are separate actions and need separate receipts. The driver does not call SshRepository or send tmux keys directly. Reader attachment must remain live after each action. Account OTP, alternate-screen history, agent-specific approvals, dictation and other extras need their own external preconditions and are not covered. Offline mode is debug-only and does not confer account permissions.

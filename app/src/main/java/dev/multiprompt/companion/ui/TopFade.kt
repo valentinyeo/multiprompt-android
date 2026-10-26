@@ -13,7 +13,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -21,15 +20,14 @@ import androidx.compose.ui.unit.dp
 @Composable
 internal fun TopFade(content: @Composable ColumnScope.() -> Unit) {
     val background = MaterialTheme.colorScheme.background
-    val statusColor = if (background.luminance() > 0.5f) ReaderBackground else background
     val statusHeight = WindowInsets.statusBars.getTop(LocalDensity.current).toFloat()
     Column(
         Modifier.fillMaxWidth().testTag("top-fade").drawBehind {
             val height = size.height + 24.dp.toPx()
             drawRect(
                 brush = Brush.verticalGradient(
-                    0f to statusColor,
-                    (statusHeight / height).coerceIn(0.01f, 0.5f) to statusColor,
+                    0f to background,
+                    (statusHeight / height).coerceIn(0.01f, 0.5f) to background,
                     0.65f to background.copy(alpha = 0.95f),
                     1f to Color.Transparent,
                     endY = height,

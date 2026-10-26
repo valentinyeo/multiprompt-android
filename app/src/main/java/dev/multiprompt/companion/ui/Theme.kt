@@ -263,6 +263,13 @@ fun MultipromptTheme(
     content: @Composable () -> Unit,
 ) {
     val colors = when {
+        readerStyle && sunlight -> remember(material3) {
+            if (material3) Material3LightColors else SunlightColors.copy(
+                surfaceContainer = ChatBubbleAgentLight,
+                surfaceContainerHigh = ChatBubbleUserLight,
+                surfaceContainerHighest = ChatBubbleUserLight,
+            )
+        }
         readerStyle && !sunlight -> remember {
             Material3DarkColors.copy(
                 background = ReaderBackground, surface = ReaderBackground,
