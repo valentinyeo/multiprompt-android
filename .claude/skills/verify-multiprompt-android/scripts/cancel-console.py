@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import select
+import shutil
 import sys
 import termios
 import tty
@@ -55,10 +56,13 @@ def render():
     first = rows[0]
     if queue and not box:
         first = "\x1b[2mPress up to edit queued messages\x1b[0m"
-    lines = ["Claude Code", "VERIFY_READY_1010", "Ready for cancel tests.", "❯ " + first]
-    lines += ["  " + row for row in rows[1:]]
-    lines.append("─" * 60)
-    sys.stdout.write("\x1b[2J\x1b[H" + "\r\n".join(lines) + "\r\n")
+    top = ["Claude Code", "VERIFY_READY_1010", "Ready for cancel tests."]
+    top += ["❯ " + " ".join(text.split()) for text in queue]
+    top += ["✻ Working…"] if queue else []
+    bottom = ["─" * 60, "❯ " + first, *("  " + row for row in rows[1:]), "─" * 60, "  ? for shortcuts"]
+    height = shutil.get_terminal_size().lines
+    lines = top + [""] * max(0, height - len(top) - len(bottom)) + bottom
+    sys.stdout.write("\x1b[2J\x1b[H" + "\r\n".join(lines))
     sys.stdout.flush()
 
 
