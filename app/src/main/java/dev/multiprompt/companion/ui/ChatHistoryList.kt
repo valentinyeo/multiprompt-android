@@ -258,7 +258,8 @@ private fun HistoryBubble(
 ) {
     val fontSize = chatFontSize((14f * fontScale).sp, fontScale)
     val isUser = role == "user"
-    val reply = remember(text, isUser) { if (isUser) ReplyQuote.parse(text) else null }
+    val note = remember(text, isUser, pending) { if (isUser && !pending) SessionNote.parse(text) else null }
+    val reply = remember(text, isUser) { if (isUser && note == null) ReplyQuote.parse(text) else null }
     val start = remember { BringIntoViewRequester() }
     LaunchedEffect(highlighted) {
         if (highlighted) {
@@ -269,6 +270,10 @@ private fun HistoryBubble(
     Column(Modifier.testTag("chat-message-$key").bringIntoViewRequester(start).then(
         if (highlighted) Modifier.semantics { stateDescription = "Original message" } else Modifier,
     )) {
+        if (note != null) {
+            SessionNoteChip(note, sessionName, sunlight, fontScale, key)
+            return@Column
+        }
         if (reply != null) ReplyReference(reply, sunlight, fontScale, Modifier.alpha(if (pending) 0.5f else 1f)) { onJump(reply) }
         ReplyableBubble(isUser = isUser, sunlight = sunlight, text = text,
             modifier = Modifier.alpha(if (pending) 0.5f else 1f),
