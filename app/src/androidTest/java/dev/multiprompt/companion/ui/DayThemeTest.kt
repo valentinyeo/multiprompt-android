@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -97,7 +98,7 @@ class DayThemeTest {
             "chat" -> "Message 0"
             else -> error("Unknown screenshot: $name")
         }
-        compose.onNodeWithText(anchor, substring = name.endsWith("-chat")).assertIsDisplayed()
+        compose.onNodeWithText(anchor, substring = name.endsWith("-chat")).assertIsDisplayed().captureToImage()
         automation.waitForIdle(100, 5_000)
         val screen = automation.takeScreenshot()
         screen.let { bitmap ->
@@ -118,8 +119,9 @@ class DayThemeTest {
             if (node.boundsInRoot.width <= 0 || node.boundsInRoot.height <= 0) return@forEachIndexed
             interaction.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
             val bounds = node.boundsInRoot
-            val left = bounds.left.toInt().coerceIn(0, screen.width - 1)
-            val top = bounds.top.toInt().coerceIn(0, screen.height - 1)
+            val position = node.positionOnScreen
+            val left = position.x.toInt().coerceIn(0, screen.width - 1)
+            val top = position.y.toInt().coerceIn(0, screen.height - 1)
             val width = bounds.width.toInt().coerceIn(1, screen.width - left)
             val height = bounds.height.toInt().coerceIn(1, screen.height - top)
             val pixels = IntArray(width * height)
