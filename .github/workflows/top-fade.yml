@@ -48,12 +48,16 @@ jobs:
           arch: x86_64
           profile: pixel_6
           ram-size: 2048M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -verbose > /tmp/top-fade-emulator.log 2>&1
           disable-animations: true
           script: tools/top-fade-proof.sh
       - name: Retain emulator diagnostics
         if: always()
         run: |
           mkdir -p build/top-fade-diagnostics
+          if [ -f /tmp/top-fade-emulator.log ]; then
+            cp /tmp/top-fade-emulator.log build/top-fade-diagnostics/emulator.txt
+          fi
           sudo dmesg -T > build/top-fade-diagnostics/kernel.txt
           free -m > build/top-fade-diagnostics/memory.txt
           ps -eo pid,ppid,stat,rss,args > build/top-fade-diagnostics/processes.txt
