@@ -691,7 +691,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             observations.takeIf { it > 0 }?.let { key to it }
         }.toMap()
-        val archivedKeys = sessions
+        val archivedKeys = AccountHostMap.withAccountSessions(sessions, current.accountLayout, mapping)
             .filter { session ->
                 val key = SessionReadStore.key(session.hostId, session.name)
                 sessionReads.isArchived(

@@ -58,7 +58,12 @@ tap_split() {
             adb shell input tap "$x" "$y"
             return 0
         fi
-        adb shell input swipe 900 400 200 400 300
+        local row=0 label
+        for label in Runners Notes Work All; do
+            if point=$(python3 "$here/ui.py" "$EVIDENCE/current.xml" tap "$label"); then read -r x row <<< "$point"; break; fi
+        done
+        (( row > 0 )) || continue
+        adb shell input swipe 900 "$row" 200 "$row" 300
     done
     printf 'Split %s not reachable\n' "$1"
     shot "failure-split-$1"
@@ -145,7 +150,9 @@ stars star runner-1 ghost-fav | tee "$EVIDENCE/favorites-set.json"
 tap_split All
 wait_text runner-1 30 hasi
 shot android-split-all
+wait_text runner-2 30 hasi
 tap_split Favorites
+wait_gone runner-2 60 hasi
 wait_text runner-1 60 hasi
 shot android-split-favorites
 if ! wait_text ghost-fav 30 hasi; then
