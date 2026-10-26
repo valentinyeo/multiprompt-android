@@ -4,7 +4,7 @@ set -euo pipefail
 : "${MULTIPROMPT_DIR:?Set the multiprompt checkout}"
 mkdir -p "$FIXTURE"
 sudo apt-get update -qq
-sudo apt-get install -y openssh-server tmux
+sudo apt-get install -y openssh-server tmux strace
 sudo useradd -m -s /bin/bash valentin
 sudo usermod -p x valentin
 ssh-keygen -q -t ed25519 -N '' -C journey-ephemeral -f "$FIXTURE/user-key"
