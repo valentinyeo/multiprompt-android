@@ -2305,6 +2305,13 @@ private fun DissolvedSessionCard(
     }
 }
 
+internal enum class ReaderMenuPage(val title: String) {
+    MAIN("Session actions"),
+    MODEL("Model and effort"),
+    DISPLAY("Display"),
+    MORE("More"),
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ReaderTopBar(
@@ -2528,6 +2535,7 @@ internal fun ReaderScreen(
     var sendMarkPending by remember(connection) { mutableStateOf(false) }
     var sentDraft by remember(connection) { mutableStateOf<SentDraft?>(null) }
     var menuExpanded by remember(connection) { mutableStateOf(false) }
+    var menuPage by remember(connection) { mutableStateOf(ReaderMenuPage.MAIN) }
     var apiKeyDialogVisible by remember(connection) { mutableStateOf(false) }
     var apiKeyDraft by remember(connection) { mutableStateOf("") }
     var apiKeyError by remember(connection) { mutableStateOf<String?>(null) }
@@ -2983,200 +2991,231 @@ internal fun ReaderScreen(
                 onModelCommand = sendModelCommand,
                 onOpenTerminal = onOpenTerminal,
                 onReleaseNotes = onReleaseNotes,
-                onMenuClick = { menuExpanded = true },
+                onMenuClick = { menuPage = ReaderMenuPage.MAIN; menuExpanded = true },
                 menuContent = {
                     DropdownMenu(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false },
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("Archive session") },
-                            onClick = { menuExpanded = false; onDissolve() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Remind me") },
-                            onClick = { menuExpanded = false; reminderDialogVisible = true },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (archived) "Return to open" else "Waiting") },
-                            onClick = { menuExpanded = false; onArchiveToggle() },
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text(listOfNotNull(runtimeDetails.label, statusLabel).joinToString(" · ").ifEmpty { "Model / effort" }) },
-                            enabled = false,
-                            onClick = {},
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Current: ${runtimeDetails.label ?: "Unknown"}") },
-                            enabled = false,
-                            onClick = {},
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Open model picker (/model)") },
-                            onClick = { menuExpanded = false; sendModelCommand("/model") },
-                        )
-                        if (session.agent == AgentKind.CLAUDE) {
-                            listOf("Opus", "Sonnet", "Fable").forEach { model ->
-                                DropdownMenuItem(
-                                    text = { Text("Use Claude $model") },
-                                    onClick = { menuExpanded = false; sendModelCommand("/model ${model.lowercase()}") },
-                                )
-                            }
-                            listOf("low", "medium", "high", "xhigh", "max").forEach { level ->
-                                DropdownMenuItem(
-                                    text = { Text("Set effort: $level") },
-                                    onClick = { menuExpanded = false; sendModelCommand("/effort $level") },
-                                )
-                            }
-                        }
-                        DropdownMenuItem(
-                            text = { Text("Release notes") },
-                            onClick = { menuExpanded = false; onReleaseNotes() },
-                        )
-                        if (reader.alternateOn) {
+                        if (menuPage != ReaderMenuPage.MAIN) {
                             DropdownMenuItem(
-                                text = { Text("Session history") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onSessionInteraction()
-                                    readerScope.launch {
-                                        connection.enterHistory()
-                                        historyDialogOpen = true
+                                text = { Text("‹ ${menuPage.title}") },
+                                onClick = { menuPage = ReaderMenuPage.MAIN },
+                            )
+                            HorizontalDivider()
+                        }
+                        when (menuPage) {
+                            ReaderMenuPage.MAIN -> {
+                                DropdownMenuItem(
+                                    text = { Text("Enter / approve") },
+                                    enabled = !reader.sending,
+                                    onClick = {
+                                        menuExpanded = false
+                                        onSessionInteraction()
+                                        onSessionInput()
+                                        connection.sendEnter()
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Interrupt session") },
+                                    enabled = !reader.sending,
+                                    onClick = {
+                                        menuExpanded = false
+                                        onSessionInteraction()
+                                        connection.interrupt()
+                                    },
+                                )
+                                if (reader.alternateOn) {
+                                    DropdownMenuItem(
+                                        text = { Text("Session history") },
+                                        onClick = {
+                                            menuExpanded = false
+                                            onSessionInteraction()
+                                            readerScope.launch {
+                                                connection.enterHistory()
+                                                historyDialogOpen = true
+                                            }
+                                        },
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text("Open live terminal") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onOpenTerminal()
+                                    },
+                                )
+                                HorizontalDivider()
+                                if (unread) {
+                                    DropdownMenuItem(
+                                        text = { Text("Mark read") },
+                                        onClick = {
+                                            menuExpanded = false
+                                            onMarkRead()
+                                        },
+                                    )
+                                }
+                                if (session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {
+                                    DropdownMenuItem(
+                                        text = { Text("Rename") },
+                                        onClick = {
+                                            menuExpanded = false
+                                            renameDraft = session.displayName
+                                            renameError = null
+                                            renameDialogVisible = true
+                                        },
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text("Remind me") },
+                                    onClick = { menuExpanded = false; reminderDialogVisible = true },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(if (archived) "Return to open" else "Waiting") },
+                                    onClick = { menuExpanded = false; onArchiveToggle() },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Archive session") },
+                                    onClick = { menuExpanded = false; onDissolve() },
+                                )
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = { Text("Model and effort ›") },
+                                    onClick = { menuPage = ReaderMenuPage.MODEL },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Display ›") },
+                                    onClick = { menuPage = ReaderMenuPage.DISPLAY },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("More ›") },
+                                    onClick = { menuPage = ReaderMenuPage.MORE },
+                                )
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = { Text("End session", color = MaterialTheme.colorScheme.error) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        endDialogVisible = true
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Remove from list") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onForget()
+                                    },
+                                )
+                            }
+                            ReaderMenuPage.MODEL -> {
+                                DropdownMenuItem(
+                                    text = { Text(listOfNotNull(runtimeDetails.label, statusLabel).joinToString(" · ").ifEmpty { "Model unknown" }) },
+                                    enabled = false,
+                                    onClick = {},
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Open model picker (/model)") },
+                                    onClick = { menuExpanded = false; sendModelCommand("/model") },
+                                )
+                                if (session.agent == AgentKind.CLAUDE) {
+                                    listOf("Opus", "Sonnet", "Fable").forEach { model ->
+                                        DropdownMenuItem(
+                                            text = { Text("Use Claude $model") },
+                                            onClick = { menuExpanded = false; sendModelCommand("/model ${model.lowercase()}") },
+                                        )
                                     }
-                                },
-                            )
-                        }
-                        DropdownMenuItem(
-                            text = { Text("Enter / approve") },
-                            enabled = !reader.sending,
-                            onClick = {
-                                menuExpanded = false
-                                onSessionInteraction()
-                                onSessionInput()
-                                connection.sendEnter()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Interrupt session") },
-                            enabled = !reader.sending,
-                            onClick = {
-                                menuExpanded = false
-                                onSessionInteraction()
-                                connection.interrupt()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (unread) "Mark read" else "Already read") },
-                            enabled = unread,
-                            onClick = {
-                                menuExpanded = false
-                                onMarkRead()
-                            },
-                        )
-                        if (session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {
-                            DropdownMenuItem(
-                                text = { Text("Rename") },
-                                onClick = {
-                                    menuExpanded = false
-                                    renameDraft = session.displayName
-                                    renameError = null
-                                    renameDialogVisible = true
-                                },
-                            )
-                        }
-                        DropdownMenuItem(
-                            text = { Text("Open live terminal") },
-                            onClick = {
-                                menuExpanded = false
-                                onOpenTerminal()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    "Copy raw transcript (${reader.output.count { it == '\n' } + 1} lines · " +
-                                        "alt ${if (reader.alternateOn) 1 else 0} · " +
-                                        "view ${scrollState.value}/${scrollState.maxValue})",
+                                    HorizontalDivider()
+                                    listOf("low", "medium", "high", "xhigh", "max").forEach { level ->
+                                        DropdownMenuItem(
+                                            text = { Text("Set effort: $level") },
+                                            onClick = { menuExpanded = false; sendModelCommand("/effort $level") },
+                                        )
+                                    }
+                                }
+                            }
+                            ReaderMenuPage.DISPLAY -> {
+                                DropdownMenuItem(
+                                    text = { Text(if (technicalMode) "Hide terminal details" else "Show terminal details") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onTechnicalModeChanged(!technicalMode)
+                                    },
                                 )
-                            },
-                            onClick = {
-                                menuExpanded = false
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
-                                    as ClipboardManager
-                                clipboard.setPrimaryClip(
-                                    ClipData.newPlainText("multiprompt transcript", reader.output),
+                                DropdownMenuItem(
+                                    text = { Text(if (sunlightMode) "Sunlight mode off" else "Sunlight mode on") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onSetAppTheme(if (sunlightMode) AppTheme.DARK else AppTheme.SUNLIGHT)
+                                    },
                                 )
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Estimate accuracy") },
-                            onClick = {
-                                menuExpanded = false
-                                onShowEtaAccuracy()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (technicalMode) "Hide terminal details" else "Show terminal details") },
-                            onClick = {
-                                menuExpanded = false
-                                onTechnicalModeChanged(!technicalMode)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (sunlightMode) "Sunlight mode off" else "Sunlight mode on") },
-                            onClick = {
-                                menuExpanded = false
-                                onSetAppTheme(if (sunlightMode) AppTheme.DARK else AppTheme.SUNLIGHT)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Use default font size") },
-                            onClick = {
-                                menuExpanded = false
-                                transcriptZoom = onResetFontScale()
-                            },
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text("End session", color = MaterialTheme.colorScheme.error) },
-                            onClick = {
-                                menuExpanded = false
-                                endDialogVisible = true
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Remove from list") },
-                            onClick = {
-                                menuExpanded = false
-                                onForget()
-                            },
-                        )
-                        HorizontalDivider()
-                        AppMenuItems(
-                            signedIn = signedIn,
-                            onSignIn = onSignIn,
-                            onSignOut = onSignOut,
-                            onDismiss = { menuExpanded = false },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Dictation API key") },
-                            onClick = {
-                                menuExpanded = false
-                                apiKeyDraft = ""
-                                apiKeyError = null
-                                apiKeyDialogVisible = true
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Screencast2 upload key") },
-                            onClick = {
-                                menuExpanded = false
-                                imageKeyDraft = ""
-                                imageKeyError = null
-                                imageKeyDialogVisible = true
-                            },
-                        )
+                                DropdownMenuItem(
+                                    text = { Text("Use default font size") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        transcriptZoom = onResetFontScale()
+                                    },
+                                )
+                            }
+                            ReaderMenuPage.MORE -> {
+                                DropdownMenuItem(
+                                    text = { Text("Release notes") },
+                                    onClick = { menuExpanded = false; onReleaseNotes() },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Estimate accuracy") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onShowEtaAccuracy()
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            if (technicalMode) {
+                                                "Copy raw transcript (${reader.output.count { it == '\n' } + 1} lines · " +
+                                                    "alt ${if (reader.alternateOn) 1 else 0} · " +
+                                                    "view ${scrollState.value}/${scrollState.maxValue})"
+                                            } else {
+                                                "Copy raw transcript"
+                                            },
+                                        )
+                                    },
+                                    onClick = {
+                                        menuExpanded = false
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
+                                            as ClipboardManager
+                                        clipboard.setPrimaryClip(
+                                            ClipData.newPlainText("multiprompt transcript", reader.output),
+                                        )
+                                    },
+                                )
+                                HorizontalDivider()
+                                AppMenuItems(
+                                    signedIn = signedIn,
+                                    onSignIn = onSignIn,
+                                    onSignOut = onSignOut,
+                                    onDismiss = { menuExpanded = false },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Dictation API key") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        apiKeyDraft = ""
+                                        apiKeyError = null
+                                        apiKeyDialogVisible = true
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Screencast2 upload key") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        imageKeyDraft = ""
+                                        imageKeyError = null
+                                        imageKeyDialogVisible = true
+                                    },
+                                )
+                            }
+                        }
                     }
                 },
             )
