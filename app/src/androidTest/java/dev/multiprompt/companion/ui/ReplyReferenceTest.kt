@@ -25,6 +25,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.multiprompt.companion.reader.ChatReactions
 import dev.multiprompt.companion.reader.ChatHistoryMessage
 import dev.multiprompt.companion.ssh.ClaudeQuestion
 import java.io.File
@@ -75,6 +76,24 @@ class ReplyReferenceTest {
             .put("highlighted", true)
             .put("wire", wire)
             .toString())
+    }
+
+    @Test
+    fun foldedReactionsDoNotShiftReplyJumpTarget() {
+        val source = ChatHistoryMessage("reaction-source", "assistant", "Original reply with a stable provider identity", "", 31, 32, "msg_source")
+        val reaction = ChatReactions.format(ChatReactions.Emoji.LIKE, source.requestId, source.text)!!
+        val messages = (1..30).map { ChatHistoryMessage("older-$it", "assistant", "Older message $it", "", it.toLong(), it + 1L) } +
+            source +
+            (33..67).map { ChatHistoryMessage("later-$it", "assistant", "Later message $it", "", it.toLong(), it + 1L) } +
+            (1..20).map { ChatHistoryMessage("reaction-$it", "user", reaction, "", 67L + it, 68L + it) } +
+            ChatHistoryMessage("reply", "user", ReplyQuote.compose(source.text, "Answer to the original"), "", 90, 91)
+        compose.setContent {
+            MaterialTheme { ChatHistoryList(messages, sunlight = true, modifier = Modifier.background(Color.White)) }
+        }
+        compose.onNodeWithTag("chat-message-reaction-source").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Jump to original message").performClick()
+        compose.onNodeWithTag("chat-message-reaction-source").assertIsDisplayed()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Original message"))
     }
 
     @Test
