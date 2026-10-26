@@ -25,6 +25,7 @@ android {
         versionName = releaseVersionName
 
         buildConfigField("boolean", "MATERIAL3", "false")
+        buildConfigField("String", "ACCOUNT_ORIGIN", "\"https://account.multiprompt.dev\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField(
@@ -50,6 +51,7 @@ android {
             applicationIdSuffix = ".debug"
             manifestPlaceholders["accountRedirectScheme"] = "dev.multiprompt.companion.debug"
             versionNameSuffix = "-debug"
+            providers.gradleProperty("accountOrigin").orNull?.let { buildConfigField("String", "ACCOUNT_ORIGIN", "\"$it\"") }
         }
         release {
             isMinifyEnabled = true

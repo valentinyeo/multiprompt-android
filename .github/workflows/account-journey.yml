@@ -1,0 +1,71 @@
+name: Account layout journey
+
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'gradle/**'
+      - 'tools/account-journey/**'
+      - '.github/workflows/account-journey.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: account-journey-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      EVIDENCE: ${{ github.workspace }}/account-journey-evidence
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: valentinyeo/multiprompt
+          ref: ceo/IGSH-963-desktop
+          path: multiprompt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.1'
+      - name: Build the account service for the local journey
+        working-directory: multiprompt/service
+        run: |
+          npm ci
+          npx wrangler deploy --dry-run --outdir .build
+      - name: Build debug app pointed at the local service
+        run: gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PaccountOrigin=http://10.0.2.2:8787 assembleDebug assembleDebugAndroidTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        env:
+          MULTIPROMPT_DIR: ${{ github.workspace }}/multiprompt
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 2048M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: bash -c 'adb install -r -g app/build/outputs/apk/debug/app-debug.apk && adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk && tools/account-journey/drive.sh'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: account-journey-android
+          path: account-journey-evidence/
+          if-no-files-found: error
+          retention-days: 14

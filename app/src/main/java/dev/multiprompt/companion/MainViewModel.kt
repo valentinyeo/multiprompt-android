@@ -262,7 +262,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             while (true) {
-                delay(20_000)
+                delay(5_000)
                 if (foreground.value) syncAccount()
             }
         }

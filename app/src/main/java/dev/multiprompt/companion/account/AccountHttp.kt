@@ -36,5 +36,5 @@ class AccountHttpClient(
         }
     }
 
-    companion object { const val ORIGIN = "https://account.multiprompt.dev" }
+    companion object { val ORIGIN: String = dev.multiprompt.companion.BuildConfig.ACCOUNT_ORIGIN }
 }
