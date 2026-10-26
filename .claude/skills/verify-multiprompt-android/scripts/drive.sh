@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md) ;;
+    sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -400,8 +400,48 @@ CHOICES
     printf 'FEATURE VERIFIED: %s\n' "$feature"
     exit 0
 fi
-wait_for_text VERIFY_READY_528
+if [[ "$feature" == chat-queued.md ]]; then
+    wait_for_text VERIFY_READY_1008
+else
+    wait_for_text VERIFY_READY_528
+fi
 shot reader-ready
+if [[ "$feature" == chat-queued.md ]]; then
+    wait_for_text 'Ready for queued messages.'
+    shot queued-ready
+    fill 'Message verify-session' WAITING_ONE
+    tap_desc 'Send prompt'
+    wait_receipt 'VERIFY_RECEIVED:WAITING_ONE'
+    wait_for_text WAITING_ONE
+    fill 'Message verify-session' WAITING_TWO
+    tap_desc 'Send prompt'
+    wait_receipt 'VERIFY_RECEIVED:WAITING_TWO'
+    wait_for_text WAITING_TWO
+    shot queued-waiting
+    python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 2 WAITING
+    sudo -u verifyssh python3 /home/verifyssh/queued-console.py take-in
+    sleep 8
+    shot queued-taken-in
+    python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 2 TAKEN_IN_NO_REPLY
+    sudo -u verifyssh python3 /home/verifyssh/queued-console.py reply
+    wait_for_text 'Both messages received.'
+    for attempt in {1..30}; do
+        dump_ui
+        if python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 0 REPLIED >/dev/null 2>&1; then break; fi
+        sleep 1
+    done
+    shot queued-replied
+    if ! python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 0 REPLIED; then
+        printf 'IGSH1008_QUEUED_STUCK\n' >&2
+        exit 1
+    fi
+    wait_for_text WAITING_ONE
+    wait_for_text WAITING_TWO
+    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/queued-receipts.txt"
+    sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-queued-work/a1b2c3d4-1008-4000-8000-000000001008.jsonl > "$EVIDENCE/queued-transcript.jsonl"
+    printf 'ANDROID_QUEUED_CLEARS_AFTER_REPLY\n'
+    exit 0
+fi
 if [[ "$feature" == chat-reactions.md ]]; then
     wait_for_text 'FIRST REPLY'
     wait_for_text 'SECOND REPLY'

@@ -40,7 +40,8 @@ data class ChatHistory(
             }
             grouped[key] = ChatHistoryMessage(key, row.role, text, previous?.timestamp ?: row.timestamp,
                 previous?.offset ?: row.offset, row.end, row.id,
-                row.queued && !QueuedMessages.accepted(row.text, QueuedMessages.timestampMillis(row.timestamp), rows, row.offset))
+                row.queued && !QueuedMessages.accepted(row.text, QueuedMessages.timestampMillis(row.timestamp), rows, row.offset) &&
+                    !QueuedMessages.answered(rows, row.offset))
         }
         grouped.values.toList()
     }

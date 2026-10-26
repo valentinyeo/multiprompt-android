@@ -16,6 +16,7 @@ on:
           - session-reader.md
           - chat-choices.md
           - chat-reactions.md
+          - chat-queued.md
           - session-routing.md
           - terminal.md
       app_ref:
