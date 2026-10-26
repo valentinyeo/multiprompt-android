@@ -131,6 +131,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -2524,6 +2525,7 @@ internal fun ReaderScreen(
     var dictationPrefix by remember(connection) { mutableStateOf("") }
     val dictationSubmissionStarted = remember(connection) { AtomicBoolean(false) }
     var pendingPromptAction by remember(connection) { mutableStateOf<Long?>(null) }
+    var sendMarkPending by remember(connection) { mutableStateOf(false) }
     var menuExpanded by remember(connection) { mutableStateOf(false) }
     var apiKeyDialogVisible by remember(connection) { mutableStateOf(false) }
     var apiKeyDraft by remember(connection) { mutableStateOf("") }
@@ -2667,6 +2669,13 @@ internal fun ReaderScreen(
     LaunchedEffect(reader.actionError) {
         if (reader.actionError != null) pendingPromptAction = null
     }
+    LaunchedEffect(prompt, sendMarkPending) {
+        if (sendMarkPending && prompt.isEmpty()) {
+            withFrameNanos { }
+            SendTiming.mark("box_cleared_frame")
+            sendMarkPending = false
+        }
+    }
     LaunchedEffect(dictationState.transcript) {
         val spoken = dictationState.transcript.trim()
         if (spoken.isNotBlank()) {
@@ -2700,6 +2709,8 @@ internal fun ReaderScreen(
         ) {
             val actionCount = reader.completedActions
             if (connection.sendPrompt(composedPrompt)) {
+                SendTiming.mark("message_added")
+                sendMarkPending = true
                 onSessionInteraction()
                 onSessionInput()
                 pendingPromptAction = actionCount
@@ -2722,6 +2733,7 @@ internal fun ReaderScreen(
     }
     val submitPrompt = {
         if (!reader.sending && pendingPromptAction == null) {
+            SendTiming.tap()
             if (dictationActive) {
                 if (dictationSubmissionStarted.compareAndSet(false, true)) {
                     sendAfterDictation = true

@@ -439,6 +439,8 @@ shot send-draft
 tap_desc 'Send prompt'
 shot eta-sending
 python3 "$scripts/no-chat-bar.py" "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-eta-sending.png" sending
+timeout 15s adb logcat -d -s SendTiming:I > "$EVIDENCE/send-timing.txt"
+python3 "$scripts/send-timing.py" "$EVIDENCE/current.xml" "$EVIDENCE/send-timing.txt" VERIFY_SENT_528
 wait_receipt 'VERIFY_RECEIVED:VERIFY_SENT_528'
 wait_for_text 'VERIFY_RECEIVED:VERIFY_SENT_528'
 shot send-result
