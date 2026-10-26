@@ -54,6 +54,7 @@ cleanup() {
     [[ -n "${server_pid:-}" ]] && kill "$server_pid"
     timeout 15s adb logcat -d > "$EVIDENCE/logcat.txt"
     { free -m; pgrep -a qemu; pgrep -a emulator; sudo dmesg 2>&1 | tail -40; } > "$EVIDENCE/host.txt" 2>&1
+    tail -n 200 /tmp/journey-emulator.log > "$EVIDENCE/emulator-tail.txt" 2>&1
     rm -rf "$work"
     printf 'DRIVER EXIT: %s\n' "$code"
     exit "$code"
