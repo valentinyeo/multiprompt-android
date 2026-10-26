@@ -16,6 +16,9 @@ import dev.multiprompt.companion.model.DissolvedSession
 import dev.multiprompt.companion.model.RemoteDirectory
 import dev.multiprompt.companion.model.RefreshMerge
 import dev.multiprompt.companion.data.UnreadCount
+import dev.multiprompt.companion.notify.ReplyNotificationPolicy
+import dev.multiprompt.companion.notify.ReplyNotifier
+import dev.multiprompt.companion.ui.SessionPreview
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.RetiredHosts
 import dev.multiprompt.companion.data.SessionSearch
@@ -96,6 +99,7 @@ data class AppUiState(
     val readerSession: TmuxSession? = null,
     val unreadSessionKeys: Set<String> = emptySet(),
     val unreadCounts: Map<String, Int> = emptyMap(),
+    val repliedSessionKeys: Set<String> = emptySet(),
     val archivedSessionKeys: Set<String> = emptySet(),
     val sessionBucket: SessionBucket = SessionBucket.OPEN,
     val dissolvedSessions: List<DissolvedSession> = emptyList(),
@@ -188,6 +192,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var pendingLayout = accountStore.load(syncAuth.accountId())
     private var usedStampThrottle = UsedStampThrottle(pendingLayout?.base)
     private val foreground = MutableStateFlow(false)
+    private var replyNotificationsBaselined = false
+    private var pendingNotificationKey: String? = null
     private var trustRefreshQueued = false
     private var accountRequestRunning = false
     private var accountGeneration = 0
@@ -244,10 +250,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         updates.check()
         if (_state.value.hosts.isNotEmpty()) refresh()
         viewModelScope.launch {
+            var backgroundTicks = 0
             while (true) {
                 delay(SESSION_REFRESH_INTERVAL_MS)
                 sweepWarmReaders()
-                if (foreground.value && _state.value.hosts.isNotEmpty()) refresh()
+                backgroundTicks = if (foreground.value) 0 else backgroundTicks + 1
+                val due = foreground.value || backgroundTicks % BACKGROUND_REFRESH_EVERY == 0
+                if (due && _state.value.hosts.isNotEmpty()) refresh()
             }
         }
         viewModelScope.launch {
@@ -560,6 +569,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val cachedByHost = snapshot.associate { host -> host.id to sessionCache.load(host.id) }
             val results = mutableMapOf<String, HostRefresh>()
             _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = false) }
+            openPendingNotificationSession()
             snapshot.map { host ->
                 async {
                     val result = runCatching { ssh.listSessions(host) }
@@ -581,11 +591,50 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 sessionCache.save(result.hostId, result.sessions)
             }
             _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = true) }
+            openPendingNotificationSession()
+            pendingNotificationKey = null
+            syncReplyNotifications()
             if (trustRefreshQueued) {
                 trustRefreshQueued = false
                 refresh()
             }
         }
+    }
+
+    private fun syncReplyNotifications() {
+        val state = _state.value
+        val front = if (foreground.value) {
+            (state.terminalSession ?: state.readerSession)?.let { SessionReadStore.key(it.hostId, it.name) }
+        } else {
+            null
+        }
+        val plan = ReplyNotificationPolicy.plan(
+            replyNotificationsBaselined,
+            state.repliedSessionKeys,
+            state.unreadCounts,
+            front,
+            ReplyNotifier.activeKeys(app),
+        )
+        replyNotificationsBaselined = true
+        _state.update { it.copy(repliedSessionKeys = emptySet()) }
+        ReplyNotifier.cancel(app, plan.cancel)
+        plan.notify.forEach { key ->
+            val session = state.sessions.firstOrNull { SessionReadStore.key(it.hostId, it.name) == key } ?: return@forEach
+            val preview = SessionPreview.line(session.preview).ifBlank { "New reply" }
+            ReplyNotifier.show(app, session.hostId, session.name, session.displayName, preview)
+        }
+    }
+
+    fun openSessionFromNotification(hostId: String, sessionName: String) {
+        pendingNotificationKey = SessionReadStore.key(hostId, sessionName)
+        openPendingNotificationSession()
+    }
+
+    private fun openPendingNotificationSession() {
+        val key = pendingNotificationKey ?: return
+        val session = _state.value.sessions.firstOrNull { SessionReadStore.key(it.hostId, it.name) == key } ?: return
+        pendingNotificationKey = null
+        openReader(session, userInitiated = true)
     }
 
     private fun applyRefresh(
@@ -658,6 +707,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .filter { TmuxText.isWaitingForInput(it.preview, it.agent) }
             .filter(sessionReads::isUnread)
             .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) }
+        val replied = mutableSetOf<String>()
         val unreadCounts = sessions.associate { session ->
             val key = SessionReadStore.key(session.hostId, session.name)
             val stored = sessionReads.unreadCountState(session)
@@ -668,6 +718,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 unread = sessionReads.isUnread(session),
             ) else stored
             if (counted != stored) sessionReads.saveUnreadCountState(session, counted)
+            if (counted.count > stored.count) replied += key
             key to UnreadCount.displayed(counted.count, key in unreadKeys)
         }
         return current.copy(
@@ -700,6 +751,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }.toMap(),
             unreadSessionKeys = unreadKeys,
             unreadCounts = unreadCounts,
+            repliedSessionKeys = current.repliedSessionKeys + replied,
             archivedSessionKeys = archivedKeys,
             workspaces = orderedWorkspaces,
             workspaceSplitIds = workspaceSplitIds,
@@ -767,6 +819,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         noteSessionInteraction(session)
         sessionReads.markRead(session)
         val key = SessionReadStore.key(session.hostId, session.name)
+        ReplyNotifier.cancel(app, key)
         _state.value.terminal?.close()
         val reader = warmReader(key) {
             SessionReaderConnection(
@@ -796,6 +849,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val session = _state.value.readerSession ?: return
         sessionReads.markRead(session)
         val key = SessionReadStore.key(session.hostId, session.name)
+        ReplyNotifier.cancel(app, key)
         _state.update { it.copy(unreadSessionKeys = it.unreadSessionKeys - key, unreadCounts = it.unreadCounts - key) }
     }
 
@@ -1369,6 +1423,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             it.hostId == session.hostId && it.name == session.name
         } == true
         noteSessionInteraction(session)
+        ReplyNotifier.cancel(app, SessionReadStore.key(session.hostId, session.name))
         _state.value.terminal?.close()
         val terminal = TerminalConnection(
             repository = ssh,
@@ -1727,5 +1782,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val MAX_DISPLAY_NAME_LENGTH = 63
         const val IDLE_OBSERVATIONS_TO_RELEASE = 2
         const val SESSION_REFRESH_INTERVAL_MS = 10_000L
+        const val BACKGROUND_REFRESH_EVERY = 6
     }
 }

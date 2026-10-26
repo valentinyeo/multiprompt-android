@@ -13,6 +13,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.view.WindowCompat
 import androidx.activity.viewModels
+import dev.multiprompt.companion.notify.ReplyNotifier
 import dev.multiprompt.companion.ui.MultipromptApp
 import dev.multiprompt.companion.ui.AppTheme
 import dev.multiprompt.companion.ui.MultipromptTheme
@@ -47,6 +48,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         handleAuthIntent(intent)
+        handleReplyIntent(intent)
     }
 
     override fun onResume() {
@@ -69,6 +71,15 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         if (intent.getBooleanExtra(EXTRA_OPEN_UPDATE, false)) recreate()
         handleAuthIntent(intent)
+        handleReplyIntent(intent)
+    }
+
+    private fun handleReplyIntent(intent: Intent) {
+        val hostId = intent.getStringExtra(ReplyNotifier.EXTRA_HOST_ID) ?: return
+        val sessionName = intent.getStringExtra(ReplyNotifier.EXTRA_SESSION_NAME) ?: return
+        intent.removeExtra(ReplyNotifier.EXTRA_HOST_ID)
+        intent.removeExtra(ReplyNotifier.EXTRA_SESSION_NAME)
+        viewModel.openSessionFromNotification(hostId, sessionName)
     }
 
     private fun handleAuthIntent(intent: Intent) {
