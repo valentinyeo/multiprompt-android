@@ -7,6 +7,10 @@ on:
         description: Optional original commit for before and after theme proof
         type: string
         required: false
+      released_update:
+        description: Install and inspect the published signed update
+        type: boolean
+        default: false
   pull_request:
   push:
     branches: [main]
@@ -84,6 +88,7 @@ jobs:
         env:
           GRADLE: gradle
           DAY_THEME_BASE_REF: ${{ inputs.baseline_ref }}
+          DAY_THEME_RELEASED_UPDATE: ${{ inputs.released_update }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:

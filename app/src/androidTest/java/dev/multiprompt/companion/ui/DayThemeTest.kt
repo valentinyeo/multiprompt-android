@@ -92,7 +92,7 @@ class DayThemeTest {
             val bitmap = interaction.captureToImage().asAndroidBitmap()
             val pixels = IntArray(bitmap.width * bitmap.height)
             bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-            val background = Color(pixels.groupingBy { it }.eachCount().maxBy { it.value }.key)
+            val background = Color(pixels.asSequence().groupingBy { it }.eachCount().maxBy { it.value }.key)
             bitmap.recycle()
             layouts.forEach { layout ->
                 val colors = listOf(layout.layoutInput.style.color) + layout.layoutInput.text.spanStyles.map { it.item.color }

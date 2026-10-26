@@ -50,4 +50,36 @@ assert len(list(Path('build/day-theme/before').glob('dark-*.png'))) == 5
 print('DAY_THEME_DARK_UNCHANGED_OK')
 PY
 fi
+if [ "${DAY_THEME_RELEASED_UPDATE:-false}" = true ]; then
+  curl -fsSL https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion-update.json -o build/day-theme/release-manifest.json
+  python3 - <<'PYTHON'
+import hashlib, json, os, subprocess
+from urllib.request import urlopen
+manifest = json.load(open('build/day-theme/release-manifest.json'))
+assert manifest['schemaVersion'] == 1
+assert manifest['commit'] == os.environ['GITHUB_SHA']
+assert manifest['apkUrl'] == 'https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion.apk'
+apk = urlopen(manifest['apkUrl']).read()
+assert len(apk) == manifest['sizeBytes']
+assert hashlib.sha256(apk).hexdigest() == manifest['sha256']
+open('build/day-theme/released.apk', 'wb').write(apk)
+subprocess.run([os.environ['ANDROID_HOME'] + '/build-tools/36.0.0/apksigner', 'verify', '--print-certs', 'build/day-theme/released.apk'], check=True)
+print('SIGNED_DAY_THEME_UPDATE_OK', manifest['versionName'], manifest['commit'])
+PYTHON
+  adb shell cmd uimode night no
+  adb install -r build/day-theme/released.apk
+  adb shell am start -W -n dev.multiprompt.companion/.MainActivity
+  adb shell uiautomator dump /sdcard/day-theme.xml
+  adb pull /sdcard/day-theme.xml build/day-theme/release-screen.xml
+  python3 - <<'PYTHON'
+import xml.etree.ElementTree as ET
+root = ET.parse('build/day-theme/release-screen.xml')
+assert any(node.get('text') == 'Sign in' for node in root.iter('node'))
+assert any(node.get('text') == 'multiprompt' for node in root.iter('node'))
+print('RELEASED_DAY_THEME_VISIBLE_OK')
+PYTHON
+  adb exec-out screencap -p > build/day-theme/released-sign-in.png
+  adb shell dumpsys package dev.multiprompt.companion > build/day-theme/release-package.txt
+  rm build/day-theme/released.apk
+fi
 echo DAY_THEME_EMULATOR_OK
