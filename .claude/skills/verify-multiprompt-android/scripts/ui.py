@@ -14,6 +14,8 @@ for node in root.iter("node"):
         matches.append(node)
     elif mode in ("desc", "checked", "unchecked") and value == node.get("content-desc"):
         matches.append(node)
+    elif mode == "editor" and node.get("class") == "android.widget.EditText" and node.get("package") == "dev.multiprompt.companion.debug":
+        matches.append(node)
     elif mode == "field" and node.get("class") == "android.widget.EditText":
         if any(value == item.get("text") or value == item.get("content-desc") for item in node.iter()):
             matches.append(node)
@@ -41,7 +43,7 @@ if mode in ("checked", "unchecked"):
         raise SystemExit(f"Expected {mode}: {value}")
 if node.get("enabled") == "false":
     raise SystemExit("Selector is disabled")
-if mode not in ("field", "version", "checked", "unchecked"):
+if mode not in ("field", "editor", "version", "checked", "unchecked"):
     ancestor = node
     while ancestor.get("clickable") != "true" and ancestor in parents:
         ancestor = parents[ancestor]

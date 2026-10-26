@@ -28,7 +28,6 @@ import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
-import dev.multiprompt.companion.skills.SkillStore
 import dev.multiprompt.companion.auth.SyncAuthManager
 import android.content.Intent
 import dev.multiprompt.companion.account.AccountHosts
@@ -187,7 +186,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val dictation: DeepgramDictation = app.deepgramDictation
     val updates: UpdateManager = app.updateManager
     val screencast: ScreencastUploader = app.screencastUploader
-    val skills: SkillStore = app.skillStore
     val syncAuth: SyncAuthManager = app.syncAuth
 
     private val accountStore = AccountLayoutStore(application)

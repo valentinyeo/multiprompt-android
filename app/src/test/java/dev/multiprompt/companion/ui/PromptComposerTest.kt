@@ -4,6 +4,19 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class PromptComposerTest {
+    @Test fun nativeSkillStaysFirstWhenTheMessageHasImagesAndAQuote() {
+        val skills = listOf(dev.multiprompt.companion.skills.NativeSkill("review", "Review"))
+        assertEquals(
+            "/review > Earlier reply\n\nhttps://example.com/photo.png\nmy task",
+            PromptComposer.composeMessage("/review my task", listOf("https://example.com/photo.png"), "Earlier reply", skills),
+        )
+        assertEquals("/review", PromptComposer.composeMessage("/review ", emptyList(), null, skills))
+        assertEquals(
+            "> Earlier reply\n\n/reviewer my task",
+            PromptComposer.composeMessage("/reviewer my task", emptyList(), "Earlier reply", skills),
+        )
+    }
+
     @Test
     fun imageUrlEndsWithASeparator() {
         assertEquals(
@@ -47,6 +60,8 @@ class PromptComposerTest {
             PromptComposer.composeMessage(
                 "Describe the screenshot",
                 listOf("https://screencast2.com/example.png"),
+                null,
+                emptyList(),
             ),
         )
     }

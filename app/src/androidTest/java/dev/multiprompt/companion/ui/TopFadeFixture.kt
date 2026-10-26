@@ -20,7 +20,6 @@ import dev.multiprompt.companion.reader.ChatHistoryConnection
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import dev.multiprompt.companion.reader.ChatHistoryState
 import dev.multiprompt.companion.security.SecretStore
-import dev.multiprompt.companion.skills.SkillStore
 import dev.multiprompt.companion.ssh.SshRepository
 import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.upload.ScreencastUploader
@@ -133,7 +132,7 @@ private fun ReaderFixture(material3: Boolean, sunlight: Boolean, sessionName: St
         }
     }
     val dictation = remember { DeepgramDictation(context, secrets) }
-    val skills = remember { SkillStore(context).apply { repos = emptyList() } }
+
     val screencast = remember { ScreencastUploader(context, secrets) }
     DisposableEffect(connection) {
         onDispose {
@@ -145,7 +144,7 @@ private fun ReaderFixture(material3: Boolean, sunlight: Boolean, sessionName: St
         connection = connection,
         dictation = dictation,
         screencast = screencast,
-        skills = skills,
+
         signedIn = true,
         onSignIn = {},
         onSignOut = {},

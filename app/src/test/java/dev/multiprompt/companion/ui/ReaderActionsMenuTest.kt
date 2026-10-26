@@ -71,7 +71,7 @@ class ReaderActionsMenuTest {
         compose.setContent {
             ReaderScreen(
                 connection = connection, dictation = f.app.deepgramDictation,
-                screencast = f.app.screencastUploader, skills = f.app.skillStore,
+                screencast = f.app.screencastUploader,
                 signedIn = true, onSignIn = {}, onSignOut = {}, session = f.session.copy(paneCommand = "claude"),
                 unread = false, archived = archived.value, initialFontScale = 1f,
                 onBack = {}, onMarkRead = {}, onArchiveToggle = { waits++; archived.value = !archived.value },

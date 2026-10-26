@@ -24,6 +24,18 @@ host key, expose an arbitrary remote-command box, or copy MP's Windows-local
 credentials to Android. Prompt text reaches tmux through SSH stdin instead of
 shell interpolation.
 
+## Native Claude skills and session controls
+
+Type `/` in a Claude session's message box. Its native skills appear above the box.
+Keep typing to filter; tap a skill. The box receives `/name`, not bundled instructions.
+**+ → Skill** opens the same list. Existing draft text stays after the selected skill.
+
+**+ → Model** and **+ → Effort** change the connected session. Current values come from its live output.
+Changing either keeps your draft and attached images. **+ → Add image** remains available.
+
+Skills come from that SSH user's Claude configuration, enabled plugins, and the selected session's project.
+The old downloaded skill catalog is removed.
+
 ## Build
 
 Account workspaces now use the same login and layout as desktop. See

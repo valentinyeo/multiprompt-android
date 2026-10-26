@@ -17,8 +17,21 @@ internal object PromptComposer {
         transcript.trim(),
     ).filter(String::isNotBlank).joinToString(" ")
 
-    fun composeMessage(prompt: String, imageUrls: List<String>): String = listOf(
-        imageUrls.joinToString("\n") { it.trim() }.trim(),
-        prompt.trim(),
-    ).filter(String::isNotBlank).joinToString("\n")
+    fun composeMessage(
+        prompt: String,
+        imageUrls: List<String>,
+        replyTo: String?,
+        nativeSkills: List<dev.multiprompt.companion.skills.NativeSkill>,
+    ): String {
+        val text = prompt.trim()
+        val command = text.takeWhile { !it.isWhitespace() }
+        val skill = nativeSkills.firstOrNull { command == "/${it.name}" }
+        val arguments = if (skill == null) text else text.removePrefix("/${skill.name}").trimStart()
+        val body = listOf(
+            imageUrls.joinToString("\n") { it.trim() }.trim(),
+            arguments,
+        ).filter(String::isNotBlank).joinToString("\n")
+        val message = ReplyQuote.compose(replyTo, body)
+        return if (skill == null) message else "/${skill.name} $message".trimEnd()
+    }
 }

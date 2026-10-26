@@ -15,6 +15,10 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.assertTextEquals
+import org.junit.Assert.assertEquals
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.reader.ChatHistoryCache
 import dev.multiprompt.companion.reader.ChatHistoryConnection
@@ -74,7 +78,7 @@ class ReaderAttachOutlineTest {
         compose.setContent {
             ReaderScreen(
                 connection = connection, dictation = f.app.deepgramDictation,
-                screencast = f.app.screencastUploader, skills = f.app.skillStore,
+                screencast = f.app.screencastUploader,
                 signedIn = true, onSignIn = {}, onSignOut = {},
                 session = f.session.copy(paneCommand = "claude"),
                 unread = false, archived = false, initialFontScale = 1f,
@@ -130,11 +134,29 @@ class ReaderAttachOutlineTest {
         assertTrue(hasOutlineAlongRow(bitmap, bitmap.height / 2, 4))
     }
 
+    @Test fun plusModelAndEffortUseNativeCommandsWithoutDroppingTheDraft() {
+        render()
+        compose.onNode(hasSetTextAction()).performTextInput("keep my draft")
+        compose.onNodeWithContentDescription("Attach").performClick()
+        compose.onNodeWithText("Model").performClick()
+        compose.onNodeWithText("Use Claude Sonnet").performClick()
+        compose.onNode(hasSetTextAction()).assertTextEquals("keep my draft")
+        compose.runOnIdle {
+            assertEquals("/model sonnet", connection.state.value.sentPrompts.last())
+            f.field<MutableStateFlow<ReaderState>>(connection, "_state").value = connection.state.value.copy(completedActions = 1)
+        }
+        compose.onNodeWithContentDescription("Attach").performClick()
+        compose.onNodeWithText("Effort").performClick()
+        compose.onNodeWithText("Set effort: high").performClick()
+        compose.onNode(hasSetTextAction()).assertTextEquals("keep my draft")
+        compose.runOnIdle { assertEquals("/effort high", connection.state.value.sentPrompts.last()) }
+    }
+
     @Test fun attachMenuIsACardWithAnOutlineAndLineIcons() {
         render()
         compose.onNodeWithContentDescription("Attach").performClick()
         compose.onNodeWithText("Add image").assertIsDisplayed()
-        compose.onNodeWithText("Use skill").assertIsDisplayed()
+        compose.onNodeWithText("Skill").assertIsDisplayed()
         val menu = compose.onNode(isPopup())
         val bitmap = capture(menu, "attach-menu")
         assertTrue(hasOutlineAlongRow(bitmap, bitmap.height / 2, 8))

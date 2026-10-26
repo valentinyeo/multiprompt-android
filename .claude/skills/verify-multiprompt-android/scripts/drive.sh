@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md) ;;
+    sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -440,6 +440,101 @@ if [[ "$feature" == chat-queued.md ]]; then
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/queued-receipts.txt"
     sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-queued-work/a1b2c3d4-1008-4000-8000-000000001008.jsonl > "$EVIDENCE/queued-transcript.jsonl"
     printf 'ANDROID_QUEUED_CLEARS_AFTER_REPLY\n'
+    exit 0
+fi
+if [[ "$feature" == native-skills.md ]]; then
+    set_composer() {
+        tap_node editor ''
+        adb shell input keycombination 113 29
+        adb shell input text "$1"
+    }
+    set_composer /
+    if ! wait_for_text '/review-native'; then
+        printf 'NATIVE_SLASH_PICKER_MISSING\n' >&2
+        exit 1
+    fi
+    wait_for_text '/personal-note'
+    wait_for_text '/qa:verify-native'
+    wait_for_absence '/late-native'
+    if select_node contains '/hidden-native' >/dev/null 2>&1; then exit 1; fi
+    shot native-slash-list
+    adb shell input text rev
+    wait_for_text '/review-native'
+    wait_for_absence '/personal-note'
+    shot native-filtered
+    tap_text '/review-native'
+    shot native-inserted
+    adb shell input text investigation
+    tap_desc 'Send prompt'
+    wait_receipt 'VERIFY_RECEIVED:/review-native investigation'
+    set_composer 'draft%sstays'
+    tap_desc Attach
+    wait_for_text Skill
+    wait_for_text Model
+    wait_for_text Effort
+    wait_for_text 'Add image'
+    shot native-plus-menu
+    tap_text Skill
+    wait_for_text '/review-native'
+    wait_for_text '/qa:verify-native'
+    wait_for_text '/late-native'
+    shot native-plus-same-list
+    tap_text '/qa:verify-native'
+    shot native-plugin-inserted
+    tap_desc 'Send prompt'
+    wait_receipt 'VERIFY_RECEIVED:/qa:verify-native draft stays'
+    set_composer 'keep%sthis%sdraft'
+    tap_desc Attach
+    tap_text Model
+    wait_for_text 'Current: Opus 5.5'
+    shot native-model-menu
+    tap_text 'Use Claude Sonnet'
+    wait_receipt 'VERIFY_RECEIVED:/model sonnet'
+    tap_desc Attach
+    tap_text Model
+    wait_for_text 'Current: Sonnet 5.5'
+    shot native-model-observed
+    tap_text '‹ Back'
+    tap_text Effort
+    wait_for_text 'Current: medium'
+    shot native-effort-menu
+    tap_text 'Set effort: high'
+    wait_receipt 'VERIFY_RECEIVED:/effort high'
+    tap_desc Attach
+    tap_text Effort
+    wait_for_text 'Current: high'
+    shot native-effort-observed
+    adb shell input keyevent KEYCODE_BACK
+    tap_desc Attach
+    tap_text 'Add image'
+    wait_for_text 'Screencast2 uploads'
+    fill 'Screencast2 upload key' fixture-only-no-upload
+    tap_text 'Save and choose image'
+    wait_for_text Photos
+    shot native-image-picker
+    adb shell input keyevent KEYCODE_BACK
+    wait_for_text 'keep this draft'
+    shot native-draft-preserved
+    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/native-receipts.txt"
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/native-tmux-final.txt"
+    sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-native-skills-work/a1b2c3d4-1009-4000-8000-000000001009.jsonl > "$EVIDENCE/native-transcript.jsonl"
+    python3 - "$EVIDENCE" <<'NATIVE'
+import json
+from pathlib import Path
+import sys
+import xml.etree.ElementTree as ET
+root = Path(sys.argv[1])
+rows = (root / 'native-receipts.txt').read_text().splitlines()
+assert rows == ['VERIFY_RECEIVED:/review-native investigation', 'VERIFY_RECEIVED:/qa:verify-native draft stays', 'VERIFY_RECEIVED:/model sonnet', 'VERIFY_RECEIVED:/effort high'], rows
+assert 'Sonnet 5.5 high' in (root / 'native-tmux-final.txt').read_text()
+assert 'BODY_MUST_NOT_BE_INJECTED' not in (root / 'native-transcript.jsonl').read_text()
+for label, required in [('native-inserted', '/review-native '), ('native-plugin-inserted', '/qa:verify-native draft stays'), ('native-draft-preserved', 'keep this draft')]:
+    xml = ET.parse(next(root.glob('*-' + label + '.xml'))).getroot()
+    fields = [n for n in xml.iter('node') if n.get('class') == 'android.widget.EditText' and n.get('package') == 'dev.multiprompt.companion.debug']
+    assert len(fields) == 1 and fields[0].get('text') == required, (label, fields)
+(root / 'native-result.json').write_text(json.dumps(dict(status='passed', slash=True, filtered=True, plus_same_list=True, fresh_native_skills=True, native_only=True, model='Sonnet 5.5', effort='high', draft_preserved=True, image_picker=True, upload_exercised=False), indent=2))
+print('NATIVE_SKILLS_MODEL_EFFORT_PROVEN')
+NATIVE
     exit 0
 fi
 if [[ "$feature" == chat-reactions.md ]]; then

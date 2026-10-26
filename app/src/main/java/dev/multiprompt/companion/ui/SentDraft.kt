@@ -1,11 +1,8 @@
 package dev.multiprompt.companion.ui
 
-import dev.multiprompt.companion.skills.Skill
-
 internal data class SentDraft(
     val prompt: String,
     val images: List<String>,
-    val skill: Skill?,
     val replyTo: String?,
 ) {
     fun restoredPrompt(current: String): String = when {

@@ -1,6 +1,12 @@
 name: Verify real Android UI
 
 on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'tools/native-skills.test.py'
+      - '.claude/skills/verify-multiprompt-android/**'
+      - '.github/workflows/verify.yml'
   workflow_dispatch:
     inputs:
       feature:
@@ -17,8 +23,14 @@ on:
           - chat-choices.md
           - chat-reactions.md
           - chat-queued.md
+          - native-skills.md
           - session-routing.md
           - terminal.md
+      expect_native_missing:
+        description: Require the original app to reject the native slash journey
+        required: false
+        type: boolean
+        default: false
       app_ref:
         description: Optional pinned app source for the unchanged journey negative control or published source
         required: false
@@ -34,13 +46,15 @@ permissions:
 
 jobs:
   verify:
+    name: ${{ inputs.expect_native_missing && 'original native-skill control' || 'verify' }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
       EVIDENCE: ${{ github.workspace }}/verification-evidence
-      VERIFY_FEATURE: ${{ inputs.feature }}
+      VERIFY_FEATURE: ${{ inputs.feature || 'native-skills.md' }}
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
       UPDATE_BASELINE_RUN: ${{ inputs.update_baseline_run }}
+      APP_REF: ${{ inputs.app_ref }}
     steps:
       - uses: actions/checkout@v4
       - name: Prepare verification paths
@@ -111,6 +125,8 @@ jobs:
       - name: Start ephemeral public-key-only SSH and tmux
         run: .claude/skills/verify-multiprompt-android/scripts/fixture.sh
       - name: Install, doctor and drive the real app
+        id: native-ui
+        continue-on-error: ${{ inputs.expect_native_missing == true }}
         uses: reactivecircus/android-emulator-runner@v2.34.0
         with:
           api-level: 35
@@ -123,6 +139,17 @@ jobs:
             adb install -r -g "$VERIFY_APK"
             .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"
             if [ -n "$UPDATE_BASELINE_RUN" ]; then .claude/skills/verify-multiprompt-android/scripts/update-reaction-release.sh; fi
+      - name: Require the original native-skill failure
+        if: inputs.expect_native_missing == true
+        env:
+          EMULATOR_OUTCOME: ${{ steps.native-ui.outcome }}
+        run: |
+          test "$VERIFY_FEATURE" = native-skills.md
+          test "$APP_REF" = 2cd0154674ced41a3733ba1b0bd90faef168eb41
+          test "$(cat "$EVIDENCE/app-source-sha.txt")" = "$APP_REF"
+          test "$EMULATOR_OUTCOME" = failure
+          grep -F 'NATIVE_SLASH_PICKER_MISSING' "$EVIDENCE/driver-transcript.txt"
+          printf '%s\n' '{"status":"expected-red","error":"NATIVE_SLASH_PICKER_MISSING"}' > "$EVIDENCE/native-baseline-result.json"
       - name: Stop recorded fixture processes and retain logs
         timeout-minutes: 2
         if: always()
@@ -131,7 +158,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: verify-${{ inputs.feature }}-${{ github.run_id }}
+          name: verify-${{ env.VERIFY_FEATURE }}-${{ github.run_id }}
           path: verification-evidence/
           if-no-files-found: error
           retention-days: 7

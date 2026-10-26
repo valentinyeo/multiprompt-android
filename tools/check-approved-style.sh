@@ -4,20 +4,25 @@ cd "$(dirname "$0")/.."
 phase=${STYLE_PHASE:-after}
 mode=${1:-run}
 mkdir -p "build/approved-style/$phase"
-files=(Theme.kt MultipromptApp.kt ChatBubble.kt ChatHistoryList.kt AppMenu.kt)
 if [ "$phase" = before ]; then
-  mkdir -p build/approved-style/source
+  snapshot=build/approved-style/source
   restore() {
-    for file in "${files[@]}"; do cp "build/approved-style/source/$file" "app/src/main/java/dev/multiprompt/companion/ui/$file"; done
+    test -d "$snapshot/main"
+    test -d "$snapshot/androidTest"
+    rm -rf app/src/main app/src/androidTest
+    cp -a "$snapshot/main" app/src/main
+    cp -a "$snapshot/androidTest" app/src/androidTest
   }
   if [ "$mode" = prepare ]; then
-    for file in "${files[@]}"; do
-    cp "app/src/main/java/dev/multiprompt/companion/ui/$file" "build/approved-style/source/$file"
-    git show ce2d32d:app/src/main/java/dev/multiprompt/companion/ui/"$file" > "app/src/main/java/dev/multiprompt/companion/ui/$file"
-    done
+    mkdir -p "$snapshot"
+    cp -a app/src/main "$snapshot/main"
+    cp -a app/src/androidTest "$snapshot/androidTest"
     trap restore ERR
+    rm -rf app/src/main app/src/androidTest
+    git archive ce2d32d app/src/main app/src/androidTest | tar -x
+    cp "$snapshot/androidTest/java/dev/multiprompt/companion/ui/ApprovedStyleTest.kt" app/src/androidTest/java/dev/multiprompt/companion/ui/ApprovedStyleTest.kt
   else
-    test -s build/approved-style/source/Theme.kt
+    test -s "$snapshot/main/java/dev/multiprompt/companion/ui/Theme.kt"
     trap restore EXIT
   fi
 fi
