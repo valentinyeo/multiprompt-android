@@ -69,7 +69,7 @@ class TopFadeInstrumentedTest {
         headline.fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
         assertEquals(1, layouts.single().lineCount)
         assertEquals(ellipsized, layouts.single().isLineEllipsized(0))
-        assertEquals(androidx.compose.ui.graphics.Color.White, layouts.single().layoutInput.style.color)
+        assertEquals(ReaderForeground, layouts.single().layoutInput.style.color)
     }
 
     @Test fun fadeBlendsOverContentWithoutAnOpaqueCutoff() {

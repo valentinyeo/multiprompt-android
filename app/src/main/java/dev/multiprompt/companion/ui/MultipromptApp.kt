@@ -2394,7 +2394,7 @@ internal fun ReaderTopBar(
                     session.displayName,
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleLarge,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
