@@ -48,7 +48,7 @@ jobs:
         with:
           api-level: 35
           arch: x86_64
-          profile: pixel_6
+          profile: pixel_2
           ram-size: 2048M
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan -verbose > /tmp/top-fade-emulator.log 2>&1
           disable-animations: true
