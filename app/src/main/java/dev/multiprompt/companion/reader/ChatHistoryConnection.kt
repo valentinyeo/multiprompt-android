@@ -37,11 +37,18 @@ class ChatHistoryConnection(
     private val wake = Channel<Unit>(Channel.CONFLATED)
     private var job: Job? = null
     @Volatile private var nearTop = false
+    @Volatile private var awaitingMessages = false
     private val cacheKey = listOf(host.id, host.hostname, host.port.toString(), host.username,
         identity.agent.name, identity.tmux, identity.cwd).joinToString("\u0000")
 
     fun nearTop(value: Boolean) {
         nearTop = value
+        if (value) wake.trySend(Unit)
+    }
+
+    fun awaitingMessages(value: Boolean) {
+        if (value == awaitingMessages) return
+        awaitingMessages = value
         if (value) wake.trySend(Unit)
     }
 
@@ -73,7 +80,7 @@ class ChatHistoryConnection(
                                 retryDelay = 2_000L
                                 wasOlder = page.mode == "older"
                                 if (!next.more && !(nearTop && next.start > 0)) {
-                                    withTimeoutOrNull(2_000L) { wake.receive() }
+                                    withTimeoutOrNull(if (awaitingMessages) 250L else 2_000L) { wake.receive() }
                                 }
                             }
                         }

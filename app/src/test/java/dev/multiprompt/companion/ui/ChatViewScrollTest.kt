@@ -48,8 +48,7 @@ class ChatViewScrollTest {
             MaterialTheme {
                 listState = rememberLazyListState()
                 Box(Modifier.height(520.dp)) {
-                    ChatHistoryList(messages.value, listState = listState, loaded = loaded,
-                        queuedMessages = queued, onNearTop = { nearTop.add(it) },
+                    ChatHistoryList(messages.value + queued.map { ChatHistoryMessage("queued:${it.hashCode()}", "user", it, "", 0, 0, pending = true) }, listState = listState, loaded = loaded, onNearTop = { nearTop.add(it) },
                         onReply = { text, _ -> replies.add(text) })
                 }
             }

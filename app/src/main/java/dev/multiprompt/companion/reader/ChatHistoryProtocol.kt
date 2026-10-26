@@ -9,6 +9,12 @@ object ChatHistoryProtocol {
 
     data class Identity(val agent: AgentKind, val tmux: String, val cwd: String = "", val sid: String = "")
 
+    enum class QueueOperation(val wire: String) {
+        ENQUEUE("enqueue"), REMOVE("remove"), DEQUEUE("dequeue"), POP_ALL("popAll"), REJECTED("rejected");
+    }
+
+    data class Settlement(val operation: QueueOperation, val content: String)
+
     data class Row(
         val role: String,
         val text: String,
@@ -16,9 +22,12 @@ object ChatHistoryProtocol {
         val timestamp: String,
         val offset: Long,
         val end: Long,
+        val queued: Boolean = false,
+        val settlement: Settlement? = null,
     ) {
         fun json(): JSONObject = JSONObject().put("role", role).put("text", text).put("id", id)
-            .put("timestamp", timestamp).put("offset", offset).put("end", end)
+            .put("timestamp", timestamp).put("offset", offset).put("end", end).put("queued", queued)
+            .also { row -> settlement?.let { row.put("settlement", JSONObject().put("operation", it.operation.wire).put("content", it.content)) } }
     }
 
     data class Page(
@@ -38,7 +47,7 @@ object ChatHistoryProtocol {
         require(id > 0 && TranscriptProtocol.supports(identity.agent))
         return JSONObject().put("id", id).put("codex", identity.agent == AgentKind.CODEX)
             .put("sid", identity.sid).put("tmux", identity.tmux).put("cwd", identity.cwd)
-            .put("source_offsets", true).put("no_jump", true)
+            .put("source_offsets", true).put("no_jump", true).put("settlement", true)
             .put("cached_sid", history.sid).put("inode", history.inode).put("offset", history.offset)
             .put("start", history.start).put("before", before).put("mtime", history.mtime)
             .put("probe", history.probe).toString() + "\n"
@@ -96,8 +105,13 @@ object ChatHistoryProtocol {
 
     internal fun parseRow(row: JSONObject): Row = Row(
         row.getString("role"), row.getString("text"), row.optString("id"), row.optString("timestamp"),
-        row.getLong("offset"), row.getLong("end"),
+        row.getLong("offset"), row.getLong("end"), row.optBoolean("queued"),
+        row.optJSONObject("settlement")?.let { fact ->
+            Settlement(QueueOperation.entries.first { it.wire == fact.getString("operation") }, fact.getString("content"))
+        },
     ).also {
-        require(it.role in setOf("user", "assistant") && it.text.isNotBlank() && it.offset >= 0 && it.end > it.offset)
+        require(it.role in setOf("user", "assistant") && it.offset >= 0 && it.end > it.offset)
+        require(if (it.settlement == null) it.text.isNotBlank() else it.role == "assistant" && it.text.isEmpty())
+        require(!it.queued || it.role == "user" && it.settlement == null)
     }
 }

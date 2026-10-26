@@ -377,8 +377,11 @@ def conversation_event(event, agent):
         return None
     identity = message.get("id") or event.get("uuid") or ""
     timestamp = event.get("timestamp") or ""
-    return dict(role=role, timestamp=timestamp if isinstance(timestamp, str) else "",
-                text=text, id=identity if isinstance(identity, str) else "")
+    row = dict(role=role, timestamp=timestamp if isinstance(timestamp, str) else "",
+               text=text, id=identity if isinstance(identity, str) else "")
+    if agent == "claude" and isinstance(attachment, dict) and attachment.get("type") == "queued_command":
+        row["queued"] = True
+    return row
 
 
 
