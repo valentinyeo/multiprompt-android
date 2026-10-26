@@ -1,7 +1,7 @@
 # Native Claude skills, model and effort
 
 Run `verify.yml` with `feature=native-skills.md`. App-source changes also run this journey on pull requests.
-Use `app_ref=2cd0154` for the unchanged original-app control. It must fail `NATIVE_SLASH_PICKER_MISSING`.
+Use `app_ref=2cd0154674ced41a3733ba1b0bd90faef168eb41` and `expect_native_missing=true` for the unchanged original-app control. It must fail `NATIVE_SLASH_PICKER_MISSING`.
 
 The existing ephemeral SSH fixture runs a disposable Claude-shaped console, not a provider call.
 It creates actual user/project/plugin skill directories and session metadata. Model and effort changes update its real tmux output.
