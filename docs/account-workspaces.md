@@ -85,7 +85,7 @@ additional host-0 identities by the desktop's current schema; use the outer
 valentin session for account tabs rather than pretending those servers are equal.
 Missing host credentials are shown explicitly, never synthesized or auto-trusted.
 
-Layout refreshes on resume and every 20 seconds while foregrounded, including in
+Layout refreshes on resume and every 5 seconds while foregrounded, including in
 the reader/terminal. Edits synchronously persist an account-scoped `{base,edited}`
 diff before updating UI. GET rebases actual local fields over remote changes;
 PUT sends `base_revision`. A 409 re-pulls and re-applies the diff, preserving remote

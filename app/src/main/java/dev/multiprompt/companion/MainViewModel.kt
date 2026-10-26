@@ -198,6 +198,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var pendingNotificationKey: String? = null
     private var trustRefreshQueued = false
     private var accountRequestRunning = false
+    private var lastRemoteRevision: Long? = null
     private var accountGeneration = 0
     private val deviceKeyMutex = Mutex()
     private var deviceKeyRefreshRunning = false
@@ -271,7 +272,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             while (true) {
-                delay(20_000)
+                delay(5_000)
                 if (foreground.value) syncAccount()
             }
         }
@@ -1734,6 +1735,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 importAccountHosts(remote)
                 usedStampThrottle.observe(remote)
                 saveAccountLayout(pendingLayout?.pull(remote) ?: PendingLayout(remote))
+                val layoutChanged = lastRemoteRevision?.let { it != remote.revision } == true
+                lastRemoteRevision = remote.revision
+                if (layoutChanged) refresh()
                 var retries = 0
                 var retryConflict = false
                 while (pendingLayout?.let { it.dirty && (retryConflict || usedStampThrottle.shouldPush(it)) } == true && retries++ < 4) {
