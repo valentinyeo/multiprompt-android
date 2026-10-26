@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.runtime.Composable
@@ -15,11 +16,33 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 private val LocalChatUser = staticCompositionLocalOf { false }
+
+data class ChatBubbleLook(val top: Color, val bottom: Color, val outline: Color)
+
+private fun Color.shifted(delta: Int): Color {
+    val d = delta / 255f
+    return Color((red + d).coerceIn(0f, 1f), (green + d).coerceIn(0f, 1f), (blue + d).coerceIn(0f, 1f), alpha)
+}
+
+fun chatBubbleLook(fill: Color): ChatBubbleLook =
+    if (fill.luminance() < 0.5f) ChatBubbleLook(fill.shifted(8), fill, fill.shifted(12))
+    else ChatBubbleLook(fill.shifted(6), fill, fill.shifted(-22))
+
+fun Modifier.chatBubbleSurface(fill: Color, shape: Shape): Modifier {
+    if (fill.alpha == 0f) return clip(shape).background(fill)
+    val look = chatBubbleLook(fill)
+    return clip(shape)
+        .background(Brush.verticalGradient(listOf(look.top, look.bottom)))
+        .border(1.dp, look.outline, shape)
+}
 
 @Composable
 fun chatBubbleColor(isUser: Boolean, sunlight: Boolean): Color = when {
@@ -65,8 +88,10 @@ fun ChatBubble(
         Box(
             bubbleModifier
                 .then(contentModifier)
-                .clip(if (LocalReaderStyle.current) ReaderCardShape else if (LocalMaterial3.current) androidx.compose.foundation.shape.RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomEnd = if (isUser) 4.dp else 20.dp, bottomStart = 20.dp) else chatShape())
-                .background(chatBubbleColor(isUser, sunlight)),
+                .chatBubbleSurface(
+                    chatBubbleColor(isUser, sunlight),
+                    if (LocalReaderStyle.current) ReaderCardShape else if (LocalMaterial3.current) androidx.compose.foundation.shape.RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomEnd = if (isUser) 4.dp else 20.dp, bottomStart = 20.dp) else chatShape(),
+                ),
         ) {
             CompositionLocalProvider(LocalChatUser provides isUser) {
                 ProvideTextStyle(
