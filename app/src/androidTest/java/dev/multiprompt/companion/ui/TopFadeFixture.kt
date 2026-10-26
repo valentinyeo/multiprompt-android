@@ -34,11 +34,11 @@ private val testSession = TmuxSession("host", "claude-reader", 1, 0, System.curr
 private val testWorkspace = Workspace("work", "Android", "host", "/home/user/android")
 
 @Composable
-internal fun FadeTestScreen(screen: FadeScreen, material3: Boolean, sunlight: Boolean) {
+internal fun FadeTestScreen(screen: FadeScreen, material3: Boolean, sunlight: Boolean, sessionName: String = testSession.name) {
     MultipromptTheme(sunlight = sunlight, material3 = false) {
         Surface {
             if (screen == FadeScreen.SESSION || screen == FadeScreen.SESSION_MENU) {
-                ReaderFixture(material3, sunlight)
+                ReaderFixture(material3, sunlight, sessionName)
             } else {
                 InboxFixture(screen, material3, sunlight)
             }
@@ -101,7 +101,7 @@ private fun InboxFixture(screen: FadeScreen, material3: Boolean, sunlight: Boole
 }
 
 @Composable
-private fun ReaderFixture(material3: Boolean, sunlight: Boolean) {
+private fun ReaderFixture(material3: Boolean, sunlight: Boolean, sessionName: String) {
     val context = LocalContext.current
     val secrets = remember { SecretStore(context) }
     val connection = remember {
@@ -149,7 +149,7 @@ private fun ReaderFixture(material3: Boolean, sunlight: Boolean) {
         signedIn = true,
         onSignIn = {},
         onSignOut = {},
-        session = testSession,
+        session = testSession.copy(name = sessionName),
         unread = false,
         archived = false,
         initialFontScale = 1f,
