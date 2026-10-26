@@ -10,9 +10,21 @@ state="$work/service-state.json"
 mkdir -p "$EVIDENCE"
 exec > >(tee -a "$EVIDENCE/driver.log") 2>&1
 now() { date +%s.%N; }
-dump_ui() {
+dump_once() {
     timeout 30s adb shell uiautomator dump /sdcard/journey-ui.xml >/dev/null || return 1
     timeout 30s adb pull /sdcard/journey-ui.xml "$EVIDENCE/current.xml" >/dev/null
+}
+dump_ui() {
+    dump_once || return 1
+    if grep -q "isn't responding" "$EVIDENCE/current.xml"; then
+        local point x y
+        if point=$(python3 "$here/ui.py" "$EVIDENCE/current.xml" tap Wait); then
+            read -r x y <<< "$point"
+            adb shell input tap "$x" "$y"
+            sleep 1
+        fi
+        dump_once
+    fi
 }
 shot() { dump_ui || true; cp "$EVIDENCE/current.xml" "$EVIDENCE/$1.xml" 2>/dev/null || true; adb exec-out screencap -p > "$EVIDENCE/$1.png"; }
 has_text() { dump_ui && python3 "$here/ui.py" "$EVIDENCE/current.xml" "${3:-has}" "$1"; }
