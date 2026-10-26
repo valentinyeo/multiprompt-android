@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|terminal.md) ;;
+    sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -375,6 +375,31 @@ if [[ "$feature" == sessions.md ]]; then
     exit 0
 fi
 tap_text verify-session
+if [[ "$feature" == chat-choices.md ]]; then
+    wait_for_text 'Use your own account. Keep the current setup.'
+    shot choices-before
+    tap_node text-containing 'Use your own account. Keep the current setup.'
+    wait_receipt 'VERIFY_RECEIVED:B: Use your own account. Keep the current setup.'
+    wait_for_text 'B: Use your own account. Keep the current setup.'
+    shot choices-after
+    wait_for_text '2: Use the current account'
+    shot question-before
+    tap_text '2: Use the current account'
+    wait_receipt 'VERIFY_QUESTION_KEY:2'
+    wait_for_text 'Question answered: Use the current account'
+    shot question-after
+    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt"
+    python3 - "$EVIDENCE/receipts.txt" <<'CHOICES'
+import sys
+from pathlib import Path
+rows = Path(sys.argv[1]).read_text().splitlines()
+assert rows == ["VERIFY_RECEIVED:B: Use your own account. Keep the current setup.", "VERIFY_QUESTION_KEY:2"], rows
+print("CHOICE SEND AND QUESTION KEY VERIFIED")
+CHOICES
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt"
+    printf 'FEATURE VERIFIED: %s\n' "$feature"
+    exit 0
+fi
 wait_for_text VERIFY_READY_528
 shot reader-ready
 if [[ "$feature" == session-reader.md ]]; then

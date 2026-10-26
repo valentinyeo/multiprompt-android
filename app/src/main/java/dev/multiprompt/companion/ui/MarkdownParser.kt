@@ -25,6 +25,7 @@ object MarkdownParser {
     private val RULE = Regex("^\\s{0,3}([-*_])(\\s*\\1){2,}\\s*$")
     private val BULLET = Regex("^(\\s*)([-*+])\\s+(.*)$")
     private val NUMBERED = Regex("^(\\s*)(\\d{1,9})[.)]\\s+(.*)$")
+    private val LETTERED = Regex("^(\\s*)([A-Za-z])[.):]\\s+(.*)$")
     private val QUOTE = Regex("^\\s{0,3}>\\s?(.*)$")
     private val TABLE_SEP = Regex("^\\s*\\|?\\s*:?-{1,}:?\\s*(\\|\\s*:?-{1,}:?\\s*)*\\|?\\s*$")
 
@@ -104,7 +105,7 @@ object MarkdownParser {
                 continue
             }
             val bullet = BULLET.matchEntire(line)
-            val numbered = NUMBERED.matchEntire(line)
+            val numbered = NUMBERED.matchEntire(line) ?: LETTERED.matchEntire(line)
             if (bullet != null || numbered != null) {
                 flushPara()
                 val m = bullet ?: numbered!!
@@ -115,7 +116,7 @@ object MarkdownParser {
                 val text = StringBuilder(m.groupValues[3])
                 var j = i + 1
                 while (j < lines.size && lines[j].isNotBlank() && BULLET.matchEntire(lines[j]) == null &&
-                    NUMBERED.matchEntire(lines[j]) == null && lines[j].startsWith(" ") &&
+                    NUMBERED.matchEntire(lines[j]) == null && LETTERED.matchEntire(lines[j]) == null && lines[j].startsWith(" ") &&
                     FENCE.matchEntire(lines[j]) == null
                 ) {
                     text.append('\n').append(lines[j].trim())

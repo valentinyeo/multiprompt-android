@@ -46,7 +46,7 @@ jobs:
           gradle-version: "9.5.1"
 
       - name: Install screenshot text reader
-        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
+        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr tmux
 
       - name: Root files, comments, lint and unit tests
         env:
