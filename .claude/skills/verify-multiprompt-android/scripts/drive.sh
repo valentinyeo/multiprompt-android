@@ -488,16 +488,21 @@ if [[ "$feature" == native-skills.md ]]; then
     shot native-model-menu
     tap_text 'Use Claude Sonnet'
     wait_receipt 'VERIFY_RECEIVED:/model sonnet'
-    wait_for_text 'Sonnet 5.5'
-    shot native-model-observed
     tap_desc Attach
+    tap_text Model
+    wait_for_text 'Current: Sonnet 5.5'
+    shot native-model-observed
+    tap_text '‹ Back'
     tap_text Effort
     wait_for_text 'Current: medium'
     shot native-effort-menu
     tap_text 'Set effort: high'
     wait_receipt 'VERIFY_RECEIVED:/effort high'
-    wait_for_text 'Sonnet 5.5 · high'
+    tap_desc Attach
+    tap_text Effort
+    wait_for_text 'Current: high'
     shot native-effort-observed
+    adb shell input keyevent KEYCODE_BACK
     tap_desc Attach
     tap_text 'Add image'
     wait_for_text 'Screencast2 uploads'
