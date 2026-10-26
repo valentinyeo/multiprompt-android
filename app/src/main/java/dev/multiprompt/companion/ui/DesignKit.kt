@@ -242,7 +242,7 @@ internal fun KitSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.()
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = Color.Transparent,
+        containerColor = Kit.Sheet,
         dragHandle = null,
         shape = Kit.SheetShape,
     ) {
