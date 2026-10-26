@@ -343,6 +343,9 @@ class SessionReaderConnection(
         _state.update { it.copy(sending = true, actionError = null) }
         try {
             withTimeout(REQUEST_TIMEOUT_MS) {
+                val questionScreen = if (request is Request.QuestionAnswer) {
+                    withFreshClient { repository.captureSession(it, tmuxSessionName) }
+                } else null
                 withFreshClient { client ->
                     when (request) {
                         is Request.Prompt -> repository.sendPrompt(
@@ -359,6 +362,7 @@ class SessionReaderConnection(
                             client,
                             tmuxSessionName,
                             request.question,
+                            requireNotNull(questionScreen),
                             request.index,
                         )
                         is Request.ModelPickerOption -> repository.selectModelPickerOption(

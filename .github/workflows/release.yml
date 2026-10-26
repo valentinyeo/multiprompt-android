@@ -75,6 +75,9 @@ jobs:
           keyPassword=$KEY_PASSWORD
           EOF
 
+      - name: Install terminal-key test dependency
+        run: sudo apt-get update && sudo apt-get install -y tmux
+
       - name: Test and build signed APK
         run: >-
           gradle --no-daemon lintDebug test testM3UnitTest assembleRelease assembleM3

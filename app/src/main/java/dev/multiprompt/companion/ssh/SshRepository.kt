@@ -485,8 +485,7 @@ class SshRepository(private val secrets: SecretStorage) {
         }
     }
 
-    suspend fun answerQuestion(client: SshClient, sessionName: String, question: ClaudeQuestion, index: Int) {
-        val screen = captureSession(client, sessionName)
+    suspend fun answerQuestion(client: SshClient, sessionName: String, question: ClaudeQuestion, screen: String, index: Int) {
         execute(client, TmuxCommands.questionAnswer(sessionName, question, screen, index)).requireSuccess("answer the question")
     }
 

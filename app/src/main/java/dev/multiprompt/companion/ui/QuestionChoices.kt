@@ -6,6 +6,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,8 +19,9 @@ import androidx.compose.ui.semantics.semantics
 import dev.multiprompt.companion.ssh.ClaudeQuestion
 
 @Composable
-internal fun QuestionChoices(question: ClaudeQuestion, enabled: Boolean, onChoose: (Int) -> Boolean) {
+internal fun QuestionChoices(question: ClaudeQuestion, enabled: Boolean, error: String? = null, onChoose: (Int) -> Boolean) {
     var chosen by rememberSaveable(question) { mutableStateOf<Int?>(null) }
+    LaunchedEffect(error) { if (error != null) chosen = null }
     Column {
         Text(question.title, style = MaterialTheme.typography.titleSmall)
         question.options.forEach { option ->

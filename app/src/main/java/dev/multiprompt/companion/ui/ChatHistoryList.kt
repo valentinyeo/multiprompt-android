@@ -88,6 +88,7 @@ internal fun ChatHistoryView(
             replyGate = replyGate,
             onReply = onReply,
             question = question,
+            questionError = reader.actionError,
             onQuestionChoice = if (!reader.sending && reader.status == ReaderStatus.Live) { option ->
                 question != null && connection.answerQuestion(question, option).also { if (it) onSessionUsed() }
             } else null,
@@ -117,6 +118,7 @@ internal fun ChatHistoryList(
     onReply: (String, Boolean) -> Unit = { _, _ -> },
     onChoice: ((String) -> Boolean)? = null,
     question: ClaudeQuestion? = null,
+    questionError: String? = null,
     onQuestionChoice: ((Int) -> Boolean)? = null,
     onNearTop: (Boolean) -> Unit = {},
     listState: LazyListState = rememberLazyListState(),
@@ -155,7 +157,7 @@ internal fun ChatHistoryList(
     ) {
         if (question != null) {
             item(key = "active-question") {
-                QuestionChoices(question, enabled = onQuestionChoice != null) { onQuestionChoice?.invoke(it) == true }
+                QuestionChoices(question, enabled = onQuestionChoice != null, error = questionError) { onQuestionChoice?.invoke(it) == true }
             }
         }
         items(messages.asReversed(), key = { it.key }, contentType = { it.role }) { message ->

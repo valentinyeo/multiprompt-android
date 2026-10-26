@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHasNoClickAction
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -114,6 +115,22 @@ class ChatChoicesTest {
         render(accept = false)
         compose.onNodeWithText(second).performClick().assertHasClickAction()
         compose.runOnIdle { assertEquals(emptyList<String>(), sent) }
+    }
+
+    @Test
+    fun failedQuestionTransportAllowsRetry() {
+        val question = ClaudeQuestion("Choose a route", listOf(ClaudeQuestion.Option(1, "Create"), ClaudeQuestion.Option(2, "Keep")))
+        val error = mutableStateOf<String?>(null)
+        var attempts = 0
+        compose.setContent {
+            MaterialTheme {
+                QuestionChoices(question, enabled = true, error = error.value) { attempts++; true }
+            }
+        }
+        compose.onNodeWithText("2: Keep").performClick().assertIsNotEnabled()
+        compose.runOnIdle { error.value = "Connection failed" }
+        compose.onNodeWithText("2: Keep").assertIsEnabled().performClick()
+        compose.runOnIdle { assertEquals(2, attempts) }
     }
 
     @Test
