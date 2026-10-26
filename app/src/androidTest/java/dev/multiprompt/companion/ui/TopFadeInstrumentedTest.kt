@@ -20,7 +20,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.core.view.WindowCompat
 import dev.multiprompt.companion.MainActivity
-import dev.multiprompt.companion.data.SessionReadStore
+import dev.multiprompt.companion.MainViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.test.rule.GrantPermissionRule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -59,8 +60,10 @@ class TopFadeInstrumentedTest {
 
     @Suppress("DEPRECATION")
     private fun verify(screen: FadeScreen, name: String, first: String, chat: Boolean = false) {
-        SessionReadStore(androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext).setAppTheme(AppTheme.DARK)
-        compose.activityRule.scenario.recreate()
+        compose.activityRule.scenario.onActivity { activity ->
+            ViewModelProvider(activity)[MainViewModel::class.java].setAppTheme(AppTheme.DARK)
+        }
+        compose.waitForIdle()
         compose.activityRule.scenario.onActivity { activity ->
             activity.setContent { FadeTestScreen(screen, material3 = false, sunlight = false) }
         }

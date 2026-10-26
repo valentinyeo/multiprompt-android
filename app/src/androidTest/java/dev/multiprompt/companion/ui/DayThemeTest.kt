@@ -21,10 +21,11 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.ViewModelProvider
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
 import dev.multiprompt.companion.MainActivity
-import dev.multiprompt.companion.data.SessionReadStore
+import dev.multiprompt.companion.MainViewModel
 import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -42,9 +43,11 @@ class DayThemeTest {
     @Test fun fiveScreensFollowTheThemeWithReadableText() {
         for (sunlight in listOf(false, true)) {
             val theme = if (sunlight) "light" else "dark"
-            SessionReadStore(InstrumentationRegistry.getInstrumentation().targetContext)
-                .setAppTheme(if (sunlight) AppTheme.SUNLIGHT else AppTheme.DARK)
             compose.activityRule.scenario.recreate()
+            compose.activityRule.scenario.onActivity { activity ->
+                ViewModelProvider(activity)[MainViewModel::class.java].setAppTheme(if (sunlight) AppTheme.SUNLIGHT else AppTheme.DARK)
+            }
+            compose.waitForIdle()
             compose.onNodeWithText("Sign in").assertIsDisplayed()
             captureAndCheck("$theme-sign-in", sunlight)
             compose.activityRule.scenario.onActivity { activity ->
