@@ -36,6 +36,9 @@ class SeedAccountDeviceTest {
             )
             secrets.put(profile.keySecretId, Base64.decode(privateKey, Base64.DEFAULT))
             HostStore(context).upsert(profile)
+            val hosts = context.getSharedPreferences("hosts", android.content.Context.MODE_PRIVATE)
+            check(hosts.edit().putString("profiles_json", hosts.getString("profiles_json", null)).commit())
+            check(HostStore(context).load().any { it.label == "Hetzner" })
         }
     }
 }
