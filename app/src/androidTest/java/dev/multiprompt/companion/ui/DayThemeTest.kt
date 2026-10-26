@@ -91,7 +91,16 @@ class DayThemeTest {
             File(output, "window.txt").writeText(android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().use { it.readText() })
         }
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()
-        if (name.endsWith("-menu")) compose.onNodeWithText("Settings").captureToImage()
+        val anchor = when (name.substringAfter('-')) {
+            "sign-in" -> "Sign in"
+            "inbox" -> "Inbox"
+            "menu" -> "Settings"
+            "settings" -> "Session list settings"
+            "chat" -> "Message 0"
+            else -> error("Unknown screenshot: $name")
+        }
+        compose.onNodeWithText(anchor, substring = name.endsWith("-chat"))
+            .assertIsDisplayed().captureToImage()
         automation.waitForIdle(100, 5_000)
         automation.takeScreenshot().let { bitmap ->
             if (sunlight && Color(bitmap.getPixel(bitmap.width / 2, 1)).luminance() < 0.9f) {
