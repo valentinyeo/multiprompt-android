@@ -1817,9 +1817,9 @@ internal fun SessionsScreen(
                                 Text(name, color = if (state.selectedWorkspaceId == id) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             if (state.selectedWorkspaceId == id) {
-                                androidx.compose.material3.FilledTonalButton(onClick = { onSelectWorkspace(id) }, colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(containerColor = if (sunlight) MaterialTheme.colorScheme.surfaceContainerHigh else Color(0xFF353535), contentColor = MaterialTheme.colorScheme.onSurface), content = label)
+                                androidx.compose.material3.FilledTonalButton(onClick = { onSelectWorkspace(id) }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(containerColor = if (sunlight) MaterialTheme.colorScheme.surfaceContainerHigh else Color(0xFF353535), contentColor = MaterialTheme.colorScheme.onSurface), content = label)
                             } else {
-                                TextButton(onClick = { onSelectWorkspace(id) }, content = label)
+                                TextButton(onClick = { onSelectWorkspace(id) }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), content = label)
                             }
                         }
                     }
@@ -2317,17 +2317,19 @@ internal fun ReaderTopBar(
                 IconButton(onClick = onBack, modifier = Modifier.roundOutlined()) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                 }
-                Text(
-                    session.displayName,
-                    modifier = Modifier.weight(1f)
-                        .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
-                        .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Box(Modifier.weight(1f)) {
+                    Text(
+                        session.displayName,
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Box {
                     IconButton(onClick = onMenuClick, modifier = Modifier.roundOutlined()) {
                         Icon(Icons.Default.MoreVert, "Session actions")

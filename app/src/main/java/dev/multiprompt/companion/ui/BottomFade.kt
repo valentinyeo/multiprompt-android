@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -38,6 +39,7 @@ internal fun BottomFade(
             )
         }.navigationBarsPadding(),
         verticalArrangement = verticalArrangement,
+        horizontalAlignment = Alignment.CenterHorizontally,
         content = content,
     )
 }
