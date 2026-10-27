@@ -30,12 +30,7 @@ data class ChatHistory(
         val pending = LinkedHashMap<String, List<PendingQuestion>>()
         for (row in rows) {
             if (row.questionResult.isNotEmpty()) pending.remove(row.questionResult)
-            row.question?.let { request ->
-                val questions = request.getJSONArray("questions")
-                pending[row.id] = (0 until questions.length()).map { index ->
-                    PendingQuestion.parse(row.id, index, questions.getJSONObject(index), request.getString("provider"))
-                }
-            }
+            if (row.questions.isNotEmpty()) pending[row.id] = row.questions
         }
         pending.values.flatten()
     }
@@ -43,7 +38,7 @@ data class ChatHistory(
     val messages: List<ChatHistoryMessage> by lazy {
         val grouped = LinkedHashMap<String, ChatHistoryMessage>()
         for (row in rows) {
-            if (row.settlement != null || row.question != null || row.questionResult.isNotEmpty()) continue
+            if (row.settlement != null || row.questions.isNotEmpty() || row.questionResult.isNotEmpty()) continue
             val key = "$sid:$inode:${row.role}:${row.id.ifEmpty { "@${row.offset}" }}"
             val previous = grouped[key]
             val text = when {

@@ -31,4 +31,11 @@ class StructuredQuestionAnswerTest {
     fun staleQuestionCannotTypeIntoTheNewPrompt() {
         TmuxCommands.questionAnswer("proof", question, "New prompt", setOf(0), "")
     }
+    @Test fun codexOtherEntersTheNotesFieldBeforeTyping() {
+        val command = TmuxCommands.questionAnswer("proof", question.copy(provider = "codex"), screen, emptySet(), "Custom")
+        assertTrue(command.contains(" Down Down Enter"))
+        assertTrue(command.contains(" -l -t "))
+        assertTrue(command.endsWith(" Enter"))
+    }
+
 }

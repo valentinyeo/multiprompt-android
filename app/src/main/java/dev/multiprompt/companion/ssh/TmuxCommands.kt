@@ -92,7 +92,15 @@ object TmuxCommands {
             } else commands.add("tmux send-keys -t $destination Enter")
         } else {
             val index = if (other.isNotBlank()) question.options.size else choices.single()
-            commands.add("tmux send-keys -t $destination ${index + 1}")
+            if (question.options.isEmpty()) {
+                check(other.isNotBlank())
+            } else if (other.isNotBlank() && question.provider == "codex") {
+                val rows = screen.lines().map(String::trim).filter { Regex("^[❯›>]?\\s*[1-9][.)]").containsMatchIn(it) }
+                val current = rows.indexOfFirst { it.startsWith('❯') || it.startsWith('›') || it.startsWith('>') }
+                check(current >= 0) { "Question selection is unavailable" }
+                val keys = List(kotlin.math.abs(index - current)) { if (index > current) "Down" else "Up" } + "Enter"
+                commands.add("tmux send-keys -t $destination " + keys.joinToString(" "))
+            } else commands.add("tmux send-keys -t $destination ${index + 1}")
         }
         if (other.isNotBlank()) {
             commands.add("tmux send-keys -l -t $destination -- ${TmuxParser.shellQuote(other)}")

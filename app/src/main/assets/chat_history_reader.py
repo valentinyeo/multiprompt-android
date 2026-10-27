@@ -614,9 +614,10 @@ def question_events(event, agent):
                     continue
             if not isinstance(value, dict) or not isinstance(value.get("questions"), list) or not value["questions"]:
                 continue
-            questions = value["questions"]
+            questions = [dict(q, options=q.get("options") or []) if agent == "codex" and isinstance(q, dict) else q
+                         for q in value["questions"]]
             if not all(isinstance(q, dict) and isinstance(q.get("question"), str) and q["question"].strip()
-                       and isinstance(q.get("options"), list) and q["options"]
+                       and isinstance(q.get("options"), list) and (q["options"] or agent == "codex")
                        and all(isinstance(o, dict) and isinstance(o.get("label"), str) and o["label"].strip()
                                and isinstance(o.get("description", ""), str) for o in q["options"])
                        and isinstance(q.get("header", ""), str) and isinstance(q.get("multiSelect", False), bool)

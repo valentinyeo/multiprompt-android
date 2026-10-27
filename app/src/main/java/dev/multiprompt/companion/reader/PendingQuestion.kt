@@ -20,14 +20,18 @@ data class PendingQuestion(
             options.all { compact(it.label) in compact(screen) }
     }
 
+    fun json(): JSONObject = JSONObject().put("question", title).put("header", header)
+        .put("multiSelect", multiSelect).put("other", other)
+        .put("options", org.json.JSONArray(options.map { JSONObject().put("label", it.label).put("description", it.description) }))
+
     companion object {
         fun parse(callId: String, index: Int, value: JSONObject, provider: String): PendingQuestion {
-            val options = value.getJSONArray("options")
+            val options = value.optJSONArray("options") ?: org.json.JSONArray()
             return PendingQuestion(callId, index, value.getString("question"), value.optString("header"),
                 (0 until options.length()).map { options.getJSONObject(it).let { option ->
                     Option(option.getString("label"), option.optString("description"))
-                } }, value.optBoolean("multiSelect"), value.optBoolean("other", true), provider).also {
-                require(it.callId.isNotBlank() && it.title.isNotBlank() && it.options.isNotEmpty())
+                } }, value.optBoolean("multiSelect"), value.optBoolean("other", provider == "claude" || options.length() == 0 || value.optBoolean("isOther")), provider).also {
+                require(it.callId.isNotBlank() && it.title.isNotBlank() && (it.options.isNotEmpty() || it.other))
             }
         }
     }
