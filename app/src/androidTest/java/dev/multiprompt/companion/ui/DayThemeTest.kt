@@ -17,6 +17,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.core.view.WindowCompat
@@ -61,6 +62,7 @@ class DayThemeTest {
             captureAndCheck("$theme-menu", sunlight)
             compose.onNodeWithText("Settings").performClick()
             compose.onNodeWithText("Session list settings").assertIsDisplayed()
+            compose.onNodeWithText("Default Reader font size").performScrollTo().assertIsDisplayed()
             captureAndCheck("$theme-settings", sunlight)
             compose.activityRule.scenario.onActivity { activity ->
                 activity.setContent { FadeTestScreen(FadeScreen.SESSION, material3 = false, sunlight = sunlight) }
