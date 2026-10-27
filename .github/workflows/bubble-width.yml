@@ -34,7 +34,7 @@ jobs:
         with:
           gradle-version: '9.5.1'
       - name: Restore instrumentation signing identity
-        if: inputs.published == true
+        if: always()
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -51,7 +51,7 @@ jobs:
           EOF
       - name: Build before starting emulator
         env:
-          PUBLISHED: ${{ inputs.published }}
+          PUBLISHED: true
         run: bash tools/bubble-width-proof.sh build
       - name: Enable KVM
         run: |
@@ -60,7 +60,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - uses: reactivecircus/android-emulator-runner@v2
         env:
-          PUBLISHED: ${{ inputs.published }}
+          PUBLISHED: true
         with:
           api-level: 35
           emulator-build: 16428233
