@@ -72,6 +72,52 @@ class ChatReactionsTest {
     }
 
     @Test
+    fun mixedReactionLinesHideOnlyTheWireAndPreserveUserWordsAndReceipt() {
+        val reply = message("msg_reply", "Synthetic answer for a reaction")
+        val line = ChatReactions.format(ChatReactions.Emoji.LIKE, reply.requestId, reply.text)!!
+        val words = "My synthetic follow-up stays here"
+        for (text in listOf("$words\n\n$line", "$line\n\n$words", "$words\n$line\nMore words")) {
+            val user = message("mixed", text, "user")
+            val raw = listOf(reply, user)
+            val shown = ChatReactions.present(raw)
+            assertEquals(text.lines().filterNot { it == line }.joinToString("\n").trim('\n'), shown.messages.last().text)
+            assertEquals(user.copy(text = shown.messages.last().text), shown.messages.last())
+            assertEquals(setOf(ChatReactions.Emoji.LIKE), shown.badges[reply.key])
+            assertEquals(text, raw.last().text)
+            assertEquals(text, raw.last().transcript().text)
+        }
+    }
+
+    @Test
+    fun onlyReactionLinesLeaveNoBubbleEvenWithBlankLinesOrPendingEcho() {
+        val reply = message("msg_reply", "Synthetic answer for a reaction")
+        val like = ChatReactions.format(ChatReactions.Emoji.LIKE, reply.requestId, reply.text)!!
+        val heart = ChatReactions.format(ChatReactions.Emoji.HEART, reply.requestId, reply.text)!!
+        for (pending in listOf(false, true)) {
+            val user = message("reactions", "\n$like\n\n$heart\n", "user").copy(pending = pending)
+            val shown = ChatReactions.present(listOf(reply, user))
+            assertEquals(listOf(reply), shown.messages)
+            assertEquals(setOf(ChatReactions.Emoji.LIKE, ChatReactions.Emoji.HEART), shown.badges[reply.key])
+            assertEquals(listOf(reply, user), ChatReactions.present(listOf(reply, user.copy(pending = true)), collapsePending = false).messages.map { if (it.key == user.key) it.copy(pending = pending) else it })
+        }
+    }
+
+    @Test
+    fun mixedInvalidReactionLinesAndAssistantTextRemainUntouched() {
+        val reply = message("msg_reply", "Synthetic answer for a reaction")
+        val valid = ChatReactions.format(ChatReactions.Emoji.LIKE, reply.requestId, reply.text)!!
+        val wrong = ChatReactions.format(ChatReactions.Emoji.LIKE, reply.requestId, "Wrong quote")!!
+        val unknown = ChatReactions.format(ChatReactions.Emoji.LIKE, "unloaded", reply.text)!!
+        for (text in listOf("My words\n$wrong", "My words\n$unknown", "My words\n👍 to: plain text", "My words\n$valid extra", "My words\n[mp:ordinary]")) {
+            val raw = listOf(reply, message("user", text, "user"))
+            assertEquals(raw, ChatReactions.present(raw).messages)
+            assertTrue(ChatReactions.present(raw).badges.isEmpty())
+        }
+        val raw = listOf(reply, message("assistant", "An example\n$valid"))
+        assertEquals(raw, ChatReactions.present(raw).messages)
+    }
+
+    @Test
     fun quotesStayShortWithoutSplittingAnEmoji() {
         val line = ChatReactions.format(ChatReactions.Emoji.HEART, "id", "a".repeat(79) + "🙂 later")!!
         val quote = ChatReactions.parse(line)!!.quote
