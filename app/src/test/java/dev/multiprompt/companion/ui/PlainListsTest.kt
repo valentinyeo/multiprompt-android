@@ -1,7 +1,6 @@
 package dev.multiprompt.companion.ui
 
 import android.app.Application
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
