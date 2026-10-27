@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -23,6 +24,8 @@ class EmulatorProofTest(unittest.TestCase):
     def test_every_emulator_job_uses_one_shared_lifecycle(self):
         for name in ('test', 'verify', 'top-fade', 'account-journey'):
             workflow = source(f'.github/workflows/{name}.yml')
+            events = re.findall(r'^  ([a-z_]+):', workflow.split('permissions:', 1)[0], re.M)
+            self.assertEqual(len(events), len(set(events)), f'duplicate workflow event: {name}')
             self.assertNotIn('uses: reactivecircus/android-emulator-runner@', workflow)
             self.assertIn('uses: ./.github/actions/android-proof', workflow)
         action = source('.github/actions/android-proof/action.yml')
