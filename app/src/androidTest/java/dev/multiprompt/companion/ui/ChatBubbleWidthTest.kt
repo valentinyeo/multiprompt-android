@@ -12,8 +12,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.multiprompt.companion.MainActivity
@@ -54,9 +57,8 @@ class ChatBubbleWidthTest {
             }
         }
         compose.waitForIdle()
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
         val output = File(checkNotNull(InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")), "bubble-width").apply { mkdirs() }
-        val bitmap = instrumentation.uiAutomation.takeScreenshot()
+        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
         File(output, "chat.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         val chat = compose.onNodeWithTag("chat-width").fetchSemanticsNode().boundsInRoot
         val measurements = JSONObject().put("screenWidth", bitmap.width).put("chatWidth", chat.width)

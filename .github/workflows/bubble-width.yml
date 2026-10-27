@@ -74,5 +74,8 @@ jobs:
         if: always()
         with:
           name: bubble-width-proof
-          path: build/bubble-width/
+          path: |
+            build/bubble-width/bubble-width/**
+            build/bubble-width/*.txt
+            build/bubble-width/manifest.json
           if-no-files-found: warn
