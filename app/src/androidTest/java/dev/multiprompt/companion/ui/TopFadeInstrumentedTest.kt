@@ -149,12 +149,11 @@ class TopFadeInstrumentedTest {
 
     private fun screenshot(name: String) {
         val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
-        listOf(
-            "mkdir -p /data/local/tmp/top-fade-proof",
-            "screencap -p /data/local/tmp/top-fade-proof/$name.png",
-        ).forEach { command ->
-            val output = instrumentation.uiAutomation.executeShellCommand(command)
-            android.os.ParcelFileDescriptor.AutoCloseInputStream(output).use { it.readBytes() }
+        val directory = java.io.File(instrumentation.targetContext.externalCacheDir, "top-fade-proof").apply { mkdirs() }
+        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
+        java.io.File(directory, "$name.png").outputStream().use {
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
         }
+        bitmap.recycle()
     }
 }

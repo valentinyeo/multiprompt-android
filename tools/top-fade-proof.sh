@@ -1,15 +1,53 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-status=0
-"${GRADLE:-gradle}" --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.multiprompt.companion.ui.TopFadeInstrumentedTest || status=$?
-mkdir -p build/top-fade-shots
-for name in inbox-top inbox-scrolled chat-top chat-scrolled chat-headline chat-headline-long dark-app-inbox-scrolled light-app-inbox-scrolled dark-chat-reference light-chat-reference; do
-  adb pull "/data/local/tmp/top-fade-proof/$name.png" build/top-fade-shots/
-  test -f "build/top-fade-shots/$name.png"
-  test -s "build/top-fade-shots/$name.png"
-done
-if [ "$status" -ne 0 ]; then exit "$status"; fi
+run_proof() {
+  local label=$1 status=0
+  "${GRADLE:-gradle}" --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.multiprompt.companion.ui.TopFadeInstrumentedTest || status=$?
+  mkdir -p "build/top-fade-shots/$label"
+  for name in inbox-top inbox-scrolled chat-top chat-scrolled chat-headline chat-headline-long dark-app-inbox-scrolled light-app-inbox-scrolled dark-chat-reference light-chat-reference; do
+    adb pull "/sdcard/Android/data/dev.multiprompt.companion.debug/cache/top-fade-proof/$name.png" "build/top-fade-shots/$label/"
+    test -s "build/top-fade-shots/$label/$name.png"
+  done
+  cp app/build/outputs/androidTest-results/connected/debug/TEST-*.xml "build/top-fade-shots/$label/"
+  return "$status"
+}
+if [ -n "${TOP_FADE_BASE_REF:-}" ]; then
+  source_file=app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt
+  mkdir -p build/top-fade-shots
+  cp "$source_file" build/top-fade-shots/candidate.kt
+  trap 'cp build/top-fade-shots/candidate.kt "$source_file"' EXIT
+  git show "$TOP_FADE_BASE_REF:$source_file" > "$source_file"
+  if "${GRADLE:-gradle}" --no-daemon testDebugUnitTest --tests '*InboxTopFadeTest' > build/top-fade-shots/before-unit.log 2>&1; then
+    echo 'Original inbox unexpectedly passed unit regression' >&2
+    exit 1
+  fi
+  python3 - <<'PY'
+import xml.etree.ElementTree as ET
+root = ET.parse('app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.InboxTopFadeTest.xml').getroot()
+assert root.attrib['tests'] == '2' and root.attrib['failures'] == '2'
+assert all('Inbox fade must cover the same control height as chat' in case.find('failure').attrib['message'] for case in root.findall('testcase'))
+print('ORIGINAL_INBOX_UNIT_REJECTED')
+PY
+  if run_proof before; then
+    echo 'Original inbox unexpectedly passed' >&2
+    exit 1
+  fi
+  python3 - <<'PY'
+from pathlib import Path
+import xml.etree.ElementTree as ET
+cases = [case for file in Path('build/top-fade-shots/before').glob('TEST-*.xml') for case in ET.parse(file).iter('testcase')]
+failed = [case for case in cases if case.find('failure') is not None]
+assert len(cases) == 7
+assert {case.attrib['name'] for case in failed} == {'fullAppInboxMatchesChatFadeInLightTheme', 'fullAppInboxMatchesChatFadeInDarkTheme'}
+assert all('Full inbox must reach the status bar' in case.find('failure').text for case in failed)
+print('ORIGINAL_INBOX_REJECTED')
+PY
+  cp build/top-fade-shots/candidate.kt "$source_file"
+  trap - EXIT
+  rm build/top-fade-shots/candidate.kt
+fi
+run_proof after
 if [ "${RELEASE_SMOKE:-false}" = true ]; then
   curl -fsSL https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion-update.json -o build/top-fade-shots/update.json
   manifest=build/top-fade-shots/update.json

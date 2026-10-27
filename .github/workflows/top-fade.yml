@@ -11,6 +11,10 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      baseline_ref:
+        description: Original commit for native before and after proof
+        type: string
+        required: false
       release_smoke:
         description: Install and verify the published signed APK after screen tests
         type: boolean
@@ -28,6 +32,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -45,6 +51,7 @@ jobs:
       - uses: reactivecircus/android-emulator-runner@v2
         env:
           RELEASE_SMOKE: ${{ inputs.release_smoke }}
+          TOP_FADE_BASE_REF: ${{ inputs.baseline_ref }}
         with:
           api-level: 35
           arch: x86_64
