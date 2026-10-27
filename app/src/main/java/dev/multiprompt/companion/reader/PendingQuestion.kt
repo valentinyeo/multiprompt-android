@@ -16,8 +16,17 @@ data class PendingQuestion(
 
     fun isVisible(screen: String): Boolean {
         fun compact(text: String) = text.filterNot(Char::isWhitespace)
-        return Regex("(?:enter to (?:select|submit)|space to (?:select|toggle)|esc to cancel)", RegexOption.IGNORE_CASE).containsMatchIn(screen) && compact(title).isNotEmpty() && compact(title) in compact(screen) &&
-            options.all { compact(it.label) in compact(screen) }
+        val lines = screen.lines().map(String::trim)
+        val footer = Regex("(?:enter to (?:select|submit)|space to (?:select|toggle)|esc to cancel)", RegexOption.IGNORE_CASE)
+        val end = lines.indexOfLast { footer.containsMatchIn(it) }
+        if (end < 0 || lines.drop(end + 1).any { it.isNotEmpty() && !it.all { ch -> ch in "─━-" } }) return false
+        val cursor = (0 until end).lastOrNull { Regex("^[❯›>]\\s*[1-9][.)]").containsMatchIn(lines[it]) }
+        if (options.isNotEmpty() && cursor == null) return false
+        val start = cursor?.let { current ->
+            (0 until current).lastOrNull { lines[it].isNotEmpty() && lines[it].all { ch -> ch in "─━-" } }?.plus(1)
+        } ?: 0
+        val form = compact(lines.subList(start, end).joinToString("\n"))
+        return compact(title).isNotEmpty() && compact(title) in form && options.all { compact(it.label) in form }
     }
 
     fun json(): JSONObject = JSONObject().put("question", title).put("header", header)

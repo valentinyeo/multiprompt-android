@@ -37,6 +37,12 @@ class PendingQuestionTest {
         assertFalse(question.isVisible("Exact question?\n1. First\n2. Second"))
         assertTrue(question.isVisible("Exact\n question?\n❯ 1. First\n2. Second\nSpace to toggle"))
     }
+    @Test fun previousQuestionInScrollbackDoesNotEnableTheCurrentQuestion() {
+        val question = ChatHistory(rows = listOf(row(0, payload))).pendingQuestions.single()
+        val screen = "Exact question?\n1. First\n2. Second\n────────────────\nA different question?\n❯ 1. First\n2. Second\n────────────────\nEnter to select"
+        assertFalse(question.isVisible(screen))
+    }
+
     @Test fun codexOtherRespectsItsStructuredSettingAndFreeTextQuestions() {
         val value = payload.getJSONArray("questions").getJSONObject(0)
         assertFalse(PendingQuestion.parse("codex", 0, value, "codex").other)
