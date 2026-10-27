@@ -2,14 +2,22 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 status=0
-"${GRADLE:-gradle}" --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.multiprompt.companion.ui.TopFadeInstrumentedTest || status=$?
+"${GRADLE:-gradle}" --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.multiprompt.companion.ui.TopFadeInstrumentedTest,dev.multiprompt.companion.ui.SettingsNavigationTest || status=$?
 mkdir -p build/top-fade-shots
 for name in inbox-top inbox-scrolled chat-top chat-scrolled chat-headline chat-headline-long; do
   adb pull "/data/local/tmp/top-fade-proof/$name.png" build/top-fade-shots/
   test -f "build/top-fade-shots/$name.png"
   test -s "build/top-fade-shots/$name.png"
 done
+mkdir -p build/top-fade-shots/settings
+adb pull /data/local/tmp/settings-proof/. build/top-fade-shots/settings/
+for theme in dark light; do
+  for page in home settings mapping renew-browser signed-out sign-in-browser; do
+    test -s "build/top-fade-shots/settings/$theme-$page.png"
+  done
+done
 if [ "$status" -ne 0 ]; then exit "$status"; fi
+echo SETTINGS_NAVIGATION_EMULATOR_OK
 if [ "${RELEASE_SMOKE:-false}" = true ]; then
   curl -fsSL https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion-update.json -o build/top-fade-shots/update.json
   manifest=build/top-fade-shots/update.json

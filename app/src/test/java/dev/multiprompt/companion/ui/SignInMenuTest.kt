@@ -20,61 +20,22 @@ class SignInMenuTest {
     @get:Rule
     val compose = createComposeRule()
 
-    @Test
-    fun signedOutMenuSignsIn() {
-        var signInCalls = 0
-        var signOutCalls = 0
+    @Test fun overflowOpensSettingsWithoutConfigurationLinks() {
+        var settingsCalls = 0
         compose.setContent {
             MaterialTheme {
                 InboxOverflowMenu(
-                    signedIn = false,
-                    onSignIn = { signInCalls++ },
-                    onSignOut = { signOutCalls++ },
-                    onSettings = {},
-                    onArrangeSplits = {},
-                    onNewWorkspace = {},
-                    onRefresh = {},
-                    onHosts = {},
-                    onUpdate = {},
+                    onSettings = { settingsCalls++ },
+                    onArrangeSplits = {}, onNewWorkspace = {}, onRefresh = {},
                 )
             }
         }
-
         compose.onNodeWithContentDescription("Session list actions").performClick()
-        compose.onNodeWithText("Sign in to sync").assertIsDisplayed().performClick()
-        compose.onNodeWithText("Sign in to sync").assertDoesNotExist()
-        compose.runOnIdle {
-            assertEquals(1, signInCalls)
-            assertEquals(0, signOutCalls)
-        }
-    }
-
-    @Test
-    fun signedInMenuSignsOut() {
-        var signInCalls = 0
-        var signOutCalls = 0
-        compose.setContent {
-            MaterialTheme {
-                InboxOverflowMenu(
-                    signedIn = true,
-                    onSignIn = { signInCalls++ },
-                    onSignOut = { signOutCalls++ },
-                    onSettings = {},
-                    onArrangeSplits = {},
-                    onNewWorkspace = {},
-                    onRefresh = {},
-                    onHosts = {},
-                    onUpdate = {},
-                )
-            }
-        }
-
-        compose.onNodeWithContentDescription("Session list actions").performClick()
-        compose.onNodeWithText("Sync: signed in — sign out").assertIsDisplayed().performClick()
-        compose.onNodeWithText("Sync: signed in — sign out").assertDoesNotExist()
-        compose.runOnIdle {
-            assertEquals(0, signInCalls)
-            assertEquals(1, signOutCalls)
-        }
+        compose.onNodeWithText("Hosts").assertDoesNotExist()
+        compose.onNodeWithText("Workspaces").assertDoesNotExist()
+        compose.onNodeWithText("Update").assertDoesNotExist()
+        compose.onNodeWithText("Settings").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Settings").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(1, settingsCalls) }
     }
 }

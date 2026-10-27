@@ -11,7 +11,6 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
-import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -52,13 +51,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -75,13 +72,11 @@ import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
@@ -89,9 +84,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.Image as OutlinedImage
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Badge
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -123,13 +116,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.key
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -144,7 +135,6 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -163,10 +153,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -310,7 +298,7 @@ private fun AppScreens(viewModel: MainViewModel) {
     val state by viewModel.state.collectAsState()
     val updateState by viewModel.updates.state.collectAsState()
     val context = LocalContext.current
-    var inboxVisible by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(StartScreen.INBOX_ON_LAUNCH) }
+    var hostMappingVisible by remember { mutableStateOf(false) }
     var useWithoutAccount by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val systemDark = isSystemInDarkTheme()
     val sunlight = when (state.appTheme) {
@@ -366,7 +354,6 @@ private fun AppScreens(viewModel: MainViewModel) {
             !state.editorVisible &&
             state.section != AppSection.SESSIONS,
         onBack = {
-            inboxVisible = StartScreen.inboxAfterLeaving(state.section)
             viewModel.select(AppSection.SESSIONS)
         },
     )
@@ -479,7 +466,7 @@ private fun AppScreens(viewModel: MainViewModel) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
-            Column(if (state.section == AppSection.SESSIONS && inboxVisible && updateState !is UpdateState.Available) Modifier else Modifier.statusBarsPadding()) {
+            Column(if (state.section == AppSection.SESSIONS && updateState !is UpdateState.Available) Modifier else Modifier.statusBarsPadding()) {
                 if (state.section != AppSection.SESSIONS) {
                     Header(
                         refreshing = state.refreshing,
@@ -495,19 +482,12 @@ private fun AppScreens(viewModel: MainViewModel) {
                 }
             }
         },
-        floatingActionButton = {
-            if (state.section == AppSection.HOSTS) {
-                FloatingActionButton(onClick = { viewModel.showHostEditor() }) {
-                    Icon(Icons.Default.Add, "Add host")
-                }
-            }
-        },
     ) { padding ->
         Box(Modifier.padding(padding)
-            .then(if (state.section == AppSection.SESSIONS && inboxVisible) Modifier.consumeWindowInsets(PaddingValues(top = padding.calculateTopPadding())) else Modifier)
+            .then(if (state.section == AppSection.SESSIONS) Modifier.consumeWindowInsets(PaddingValues(top = padding.calculateTopPadding())) else Modifier)
             .fillMaxSize()) {
             when (state.section) {
-                AppSection.SESSIONS -> if (!inboxVisible) AccountWorkspacesScreen(viewModel, onInbox = { inboxVisible = true }, onReleaseNotes = viewModel::openReleaseNotes) else SessionsScreen(
+                AppSection.SESSIONS -> SessionsScreen(
                     state = state,
                     signedIn = state.signedIn,
                     onSignIn = { viewModel.signInAccount { context.startActivity(it) } },
@@ -548,17 +528,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     crashReport = state.crashReport,
                     onClearCrashReport = viewModel::clearCrashReport,
                     material3 = BuildConfig.MATERIAL3,
-                    onAddHost = {
-                        viewModel.select(AppSection.HOSTS)
-                        viewModel.showHostEditor()
-                    },
-                )
-                AppSection.HOSTS -> HostsScreen(
-                    state = state,
-                    onEdit = viewModel::showHostEditor,
-                    onDelete = viewModel::deleteHost,
-                    onAddUser = viewModel::addUserOnHost,
-                    onTrust = viewModel::trustHostKey,
+                    onHostMapping = { hostMappingVisible = true },
                 )
                 AppSection.UPDATE -> UpdateScreen(
                     state = updateState,
@@ -568,6 +538,8 @@ private fun AppScreens(viewModel: MainViewModel) {
             }
         }
     }
+
+    if (hostMappingVisible) HostMappingDialog(viewModel, onDismiss = { hostMappingVisible = false })
 
     state.newSession?.let { picker ->
         when (picker.step) {
@@ -764,7 +736,6 @@ internal fun Header(
                 Text(
                     when (section) {
                         AppSection.SESSIONS -> "Sessions"
-                        AppSection.HOSTS -> "Hosts"
                         AppSection.UPDATE -> "Update"
                     },
                     fontWeight = FontWeight.Bold,
@@ -789,7 +760,6 @@ internal fun Header(
                 ) {
                     listOf(
                         AppSection.SESSIONS to "Sessions",
-                        AppSection.HOSTS to "Hosts",
                         AppSection.UPDATE to "Update",
                     ).forEach { (destination, label) ->
                         DropdownMenuItem(
@@ -1179,7 +1149,7 @@ internal fun SessionsScreen(
     onSetReaderDefaultFontScale: (Float) -> Unit,
     crashReport: CrashReport?,
     onClearCrashReport: () -> Unit,
-    onAddHost: () -> Unit,
+    onHostMapping: () -> Unit,
     nowMillis: () -> Long = System::currentTimeMillis,
     onSetSessionListSetting: (String, Boolean) -> Unit = { _, _ -> },
     material3: Boolean = LocalMaterial3.current,
@@ -1288,6 +1258,11 @@ internal fun SessionsScreen(
                     Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    TextButton(onClick = onSignIn) { Text(if (signedIn) "Switch / renew login" else "Sign in") }
+                    if (signedIn) TextButton(onClick = onSignOut) { Text("Sign out") }
+                    TextButton(onClick = onHostMapping) { Text("Host mapping") }
+                    TextButton(onClick = { onSelectSection(AppSection.UPDATE) }) { Text("Update") }
+                    HorizontalDivider()
                     listOf(
                         Triple("frequent", "Show Frequent split", state.showFrequentSplit),
                         Triple("frequent_first", "Frequent as first tab", state.frequentFirst),
@@ -1683,9 +1658,6 @@ internal fun SessionsScreen(
                             }
                         }
                         InboxOverflowMenu(
-                            signedIn = signedIn,
-                            onSignIn = onSignIn,
-                            onSignOut = onSignOut,
                             onSettings = { settingsVisible = true },
                             onArrangeSplits = { splitOrderDialogVisible = true },
                             onNewWorkspace = {
@@ -1693,8 +1665,6 @@ internal fun SessionsScreen(
                                 workspaceDialogVisible = true
                             },
                             onRefresh = onRefresh,
-                            onHosts = { onSelectSection(AppSection.HOSTS) },
-                            onUpdate = { onSelectSection(AppSection.UPDATE) },
                             onReleaseNotes = onReleaseNotes,
                         )
                     }
@@ -1828,7 +1798,7 @@ internal fun SessionsScreen(
     ) { padding ->
         if (state.hosts.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding)) {
-                EmptyState("Connect your first VPS", "Import an SSH key, then the app will discover tmux sessions.", onAddHost)
+                EmptyState("No sessions yet", "Configure servers through the CLI, then check Host mapping in Settings.", onHostMapping)
             }
         } else LazyColumn(
             Modifier
@@ -3976,90 +3946,6 @@ private fun AnnotatedString.Builder.appendHighlightedCodeLine(line: String) {
     append(line.substring(cursor))
 }
 
-@Composable
-private fun HostsScreen(
-    state: AppUiState,
-    onEdit: (HostProfile) -> Unit,
-    onDelete: (HostProfile) -> Unit,
-    onAddUser: (HostProfile, String) -> Unit,
-    onTrust: (String) -> Unit,
-) {
-    var deleting by remember { mutableStateOf<HostProfile?>(null) }
-    var addingUser by remember { mutableStateOf<HostProfile?>(null) }
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        items(state.hosts, key = { it.id }) { host ->
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(host.label, fontWeight = FontWeight.Bold)
-                            Text(
-                                "${host.username}@${host.hostname}:${host.port}",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                            )
-                        }
-                        IconButton(onClick = { addingUser = host }) { Icon(Icons.Default.PersonAdd, "Add another user on this server") }
-                        IconButton(onClick = { onEdit(host) }) { Icon(Icons.Default.Edit, "Edit") }
-                        IconButton(onClick = { deleting = host }) { Icon(Icons.Default.Delete, "Delete") }
-                    }
-                    host.hostKeyFingerprint?.let {
-                        Text("Pinned $it", style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace)
-                    }
-                    state.pendingHostKeys[host.id]?.let { key ->
-                        HorizontalDivider()
-                        Text(
-                            if (key.changed) "WARNING: the SSH host key changed" else "First connection: verify this SSH host key",
-                            color = if (key.changed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(key.fingerprint, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-                        Button(onClick = { onTrust(host.id) }) {
-                            Text(if (key.changed) "Replace trusted key" else "Trust this key")
-                        }
-                    }
-                    state.hostErrors[host.id]?.takeIf { state.pendingHostKeys[host.id] == null }?.let { InlineError(it) }
-                }
-            }
-        }
-    }
-    deleting?.let { host ->
-        AlertDialog(
-            onDismissRequest = { deleting = null },
-            title = { Text("Delete ${host.label}?") },
-            text = { Text("The encrypted private key stored for this host will also be removed.") },
-            confirmButton = {
-                TextButton(onClick = { onDelete(host); deleting = null }) { Text("Delete") }
-            },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
-        )
-    }
-    addingUser?.let { host ->
-        var username by remember(host.id) { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { addingUser = null },
-            title = { Text("Another user on ${host.hostname}") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Uses the same key as ${host.label}. That user must accept this key on the server.")
-                    OutlinedTextField(username, { username = it.trim() }, label = { Text("Username") }, singleLine = true)
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = { onAddUser(host, username); addingUser = null },
-                    enabled = username.isNotEmpty() && username != host.username,
-                ) { Text("Add and connect") }
-            },
-            dismissButton = { TextButton(onClick = { addingUser = null }) { Text("Cancel") } },
-        )
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun HostEditorScreen(
@@ -4445,7 +4331,7 @@ private fun EmptyState(title: String, body: String, action: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(20.dp))
-        Button(onClick = action) { Text("Add VPS") }
+        Button(onClick = action) { Text("Host mapping") }
     }
 }
 

@@ -12,7 +12,7 @@ import dev.multiprompt.companion.MainViewModel
 import dev.multiprompt.companion.MultipromptApplication
 import dev.multiprompt.companion.data.HostStore
 import dev.multiprompt.companion.model.HostProfile
-import dev.multiprompt.companion.ui.MultipromptApp
+import dev.multiprompt.companion.ui.HostMappingDialog
 import dev.multiprompt.companion.ui.MultipromptTheme
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
@@ -146,11 +146,11 @@ class AccountHostNamesAppTest {
             assertEquals(expected, HostStore(app).load().associateBy { it.id })
             assertEquals(expected, model.state.value.hosts.associateBy { it.id })
             assertEquals(expected, model.state.value.accountHosts.values.associateBy { it.id })
-            model.select(AppSection.HOSTS)
+            model.select(AppSection.SESSIONS)
         }
-        compose.setContent { MultipromptTheme { MultipromptApp(model) } }
-        compose.onNodeWithText("VPS Hetzner").assertIsDisplayed()
-        compose.onNodeWithText("VPS Contabo").assertIsDisplayed()
+        compose.setContent { MultipromptTheme { HostMappingDialog(model, onDismiss = {}) } }
+        compose.onNodeWithText("0 · VPS Hetzner: VPS Hetzner (valentin)").assertIsDisplayed()
+        compose.onNodeWithText("1 · VPS Contabo: VPS Contabo (valentin)").assertIsDisplayed()
         compose.onNodeWithText("1").assertDoesNotExist()
         compose.onNodeWithText("2").assertDoesNotExist()
 
@@ -165,9 +165,9 @@ class AccountHostNamesAppTest {
             assertEquals(expected, model.state.value.hosts.associateBy { it.id })
             assertEquals(expected, model.state.value.accountHosts.values.associateBy { it.id })
         }
-        compose.onNodeWithText("VPS Hetzner Main").assertIsDisplayed()
-        compose.onNodeWithText("VPS Hetzner").assertDoesNotExist()
-        compose.onNodeWithText("VPS Contabo").assertIsDisplayed()
+        compose.onNodeWithText("0 · VPS Hetzner Main: VPS Hetzner Main (valentin)").assertIsDisplayed()
+        compose.onNodeWithText("0 · VPS Hetzner: VPS Hetzner (valentin)").assertDoesNotExist()
+        compose.onNodeWithText("1 · VPS Contabo: VPS Contabo (valentin)").assertIsDisplayed()
         compose.onNodeWithText("1").assertDoesNotExist()
         compose.onNodeWithText("2").assertDoesNotExist()
     }

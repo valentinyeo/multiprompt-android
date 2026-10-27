@@ -49,7 +49,7 @@ class MutedInboxTest {
                     onStartNewSession = {}, onSetNewestSessionsAtBottom = {}, onSetAllSplitOnRight = {},
                     appTheme = AppTheme.SYSTEM, onSetAppTheme = {}, onClearSessionActionError = {},
                     readerDefaultFontScale = 1f, onSetReaderDefaultFontScale = {}, crashReport = null,
-                    onClearCrashReport = {}, onAddHost = {}, nowMillis = { 1_800_000_000_000 },
+                    onClearCrashReport = {}, onHostMapping = {}, nowMillis = { 1_800_000_000_000 },
                 )
             }
         }

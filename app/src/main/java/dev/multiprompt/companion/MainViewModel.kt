@@ -76,7 +76,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import java.util.UUID
 
-enum class AppSection { SESSIONS, HOSTS, UPDATE }
+enum class AppSection { SESSIONS, UPDATE }
 
 enum class SessionBucket { OPEN, WAITING, ARCHIVE }
 

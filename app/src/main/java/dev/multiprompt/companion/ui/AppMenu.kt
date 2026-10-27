@@ -8,16 +8,13 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
@@ -27,7 +24,6 @@ internal fun ColumnScope.AppMenuItems(
     onSignIn: () -> Unit,
     onSignOut: () -> Unit,
     onDismiss: () -> Unit,
-    onHosts: (() -> Unit)? = null,
     onUpdate: (() -> Unit)? = null,
 ) {
     DropdownMenuItem(
@@ -45,15 +41,6 @@ internal fun ColumnScope.AppMenuItems(
             if (signedIn) onSignOut() else onSignIn()
         },
     )
-    if (onHosts != null) {
-        DropdownMenuItem(
-            text = { Text("Hosts") },
-            onClick = {
-                onDismiss()
-                onHosts()
-            },
-        )
-    }
     if (onUpdate != null) {
         DropdownMenuItem(
             text = { Text("Update") },
@@ -67,15 +54,10 @@ internal fun ColumnScope.AppMenuItems(
 
 @Composable
 internal fun InboxOverflowMenu(
-    signedIn: Boolean,
-    onSignIn: () -> Unit,
-    onSignOut: () -> Unit,
     onSettings: () -> Unit,
     onArrangeSplits: () -> Unit,
     onNewWorkspace: () -> Unit,
     onRefresh: () -> Unit,
-    onHosts: () -> Unit,
-    onUpdate: () -> Unit,
     onReleaseNotes: () -> Unit = {},
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -119,15 +101,6 @@ internal fun InboxOverflowMenu(
             DropdownMenuItem(
                 text = { VersionLabel(onClick = { expanded = false; onReleaseNotes() }) },
                 onClick = { expanded = false; onReleaseNotes() },
-            )
-            HorizontalDivider()
-            AppMenuItems(
-                signedIn = signedIn,
-                onSignIn = onSignIn,
-                onSignOut = onSignOut,
-                onDismiss = { expanded = false },
-                onHosts = onHosts,
-                onUpdate = onUpdate,
             )
         }
     }

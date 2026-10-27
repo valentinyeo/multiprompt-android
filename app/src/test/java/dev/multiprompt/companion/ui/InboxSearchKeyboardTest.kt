@@ -99,7 +99,7 @@ class InboxSearchKeyboardTest {
                     onSetReaderDefaultFontScale = {},
                     crashReport = null,
                     onClearCrashReport = {},
-                    onAddHost = {},
+                    onHostMapping = {},
                     signedIn = true,
                     onSignIn = {},
                     onSignOut = {},

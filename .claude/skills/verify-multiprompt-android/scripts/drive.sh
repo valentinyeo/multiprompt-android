@@ -159,37 +159,22 @@ fi
 tap_text 'Use without account (debug)'
 wait_for_text Inbox
 tap_text All
-tap_desc 'Session list actions'
-tap_text Hosts
-tap_desc 'Add host'
-wait_for_text 'Add VPS'
+seed_host() {
+    adb shell am force-stop "$package"
+    set +x
+    adb shell am instrument -w -e class dev.multiprompt.companion.account.SeedHostDeviceTest \
+        -e host_label "$1" -e ssh_host "$2" -e ssh_port "$3" -e ssh_user "$4" \
+        -e ssh_private_key "$(base64 -w0 "$FIXTURE/user-key")" \
+        "$package.test/androidx.test.runner.AndroidJUnitRunner" > "$EVIDENCE/host-seed.txt"
+    set -x
+    grep -F 'OK (1 test)' "$EVIDENCE/host-seed.txt"
+    relaunch_app
+}
 if [[ "$feature" == hosts-retired.md ]]; then
     retired=45.151.123.11
     sudo iptables -I OUTPUT -d "$retired" -p tcp -j REJECT --reject-with tcp-reset
-    sudo iptables -S OUTPUT | tee "$EVIDENCE/retired-address-blocked.txt"
-    grep -F -- "-d $retired/32" "$EVIDENCE/retired-address-blocked.txt"
-    fill Label 'Inne%sCRO'
-    fill 'Hostname or IP' "$retired"
-    fill Username valentin
-    fill Port 22
-    adb push "$FIXTURE/user-key" /sdcard/Download/verify-key.pem
-    tap_text 'Import private key'
-    wait_for_text 'Recent'
-    tap_desc 'Show roots'
-    tap_text Downloads
-    wait_for_text verify-key.pem
-    tap_text verify-key.pem
-    wait_for_text 'Key:'
-    shot retired-form
-    tap_text 'Save and connect'
-    wait_for_text Inbox
-    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent 'Trust Inne CRO?'
-    tap_desc 'Session list actions'
-    tap_text Hosts
-    wait_for_text 'Inne CRO'
-    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "valentin@$retired:22"
-    shot retired-host-saved
-    relaunch_app
+    sudo iptables -S OUTPUT > "$EVIDENCE/retired-address-blocked.txt"
+    seed_host 'Inne CRO' "$retired" 22 valentin
     for attempt in {1..10}; do
         dump_ui
         python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains Inbox
@@ -197,37 +182,17 @@ if [[ "$feature" == hosts-retired.md ]]; then
         python3 "$scripts/ui.py" "$EVIDENCE/current.xml" lacks 'Inne CRO'
         sleep 1
     done
-    shot relaunched-inbox
     tap_desc 'Session list actions'
-    tap_text Hosts
-    for attempt in {1..30}; do
-        if select_node desc 'Add host' >/dev/null 2>&1; then break; fi
-        sleep 1
-    done
-    select_node desc 'Add host'
-    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" lacks 'Inne CRO'
+    tap_text Settings
+    tap_text 'Host mapping'
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" lacks "$retired"
-    shot relaunched-hosts
-    sudo iptables -L OUTPUT -v -n | tee "$EVIDENCE/retired-address-attempts.txt"
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" lacks 'Inne CRO:'
+    shot retired-host-removed
+    sudo iptables -L OUTPUT -v -n > "$EVIDENCE/retired-address-attempts.txt"
     printf 'RETIRED HOST REMOVED ON RELAUNCH VERIFIED\n'
     exit 0
 fi
-fill Label Verify
-fill 'Hostname or IP' 10.0.2.2
-fill Username verifyssh
-fill Port 2222
-adb push "$FIXTURE/user-key" /sdcard/Download/verify-key.pem
-tap_text 'Import private key'
-wait_for_text 'Recent'
-shot key-picker
-tap_desc 'Show roots'
-shot picker-roots
-tap_text Downloads
-wait_for_text verify-key.pem
-tap_text verify-key.pem
-wait_for_text 'Key:'
-shot key-imported
-tap_text 'Save and connect'
+seed_host Verify 10.0.2.2 2222 verifyssh
 wait_for_text 'Trust Verify?'
 shot compare-host-key
 fingerprint=$(cat "$EVIDENCE/host-fingerprint.txt")
@@ -246,7 +211,8 @@ shot sessions
 sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
 if [[ "$feature" == hosts.md ]]; then
     tap_desc 'Session list actions'
-    tap_text Hosts
+    tap_text Settings
+    tap_text 'Host mapping'
     wait_for_text "Pinned $fingerprint"
     shot pinned-host
     exit 0
@@ -299,7 +265,8 @@ PYROTATE
     require_dismissed "$connections_before"
     shot changed-key-dismissed-relaunched
     tap_desc 'Session list actions'
-    tap_text Hosts
+    tap_text Settings
+    tap_text 'Host mapping'
     wait_for_text "Pinned $fingerprint"
     shot original-key-still-pinned
     accepted_after=$(sudo awk '/Accepted publickey/ {n++} END {print n+0}' "$FIXTURE/sshd.log")
