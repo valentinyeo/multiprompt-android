@@ -2493,6 +2493,10 @@ internal fun ReaderScreen(
 ) = key(connection) {
     MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
     val reader by connection.state.collectAsState()
+    val working = reader.isWorking(session.agent)
+    LaunchedEffect(connection, working) {
+        android.util.Log.i("SessionWorking", "session=${session.name} visible=$working hook=${reader.hookState?.active} status=${reader.status} sending=${reader.sending}")
+    }
     val transcript = reader.transcript.takeUnless { technicalMode }
     val historyAgent = TranscriptProtocol.supports(session.agent)
     val historyChat = historyAgent && !technicalMode
@@ -3580,9 +3584,6 @@ internal fun ReaderScreen(
             }
             val readerBlocks = remember(displayedOutput, session.agent, reader.sentPrompts) {
                 TmuxText.readerBlocks(displayedOutput, session.agent, reader.sentPrompts)
-            }
-            val working = reader.sending || readerBlocks.any { block ->
-                block.kind == TmuxText.ReaderBlockKind.PROGRESS && isTransientProgress(block.text)
             }
             val visibleReaderBlocks = if (transcript != null) emptyList() else readerBlocks.filterNot { block ->
                 !technicalMode && !TmuxText.containsLink(block.text) && (
