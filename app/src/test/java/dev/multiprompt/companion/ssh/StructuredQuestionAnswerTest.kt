@@ -2,6 +2,7 @@ package dev.multiprompt.companion.ssh
 
 import dev.multiprompt.companion.reader.PendingQuestion
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class StructuredQuestionAnswerTest {
@@ -13,11 +14,12 @@ class StructuredQuestionAnswerTest {
         assertTrue(TmuxCommands.questionAnswer("proof", question, screen, setOf(1), "").endsWith(" 2"))
     }
 
-    @Test fun otherIsQuotedLiteralInputNotShellOrProviderCommands() {
+    @Test fun otherTravelsOnlyThroughStdinNotShellOrProviderCommands() {
         val command = TmuxCommands.questionAnswer("proof", question, screen, emptySet(), "a'b; $(false)")
-        assertTrue(command.contains(" -l -t "))
-        assertTrue(command.contains(TmuxParser.shellQuote("a'b; $(false)")))
-        assertTrue(command.endsWith(" Enter"))
+        assertFalse(command.contains("a'b"))
+        assertFalse(command.contains("$(false)"))
+        assertTrue(command.contains("tmux load-buffer -b \"\$mp_buffer\" -"))
+        assertTrue(command.contains("tmux paste-buffer -dpr"))
     }
 
     @Test fun multipleAnswersToggleTheExactOptionsThenSubmit() {
@@ -34,8 +36,8 @@ class StructuredQuestionAnswerTest {
     @Test fun codexOtherEntersTheNotesFieldBeforeTyping() {
         val command = TmuxCommands.questionAnswer("proof", question.copy(provider = "codex"), screen, emptySet(), "Custom")
         assertTrue(command.contains(" Down Down Enter"))
-        assertTrue(command.contains(" -l -t "))
-        assertTrue(command.endsWith(" Enter"))
+        assertFalse(command.contains("Custom"))
+        assertTrue(command.contains("tmux paste-buffer -dpr"))
     }
 
 }

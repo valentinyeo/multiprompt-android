@@ -103,8 +103,7 @@ object TmuxCommands {
             } else commands.add("tmux send-keys -t $destination ${index + 1}")
         }
         if (other.isNotBlank()) {
-            commands.add("tmux send-keys -l -t $destination -- ${TmuxParser.shellQuote(other)}")
-            commands.add("tmux send-keys -t $destination Enter")
+            commands.add("(" + pastePrompt(sessionName) + ")")
         }
         return commands.joinToString(" && ")
     }

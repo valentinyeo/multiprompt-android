@@ -497,7 +497,8 @@ class SshRepository(private val secrets: SecretStorage) {
     }
 
     suspend fun answerQuestion(client: SshClient, sessionName: String, question: dev.multiprompt.companion.reader.PendingQuestion, screen: String, choices: Set<Int>, other: String) {
-        execute(client, TmuxCommands.questionAnswer(sessionName, question, screen, choices, other)).requireSuccess("answer the question")
+        execute(client, TmuxCommands.questionAnswer(sessionName, question, screen, choices, other),
+            other.takeIf { it.isNotBlank() }?.toByteArray(Charsets.UTF_8)).requireSuccess("answer the question")
     }
 
     suspend fun selectModelPickerOption(client: SshClient, sessionName: String, index: Int) {

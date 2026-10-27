@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: signed-questions-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   signed-questions:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
