@@ -86,10 +86,19 @@ class ChatChoicesTest {
 
     @Test
     fun letteredOptionsSendTheirLabelAndDescription() {
-        messages.value = listOf(messages.value.single().copy(text = "A) **Create a new account.** Keep work separate.\nB) **Use your own account.** Keep the current setup."))
+        messages.value = listOf(messages.value.single().copy(text = "Choose a route:\n\nA) **Create a new account.** Keep work separate.\nB) **Use your own account.** Keep the current setup."))
         render()
         compose.onNodeWithText(second).performClick()
         compose.runOnIdle { assertEquals(listOf("B: $second"), sent) }
+    }
+
+    @Test
+    fun sectionHeadingsBeforeYesOrNoQuestionStayReadOnly() {
+        messages.value = listOf(messages.value.single().copy(text = "1. **Current setup**\n2. **Work remaining**\n\nWould you like me to continue?"))
+        render(readerStyle = true)
+        compose.onNodeWithText("Current setup").assertHasNoClickAction()
+        compose.onNodeWithText("Work remaining").assertHasNoClickAction()
+        compose.runOnIdle { assertEquals(emptyList<String>(), sent) }
     }
 
     @Test

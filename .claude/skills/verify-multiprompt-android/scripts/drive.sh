@@ -389,6 +389,24 @@ if [[ "$feature" == chat-choices.md ]]; then
     wait_receipt 'VERIFY_QUESTION_KEY:2'
     wait_for_text 'Question answered: Use the current account'
     shot question-after
+    wait_for_text 'Would you like me to continue?'
+    wait_for_text 'Current setup'
+    wait_for_text 'Work remaining'
+    shot section-headings
+    python3 - "$EVIDENCE/current.xml" <<'SECTIONS'
+import sys
+import xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+parents = {child: parent for parent in root.iter() for child in parent}
+for title in ["Current setup", "Work remaining"]:
+    nodes = [node for node in root.iter() if title in node.get('text', '')]
+    assert nodes, title
+    for node in nodes:
+        while node is not None:
+            assert node.get('clickable') != 'true', f"Section became an answer: {title}"
+            node = parents.get(node)
+print('NUMBERED_SECTIONS_READ_ONLY_OK')
+SECTIONS
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt"
     python3 - "$EVIDENCE/receipts.txt" <<'CHOICES'
 import sys
