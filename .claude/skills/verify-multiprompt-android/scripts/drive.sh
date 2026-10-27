@@ -12,7 +12,7 @@ scripts=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$EVIDENCE"
 exec > >(tee -a "$EVIDENCE/driver-transcript.txt") 2>&1
 set -x
-package=dev.multiprompt.companion.debug
+package=${VERIFY_PACKAGE:-dev.multiprompt.companion.debug}
 step=0
 dump_ui() {
     timeout 20s adb shell uiautomator dump /sdcard/verify-ui.xml >/dev/null || return
@@ -139,11 +139,17 @@ wait_receipt() {
 }
 adb shell settings put global hide_error_dialogs 1
 adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
-wait_for_text 'Sign in to see your servers, workspaces and sessions.'
-doctor
-dump_ui
-python3 "$scripts/ui.py" "$EVIDENCE/current.xml" version "$EXPECTED_VERSION" > "$EVIDENCE/version-label.txt"
-shot sign-in
+if [[ "$package" == dev.multiprompt.companion ]]; then
+    [[ "$feature" == chat-choices.md ]]
+    wait_for_text Inbox
+    doctor
+else
+    wait_for_text 'Sign in to see your servers, workspaces and sessions.'
+    doctor
+    dump_ui
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" version "$EXPECTED_VERSION" > "$EVIDENCE/version-label.txt"
+    shot sign-in
+fi
 if [[ "$feature" == sign-in.md ]]; then
     tap_text 'Sign in'
     for attempt in {1..30}; do
@@ -156,7 +162,7 @@ if [[ "$feature" == sign-in.md ]]; then
     printf 'SIGN-IN HANDOFF VERIFIED; OTP completion is NOT verified\n'
     exit 0
 fi
-tap_text 'Use without account (debug)'
+if [[ "$package" == dev.multiprompt.companion.debug ]]; then tap_text 'Use without account (debug)'; fi
 wait_for_text Inbox
 tap_text All
 tap_desc 'Session list actions'

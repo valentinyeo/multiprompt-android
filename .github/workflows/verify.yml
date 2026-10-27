@@ -7,10 +7,22 @@ on:
     paths:
       - 'app/**'
       - 'tools/native-skills.test.py'
+      - 'tools/release-choices/**'
       - '.claude/skills/verify-multiprompt-android/**'
       - '.github/workflows/verify.yml'
   workflow_dispatch:
     inputs:
+      release_choices:
+        description: Verify plain lists and real question answers on the signed release APK
+        type: boolean
+        default: false
+      candidate:
+        description: Build signed branch candidate instead of downloading the published APK
+        type: boolean
+        default: false
+      expected_commit:
+        description: Required published manifest commit for release choices proof
+        type: string
       feature:
         description: User journey from the verification feature map
         required: true
@@ -95,7 +107,24 @@ jobs:
           [[ "$BASELINE_RUN" =~ ^[0-9]+$ ]]
           gh run download "$BASELINE_RUN" --repo "$GITHUB_REPOSITORY" --name "verify-chat-reactions.md-$BASELINE_RUN" --dir "$RUNNER_TEMP/update-baseline"
           cp -a "$RUNNER_TEMP/update-baseline/signed-update-baseline" "$EVIDENCE/"
+      - name: Prepare signed choices APK and same-signer fixture instrumentation
+        if: inputs.release_choices == true
+        env:
+          CANDIDATE: ${{ inputs.candidate }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test "$VERIFY_FEATURE" = chat-choices.md
+          sdkmanager --install 'build-tools;35.0.0' 'platforms;android-35'
+          bash tools/release-choices/prepare.sh
+          echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
+          echo "VERIFY_PACKAGE=dev.multiprompt.companion" >> "$GITHUB_ENV"
+          echo "EXPECTED_VERSION=$(cat "$EVIDENCE/version.txt")" >> "$GITHUB_ENV"
       - name: Build debug APK
+        if: inputs.release_choices != true
         run: |
           mkdir -p "$EVIDENCE"
           python3 -m pip install Pillow
@@ -141,7 +170,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
             adb install -r -g "$VERIFY_APK"
-            .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"
+            if [ "${VERIFY_PACKAGE:-}" = dev.multiprompt.companion ]; then bash tools/release-choices/run.sh; else .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; fi
             if [ -n "$UPDATE_BASELINE_RUN" ]; then .claude/skills/verify-multiprompt-android/scripts/update-reaction-release.sh; fi
       - name: Require the original native-skill failure
         if: inputs.expect_native_missing == true

@@ -2,7 +2,7 @@
 
 Dispatch `verify.yml` with `feature=chat-choices.md` on the pushed branch. No local app or Gradle runs.
 
-The isolated SSH/tmux fixture uses Python, not an AI provider. Normal transcript discovery reads its Claude-format transcript. No preferences, reader state or transport methods are injected.
+The isolated SSH/tmux fixture uses Python, not an AI provider. Normal transcript discovery reads its Claude-format transcript. The debug journey does not inject preferences, reader state or transport methods.
 
 ## Journey
 
@@ -13,7 +13,13 @@ The isolated SSH/tmux fixture uses Python, not an AI provider. Normal transcript
 5. Require raw-key receipt `VERIFY_QUESTION_KEY:2`, resulting transcript **Question answered: Use the current account**, and `question-after`.
 6. Require exactly those two receipts. No inferred prose answer, pasted question label, duplicate send or extra Enter may reach the console.
 
-Inspect PNG/XML pairs, receipts, SSH logs, final tmux capture and driver transcript. This journey uses the debug build; it does not prove released phone screens. Check the signed published update separately.
+Inspect PNG/XML pairs, receipts, SSH logs, final tmux capture and driver transcript.
+
+## Verify the published APK
+
+Dispatch `verify.yml` with `feature=chat-choices.md`, `release_choices=true`, and `expected_commit` set to the published manifest commit. The workflow downloads the exact signed APK and verifies its hash, size, package, version and certificate. Same-signer instrumentation seeds an isolated offline account session. An emulator proxy blocks account traffic. This proves the released reader and real SSH transport, not production sign-in. No production app code or APK bytes change. The journey retains a recording and the same PNG/XML pairs and independent answer receipts.
+
+Before merge, use `candidate=true` to build and test the signed branch APK. Leave `candidate=false` for released-build acceptance.
 
 `ChatChoicesTest` covers complete read-only numbered and lettered prose in reader/classic themes, plus structured question retries and raw-key transport. `ClaudeQuestionTest` rejects prose lists, stale prompts, unrelated menus and invalid keys. Structured Codex question events are not currently supported; this change does not guess them from prose.
 
