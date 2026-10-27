@@ -62,6 +62,7 @@ jobs:
           name: chat-regression-proof
           path: |
             app/build/reports/igsh-844/*.png
+            app/build/reports/igsh-1045/*.png
             app/build/test-results/test*UnitTest/*.xml
 
   image-preview-emulator:
