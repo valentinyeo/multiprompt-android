@@ -6,6 +6,7 @@ internal object ChatChoices {
         var group = mutableListOf<Int>()
         var previous = 0
         var letters = false
+        var ready = false
         fun finish() {
             if (group.size >= 2) latest = group.toSet()
             group = mutableListOf()
@@ -18,9 +19,21 @@ internal object ChatChoices {
             val ordinal = if (letter) marker.uppercase()[0] - 'A' + 1 else marker.toIntOrNull() ?: 0
             if (item == null || item.depth != 0 || ordinal < 1 || item.runs.all { it.text.isBlank() }) {
                 finish()
+                val runs = when (block) {
+                    is MdBlock.Paragraph -> block.runs
+                    is MdBlock.Heading -> block.runs
+                    else -> emptyList()
+                }
+                val prompt = runs.joinToString("") { it.text }.trim().lineSequence().last().trim()
+                ready = prompt.endsWith("?") || (prompt.endsWith(":") &&
+                    listOf("pick one", "choose", "which", "options", "your call").any { prompt.contains(it, ignoreCase = true) })
+                if (ready) latest = emptySet()
             } else {
-                if (ordinal != previous + 1 || (group.isNotEmpty() && letter != letters)) finish()
-                if (ordinal == 1 || group.isNotEmpty()) {
+                if (ordinal != previous + 1 || (group.isNotEmpty() && letter != letters)) {
+                    finish()
+                    ready = false
+                }
+                if ((ordinal == 1 && ready) || group.isNotEmpty()) {
                     group.add(index)
                     previous = ordinal
                     letters = letter

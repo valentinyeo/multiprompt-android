@@ -40,7 +40,10 @@ finally:
     termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
 receipt("VERIFY_QUESTION_KEY:" + key)
 record("assistant", "Question answered: " + ("Use the current account" if key == "2" else "WRONG KEY " + repr(key)))
-record("assistant", "1. **Current setup**\n2. **Work remaining**\n\nWould you like me to continue?")
 print("\x1b[2J\x1b[HClaude Code · question answered", flush=True)
+line = input()
+receipt("VERIFY_RECEIVED:" + line)
+record("user", line)
+record("assistant", "1. **Current setup**\n2. **Work remaining**\n\nWould you like me to continue?")
 for line in sys.stdin:
     receipt("UNEXPECTED_EXTRA_INPUT:" + line.rstrip("\n"))

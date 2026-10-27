@@ -16,7 +16,7 @@ class ChatChoicesParsingTest {
     @Test
     fun codeBulletsNestedAndNonConsecutiveListsDoNotBecomeAnswers() {
         listOf("```\n1. Never send this\n2. Or this\n```", "- One\n- Two", "1. One\n3. Three", "A. One\nC. Three", "- Parent\n  1. Nested one\n  2. Nested two", "1. Only one").forEach {
-            assertTrue(it, ChatChoices.indices(MarkdownParser.parse(it)).isEmpty())
+            assertTrue(it, ChatChoices.indices(MarkdownParser.parse("Pick one:\n\n$it")).isEmpty())
         }
     }
 

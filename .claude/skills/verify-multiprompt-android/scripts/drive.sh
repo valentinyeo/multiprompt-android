@@ -389,6 +389,9 @@ if [[ "$feature" == chat-choices.md ]]; then
     wait_receipt 'VERIFY_QUESTION_KEY:2'
     wait_for_text 'Question answered: Use the current account'
     shot question-after
+    fill 'Message verify-session' SHOW_SECTION_CASE
+    tap_desc 'Send prompt'
+    wait_receipt 'VERIFY_RECEIVED:SHOW_SECTION_CASE'
     wait_for_text 'Would you like me to continue?'
     wait_for_text 'Current setup'
     wait_for_text 'Work remaining'
@@ -412,7 +415,7 @@ SECTIONS
 import sys
 from pathlib import Path
 rows = Path(sys.argv[1]).read_text().splitlines()
-assert rows == ["VERIFY_RECEIVED:B: Use your own account. Keep the current setup.", "VERIFY_QUESTION_KEY:2"], rows
+assert rows == ["VERIFY_RECEIVED:B: Use your own account. Keep the current setup.", "VERIFY_QUESTION_KEY:2", "VERIFY_RECEIVED:SHOW_SECTION_CASE"], rows
 print("CHOICE SEND AND QUESTION KEY VERIFIED")
 CHOICES
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt"
