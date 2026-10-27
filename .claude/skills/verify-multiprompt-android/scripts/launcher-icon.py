@@ -23,10 +23,14 @@ def launcher_cells(path):
 def measure(image):
     width, height = image.size
     pixels = image.convert("RGB").load()
-    total = width * height
-    white = dark = cyan = 0
+    cx, cy = width / 2, height * 0.62
+    radius = width * 0.25
+    inside = white = dark = cyan = 0
     for y in range(height):
         for x in range(width):
+            if (x - cx) ** 2 + (y - cy) ** 2 > radius ** 2:
+                continue
+            inside += 1
             r, g, b = pixels[x, y]
             if min(r, g, b) >= 215:
                 white += 1
@@ -34,15 +38,15 @@ def measure(image):
                 dark += 1
             if b >= 200 and r <= 170 and g >= 150:
                 cyan += 1
-    return {"white": white / total, "dark": dark / total, "cyan": cyan / total}
+    return {"white": white / inside, "dark": dark / inside, "cyan": cyan / inside}
 
 
 def verdict(stats):
     reasons = []
-    if stats["white"] < 0.10:
-        reasons.append(f"white head area {stats['white']:.3f} is below 0.10")
-    if stats["dark"] < 0.04:
-        reasons.append(f"dark tile and visor area {stats['dark']:.3f} is below 0.04")
+    if stats["white"] < 0.25:
+        reasons.append(f"white head area {stats['white']:.3f} is below 0.25")
+    if stats["dark"] < 0.15:
+        reasons.append(f"dark tile and visor area {stats['dark']:.3f} is below 0.15")
     if stats["cyan"] > 0.005:
         reasons.append(f"old cyan glyph pixels {stats['cyan']:.3f} are above 0.005")
     return reasons

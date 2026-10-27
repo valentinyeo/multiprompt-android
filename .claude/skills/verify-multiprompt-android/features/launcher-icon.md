@@ -10,7 +10,7 @@ Go to the Android home screen and open the app drawer. The multiprompt icon sits
 
 ## Driving it with control.ps1
 
-Dispatch `verify.yml` with `feature=launcher-icon.md`. `drive.sh` installs the debug APK, passes the doctor, presses Home, opens the drawer with a real swipe and scrolls until the launcher shows a cell labelled multiprompt. `launcher-icon.py check` crops the top of that cell from the real screenshot and requires a large bright head area, a dark tile and visor area, and no pixel of the old cyan glyph. The built APK's adaptive icon is dumped with `aapt2` and must contain a `monochrome` element.
+Dispatch `verify.yml` with `feature=launcher-icon.md`. `drive.sh` installs the debug APK, passes the doctor, presses Home, opens the drawer with a real swipe and scrolls until the launcher shows a cell labelled multiprompt. `launcher-icon.py check` crops the top of that cell from the real screenshot, measures only a disc around the icon centre (so the drawer background cannot count), and requires a large bright head area, a dark tile and visor area, and no pixel of the old cyan glyph. The built APK's adaptive icon is dumped with `aapt2` and must contain a `monochrome` element.
 
 Red control: dispatch the same journey with `app_ref` set to a commit from before this change. The run must fail with `LAUNCHER_ICON_NOT_ROBOT`, not a setup error.
 
