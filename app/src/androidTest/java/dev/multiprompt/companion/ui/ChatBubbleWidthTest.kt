@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -66,6 +67,12 @@ class ChatBubbleWidthTest {
         for (role in listOf("agent", "user")) {
             val long = compose.onNodeWithTag("$role-long").fetchSemanticsNode().boundsInRoot
             val short = compose.onNodeWithTag("$role-short").fetchSemanticsNode().boundsInRoot
+            val pixels = IntArray(bitmap.width)
+            bitmap.getPixels(pixels, 0, bitmap.width, 0, ((long.top + long.bottom) / 2).toInt(), bitmap.width, 1)
+            val left = pixels.indexOfFirst { it != ReaderBackground.toArgb() }
+            val right = pixels.indexOfLast { it != ReaderBackground.toArgb() } + 1
+            assertEquals("$role screenshot shows the measured left edge", long.left, left.toFloat(), 2f)
+            assertEquals("$role screenshot shows the measured right edge", long.right, right.toFloat(), 2f)
             measurements.put(role, JSONObject().put("longWidth", long.width).put("shortWidth", short.width)
                 .put("left", long.left).put("right", long.right).put("top", long.top).put("bottom", long.bottom))
             if (kotlin.math.abs(long.width / chat.width - 0.9f) > 0.005f) problems += "$role maximum is ${long.width / chat.width}, expected 0.9"

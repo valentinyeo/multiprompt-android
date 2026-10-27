@@ -48,6 +48,7 @@ PY
     adb install -r -g "$out/test.apk"
     adb shell dumpsys package "$package" > "$out/installed-package.txt"
     adb shell am instrument -w -r -e class dev.multiprompt.companion.ui.ChatBubbleWidthTest -e additionalTestOutputDir "/sdcard/Android/media/$package/width-proof" "$package.test/androidx.test.runner.AndroidJUnitRunner" | tee "$out/instrumentation.txt"
+    adb logcat -d > "$out/logcat.txt"
     adb pull "/sdcard/Android/media/$package/width-proof/bubble-width" "$out/"
     grep -F 'OK (1 test)' "$out/instrumentation.txt"
     echo CHAT_BUBBLE_WIDTH_OK
