@@ -85,7 +85,9 @@ jobs:
           script: |
             adb install -r -g "$RUNNER_TEMP/proof.apk"
             adb install -r -g app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
+            adb logcat -c
             adb shell am instrument -w -r -e class dev.multiprompt.companion.ui.StructuredQuestionsReleaseTest -e additionalTestOutputDir /sdcard/Android/media/dev.multiprompt.companion/question-proof dev.multiprompt.companion.test/androidx.test.runner.AndroidJUnitRunner > "$EVIDENCE/instrumentation.txt"
+            adb logcat -d -v threadtime > "$EVIDENCE/logcat.txt"
             cat "$EVIDENCE/instrumentation.txt"
             adb pull /sdcard/Android/media/dev.multiprompt.companion/question-proof "$EVIDENCE/"
             grep -Fx 'RELEASED_STRUCTURED_QUESTIONS_OK' "$EVIDENCE/question-proof/released-questions-result.txt"
