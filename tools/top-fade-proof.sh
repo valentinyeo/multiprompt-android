@@ -2,14 +2,17 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 run_proof() {
-  local label=$1 status=0
+  local label=$1 status=0 result
+  rm -rf app/build/outputs/connected_android_test_additional_output
   "${GRADLE:-gradle}" --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.multiprompt.companion.ui.TopFadeInstrumentedTest || status=$?
+  result=$(find app/build/outputs -type d -name top-fade-proof -print -quit)
+  test -n "$result" || return 1
   mkdir -p "build/top-fade-shots/$label"
   for name in inbox-top inbox-scrolled chat-top chat-scrolled chat-headline chat-headline-long dark-app-inbox-scrolled light-app-inbox-scrolled dark-chat-reference light-chat-reference; do
-    adb pull "/sdcard/Android/data/dev.multiprompt.companion.debug/cache/top-fade-proof/$name.png" "build/top-fade-shots/$label/"
-    test -s "build/top-fade-shots/$label/$name.png"
+    cp "$result/$name.png" "build/top-fade-shots/$label/" || return 1
+    test -s "build/top-fade-shots/$label/$name.png" || return 1
   done
-  cp app/build/outputs/androidTest-results/connected/debug/TEST-*.xml "build/top-fade-shots/$label/"
+  cp app/build/outputs/androidTest-results/connected/debug/TEST-*.xml "build/top-fade-shots/$label/" || return 1
   return "$status"
 }
 if [ -n "${TOP_FADE_BASE_REF:-}" ]; then
