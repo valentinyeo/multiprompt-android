@@ -98,19 +98,20 @@ wait_for_absence() {
     return 1
 }
 relaunch_app() {
+    local expected=${1:-Inbox}
     adb shell am force-stop "$package"
     adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
     for attempt in {1..30}; do
         printf 'Relaunch navigation attempt %s/30\n' "$attempt"
         dump_ui
-        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains Inbox >/dev/null 2>&1; then break; fi
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "$expected" >/dev/null 2>&1; then break; fi
         if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text 'Use without account (debug)' >/dev/null 2>&1; then
             tap_text 'Use without account (debug)'
             break
         fi
         sleep 1
     done
-    wait_for_text Inbox
+    wait_for_text "$expected"
     doctor
 }
 refresh_inbox() {
@@ -168,13 +169,13 @@ seed_host() {
         "$package.test/androidx.test.runner.AndroidJUnitRunner" > "$EVIDENCE/host-seed.txt"
     set -x
     grep -F 'OK (1 test)' "$EVIDENCE/host-seed.txt"
-    relaunch_app
+    relaunch_app "${5:-Trust $1?}"
 }
 if [[ "$feature" == hosts-retired.md ]]; then
     retired=45.151.123.11
     sudo iptables -I OUTPUT -d "$retired" -p tcp -j REJECT --reject-with tcp-reset
     sudo iptables -S OUTPUT > "$EVIDENCE/retired-address-blocked.txt"
-    seed_host 'Inne CRO' "$retired" 22 valentin
+    seed_host 'Inne CRO' "$retired" 22 valentin Inbox
     for attempt in {1..10}; do
         dump_ui
         python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains Inbox
