@@ -1,0 +1,92 @@
+name: Signed question choices proof
+
+on:
+  push:
+    branches: [ceo/IGSH-1066]
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Android release]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  signed-questions:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      EVIDENCE: ${{ github.workspace }}/signed-question-proof
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.1'
+      - uses: android-actions/setup-android@v3
+      - name: Restore existing release signer
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          mkdir -p signing "$EVIDENCE"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > signing/multiprompt-companion.jks
+          cat > keystore.properties <<CONFIG
+          storeFile=signing/multiprompt-companion.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          CONFIG
+      - name: Build signed instrumentation for the release package
+        run: |
+          gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PproofBuildType=release assembleRelease assembleReleaseAndroidTest
+          git rev-parse HEAD > "$EVIDENCE/source-sha.txt"
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/proof.apk"
+      - name: Download the actual published APK
+        if: github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch'
+        run: |
+          curl -fsSL https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion-update.json -o "$EVIDENCE/manifest.json"
+          test "$(jq -er '.commit' "$EVIDENCE/manifest.json")" = "$SOURCE_SHA"
+          curl -fsSL "$(jq -er '.apkUrl' "$EVIDENCE/manifest.json")" -o "$RUNNER_TEMP/proof.apk"
+          printf '%s  %s\n' "$(jq -er '.sha256' "$EVIDENCE/manifest.json")" "$RUNNER_TEMP/proof.apk" | sha256sum --check
+      - name: Record exact APK and signer
+        run: |
+          sha256sum "$RUNNER_TEMP/proof.apk" > "$EVIDENCE/apk-sha256.txt"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$RUNNER_TEMP/proof.apk" > "$EVIDENCE/certificate.txt"
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          emulator-build: 16428233
+          arch: x86_64
+          profile: pixel_2
+          ram-size: 2048M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
+          disable-animations: true
+          script: |
+            adb install -r -g "$RUNNER_TEMP/proof.apk"
+            adb install -r -g app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
+            adb shell am instrument -w -r -e class dev.multiprompt.companion.ui.StructuredQuestionsReleaseTest -e additionalTestOutputDir /sdcard/Android/media/dev.multiprompt.companion/question-proof dev.multiprompt.companion.test/androidx.test.runner.AndroidJUnitRunner > "$EVIDENCE/instrumentation.txt"
+            cat "$EVIDENCE/instrumentation.txt"
+            adb pull /sdcard/Android/media/dev.multiprompt.companion/question-proof "$EVIDENCE/"
+            grep -Fx 'RELEASED_STRUCTURED_QUESTIONS_OK' "$EVIDENCE/question-proof/released-questions-result.txt"
+            adb shell dumpsys package dev.multiprompt.companion > "$EVIDENCE/installed-package.txt"
+      - name: Retain proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-question-proof-${{ github.run_id }}
+          path: signed-question-proof/

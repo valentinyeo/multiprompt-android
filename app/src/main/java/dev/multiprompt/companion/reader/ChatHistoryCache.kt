@@ -20,7 +20,7 @@ class ChatHistoryCache(
                 require(file.length() <= sessionBytes)
                 file.bufferedReader().use { reader ->
                     val header = JSONObject(requireNotNull(reader.readLine()))
-                    require(header.getInt("version") == 3)
+                    require(header.getInt("version") == 4)
                     val rows = reader.lineSequence().map { ChatHistoryProtocol.parseRow(JSONObject(it)) }.toList()
                     require(rows.zipWithNext().all { (a, b) -> a.offset <= b.offset })
                     ChatHistory(header.getString("sid"), header.getLong("inode"), header.getLong("offset"),
@@ -54,7 +54,7 @@ class ChatHistoryCache(
         val start = if (lines.size == history.rows.size) history.start else {
             history.rows.getOrNull(history.rows.size - lines.size)?.offset ?: history.offset
         }
-        val header = JSONObject().put("version", 3).put("sid", history.sid).put("inode", history.inode)
+        val header = JSONObject().put("version", 4).put("sid", history.sid).put("inode", history.inode)
             .put("offset", history.offset).put("start", start).put("mtime", history.mtime)
             .put("probe", history.probe).put("more", history.more)
         val name = digest(sessionKey) + "-" + digest(history.sid) + ".jsonl"
