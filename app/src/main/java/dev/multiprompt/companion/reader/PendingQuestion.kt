@@ -14,19 +14,22 @@ data class PendingQuestion(
 ) {
     data class Option(val label: String, val description: String)
 
-    fun isVisible(screen: String): Boolean {
+    fun isVisible(screen: String): Boolean = activeScreen(screen) != null
+
+    fun activeScreen(screen: String): String? {
         fun compact(text: String) = text.filterNot(Char::isWhitespace)
         val lines = screen.lines().map(String::trim)
         val footer = Regex("(?:enter to (?:select|submit)|space to (?:select|toggle)|esc to cancel)", RegexOption.IGNORE_CASE)
         val end = lines.indexOfLast { footer.containsMatchIn(it) }
-        if (end < 0 || lines.drop(end + 1).any { it.isNotEmpty() && !it.all { ch -> ch in "─━-" } }) return false
+        if (end < 0 || lines.drop(end + 1).any { it.isNotEmpty() && !it.all { ch -> ch in "─━-" } }) return null
         val cursor = (0 until end).lastOrNull { Regex("^[❯›>]\\s*[1-9][.)]").containsMatchIn(lines[it]) }
-        if (options.isNotEmpty() && cursor == null) return false
+        if (options.isNotEmpty() && cursor == null) return null
         val start = cursor?.let { current ->
             (0 until current).lastOrNull { lines[it].isNotEmpty() && lines[it].all { ch -> ch in "─━-" } }?.plus(1)
         } ?: 0
-        val form = compact(lines.subList(start, end).joinToString("\n"))
-        return compact(title).isNotEmpty() && compact(title) in form && options.all { compact(it.label) in form }
+        val active = lines.subList(start, end).joinToString("\n")
+        val form = compact(active)
+        return active.takeIf { compact(title).isNotEmpty() && compact(title) in form && options.all { compact(it.label) in form } }
     }
 
     fun json(): JSONObject = JSONObject().put("question", title).put("header", header)

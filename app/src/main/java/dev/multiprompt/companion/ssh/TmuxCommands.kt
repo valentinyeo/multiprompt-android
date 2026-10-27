@@ -69,11 +69,11 @@ object TmuxCommands {
         require(choices.isNotEmpty() || other.isNotBlank())
         require(question.multiSelect || choices.size + (if (other.isNotBlank()) 1 else 0) == 1)
         require(question.other || other.isEmpty())
-        check(question.isVisible(screen)) { "This question is no longer waiting for an answer" }
+        val activeScreen = checkNotNull(question.activeScreen(screen)) { "This question is no longer waiting for an answer" }
         val destination = target(sessionName)
         val commands = mutableListOf<String>()
         if (question.multiSelect) {
-            val rows = screen.lines().map(String::trim).filter { Regex("^[❯›>]?\\s*[1-9][.)]").containsMatchIn(it) }
+            val rows = activeScreen.lines().map(String::trim).filter { Regex("^[❯›>]?\\s*[1-9][.)]").containsMatchIn(it) }
             val current = rows.indexOfFirst { it.startsWith('❯') || it.startsWith('›') || it.startsWith('>') }
             check(current >= 0 && rows.size >= question.options.size) { "Question selection is unavailable" }
             val checked = rows.mapIndexedNotNull { index, line ->
@@ -95,7 +95,7 @@ object TmuxCommands {
             if (question.options.isEmpty()) {
                 check(other.isNotBlank())
             } else if (other.isNotBlank() && question.provider == "codex") {
-                val rows = screen.lines().map(String::trim).filter { Regex("^[❯›>]?\\s*[1-9][.)]").containsMatchIn(it) }
+                val rows = activeScreen.lines().map(String::trim).filter { Regex("^[❯›>]?\\s*[1-9][.)]").containsMatchIn(it) }
                 val current = rows.indexOfFirst { it.startsWith('❯') || it.startsWith('›') || it.startsWith('>') }
                 check(current >= 0) { "Question selection is unavailable" }
                 val keys = List(kotlin.math.abs(index - current)) { if (index > current) "Down" else "Up" } + "Enter"

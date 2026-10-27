@@ -40,4 +40,11 @@ class StructuredQuestionAnswerTest {
         assertTrue(command.contains("tmux paste-buffer -dpr"))
     }
 
+    @Test fun oldCheckboxesInScrollbackCannotChangeTheCurrentAnswer() {
+        val old = "Old question?\n❯ 1. ☒ First\n2. ☒ Second\n────────────────\n"
+        val command = TmuxCommands.questionAnswer("proof", question.copy(multiSelect = true), old + screen, setOf(0, 1), "")
+        org.junit.Assert.assertEquals(2, Regex("Space").findAll(command).count())
+        assertTrue(command.contains(" Down Space"))
+    }
+
 }
