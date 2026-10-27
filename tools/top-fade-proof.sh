@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 status=0
 "${GRADLE:-gradle}" --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.multiprompt.companion.ui.TopFadeInstrumentedTest || status=$?
 mkdir -p build/top-fade-shots
-for name in inbox-top inbox-scrolled chat-top chat-scrolled chat-headline chat-headline-long; do
+for name in inbox-top inbox-scrolled chat-top chat-scrolled chat-headline chat-headline-long dark-app-inbox-scrolled light-app-inbox-scrolled dark-chat-reference light-chat-reference; do
   adb pull "/data/local/tmp/top-fade-proof/$name.png" build/top-fade-shots/
   test -f "build/top-fade-shots/$name.png"
   test -s "build/top-fade-shots/$name.png"
