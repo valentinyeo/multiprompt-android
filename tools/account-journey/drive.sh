@@ -115,6 +115,21 @@ grep -q 'OK (1 test)' "$EVIDENCE/seed.txt"
 adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
 
 wait_text Work 120
+wait_text Favorites 30 selected
+shot split-fresh-favorites
+tap_text Favorites
+wait_text Favorites 30 selected
+adb shell am force-stop "$package"
+adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
+wait_text Favorites 60 selected
+shot split-reopened-favorites
+tap_text Work
+wait_text Work 30 selected
+adb shell am force-stop "$package"
+adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
+wait_text Work 60 selected
+shot split-reopened-work
+printf 'LAST_SPLIT_PROCESS_REOPEN_OK\n' | tee "$EVIDENCE/last-split-result.txt"
 tap_text Work
 wait_text work-main 60 hasi
 wait_text runner-3 30 hasi

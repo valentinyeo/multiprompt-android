@@ -1,6 +1,7 @@
 package dev.multiprompt.companion.data
 
 import android.content.Context
+import dev.multiprompt.companion.account.FAVORITES_SPLIT_ID
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.model.Workspace
 import java.util.UUID
@@ -9,6 +10,17 @@ import org.json.JSONObject
 
 class WorkspaceStore(context: Context) {
     private val preferences = context.getSharedPreferences("workspaces", Context.MODE_PRIVATE)
+
+    fun selectedSplitId(): String? = runCatching {
+        val raw = preferences.getString(KEY_SELECTED_SPLIT, null) ?: return FAVORITES_SPLIT_ID
+        val saved = JSONArray(raw)
+        require(saved.length() == 1)
+        if (saved.isNull(0)) null else saved.getString(0)
+    }.getOrDefault(FAVORITES_SPLIT_ID)
+
+    fun saveSelectedSplitId(id: String?) {
+        preferences.edit().putString(KEY_SELECTED_SPLIT, JSONArray().put(id).toString()).apply()
+    }
 
     fun load(): List<Workspace> {
         val raw = preferences.getString(KEY_WORKSPACES, null) ?: return emptyList()
@@ -198,6 +210,7 @@ class WorkspaceStore(context: Context) {
     }
 
     companion object {
+        private const val KEY_SELECTED_SPLIT = "selected_split_json"
         private const val KEY_WORKSPACES = "workspaces_json"
         private const val KEY_SPLIT_ORDER = "split_order_json"
         private const val KEY_PATH_USAGE = "path_usage_json"

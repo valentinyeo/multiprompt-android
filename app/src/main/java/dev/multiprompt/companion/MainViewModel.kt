@@ -221,7 +221,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             dissolvedSessions = dissolvedStore.load(),
             crashReport = crashReportStore.loadForDisplay(),
         ).let { initial ->
-            initial.copy(selectedWorkspaceId = if (null in initial.visibleWorkspaceSplitIds) null else initial.visibleWorkspaceSplitIds.first())
+            val saved = workspaceStore.selectedSplitId()
+            val visible = initial.visibleWorkspaceSplitIds
+            initial.copy(selectedWorkspaceId = when {
+                saved in visible -> saved
+                FAVORITES_SPLIT_ID in visible -> FAVORITES_SPLIT_ID
+                else -> visible.first()
+            })
         },
     )
     val state: StateFlow<AppUiState> = _state.asStateFlow()
@@ -936,6 +942,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update {
             it.copy(selectedWorkspaceId = if (workspaceId in it.visibleWorkspaceSplitIds) workspaceId else it.visibleWorkspaceSplitIds.first(), workspaceSelectionInitialized = true)
         }
+        workspaceStore.saveSelectedSplitId(_state.value.selectedWorkspaceId)
     }
 
     fun noteSessionInteraction(session: TmuxSession) {
