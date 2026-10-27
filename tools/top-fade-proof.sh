@@ -29,7 +29,7 @@ if [ -n "${TOP_FADE_BASE_REF:-}" ]; then
 import xml.etree.ElementTree as ET
 root = ET.parse('app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.InboxTopFadeTest.xml').getroot()
 assert root.attrib['tests'] == '2' and root.attrib['failures'] == '2'
-assert all('Inbox fade must cover the same control height as chat' in case.find('failure').attrib['message'] for case in root.findall('testcase'))
+assert all('Inbox fade must extend as far below its controls as chat' in case.find('failure').attrib['message'] for case in root.findall('testcase'))
 print('ORIGINAL_INBOX_UNIT_REJECTED')
 PY
   if run_proof before; then
