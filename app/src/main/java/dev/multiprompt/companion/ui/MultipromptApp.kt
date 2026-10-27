@@ -2162,7 +2162,7 @@ private fun SessionCard(
                 ) {
                     onToggleFavorite?.let { toggle ->
                         DropdownMenuItem(
-                            text = { Text(if (starred) "Unstar" else "Star") },
+                            text = { Text(if (starred) "Remove from Favorites" else "Add to Favorites") },
                             onClick = {
                                 menuExpanded = false
                                 toggle()

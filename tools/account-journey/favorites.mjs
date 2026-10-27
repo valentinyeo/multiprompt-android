@@ -17,7 +17,13 @@ if (mode === 'star') {
         if (!tab) throw new Error(`no tab ${name}`);
         tab.favorite = false;
     }
-} else throw new Error('mode star or unstar');
+} else if (mode !== 'read') throw new Error('mode star, unstar or read');
+if (mode === 'read') {
+    const tab = layout.tabs.find(t => t.tmux_session === names[0]);
+    if (!tab || tab.favorite !== (names[1] === 'true')) throw new Error(`unexpected favorite state for ${names[0]}`);
+    console.log(JSON.stringify({ revision, session: tab.tmux_session, favorite: tab.favorite, workspace: tab.workspace }));
+    process.exit(0);
+}
 const write = await fetch(`${origin}/v1/layout`, { method: 'PUT', headers, body: JSON.stringify({ base_revision: revision, layout }) });
 if (write.status !== 200) throw new Error(`layout write ${write.status} ${await write.text()}`);
 const stored = await (await fetch(`${origin}/v1/layout`, { headers })).json();

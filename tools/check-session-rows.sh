@@ -36,9 +36,21 @@ if run_rows before; then
 fi
 grep -F 'still shows status lines' build/session-rows/before/rows.txt
 grep -E 'yellow marker pixels=[1-9]' build/session-rows/before/rows.txt
+python3 - <<'PYTHON'
+from pathlib import Path
+import xml.etree.ElementTree as ET
+failures = []
+for path in Path('app/build/outputs/androidTest-results/connected').rglob('*.xml'):
+    for case in ET.parse(path).iter('testcase'):
+        if case.get('name') == 'longPressRemovesAndAddsFavoriteWithoutOpeningOrDeletingSession':
+            failures.extend(''.join(failure.itertext()) for failure in case.findall('failure'))
+assert any('Remove from Favorites' in failure for failure in failures), failures
+print('FAVORITE_ACTIONS_RED_OK')
+PYTHON
 echo SESSION_ROWS_RED_OK
 restore
 trap - EXIT
 run_rows after
-test "$(find build/session-rows/after -name '*.png' | wc -l)" -eq 5
+test "$(find build/session-rows/after -name '*.png' | wc -l)" -eq 9
+grep -F 'FAVORITE_ACTIONS_OK:' build/session-rows/after/favorite-actions.txt
 echo SESSION_ROWS_EMULATOR_OK
