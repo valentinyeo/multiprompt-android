@@ -9,7 +9,7 @@ on:
       - 'tools/top-fade-proof.sh'
       - '.github/workflows/top-fade.yml'
   push:
-    branches: [main, ceo/IGSH-1077]
+    branches: [main]
   workflow_dispatch:
     inputs:
       release_smoke:
