@@ -2,7 +2,7 @@ name: Verify real Android UI
 
 on:
   push:
-    branches: [ceo/IGSH-1012, ceo/IGSH-1069, ceo/IGSH-1076, ceo/IGSH-1076-proof]
+    branches: [ceo/IGSH-1012, ceo/IGSH-1069, ceo/IGSH-1076, ceo/IGSH-1076-proof, ceo/IGSH-1076-red]
   pull_request:
     paths:
       - 'app/**'
@@ -79,7 +79,7 @@ jobs:
       VERIFY_FEATURE: ${{ inputs.feature || ((github.head_ref == 'ceo/IGSH-1076' || startsWith(github.ref, 'refs/heads/ceo/IGSH-1076')) && 'terminal.md') || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1069' && 'chat-choices.md') || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1012' && 'chat-reactions.md') || 'native-skills.md' }}
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
       UPDATE_BASELINE_RUN: ${{ inputs.update_baseline_run }}
-      APP_REF: ${{ inputs.app_ref }}
+      APP_REF: ${{ inputs.app_ref || (github.ref == 'refs/heads/ceo/IGSH-1076-red' && '7f640c6336ebdc63b37373f141c656bc9dbcb0d5') }}
     steps:
       - uses: actions/checkout@v4
       - name: Prepare verification paths
@@ -97,9 +97,9 @@ jobs:
         with:
           packages: platform-tools
       - uses: actions/checkout@v4
-        if: inputs.app_ref != ''
+        if: env.APP_REF != ''
         with:
-          ref: ${{ inputs.app_ref }}
+          ref: ${{ env.APP_REF }}
           path: app-source
       - name: Capture signed update baseline
         if: env.VERIFY_FEATURE == 'chat-reactions.md' && inputs.update_baseline_run == ''

@@ -746,16 +746,18 @@ if [[ "$feature" == terminal.md ]]; then
     sudo -u verifyssh tmux list-clients -F '#{client_name} #{client_session}' > "$EVIDENCE/tmux-clients.txt"
     grep -F verify-session "$EVIDENCE/tmux-clients.txt"
     shot terminal-attached
-    sudo -u verifyssh tmux send-keys -t verify-session 'for i in $(seq 1 500); do printf "SHELL_HISTORY_%04d\n" "$i"; done; tmux wait-for -S shell-history-ready' Enter
-    sudo -u verifyssh tmux wait-for shell-history-ready
     sudo -u verifyssh tmux capture-pane -p -S - -t verify-session > "$EVIDENCE/shell-history-before.txt"
     grep -Fx SHELL_HISTORY_0001 "$EVIDENCE/shell-history-before.txt"
     grep -Fx SHELL_HISTORY_0500 "$EVIDENCE/shell-history-before.txt"
     for keyboard_state in closed open; do
         adb shell screenrecord --time-limit 180 "/sdcard/shell-scroll-$keyboard_state.mp4" &
         recording_pid=$!
-        if [[ "$keyboard_state" == open ]]; then
-            tap_desc 'Show keyboard'
+        tap_desc 'Show keyboard'
+        if [[ "$keyboard_state" == closed ]]; then
+            adb shell input keyevent KEYCODE_BACK
+            adb shell dumpsys input_method > "$EVIDENCE/keyboard-closed.txt"
+            grep -F 'mInputShown=false' "$EVIDENCE/keyboard-closed.txt"
+        else
             adb shell dumpsys input_method > "$EVIDENCE/keyboard-before.txt"
             grep -F 'mInputShown=true' "$EVIDENCE/keyboard-before.txt"
         fi
@@ -774,8 +776,9 @@ if [[ "$feature" == terminal.md ]]; then
         wait_for_text SHELL_HISTORY_0001
         shot "shell-first-$keyboard_state"
         marker="SHELL_NEW_${keyboard_state^^}"
-        sudo -u verifyssh tmux send-keys -t verify-session "echo $marker; tmux wait-for -S shell-new-output" Enter
-        sudo -u verifyssh tmux wait-for shell-new-output
+        sudo -u verifyssh tmux send-keys -l -t verify-session "$marker"
+        sudo -u verifyssh tmux send-keys -t verify-session Enter
+        wait_receipt "$marker"
         sudo -u verifyssh tmux capture-pane -p -S - -t verify-session > "$EVIDENCE/shell-history-after-$keyboard_state.txt"
         grep -Fx "$marker" "$EVIDENCE/shell-history-after-$keyboard_state.txt"
         shot "shell-anchored-$keyboard_state"

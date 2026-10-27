@@ -37,7 +37,8 @@ if [[ "${VERIFY_FEATURE:-}" == chat-working.md ]]; then
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/working-console.py'
 elif [[ "${VERIFY_FEATURE:-}" == terminal.md ]]; then
-    sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'printf "VERIFY_READY_528\n"; exec bash --noprofile --norc'
+    sudo install -m 755 "$(dirname "$0")/terminal-console.py" /home/verifyssh/terminal-console.py
+    sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'python3 -u /home/verifyssh/terminal-console.py /home/verifyssh/receipts.txt'
 elif [[ "${VERIFY_FEATURE:-}" == chat-choices.md ]]; then
     sudo install -m 755 "$(dirname "$0")/choices-console.py" /home/verifyssh/choices-console.py
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'exec -a claude /usr/bin/python3 -u /home/verifyssh/choices-console.py /home/verifyssh/receipts.txt'
