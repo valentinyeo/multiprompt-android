@@ -1,5 +1,17 @@
 package dev.multiprompt.companion.ui
 
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.outlined.Image as OutlinedImage
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import android.text.format.DateUtils
 import androidx.compose.foundation.lazy.rememberLazyListState
 import dev.multiprompt.companion.reader.TranscriptProtocol
 import android.Manifest
