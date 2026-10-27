@@ -85,6 +85,19 @@ class SessionListSettingsTest {
         compose.onNodeWithText("Inbox").assertDoesNotExist()
     }
 
+    @Test fun settingsKeepsAccountAndUpdateActionsAfterRemovingConfigurationPages() {
+        render()
+        openSettings()
+        compose.onNodeWithText("Switch / renew login").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Sign out").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Host mapping").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Update").performScrollTo().assertIsDisplayed()
+        closeSettings()
+        compose.onNodeWithContentDescription("Session list actions").performClick()
+        compose.onNodeWithText("Hosts").assertDoesNotExist()
+        compose.onNodeWithText("Workspaces").assertDoesNotExist()
+    }
+
     private fun closeSettings() {
         compose.runOnIdle { back.onBackPressed() }
         compose.onNodeWithText("Session list settings").assertDoesNotExist()
