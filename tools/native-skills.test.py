@@ -97,11 +97,15 @@ package=dev.multiprompt.companion.debug
 adb() { :; }
 dump_ui() { :; }
 doctor() { :; }
+tap_text() { test "$1" = All; printf selected > "$EVIDENCE/selected"; }
 sleep() { return 1; }
 wait_for_text() { test "$1" = "$expected_screen"; }
 """ + function + '\nrelaunch_app "$@"\n'
                 result = subprocess.run(["bash", "-c", harness, "relaunch", *arguments], env=env, capture_output=True, text=True)
                 self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+                if screen == "Inbox":
+                    self.assertTrue((self.home / "selected").is_file())
+                (self.home / "selected").unlink(missing_ok=True)
 
     def test_cli_uses_exact_tmux_session_without_interpolation(self):
         self.skill(self.cwd, "local")

@@ -113,6 +113,7 @@ relaunch_app() {
     done
     wait_for_text "$expected"
     doctor
+    if [[ "$expected" == Inbox ]]; then tap_text All; fi
 }
 refresh_inbox() {
     tap_desc 'Session list actions'
@@ -203,8 +204,10 @@ if sudo grep -q 'Accepted publickey' "$FIXTURE/sshd.log"; then
     exit 1
 fi
 tap_text 'Trust and connect'
+wait_for_text Inbox
+tap_text All
 if ! wait_for_text verify-session; then
-    printf 'Trust tap 1 did not pin the host; the dialog was still shown\n' | tee -a "$EVIDENCE/trust-retries.txt"
+    printf 'Trusted host did not expose verify-session in All\n' | tee -a "$EVIDENCE/trust-retries.txt"
     shot trust-retry-1
     exit 1
 fi
