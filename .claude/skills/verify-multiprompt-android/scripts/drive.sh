@@ -377,25 +377,44 @@ if [[ "$feature" == sessions.md ]]; then
 fi
 tap_text verify-session
 if [[ "$feature" == chat-choices.md ]]; then
-    wait_for_text 'Use your own account. Keep the current setup.'
-    shot choices-before
-    tap_node text-containing 'Use your own account. Keep the current setup.'
-    wait_receipt 'VERIFY_RECEIVED:B: Use your own account. Keep the current setup.'
-    wait_for_text 'B: Use your own account. Keep the current setup.'
-    shot choices-after
-    wait_for_text '2: Use the current account'
-    shot question-before
-    tap_text '2: Use the current account'
+    wait_for_text 'Which route should we use?'
+    shot structured-question-before
+    tap_node text-containing 'Use the current account'
+    tap_text 'Submit answer'
     wait_receipt 'VERIFY_QUESTION_KEY:2'
-    wait_for_text 'Question answered: Use the current account'
-    shot question-after
+    wait_for_text 'What should we keep?'
+    shot multiple-question-before
+    tap_node text-containing 'History'
+    tap_node text-containing 'Settings'
+    fill Other Custom
+    tap_text 'Submit answer'
+    wait_receipt 'VERIFY_MULTI:{"other": "Custom", "selected": [0, 1]}'
+    wait_for_text 'Structured questions answered.'
+    wait_for_absence 'Submit answer'
+    shot structured-questions-after
+    adb shell input swipe 190 300 190 680 500
+    wait_for_text 'First route'
+    shot ordinary-lists
+    python3 - "$EVIDENCE/current.xml" <<'PLAINLISTS'
+import sys
+import xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+parents = {child: parent for parent in root.iter() for child in parent}
+for text in ['First route', 'Second route', 'Ordinary bullet']:
+    node = next(node for node in root.iter('node') if node.get('text') == text)
+    while node is not None:
+        assert node.get('clickable') != 'true', (text, node.attrib)
+        node = parents.get(node)
+assert any(node.get('text') == '1.' for node in root.iter('node'))
+print('ORDINARY_LISTS_HAVE_NO_ANSWER_CARDS')
+PLAINLISTS
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt"
     python3 - "$EVIDENCE/receipts.txt" <<'CHOICES'
 import sys
 from pathlib import Path
 rows = Path(sys.argv[1]).read_text().splitlines()
-assert rows == ["VERIFY_RECEIVED:B: Use your own account. Keep the current setup.", "VERIFY_QUESTION_KEY:2"], rows
-print("CHOICE SEND AND QUESTION KEY VERIFIED")
+assert rows == ["VERIFY_QUESTION_KEY:2", 'VERIFY_MULTI:{"other": "Custom", "selected": [0, 1]}'], rows
+print("STRUCTURED_QUESTION_SENDS_VERIFIED")
 CHOICES
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt"
     printf 'FEATURE VERIFIED: %s\n' "$feature"

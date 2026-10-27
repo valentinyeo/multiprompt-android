@@ -22,7 +22,7 @@ class ChatHistoryCache(
                     val header = JSONObject(requireNotNull(reader.readLine()))
                     require(header.getInt("version") == 3)
                     val rows = reader.lineSequence().map { ChatHistoryProtocol.parseRow(JSONObject(it)) }.toList()
-                    require(rows.zipWithNext().all { (a, b) -> a.offset < b.offset })
+                    require(rows.zipWithNext().all { (a, b) -> a.offset <= b.offset })
                     ChatHistory(header.getString("sid"), header.getLong("inode"), header.getLong("offset"),
                         header.getLong("start"), header.getLong("mtime"), header.getString("probe"),
                         header.getBoolean("more"), rows).also { history ->

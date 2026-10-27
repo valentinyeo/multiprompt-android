@@ -69,6 +69,44 @@ object TmuxCommands {
         return modelPickerOption(sessionName, index)
     }
 
+    fun questionAnswer(sessionName: String, question: dev.multiprompt.companion.reader.PendingQuestion,
+        screen: String, choices: Set<Int>, other: String): String {
+        require(choices.all { it in question.options.indices })
+        require(choices.isNotEmpty() || other.isNotBlank())
+        require(question.multiSelect || choices.size + (if (other.isNotBlank()) 1 else 0) == 1)
+        require(question.other || other.isEmpty())
+        check(question.isVisible(screen)) { "This question is no longer waiting for an answer" }
+        val destination = target(sessionName)
+        val commands = mutableListOf<String>()
+        if (question.multiSelect) {
+            val rows = screen.lines().map(String::trim).filter { Regex("^[❯›>]?\\s*[1-9][.)]").containsMatchIn(it) }
+            val current = rows.indexOfFirst { it.startsWith('❯') || it.startsWith('›') || it.startsWith('>') }
+            check(current >= 0 && rows.size >= question.options.size) { "Question selection is unavailable" }
+            val checked = rows.mapIndexedNotNull { index, line ->
+                index.takeIf { line.contains('☒') || line.contains('☑') || line.contains("[x]") || line.contains("[✓]") }
+            }.toSet()
+            var cursor = current
+            for (index in (checked union choices).sorted()) {
+                if ((index in checked) == (index in choices)) continue
+                val keys = List(kotlin.math.abs(index - cursor)) { if (index > cursor) "Down" else "Up" } + "Space"
+                commands.add("tmux send-keys -t $destination " + keys.joinToString(" "))
+                cursor = index
+            }
+            if (other.isNotBlank()) {
+                val keys = List(kotlin.math.abs(question.options.size - cursor)) { if (question.options.size > cursor) "Down" else "Up" } + "Space"
+                commands.add("tmux send-keys -t $destination " + keys.joinToString(" "))
+            } else commands.add("tmux send-keys -t $destination Enter")
+        } else {
+            val index = if (other.isNotBlank()) question.options.size else choices.single()
+            commands.add("tmux send-keys -t $destination ${index + 1}")
+        }
+        if (other.isNotBlank()) {
+            commands.add("tmux send-keys -l -t $destination -- ${TmuxParser.shellQuote(other)}")
+            commands.add("tmux send-keys -t $destination Enter")
+        }
+        return commands.joinToString(" && ")
+    }
+
     fun modelPickerOption(sessionName: String, index: Int): String {
         require(index in 1..9) { "Model picker option must be between 1 and 9" }
         return "tmux send-keys -t ${target(sessionName)} $index"

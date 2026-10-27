@@ -87,24 +87,14 @@ class ReaderStyleTest {
         }
     }
 
-    @Test fun numberedOptionsHaveBlueLetterBadgesNextToTheirUnchangedText() {
+    @Test fun numberedListsKeepTheirOriginalMarkers() {
         compose.setContent {
             MultipromptTheme(readerStyle = true) {
                 MarkdownText("1. First option\n2. Second option\n27. Another option", ReaderTextSize, ReaderForeground, ReaderChoiceBlue)
             }
         }
-        listOf(1 to "A", 2 to "B", 27 to "AA").forEach { (number, letter) ->
-            val badge = compose.onNodeWithTag("reader-choice-$number").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-            assertEquals(24f, badge.width, 0.01f)
-            val layouts = mutableListOf<TextLayoutResult>()
-            compose.onNodeWithText(letter).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
-            assertEquals(Color.White, layouts.single().layoutInput.style.color)
+        listOf("1.", "2.", "27.", "First option", "Second option", "Another option").forEach {
+            compose.onNodeWithText(it).assertIsDisplayed()
         }
-        val badge = compose.onNodeWithTag("reader-choice-1").fetchSemanticsNode().boundsInRoot
-        val option = compose.onNodeWithText("First option").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        assertTrue(badge.right <= option.left)
-        compose.onNodeWithText("1.").assertDoesNotExist()
-        compose.onNodeWithText("Second option").assertIsDisplayed()
-        compose.onNodeWithText("Another option").assertIsDisplayed()
     }
 }

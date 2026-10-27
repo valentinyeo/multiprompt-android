@@ -496,8 +496,8 @@ class SshRepository(private val secrets: SecretStorage) {
         }
     }
 
-    suspend fun answerQuestion(client: SshClient, sessionName: String, question: ClaudeQuestion, screen: String, index: Int) {
-        execute(client, TmuxCommands.questionAnswer(sessionName, question, screen, index)).requireSuccess("answer the question")
+    suspend fun answerQuestion(client: SshClient, sessionName: String, question: dev.multiprompt.companion.reader.PendingQuestion, screen: String, choices: Set<Int>, other: String) {
+        execute(client, TmuxCommands.questionAnswer(sessionName, question, screen, choices, other)).requireSuccess("answer the question")
     }
 
     suspend fun selectModelPickerOption(client: SshClient, sessionName: String, index: Int) {
