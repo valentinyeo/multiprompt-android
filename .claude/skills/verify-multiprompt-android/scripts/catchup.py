@@ -61,6 +61,7 @@ try:
         time.sleep(max(0, 1 - (time.monotonic() - began)))
     assert seen is not None, 'FOLLOWUP_NEVER_VISIBLE'
 finally:
+    monitored = time.monotonic() - started
     stop.set()
     thread.join()
     (root / 'catchup-samples.json').write_text(json.dumps(samples, indent=2))
@@ -72,6 +73,6 @@ finally:
                     '[1:v]scale=720:1280,fps=1[phone];[0:v][phone]hstack=inputs=2',
                     '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-shortest', str(root / 'shell-and-chat.mp4')], check=True)
 
-result = dict(duration=time.monotonic() - started, replyLatencySeconds=seen, samples=len(samples), status='passed')
+result = dict(duration=monitored, replyLatencySeconds=seen, samples=len(samples), status='passed')
 (root / 'catchup-result.json').write_text(json.dumps(result, indent=2))
 print('ANDROID_CHAT_CAUGHT_UP_WITHIN_3_SECONDS_FOR_120_SECONDS', result)

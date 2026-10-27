@@ -24,7 +24,7 @@ def append(row):
     if isinstance(text, str):
         with (HOME / "shell-events.jsonl").open("a") as output:
             output.write(json.dumps(dict(text=text, timestamp=time.time())) + "\n")
-        tty = subprocess.check_output(["tmux", "display-message", "-p", "-t", "=verify-session", "#{pane_tty}"], text=True).strip()
+        tty = subprocess.check_output(["tmux", "display-message", "-p", "-t", "=verify-session:", "#{pane_tty}"], text=True).strip()
         with open(tty, "w") as terminal:
             terminal.write(text + "\n")
 

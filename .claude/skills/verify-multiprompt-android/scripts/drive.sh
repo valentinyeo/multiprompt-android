@@ -589,6 +589,10 @@ LATENCY
     fill 'Message verify-session' FOLLOWUP
     tap_desc 'Send prompt'
     wait_receipt 'VERIFY_RECEIVED:FOLLOWUP'
+    adb shell kill -INT "$recorder_pid"
+    wait "$recorder_client" || true
+    adb pull /sdcard/chat-catchup.mp4 "$EVIDENCE/chat-catchup.mp4"
+    recorder_pid=
     sudo -u verifyssh python3 /home/verifyssh/queued-console.py followup &
     followup_pid=$!
     python3 "$scripts/catchup.py"
