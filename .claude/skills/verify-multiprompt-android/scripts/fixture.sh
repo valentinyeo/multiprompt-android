@@ -33,7 +33,9 @@ CONFIG
 sudo /usr/sbin/sshd -t -f "$FIXTURE/sshd_config"
 sudo /usr/sbin/sshd -f "$FIXTURE/sshd_config" -E "$FIXTURE/sshd.log"
 sudo install -m 755 "$(dirname "$0")/console.py" /home/verifyssh/console.py
-if [[ "${VERIFY_FEATURE:-}" == chat-choices.md ]]; then
+if [[ "${VERIFY_FEATURE:-}" == terminal.md ]]; then
+    sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'printf "VERIFY_READY_528\n"; exec bash --noprofile --norc'
+elif [[ "${VERIFY_FEATURE:-}" == chat-choices.md ]]; then
     sudo install -m 755 "$(dirname "$0")/choices-console.py" /home/verifyssh/choices-console.py
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'exec -a claude /usr/bin/python3 -u /home/verifyssh/choices-console.py /home/verifyssh/receipts.txt'
 elif [[ "${VERIFY_FEATURE:-}" == native-skills.md ]]; then
