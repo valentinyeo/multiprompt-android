@@ -21,6 +21,8 @@ class SeedHostDeviceTest {
         val key = requireNotNull(arguments.getString("ssh_private_key"))
         SecretStore(context).put(host.keySecretId, Base64.decode(key, Base64.DEFAULT))
         HostStore(context).upsert(host)
+        val hosts = context.getSharedPreferences("hosts", android.content.Context.MODE_PRIVATE)
+        check(hosts.edit().putString("profiles_json", hosts.getString("profiles_json", null)).commit())
         check(HostStore(context).load().any { it.id == host.id })
     }
 }
