@@ -15,7 +15,6 @@ val signing = Properties().apply {
 android {
     namespace = "dev.multiprompt.companion"
     compileSdk = 36
-    testBuildType = providers.gradleProperty("proofBuildType").orElse("debug").get()
 
     defaultConfig {
         applicationId = "dev.multiprompt.companion"
@@ -57,7 +56,6 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            testProguardFiles("test-proguard-rules.pro")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

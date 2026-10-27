@@ -12,7 +12,7 @@ scripts=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$EVIDENCE"
 exec > >(tee -a "$EVIDENCE/driver-transcript.txt") 2>&1
 set -x
-package=dev.multiprompt.companion.debug
+package=${VERIFY_PACKAGE:-dev.multiprompt.companion.debug}
 step=0
 dump_ui() {
     timeout 20s adb shell uiautomator dump /sdcard/verify-ui.xml >/dev/null || return
@@ -386,7 +386,9 @@ if [[ "$feature" == chat-choices.md ]]; then
     shot multiple-question-before
     tap_node text-containing 'History'
     tap_node text-containing 'Settings'
-    fill Other Custom
+    tap_node field Other
+    adb shell input text Custom
+    adb shell input keyevent KEYCODE_BACK
     tap_text 'Submit answer'
     wait_receipt 'VERIFY_MULTI:{"other": "Custom", "selected": [0, 1]}'
     wait_for_text 'Structured questions answered.'

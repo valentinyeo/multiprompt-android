@@ -1,2 +1,0 @@
--keep class kotlin.** { *; }
--keep class androidx.** { *; }

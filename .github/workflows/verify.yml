@@ -132,7 +132,7 @@ jobs:
         continue-on-error: ${{ inputs.expect_native_missing == true }}
         uses: reactivecircus/android-emulator-runner@v2.34.0
         with:
-          api-level: 35
+          api-level: ${{ env.VERIFY_FEATURE == 'chat-choices.md' && 34 || 35 }}
           emulator-build: 16428233
           arch: x86_64
           target: google_apis

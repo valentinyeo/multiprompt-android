@@ -3,5 +3,3 @@
 -dontwarn org.slf4j.**
 -keep class org.bouncycastle.** { *; }
 -dontwarn org.bouncycastle.**
-
--keep class androidx.tracing.Trace { *; }
