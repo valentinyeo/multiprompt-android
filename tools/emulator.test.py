@@ -56,7 +56,11 @@ case "$*" in
 esac
 ''')
             adb.chmod(0o700)
-            env = dict(os.environ, PATH=f'{path}:{os.environ["PATH"]}', RUNNER_TEMP=tmp, MODE=mode)
+            for name, body in {'pgrep': 'echo 123', 'sudo': 'exec "$@"', 'strace': 'exit 0'}.items():
+                tool = path / name
+                tool.write_text('#!/usr/bin/env bash\n' + body + '\n')
+                tool.chmod(0o700)
+            env = dict(os.environ, PATH=f'{path}:{os.environ["PATH"]}', RUNNER_TEMP=tmp, MODE=mode, ANDROID_HOME=tmp)
             result = subprocess.run(['bash', str(path / 'run.sh')], env=env, capture_output=True, text=True)
             return result, (path / 'proof').exists(), (path / 'adb-calls').read_text()
 
