@@ -658,7 +658,7 @@ if [[ "$feature" == terminal.md ]]; then
     sudo -u verifyssh tmux list-clients -F '#{client_name} #{client_session}' > "$EVIDENCE/tmux-clients.txt"
     grep -F verify-session "$EVIDENCE/tmux-clients.txt"
     shot terminal-attached
-    sudo -u verifyssh tmux send-keys -t verify-session "$(printf 'for i in $(seq 1 500); do printf "SHELL_HISTORY_%04d\\n" "$i"; done; tmux wait-for -S shell-history-ready')" Enter
+    sudo -u verifyssh tmux send-keys -t verify-session 'for i in $(seq 1 500); do printf "SHELL_HISTORY_%04d\n" "$i"; done; tmux wait-for -S shell-history-ready' Enter
     sudo -u verifyssh tmux wait-for shell-history-ready
     sudo -u verifyssh tmux capture-pane -p -S - -t verify-session > "$EVIDENCE/shell-history-before.txt"
     grep -Fx SHELL_HISTORY_0001 "$EVIDENCE/shell-history-before.txt"
@@ -685,13 +685,14 @@ if [[ "$feature" == terminal.md ]]; then
         done
         wait_for_text SHELL_HISTORY_0001
         shot "shell-first-$keyboard_state"
-        sudo -u verifyssh tmux send-keys -t verify-session 'echo SHELL_NEW_OUTPUT; tmux wait-for -S shell-new-output' Enter
+        marker="SHELL_NEW_${keyboard_state^^}"
+        sudo -u verifyssh tmux send-keys -t verify-session "echo $marker; tmux wait-for -S shell-new-output" Enter
         sudo -u verifyssh tmux wait-for shell-new-output
         sudo -u verifyssh tmux capture-pane -p -S - -t verify-session > "$EVIDENCE/shell-history-after-$keyboard_state.txt"
-        grep -Fx SHELL_NEW_OUTPUT "$EVIDENCE/shell-history-after-$keyboard_state.txt"
+        grep -Fx "$marker" "$EVIDENCE/shell-history-after-$keyboard_state.txt"
         shot "shell-anchored-$keyboard_state"
         python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains SHELL_HISTORY_0001
-        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent SHELL_NEW_OUTPUT
+        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent "$marker"
         tap_desc 'Jump to live'
         wait_for_absence 'Jump to live'
         shot "shell-live-$keyboard_state"
