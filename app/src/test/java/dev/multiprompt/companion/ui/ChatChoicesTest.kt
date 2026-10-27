@@ -3,7 +3,6 @@ package dev.multiprompt.companion.ui
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -101,7 +100,7 @@ class ChatChoicesTest {
         var received = ""
         compose.setContent {
             MaterialTheme {
-                QuestionChoices(question, enabled = true) { index ->
+                ChatHistoryList(messages = emptyList(), question = question, onQuestionChoice = { index ->
                     val command = TmuxCommands.questionAnswer("question-proof", question, screen, index)
                     val script = sequenceOf(File("../tools/check-question-key.sh"), File("tools/check-question-key.sh")).first { it.isFile }
                     val process = ProcessBuilder("timeout", "15", "bash", script.path, command)
@@ -109,7 +108,7 @@ class ChatChoicesTest {
                     received = process.inputStream.bufferedReader().readText()
                     check(process.waitFor() == 0) { received }
                     true
-                }
+                })
             }
         }
         compose.onNodeWithText("2: Use the current account").performClick().assertIsSelected().assertIsNotEnabled()

@@ -1,20 +1,20 @@
-# Tap chat choices
+# Plain reply lists and real questions
 
 Dispatch `verify.yml` with `feature=chat-choices.md` on the pushed branch. No local app or Gradle runs.
 
-The existing real SSH/tmux fixture uses a Python console, not an AI provider. It keeps a Claude-format transcript open and uses an agent-shaped process name for normal transcript discovery. No app preferences, reader state or transport methods are injected.
+The isolated SSH/tmux fixture uses Python, not an AI provider. Normal transcript discovery reads its Claude-format transcript. No preferences, reader state or transport methods are injected.
 
 ## Journey
 
 1. Import the generated key and trust the displayed fingerprint through the normal host screens.
-2. Open `verify-session`. The latest assistant reply contains lettered options, including **Use your own account. Keep the current setup.** Capture `choices-before`.
-3. Tap that option. Require the independent console receipt `VERIFY_RECEIVED:B: Use your own account. Keep the current setup.` and the resulting user message. Capture `choices-after`.
-4. The console now presents a single-select Claude-style question in the live tmux pane. Capture `question-before`; tap **2: Use the current account**.
-5. Require the raw-key receipt `VERIFY_QUESTION_KEY:2` and transcript reply **Question answered: Use the current account**. Capture `question-after`.
-6. Require exactly those two receipts. No pasted answer, duplicate send or extra Enter may reach the console.
+2. Open `verify-session`. Capture `plain-numbered-reply`. Require original numbered markers, all three complete list items, no A/B/C badges and no clickable list items. The second item must include “or pause until you top up?”.
+3. Send `Continue` through the normal composer. Require exactly `VERIFY_RECEIVED:Continue` at the independent console.
+4. Capture `question-before`. Tap the live Claude-style question option **2: Use the current account**.
+5. Require raw-key receipt `VERIFY_QUESTION_KEY:2`, resulting transcript **Question answered: Use the current account**, and `question-after`.
+6. Require exactly those two receipts. No inferred prose answer, pasted question label, duplicate send or extra Enter may reach the console.
 
-Inspect all four PNG/XML pairs, the receipts, SSH log, final tmux capture and driver transcript. The normal in-app update is proved separately with `node tools/release-status.mjs` against the merged commit.
+Inspect PNG/XML pairs, receipts, SSH logs, final tmux capture and driver transcript. This journey uses the debug build; it does not prove released phone screens. Check the signed published update separately.
 
-`ChatChoicesTest` also covers numbered options in classic and reader themes, lettered options, selected/disabled choices, older replies, queued/user answers, and a tap delivering its generated command into a real isolated tmux session. `ClaudeQuestionTest` rejects stale prompts, mismatched questions, free-text and multi-select prompts, invalid keys and unrelated menus. Multi-select and free-text entries remain terminal interactions; this journey makes no claim about those or a live provider.
+`ChatChoicesTest` covers complete read-only numbered and lettered prose in reader/classic themes, plus structured question retries and raw-key transport. `ClaudeQuestionTest` rejects prose lists, stale prompts, unrelated menus and invalid keys. Structured Codex question events are not currently supported; this change does not guess them from prose.
 
-Red control: https://github.com/valentinyeo/multiprompt-android/actions/runs/40330821523/job/121599465299 — the unchanged app fails `latestReplyOptionsAreTappable`; the option has no click action.
+Desktop follows the same rule in https://app.hypertask.ai/detail/project-2060/1063.

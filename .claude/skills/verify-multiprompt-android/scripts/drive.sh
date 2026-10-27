@@ -377,12 +377,23 @@ if [[ "$feature" == sessions.md ]]; then
 fi
 tap_text verify-session
 if [[ "$feature" == chat-choices.md ]]; then
-    wait_for_text 'Use your own account. Keep the current setup.'
-    shot choices-before
-    tap_node text-containing 'Use your own account. Keep the current setup.'
-    wait_receipt 'VERIFY_RECEIVED:B: Use your own account. Keep the current setup.'
-    wait_for_text 'B: Use your own account. Keep the current setup.'
-    shot choices-after
+    wait_for_text 'Should the two daily jobs keep running, or pause until you top up?'
+    shot plain-numbered-reply
+    python3 - "$EVIDENCE/current.xml" <<'PLAIN'
+import sys
+import xml.etree.ElementTree as ET
+nodes = list(ET.parse(sys.argv[1]).getroot().iter('node'))
+for text in ['1.', '2.', '3.', 'How much money is on the account?',
+             'Should the two daily jobs keep running, or pause until you top up?',
+             'Should I merge the leaderboard into all ads?']:
+    matches = [node for node in nodes if node.get('text') == text]
+    assert matches and all(node.get('clickable') == 'false' for node in matches), text
+assert not any(node.get('text') in ['A', 'B', 'C'] for node in nodes)
+print('PLAIN_NUMBERED_REPLY_COMPLETE_AND_READ_ONLY')
+PLAIN
+    fill 'Message verify-session' Continue
+    tap_desc 'Send prompt'
+    wait_receipt 'VERIFY_RECEIVED:Continue'
     wait_for_text '2: Use the current account'
     shot question-before
     tap_text '2: Use the current account'
@@ -394,8 +405,8 @@ if [[ "$feature" == chat-choices.md ]]; then
 import sys
 from pathlib import Path
 rows = Path(sys.argv[1]).read_text().splitlines()
-assert rows == ["VERIFY_RECEIVED:B: Use your own account. Keep the current setup.", "VERIFY_QUESTION_KEY:2"], rows
-print("CHOICE SEND AND QUESTION KEY VERIFIED")
+assert rows == ["VERIFY_RECEIVED:Continue", "VERIFY_QUESTION_KEY:2"], rows
+print("PLAIN LIST AND STRUCTURED QUESTION KEY VERIFIED")
 CHOICES
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt"
     printf 'FEATURE VERIFIED: %s\n' "$feature"
