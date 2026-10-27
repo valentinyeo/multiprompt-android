@@ -1,6 +1,8 @@
 name: Verify real Android UI
 
 on:
+  push:
+    branches: [ceo/IGSH-1012]
   pull_request:
     paths:
       - 'app/**'
@@ -52,7 +54,7 @@ jobs:
     timeout-minutes: 35
     env:
       EVIDENCE: ${{ github.workspace }}/verification-evidence
-      VERIFY_FEATURE: ${{ inputs.feature || 'native-skills.md' }}
+      VERIFY_FEATURE: ${{ inputs.feature || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1012' && 'chat-reactions.md') || 'native-skills.md' }}
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
       UPDATE_BASELINE_RUN: ${{ inputs.update_baseline_run }}
       APP_REF: ${{ inputs.app_ref }}
@@ -78,7 +80,7 @@ jobs:
           ref: ${{ inputs.app_ref }}
           path: app-source
       - name: Capture signed update baseline
-        if: inputs.feature == 'chat-reactions.md' && inputs.update_baseline_run == ''
+        if: env.VERIFY_FEATURE == 'chat-reactions.md' && inputs.update_baseline_run == ''
         run: |
           mkdir -p "$EVIDENCE/signed-update-baseline"
           curl -fsSL https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion-update.json -o "$EVIDENCE/signed-update-baseline/manifest.json"
