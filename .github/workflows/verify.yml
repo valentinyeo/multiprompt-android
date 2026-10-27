@@ -141,11 +141,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
             adb install -r -g "$VERIFY_APK"
-            if [ -n "$UPDATE_BASELINE_RUN" ]; then
-              .claude/skills/verify-multiprompt-android/scripts/update-reaction-release.sh
-            else
-              .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"
-            fi
+            if [ -n "$UPDATE_BASELINE_RUN" ]; then .claude/skills/verify-multiprompt-android/scripts/update-reaction-release.sh; else .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; fi
       - name: Require the original native-skill failure
         if: inputs.expect_native_missing == true
         env:
