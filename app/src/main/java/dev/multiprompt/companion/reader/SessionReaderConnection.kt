@@ -106,6 +106,11 @@ class SessionReaderConnection(
             }
     }
 
+    suspend fun resyncChat() {
+        _state.update { it.copy(sentPrompts = emptyList(), sentRecord = emptyList()) }
+        historyConnection?.resync()?.await()
+    }
+
     fun start() {
         if (actionJob == null) {
             actionJob = scope.launch {

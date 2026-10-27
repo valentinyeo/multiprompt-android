@@ -62,6 +62,7 @@ class SessionLookTest {
     }
 
     @Test fun readerAndTerminalStepJumpsNeverQualifyTheirNewFrontSession() {
+        f.model.selectWorkspace(null)
         for (terminal in listOf(false, true)) {
             f.foreground.value = true
             if (terminal) f.model.openTerminal(f.session, userInitiated = true)

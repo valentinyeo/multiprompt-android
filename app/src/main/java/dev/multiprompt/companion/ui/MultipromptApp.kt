@@ -136,6 +136,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -1815,9 +1816,9 @@ internal fun SessionsScreen(
                                 Text(name, color = if (state.selectedWorkspaceId == id) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             if (state.selectedWorkspaceId == id) {
-                                androidx.compose.material3.FilledTonalButton(onClick = { onSelectWorkspace(id) }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(containerColor = if (sunlight) MaterialTheme.colorScheme.surfaceContainerHigh else Color(0xFF353535), contentColor = MaterialTheme.colorScheme.onSurface), content = label)
+                                androidx.compose.material3.FilledTonalButton(onClick = { onSelectWorkspace(id) }, modifier = Modifier.semantics { selected = true }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(containerColor = if (sunlight) MaterialTheme.colorScheme.surfaceContainerHigh else Color(0xFF353535), contentColor = MaterialTheme.colorScheme.onSurface), content = label)
                             } else {
-                                TextButton(onClick = { onSelectWorkspace(id) }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), content = label)
+                                TextButton(onClick = { onSelectWorkspace(id) }, modifier = Modifier.semantics { selected = false }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), content = label)
                             }
                         }
                     }
@@ -3077,6 +3078,17 @@ internal fun ReaderScreen(
                                 DropdownMenuItem(
                                     text = { Text("More ›") },
                                     onClick = { menuPage = ReaderMenuPage.MORE },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Resync chat") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        readerScope.launch {
+                                            connection.resyncChat()
+                                            followRequest++
+                                            android.widget.Toast.makeText(context, "Synced", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
                                 )
                                 HorizontalDivider()
                                 DropdownMenuItem(

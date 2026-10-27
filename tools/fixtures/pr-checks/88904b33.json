@@ -1,0 +1,15 @@
+{
+  "source": "https://github.com/valentinyeo/multiprompt-android/commit/88904b33ad644a6a2fe8928f5cae9eae77ba8282/checks",
+  "headRefOid": "88904b33ad644a6a2fe8928f5cae9eae77ba8282",
+  "baseRefOid": "0000000000000000000000000000000000000000",
+  "state": "OPEN",
+  "mergeable": "MERGEABLE",
+  "statusCheckRollup": [
+    {
+      "__typename": "CheckRun",
+      "name": "secret-scan",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS"
+    }
+  ]
+}

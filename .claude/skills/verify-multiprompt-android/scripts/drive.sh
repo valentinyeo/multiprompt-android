@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md) ;;
+    sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -158,6 +158,7 @@ if [[ "$feature" == sign-in.md ]]; then
 fi
 tap_text 'Use without account (debug)'
 wait_for_text Inbox
+tap_text All
 tap_desc 'Session list actions'
 tap_text Hosts
 tap_desc 'Add host'
@@ -535,6 +536,57 @@ for label, required in [('native-inserted', '/review-native '), ('native-plugin-
 (root / 'native-result.json').write_text(json.dumps(dict(status='passed', slash=True, filtered=True, plus_same_list=True, fresh_native_skills=True, native_only=True, model='Sonnet 5.5', effort='high', draft_preserved=True, image_picker=True, upload_exercised=False), indent=2))
 print('NATIVE_SKILLS_MODEL_EFFORT_PROVEN')
 NATIVE
+    exit 0
+fi
+if [[ "$feature" == chat-resync.md ]]; then
+    wait_for_text 'FIRST REPLY'
+    for message in SYNC_ONE SYNC_TWO; do
+        fill 'Message verify-session' "$message"
+        tap_desc 'Send prompt'
+        wait_receipt "VERIFY_RECEIVED:$message"
+        wait_for_text "Reply to $message"
+    done
+    wait_for_text Queued
+    shot out-of-sync
+    queued_before=$(grep -o 'text="Queued"' "$EVIDENCE/current.xml" | wc -l)
+    printf '%s\n' "$queued_before" > "$EVIDENCE/queued-before.txt"
+    [[ "$queued_before" == 2 ]]
+    fill 'Message verify-session' 'draft%sstays%shere'
+    shot draft-before
+    tap_desc 'Session actions'
+    if ! wait_for_text 'Resync chat'; then
+        printf 'IGSH1011_RESYNC_MISSING\n' >&2
+        exit 1
+    fi
+    shot resync-menu
+    tap_text 'Resync chat'
+    toast_shots=()
+    for attempt in {1..8}; do
+        adb exec-out screencap -p > "$EVIDENCE/toast-$attempt.png"
+        toast_shots+=("$EVIDENCE/toast-$attempt.png")
+    done
+    sleep 5
+    adb exec-out screencap -p > "$EVIDENCE/toast-settled.png"
+    python3 "$scripts/toast.py" "$EVIDENCE/toast-settled.png" "${toast_shots[@]}" | tee "$EVIDENCE/toast-result.txt"
+    wait_for_absence Queued
+    shot synced
+    wait_for_text 'Reply to SYNC_ONE'
+    wait_for_text 'Reply to SYNC_TWO'
+    wait_for_text '[phone] SYNC_ONE'
+    wait_for_text '[phone] SYNC_TWO'
+    dump_ui
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field 'draft stays here'
+    shot resynced
+    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt"
+    python3 - "$EVIDENCE/receipts.txt" <<'RESYNC'
+import sys
+from pathlib import Path
+rows = Path(sys.argv[1]).read_text().splitlines()
+assert rows == ["VERIFY_RECEIVED:SYNC_ONE", "VERIFY_RECEIVED:SYNC_TWO"], rows
+print("RESYNC CLEARED STALE QUEUED; NOTHING RESENT")
+RESYNC
+    sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-resync-work/a1b2c3d4-1011-4000-8000-000000001011.jsonl > "$EVIDENCE/resync-transcript.jsonl"
+    printf 'ANDROID_CHAT_RESYNC_VERIFIED\n'
     exit 0
 fi
 if [[ "$feature" == chat-reactions.md ]]; then

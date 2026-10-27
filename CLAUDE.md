@@ -34,8 +34,20 @@ Requires JDK 17 and Android SDK 36. Before every push run `tools/check.sh`: it i
 
 ## Git workflow
 
-- `main` is protected: every change lands through a pull request that passes `test` and `secret-scan`, then squash-merges. Never push to `main` directly.
+- `main` requires all eight always-on app/security checks. Updated base required; administrators cannot bypass. Never push directly.
+- Before merge: `node tools/pr-checks.mjs <PR> --wait`. Recheck once with `node tools/pr-checks.mjs <PR>`. Missing checks never pass. Failed or skipped checks stop immediately. Ticket closure requires merged, complete-green proof.
+- One wait per PR; five-minute polls; thirty-minute maximum. Head/base changes stop the wait. Never use bare `gh pr checks --watch` or `gh-green` as complete-check proof.
+- Merge the checked head with `gh pr merge <PR> --squash --delete-branch --match-head-commit <checked-sha>`.
 - Never finish a task with changes parked in a branch, in the stash, or as untracked files. A task is done when its PR is merged and its branch deleted.
+
+## Design system
+
+All Android UI is built from the kit in `app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt` with the `Reader*` colours in `Theme.kt`. Figma page: https://www.figma.com/design/8Yzu3N21UlCL7lA3YXm45D?node-id=41-441 (Yeo UX team).
+
+- Use only `Kit*` components and `Kit` values in new screens. No Material `DropdownMenu`, `AlertDialog`, `Switch`, tonal fills or purple colours; every menu is `KitSheet`.
+- One surface style: fill `Kit.Surface`, 1 dp `Kit.Outline`, fully round pills and buttons, 20 dp corners on cards and bubbles.
+- Blue (`Kit.AccentUnread`) only for unread. Red (`Kit.Danger`) only for destructive actions.
+- A component or colour the kit lacks needs a Figma frame and Valentin's yes before it is added. `DesignKitTest` fails when a component stops painting its colour and when `DesignKit.kt` uses Material colour schemes or raw colour literals.
 
 ## Architecture
 
