@@ -24,6 +24,7 @@ on:
           - chat-reactions.md
           - chat-queued.md
           - native-skills.md
+          - chat-resync.md
           - session-routing.md
           - terminal.md
       expect_native_missing:

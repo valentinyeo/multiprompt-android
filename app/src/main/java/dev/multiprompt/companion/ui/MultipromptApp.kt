@@ -3079,6 +3079,17 @@ internal fun ReaderScreen(
                                     text = { Text("More ›") },
                                     onClick = { menuPage = ReaderMenuPage.MORE },
                                 )
+                                DropdownMenuItem(
+                                    text = { Text("Resync chat") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        readerScope.launch {
+                                            connection.resyncChat()
+                                            followRequest++
+                                            android.widget.Toast.makeText(context, "Synced", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                )
                                 HorizontalDivider()
                                 DropdownMenuItem(
                                     text = { Text("End session", color = MaterialTheme.colorScheme.error) },

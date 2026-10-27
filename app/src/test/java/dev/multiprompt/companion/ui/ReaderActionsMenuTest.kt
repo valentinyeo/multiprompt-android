@@ -20,6 +20,7 @@ import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import dev.multiprompt.companion.reader.ChatHistoryState
 import dev.multiprompt.companion.reader.ChatHistoryCache
 import org.robolectric.util.ReflectionHelpers
+import dev.multiprompt.companion.reader.QueuedMessages
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
@@ -160,13 +161,28 @@ class ReaderActionsMenuTest {
         openMenu()
         listOf(
             "Enter / approve", "Interrupt session", "Open live terminal", "Rename", "Remind me", "Waiting",
-            "Archive session", "Model and effort ›", "Display ›", "More ›", "End session", "Remove from list",
+            "Archive session", "Model and effort ›", "Display ›", "More ›", "Resync chat", "End session", "Remove from list",
         ).forEach { compose.onNodeWithText(it).assertIsDisplayed() }
         listOf(
             "Set effort: low", "Set effort: max", "Use Claude Opus", "Open model picker (/model)", "Sunlight mode on",
             "Show terminal details", "Use default font size", "Release notes", "Estimate accuracy", "Dictation API key",
             "Screencast2 upload key", "Already read", "Current: Unknown",
         ).forEach { compose.onNodeWithText(it).assertDoesNotExist() }
+    }
+
+    @Test fun resyncChatEntryDropsEverySentMessageRecordAndClosesTheMenu() {
+        render(material3 = true)
+        f.field<MutableStateFlow<ReaderState>>(connection, "_state").value = ReaderState(
+            status = ReaderStatus.Live, sentPrompts = listOf("hello there"),
+            sentRecord = listOf(QueuedMessages.SentPrompt("hello there", System.currentTimeMillis())),
+        )
+        openMenu()
+        compose.onNodeWithText("Resync chat").assertIsDisplayed().performClick()
+        compose.runOnIdle {
+            assertTrue(connection.state.value.sentRecord.isEmpty())
+            assertTrue(connection.state.value.sentPrompts.isEmpty())
+        }
+        compose.onNodeWithText("Resync chat").assertDoesNotExist()
     }
 
     @Test fun modelAndEffortSubPageHoldsModelChoicesAndBackReturnsToTheMainMenu() {

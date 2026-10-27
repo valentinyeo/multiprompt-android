@@ -56,4 +56,30 @@ class ChatHistoryConnectionTest {
             assertNotSame(codex, reader.chatHistory(AgentKind.CODEX, "/other"))
         }
     }
+
+    @Test
+    fun resyncChatForgetsEverySentMessageRecordSoNoQueuedBubbleSurvives() = runBlocking {
+        SessionReaderConnection(repository(), host, "tmux", historyScript = byteArrayOf(),
+            historyCache = ChatHistoryCache(temporary.newFolder())).use { reader ->
+            val text = "Any idea when the visual update of the inbox is coming?"
+            assertTrue(reader.sendPrompt(text))
+            val now = System.currentTimeMillis()
+            val before = ChatHistory().displayMessages("", AgentKind.CLAUDE, reader.state.value.sentRecord, now)
+            assertEquals(listOf(text), before.map { it.text })
+            assertTrue(before.single().pending)
+            reader.resyncChat()
+            assertTrue(reader.state.value.sentRecord.isEmpty())
+            assertTrue(reader.state.value.sentPrompts.isEmpty())
+            assertTrue(ChatHistory().displayMessages("", AgentKind.CLAUDE, reader.state.value.sentRecord, now).isEmpty())
+        }
+    }
+
+    @Test
+    fun resyncRequestsTheWholeTailFromTheSession() {
+        val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd")
+        val request = org.json.JSONObject(ChatHistoryProtocol.request(7, identity, ChatHistory()))
+        assertEquals("", request.getString("cached_sid"))
+        assertEquals(0L, request.getLong("offset"))
+        assertEquals(0L, request.getLong("start"))
+    }
 }
