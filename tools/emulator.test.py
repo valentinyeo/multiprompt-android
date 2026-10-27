@@ -75,6 +75,44 @@ esac
                 self.assertFalse(ran)
                 self.assertNotIn('EMULATOR_STAGE_OK', result.stdout)
 
+    def test_series_requires_consecutive_success_and_exact_commit(self):
+        for failure in ('none', 'failed-run', 'wrong-commit'):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp)
+                script = path / 'series.sh'
+                script.write_text(source('.github/actions/android-proof/series.sh'))
+                gh = path / 'gh'
+                gh.write_text("""#!/usr/bin/env python3
+import json, os, pathlib, sys
+p = pathlib.Path(os.environ['RUNNER_TEMP'])
+a = sys.argv[1:]
+with (p / 'calls').open('a') as f: f.write(' '.join(a) + '\u005cn')
+if a[0] == 'api':
+    n = int((p / 'count').read_text()) + 1 if (p / 'count').exists() else 1
+    (p / 'count').write_text(str(n))
+    print(json.dumps(dict(workflow_run_id=n, html_url=f'https://github.com/proof/actions/runs/{n}')))
+elif a[1] == 'watch':
+    if os.environ['FAILURE'] == 'failed-run': sys.exit(1)
+elif a[1] == 'view':
+    sha = 'wrong' if os.environ['FAILURE'] == 'wrong-commit' else os.environ['PROOF_COMMIT']
+    print(json.dumps(dict(headSha=sha, headBranch=os.environ['PROOF_REF'], conclusion='success')))
+else: sys.exit(2)
+""")
+                gh.chmod(0o700)
+                env = dict(os.environ, PATH=f'{path}:{os.environ["PATH"]}', RUNNER_TEMP=tmp,
+                           GITHUB_REPOSITORY='proof/repo', PROOF_REF='candidate', PROOF_COUNT='5',
+                           PROOF_COMMIT='candidate-sha', FAILURE=failure)
+                result = subprocess.run(['bash', str(script)], cwd=path, env=env, capture_output=True, text=True)
+                calls = (path / 'calls').read_text()
+                if failure == 'none':
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(calls.count('run watch'), 5)
+                    self.assertIn('EMULATOR_SERIES_OK', result.stdout)
+                else:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertEqual(calls.count('run watch'), 1)
+                    self.assertNotIn('EMULATOR_SERIES_OK', result.stdout)
+
     def test_device_reboot_during_proof_is_not_a_success(self):
         result, ran, _ = self.run_stage('reboot')
         self.assertTrue(ran)
