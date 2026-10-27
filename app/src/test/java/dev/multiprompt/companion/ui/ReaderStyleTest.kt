@@ -57,8 +57,8 @@ class ReaderStyleTest {
         }
         val user = compose.onNodeWithText("User message").fetchSemanticsNode().boundsInRoot
         val agent = compose.onNodeWithText("Agent message").fetchSemanticsNode().boundsInRoot
-        assertEquals(16f, agent.left, 0.01f)
-        assertEquals(374f, user.right, 0.5f)
+        assertEquals(12f, agent.left, 0.01f)
+        assertEquals(378f, user.right, 0.5f)
         assertTrue(user.left > agent.left)
         listOf("User message", "Agent message").forEach { text ->
             val layouts = mutableListOf<TextLayoutResult>()

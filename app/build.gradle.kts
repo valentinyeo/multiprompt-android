@@ -15,7 +15,6 @@ val signing = Properties().apply {
 android {
     namespace = "dev.multiprompt.companion"
     compileSdk = 36
-    testBuildType = providers.gradleProperty("instrumentationBuildType").orNull ?: "debug"
 
     defaultConfig {
         applicationId = "dev.multiprompt.companion"
