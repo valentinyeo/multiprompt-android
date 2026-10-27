@@ -1,6 +1,8 @@
 package dev.multiprompt.companion.ui
 
 import android.app.Application
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.onNodeWithTag
 import dev.multiprompt.companion.ssh.TmuxText
@@ -51,8 +53,8 @@ class ReaderProgressBarTest {
 
     @After fun cleanup() { connection.close(); f.close() }
 
-    private fun render() {
-        f.field<MutableStateFlow<ReaderState>>(connection, "_state").value = ReaderState(status = ReaderStatus.Live, sending = false)
+    private fun render(state: ReaderState = ReaderState(status = ReaderStatus.Live, sending = false)) {
+        f.field<MutableStateFlow<ReaderState>>(connection, "_state").value = state
         compose.setContent {
             ReaderScreen(
                 connection = connection, dictation = f.app.deepgramDictation,
@@ -68,6 +70,28 @@ class ReaderProgressBarTest {
                 onForget = {}, onShowEtaAccuracy = {}, onReleaseNotes = {}, material3 = false,
             )
         }
+    }
+
+    @Test fun serverTurnKeepsDotsThroughQuietToolsAndReconnectUntilIdle() {
+        val started = System.currentTimeMillis() / 1000 - 3600
+        render(ReaderState(status = ReaderStatus.Live,
+            hookState = TmuxText.HookState(active = true, atEpochSeconds = started)))
+        val reader = f.field<MutableStateFlow<ReaderState>>(connection, "_state")
+        compose.onNodeWithContentDescription("Working").assertIsDisplayed()
+        for (status in listOf(ReaderStatus.Connecting, ReaderStatus.Live)) {
+            compose.runOnIdle { reader.value = reader.value.copy(status = status) }
+            compose.onNodeWithContentDescription("Working").assertIsDisplayed()
+        }
+        compose.runOnIdle {
+            reader.value = reader.value.copy(hookState = TmuxText.HookState(false, started + 3600))
+        }
+        compose.onNodeWithContentDescription("Working").assertDoesNotExist()
+    }
+
+    @Test fun serverIdleOverridesStaleProgressText() {
+        render(ReaderState(status = ReaderStatus.Live, screenOutput = "Working…", output = "Working…",
+            hookState = TmuxText.HookState(false, System.currentTimeMillis() / 1000)))
+        compose.onNodeWithContentDescription("Working").assertDoesNotExist()
     }
 
     @Test fun etaDoesNotAddABarAboveComposerWhileIdleOrSending() {

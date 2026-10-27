@@ -44,7 +44,6 @@ import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.reader.ChatReactions
 import dev.multiprompt.companion.reader.ReaderStatus
-import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.ssh.ClaudeQuestion
 import dev.multiprompt.companion.reader.ChatHistoryMessage
 import dev.multiprompt.companion.reader.ReaderState
@@ -120,9 +119,7 @@ internal fun ChatHistoryView(
             onMarkUnread = onMarkUnread,
             onReaction = onReaction,
             collapsePendingReactions = reader.actionError == null,
-            working = reader.sending || TmuxText.readerBlocks(reader.screenOutput, agent).any {
-                it.kind == TmuxText.ReaderBlockKind.PROGRESS && isTransientProgress(it.text)
-            },
+            working = reader.isWorking(agent),
             onNearTop = history::nearTop,
             listState = listState,
             followRequest = followRequest,
