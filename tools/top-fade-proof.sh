@@ -19,6 +19,11 @@ done
 if [ "$status" -ne 0 ]; then exit "$status"; fi
 echo SETTINGS_NAVIGATION_EMULATOR_OK
 if [ "${RELEASE_SMOKE:-false}" = true ]; then
+  if [ "${GITHUB_EVENT_NAME:-}" = push ]; then
+    release_run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml --commit "$GITHUB_SHA" --limit 1 --json databaseId --jq '.[0].databaseId')
+    test -n "$release_run"
+    timeout 1800s gh run watch "$release_run" --repo "$GITHUB_REPOSITORY" --interval 300 --exit-status
+  fi
   curl -fsSL https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion-update.json -o build/top-fade-shots/update.json
   manifest=build/top-fade-shots/update.json
   commit=$(jq -er '.commit' "$manifest")
