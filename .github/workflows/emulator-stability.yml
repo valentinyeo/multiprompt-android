@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/actions/android-proof/**'
       - '.github/workflows/emulator-stability.yml'
+      - 'tools/emulator.test.py'
 
 permissions:
   contents: read

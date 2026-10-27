@@ -2,7 +2,7 @@ name: Verify real Android UI
 
 on:
   push:
-    branches: [ceo/IGSH-1012, ceo/IGSH-1077]
+    branches: [ceo/IGSH-1012]
   pull_request:
     paths:
       - '.github/actions/android-proof/**'
