@@ -56,8 +56,8 @@ jobs:
       EVIDENCE: ${{ github.workspace }}/verification-evidence
       VERIFY_FEATURE: ${{ inputs.feature || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1012' && 'chat-reactions.md') || 'native-skills.md' }}
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
-      UPDATE_BASELINE_RUN: ${{ inputs.update_baseline_run }}
-      APP_REF: ${{ inputs.app_ref }}
+      UPDATE_BASELINE_RUN: ${{ inputs.update_baseline_run || (github.event_name == 'push' && '40512188866') }}
+      APP_REF: ${{ inputs.app_ref || (github.event_name == 'push' && '41f3847b42a3d56ac9d3a1ce32e62fac23066132') }}
     steps:
       - uses: actions/checkout@v4
       - name: Prepare verification paths
@@ -75,22 +75,22 @@ jobs:
         with:
           packages: platform-tools
       - uses: actions/checkout@v4
-        if: inputs.app_ref != ''
+        if: env.APP_REF != ''
         with:
-          ref: ${{ inputs.app_ref }}
+          ref: ${{ env.APP_REF }}
           path: app-source
       - name: Capture signed update baseline
-        if: env.VERIFY_FEATURE == 'chat-reactions.md' && inputs.update_baseline_run == ''
+        if: env.VERIFY_FEATURE == 'chat-reactions.md' && env.UPDATE_BASELINE_RUN == ''
         run: |
           mkdir -p "$EVIDENCE/signed-update-baseline"
           curl -fsSL https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion-update.json -o "$EVIDENCE/signed-update-baseline/manifest.json"
           curl -fsSL "$(jq -er '.apkUrl' "$EVIDENCE/signed-update-baseline/manifest.json")" -o "$EVIDENCE/signed-update-baseline/app.apk"
           printf '%s  %s\n' "$(jq -er '.sha256' "$EVIDENCE/signed-update-baseline/manifest.json")" "$EVIDENCE/signed-update-baseline/app.apk" | sha256sum --check
       - name: Restore signed update baseline
-        if: inputs.update_baseline_run != ''
+        if: env.UPDATE_BASELINE_RUN != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          BASELINE_RUN: ${{ inputs.update_baseline_run }}
+          BASELINE_RUN: ${{ env.UPDATE_BASELINE_RUN }}
         run: |
           [[ "$BASELINE_RUN" =~ ^[0-9]+$ ]]
           gh run download "$BASELINE_RUN" --repo "$GITHUB_REPOSITORY" --name "verify-chat-reactions.md-$BASELINE_RUN" --dir "$RUNNER_TEMP/update-baseline"
