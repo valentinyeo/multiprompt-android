@@ -21,3 +21,14 @@ test('workflow run scripts use environment values for event and dispatch data', 
     }
   }
 });
+
+test('emulator action receives complete shell commands per script line', () => {
+  const { spawnSync } = require('node:child_process');
+  const text = readFileSync(path.join(directory, 'verify.yml'), 'utf8');
+  const script = text.match(/^          script: \|\n((?:            .*\n)+)/m);
+  assert.ok(script, 'Missing emulator script');
+  for (const line of script[1].trim().split('\n')) {
+    const result = spawnSync('sh', ['-n', '-c', line.trim()], { encoding: 'utf8' });
+    assert.equal(result.status, 0, `${line}\n${result.stderr}`);
+  }
+});
