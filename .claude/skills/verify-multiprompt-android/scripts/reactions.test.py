@@ -55,6 +55,9 @@ class ReactionOracleTest(unittest.TestCase):
     def test_extra_reaction_bubble(self):
         self.check_case(lambda nodes, image: nodes.append(dict(text='👍 to: Same prefix [mp:6d8e353d25c5fe23]', bounds='[10,235][210,245]')), False)
 
+    def test_shown_session_reply(self):
+        self.check_case(lambda nodes, image: nodes.append(dict(text='Reaction received.', bounds='[10,235][210,245]')), False)
+
     def test_cleared_composer(self):
         self.check_case(lambda nodes, image: nodes[3].update(text=''), False)
 

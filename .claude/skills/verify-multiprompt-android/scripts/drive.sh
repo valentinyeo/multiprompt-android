@@ -618,6 +618,10 @@ if [[ "$feature" == chat-reactions.md ]]; then
     done
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/reaction-receipts.txt"
     python3 "$scripts/reactions.py" transport "$EVIDENCE/reaction-receipts.txt" "$EVIDENCE/reaction-transport.json"
+    for attempt in {1..30}; do
+        if sudo grep -F 'Reaction received.' /home/verifyssh/.claude/projects/-home-verifyssh-reaction-work/a1b2c3d4-0975-4000-8000-000000000975.jsonl >/dev/null; then break; fi
+        sleep 1
+    done
     relaunch_app
     tap_text verify-session
     wait_for_text 'FIRST REPLY'
