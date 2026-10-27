@@ -83,10 +83,20 @@ wait_for_text() {
     return 1
 }
 fill() {
-    tap_node field "$1"
-    adb shell input keycombination 113 29
-    adb shell input text "$2"
-    adb shell input keyevent KEYCODE_BACK
+    local attempt
+    for attempt in 1 2 3; do
+        tap_node field "$1"
+        select_node focused-field "$1" >/dev/null || continue
+        adb shell input keycombination 113 29
+        adb shell input text "$2"
+        dump_ui
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value "$1" "${2//%s/ }"; then
+            adb shell input keyevent KEYCODE_BACK
+            return
+        fi
+    done
+    printf 'Field input did not match: %s\n' "$1" >&2
+    return 1
 }
 wait_for_absence() {
     local attempt
@@ -168,7 +178,7 @@ tap_text All
 tap_desc 'Session list actions'
 tap_text Hosts
 tap_desc 'Add host'
-wait_for_text 'Add VPS'
+wait_for_text 'Save and connect'
 if [[ "$feature" == hosts-retired.md ]]; then
     retired=45.151.123.11
     sudo iptables -I OUTPUT -d "$retired" -p tcp -j REJECT --reject-with tcp-reset

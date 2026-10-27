@@ -16,7 +16,7 @@ storePassword=$ANDROID_KEYSTORE_PASSWORD
 keyAlias=$ANDROID_KEY_ALIAS
 keyPassword=$ANDROID_KEY_PASSWORD
 EOF
-    gradle --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2g -PversionName=0.1.2-candidate assembleRelease
+    gradle --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2g -PversionCode=1000000000 -PversionName=0.1.2-candidate assembleRelease
     cp app/build/outputs/apk/release/app-release.apk "$EVIDENCE/app.apk"
     printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/app-source-sha.txt"
     printf '%s\n' 0.1.2-candidate > "$EVIDENCE/version.txt"
@@ -29,6 +29,7 @@ else
     jq -er '.commit' "$EVIDENCE/manifest.json" > "$EVIDENCE/app-source-sha.txt"
     jq -er '.versionName' "$EVIDENCE/manifest.json" > "$EVIDENCE/version.txt"
 fi
+sha256sum "$EVIDENCE/app.apk" > "$EVIDENCE/app-apk-sha256.txt"
 "$tools/apksigner" verify --print-certs "$EVIDENCE/app.apk" > "$EVIDENCE/apk-certificate.txt"
 "$tools/aapt" dump badging "$EVIDENCE/app.apk" > "$EVIDENCE/apk-package.txt"
 grep -F "package: name='dev.multiprompt.companion'" "$EVIDENCE/apk-package.txt"

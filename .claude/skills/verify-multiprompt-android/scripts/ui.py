@@ -16,7 +16,7 @@ for node in root.iter("node"):
         matches.append(node)
     elif mode == "editor" and node.get("class") == "android.widget.EditText" and node.get("package") == "dev.multiprompt.companion.debug":
         matches.append(node)
-    elif mode == "field" and node.get("class") == "android.widget.EditText":
+    elif mode in ("field", "focused-field", "field-value") and node.get("class") == "android.widget.EditText":
         if any(value == item.get("text") or value == item.get("content-desc") for item in node.iter()):
             matches.append(node)
 if mode in ("absent", "lacks"):
@@ -34,6 +34,14 @@ if mode == "contains":
 if len(matches) != 1:
     raise SystemExit(f"Ambiguous {mode}: {value} ({len(matches)})")
 node = matches[0]
+if mode == "focused-field" and node.get("focused") != "true":
+    raise SystemExit(f"Field is not focused: {value}")
+if mode == "field-value":
+    expected = sys.argv[4]
+    if node.get("password") != "true" and node.get("text") != expected:
+        raise SystemExit(f"Field {value} has {node.get('text')!r}, expected {expected!r}")
+    print("FIELD_VALUE_VERIFIED")
+    raise SystemExit(0)
 if mode == "version":
     if node.get("content-desc") != f"Version {value}, open release notes":
         raise SystemExit("Version label description does not match")
@@ -43,7 +51,7 @@ if mode in ("checked", "unchecked"):
         raise SystemExit(f"Expected {mode}: {value}")
 if node.get("enabled") == "false":
     raise SystemExit("Selector is disabled")
-if mode not in ("field", "editor", "version", "checked", "unchecked"):
+if mode not in ("field", "focused-field", "editor", "version", "checked", "unchecked"):
     ancestor = node
     while ancestor.get("clickable") != "true" and ancestor in parents:
         ancestor = parents[ancestor]
