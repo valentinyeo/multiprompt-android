@@ -98,7 +98,10 @@ class ChatReactionsTest {
             val shown = ChatReactions.present(listOf(reply, user))
             assertEquals(listOf(reply), shown.messages)
             assertEquals(setOf(ChatReactions.Emoji.LIKE, ChatReactions.Emoji.HEART), shown.badges[reply.key])
-            assertEquals(listOf(reply, user), ChatReactions.present(listOf(reply, user.copy(pending = true)), collapsePending = false).messages.map { if (it.key == user.key) it.copy(pending = pending) else it })
+            val failed = user.copy(pending = true)
+            val uncollapsed = ChatReactions.present(listOf(reply, failed), collapsePending = false)
+            assertEquals(listOf(reply, failed), uncollapsed.messages)
+            assertTrue(uncollapsed.badges.isEmpty())
         }
     }
 
