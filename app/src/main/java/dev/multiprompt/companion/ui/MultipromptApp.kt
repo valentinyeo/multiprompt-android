@@ -4345,7 +4345,7 @@ private fun TerminalScreen(
                 subtitle = "${connection.tmuxSessionName} · ${statusLabel(status)}",
                 onBack = onBack,
                 onReleaseNotes = onReleaseNotes,
-                onOpenHistory = { historyVisible = true; keyboard?.hide() },
+                onOpenHistory = { historyVisible = true },
                 onLiveView = { historyVisible = false },
                 onShowKeyboard = { focusRequester.requestFocus(); keyboard?.show() },
             )
@@ -4374,10 +4374,7 @@ private fun TerminalScreen(
             }
             ShellContent(
                 historyVisible = historyVisible,
-                onOpenHistory = {
-                    historyVisible = true
-                    keyboard?.hide()
-                },
+                onOpenHistory = { historyVisible = true },
                 onJumpToLive = { historyVisible = false },
                 loadHistory = connection::history,
                 fontSize = fontSize,
