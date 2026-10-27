@@ -1,0 +1,78 @@
+name: Chat bubble width proof
+
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'tools/bubble-width-proof.sh'
+      - '.github/workflows/bubble-width.yml'
+  workflow_dispatch:
+    inputs:
+      published:
+        description: Test the signed published APK instead of a debug build
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bubble-width-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.1'
+      - name: Restore instrumentation signing identity
+        if: inputs.published == true
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          mkdir -p signing
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > signing/multiprompt-companion.jks
+          cat > keystore.properties <<EOF
+          storeFile=signing/multiprompt-companion.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+      - name: Build before starting emulator
+        env:
+          PUBLISHED: ${{ inputs.published }}
+        run: bash tools/bubble-width-proof.sh build
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        env:
+          PUBLISHED: ${{ inputs.published }}
+        with:
+          api-level: 35
+          emulator-build: 16428233
+          arch: x86_64
+          profile: pixel_2
+          ram-size: 2048M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
+          disable-animations: true
+          script: bash tools/bubble-width-proof.sh test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bubble-width-proof
+          path: build/bubble-width/
+          if-no-files-found: warn
