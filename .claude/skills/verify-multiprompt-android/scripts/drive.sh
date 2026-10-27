@@ -763,7 +763,7 @@ if [[ "$feature" == terminal.md ]]; then
         fi
         adb shell input swipe 200 800 200 400 600
         wait_for_text 'SHELL_HISTORY_'
-        wait_for_text 'Jump to live'
+        select_node desc 'Jump to live'
         if [[ "$keyboard_state" == open ]]; then
             adb shell dumpsys input_method > "$EVIDENCE/keyboard-history.txt"
             grep -F 'mInputShown=true' "$EVIDENCE/keyboard-history.txt"
@@ -785,7 +785,8 @@ if [[ "$feature" == terminal.md ]]; then
         python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains SHELL_HISTORY_0001
         python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent "$marker"
         tap_desc 'Jump to live'
-        wait_for_absence 'Jump to live'
+        dump_ui
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" desc 'Jump to live' >/dev/null 2>&1; then exit 1; fi
         shot "shell-live-$keyboard_state"
         adb shell kill -2 "$(adb shell pidof screenrecord | tr -d '\r')"
         wait "$recording_pid"
