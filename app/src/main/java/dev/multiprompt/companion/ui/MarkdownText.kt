@@ -1,11 +1,5 @@
 package dev.multiprompt.companion.ui
 
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.ui.semantics.Role
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
@@ -56,27 +50,15 @@ fun MarkdownText(
     linkColor: Color,
     modifier: Modifier = Modifier,
     imagePreviews: Boolean = false,
-    onChoice: ((String) -> Boolean)? = null,
-    selectedAnswer: String? = null,
 ) {
-    val readerStyle = LocalReaderStyle.current
     val blocks = remember(text) { MarkdownParser.parse(text) }
-    val choices = remember(blocks) { ChatChoices.indices(blocks) }
-    var pendingChoice by rememberSaveable(text) { mutableStateOf<Int?>(null) }
-    val confirmedChoice = remember(blocks, choices, selectedAnswer) {
-        choices.firstOrNull { index ->
-            val item = blocks[index] as MdBlock.ListItem
-            selectedAnswer != null && (selectedAnswer == ChatChoices.answer(item, true) || selectedAnswer == ChatChoices.answer(item, false))
-        }
-    }
-    val selectedChoice = confirmedChoice ?: pendingChoice
     val codeBg = color.copy(alpha = 0.10f)
     val codeFontFamily = if (LocalReaderStyle.current) FontFamily.SansSerif else FontFamily.Monospace
     val scale = if (LocalReaderStyle.current) fontSize.value / ReaderTextSize.value else if (LocalMaterial3.current) fontSize.value / 15f else 1f
     val lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, scale)
     androidx.compose.material3.ProvideTextStyle(androidx.compose.ui.text.TextStyle(fontFamily = chatFontFamily())) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        blocks.forEachIndexed { blockIndex, block ->
+        blocks.forEach { block ->
             when (block) {
                 is MdBlock.Paragraph -> if (imagePreviews) {
                     ChatImageRuns(block.runs) { runs ->
@@ -96,34 +78,13 @@ fun MarkdownText(
                     modifier = Modifier.padding(top = 4.dp),
                 )
                 is MdBlock.ListItem -> {
-                    val isChoice = blockIndex in choices && (onChoice != null || selectedChoice != null)
-                    val chosen = selectedChoice == blockIndex
-                    val enabled = onChoice != null && selectedChoice == null
-                    Row(Modifier.padding(start = (block.depth * 16).dp)
-                        .then(if (isChoice) Modifier.fillMaxWidth()
-                            .background(if (chosen) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent, ReaderBadgeShape)
-                            .selectable(selected = chosen, enabled = enabled, role = Role.RadioButton) {
-                                if (confirmedChoice == null && pendingChoice == null && onChoice?.invoke(ChatChoices.answer(block, readerStyle)) == true) pendingChoice = blockIndex
-                            }.padding(vertical = 8.dp, horizontal = 4.dp) else Modifier)) {
-                        val label = ChatChoices.label(block.marker, LocalReaderStyle.current)
-                        val numbered = block.marker.removeSuffix(".").toIntOrNull() ?: 0
-                        if (LocalReaderStyle.current && (numbered > 0 || block.marker.removeSuffix(".").singleOrNull()?.isLetter() == true)) {
-                            Box(
-                                Modifier.padding(end = ReaderBadgeGap).width(ReaderBadgeSize).height(ReaderBadgeSize)
-                                    .background(if (isChoice && selectedChoice != null && !chosen) color.copy(alpha = 0.15f) else ReaderChoiceBackground, ReaderBadgeShape)
-                                    .testTag("reader-choice-${if (numbered > 0) numbered.toString() else label}"),
-                                contentAlignment = androidx.compose.ui.Alignment.Center,
-                            ) {
-                                Text(label, fontSize = ReaderBadgeTextSize, color = ReaderBadgeForeground)
-                            }
-                        } else {
-                            Text(block.marker, fontSize = fontSize, lineHeight = lineHeight, color = color,
-                                modifier = Modifier.width(if (block.marker.length > 2) 28.dp else 18.dp))
-                        }
+                    Row(Modifier.padding(start = (block.depth * 16).dp)) {
+                        Text(block.marker, fontSize = fontSize, lineHeight = lineHeight, color = color,
+                            modifier = Modifier.width(if (block.marker.length > 2) 28.dp else 18.dp))
                         Text(
                             markdownAnnotated(block.runs, linkColor, codeBg, codeFontFamily),
                             fontSize = fontSize, lineHeight = lineHeight,
-                            color = if (isChoice && selectedChoice != null && !chosen) color.copy(alpha = 0.45f) else color,
+                            color = color,
                             modifier = Modifier.weight(1f),
                         )
                     }

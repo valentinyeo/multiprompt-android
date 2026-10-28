@@ -12,7 +12,7 @@ scripts=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$EVIDENCE"
 exec > >(tee -a "$EVIDENCE/driver-transcript.txt") 2>&1
 set -x
-package=dev.multiprompt.companion.debug
+package=${VERIFY_PACKAGE:-dev.multiprompt.companion.debug}
 step=0
 dump_ui() {
     timeout 20s adb shell uiautomator dump /sdcard/verify-ui.xml >/dev/null || return
@@ -65,7 +65,7 @@ doctor() {
         sleep 3
     done
     for attempt in {1..30}; do
-        if adb shell ping -c 1 -W 2 10.0.2.2 >/dev/null 2>&1; then return; fi
+        if "$scripts/ssh-ready.sh"; then return; fi
         printf 'Emulator network not up yet, attempt %s/30\n' "$attempt" | tee -a "$EVIDENCE/network-wait.txt"
         sleep 2
     done
@@ -83,10 +83,20 @@ wait_for_text() {
     return 1
 }
 fill() {
-    tap_node field "$1"
-    adb shell input keycombination 113 29
-    adb shell input text "$2"
-    adb shell input keyevent KEYCODE_BACK
+    local attempt
+    for attempt in 1 2 3; do
+        tap_node field "$1"
+        select_node focused-field "$1" >/dev/null || continue
+        adb shell input keycombination 113 29
+        adb shell input text "$2"
+        dump_ui
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value "$1" "${2//%s/ }"; then
+            adb shell input keyevent KEYCODE_BACK
+            return
+        fi
+    done
+    printf 'Field input did not match: %s\n' "$1" >&2
+    return 1
 }
 wait_for_absence() {
     local attempt
@@ -139,11 +149,17 @@ wait_receipt() {
 }
 adb shell settings put global hide_error_dialogs 1
 adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
-wait_for_text 'Sign in to see your servers, workspaces and sessions.'
-doctor
-dump_ui
-python3 "$scripts/ui.py" "$EVIDENCE/current.xml" version "$EXPECTED_VERSION" > "$EVIDENCE/version-label.txt"
-shot sign-in
+if [[ "$package" == dev.multiprompt.companion ]]; then
+    [[ "$feature" == chat-choices.md ]]
+    wait_for_text Inbox
+    doctor
+else
+    wait_for_text 'Sign in to see your servers, workspaces and sessions.'
+    doctor
+    dump_ui
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" version "$EXPECTED_VERSION" > "$EVIDENCE/version-label.txt"
+    shot sign-in
+fi
 if [[ "$feature" == sign-in.md ]]; then
     tap_text 'Sign in'
     for attempt in {1..30}; do
@@ -156,13 +172,13 @@ if [[ "$feature" == sign-in.md ]]; then
     printf 'SIGN-IN HANDOFF VERIFIED; OTP completion is NOT verified\n'
     exit 0
 fi
-tap_text 'Use without account (debug)'
+if [[ "$package" == dev.multiprompt.companion.debug ]]; then tap_text 'Use without account (debug)'; fi
 wait_for_text Inbox
 tap_text All
 tap_desc 'Session list actions'
 tap_text Hosts
 tap_desc 'Add host'
-wait_for_text 'Add VPS'
+wait_for_text 'Save and connect'
 if [[ "$feature" == hosts-retired.md ]]; then
     retired=45.151.123.11
     sudo iptables -I OUTPUT -d "$retired" -p tcp -j REJECT --reject-with tcp-reset
@@ -377,12 +393,23 @@ if [[ "$feature" == sessions.md ]]; then
 fi
 tap_text verify-session
 if [[ "$feature" == chat-choices.md ]]; then
-    wait_for_text 'Use your own account. Keep the current setup.'
-    shot choices-before
-    tap_node text-containing 'Use your own account. Keep the current setup.'
-    wait_receipt 'VERIFY_RECEIVED:B: Use your own account. Keep the current setup.'
-    wait_for_text 'B: Use your own account. Keep the current setup.'
-    shot choices-after
+    wait_for_text 'Should the two daily jobs keep running, or pause until you top up?'
+    shot plain-numbered-reply
+    python3 - "$EVIDENCE/current.xml" <<'PLAIN'
+import sys
+import xml.etree.ElementTree as ET
+nodes = list(ET.parse(sys.argv[1]).getroot().iter('node'))
+for text in ['1.', '2.', '3.', 'How much money is on the account?',
+             'Should the two daily jobs keep running, or pause until you top up?',
+             'Should I merge the leaderboard into all ads?']:
+    matches = [node for node in nodes if node.get('text') == text]
+    assert matches and all(node.get('clickable') == 'false' for node in matches), text
+assert not any(node.get('text') in ['A', 'B', 'C'] for node in nodes)
+print('PLAIN_NUMBERED_REPLY_COMPLETE_AND_READ_ONLY')
+PLAIN
+    fill 'Message verify-session' Continue
+    tap_desc 'Send prompt'
+    wait_receipt 'VERIFY_RECEIVED:Continue'
     wait_for_text '2: Use the current account'
     shot question-before
     tap_text '2: Use the current account'
@@ -394,8 +421,8 @@ if [[ "$feature" == chat-choices.md ]]; then
 import sys
 from pathlib import Path
 rows = Path(sys.argv[1]).read_text().splitlines()
-assert rows == ["VERIFY_RECEIVED:B: Use your own account. Keep the current setup.", "VERIFY_QUESTION_KEY:2"], rows
-print("CHOICE SEND AND QUESTION KEY VERIFIED")
+assert rows == ["VERIFY_RECEIVED:Continue", "VERIFY_QUESTION_KEY:2"], rows
+print("PLAIN LIST AND STRUCTURED QUESTION KEY VERIFIED")
 CHOICES
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt"
     printf 'FEATURE VERIFIED: %s\n' "$feature"
