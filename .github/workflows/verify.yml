@@ -10,10 +10,19 @@ on:
       - 'tools/release-choices/**'
       - '.claude/skills/verify-multiprompt-android/**'
       - '.github/workflows/verify.yml'
+      - '.github/actions/android-proof/**'
   workflow_dispatch:
     inputs:
+      release_icon:
+        description: Verify the approved launcher icon on the published signed APK
+        type: boolean
+        default: false
       release_choices:
         description: Verify plain lists and real question answers on the signed release APK
+        type: boolean
+        default: false
+      released_reactions:
+        description: Verify reaction display and transport on the signed APK
         type: boolean
         default: false
       candidate:
@@ -41,6 +50,7 @@ on:
           - chat-resync.md
           - session-routing.md
           - terminal.md
+          - launcher-icon.md
       expect_native_missing:
         description: Require the original app to reject the native slash journey
         required: false
@@ -72,21 +82,6 @@ jobs:
       APP_REF: ${{ inputs.app_ref }}
     steps:
       - uses: actions/checkout@v4
-      - name: Prove emulator host regression against original configuration
-        if: github.ref == 'refs/heads/ceo/IGSH-1022'
-        run: |
-          original="$RUNNER_TEMP/original-workflows"
-          mkdir -p "$original"
-          git fetch --depth=1 origin 9a979213a00610c5a146e0bfd8002e6f4f0c9789
-          git show 9a979213a00610c5a146e0bfd8002e6f4f0c9789:.github/workflows/verify.yml > "$original/verify.yml"
-          if WORKFLOW_DIR="$original" node --test tools/workflow-inputs.test.js > "$RUNNER_TEMP/reader-red.txt" 2>&1; then
-            cat "$RUNNER_TEMP/reader-red.txt"
-            exit 1
-          fi
-          cat "$RUNNER_TEMP/reader-red.txt"
-          grep -F 'AssertionError' "$RUNNER_TEMP/reader-red.txt"
-          node --test tools/workflow-inputs.test.js
-          printf 'EMULATOR_HOST_RED_GREEN_OK\n'
       - name: Prove SSH fixture configuration on the supported host
         run: |
           sudo apt-get update -qq
@@ -139,8 +134,12 @@ jobs:
           [[ "$BASELINE_RUN" =~ ^[0-9]+$ ]]
           gh run download "$BASELINE_RUN" --repo "$GITHUB_REPOSITORY" --name "verify-chat-reactions.md-$BASELINE_RUN" --dir "$RUNNER_TEMP/update-baseline"
           cp -a "$RUNNER_TEMP/update-baseline/signed-update-baseline" "$EVIDENCE/"
+      - name: Check reaction screenshot oracle
+        run: |
+          python3 -m pip install Pillow
+          python3 .claude/skills/verify-multiprompt-android/scripts/reactions.test.py
       - name: Prepare signed choices APK and same-signer fixture instrumentation
-        if: inputs.release_choices == true
+        if: inputs.release_choices == true || inputs.released_reactions == true
         env:
           CANDIDATE: ${{ inputs.candidate }}
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
@@ -149,18 +148,29 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          test "$VERIFY_FEATURE" = chat-choices.md
+          [[ "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md ]]
           sdkmanager --install 'build-tools;35.0.0' 'platforms;android-35'
           bash tools/release-choices/prepare.sh
           echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
           echo "VERIFY_PACKAGE=dev.multiprompt.companion" >> "$GITHUB_ENV"
           echo "EXPECTED_VERSION=$(cat "$EVIDENCE/version.txt")" >> "$GITHUB_ENV"
+      - name: Download published icon APK
+        if: inputs.release_icon == true
+        run: |
+          test "$VERIFY_FEATURE" = launcher-icon.md
+          python3 -m pip install Pillow
+          python3 .claude/skills/verify-multiprompt-android/scripts/launcher-icon.test.py
+          curl -fsSL https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion-update.json -o "$EVIDENCE/manifest.json"
+          curl -fsSL "$(jq -er '.apkUrl' "$EVIDENCE/manifest.json")" -o "$EVIDENCE/app.apk"
+          printf '%s  %s\n' "$(jq -er '.sha256' "$EVIDENCE/manifest.json")" "$EVIDENCE/app.apk" | sha256sum --check
+          echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
+          echo "VERIFY_PACKAGE=dev.multiprompt.companion" >> "$GITHUB_ENV"
+          echo "EXPECTED_VERSION=$(jq -er '.versionName' "$EVIDENCE/manifest.json")" >> "$GITHUB_ENV"
       - name: Build debug APK
-        if: inputs.release_choices != true
+        if: inputs.release_choices != true && inputs.release_icon != true && inputs.released_reactions != true
         run: |
           mkdir -p "$EVIDENCE"
-          python3 -m pip install Pillow
-          python3 .claude/skills/verify-multiprompt-android/scripts/reactions.test.py
+          python3 .claude/skills/verify-multiprompt-android/scripts/launcher-icon.test.py
           printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/revision.txt"
           app_source="$GITHUB_WORKSPACE"
           if [ -d "$GITHUB_WORKSPACE/app-source" ]; then app_source="$GITHUB_WORKSPACE/app-source"; fi
@@ -171,38 +181,18 @@ jobs:
       - name: Build routing instrumentation
         if: inputs.feature == 'session-routing.md'
         run: gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g assembleDebugAndroidTest
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: Download emulator SDK with bounded retries
-        timeout-minutes: 15
-        run: |
-          for attempt in 1 2 3; do
-            printf 'SDK download attempt %s/3\n' "$attempt" | tee -a "$EVIDENCE/sdk-install.txt"
-            if sdkmanager --install 'build-tools;35.0.0' platform-tools 'platforms;android-35' emulator 'system-images;android-35;google_apis;x86_64' --channel=0 2>&1 | tee -a "$EVIDENCE/sdk-install.txt"; then
-              exit 0
-            fi
-          done
-          exit 1
       - name: Start ephemeral public-key-only SSH and tmux
         run: .claude/skills/verify-multiprompt-android/scripts/fixture.sh
       - name: Install, doctor and drive the real app
         id: native-ui
         continue-on-error: ${{ inputs.expect_native_missing == true }}
-        uses: reactivecircus/android-emulator-runner@v2.34.0
+        uses: ./.github/actions/android-proof
         with:
-          api-level: 35
-          emulator-build: 16428233
-          arch: x86_64
-          target: google_apis
-          profile: pixel_2
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -verbose > /tmp/native-emulator.log 2>&1
+          stage: stage-1
+          target: default
           script: |
             adb install -r -g "$VERIFY_APK"
-            if [ "${VERIFY_PACKAGE:-}" = dev.multiprompt.companion ]; then bash tools/release-choices/run.sh; else .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; fi
+            if [ "${VERIFY_PACKAGE:-}" = dev.multiprompt.companion ] && [ "$VERIFY_FEATURE" != launcher-icon.md ]; then bash tools/release-choices/run.sh; else .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; fi
             if [ -n "$UPDATE_BASELINE_RUN" ]; then .claude/skills/verify-multiprompt-android/scripts/update-reaction-release.sh; fi
       - name: Require the original native-skill failure
         if: inputs.expect_native_missing == true

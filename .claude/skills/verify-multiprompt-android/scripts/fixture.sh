@@ -28,7 +28,6 @@ AllowUsers verifyssh
 UsePAM no
 PrintMotd no
 LogLevel VERBOSE
-$(if sudo /usr/sbin/sshd -T -f /dev/null -o PerSourcePenalties=no >/dev/null 2>&1; then printf 'PerSourcePenalties no'; fi)
 CONFIG
 sudo /usr/sbin/sshd -t -f "$FIXTURE/sshd_config"
 sudo /usr/sbin/sshd -f "$FIXTURE/sshd_config" -E "$FIXTURE/sshd.log"

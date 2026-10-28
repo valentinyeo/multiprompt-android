@@ -28,6 +28,8 @@ import dev.multiprompt.companion.BuildConfig
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -164,7 +166,8 @@ internal fun ReplyableBubble(
                 Row(
                     Modifier.padding(top = 6.dp).testTag("reaction-badges:$messageId")
                         .semantics { contentDescription = "Reactions: " + shown.joinToString(" ") { it.text } }
-                        .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(12.dp))
+                        .background(if (sunlight) Color(0xFFE1E1E1) else ChatBubbleUserDark, RoundedCornerShape(12.dp))
+                        .border(1.dp, if (sunlight) Color(0xFF9B9B9B) else ReaderBubbleUserOutline, RoundedCornerShape(12.dp))
                         .padding(horizontal = 8.dp, vertical = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {

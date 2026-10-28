@@ -53,11 +53,17 @@ object ChatReactions {
             return true
         }
         val reactions = mutableSetOf<Int>()
-        messages.forEachIndexed { index, message ->
-            if (message.role == "user" && !(message.pending && !collapsePending) && apply(message.text, index)) reactions.add(index)
+        val displayed = messages.mapIndexed { index, message ->
+            if (message.role != "user" || (message.pending && !collapsePending)) return@mapIndexed message
+            val lines = message.text.lines()
+            val kept = lines.filterNot { apply(it, index) }
+            if (kept.size == lines.size) return@mapIndexed message
+            val text = kept.joinToString("\n").trim('\n')
+            if (text.isBlank()) reactions.add(index)
+            message.copy(text = text)
         }
         val silent = hideReplies(messages, reactions)
-        val visible = messages.filterIndexed { index, _ -> index !in reactions && index !in silent }
+        val visible = displayed.filterIndexed { index, _ -> index !in reactions && index !in silent }
         return Presentation(visible, badges)
     }
 
