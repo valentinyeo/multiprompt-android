@@ -753,7 +753,7 @@ if [[ "$feature" == terminal.md ]]; then
     grep -Fx SHELL_HISTORY_0001 "$EVIDENCE/shell-history-before.txt"
     grep -Fx SHELL_HISTORY_0500 "$EVIDENCE/shell-history-before.txt"
     for keyboard_state in open closed; do
-        adb shell screenrecord --time-limit 180 "/sdcard/shell-scroll-$keyboard_state.mp4" &
+        adb shell "screenrecord --time-limit 0 --bit-rate 1000000 /sdcard/shell-scroll-$keyboard_state.mp4 & echo \$! > /sdcard/shell-scroll-$keyboard_state.pid; wait" &
         recording_pid=$!
         tap_desc 'Show keyboard'
         if [[ "$keyboard_state" == closed ]]; then
@@ -794,7 +794,7 @@ if [[ "$feature" == terminal.md ]]; then
         dump_ui
         if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" desc 'Jump to live' >/dev/null 2>&1; then exit 1; fi
         shot "shell-live-$keyboard_state"
-        adb shell kill -2 "$(adb shell pidof screenrecord | tr -d '\r')"
+        adb shell kill -2 "$(adb shell cat "/sdcard/shell-scroll-$keyboard_state.pid" | tr -d '\r')"
         wait "$recording_pid"
         adb pull "/sdcard/shell-scroll-$keyboard_state.mp4" "$EVIDENCE/shell-scroll-$keyboard_state.mp4"
     done
