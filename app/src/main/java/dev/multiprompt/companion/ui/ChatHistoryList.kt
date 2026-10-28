@@ -44,7 +44,6 @@ import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.reader.ChatReactions
 import dev.multiprompt.companion.reader.ReaderStatus
-import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.ssh.ClaudeQuestion
 import dev.multiprompt.companion.reader.ChatHistoryMessage
 import dev.multiprompt.companion.reader.ReaderState
@@ -112,17 +111,12 @@ internal fun ChatHistoryView(
             onQuestionChoice = if (!reader.sending && reader.status == ReaderStatus.Live) { option ->
                 question != null && connection.answerQuestion(question, option).also { if (it) onSessionUsed() }
             } else null,
-            onChoice = if (question == null && !reader.sending && reader.status == ReaderStatus.Live) { answer ->
-                connection.sendPrompt(answer).also { if (it) onSessionUsed() }
-            } else null,
             sessionName = sessionName,
             unreadMessageKey = unreadMessageKey,
             onMarkUnread = onMarkUnread,
             onReaction = onReaction,
             collapsePendingReactions = reader.actionError == null,
-            working = reader.sending || TmuxText.readerBlocks(reader.screenOutput, agent).any {
-                it.kind == TmuxText.ReaderBlockKind.PROGRESS && isTransientProgress(it.text)
-            },
+            working = reader.isWorking(agent),
             onNearTop = history::nearTop,
             listState = listState,
             followRequest = followRequest,
@@ -143,7 +137,6 @@ internal fun ChatHistoryList(
     sunlight: Boolean = false,
     replyGate: ReplySwipeGate = remember { ReplySwipeGate() },
     onReply: (String, Boolean) -> Unit = { _, _ -> },
-    onChoice: ((String) -> Boolean)? = null,
     question: ClaudeQuestion? = null,
     questionError: String? = null,
     onQuestionChoice: ((Int) -> Boolean)? = null,
@@ -192,10 +185,6 @@ internal fun ChatHistoryList(
     }
     val atBottom = !listState.canScrollBackward && pendingJump == null
     val newest = messages.lastOrNull()
-    val selectedAnswers = remember(messages) {
-        messages.zipWithNext().filter { (reply, answer) -> reply.role == "assistant" && answer.role == "user" && !answer.pending }
-            .associate { (reply, answer) -> reply.key to answer.text }
-    }
     LaunchedEffect(newest?.key, newest?.text, newest?.pending, question) {
         if (atBottom) listState.scrollToItem(0)
     }
@@ -234,8 +223,6 @@ internal fun ChatHistoryList(
                     messageId = message.requestId, sessionName = sessionName, onMarkUnread = { onMarkUnread(message.key) },
                     key = message.key, highlighted = highlightedKey == message.key,
                     onJump = { pendingJump = ReplyJump(message, it) },
-                    onChoice = onChoice.takeIf { message.key == newest?.key && message.role == "assistant" },
-                    selectedAnswer = selectedAnswers[message.key],
                     reactions = presentation.badges[message.key].orEmpty(),
                     onReaction = if (agent == AgentKind.CLAUDE && message.role == "assistant" && onReaction != null) {
                         { emoji -> onReaction(message, emoji) }
@@ -266,8 +253,6 @@ private fun HistoryBubble(
     key: String,
     highlighted: Boolean,
     onJump: (ReplyQuote.Reply) -> Unit,
-    onChoice: ((String) -> Boolean)? = null,
-    selectedAnswer: String? = null,
     reactions: Set<ChatReactions.Emoji> = emptySet(),
     onReaction: ((ChatReactions.Emoji) -> Unit)? = null,
 ) {
@@ -305,7 +290,7 @@ private fun HistoryBubble(
                         lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, fontScale), color = chatTextColor(sunlight))
                 }
             } else {
-                MarkdownText(text = text, fontSize = fontSize, color = chatTextColor(sunlight), linkColor = chatLinkColor(terminalBlue(sunlight)), imagePreviews = true, onChoice = onChoice, selectedAnswer = selectedAnswer)
+                MarkdownText(text = text, fontSize = fontSize, color = chatTextColor(sunlight), linkColor = chatLinkColor(terminalBlue(sunlight)), imagePreviews = true)
             }
         }
     }

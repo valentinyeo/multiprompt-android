@@ -8,9 +8,17 @@ on:
       - 'tools/top-fade-proof.sh'
       - '.github/workflows/top-fade.yml'
   push:
+    branches: [main, ceo/IGSH-1073]
+  workflow_run:
+    workflows: [Android release]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
     inputs:
+      baseline_ref:
+        description: Original commit for native before and after proof
+        type: string
+        required: false
       release_smoke:
         description: Install and verify the published signed APK after screen tests
         type: boolean
@@ -25,9 +33,13 @@ concurrency:
 
 jobs:
   emulator:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -44,7 +56,8 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - uses: reactivecircus/android-emulator-runner@v2
         env:
-          RELEASE_SMOKE: ${{ inputs.release_smoke }}
+          RELEASE_SMOKE: ${{ inputs.release_smoke || github.event_name == 'workflow_run' }}
+          TOP_FADE_BASE_REF: ${{ inputs.baseline_ref || (github.ref == 'refs/heads/ceo/IGSH-1073' && '41f3847') || '' }}
         with:
           api-level: 35
           arch: x86_64

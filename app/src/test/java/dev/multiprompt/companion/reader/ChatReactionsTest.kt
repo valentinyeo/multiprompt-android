@@ -77,4 +77,23 @@ class ChatReactionsTest {
         val quote = ChatReactions.parse(line)!!.quote
         assertEquals("a".repeat(79), quote)
     }
+
+    @Test
+    fun aLoneSessionReplyToAReactionIsHiddenAndOtherRepliesStay() {
+        val target = message("msg_target", "Everything is done")
+        val line = ChatReactions.format(ChatReactions.Emoji.LIKE, target.requestId, target.text)!!
+        val reaction = message("reaction", line, "user")
+        val ack = message("ack", "Noted, thanks.")
+        val shown = ChatReactions.present(listOf(target, reaction, ack))
+        assertEquals(listOf(target), shown.messages)
+        assertEquals(setOf(ChatReactions.Emoji.LIKE), shown.badges[target.key])
+        val ordinary = message("ordinary", "Please continue", "user")
+        val kept = listOf(target, ordinary, ack)
+        assertEquals(kept, ChatReactions.present(kept).messages)
+        val work = listOf(target, reaction, ack, message("report", "Finished the follow-up"))
+        assertEquals(listOf(target, ack, work.last()), ChatReactions.present(work).messages)
+        val next = message("next", "Thanks, what is next?", "user")
+        val later = message("answer", "Next up is the Settings page")
+        assertEquals(listOf(target, next, later), ChatReactions.present(listOf(target, reaction, ack, next, later)).messages)
+    }
 }

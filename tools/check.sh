@@ -2,8 +2,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 node --test tools/root-files.test.js tools/strip-comments.test.js tools/release-status.test.js tools/workflow-inputs.test.js tools/pr-checks.test.js
+python3 -B tools/working-dots/check.test.py
 python3 tools/session-routing.test.py
 python3 -B tools/native-skills.test.py
+python3 -B tools/release-choices/ui.test.py
 python3 -B tools/check-approved-style-source.test.py
 python3 -B tools/account-journey/ui.test.py
 python3 -B tools/check-day-theme-images.test.py
