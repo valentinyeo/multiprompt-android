@@ -18,6 +18,15 @@ jobs:
       VERIFY_PACKAGE: dev.multiprompt.companion
     steps:
       - uses: actions/checkout@v4
+      - name: Reject the actual first-run readiness failure
+        run: |
+          git fetch --depth=1 origin cb29ac1f
+          git show FETCH_HEAD:tools/working-dots/console.py > "$RUNNER_TEMP/original-working-console.py"
+          if WORKING_CONSOLE="$RUNNER_TEMP/original-working-console.py" python3 -B tools/working-dots/check.test.py WorkingEvidenceTest.test_fixture_ready_has_receipts_and_real_done_state; then
+            echo 'Original fixture falsely passed readiness' >&2
+            exit 1
+          fi
+          echo REAL_READINESS_RED_CONTROL_PROVEN
       - name: Reject missing dots and late transitions
         run: python3 -B tools/working-dots/check.test.py
       - uses: actions/setup-java@v4

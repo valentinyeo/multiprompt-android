@@ -19,6 +19,7 @@ meta.write_text(json.dumps(dict(sessionId=sid, cwd=str(cwd), pid=os.getpid())))
 state = home / ".local/state/multiprompt/tab-state.json"
 state.parent.mkdir(parents=True, exist_ok=True)
 events = home / "working-events.jsonl"
+events.touch()
 
 
 def record(kind, **fields):
@@ -28,7 +29,7 @@ def record(kind, **fields):
 
 def turn(active):
     temp = state.with_suffix(".tmp")
-    temp.write_text(json.dumps({"verify-session": {"state": "active" if active else "idle", "at": int(time.time())}}))
+    temp.write_text(json.dumps({"verify-session": {"state": "active" if active else "done", "at": int(time.time())}}))
     temp.replace(state)
     record("start" if active else "end")
 
@@ -37,7 +38,7 @@ with transcript.open("w") as output:
     for role, text in [("user", "Run quiet local tools."), ("assistant", "WORKING_DOTS_READY")]:
         output.write(json.dumps(dict(type=role, uuid=str(uuid.uuid4()), sessionId=sid,
             message=dict(role=role, content=[dict(type="text", text=text)]))) + "\n")
-state.write_text(json.dumps({"verify-session": {"state": "idle", "at": int(time.time())}}))
+state.write_text(json.dumps({"verify-session": {"state": "done", "at": int(time.time())}}))
 print("Claude Code protocol fixture\nWORKING_DOTS_READY\n❯ ", flush=True)
 while not (home / "start-working-proof").exists():
     time.sleep(0.1)

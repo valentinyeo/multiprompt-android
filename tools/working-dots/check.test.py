@@ -1,3 +1,7 @@
+import os
+import subprocess
+import sys
+import tempfile
 import copy
 import importlib.util
 from pathlib import Path
@@ -17,6 +21,22 @@ class WorkingEvidenceTest(unittest.TestCase):
         self.journey = [dict(event="clock", at=0, device_at=0), dict(event="lock", at=55000),
             dict(event="unlock", at=58000), dict(event="disconnect", at=90000, authentications=1),
             dict(event="reconnected", at=92000, authentications=2)]
+
+    def test_fixture_ready_has_receipts_and_real_done_state(self):
+        source = Path(os.environ.get("WORKING_CONSOLE", Path(__file__).with_name("console.py")))
+        with tempfile.TemporaryDirectory() as folder:
+            process = subprocess.Popen([sys.executable, str(source)], env={**os.environ, "HOME": folder}, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            try:
+                output, error = process.communicate(timeout=1)
+            except subprocess.TimeoutExpired:
+                process.terminate()
+                output, error = process.communicate(timeout=5)
+            self.assertIn("WORKING_DOTS_READY", output, error)
+            home = Path(folder)
+            self.assertTrue((home / "working-events.jsonl").is_file(), "Receipt stream missing at readiness")
+            import json
+            state = json.loads((home / ".local/state/multiprompt/tab-state.json").read_text())
+            self.assertEqual(state["verify-session"]["state"], "done")
 
     def test_complete_quiet_turn(self):
         self.assertEqual(check.verify(self.samples, self.server, self.journey)["tools"], 135)
