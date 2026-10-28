@@ -18,4 +18,5 @@ rm -rf "$ANDROID_HOME/emulator"
 mv "$RUNNER_TEMP/android-proof-sdk/emulator" "$ANDROID_HOME/emulator"
 "$ANDROID_HOME/emulator/emulator" -version | tee "$RUNNER_TEMP/android-proof/emulator-version.txt"
 grep -F 'Android emulator version 35.6.11' "$RUNNER_TEMP/android-proof/emulator-version.txt"
+"$ANDROID_HOME/emulator/qemu/linux-x86_64/qemu-system-x86_64" -version
 echo PINNED_EMULATOR_READY

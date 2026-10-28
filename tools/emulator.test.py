@@ -35,7 +35,7 @@ class EmulatorProofTest(unittest.TestCase):
         action = source('.github/actions/android-proof/action.yml')
         for option in ('api-level: 35', 'ram-size: 2048M', '-gpu swiftshader_indirect', 'uses: actions/cache@v4',
                        'disable-animations: true', '-no-snapshot', '-Vulkan',
-                       'test -r /dev/kvm && test -w /dev/kvm', 'kernel.txt', 'crashes', 'sdk.sh', 'pre-emulator-launch-script:', 'emulator.sh'):
+                       'test -r /dev/kvm && test -w /dev/kvm', 'kernel.txt', 'crashes', 'gdb libpulse0', 'sdk.sh', 'pre-emulator-launch-script:', 'emulator.sh'):
             self.assertIn(option, action)
         self.assertNotIn('PerSourcePenalties', source('.claude/skills/verify-multiprompt-android/scripts/fixture.sh'))
         self.assertNotIn('-gpu off', action)
@@ -161,6 +161,9 @@ fi
                     entry = zipfile.ZipInfo('emulator/emulator')
                     entry.external_attr = 0o100755 << 16
                     output.writestr(entry, '#!/usr/bin/env bash\necho "Android emulator version 35.6.11.0"\n')
+                    entry = zipfile.ZipInfo('emulator/qemu/linux-x86_64/qemu-system-x86_64')
+                    entry.external_attr = 0o100755 << 16
+                    output.writestr(entry, '#!/usr/bin/env bash\necho "QEMU loaded"\n')
                 checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
                 script = path / 'emulator.sh'
                 script.write_text(re.sub(r'checksum=[a-f0-9]{64}', f'checksum={checksum}', source('.github/actions/android-proof/emulator.sh')))

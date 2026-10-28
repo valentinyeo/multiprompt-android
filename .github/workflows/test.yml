@@ -54,7 +54,7 @@ jobs:
 
       - name: Reject the original unshared emulator lifecycle
         run: |
-          for ref in 7bc75242 3795895; do
+          for ref in 7bc75242 3795895 48bc00c; do
             if python3 -B tools/emulator.test.py --config-only --ref "$ref" > /tmp/emulator-red.txt 2>&1; then cat /tmp/emulator-red.txt; exit 1; fi
             cat /tmp/emulator-red.txt
             grep -F 'AssertionError' /tmp/emulator-red.txt

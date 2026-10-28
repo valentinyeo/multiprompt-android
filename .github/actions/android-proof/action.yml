@@ -26,7 +26,7 @@ runs:
         PROOF_SCRIPT: ${{ inputs.script }}
         PROOF_TARGET: ${{ inputs.target }}
       run: |
-        sudo apt-get update && sudo apt-get install -y gdb
+        sudo apt-get update && sudo apt-get install -y gdb libpulse0
         bash "${{ github.action_path }}/sdk.sh"
         test -c /dev/kvm
         echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
