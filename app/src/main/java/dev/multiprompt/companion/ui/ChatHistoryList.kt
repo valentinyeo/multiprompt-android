@@ -44,7 +44,8 @@ import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.reader.ChatReactions
 import dev.multiprompt.companion.reader.ReaderStatus
-import dev.multiprompt.companion.ssh.ClaudeQuestion
+import dev.multiprompt.companion.ssh.TmuxText
+import dev.multiprompt.companion.reader.PendingQuestion
 import dev.multiprompt.companion.reader.ChatHistoryMessage
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.SessionReaderConnection
@@ -78,9 +79,7 @@ internal fun ChatHistoryView(
     val messages = state.history.displayMessages(reader.screenOutput, agent, reader.sentRecord, System.currentTimeMillis())
     SideEffect { history.awaitingMessages(messages.any { it.pending }) }
     DisposableEffect(history) { onDispose { history.awaitingMessages(false) } }
-    val question = remember(reader.screenOutput, agent) {
-        if (agent == AgentKind.CLAUDE) ClaudeQuestion.parse(reader.screenOutput) else null
-    }
+    val questions = state.history.pendingQuestions
     Column(modifier.fillMaxSize()) {
         if (state.retrying) {
             Text(
@@ -106,11 +105,12 @@ internal fun ChatHistoryView(
             sunlight = sunlight,
             replyGate = replyGate,
             onReply = onReply,
-            question = question,
+            questions = questions,
             questionError = reader.actionError,
-            onQuestionChoice = if (!reader.sending && reader.status == ReaderStatus.Live) { option ->
-                question != null && connection.answerQuestion(question, option).also { if (it) onSessionUsed() }
+            onQuestionChoice = if (!reader.sending && reader.status == ReaderStatus.Live) { question, choices, other ->
+                connection.answerQuestion(question, choices, other).also { if (it) onSessionUsed() }
             } else null,
+            questionScreen = reader.screenOutput,
             sessionName = sessionName,
             unreadMessageKey = unreadMessageKey,
             onMarkUnread = onMarkUnread,
@@ -137,9 +137,10 @@ internal fun ChatHistoryList(
     sunlight: Boolean = false,
     replyGate: ReplySwipeGate = remember { ReplySwipeGate() },
     onReply: (String, Boolean) -> Unit = { _, _ -> },
-    question: ClaudeQuestion? = null,
+    questions: List<PendingQuestion> = emptyList(),
+    questionScreen: String = "",
     questionError: String? = null,
-    onQuestionChoice: ((Int) -> Boolean)? = null,
+    onQuestionChoice: ((PendingQuestion, Set<Int>, String) -> Boolean)? = null,
     onNearTop: (Boolean) -> Unit = {},
     listState: LazyListState = rememberLazyListState(),
     followRequest: Int = 0,
@@ -160,7 +161,7 @@ internal fun ChatHistoryList(
     var pendingJump by remember { mutableStateOf<ReplyJump?>(null) }
     var highlightedKey by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
-    LaunchedEffect(pendingJump, presentation.messages, hasOlder, loaded, question, working) {
+    LaunchedEffect(pendingJump, presentation.messages, hasOlder, loaded, questions, working) {
         val request = pendingJump ?: return@LaunchedEffect
         val visible = presentation.messages
         val keys = visible.map { it.key }
@@ -170,7 +171,7 @@ internal fun ChatHistoryList(
         val source = ReplyQuote.sourceIndex(texts, before, request.reply.quoted)
         if (source != null) {
             highlightedKey = keys[source]
-            listState.scrollToItem(keys.lastIndex - source + (if (question != null) 1 else 0) + (if (working) 1 else 0))
+            listState.scrollToItem(keys.lastIndex - source + questions.size + (if (working) 1 else 0))
             pendingJump = null
         } else if (before < 0 || (!hasOlder && loaded)) {
             pendingJump = null
@@ -185,7 +186,7 @@ internal fun ChatHistoryList(
     }
     val atBottom = !listState.canScrollBackward && pendingJump == null
     val newest = messages.lastOrNull()
-    LaunchedEffect(newest?.key, newest?.text, newest?.pending, question) {
+    LaunchedEffect(newest?.key, newest?.text, newest?.pending, questions) {
         if (atBottom) listState.scrollToItem(0)
     }
     LaunchedEffect(followRequest) {
@@ -207,9 +208,11 @@ internal fun ChatHistoryList(
         contentPadding = if (LocalReaderStyle.current) androidx.compose.foundation.layout.PaddingValues(top = ReaderFloatingInset + WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = ReaderMessageSpacing + bottomPadding) else androidx.compose.foundation.layout.PaddingValues(bottom = bottomPadding),
     ) {
         if (working) item(key = "working") { WorkingDots() }
-        if (question != null) {
-            item(key = "active-question") {
-                QuestionChoices(question, enabled = onQuestionChoice != null, error = questionError) { onQuestionChoice?.invoke(it) == true }
+        questions.asReversed().forEach { question ->
+            item(key = "question:${question.callId}:${question.index}") {
+                QuestionChoices(question, enabled = onQuestionChoice != null && question.isVisible(questionScreen), error = questionError) { choices, other ->
+                    onQuestionChoice?.invoke(question, choices, other) == true
+                }
             }
         }
         itemsIndexed(presentation.messages.asReversed(), key = { _, message -> message.key }, contentType = { _, message -> message.role }) { index, message ->

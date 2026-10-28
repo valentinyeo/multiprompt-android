@@ -438,36 +438,46 @@ if [[ "$feature" == chat-working.md ]]; then
     exit 0
 fi
 if [[ "$feature" == chat-choices.md ]]; then
-    wait_for_text 'Should the two daily jobs keep running, or pause until you top up?'
-    shot plain-numbered-reply
-    python3 - "$EVIDENCE/current.xml" <<'PLAIN'
+    wait_for_text 'Which route should we use?'
+    shot structured-question-before
+    tap_node text-containing 'Use the current account'
+    tap_text 'Submit answer'
+    wait_receipt 'VERIFY_QUESTION_KEY:2'
+    wait_for_text 'What should we keep?'
+    shot multiple-question-before
+    tap_node text-containing 'History'
+    tap_node text-containing 'Settings'
+    tap_node field Other
+    adb shell input text Custom
+    adb shell input keyevent KEYCODE_BACK
+    tap_text 'Submit answer'
+    wait_receipt 'VERIFY_MULTI:{"other": "Custom", "selected": [0, 1]}'
+    wait_for_text 'Structured questions answered.'
+    wait_for_absence 'Submit answer'
+    shot structured-questions-after
+    adb shell input swipe 190 300 190 680 500
+    wait_for_text 'First route'
+    shot ordinary-lists
+    python3 - "$EVIDENCE/current.xml" <<'PLAINLISTS'
 import sys
 import xml.etree.ElementTree as ET
-nodes = list(ET.parse(sys.argv[1]).getroot().iter('node'))
-for text in ['1.', '2.', '3.', 'How much money is on the account?',
-             'Should the two daily jobs keep running, or pause until you top up?',
-             'Should I merge the leaderboard into all ads?']:
-    matches = [node for node in nodes if node.get('text') == text]
-    assert matches and all(node.get('clickable') == 'false' for node in matches), text
-assert not any(node.get('text') in ['A', 'B', 'C'] for node in nodes)
-print('PLAIN_NUMBERED_REPLY_COMPLETE_AND_READ_ONLY')
-PLAIN
-    fill 'Message verify-session' Continue
-    tap_desc 'Send prompt'
-    wait_receipt 'VERIFY_RECEIVED:Continue'
-    wait_for_text '2: Use the current account'
-    shot question-before
-    tap_text '2: Use the current account'
-    wait_receipt 'VERIFY_QUESTION_KEY:2'
-    wait_for_text 'Question answered: Use the current account'
-    shot question-after
+root = ET.parse(sys.argv[1]).getroot()
+parents = {child: parent for parent in root.iter() for child in parent}
+for text in ['First route', 'Second route', 'Ordinary bullet']:
+    node = next(node for node in root.iter('node') if node.get('text') == text)
+    while node is not None:
+        assert node.get('clickable') != 'true', (text, node.attrib)
+        node = parents.get(node)
+assert any(node.get('text') == '1.' for node in root.iter('node'))
+print('ORDINARY_LISTS_HAVE_NO_ANSWER_CARDS')
+PLAINLISTS
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt"
     python3 - "$EVIDENCE/receipts.txt" <<'CHOICES'
 import sys
 from pathlib import Path
 rows = Path(sys.argv[1]).read_text().splitlines()
-assert rows == ["VERIFY_RECEIVED:Continue", "VERIFY_QUESTION_KEY:2"], rows
-print("PLAIN LIST AND STRUCTURED QUESTION KEY VERIFIED")
+assert rows == ["VERIFY_QUESTION_KEY:2", 'VERIFY_MULTI:{"other": "Custom", "selected": [0, 1]}'], rows
+print("STRUCTURED_QUESTION_SENDS_VERIFIED")
 CHOICES
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt"
     printf 'FEATURE VERIFIED: %s\n' "$feature"

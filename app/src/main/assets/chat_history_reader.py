@@ -581,6 +581,53 @@ def tool_events(event, agent, search=False):
     return rows
 
 
+def question_events(event, agent):
+    if not isinstance(event, dict):
+        return []
+    if agent == "claude":
+        if event.get("type") not in ("user", "assistant") or any(event.get(key) for key in
+                ("isMeta", "isSidechain", "isCompactSummary", "isVisibleInTranscriptOnly")):
+            return []
+        parts = (event.get("message") or {}).get("content", [])
+        parts = parts if isinstance(parts, list) else []
+    else:
+        parts = [event.get("payload")] if event.get("type") == "response_item" else []
+    rows = []
+    for part in parts:
+        if not isinstance(part, dict):
+            continue
+        kind = part.get("type")
+        call = kind in ("tool_use", "function_call")
+        result = kind in ("tool_result", "function_call_output")
+        identity = part.get("id") if agent == "claude" and call else part.get("tool_use_id") if agent == "claude" else part.get("call_id")
+        if not isinstance(identity, str) or not identity:
+            continue
+        if result:
+            rows.append(dict(role="assistant", id=identity, timestamp=event.get("timestamp", ""),
+                             text="", questionResult=identity))
+        elif call and part.get("name") in ("AskUserQuestion", "request_user_input"):
+            value = part.get("input", part.get("arguments", {}))
+            if isinstance(value, str):
+                try:
+                    value = json.loads(value)
+                except ValueError:
+                    continue
+            if not isinstance(value, dict) or not isinstance(value.get("questions"), list) or not value["questions"]:
+                continue
+            questions = [dict(q, options=q.get("options") or []) if agent == "codex" and isinstance(q, dict) else q
+                         for q in value["questions"]]
+            if not all(isinstance(q, dict) and isinstance(q.get("question"), str) and q["question"].strip()
+                       and isinstance(q.get("options"), list) and (q["options"] or agent == "codex")
+                       and all(isinstance(o, dict) and isinstance(o.get("label"), str) and o["label"].strip()
+                               and isinstance(o.get("description", ""), str) for o in q["options"])
+                       and isinstance(q.get("header", ""), str) and isinstance(q.get("multiSelect", False), bool)
+                       for q in questions):
+                continue
+            rows.append(dict(role="assistant", id=identity, timestamp=event.get("timestamp", ""), text="",
+                             question=dict(provider=agent, questions=questions)))
+    return rows
+
+
 def pair_tool_rows(rows):
     calls = {row["id"]: row for row in rows if row["role"] == "tool"}
     inputs = {identity: row["detail"] for identity, row in calls.items()}
@@ -1126,6 +1173,8 @@ def response(q, source=None, as_owner=False):
             if message is None and q.get("settlement"):
                 message = settlement_event(event, agent)
             messages = ([message] if message else []) + tool_events(event, agent)
+            if q.get("questions"):
+                messages.extend(question_events(event, agent))
             if q.get("source_offsets"):
                 for row in messages:
                     row.update(offset=consumed, end=consumed + len(raw))

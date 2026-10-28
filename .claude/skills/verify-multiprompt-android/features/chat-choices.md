@@ -1,26 +1,24 @@
-# Plain reply lists and real questions
+# Structured questions and ordinary lists
 
 Dispatch `verify.yml` with `feature=chat-choices.md` on the pushed branch. No local app or Gradle runs.
 
-The isolated SSH/tmux fixture uses Python, not an AI provider. Normal transcript discovery reads its Claude-format transcript. The debug journey does not inject preferences, reader state or transport methods.
+The isolated SSH/tmux Python fixture writes real structured AskUserQuestion events. Transcript discovery reads the events through SSH; prose never creates cards.
 
 ## Journey
 
-1. Import the generated key and trust the displayed fingerprint through the normal host screens.
-2. Open `verify-session`. Capture `plain-numbered-reply`. Require original numbered markers, all three complete list items, no A/B/C badges and no clickable list items. The second item must include “or pause until you top up?”.
-3. Send `Continue` through the normal composer. Require exactly `VERIFY_RECEIVED:Continue` at the independent console.
-4. Capture `question-before`. Tap the live Claude-style question option **2: Use the current account**.
-5. Require raw-key receipt `VERIFY_QUESTION_KEY:2`, resulting transcript **Question answered: Use the current account**, and `question-after`.
-6. Require exactly those two receipts. No inferred prose answer, pasted question label, duplicate send or extra Enter may reach the console.
+1. Import the generated key and trust the displayed fingerprint through normal host screens.
+2. Open `verify-session`. Check exact question, header, labels and descriptions. Select **Use the current account**, then **Submit answer**. Require raw-key receipt `VERIFY_QUESTION_KEY:2`.
+3. For **What should we keep?**, select **History** and **Settings**, type **Custom** into **Other**, then submit. Require `VERIFY_MULTI:{"other": "Custom", "selected": [0, 1]}`.
+4. Require **Structured questions answered.** and no remaining answer card.
+5. Capture ordinary numbered and bulleted lists. Require original markers and complete text without clickable items.
+6. Require exactly those two receipts. No label guessing, duplicate sends or extra Enter.
 
 Inspect PNG/XML pairs, receipts, SSH logs, final tmux capture and driver transcript.
 
-## Verify the published APK
+## Published APK
 
-Dispatch `verify.yml` with `feature=chat-choices.md`, `release_choices=true`, and `expected_commit` set to the published manifest commit. The workflow downloads the exact signed APK and verifies its hash, size, package, version and certificate. Same-signer instrumentation seeds an isolated offline account session. An emulator proxy blocks account traffic. This proves the released reader and real SSH transport, not production sign-in. No production app code or APK bytes change. The journey retains a recording and the same PNG/XML pairs and independent answer receipts.
+Dispatch `verify.yml` with `feature=chat-choices.md`, `release_choices=true`, and `expected_commit` matching the public manifest. The workflow verifies exact APK hash, size, package, version and certificate. Same-signer instrumentation seeds only an isolated offline session. An emulator proxy blocks account traffic. Production app bytes and sign-in behavior stay unchanged.
 
-Before merge, use `candidate=true` to build and test the signed branch APK. Leave `candidate=false` for released-build acceptance.
+Before merge use `candidate=true`; after release use `candidate=false`.
 
-`ChatChoicesTest` covers complete read-only numbered and lettered prose in reader/classic themes, plus structured question retries and raw-key transport. `ClaudeQuestionTest` rejects prose lists, stale prompts, unrelated menus and invalid keys. Structured Codex question events are not currently supported; this change does not guess them from prose.
-
-Desktop follows the same rule in https://app.hypertask.ai/detail/project-2060/1063.
+JVM tests cover plain lists, exact labels and descriptions, single/multiple selection, Other, retries, stale questions and provider-specific key transport. Python tests cover structured Claude/Codex event parsing. Desktop counterpart: https://app.hypertask.ai/detail/project-2060/1063.
