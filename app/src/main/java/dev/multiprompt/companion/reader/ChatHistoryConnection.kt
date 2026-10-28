@@ -41,6 +41,7 @@ class ChatHistoryConnection(
     @Volatile private var resyncing: CompletableDeferred<Unit>? = null
     @Volatile private var nearTop = false
     @Volatile private var awaitingMessages = false
+    @Volatile private var deliveryIds: List<String> = emptyList()
     private val cacheKey = listOf(host.id, host.hostname, host.port.toString(), host.username,
         identity.agent.name, identity.tmux, identity.cwd).joinToString("\u0000")
 
@@ -53,6 +54,12 @@ class ChatHistoryConnection(
         if (value == awaitingMessages) return
         awaitingMessages = value
         if (value) wake.trySend(Unit)
+    }
+
+    fun deliveryIds(ids: List<String>) {
+        if (deliveryIds == ids) return
+        deliveryIds = ids
+        wake.trySend(Unit)
     }
 
     fun resync(): CompletableDeferred<Unit> = CompletableDeferred<Unit>().also {
@@ -80,7 +87,7 @@ class ChatHistoryConnection(
                                 val before = if (nearTop && !wasOlder && !current.more) current.start else 0
                                 requestId++
                                 val page = ChatHistoryProtocol.parse(
-                                    exchange(ChatHistoryProtocol.request(requestId, identity, current, before)),
+                                    exchange(ChatHistoryProtocol.request(requestId, identity, current, before, deliveryIds)),
                                     requestId, identity,
                                 ) ?: error("History unavailable")
                                 val next = current.apply(page)

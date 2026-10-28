@@ -108,7 +108,7 @@ class SessionReaderConnection(
     }
 
     suspend fun resyncChat() {
-        _state.update { it.copy(sentPrompts = emptyList(), sentRecord = emptyList()) }
+        _state.update { it.copy(sentPrompts = emptyList(), sentRecord = it.sentRecord.filter { record -> record.messageId.isNotEmpty() }) }
         historyConnection?.resync()?.await()
     }
 
@@ -154,8 +154,8 @@ class SessionReaderConnection(
         return sent
     }
 
-    fun cancelQueued(messageId: String): Boolean {
-        val record = _state.value.sentRecord.firstOrNull { it.messageId == messageId } ?: return false
+    fun cancelQueued(messageId: String, held: List<QueuedMessages.SentPrompt> = emptyList()): Boolean {
+        val record = (_state.value.sentRecord + held).firstOrNull { it.messageId == messageId } ?: return false
         return requests.trySend(Request.Cancel(record)).isSuccess
     }
 
@@ -388,15 +388,15 @@ class SessionReaderConnection(
                         ) else {
                             val receipt = repository.heldPrompt(client, historyScript, tmuxSessionName, request.record, cancel = false)
                             _state.update { current -> current.copy(sentRecord = current.sentRecord.map { record ->
-                                if (record.messageId == request.record.messageId) record.copy(acknowledged = true,
+                                if (record.messageId == request.record.messageId) record.copy(delivery = QueuedMessages.Delivery.valueOf(receipt.getString("state").uppercase()),
                                     sid = receipt.getString("sid"), inode = receipt.getLong("inode"), afterOffset = receipt.getLong("offset")) else record
                             }) }
                         }
                         is Request.Cancel -> {
                             repository.heldPrompt(client, historyScript, tmuxSessionName, request.record, cancel = true)
-                            _state.update { current -> current.copy(sentRecord = current.sentRecord.map { record ->
-                                if (record.messageId == request.record.messageId) record.copy(cancelled = true) else record
-                            }) }
+                            _state.update { current -> current.copy(sentRecord = current.sentRecord.filterNot {
+                                it.messageId == request.record.messageId
+                            } + request.record.copy(delivery = QueuedMessages.Delivery.CANCELLED)) }
                         }
                         is Request.Action -> repository.performAction(
                             client,

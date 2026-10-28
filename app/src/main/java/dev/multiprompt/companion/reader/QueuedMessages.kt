@@ -6,12 +6,13 @@ import java.time.Instant
 import java.time.format.DateTimeParseException
 
 object QueuedMessages {
+    enum class Delivery { SENDING, QUEUED, SUBMITTED, DELIVERED, CANCELLED }
+
     data class SentPrompt(
         val text: String,
         val sentAtMillis: Long,
         val messageId: String = "",
-        val acknowledged: Boolean = false,
-        val cancelled: Boolean = false,
+        val delivery: Delivery = Delivery.SENDING,
         val sid: String = "",
         val inode: Long = 0,
         val afterOffset: Long = 0,

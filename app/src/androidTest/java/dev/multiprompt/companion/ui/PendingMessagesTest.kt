@@ -23,6 +23,7 @@ import dev.multiprompt.companion.MultipromptApplication
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.reader.ChatHistory
+import dev.multiprompt.companion.reader.QueuedMessages
 import dev.multiprompt.companion.reader.ChatHistoryConnection
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import dev.multiprompt.companion.reader.ChatHistoryState
@@ -122,6 +123,11 @@ class PendingMessagesTest {
             )))
         }
         compose.onNodeWithText("Send while busy").performClick()
+        compose.runOnIdle {
+            reader.value = reader.value.copy(sentRecord = reader.value.sentRecord.map {
+                it.copy(delivery = QueuedMessages.Delivery.QUEUED, sid = "proof", inode = 1, afterOffset = 100)
+            })
+        }
         val pendingPixels = pixels()
         savePixels("pending", pendingPixels)
         val pending = contrast(pendingPixels)
@@ -143,7 +149,7 @@ class PendingMessagesTest {
         if (::connection.isInitialized) connection.close()
     }
 
-    @Test fun exactAcceptanceRestoresBrightnessWithinOneSecondBeforeUserTranscript() {
+    @Test fun hostReceiptRestoresBrightnessWithinOneSecondBeforeUserTranscript() {
         harness()
         val normal = send()
         compose.runOnIdle {
@@ -154,8 +160,9 @@ class PendingMessagesTest {
         var acceptedAt = 0L
         compose.runOnIdle {
             acceptedAt = SystemClock.elapsedRealtime()
-            applyRow(JSONObject().put("role", "assistant").put("text", "").put("timestamp", Instant.now().toString())
-                .put("settlement", JSONObject().put("operation", "remove").put("content", prompt)))
+            val token = reader.value.sentRecord.single().messageId
+            applyRow(JSONObject().put("role", "status").put("deliveries", org.json.JSONArray()
+                .put(JSONObject().put("id", token).put("state", "delivered"))))
         }
         val acceptedPixels = pixels()
         val accepted = contrast(acceptedPixels)

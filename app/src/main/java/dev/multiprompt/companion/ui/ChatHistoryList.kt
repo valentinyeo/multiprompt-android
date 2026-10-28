@@ -76,7 +76,10 @@ internal fun ChatHistoryView(
     val history = remember(connection, agent, workingDirectory) { connection.chatHistory(agent, workingDirectory) }
     val state by history.state.collectAsState()
     val messages = state.history.displayMessages(reader.screenOutput, agent, reader.sentRecord, System.currentTimeMillis())
-    SideEffect { history.awaitingMessages(messages.any { it.pending }) }
+    SideEffect {
+        history.awaitingMessages(messages.any { it.pending })
+        history.deliveryIds(reader.sentRecord.map { it.messageId }.filter { it.isNotEmpty() })
+    }
     DisposableEffect(history) { onDispose { history.awaitingMessages(false) } }
     val question = remember(reader.screenOutput, agent) {
         if (agent == AgentKind.CLAUDE) ClaudeQuestion.parse(reader.screenOutput) else null
@@ -116,7 +119,7 @@ internal fun ChatHistoryView(
             onMarkUnread = onMarkUnread,
             onReaction = onReaction,
             onCancelPending = if (!reader.sending && reader.status == ReaderStatus.Live) { target ->
-                connection.cancelQueued(target.requestId)
+                connection.cancelQueued(target.requestId, state.history.held)
             } else null,
             collapsePendingReactions = reader.actionError == null,
             working = reader.isWorking(agent),
@@ -232,7 +235,7 @@ internal fun ChatHistoryList(
                         { emoji -> onReaction(message, emoji) }
                     } else null,
                     delivery = message.delivery,
-                    onCancel = if (message.role == "user" && message.pending && message.requestId.isNotEmpty() && onCancelPending != null) {
+                    onCancel = if (message.role == "user" && message.delivery == "Queued" && message.requestId.isNotEmpty() && onCancelPending != null) {
                         { onCancelPending(message) }
                     } else null)
             }

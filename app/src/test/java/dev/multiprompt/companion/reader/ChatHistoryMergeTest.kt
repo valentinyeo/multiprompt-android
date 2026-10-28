@@ -177,8 +177,8 @@ class ChatHistoryMergeTest {
     }
     @Test
     fun heldMessagesUseReceiptBoundaryAndKeepDuplicateIdentities() {
-        val first = QueuedMessages.SentPrompt("same", 1, "first", acknowledged = true, sid = "sid", inode = 9, afterOffset = 100)
-        val second = first.copy(messageId = "second", sentAtMillis = 2, cancelled = true)
+        val first = QueuedMessages.SentPrompt("same", 1, "first", delivery = QueuedMessages.Delivery.QUEUED, sid = "sid", inode = 9, afterOffset = 100)
+        val second = first.copy(messageId = "second", sentAtMillis = 2, delivery = QueuedMessages.Delivery.CANCELLED)
         val old = ChatHistoryProtocol.Row("user", "same", "old", "", 1, 20)
         val history = ChatHistory(sid = "sid", inode = 9, rows = listOf(old))
         val waiting = history.displayMessages("", AgentKind.CLAUDE, listOf(first, second), 3)
@@ -196,7 +196,7 @@ class ChatHistoryMergeTest {
 
     @Test
     fun queueAndOtherSessionAreNotDeliveryReceipts() {
-        val prompt = QueuedMessages.SentPrompt("target", 1, "target-id", acknowledged = true, sid = "sid", inode = 9, afterOffset = 100)
+        val prompt = QueuedMessages.SentPrompt("target", 1, "target-id", delivery = QueuedMessages.Delivery.QUEUED, sid = "sid", inode = 9, afterOffset = 100)
         val queue = ChatHistoryProtocol.Row("user", "target", "queued", "", 100, 150, queued = true)
         val history = ChatHistory(sid = "sid", inode = 9, rows = listOf(queue))
         assertEquals("Queued", history.displayMessages("", AgentKind.CLAUDE, listOf(prompt), 2).last().delivery)

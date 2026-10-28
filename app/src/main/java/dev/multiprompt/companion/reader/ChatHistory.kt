@@ -26,6 +26,8 @@ data class ChatHistory(
     val probe: String = "",
     val more: Boolean = false,
     val rows: List<Row> = emptyList(),
+    val deliveries: Map<String, QueuedMessages.Delivery> = emptyMap(),
+    val held: List<QueuedMessages.SentPrompt> = emptyList(),
 ) {
     val messages: List<ChatHistoryMessage> by lazy {
         val grouped = LinkedHashMap<String, ChatHistoryMessage>()
@@ -54,10 +56,10 @@ data class ChatHistory(
             ChatHistoryMessage("@queued:$text", "user", text, "", 0, 0,
                 pending = !QueuedMessages.accepted(text, sentAt, rows))
         }
-        val own = sent.filter { it.messageId.isNotEmpty() }
+        val own = (sent.filter { it.messageId.isNotEmpty() } + held).distinctBy { it.messageId }.sortedBy { it.sentAtMillis }
         val delivered = mutableSetOf<String>()
         val current = messages.map { message ->
-            val record = own.firstOrNull { prompt -> prompt.messageId !in delivered && !prompt.cancelled && prompt.sid == sid && prompt.inode == inode &&
+            val record = own.firstOrNull { prompt -> prompt.messageId !in delivered && prompt.delivery != QueuedMessages.Delivery.CANCELLED && deliveries[prompt.messageId] != QueuedMessages.Delivery.CANCELLED && prompt.sid == sid && prompt.inode == inode &&
                 message.role == "user" && message.offset >= prompt.afterOffset &&
                 QueuedMessages.normalize(message.text) == QueuedMessages.normalize(prompt.text) &&
                 rows.any { it.offset == message.offset && it.role == "user" && !it.queued }
@@ -68,9 +70,15 @@ data class ChatHistory(
             }
         }
         val managed = own.filter { it.messageId !in delivered }.map { prompt ->
+            val state = if (prompt.delivery == QueuedMessages.Delivery.CANCELLED) prompt.delivery else deliveries[prompt.messageId] ?: prompt.delivery
             ChatHistoryMessage("@held:${prompt.messageId}", "user", prompt.text, "", 0, 0,
-                requestId = prompt.messageId, pending = !prompt.cancelled,
-                delivery = if (prompt.cancelled) "Cancelled" else if (prompt.acknowledged) "Queued" else "Sending")
+                requestId = prompt.messageId, pending = state !in setOf(QueuedMessages.Delivery.CANCELLED, QueuedMessages.Delivery.DELIVERED),
+                delivery = when (state) {
+                    QueuedMessages.Delivery.CANCELLED -> "Cancelled"
+                    QueuedMessages.Delivery.DELIVERED -> "Delivered"
+                    QueuedMessages.Delivery.QUEUED -> "Queued"
+                    QueuedMessages.Delivery.SENDING, QueuedMessages.Delivery.SUBMITTED -> "Sending"
+                })
         }
         return current + echoes + managed
     }
@@ -84,9 +92,9 @@ data class ChatHistory(
         val retained = if (page.mode == "tail") emptyList() else rows
         val merged = (retained + page.rows).associateBy { Pair(it.offset, it.role) }.values.sortedBy { it.offset }
         return if (page.mode == "older") {
-            copy(start = page.oldest, rows = merged)
+            copy(start = page.oldest, rows = merged, deliveries = deliveries + page.deliveries, held = page.held)
         } else {
-            ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged)
+            ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged, (if (sameSource) deliveries else emptyMap()) + page.deliveries, page.held)
         }
     }
 }
