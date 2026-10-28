@@ -9,6 +9,8 @@
 - Stable reply identity after restart.
 - Unmatched reaction lines remain visible.
 - Existing composer drafts stay unchanged.
+- Mixed user messages keep words without reaction transport.
+- Padded reaction-only messages and lone acknowledgements stay hidden.
 
 ## How to get to it (user POV)
 
@@ -22,6 +24,8 @@ The existing host-import and fingerprint comparison run first. The fixture provi
 The driver keeps a draft, long-presses the first reply, checks all three choices, and selects 👍. It requires one quoted transport receipt. UI XML and screenshots require one badge between the first and second replies, no new reaction bubble, no "Reaction received." answer bubble, and the unchanged draft. The driver restarts the app and repeats the target check. An unmatched transcript line must remain visible.
 
 For the negative control, set `app_ref` to the pre-feature commit. The same journey must fail with `IGSH975_REACTIONS_MISSING` after opening the real sheet.
+
+For signed reaction display proof, set `released_reactions=true` and `expected_commit` to the published commit. The same journey uses the signed release with an isolated account fixture, retaining a recording and mixed-message screenshots. Before merging, `candidate=true` builds a same-signer branch candidate; the existing published APK is the negative control.
 
 For release proof, set `app_ref` to the live manifest's commit. Set `update_baseline_run` to the earlier reaction run that retained a signed baseline APK. The source journey runs unchanged. Then the old signed app's normal update worker must offer the new release. The candidate must pass package, version, size, checksum and same-certificate checks. The workflow installs it on its own emulator and records the version.
 

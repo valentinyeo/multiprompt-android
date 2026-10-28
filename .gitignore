@@ -7,4 +7,5 @@ keystore.properties
 *.jks
 *.keystore
 /*.apk
+
 __pycache__/

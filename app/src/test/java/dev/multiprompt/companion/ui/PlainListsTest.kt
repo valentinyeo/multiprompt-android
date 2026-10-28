@@ -6,6 +6,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -17,7 +19,8 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [35], application = Application::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class PlainListsTest {
-    @get:Rule val compose = createComposeRule()
+    private val scheduler = TestCoroutineScheduler()
+    @get:Rule val compose = createComposeRule(effectContext = UnconfinedTestDispatcher(scheduler))
 
     @Test fun plainNumberedListsKeepTheirNumbersAndHaveNoCards() {
         compose.setContent {

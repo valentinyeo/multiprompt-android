@@ -29,12 +29,14 @@ Numbered PNG/XML pairs show action and result. The transcript records commands a
 - [Session settings](session-settings.md): full-screen split switches; saving is blocked without account OTP and a pulled layout.
 - [Session routing](session-routing.md): Inbox and swipe switching, typed and simulated dictated sends, independent SSH receipts.
 - [Chat choices](chat-choices.md): latest-reply option taps and live question number keys, with independent SSH/tmux receipts.
+- [Working dots on the signed release](chat-working.md): quiet tools, lock/unlock, real SSH reconnect, recording and timed visible-state samples. Uses `working-dots.yml`.
 - [Queued label](chat-queued.md): sent messages show Queued until taken in and answered, then return to normal.
 - [Native Claude controls](native-skills.md): slash filtering, shared plus entry, actual session model/effort and retained image picker.
 - [Claude reactions](chat-reactions.md): quoted sends, one badge, restart identity, fallback and signed update offers.
 - [Resync chat](chat-resync.md): the three-dot Resync chat entry clears stale Queued labels, keeps the draft, resends nothing.
 - [Session reader](session-reader.md): native output, Send, Enter/approve and Interrupt, with independent console receipts.
 - [Terminal](terminal.md): real SSH PTY/tmux fallback attachment.
+- [Launcher icon](launcher-icon.md): the robot launcher icon in the emulator's app drawer, with the themed-icon layer present in the built APK.
 
 ## Shipped but not automated
 

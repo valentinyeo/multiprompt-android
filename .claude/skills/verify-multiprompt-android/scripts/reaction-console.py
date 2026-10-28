@@ -25,6 +25,15 @@ if sys.argv[1:] == ["append-unmatched"]:
     event("user", FALLBACK, "unmatched")
     raise SystemExit(0)
 
+if sys.argv[1:] == ["append-mixed"]:
+    prefix = " ".join(("Same first words " + "for this example " * 8).split())[:80].rstrip()
+    wire = "👍 to: " + prefix + " [mp:6d8e353d25c5fe23]"
+    event("user", "My follow-up stays visible\n\n" + wire, "mixed")
+    event("assistant", "Answer to the follow-up", "msg_mixed_answer")
+    event("user", "\n" + wire + "\n", "padded-reaction")
+    event("assistant", "Padded reaction received.", "msg_padded_ack")
+    raise SystemExit(0)
+
 receipts = Path(sys.argv[1])
 CWD.mkdir(parents=True, exist_ok=True)
 os.chdir(CWD)

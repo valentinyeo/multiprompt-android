@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md) ;;
+    chat-working.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -65,7 +65,7 @@ doctor() {
         sleep 3
     done
     for attempt in {1..30}; do
-        if adb shell ping -c 1 -W 2 10.0.2.2 >/dev/null 2>&1; then return; fi
+        if "$scripts/ssh-ready.sh"; then return; fi
         printf 'Emulator network not up yet, attempt %s/30\n' "$attempt" | tee -a "$EVIDENCE/network-wait.txt"
         sleep 2
     done
@@ -83,10 +83,20 @@ wait_for_text() {
     return 1
 }
 fill() {
-    tap_node field "$1"
-    adb shell input keycombination 113 29
-    adb shell input text "$2"
-    adb shell input keyevent KEYCODE_BACK
+    local attempt
+    for attempt in 1 2 3; do
+        tap_node field "$1"
+        select_node focused-field "$1" >/dev/null || continue
+        adb shell input keycombination 113 29
+        adb shell input text "$2"
+        dump_ui
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value "$1" "${2//%s/ }"; then
+            adb shell input keyevent KEYCODE_BACK
+            return
+        fi
+    done
+    printf 'Field input did not match: %s\n' "$1" >&2
+    return 1
 }
 wait_for_absence() {
     local attempt
@@ -137,13 +147,59 @@ wait_receipt() {
     done
     return 1
 }
+launcher_icon() {
+    adb shell dumpsys package "$package" > "$EVIDENCE/package.txt"
+    sed -n 's/^[[:space:]]*versionName=//p' "$EVIDENCE/package.txt" | grep -Fx "$EXPECTED_VERSION"
+    adb shell input keyevent KEYCODE_HOME
+    sleep 3
+    dump_ui
+    if ! python3 "$scripts/launcher-icon.py" home "$EVIDENCE/current.xml"; then
+        local size w h x y attempt
+        size=$(adb shell wm size | grep -Eo '[0-9]+x[0-9]+' | tail -1)
+        w=${size%x*}
+        h=${size#*x}
+        adb shell input swipe $((w / 2)) $((h * 7 / 10)) $((w / 2)) $((h / 4)) 500
+        sleep 2
+        for attempt in {1..8}; do
+            dump_ui
+            if python3 "$scripts/launcher-icon.py" find "$EVIDENCE/current.xml"; then break; fi
+            adb shell input swipe $((w / 2)) $((h * 7 / 10)) $((w / 2)) $((h / 4)) 500
+            sleep 2
+        done
+        shot launcher-drawer
+        python3 "$scripts/launcher-icon.py" check "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-launcher-drawer.png" "$EVIDENCE/launcher-icon-crop.png" "$EVIDENCE/launcher-icon-result.json"
+        read -r x y < <(python3 "$scripts/launcher-icon.py" position "$EVIDENCE/current.xml")
+        adb shell input touchscreen draganddrop "$x" "$y" $((w / 2)) $((h / 2)) 1800
+        adb shell input keyevent KEYCODE_HOME
+        sleep 2
+    fi
+    shot launcher-home-icon
+    python3 "$scripts/launcher-icon.py" home "$EVIDENCE/current.xml"
+    python3 "$scripts/launcher-icon.py" check "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-launcher-home-icon.png" "$EVIDENCE/launcher-icon-crop.png" "$EVIDENCE/launcher-icon-result.json"
+    local aapt2
+    aapt2=$(find "$ANDROID_HOME/build-tools" -name aapt2 | sort | tail -1)
+    "$aapt2" dump xmltree --file res/mipmap-anydpi-v26/ic_launcher.xml "$VERIFY_APK" | tee "$EVIDENCE/adaptive-icon-tree.txt"
+    grep -q 'monochrome' "$EVIDENCE/adaptive-icon-tree.txt"
+    printf 'ANDROID_LAUNCHER_ROBOT_ICON_PROVEN\n'
+}
+
 adb shell settings put global hide_error_dialogs 1
 adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
-wait_for_text 'Sign in to see your servers, workspaces and sessions.'
-doctor
-dump_ui
-python3 "$scripts/ui.py" "$EVIDENCE/current.xml" version "$EXPECTED_VERSION" > "$EVIDENCE/version-label.txt"
-shot sign-in
+if [[ "$feature" == launcher-icon.md ]]; then
+    launcher_icon
+    exit 0
+fi
+if [[ "$package" == dev.multiprompt.companion ]]; then
+    [[ "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md ]]
+    wait_for_text Inbox
+    doctor
+else
+    wait_for_text 'Sign in to see your servers, workspaces and sessions.'
+    doctor
+    dump_ui
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" version "$EXPECTED_VERSION" > "$EVIDENCE/version-label.txt"
+    shot sign-in
+fi
 if [[ "$feature" == sign-in.md ]]; then
     tap_text 'Sign in'
     for attempt in {1..30}; do
@@ -156,13 +212,13 @@ if [[ "$feature" == sign-in.md ]]; then
     printf 'SIGN-IN HANDOFF VERIFIED; OTP completion is NOT verified\n'
     exit 0
 fi
-tap_text 'Use without account (debug)'
+if [[ "$package" == dev.multiprompt.companion.debug ]]; then tap_text 'Use without account (debug)'; fi
 wait_for_text Inbox
 tap_text All
 tap_desc 'Session list actions'
 tap_text Hosts
 tap_desc 'Add host'
-wait_for_text 'Add VPS'
+wait_for_text 'Save and connect'
 if [[ "$feature" == hosts-retired.md ]]; then
     retired=45.151.123.11
     sudo iptables -I OUTPUT -d "$retired" -p tcp -j REJECT --reject-with tcp-reset
@@ -376,6 +432,11 @@ if [[ "$feature" == sessions.md ]]; then
     exit 0
 fi
 tap_text verify-session
+if [[ "$feature" == chat-working.md ]]; then
+    wait_for_text WORKING_DOTS_READY
+    python3 tools/working-dots/drive.py
+    exit 0
+fi
 if [[ "$feature" == chat-choices.md ]]; then
     wait_for_text 'Which route should we use?'
     shot structured-question-before
@@ -660,6 +721,12 @@ if [[ "$feature" == chat-reactions.md ]]; then
     python3 "$scripts/reactions.py" check "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-reactions-fallback.png" fallback "$EVIDENCE/reactions-result.json"
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/reaction-receipts.txt"
     python3 "$scripts/reactions.py" transport "$EVIDENCE/reaction-receipts.txt" "$EVIDENCE/reaction-transport.json"
+    sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-reaction-work/a1b2c3d4-0975-4000-8000-000000000975.jsonl > "$EVIDENCE/reaction-transcript.jsonl"
+    sudo -u verifyssh python3 /home/verifyssh/reaction-console.py append-mixed
+    wait_for_text 'My follow-up stays visible'
+    wait_for_text 'Answer to the follow-up'
+    shot reactions-mixed
+    python3 "$scripts/reactions.py" mixed "$EVIDENCE/current.xml" "$EVIDENCE/reactions-mixed-result.json"
     sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-reaction-work/a1b2c3d4-0975-4000-8000-000000000975.jsonl > "$EVIDENCE/reaction-transcript.jsonl"
     printf 'ANDROID_REACTIONS_REAL_SSH_RESTART_PROVEN\n'
     exit 0

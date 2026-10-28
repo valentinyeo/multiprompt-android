@@ -87,7 +87,7 @@ class ReaderStyleTest {
         }
     }
 
-    @Test fun numberedListsKeepTheirOriginalMarkers() {
+    @Test fun numberedListsKeepTheirOriginalMarkersWithoutAnswerBadges() {
         compose.setContent {
             MultipromptTheme(readerStyle = true) {
                 MarkdownText("1. First option\n2. Second option\n27. Another option", ReaderTextSize, ReaderForeground, ReaderChoiceBlue)
@@ -96,5 +96,6 @@ class ReaderStyleTest {
         listOf("1.", "2.", "27.", "First option", "Second option", "Another option").forEach {
             compose.onNodeWithText(it).assertIsDisplayed()
         }
+        listOf(1, 2, 27).forEach { compose.onNodeWithTag("reader-choice-$it").assertDoesNotExist() }
     }
 }

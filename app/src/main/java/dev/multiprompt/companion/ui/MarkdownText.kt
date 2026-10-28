@@ -22,8 +22,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -77,12 +77,17 @@ fun MarkdownText(
                     color = color,
                     modifier = Modifier.padding(top = 4.dp),
                 )
-                is MdBlock.ListItem -> Row(Modifier.padding(start = (block.depth * 16).dp)) {
-                    Text(block.marker, fontSize = fontSize, lineHeight = lineHeight, color = color,
-                        modifier = Modifier.width(if (block.marker.length > 2) 28.dp else 18.dp))
-                    Text(markdownAnnotated(block.runs, linkColor, codeBg, codeFontFamily),
-                        fontSize = fontSize, lineHeight = lineHeight, color = color,
-                        modifier = Modifier.weight(1f))
+                is MdBlock.ListItem -> {
+                    Row(Modifier.padding(start = (block.depth * 16).dp)) {
+                        Text(block.marker, fontSize = fontSize, lineHeight = lineHeight, color = color,
+                            modifier = Modifier.width(if (block.marker.length > 2) 28.dp else 18.dp))
+                        Text(
+                            markdownAnnotated(block.runs, linkColor, codeBg, codeFontFamily),
+                            fontSize = fontSize, lineHeight = lineHeight,
+                            color = color,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
                 is MdBlock.Quote -> Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)
                     .then(if (LocalMaterial3.current) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp)) else Modifier)) {
