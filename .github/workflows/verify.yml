@@ -92,8 +92,8 @@ jobs:
         run: |
           original="$RUNNER_TEMP/crashing-emulator-workflows"
           mkdir -p "$original"
-          git fetch --depth=1 origin f0efaed
-          git show f0efaed:.github/workflows/verify.yml > "$original/verify.yml"
+          git fetch --depth=1 origin f0efaed8ebb9195fbc71da1021b5ef65acc8986e
+          git show f0efaed8ebb9195fbc71da1021b5ef65acc8986e:.github/workflows/verify.yml > "$original/verify.yml"
           if WORKFLOW_DIR="$original" node --test --test-name-pattern='session reader pins the pre-regression emulator binary' tools/workflow-inputs.test.js > "$RUNNER_TEMP/binary-red.txt" 2>&1; then
             cat "$RUNNER_TEMP/binary-red.txt"
             exit 1
