@@ -22,9 +22,11 @@ test('workflow run scripts use environment values for event and dispatch data', 
   }
 });
 
-test('session-reader isolates the crashing API 35 image without changing other journeys', () => {
+test('emulator journeys stay on the supported host, not the moving latest image', () => {
   const workflow = readFileSync(path.join(directory, 'verify.yml'), 'utf8');
-  assert.match(workflow, /EMULATOR_API_LEVEL: \$\{\{ inputs\.feature == 'session-reader\.md' && '34' \|\| '35' \}\}/);
-  assert.match(workflow, /"system-images;android-\$\{EMULATOR_API_LEVEL\};google_apis;x86_64"/);
-  assert.match(workflow, /api-level: \$\{\{ env\.EMULATOR_API_LEVEL \}\}/);
+  assert.match(workflow, /runs-on: ubuntu-24\.04/);
+  const checks = readFileSync(path.join(directory, 'test.yml'), 'utf8');
+  const emulatorJobs = checks.slice(checks.indexOf('  image-preview-emulator:'));
+  assert.equal((emulatorJobs.match(/runs-on: ubuntu-24\.04/g) || []).length, 5);
+  assert.doesNotMatch(emulatorJobs, /runs-on: ubuntu-latest/);
 });
