@@ -117,6 +117,7 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -478,6 +479,8 @@ private fun AppScreens(viewModel: MainViewModel) {
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        contentWindowInsets = if (state.section == AppSection.SESSIONS && inboxVisible)
+            WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
         topBar = {
             Column(if (state.section == AppSection.SESSIONS && inboxVisible && updateState !is UpdateState.Available) Modifier else Modifier.statusBarsPadding()) {
                 if (state.section != AppSection.SESSIONS) {
@@ -1605,7 +1608,8 @@ internal fun SessionsScreen(
                 Row(
                     Modifier.fillMaxWidth()
                         .then(if (LocalMaterial3.current) Modifier.height(64.dp) else Modifier)
-                        .padding(horizontal = 8.dp, vertical = if (LocalMaterial3.current) 0.dp else 2.dp),
+                        .padding(horizontal = 8.dp, vertical = if (LocalReaderStyle.current) ReaderScreenPadding else if (LocalMaterial3.current) 0.dp else 2.dp)
+                        .then(if (LocalReaderStyle.current) Modifier.offset(y = (-6).dp) else Modifier),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
