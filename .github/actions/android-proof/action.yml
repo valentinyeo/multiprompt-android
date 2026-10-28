@@ -17,15 +17,17 @@ runs:
       uses: actions/cache@v4
       with:
         path: |
-          ${{ env.ANDROID_HOME }}/emulator
+          ~/.cache/android-proof
           ${{ env.ANDROID_HOME }}/system-images/android-35/${{ inputs.target }}/x86_64
-        key: android-proof-${{ runner.os }}-24.04-35-${{ inputs.target }}-v1
+        key: android-proof-${{ runner.os }}-24.04-35-${{ inputs.target }}-emulator-13610412-v2
     - name: Prepare accelerated emulator
       shell: bash
       env:
         PROOF_SCRIPT: ${{ inputs.script }}
+        PROOF_TARGET: ${{ inputs.target }}
       run: |
-        sudo apt-get update && sudo apt-get install -y strace
+        sudo apt-get update && sudo apt-get install -y gdb
+        bash "${{ github.action_path }}/sdk.sh"
         test -c /dev/kvm
         echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
         sudo udevadm control --reload-rules
@@ -47,6 +49,7 @@ runs:
         ram-size: 2048M
         disable-animations: true
         emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -feature -Vulkan -verbose > /tmp/android-proof-emulator.log 2>&1
+        pre-emulator-launch-script: bash "$ANDROID_PROOF_ACTION/emulator.sh"
         script: bash "$ANDROID_PROOF_ACTION/run.sh"
     - name: Retain emulator host and exit evidence
       if: always()

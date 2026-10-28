@@ -1,10 +1,12 @@
 import argparse
+import hashlib
 import os
 import re
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+import zipfile
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--ref')
@@ -33,7 +35,7 @@ class EmulatorProofTest(unittest.TestCase):
         action = source('.github/actions/android-proof/action.yml')
         for option in ('api-level: 35', 'ram-size: 2048M', '-gpu swiftshader_indirect', 'uses: actions/cache@v4',
                        'disable-animations: true', '-no-snapshot', '-Vulkan',
-                       'test -r /dev/kvm && test -w /dev/kvm', 'kernel.txt', 'crashes'):
+                       'test -r /dev/kvm && test -w /dev/kvm', 'kernel.txt', 'crashes', 'sdk.sh', 'pre-emulator-launch-script:', 'emulator.sh'):
             self.assertIn(option, action)
         self.assertNotIn('PerSourcePenalties', source('.claude/skills/verify-multiprompt-android/scripts/fixture.sh'))
         self.assertNotIn('-gpu off', action)
@@ -62,7 +64,7 @@ case "$*" in
 esac
 ''')
             adb.chmod(0o700)
-            for name, body in {'pgrep': 'echo 123', 'sudo': 'exec "$@"', 'strace': 'exit 0'}.items():
+            for name, body in {'pgrep': 'echo 123', 'sudo': 'exec "$@"', 'gdb': 'exit 0'}.items():
                 tool = path / name
                 tool.write_text('#!/usr/bin/env bash\n' + body + '\n')
                 tool.chmod(0o700)
@@ -122,6 +124,70 @@ else: sys.exit(2)
                     self.assertNotEqual(result.returncode, 0)
                     self.assertEqual(calls.count('run watch'), 1)
                     self.assertNotIn('EMULATOR_SERIES_OK', result.stdout)
+
+    def test_partial_sdk_install_retries_and_never_reports_missing_image_ready(self):
+        for ready_on in (2, 4):
+            with self.subTest(ready_on=ready_on), tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp)
+                script = path / 'sdk.sh'
+                script.write_text(source('.github/actions/android-proof/sdk.sh'))
+                installer = path / 'sdkmanager'
+                installer.write_text('''#!/usr/bin/env bash
+set -eu
+if [ "$*" = --licenses ]; then exit 0; fi
+count=$(cat "$ANDROID_HOME/count" 2>/dev/null || echo 0)
+count=$((count + 1))
+echo "$count" > "$ANDROID_HOME/count"
+if [ "$count" -eq "$READY_ON" ]; then
+  image="$ANDROID_HOME/system-images/android-35/default/x86_64"
+  mkdir -p "$image"
+  echo image > "$image/system.img"
+  echo package > "$image/package.xml"
+fi
+''')
+                installer.chmod(0o700)
+                env = dict(os.environ, ANDROID_HOME=tmp, PROOF_TARGET='default', READY_ON=str(ready_on), PATH=f'{tmp}:{os.environ["PATH"]}')
+                result = subprocess.run(['bash', str(script)], env=env, capture_output=True, text=True)
+                self.assertEqual(int((path / 'count').read_text()), min(ready_on, 3))
+                self.assertEqual(result.returncode == 0, ready_on == 2, result.stderr)
+                self.assertEqual('ANDROID_IMAGE_READY' in result.stdout, ready_on == 2)
+
+    def test_pinned_emulator_rejects_corrupt_download_and_reuses_validated_cache(self):
+        for corrupt in (False, True):
+            with self.subTest(corrupt=corrupt), tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp)
+                archive = path / 'fixture.zip'
+                with zipfile.ZipFile(archive, 'w') as output:
+                    entry = zipfile.ZipInfo('emulator/emulator')
+                    entry.external_attr = 0o100755 << 16
+                    output.writestr(entry, '#!/usr/bin/env bash\necho "Android emulator version 35.6.11.0"\n')
+                checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
+                script = path / 'emulator.sh'
+                script.write_text(re.sub(r'checksum=[a-f0-9]{64}', f'checksum={checksum}', source('.github/actions/android-proof/emulator.sh')))
+                curl = path / 'curl'
+                curl.write_text('''#!/usr/bin/env python3
+import os, pathlib, sys
+p = pathlib.Path(os.environ['HOME'])
+with (p / 'downloads').open('a') as f: f.write('download\\n')
+out = pathlib.Path(sys.argv[sys.argv.index('--output') + 1])
+out.write_bytes(b'truncated' if os.environ['CORRUPT'] == 'yes' else (p / 'fixture.zip').read_bytes())
+''')
+                curl.chmod(0o700)
+                (path / 'android-proof').mkdir()
+                (path / 'emulator').mkdir()
+                (path / 'emulator/stale-library').write_text('old')
+                env = dict(os.environ, HOME=tmp, RUNNER_TEMP=tmp, ANDROID_HOME=tmp, CORRUPT='yes' if corrupt else 'no', PATH=f'{tmp}:{os.environ["PATH"]}')
+                result = subprocess.run(['bash', str(script)], env=env, capture_output=True, text=True)
+                if corrupt:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertNotIn('PINNED_EMULATOR_READY', result.stdout)
+                    self.assertTrue((path / 'emulator/stale-library').exists())
+                else:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn('PINNED_EMULATOR_READY', result.stdout)
+                    self.assertFalse((path / 'emulator/stale-library').exists())
+                    subprocess.run(['bash', str(script)], env=env, check=True, capture_output=True)
+                    self.assertEqual((path / 'downloads').read_text().count('download'), 1)
 
     def test_device_reboot_during_proof_is_not_a_success(self):
         result, ran, _ = self.run_stage('reboot')
