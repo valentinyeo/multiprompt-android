@@ -54,7 +54,7 @@ jobs:
 
       - name: Reject the original unshared emulator lifecycle
         run: |
-          if python3 -B tools/emulator.test.py --config-only --ref 7f640c6336ebdc63b37373f141c656bc9dbcb0d5 > /tmp/emulator-red.txt 2>&1; then cat /tmp/emulator-red.txt; exit 1; fi
+          if python3 -B tools/emulator.test.py --config-only --ref 7bc75242 > /tmp/emulator-red.txt 2>&1; then cat /tmp/emulator-red.txt; exit 1; fi
           cat /tmp/emulator-red.txt
           grep -F 'AssertionError' /tmp/emulator-red.txt
           echo EMULATOR_ORIGINAL_REJECTED
@@ -95,7 +95,6 @@ jobs:
         run: gradle --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2g -Pkotlin.compiler.execution.strategy=in-process assembleDebug assembleDebugAndroidTest
       - uses: ./.github/actions/android-proof
         with:
-          target: default
           stage: stage-1
           script: bash tools/check-image-preview.sh
         env:
@@ -103,7 +102,6 @@ jobs:
       - name: Verify day theme in a fresh emulator
         uses: ./.github/actions/android-proof
         with:
-          target: default
           stage: stage-2
           script: bash tools/check-day-theme.sh
         env:
@@ -142,7 +140,6 @@ jobs:
           gradle-version: "9.5.1"
       - uses: ./.github/actions/android-proof
         with:
-          target: default
           stage: stage-3
           script: bash tools/check-reply-notifications.sh
         env:
@@ -175,7 +172,6 @@ jobs:
           gradle-version: "9.5.1"
       - uses: ./.github/actions/android-proof
         with:
-          target: default
           stage: stage-4
           script: bash tools/check-session-rows.sh
         env:
@@ -205,7 +201,6 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
       - uses: ./.github/actions/android-proof
         with:
-          target: default
           stage: stage-5
           script: bash tools/check-message-actions.sh
         env:
@@ -246,7 +241,6 @@ jobs:
       - name: Reject unapproved original screens
         uses: ./.github/actions/android-proof
         with:
-          target: default
           stage: stage-6
           script: bash tools/check-approved-style.sh
         env:
@@ -260,7 +254,6 @@ jobs:
       - name: Verify approved screens
         uses: ./.github/actions/android-proof
         with:
-          target: default
           stage: stage-7
           script: bash tools/check-approved-style.sh
         env:

@@ -2,16 +2,32 @@ name: Verify real Android UI
 
 on:
   push:
-    branches: [ceo/IGSH-1012]
+    branches: [ceo/IGSH-1012, ceo/IGSH-1069]
   pull_request:
     paths:
-      - '.github/actions/android-proof/**'
       - 'app/**'
       - 'tools/native-skills.test.py'
+      - 'tools/release-choices/**'
       - '.claude/skills/verify-multiprompt-android/**'
       - '.github/workflows/verify.yml'
+      - '.github/actions/android-proof/**'
   workflow_dispatch:
     inputs:
+      release_choices:
+        description: Verify plain lists and real question answers on the signed release APK
+        type: boolean
+        default: false
+      released_reactions:
+        description: Verify reaction display and transport on the signed APK
+        type: boolean
+        default: false
+      candidate:
+        description: Build signed branch candidate instead of downloading the published APK
+        type: boolean
+        default: false
+      expected_commit:
+        description: Required published manifest commit for release choices proof
+        type: string
       feature:
         description: User journey from the verification feature map
         required: true
@@ -55,7 +71,7 @@ jobs:
     timeout-minutes: 35
     env:
       EVIDENCE: ${{ github.workspace }}/verification-evidence
-      VERIFY_FEATURE: ${{ inputs.feature || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1012' && 'chat-reactions.md') || 'native-skills.md' }}
+      VERIFY_FEATURE: ${{ inputs.feature || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1069' && 'chat-choices.md') || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1012' && 'chat-reactions.md') || 'native-skills.md' }}
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
       UPDATE_BASELINE_RUN: ${{ inputs.update_baseline_run }}
       APP_REF: ${{ inputs.app_ref }}
@@ -96,11 +112,30 @@ jobs:
           [[ "$BASELINE_RUN" =~ ^[0-9]+$ ]]
           gh run download "$BASELINE_RUN" --repo "$GITHUB_REPOSITORY" --name "verify-chat-reactions.md-$BASELINE_RUN" --dir "$RUNNER_TEMP/update-baseline"
           cp -a "$RUNNER_TEMP/update-baseline/signed-update-baseline" "$EVIDENCE/"
-      - name: Build debug APK
+      - name: Check reaction screenshot oracle
         run: |
-          mkdir -p "$EVIDENCE"
           python3 -m pip install Pillow
           python3 .claude/skills/verify-multiprompt-android/scripts/reactions.test.py
+      - name: Prepare signed choices APK and same-signer fixture instrumentation
+        if: inputs.release_choices == true || inputs.released_reactions == true
+        env:
+          CANDIDATE: ${{ inputs.candidate }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          [[ "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md ]]
+          sdkmanager --install 'build-tools;35.0.0' 'platforms;android-35'
+          bash tools/release-choices/prepare.sh
+          echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
+          echo "VERIFY_PACKAGE=dev.multiprompt.companion" >> "$GITHUB_ENV"
+          echo "EXPECTED_VERSION=$(cat "$EVIDENCE/version.txt")" >> "$GITHUB_ENV"
+      - name: Build debug APK
+        if: inputs.release_choices != true && inputs.released_reactions != true
+        run: |
+          mkdir -p "$EVIDENCE"
           printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/revision.txt"
           app_source="$GITHUB_WORKSPACE"
           if [ -d "$GITHUB_WORKSPACE/app-source" ]; then app_source="$GITHUB_WORKSPACE/app-source"; fi
@@ -118,12 +153,11 @@ jobs:
         continue-on-error: ${{ inputs.expect_native_missing == true }}
         uses: ./.github/actions/android-proof
         with:
-          target: google_apis
           stage: stage-1
+          target: default
           script: |
             adb install -r -g "$VERIFY_APK"
-            .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"
-            bash .github/actions/android-proof/ready.sh
+            if [ "${VERIFY_PACKAGE:-}" = dev.multiprompt.companion ]; then bash tools/release-choices/run.sh; else .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; fi
             if [ -n "$UPDATE_BASELINE_RUN" ]; then .claude/skills/verify-multiprompt-android/scripts/update-reaction-release.sh; fi
       - name: Require the original native-skill failure
         if: inputs.expect_native_missing == true
@@ -136,6 +170,15 @@ jobs:
           test "$EMULATOR_OUTCOME" = failure
           grep -F 'NATIVE_SLASH_PICKER_MISSING' "$EVIDENCE/driver-transcript.txt"
           printf '%s\n' '{"status":"expected-red","error":"NATIVE_SLASH_PICKER_MISSING"}' > "$EVIDENCE/native-baseline-result.json"
+      - name: Retain emulator exit and host memory evidence
+        if: always()
+        run: |
+          mkdir -p "$EVIDENCE/emulator-diagnostics"
+          if [ -f /tmp/native-emulator.log ]; then cp /tmp/native-emulator.log "$EVIDENCE/emulator-diagnostics/"; fi
+          if [ -d /tmp/android-runner ]; then cp -a /tmp/android-runner "$EVIDENCE/emulator-diagnostics/crashes"; fi
+          sudo dmesg -T > "$EVIDENCE/emulator-diagnostics/kernel.txt"
+          free -m > "$EVIDENCE/emulator-diagnostics/memory.txt"
+          ps -eo pid,ppid,stat,rss,args > "$EVIDENCE/emulator-diagnostics/processes.txt"
       - name: Stop recorded fixture processes and retain logs
         timeout-minutes: 2
         if: always()

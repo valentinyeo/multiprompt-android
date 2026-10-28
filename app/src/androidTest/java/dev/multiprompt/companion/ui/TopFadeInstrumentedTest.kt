@@ -42,6 +42,31 @@ class TopFadeInstrumentedTest {
 
     @Test fun chatScrollsUnderTheStatusBarFade() = verify(FadeScreen.SESSION, "chat", "Message 0", chat = true)
 
+    @Test fun fullAppInboxMatchesChatFadeInDarkTheme() = verifyAppInbox(false)
+
+    @Test fun fullAppInboxMatchesChatFadeInLightTheme() = verifyAppInbox(true)
+
+    private fun verifyAppInbox(sunlight: Boolean) {
+        val theme = if (sunlight) "light" else "dark"
+        compose.activityRule.scenario.onActivity { activity ->
+            activity.setContent { AppInboxFixture(sunlight) }
+        }
+        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(15)
+        compose.waitForIdle()
+        screenshot("$theme-app-inbox-scrolled")
+        val inbox = compose.onNodeWithTag("top-fade", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val list = compose.onNode(hasScrollToIndexAction()).fetchSemanticsNode().boundsInRoot
+        compose.activityRule.scenario.onActivity { activity ->
+            activity.setContent { FadeTestScreen(FadeScreen.SESSION, material3 = false, sunlight = sunlight) }
+        }
+        compose.waitForIdle()
+        screenshot("$theme-chat-reference")
+        val chat = compose.onNodeWithTag("top-fade", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertEquals("Full inbox must reach the status bar", 0f, list.top, 1f)
+        assertEquals("Inbox and chat fades must start together", chat.top, inbox.top, 1f)
+        assertEquals("Inbox and chat fades must have identical reach", chat.height, inbox.height, 1f)
+    }
+
     @Test fun chatHeadlineReplacesMessagingLabel() = verifyHeadline("Mini Boss CEO", "chat-headline", false)
 
     @Test fun longChatHeadlineKeepsMenuVisible() = verifyHeadline(
@@ -123,13 +148,11 @@ class TopFadeInstrumentedTest {
     }
 
     private fun screenshot(name: String) {
-        val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
-        listOf(
-            "mkdir -p /data/local/tmp/top-fade-proof",
-            "screencap -p /data/local/tmp/top-fade-proof/$name.png",
-        ).forEach { command ->
-            val output = instrumentation.uiAutomation.executeShellCommand(command)
-            android.os.ParcelFileDescriptor.AutoCloseInputStream(output).use { it.readBytes() }
+        val directory = java.io.File(checkNotNull(androidx.test.platform.app.InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")), "top-fade-proof").apply { mkdirs() }
+        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
+        java.io.File(directory, "$name.png").outputStream().use {
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
         }
+        bitmap.recycle()
     }
 }

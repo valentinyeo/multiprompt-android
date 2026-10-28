@@ -3,11 +3,11 @@ name: Account layout journey
 on:
   pull_request:
     paths:
-      - '.github/actions/android-proof/**'
       - 'app/**'
       - 'gradle/**'
       - 'tools/account-journey/**'
       - '.github/workflows/account-journey.yml'
+      - '.github/actions/android-proof/**'
   workflow_dispatch:
 
 permissions:
@@ -53,8 +53,8 @@ jobs:
         run: bash tools/account-journey/fixture.sh
       - uses: ./.github/actions/android-proof
         with:
-          target: google_apis
           stage: stage-1
+          target: google_apis
           script: |
             bash -c 'adb install -r -g app/build/outputs/apk/debug/app-debug.apk && adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk && tools/account-journey/drive.sh'
       - uses: actions/upload-artifact@v4

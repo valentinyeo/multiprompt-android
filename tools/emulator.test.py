@@ -22,17 +22,18 @@ def source(name):
 
 class EmulatorProofTest(unittest.TestCase):
     def test_every_emulator_job_uses_one_shared_lifecycle(self):
-        for name in ('test', 'verify', 'top-fade', 'account-journey'):
+        for name in ('test', 'verify', 'top-fade', 'account-journey', 'working-dots'):
             workflow = source(f'.github/workflows/{name}.yml')
             events = re.findall(r'^  ([a-z_]+):', workflow.split('permissions:', 1)[0], re.M)
             self.assertEqual(len(events), len(set(events)), f'duplicate workflow event: {name}')
             self.assertNotIn('uses: reactivecircus/android-emulator-runner@', workflow)
             self.assertIn('uses: ./.github/actions/android-proof', workflow)
         action = source('.github/actions/android-proof/action.yml')
-        for option in ('emulator-build: 12414864', 'ram-size: 4096M', 'disk-size: 6G',
+        for option in ('api-level: 35', 'ram-size: 2048M', '-gpu off', 'uses: actions/cache@v4',
                        'disable-animations: true', '-no-snapshot', '-Vulkan',
                        'test -r /dev/kvm && test -w /dev/kvm', 'kernel.txt', 'crashes'):
             self.assertIn(option, action)
+        self.assertNotIn('emulator-build:', action)
         self.assertIn('python3 -B tools/emulator.test.py', source('tools/check.sh'))
 
     def run_stage(self, mode):

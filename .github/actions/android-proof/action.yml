@@ -13,6 +13,13 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Cache emulator SDK packages
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ env.ANDROID_HOME }}/emulator
+          ${{ env.ANDROID_HOME }}/system-images/android-35/${{ inputs.target }}/x86_64
+        key: android-proof-${{ runner.os }}-35-${{ inputs.target }}-v1
     - name: Prepare accelerated emulator
       shell: bash
       env:
@@ -27,22 +34,19 @@ runs:
         mkdir -p "$RUNNER_TEMP/android-proof"
         free -m | tee "$RUNNER_TEMP/android-proof/memory-before.txt"
         df -h "$ANDROID_HOME" | tee "$RUNNER_TEMP/android-proof/disk-before.txt"
-        test "$(df --output=avail -k "$ANDROID_HOME" | tail -1)" -gt 8388608
         printf '%s\n' "$PROOF_SCRIPT" > "$RUNNER_TEMP/android-proof/stage.sh"
     - uses: reactivecircus/android-emulator-runner@v2.34.0
       env:
         ANDROID_PROOF_ACTION: ${{ github.action_path }}
       with:
         api-level: 35
-        emulator-build: 12414864
         arch: x86_64
         target: ${{ inputs.target }}
         profile: pixel_2
         cores: 2
-        ram-size: 4096M
-        disk-size: 6G
+        ram-size: 2048M
         disable-animations: true
-        emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -feature -Vulkan -verbose > /tmp/android-proof-emulator.log 2>&1
+        emulator-options: -no-window -gpu off -no-snapshot -noaudio -no-boot-anim -camera-back none -feature -Vulkan -verbose > /tmp/android-proof-emulator.log 2>&1
         script: bash "$ANDROID_PROOF_ACTION/run.sh"
     - name: Retain emulator host and exit evidence
       if: always()
