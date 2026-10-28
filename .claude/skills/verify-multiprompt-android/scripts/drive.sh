@@ -84,10 +84,12 @@ wait_for_text() {
 }
 fill() {
     local attempt
+    local -a clear_keys
     for attempt in 1 2 3; do
         tap_node field "$1"
         select_node focused-field "$1" >/dev/null || continue
-        adb shell input keycombination 113 29
+        read -r -a clear_keys < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" clear-field "$1")
+        adb shell input keyevent "${clear_keys[@]}"
         adb shell input text "$2"
         dump_ui
         if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value "$1" "${2//%s/ }"; then
@@ -190,7 +192,7 @@ if [[ "$feature" == launcher-icon.md ]]; then
     exit 0
 fi
 if [[ "$package" == dev.multiprompt.companion ]]; then
-    [[ "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md ]]
+    [[ "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -740,12 +742,63 @@ if [[ "$feature" == session-reader.md ]]; then
     shot attach-closed
 fi
 if [[ "$feature" == terminal.md ]]; then
+    adb shell settings put secure show_ime_with_hard_keyboard 1
     tap_desc 'Session actions'
     tap_text 'Open live terminal'
     wait_for_text 'SSH · tmux attached'
     sudo -u verifyssh tmux list-clients -F '#{client_name} #{client_session}' > "$EVIDENCE/tmux-clients.txt"
     grep -F verify-session "$EVIDENCE/tmux-clients.txt"
     shot terminal-attached
+    sudo -u verifyssh tmux capture-pane -p -S - -t verify-session > "$EVIDENCE/shell-history-before.txt"
+    grep -Fx SHELL_HISTORY_0001 "$EVIDENCE/shell-history-before.txt"
+    grep -Fx SHELL_HISTORY_0500 "$EVIDENCE/shell-history-before.txt"
+    for keyboard_state in open closed; do
+        adb shell "screenrecord --time-limit 0 --bit-rate 1000000 /sdcard/shell-scroll-$keyboard_state.mp4 & echo \$! > /sdcard/shell-scroll-$keyboard_state.pid; wait" &
+        recording_pid=$!
+        tap_desc 'Show keyboard'
+        if [[ "$keyboard_state" == closed ]]; then
+            adb shell input keyevent KEYCODE_BACK
+            adb shell dumpsys input_method > "$EVIDENCE/keyboard-closed.txt"
+            grep -F 'mInputShown=false' "$EVIDENCE/keyboard-closed.txt"
+        else
+            adb shell dumpsys input_method > "$EVIDENCE/keyboard-before.txt"
+            grep -F 'mInputShown=true' "$EVIDENCE/keyboard-before.txt"
+        fi
+        adb shell input swipe 200 800 200 400 600
+        wait_for_text 'SHELL_HISTORY_'
+        select_node desc 'Jump to live'
+        if [[ "$keyboard_state" == open ]]; then
+            adb shell dumpsys input_method > "$EVIDENCE/keyboard-history.txt"
+            grep -F 'mInputShown=true' "$EVIDENCE/keyboard-history.txt"
+        fi
+        for attempt in {1..100}; do
+            dump_ui
+            if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains SHELL_HISTORY_0001 >/dev/null 2>&1; then break; fi
+            read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
+            for swipe in 1 2 3; do
+                adb shell input swipe "$x1" "$y1" "$x2" "$y2" 120
+            done
+        done
+        wait_for_text SHELL_HISTORY_0001
+        shot "shell-first-$keyboard_state"
+        marker="SHELL_NEW_${keyboard_state^^}"
+        sudo -u verifyssh tmux send-keys -l -t verify-session "$marker"
+        sudo -u verifyssh tmux send-keys -t verify-session Enter
+        wait_receipt "$marker"
+        sudo -u verifyssh tmux capture-pane -p -S - -t verify-session > "$EVIDENCE/shell-history-after-$keyboard_state.txt"
+        grep -Fx "$marker" "$EVIDENCE/shell-history-after-$keyboard_state.txt"
+        shot "shell-anchored-$keyboard_state"
+        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains SHELL_HISTORY_0001
+        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent "$marker"
+        tap_desc 'Jump to live'
+        dump_ui
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" desc 'Jump to live' >/dev/null 2>&1; then exit 1; fi
+        shot "shell-live-$keyboard_state"
+        adb shell kill -2 "$(adb shell cat "/sdcard/shell-scroll-$keyboard_state.pid" | tr -d '\r')"
+        wait "$recording_pid"
+        adb pull "/sdcard/shell-scroll-$keyboard_state.mp4" "$EVIDENCE/shell-scroll-$keyboard_state.mp4"
+    done
+    printf 'SHELL_SCROLL_500_KEYBOARD_ANCHOR_LIVE_OK\n' | tee "$EVIDENCE/shell-scroll-result.txt"
     exit 0
 fi
 sudo -u verifyssh mkdir -p /home/verifyssh/.local/state/multiprompt
