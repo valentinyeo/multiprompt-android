@@ -1299,6 +1299,9 @@ def box_draft_text(shown):
 
 
 
+QUEUE_SHOWN = 8
+
+
 def held_queue_path(tmux):
     if not isinstance(tmux, str) or not TMUX_NAME.fullmatch(tmux):
         raise ValueError("invalid tmux name")
