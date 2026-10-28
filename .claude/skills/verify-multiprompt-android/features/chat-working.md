@@ -16,7 +16,7 @@ Download `released-working-dots-<run-id>` and inspect:
 - `manifest.json`, `apk-certificate.txt`, and `app-apk-sha256.txt`: published signed APK identity, not a rebuilt candidate.
 - `working-dots.mp4`: 135 seconds of quiet local tools, screen lock and unlock, and an SSH reconnect.
 - `quiet-tools.png`, `after-unlock.png`, `after-reconnect.png`, and `after-turn.png`: visible dots during work and no dots after work.
-- `visibility.txt`: visible accessibility nodes sampled every 100 ms.
+- `visibility.txt`: visible accessibility nodes sampled every 25 ms with the accessibility cache cleared.
 - `server.jsonl`: actual local tool executions and server start/end times.
 - `journey.jsonl` and `reset-sockets.txt`: screen events, real socket reset, fresh SSH authentication, and clock alignment.
 - `result.json`: independently checked duration, samples, tool receipts, and start/end visibility delays of at most one second.

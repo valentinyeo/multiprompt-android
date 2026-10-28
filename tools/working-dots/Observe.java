@@ -48,6 +48,7 @@ public class Observe extends Instrumentation {
         long end = SystemClock.elapsedRealtime() + 600000;
         while (SystemClock.elapsedRealtime() < end && !stop.exists()) {
             Bundle result = new Bundle();
+            getUiAutomation().clearCache();
             AccessibilityNodeInfo root = getUiAutomation().getRootInActiveWindow();
             AccessibilityNodeInfo inbox = text(root, "Inbox");
             if (inbox != null && inbox.isVisibleToUser()) {
@@ -60,7 +61,7 @@ public class Observe extends Instrumentation {
             result.putString("sample", "{\"at\":" + System.currentTimeMillis()
                 + ",\"ready\":" + ready + ",\"visible\":" + shown + ",\"interactive\":" + power.isInteractive() + "}");
             sendStatus(0, result);
-            SystemClock.sleep(100);
+            SystemClock.sleep(25);
         }
         finish(Activity.RESULT_OK, new Bundle());
     }
