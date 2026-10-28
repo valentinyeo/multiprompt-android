@@ -132,6 +132,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -2684,8 +2686,10 @@ internal fun ReaderScreen(
             sentDraft = null
         }
     }
+    SideEffect { if (sendMarkPending && prompt.isEmpty()) SendTiming.mark("box_composed") }
     LaunchedEffect(prompt, sendMarkPending) {
         if (sendMarkPending && prompt.isEmpty()) {
+            SendTiming.mark("box_effect")
             withFrameNanos { }
             SendTiming.mark("box_cleared_frame")
             sendMarkPending = false
@@ -2724,6 +2728,7 @@ internal fun ReaderScreen(
                 SendTiming.mark("message_added")
                 sentDraft = draft
                 setPrompt("")
+                SendTiming.mark("box_state_cleared")
                 imageAttachments = emptyList()
                 replyTo = null
                 sendMarkPending = true
@@ -3371,7 +3376,11 @@ internal fun ReaderScreen(
                             value = promptField,
                             onValueChange = { promptField = it },
                             modifier = Modifier.weight(1f).heightIn(min = ReaderComposerHeight)
-                                .border(1.dp, MaterialTheme.colorScheme.outline, ReaderComposerShape).focusRequester(promptFocusRequester),
+                                .border(1.dp, MaterialTheme.colorScheme.outline, ReaderComposerShape).focusRequester(promptFocusRequester)
+                                .drawWithContent {
+                                    drawContent()
+                                    if (sendMarkPending && prompt.isEmpty()) SendTiming.mark("box_drawn")
+                                },
                             filled = true,
                             placeholder = {
                                 Text("Message ${session.displayName}", maxLines = 1, overflow = TextOverflow.Ellipsis)
