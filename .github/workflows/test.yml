@@ -67,7 +67,7 @@ jobs:
 
   image-preview-emulator:
     name: image-preview-emulator
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -93,15 +93,26 @@ jobs:
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          emulator-build: 14214601
+          emulator-build: 16428233
           arch: x86_64
           profile: pixel_2
           ram-size: 2048M
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
           disable-animations: true
-          script: |
-            bash tools/check-image-preview.sh
-            bash tools/check-day-theme.sh
+          script: bash tools/check-image-preview.sh
+        env:
+          GRADLE: gradle
+      - name: Verify day theme in a fresh emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          emulator-build: 16428233
+          arch: x86_64
+          profile: pixel_2
+          ram-size: 2048M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
+          disable-animations: true
+          script: bash tools/check-day-theme.sh
         env:
           GRADLE: gradle
           DAY_THEME_BASE_REF: ${{ inputs.baseline_ref }}
@@ -126,7 +137,7 @@ jobs:
 
   reply-notifications-emulator:
     name: reply-notifications-emulator
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -144,7 +155,6 @@ jobs:
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          emulator-build: 14214601
           arch: x86_64
           profile: pixel_2
           ram-size: 2048M
@@ -167,7 +177,7 @@ jobs:
 
   session-rows-emulator:
     name: session-rows-emulator
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -187,7 +197,6 @@ jobs:
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          emulator-build: 14214601
           arch: x86_64
           profile: pixel_2
           ram-size: 2048M
@@ -207,7 +216,7 @@ jobs:
 
   message-actions-emulator:
     name: message-actions-emulator
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -227,7 +236,6 @@ jobs:
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          emulator-build: 14214601
           arch: x86_64
           profile: pixel_2
           ram-size: 2048M
@@ -248,7 +256,7 @@ jobs:
 
   approved-style-emulator:
     name: approved-style-emulator
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -278,7 +286,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          emulator-build: 14214601
+          emulator-build: 16428233
           arch: x86_64
           profile: pixel_2
           ram-size: 2048M
@@ -297,7 +305,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          emulator-build: 14214601
+          emulator-build: 16428233
           arch: x86_64
           profile: pixel_2
           ram-size: 2048M
