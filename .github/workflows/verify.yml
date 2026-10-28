@@ -46,6 +46,7 @@ on:
           - chat-choices.md
           - chat-reactions.md
           - chat-queued.md
+          - chat-cancel.md
           - native-skills.md
           - chat-resync.md
           - session-routing.md
