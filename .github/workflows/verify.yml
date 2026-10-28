@@ -111,6 +111,10 @@ jobs:
           [[ "$BASELINE_RUN" =~ ^[0-9]+$ ]]
           gh run download "$BASELINE_RUN" --repo "$GITHUB_REPOSITORY" --name "verify-chat-reactions.md-$BASELINE_RUN" --dir "$RUNNER_TEMP/update-baseline"
           cp -a "$RUNNER_TEMP/update-baseline/signed-update-baseline" "$EVIDENCE/"
+      - name: Check reaction screenshot oracle
+        run: |
+          python3 -m pip install Pillow
+          python3 .claude/skills/verify-multiprompt-android/scripts/reactions.test.py
       - name: Prepare signed choices APK and same-signer fixture instrumentation
         if: inputs.release_choices == true || inputs.released_reactions == true
         env:
@@ -131,8 +135,6 @@ jobs:
         if: inputs.release_choices != true && inputs.released_reactions != true
         run: |
           mkdir -p "$EVIDENCE"
-          python3 -m pip install Pillow
-          python3 .claude/skills/verify-multiprompt-android/scripts/reactions.test.py
           printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/revision.txt"
           app_source="$GITHUB_WORKSPACE"
           if [ -d "$GITHUB_WORKSPACE/app-source" ]; then app_source="$GITHUB_WORKSPACE/app-source"; fi
