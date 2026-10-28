@@ -190,7 +190,7 @@ if [[ "$feature" == launcher-icon.md ]]; then
     exit 0
 fi
 if [[ "$package" == dev.multiprompt.companion ]]; then
-    [[ "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md ]]
+    [[ "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == chat-cancel.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -474,8 +474,10 @@ CHOICES
     exit 0
 fi
 if [[ "$feature" == chat-cancel.md ]]; then
-    adb shell 'echo $$ > /sdcard/cancel-record.pid; exec screenrecord --time-limit 180 /sdcard/cancel-proof.mp4' &
-    recording_client=$!
+    if [[ "$package" != dev.multiprompt.companion ]]; then
+        adb shell 'echo $$ > /sdcard/cancel-record.pid; exec screenrecord --time-limit 180 /sdcard/cancel-proof.mp4' &
+        recording_client=$!
+    fi
     wait_for_text VERIFY_READY_1010
     wait_for_text 'Ready for cancel tests.'
     shot cancel-ready
@@ -514,11 +516,13 @@ PROOF
     shot delivered-menu
     if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'Cancel message'; then exit 1; fi
     adb shell input keyevent 4
-    remote_recording=$(adb shell cat /sdcard/cancel-record.pid | tr -d '\r')
-    [[ "$remote_recording" =~ ^[0-9]+$ ]]
-    adb shell kill -2 "$remote_recording"
-    wait "$recording_client"
-    adb pull /sdcard/cancel-proof.mp4 "$EVIDENCE/cancel-proof.mp4"
+    if [[ "$package" != dev.multiprompt.companion ]]; then
+        remote_recording=$(adb shell cat /sdcard/cancel-record.pid | tr -d '\r')
+        [[ "$remote_recording" =~ ^[0-9]+$ ]]
+        adb shell kill -2 "$remote_recording"
+        wait "$recording_client"
+        adb pull /sdcard/cancel-proof.mp4 "$EVIDENCE/cancel-proof.mp4"
+    fi
     printf 'FEATURE VERIFIED: %s\n' "$feature"
     exit 0
 fi
