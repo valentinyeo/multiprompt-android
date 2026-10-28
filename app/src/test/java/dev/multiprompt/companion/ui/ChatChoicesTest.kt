@@ -1,7 +1,6 @@
 package dev.multiprompt.companion.ui
 
 
-@OptIn(ExperimentalCoroutinesApi::class)
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
@@ -9,15 +8,12 @@ import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import dev.multiprompt.companion.reader.ChatHistoryMessage
 import dev.multiprompt.companion.reader.PendingQuestion
-import dev.multiprompt.companion.ssh.TmuxCommands
-import java.io.File
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -29,6 +25,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
