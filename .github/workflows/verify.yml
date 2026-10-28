@@ -16,6 +16,10 @@ on:
         description: Verify plain lists and real question answers on the signed release APK
         type: boolean
         default: false
+      released_reactions:
+        description: Verify reaction display and transport on the signed APK
+        type: boolean
+        default: false
       candidate:
         description: Build signed branch candidate instead of downloading the published APK
         type: boolean
@@ -70,6 +74,8 @@ jobs:
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
       UPDATE_BASELINE_RUN: ${{ inputs.update_baseline_run }}
       APP_REF: ${{ inputs.app_ref }}
+      PROOF_API: ${{ inputs.released_reactions && '34' || '35' }}
+      PROOF_TARGET: ${{ inputs.released_reactions && 'google_apis' || 'default' }}
     steps:
       - uses: actions/checkout@v4
       - name: Prepare verification paths
@@ -107,8 +113,12 @@ jobs:
           [[ "$BASELINE_RUN" =~ ^[0-9]+$ ]]
           gh run download "$BASELINE_RUN" --repo "$GITHUB_REPOSITORY" --name "verify-chat-reactions.md-$BASELINE_RUN" --dir "$RUNNER_TEMP/update-baseline"
           cp -a "$RUNNER_TEMP/update-baseline/signed-update-baseline" "$EVIDENCE/"
+      - name: Check reaction screenshot oracle
+        run: |
+          python3 -m pip install Pillow
+          python3 .claude/skills/verify-multiprompt-android/scripts/reactions.test.py
       - name: Prepare signed choices APK and same-signer fixture instrumentation
-        if: inputs.release_choices == true
+        if: inputs.release_choices == true || inputs.released_reactions == true
         env:
           CANDIDATE: ${{ inputs.candidate }}
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
@@ -117,18 +127,16 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          test "$VERIFY_FEATURE" = chat-choices.md
+          [[ "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md ]]
           sdkmanager --install 'build-tools;35.0.0' 'platforms;android-35'
           bash tools/release-choices/prepare.sh
           echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
           echo "VERIFY_PACKAGE=dev.multiprompt.companion" >> "$GITHUB_ENV"
           echo "EXPECTED_VERSION=$(cat "$EVIDENCE/version.txt")" >> "$GITHUB_ENV"
       - name: Build debug APK
-        if: inputs.release_choices != true
+        if: inputs.release_choices != true && inputs.released_reactions != true
         run: |
           mkdir -p "$EVIDENCE"
-          python3 -m pip install Pillow
-          python3 .claude/skills/verify-multiprompt-android/scripts/reactions.test.py
           printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/revision.txt"
           app_source="$GITHUB_WORKSPACE"
           if [ -d "$GITHUB_WORKSPACE/app-source" ]; then app_source="$GITHUB_WORKSPACE/app-source"; fi
@@ -149,7 +157,7 @@ jobs:
         run: |
           for attempt in 1 2 3; do
             printf 'SDK download attempt %s/3\n' "$attempt" | tee -a "$EVIDENCE/sdk-install.txt"
-            if sdkmanager --install 'build-tools;35.0.0' platform-tools 'platforms;android-35' emulator 'system-images;android-35;google_apis;x86_64' --channel=0 2>&1 | tee -a "$EVIDENCE/sdk-install.txt"; then
+            if sdkmanager --install 'build-tools;35.0.0' platform-tools 'platforms;android-35' emulator "system-images;android-${PROOF_API};${PROOF_TARGET};x86_64" --channel=0 2>&1 | tee -a "$EVIDENCE/sdk-install.txt"; then
               exit 0
             fi
           done
@@ -161,13 +169,13 @@ jobs:
         continue-on-error: ${{ inputs.expect_native_missing == true }}
         uses: reactivecircus/android-emulator-runner@v2.34.0
         with:
-          api-level: 35
-          emulator-build: 16428233
+          api-level: ${{ env.PROOF_API }}
+          emulator-build: ${{ inputs.released_reactions && '16428233' || '12414864' }}
           arch: x86_64
-          target: google_apis
+          target: ${{ env.PROOF_TARGET }}
           profile: pixel_2
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -verbose > /tmp/native-emulator.log 2>&1
+          emulator-options: -no-window -gpu ${{ inputs.released_reactions && 'swiftshader_indirect' || 'off' }} -no-snapshot -noaudio -no-boot-anim -camera-back none -feature -Vulkan -verbose > /tmp/native-emulator.log 2>&1
           script: |
             adb install -r -g "$VERIFY_APK"
             if [ "${VERIFY_PACKAGE:-}" = dev.multiprompt.companion ]; then bash tools/release-choices/run.sh; else .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; fi
