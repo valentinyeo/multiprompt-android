@@ -9,6 +9,7 @@ python3 -B tools/release-choices/ui.test.py
 python3 -B tools/check-approved-style-source.test.py
 python3 -B tools/account-journey/ui.test.py
 python3 -B tools/check-day-theme-images.test.py
+python3 -B tools/emulator.test.py
 node tools/root-files.mjs
 node tools/strip-comments.mjs --check
 "${GRADLE:-./gradlew}" --no-daemon -Dorg.gradle.jvmargs=-Xmx3g lintDebug test testM3UnitTest

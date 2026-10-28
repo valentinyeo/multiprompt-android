@@ -1,0 +1,38 @@
+name: Emulator stability series
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/actions/android-proof/**'
+      - '.github/workflows/emulator-stability.yml'
+      - 'tools/emulator.test.py'
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: emulator-stability-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  series:
+    runs-on: ubuntu-latest
+    timeout-minutes: 160
+    steps:
+      - uses: actions/checkout@v4
+      - name: Consecutive real proof runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROOF_REF: ${{ github.ref_name }}
+          PROOF_COMMIT: ${{ github.sha }}
+          PROOF_COUNT: ${{ github.ref_name == 'main' && '5' || '3' }}
+        run: bash .github/actions/android-proof/series.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: emulator-stability-series
+          path: stability-evidence/
+          if-no-files-found: error
