@@ -19,7 +19,7 @@ runs:
         path: |
           ${{ env.ANDROID_HOME }}/emulator
           ${{ env.ANDROID_HOME }}/system-images/android-35/${{ inputs.target }}/x86_64
-        key: android-proof-${{ runner.os }}-35-${{ inputs.target }}-v1
+        key: android-proof-${{ runner.os }}-24.04-35-${{ inputs.target }}-v1
     - name: Prepare accelerated emulator
       shell: bash
       env:

@@ -67,7 +67,7 @@ permissions:
 jobs:
   verify:
     name: ${{ inputs.expect_native_missing && 'original native-skill control' || 'verify' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     env:
       EVIDENCE: ${{ github.workspace }}/verification-evidence

@@ -28,6 +28,8 @@ class EmulatorProofTest(unittest.TestCase):
             self.assertEqual(len(events), len(set(events)), f'duplicate workflow event: {name}')
             self.assertNotIn('uses: reactivecircus/android-emulator-runner@', workflow)
             self.assertIn('uses: ./.github/actions/android-proof', workflow)
+            self.assertNotIn('runs-on: ubuntu-latest', workflow)
+            self.assertIn('runs-on: ubuntu-24.04', workflow)
         action = source('.github/actions/android-proof/action.yml')
         for option in ('api-level: 35', 'ram-size: 2048M', '-gpu off', 'uses: actions/cache@v4',
                        'disable-animations: true', '-no-snapshot', '-Vulkan',
