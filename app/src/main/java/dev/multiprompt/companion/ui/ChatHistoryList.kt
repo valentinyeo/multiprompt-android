@@ -115,6 +115,9 @@ internal fun ChatHistoryView(
             unreadMessageKey = unreadMessageKey,
             onMarkUnread = onMarkUnread,
             onReaction = onReaction,
+            onCancelPending = if (!reader.sending && reader.status == ReaderStatus.Live) { target ->
+                connection.cancelQueued(target.requestId)
+            } else null,
             collapsePendingReactions = reader.actionError == null,
             working = reader.isWorking(agent),
             onNearTop = history::nearTop,
@@ -148,6 +151,7 @@ internal fun ChatHistoryList(
     onMarkUnread: (String) -> Unit = {},
     hasOlder: Boolean = false,
     onReaction: ((ChatHistoryMessage, ChatReactions.Emoji) -> Unit)? = null,
+    onCancelPending: ((ChatHistoryMessage) -> Unit)? = null,
     collapsePendingReactions: Boolean = true,
     working: Boolean = false,
     bottomPadding: Dp = 0.dp,
@@ -226,6 +230,10 @@ internal fun ChatHistoryList(
                     reactions = presentation.badges[message.key].orEmpty(),
                     onReaction = if (agent == AgentKind.CLAUDE && message.role == "assistant" && onReaction != null) {
                         { emoji -> onReaction(message, emoji) }
+                    } else null,
+                    delivery = message.delivery,
+                    onCancel = if (message.role == "user" && message.pending && message.requestId.isNotEmpty() && onCancelPending != null) {
+                        { onCancelPending(message) }
                     } else null)
             }
         }
@@ -255,6 +263,8 @@ private fun HistoryBubble(
     onJump: (ReplyQuote.Reply) -> Unit,
     reactions: Set<ChatReactions.Emoji> = emptySet(),
     onReaction: ((ChatReactions.Emoji) -> Unit)? = null,
+    onCancel: (() -> Unit)? = null,
+    delivery: String? = null,
 ) {
     val fontSize = chatFontSize((14f * fontScale).sp, fontScale)
     val isUser = role == "user"
@@ -279,9 +289,9 @@ private fun HistoryBubble(
             modifier = Modifier.alpha(if (pending) 0.5f else 1f),
             onReply = { onReply(it, isUser) }, gate = gate,
             messageId = messageId, sessionName = sessionName, onMarkUnread = onMarkUnread,
-            highlighted = highlighted, reactions = reactions, onReaction = onReaction) {
-            if (pending) {
-                Text("Queued", fontFamily = chatFontFamily(), fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp,
+            highlighted = highlighted, reactions = reactions, onReaction = onReaction, onCancel = onCancel) {
+            if (pending || delivery != null) {
+                Text(delivery ?: "Queued", fontFamily = chatFontFamily(), fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp,
                     color = chatHintColor(sunlight))
             }
             if (isUser) {

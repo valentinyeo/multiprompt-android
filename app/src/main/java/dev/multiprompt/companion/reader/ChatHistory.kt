@@ -12,6 +12,7 @@ data class ChatHistoryMessage(
     val end: Long,
     val requestId: String = "",
     val pending: Boolean = false,
+    val delivery: String? = null,
 ) {
     fun transcript(): TranscriptMessage = TranscriptMessage(role, timestamp.ifEmpty { null }, text)
 }
@@ -48,12 +49,30 @@ data class ChatHistory(
 
     fun displayMessages(screenOutput: String, agent: AgentKind,
         sent: List<QueuedMessages.SentPrompt>, nowMillis: Long): List<ChatHistoryMessage> {
-        val echoes = QueuedMessages.pending(messages.map { it.transcript() }, screenOutput, agent, sent, nowMillis).map { text ->
+        val echoes = QueuedMessages.pending(messages.map { it.transcript() }, screenOutput, agent, sent.filter { it.messageId.isEmpty() }, nowMillis).map { text ->
             val sentAt = sent.lastOrNull { QueuedMessages.normalize(it.text) == text }?.sentAtMillis
             ChatHistoryMessage("@queued:$text", "user", text, "", 0, 0,
                 pending = !QueuedMessages.accepted(text, sentAt, rows))
         }
-        return messages + echoes
+        val own = sent.filter { it.messageId.isNotEmpty() }
+        val delivered = mutableSetOf<String>()
+        val current = messages.map { message ->
+            val record = own.firstOrNull { prompt -> prompt.messageId !in delivered && !prompt.cancelled && prompt.sid == sid && prompt.inode == inode &&
+                message.role == "user" && message.offset >= prompt.afterOffset &&
+                QueuedMessages.normalize(message.text) == QueuedMessages.normalize(prompt.text) &&
+                rows.any { it.offset == message.offset && it.role == "user" && !it.queued }
+            }
+            if (record == null) message else {
+                delivered.add(record.messageId)
+                message.copy(delivery = "Delivered")
+            }
+        }
+        val managed = own.filter { it.messageId !in delivered }.map { prompt ->
+            ChatHistoryMessage("@held:${prompt.messageId}", "user", prompt.text, "", 0, 0,
+                requestId = prompt.messageId, pending = !prompt.cancelled,
+                delivery = if (prompt.cancelled) "Cancelled" else if (prompt.acknowledged) "Queued" else "Sending")
+        }
+        return current + echoes + managed
     }
 
     fun apply(page: ChatHistoryProtocol.Page): ChatHistory {

@@ -323,6 +323,29 @@ class SshRepository(private val secrets: SecretStorage) {
         }
     }
 
+    suspend fun heldPrompt(
+        client: SshClient,
+        script: ByteArray,
+        sessionName: String,
+        record: dev.multiprompt.companion.reader.QueuedMessages.SentPrompt,
+        cancel: Boolean,
+    ): org.json.JSONObject {
+        val op = if (cancel) "cancel_queued" else "send"
+        val query = org.json.JSONObject().put("op", op).put("id", 1).put("tmux", sessionName)
+            .put("text", record.text).put("queued_at", record.sentAtMillis).put("message_id", record.messageId)
+        var receipt = org.json.JSONObject()
+        streamChatHistory(client, script) { exchange ->
+            val wire = org.json.JSONObject(exchange(query.toString() + "\n")).getString("wire")
+            if (!wire.startsWith("@mp\t1\t$op\tok\t")) {
+                throw SshProblem.Connection(if (cancel && wire.contains("\tnot_queued\t"))
+                    "Message already sent to the terminal; cannot cancel" else "The host could not confirm this message action")
+            }
+            if (!cancel) receipt = wire.lineSequence().filter { it.startsWith("{") }
+                .map { org.json.JSONObject(it) }.first { it.optString("role") == "delivery" }
+        }
+        return receipt
+    }
+
     suspend fun sendPrompt(client: SshClient, sessionName: String, prompt: String) {
         require(prompt.isNotBlank()) { "Enter a prompt first" }
         val bytes = prompt.toByteArray(Charsets.UTF_8)
