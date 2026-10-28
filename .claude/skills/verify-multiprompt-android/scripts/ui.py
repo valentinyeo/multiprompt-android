@@ -22,7 +22,7 @@ for node in root.iter("node"):
         matches.append(node)
     elif mode == "field-value" and node.get("class") == "android.widget.EditText" and node.get("focused") == "true":
         matches.append(node)
-    elif mode in ("field", "focused-field") and node.get("class") == "android.widget.EditText":
+    elif mode in ("field", "focused-field", "clear-field") and node.get("class") == "android.widget.EditText":
         if any(value == item.get("text") or value == item.get("content-desc") for item in node.iter()):
             matches.append(node)
 if mode in ("absent", "lacks"):
@@ -40,7 +40,7 @@ if mode == "contains":
 if len(matches) != 1:
     raise SystemExit(f"Ambiguous {mode}: {value} ({len(matches)})")
 node = matches[0]
-if mode == "focused-field" and node.get("focused") != "true":
+if mode in ("focused-field", "clear-field") and node.get("focused") != "true":
     raise SystemExit(f"Field is not focused: {value}")
 if mode == "field-value":
     expected = sys.argv[4]
@@ -57,7 +57,7 @@ if mode in ("checked", "unchecked"):
         raise SystemExit(f"Expected {mode}: {value}")
 if node.get("enabled") == "false":
     raise SystemExit("Selector is disabled")
-if mode not in ("field", "focused-field", "editor", "version", "checked", "unchecked", "scroll-back"):
+if mode not in ("field", "focused-field", "editor", "version", "checked", "unchecked", "scroll-back", "clear-field"):
     ancestor = node
     while ancestor.get("clickable") != "true" and ancestor in parents:
         ancestor = parents[ancestor]
@@ -68,7 +68,9 @@ if mode not in ("field", "focused-field", "editor", "version", "checked", "unche
 numbers = list(map(int, re.findall(r"\d+", node.get("bounds", ""))))
 if len(numbers) != 4 or numbers[2] <= numbers[0] or numbers[3] <= numbers[1]:
     raise SystemExit("Empty selector bounds")
-if mode == "scroll-back":
+if mode == "clear-field":
+    print("123", *("67" for _ in node.get("text", "")))
+elif mode == "scroll-back":
     x = (numbers[0] + numbers[2]) // 2
     inset = (numbers[3] - numbers[1]) // 5
     print(x, numbers[1] + inset, x, numbers[3] - inset)

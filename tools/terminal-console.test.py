@@ -28,6 +28,16 @@ class TerminalConsoleTest(unittest.TestCase):
                 self.assertLess(y2, bottom)
                 self.assertGreater(y2 - y1, (bottom - 231) // 2)
 
+    def test_numeric_field_clear_replaces_existing_digits_without_control_keys(self):
+        root = Path(__file__).resolve().parents[1]
+        script = root / '.claude/skills/verify-multiprompt-android/scripts/ui.py'
+        for text in ('22', '22222222222222', ''):
+            with self.subTest(text=text), tempfile.TemporaryDirectory() as directory:
+                xml = Path(directory) / 'ui.xml'
+                xml.write_text(f'<hierarchy><node class="android.widget.EditText" focused="true" text="{text}" bounds="[0,0][100,100]"><node text="Port" /></node></hierarchy>')
+                result = subprocess.run(['python3', str(script), str(xml), 'clear-field', 'Port'], text=True, capture_output=True, check=True)
+                self.assertEqual(result.stdout.split(), ['123'] + ['67'] * len(text))
+
 
 if __name__ == '__main__':
     unittest.main()

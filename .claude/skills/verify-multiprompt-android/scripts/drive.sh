@@ -84,10 +84,12 @@ wait_for_text() {
 }
 fill() {
     local attempt
+    local -a clear_keys
     for attempt in 1 2 3; do
         tap_node field "$1"
         select_node focused-field "$1" >/dev/null || continue
-        adb shell input keycombination 113 29
+        read -r -a clear_keys < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" clear-field "$1")
+        adb shell input keyevent "${clear_keys[@]}"
         adb shell input text "$2"
         dump_ui
         if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value "$1" "${2//%s/ }"; then
