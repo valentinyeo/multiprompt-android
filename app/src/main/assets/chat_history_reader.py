@@ -1325,7 +1325,7 @@ def start_held_worker(tmux, sid, transcript, source):
     with closing(held_queue_db(tmux)) as db:
         if not db.execute("SELECT 1 FROM messages WHERE sid=? AND state IN ('queued','submitted') LIMIT 1", (sid,)).fetchone():
             return
-    with held_queue_path(tmux).with_suffix(".worker").open("a") as lock:
+    with held_queue_path(tmux).with_suffix("." + hashlib.sha256(sid.encode()).hexdigest() + ".worker").open("a") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -1345,7 +1345,7 @@ def held_queue_worker(tmux, sid, transcript):
     import selectors
     import struct
     from contextlib import closing
-    with held_queue_path(tmux).with_suffix(".worker").open("a") as lock:
+    with held_queue_path(tmux).with_suffix("." + hashlib.sha256(sid.encode()).hexdigest() + ".worker").open("a") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -1367,6 +1367,9 @@ def held_queue_worker(tmux, sid, transcript):
                 selector.register(fd, selectors.EVENT_READ, "file")
                 selector.register(control.stdout, selectors.EVENT_READ, "tmux")
                 while True:
+                    current = resolve_tmux_agent("claude", tmux)
+                    if current is None or current[0] != sid or Path(current[1]) != Path(transcript):
+                        return
                     drain_held_queue(tmux, sid, transcript)
                     with closing(held_queue_db(tmux)) as db:
                         pending = db.execute("SELECT 1 FROM messages WHERE sid=? AND state IN ('queued','submitted') LIMIT 1", (sid,)).fetchone()
