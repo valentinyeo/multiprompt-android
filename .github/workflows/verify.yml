@@ -167,7 +167,7 @@ jobs:
           target: google_apis
           profile: pixel_2
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -verbose > /tmp/native-emulator.log 2>&1
           script: |
             adb install -r -g "$VERIFY_APK"
             if [ "${VERIFY_PACKAGE:-}" = dev.multiprompt.companion ]; then bash tools/release-choices/run.sh; else .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; fi
@@ -183,6 +183,15 @@ jobs:
           test "$EMULATOR_OUTCOME" = failure
           grep -F 'NATIVE_SLASH_PICKER_MISSING' "$EVIDENCE/driver-transcript.txt"
           printf '%s\n' '{"status":"expected-red","error":"NATIVE_SLASH_PICKER_MISSING"}' > "$EVIDENCE/native-baseline-result.json"
+      - name: Retain emulator exit and host memory evidence
+        if: always()
+        run: |
+          mkdir -p "$EVIDENCE/emulator-diagnostics"
+          if [ -f /tmp/native-emulator.log ]; then cp /tmp/native-emulator.log "$EVIDENCE/emulator-diagnostics/"; fi
+          if [ -d /tmp/android-runner ]; then cp -a /tmp/android-runner "$EVIDENCE/emulator-diagnostics/crashes"; fi
+          sudo dmesg -T > "$EVIDENCE/emulator-diagnostics/kernel.txt"
+          free -m > "$EVIDENCE/emulator-diagnostics/memory.txt"
+          ps -eo pid,ppid,stat,rss,args > "$EVIDENCE/emulator-diagnostics/processes.txt"
       - name: Stop recorded fixture processes and retain logs
         timeout-minutes: 2
         if: always()

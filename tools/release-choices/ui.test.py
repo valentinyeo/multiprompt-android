@@ -38,5 +38,27 @@ class FieldReadbackTest(unittest.TestCase):
         self.assertEqual(result.stdout.strip(), '50 50')
 
 
+class SshReadinessTest(unittest.TestCase):
+    def probe(self, response):
+        script = Path(__file__).resolve().parents[2] / '.claude/skills/verify-multiprompt-android/scripts/ssh-ready.sh'
+        with tempfile.TemporaryDirectory() as folder:
+            adb = Path(folder) / 'adb'
+            adb.write_text('#!/bin/sh\nprintf "%s\\n" "$RESPONSE"\n')
+            adb.chmod(0o700)
+            return subprocess.run(['bash', str(script)], env={**os.environ, 'EVIDENCE': folder,
+                'PATH': folder + os.pathsep + os.environ['PATH'], 'RESPONSE': response}, capture_output=True, text=True)
+
+    def test_real_ssh_banner_is_required(self):
+        result = self.probe('SSH-2.0-OpenSSH_9.9')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('SSH-2.0-', result.stdout)
+
+    def test_http_success_is_not_ssh_reachability(self):
+        self.assertNotEqual(self.probe('HTTP/1.1 200 OK').returncode, 0)
+
+    def test_no_banner_is_not_ready(self):
+        self.assertNotEqual(self.probe('').returncode, 0)
+
+
 if __name__ == '__main__':
     unittest.main()
