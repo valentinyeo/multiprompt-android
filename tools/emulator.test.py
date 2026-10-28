@@ -163,7 +163,7 @@ fi
                     output.writestr(entry, '#!/usr/bin/env bash\necho "Android emulator version 35.6.11.0"\n')
                     entry = zipfile.ZipInfo('emulator/qemu/linux-x86_64/qemu-system-x86_64')
                     entry.external_attr = 0o100755 << 16
-                    output.writestr(entry, '#!/usr/bin/env bash\necho "QEMU loaded"\n')
+                    output.writestr(entry, '#!/usr/bin/env bash\n[[ "${LD_LIBRARY_PATH:-}" == "$ANDROID_HOME/emulator/lib64:"* ]] || exit 127\necho "QEMU loaded"\n')
                 checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
                 script = path / 'emulator.sh'
                 script.write_text(re.sub(r'checksum=[a-f0-9]{64}', f'checksum={checksum}', source('.github/actions/android-proof/emulator.sh')))
