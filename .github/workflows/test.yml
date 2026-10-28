@@ -105,6 +105,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
+          target: google_apis
           emulator-build: 16428233
           arch: x86_64
           profile: pixel_2
@@ -285,6 +286,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
+          target: google_apis
           emulator-build: 16428233
           arch: x86_64
           profile: pixel_2
@@ -304,6 +306,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
+          target: google_apis
           emulator-build: 16428233
           arch: x86_64
           profile: pixel_2
