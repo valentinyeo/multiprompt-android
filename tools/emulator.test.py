@@ -35,6 +35,7 @@ class EmulatorProofTest(unittest.TestCase):
                        'disable-animations: true', '-no-snapshot', '-Vulkan',
                        'test -r /dev/kvm && test -w /dev/kvm', 'kernel.txt', 'crashes'):
             self.assertIn(option, action)
+        self.assertNotIn('PerSourcePenalties', source('.claude/skills/verify-multiprompt-android/scripts/fixture.sh'))
         self.assertNotIn('emulator-build:', action)
         self.assertIn('python3 -B tools/emulator.test.py', source('tools/check.sh'))
 
