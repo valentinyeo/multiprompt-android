@@ -1181,21 +1181,10 @@ def response(q, source=None, as_owner=False):
 
 def prompt_box_text(target):
     try:
-        shown = subprocess.run(["tmux", "capture-pane", "-p", "-J", "-t", target], capture_output=True, text=True, timeout=5).stdout
+        shown = subprocess.run(["tmux", "capture-pane", "-p", "-e", "-J", "-t", target], capture_output=True, text=True, timeout=5).stdout
     except (OSError, subprocess.SubprocessError, UnicodeError):
         return ""
-    if not isinstance(shown, str):
-        return ""
-    lines = shown.splitlines()
-    starts = [i for i, line in enumerate(lines) if line.startswith("\u276f")]
-    if not starts:
-        return ""
-    box = []
-    for line in lines[starts[-1]:]:
-        if line.startswith("\u2500"):
-            break
-        box.append(line)
-    return " ".join(" ".join(box)[1:].split())
+    return (box_draft_text(shown) or "") if isinstance(shown, str) else ""
 
 
 def stop_response(q):
