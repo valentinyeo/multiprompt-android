@@ -152,6 +152,27 @@ launcher_icon() {
     sed -n 's/^[[:space:]]*versionName=//p' "$EVIDENCE/package.txt" | grep -Fx "$EXPECTED_VERSION"
     adb shell input keyevent KEYCODE_HOME
     sleep 3
+    dump_ui
+    if ! python3 "$scripts/launcher-icon.py" home "$EVIDENCE/current.xml"; then
+        local size w h x y attempt
+        size=$(adb shell wm size | grep -Eo '[0-9]+x[0-9]+' | tail -1)
+        w=${size%x*}
+        h=${size#*x}
+        adb shell input swipe $((w / 2)) $((h * 7 / 10)) $((w / 2)) $((h / 4)) 500
+        sleep 2
+        for attempt in {1..8}; do
+            dump_ui
+            if python3 "$scripts/launcher-icon.py" find "$EVIDENCE/current.xml"; then break; fi
+            adb shell input swipe $((w / 2)) $((h * 7 / 10)) $((w / 2)) $((h / 4)) 500
+            sleep 2
+        done
+        shot launcher-drawer
+        python3 "$scripts/launcher-icon.py" check "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-launcher-drawer.png" "$EVIDENCE/launcher-icon-crop.png" "$EVIDENCE/launcher-icon-result.json"
+        read -r x y < <(python3 "$scripts/launcher-icon.py" position "$EVIDENCE/current.xml")
+        adb shell input touchscreen draganddrop "$x" "$y" $((w / 2)) $((h / 2)) 1800
+        adb shell input keyevent KEYCODE_HOME
+        sleep 2
+    fi
     shot launcher-home-icon
     python3 "$scripts/launcher-icon.py" home "$EVIDENCE/current.xml"
     python3 "$scripts/launcher-icon.py" check "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-launcher-home-icon.png" "$EVIDENCE/launcher-icon-crop.png" "$EVIDENCE/launcher-icon-result.json"

@@ -59,14 +59,18 @@ def icon_region(cell_bounds):
 
 
 mode = sys.argv[1]
-if mode in ("find", "home"):
+if mode in ("find", "home", "position"):
     cells = launcher_cells(sys.argv[2])
     if len(cells) != 1:
         raise SystemExit(f"Expected one launcher cell labelled {LABEL}, found {len(cells)}")
     if mode == "home":
         ids = {n.get("resource-id", "").split(":id/")[-1] for n in ET.parse(sys.argv[2]).iter("node")}
         assert "workspace" in ids and "apps_view" not in ids, "LAUNCHER_NOT_HOME_SCREEN"
-    print(cells[0].get("bounds"))
+    if mode == "position":
+        left, top, right, bottom = bounds(cells[0])
+        print((left + right) // 2, top + int((bottom - top) * 0.31))
+    else:
+        print(cells[0].get("bounds"))
     raise SystemExit(0)
 
 if mode == "check":
