@@ -2,7 +2,7 @@ name: Verify real Android UI
 
 on:
   push:
-    branches: [ceo/IGSH-1012, ceo/IGSH-1069, ceo/IGSH-1076, ceo/IGSH-1076-proof, ceo/IGSH-1076-red]
+    branches: [ceo/IGSH-1012, ceo/IGSH-1069, ceo/IGSH-1076]
   pull_request:
     paths:
       - 'app/**'
@@ -13,6 +13,10 @@ on:
       - '.github/actions/android-proof/**'
   workflow_dispatch:
     inputs:
+      released_terminal:
+        description: Verify 500-line shell scrolling on the published signed APK
+        type: boolean
+        default: false
       release_icon:
         description: Verify the approved launcher icon on the published signed APK
         type: boolean
@@ -79,7 +83,7 @@ jobs:
       VERIFY_FEATURE: ${{ inputs.feature || ((github.head_ref == 'ceo/IGSH-1076' || startsWith(github.ref, 'refs/heads/ceo/IGSH-1076')) && 'terminal.md') || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1069' && 'chat-choices.md') || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1012' && 'chat-reactions.md') || 'native-skills.md' }}
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
       UPDATE_BASELINE_RUN: ${{ inputs.update_baseline_run }}
-      APP_REF: ${{ inputs.app_ref || (github.ref == 'refs/heads/ceo/IGSH-1076-red' && '7f640c6336ebdc63b37373f141c656bc9dbcb0d5') || '' }}
+      APP_REF: ${{ inputs.app_ref }}
     steps:
       - uses: actions/checkout@v4
       - name: Prepare verification paths
@@ -122,7 +126,7 @@ jobs:
           python3 -m pip install Pillow
           python3 .claude/skills/verify-multiprompt-android/scripts/reactions.test.py
       - name: Prepare signed choices APK and same-signer fixture instrumentation
-        if: inputs.release_choices == true || inputs.released_reactions == true
+        if: inputs.release_choices == true || inputs.released_reactions == true || inputs.released_terminal == true
         env:
           CANDIDATE: ${{ inputs.candidate }}
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
@@ -131,7 +135,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          [[ "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md ]]
+          [[ "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md || "$VERIFY_FEATURE" = terminal.md ]]
           sdkmanager --install 'build-tools;35.0.0' 'platforms;android-35'
           bash tools/release-choices/prepare.sh
           echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
@@ -150,7 +154,7 @@ jobs:
           echo "VERIFY_PACKAGE=dev.multiprompt.companion" >> "$GITHUB_ENV"
           echo "EXPECTED_VERSION=$(jq -er '.versionName' "$EVIDENCE/manifest.json")" >> "$GITHUB_ENV"
       - name: Build debug APK
-        if: inputs.release_choices != true && inputs.release_icon != true && inputs.released_reactions != true
+        if: inputs.release_choices != true && inputs.release_icon != true && inputs.released_reactions != true && inputs.released_terminal != true
         run: |
           mkdir -p "$EVIDENCE"
           python3 .claude/skills/verify-multiprompt-android/scripts/launcher-icon.test.py

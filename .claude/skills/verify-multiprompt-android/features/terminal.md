@@ -16,7 +16,7 @@ Open a session reader, then **Session actions → Open live terminal**. Double-t
 
 ## Driving it with adb and UI Automator
 
-Preconditions: fresh fixture; dispatch `feature=terminal.md`. Driver imports the real key, compares/trusts the host and opens `verify-session` in the reader first.
+Preconditions: fresh fixture; dispatch `feature=terminal.md`. For the published APK, also set `released_terminal=true` and `expected_commit` to its manifest commit; the existing same-signer instrumentation seeds only an isolated offline account session. Driver imports the real key, compares/trusts the host and opens `verify-session` in the reader first.
 
 - Require native `VERIFY_READY_528` and capture `reader-ready`.
 - `tap_desc 'Session actions'`; `tap_text 'Open live terminal'`; `wait_for_text 'SSH · tmux attached'`.
