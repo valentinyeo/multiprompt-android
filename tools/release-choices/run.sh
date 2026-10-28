@@ -14,4 +14,4 @@ finish() {
 adb shell 'screenrecord --time-limit 180 /sdcard/release-choices.mp4 & echo $! > /sdcard/choices-recording.pid; wait' > "$FIXTURE/recording.log" 2>&1 &
 recording=$!
 trap finish EXIT
-.claude/skills/verify-multiprompt-android/scripts/drive.sh chat-choices.md
+.claude/skills/verify-multiprompt-android/scripts/drive.sh "${VERIFY_FEATURE:?}"

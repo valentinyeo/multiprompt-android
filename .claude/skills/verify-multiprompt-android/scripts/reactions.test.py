@@ -37,6 +37,20 @@ class ReactionOracleTest(unittest.TestCase):
             result = subprocess.run([sys.executable, str(SCRIPT), 'check', str(root / 'ui.xml'), str(root / 'screen.png'), 'badge', str(root / 'result.json')], capture_output=True, text=True)
             self.assertEqual(result.returncode == 0, expect, result.stdout + result.stderr)
 
+    def test_mixed_wire_is_rejected_and_clean_words_are_accepted(self):
+        for wire, expected in [(True, False), (False, True)]:
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                tree = ET.Element('hierarchy')
+                for text in ['My follow-up stays visible', 'Answer to the follow-up']:
+                    ET.SubElement(tree, 'node', text=text)
+                ET.SubElement(tree, 'node', {'content-desc': 'Reactions: 👍'})
+                if wire:
+                    ET.SubElement(tree, 'node', text='👍 to: Quote [mp:6d8e353d25c5fe23]')
+                ET.ElementTree(tree).write(root / 'ui.xml', encoding='utf-8')
+                result = subprocess.run([sys.executable, str(SCRIPT), 'mixed', str(root / 'ui.xml'), str(root / 'result.json')], capture_output=True, text=True)
+                self.assertEqual(result.returncode == 0, expected, result.stdout + result.stderr)
+
     def test_valid_badge(self):
         self.check_case()
 

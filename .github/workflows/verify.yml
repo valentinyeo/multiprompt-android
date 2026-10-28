@@ -16,6 +16,10 @@ on:
         description: Verify plain lists and real question answers on the signed release APK
         type: boolean
         default: false
+      released_reactions:
+        description: Verify reaction display and transport on the signed APK
+        type: boolean
+        default: false
       candidate:
         description: Build signed branch candidate instead of downloading the published APK
         type: boolean
@@ -108,7 +112,7 @@ jobs:
           gh run download "$BASELINE_RUN" --repo "$GITHUB_REPOSITORY" --name "verify-chat-reactions.md-$BASELINE_RUN" --dir "$RUNNER_TEMP/update-baseline"
           cp -a "$RUNNER_TEMP/update-baseline/signed-update-baseline" "$EVIDENCE/"
       - name: Prepare signed choices APK and same-signer fixture instrumentation
-        if: inputs.release_choices == true
+        if: inputs.release_choices == true || inputs.released_reactions == true
         env:
           CANDIDATE: ${{ inputs.candidate }}
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
@@ -117,14 +121,14 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          test "$VERIFY_FEATURE" = chat-choices.md
+          [[ "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md ]]
           sdkmanager --install 'build-tools;35.0.0' 'platforms;android-35'
           bash tools/release-choices/prepare.sh
           echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
           echo "VERIFY_PACKAGE=dev.multiprompt.companion" >> "$GITHUB_ENV"
           echo "EXPECTED_VERSION=$(cat "$EVIDENCE/version.txt")" >> "$GITHUB_ENV"
       - name: Build debug APK
-        if: inputs.release_choices != true
+        if: inputs.release_choices != true && inputs.released_reactions != true
         run: |
           mkdir -p "$EVIDENCE"
           python3 -m pip install Pillow

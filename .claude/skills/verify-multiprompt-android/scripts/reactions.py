@@ -31,6 +31,17 @@ if mode == "transport":
     raise SystemExit(0)
 
 nodes = list(ET.parse(sys.argv[2]).getroot().iter("node"))
+if mode == "mixed":
+    texts = [node.get("text", "") for node in nodes]
+    assert "My follow-up stays visible" in texts, texts
+    assert "Answer to the follow-up" in texts, texts
+    assert not any("[mp:6d8e353d25c5fe23]" in text for text in texts), texts
+    assert not any("Padded reaction received." in text for text in texts), texts
+    assert any(node.get("content-desc") == "Reactions: 👍" for node in nodes), "badge missing"
+    Path(sys.argv[3]).write_text(json.dumps(dict(status="passed", mixedWords=True, answer=True, badge=True, wireHidden=True)))
+    print("MIXED_REACTION_DISPLAY_VERIFIED")
+    raise SystemExit(0)
+
 first = bounds(one(nodes, "FIRST REPLY"))
 if mode == "point":
     print((first[0] + first[2]) // 2, (first[1] + first[3]) // 2)
