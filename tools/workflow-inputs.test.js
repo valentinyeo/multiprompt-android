@@ -21,3 +21,10 @@ test('workflow run scripts use environment values for event and dispatch data', 
     }
   }
 });
+
+test('session-reader isolates the crashing API 35 image without changing other journeys', () => {
+  const workflow = readFileSync(path.join(directory, 'verify.yml'), 'utf8');
+  assert.match(workflow, /EMULATOR_API_LEVEL: \$\{\{ inputs\.feature == 'session-reader\.md' && '34' \|\| '35' \}\}/);
+  assert.match(workflow, /"system-images;android-\$\{EMULATOR_API_LEVEL\};google_apis;x86_64"/);
+  assert.match(workflow, /api-level: \$\{\{ env\.EMULATOR_API_LEVEL \}\}/);
+});

@@ -70,8 +70,24 @@ jobs:
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
       UPDATE_BASELINE_RUN: ${{ inputs.update_baseline_run }}
       APP_REF: ${{ inputs.app_ref }}
+      EMULATOR_API_LEVEL: ${{ inputs.feature == 'session-reader.md' && '34' || '35' }}
     steps:
       - uses: actions/checkout@v4
+      - name: Prove reader image regression against original configuration
+        if: github.ref == 'refs/heads/ceo/IGSH-1022'
+        run: |
+          original="$RUNNER_TEMP/original-workflows"
+          mkdir -p "$original"
+          git fetch --depth=1 origin 9a979213a00610c5a146e0bfd8002e6f4f0c9789
+          git show 9a979213a00610c5a146e0bfd8002e6f4f0c9789:.github/workflows/verify.yml > "$original/verify.yml"
+          if WORKFLOW_DIR="$original" node --test tools/workflow-inputs.test.js > "$RUNNER_TEMP/reader-red.txt" 2>&1; then
+            cat "$RUNNER_TEMP/reader-red.txt"
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/reader-red.txt"
+          grep -F 'AssertionError' "$RUNNER_TEMP/reader-red.txt"
+          node --test tools/workflow-inputs.test.js
+          printf 'READER_IMAGE_RED_GREEN_OK\n'
       - name: Prepare verification paths
         run: |
           mkdir -p "$EVIDENCE"
@@ -149,7 +165,7 @@ jobs:
         run: |
           for attempt in 1 2 3; do
             printf 'SDK download attempt %s/3\n' "$attempt" | tee -a "$EVIDENCE/sdk-install.txt"
-            if sdkmanager --install 'build-tools;35.0.0' platform-tools 'platforms;android-35' emulator 'system-images;android-35;google_apis;x86_64' --channel=0 2>&1 | tee -a "$EVIDENCE/sdk-install.txt"; then
+            if sdkmanager --install 'build-tools;35.0.0' platform-tools 'platforms;android-35' emulator "system-images;android-${EMULATOR_API_LEVEL};google_apis;x86_64" --channel=0 2>&1 | tee -a "$EVIDENCE/sdk-install.txt"; then
               exit 0
             fi
           done
@@ -161,7 +177,7 @@ jobs:
         continue-on-error: ${{ inputs.expect_native_missing == true }}
         uses: reactivecircus/android-emulator-runner@v2.34.0
         with:
-          api-level: 35
+          api-level: ${{ env.EMULATOR_API_LEVEL }}
           emulator-build: 16428233
           arch: x86_64
           target: google_apis

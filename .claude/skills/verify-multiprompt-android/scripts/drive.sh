@@ -50,7 +50,7 @@ finish() {
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt" 2>/dev/null
     shot "exit-$code"
     timeout 15s adb logcat -d > "$EVIDENCE/logcat.txt"
-    kill "${logcat_stream_pid:-0}" 2>/dev/null
+    kill "$logcat_stream_pid" 2>/dev/null
     printf 'DRIVER EXIT: %s\n' "$code"
     exit "$code"
 }
