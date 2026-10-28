@@ -740,6 +740,7 @@ if [[ "$feature" == session-reader.md ]]; then
     shot attach-closed
 fi
 if [[ "$feature" == terminal.md ]]; then
+    adb shell settings put secure show_ime_with_hard_keyboard 1
     tap_desc 'Session actions'
     tap_text 'Open live terminal'
     wait_for_text 'SSH · tmux attached'
@@ -749,7 +750,7 @@ if [[ "$feature" == terminal.md ]]; then
     sudo -u verifyssh tmux capture-pane -p -S - -t verify-session > "$EVIDENCE/shell-history-before.txt"
     grep -Fx SHELL_HISTORY_0001 "$EVIDENCE/shell-history-before.txt"
     grep -Fx SHELL_HISTORY_0500 "$EVIDENCE/shell-history-before.txt"
-    for keyboard_state in closed open; do
+    for keyboard_state in open closed; do
         adb shell screenrecord --time-limit 180 "/sdcard/shell-scroll-$keyboard_state.mp4" &
         recording_pid=$!
         tap_desc 'Show keyboard'

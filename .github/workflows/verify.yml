@@ -197,7 +197,7 @@ jobs:
           grep -F 'NATIVE_SLASH_PICKER_MISSING' "$EVIDENCE/driver-transcript.txt"
           printf '%s\n' '{"status":"expected-red","error":"NATIVE_SLASH_PICKER_MISSING"}' > "$EVIDENCE/native-baseline-result.json"
       - name: Require the original shell swipe failure
-        if: inputs.expect_shell_missing == true
+        if: always() && inputs.expect_shell_missing == true
         env:
           EMULATOR_OUTCOME: ${{ steps.native-ui.outcome }}
         run: |
