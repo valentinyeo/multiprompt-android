@@ -59,11 +59,15 @@ def icon_region(cell_bounds):
 
 
 mode = sys.argv[1]
-if mode == "find":
+if mode in ("find", "position"):
     cells = launcher_cells(sys.argv[2])
     if len(cells) != 1:
         raise SystemExit(f"Expected one launcher cell labelled {LABEL}, found {len(cells)}")
-    print(cells[0].get("bounds"))
+    if mode == "position":
+        left, top, right, bottom = bounds(cells[0])
+        print((left + right) // 2, top + int((bottom - top) * 0.31))
+    else:
+        print(cells[0].get("bounds"))
     raise SystemExit(0)
 
 if mode == "check":

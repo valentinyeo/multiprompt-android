@@ -148,7 +148,9 @@ wait_receipt() {
     return 1
 }
 launcher_icon() {
-    local size w h attempt
+    local size w h attempt x y
+    adb shell dumpsys package "$package" > "$EVIDENCE/package.txt"
+    sed -n 's/^[[:space:]]*versionName=//p' "$EVIDENCE/package.txt" | grep -Fx "$EXPECTED_VERSION"
     size=$(adb shell wm size | grep -Eo '[0-9]+x[0-9]+' | tail -1)
     w=${size%x*}
     h=${size#*x}
@@ -169,6 +171,11 @@ launcher_icon() {
     aapt2=$(find "$ANDROID_HOME/build-tools" -name aapt2 | sort | tail -1)
     "$aapt2" dump xmltree --file res/mipmap-anydpi-v26/ic_launcher.xml "$VERIFY_APK" | tee "$EVIDENCE/adaptive-icon-tree.txt"
     grep -q 'monochrome' "$EVIDENCE/adaptive-icon-tree.txt"
+    read -r x y < <(python3 "$scripts/launcher-icon.py" position "$EVIDENCE/current.xml")
+    adb shell input touchscreen draganddrop "$x" "$y" $((w / 2)) $((h / 2)) 1800
+    sleep 2
+    shot launcher-home-icon
+    python3 "$scripts/launcher-icon.py" find "$EVIDENCE/current.xml"
     printf 'ANDROID_LAUNCHER_ROBOT_ICON_PROVEN\n'
 }
 adb shell settings put global hide_error_dialogs 1
