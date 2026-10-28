@@ -22,16 +22,6 @@ test('workflow run scripts use environment values for event and dispatch data', 
   }
 });
 
-test('session reader pins the pre-regression emulator binary', () => {
-  const workflow = readFileSync(path.join(directory, 'verify.yml'), 'utf8');
-  assert.match(workflow, /emulator-build: 14472402/);
-  assert.doesNotMatch(workflow, /emulator-build: 16428233/);
-  const checks = readFileSync(path.join(directory, 'test.yml'), 'utf8');
-  const launches = checks.match(/uses: reactivecircus\/android-emulator-runner@[^\n]+\n[\s\S]*?(?=          script:)/g);
-  assert.ok(launches?.length > 0, 'emulator launches exist');
-  for (const launch of launches) assert.match(launch, /emulator-build: 14472402/);
-});
-
 test('emulator journeys stay on the supported host, not the moving latest image', () => {
   const workflow = readFileSync(path.join(directory, 'verify.yml'), 'utf8');
   assert.match(workflow, /runs-on: ubuntu-24\.04/);

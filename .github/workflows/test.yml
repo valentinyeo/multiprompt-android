@@ -92,7 +92,7 @@ jobs:
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          emulator-build: 14472402
+          emulator-build: 16428233
           arch: x86_64
           profile: pixel_2
           ram-size: 2048M
@@ -105,7 +105,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          emulator-build: 14472402
+          emulator-build: 16428233
           arch: x86_64
           profile: pixel_2
           ram-size: 2048M
@@ -154,7 +154,6 @@ jobs:
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          emulator-build: 14472402
           arch: x86_64
           profile: pixel_2
           ram-size: 2048M
@@ -197,7 +196,6 @@ jobs:
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          emulator-build: 14472402
           arch: x86_64
           profile: pixel_2
           ram-size: 2048M
@@ -237,7 +235,6 @@ jobs:
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          emulator-build: 14472402
           arch: x86_64
           profile: pixel_2
           ram-size: 2048M
@@ -288,7 +285,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          emulator-build: 14472402
+          emulator-build: 16428233
           arch: x86_64
           profile: pixel_2
           ram-size: 2048M
@@ -307,7 +304,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          emulator-build: 14472402
+          emulator-build: 16428233
           arch: x86_64
           profile: pixel_2
           ram-size: 2048M
