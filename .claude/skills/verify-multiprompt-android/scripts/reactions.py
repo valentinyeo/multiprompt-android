@@ -61,8 +61,10 @@ crop = image.crop(tuple(badge))
 colors = sorted(crop.getcolors(crop.width * crop.height) or [], reverse=True)
 assert len(colors) > 3 and crop.width * crop.height - colors[0][0] > 20, "badge glyph must be painted"
 palette = {rgb: count for count, rgb in colors}
-assert palette.get((53, 53, 53), 0) > crop.width * crop.height // 4, "desktop grey reaction fill missing"
-assert palette.get((74, 74, 74), 0) > 10, "desktop grey reaction outline missing"
+light = sum(image.getpixel((0, (badge[1] + badge[3]) // 2))) > 3 * 128
+fill, outline = ((225, 225, 225), (155, 155, 155)) if light else ((53, 53, 53), (74, 74, 74))
+assert palette.get(fill, 0) > crop.width * crop.height // 4, "desktop grey reaction fill missing"
+assert palette.get(outline, 0) > 10, "desktop grey reaction outline missing"
 quoted = [node.get("text") for node in nodes if "👍 to:" in node.get("text", "")]
 replies = [node.get("text") for node in nodes if "Reaction received." in node.get("text", "")]
 assert not replies, ("the session reply to a matched reaction must stay hidden", replies)
