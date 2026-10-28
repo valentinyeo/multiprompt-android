@@ -31,11 +31,13 @@ class EmulatorProofTest(unittest.TestCase):
             self.assertNotIn('runs-on: ubuntu-latest', workflow)
             self.assertIn('runs-on: ubuntu-24.04', workflow)
         action = source('.github/actions/android-proof/action.yml')
-        for option in ('api-level: 35', 'ram-size: 2048M', '-gpu off', 'uses: actions/cache@v4',
+        for option in ('api-level: 35', 'ram-size: 2048M', '-gpu swiftshader_indirect', 'uses: actions/cache@v4',
                        'disable-animations: true', '-no-snapshot', '-Vulkan',
                        'test -r /dev/kvm && test -w /dev/kvm', 'kernel.txt', 'crashes'):
             self.assertIn(option, action)
         self.assertNotIn('PerSourcePenalties', source('.claude/skills/verify-multiprompt-android/scripts/fixture.sh'))
+        self.assertNotIn('-gpu off', action)
+        self.assertNotIn('PerSourcePenalties', source('tools/account-journey/fixture.sh'))
         self.assertNotIn('emulator-build:', action)
         self.assertIn('python3 -B tools/emulator.test.py', source('tools/check.sh'))
 
