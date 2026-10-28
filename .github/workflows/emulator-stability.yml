@@ -1,8 +1,9 @@
 name: Emulator stability series
 
 on:
+  workflow_dispatch:
   push:
-    branches: [main, ceo/IGSH-1077]
+    branches: [main]
     paths:
       - '.github/actions/android-proof/**'
       - '.github/workflows/emulator-stability.yml'
