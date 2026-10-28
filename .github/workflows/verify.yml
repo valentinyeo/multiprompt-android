@@ -87,6 +87,21 @@ jobs:
           grep -F 'AssertionError' "$RUNNER_TEMP/reader-red.txt"
           node --test tools/workflow-inputs.test.js
           printf 'EMULATOR_HOST_RED_GREEN_OK\n'
+      - name: Prove software renderer regression against the crashing configuration
+        if: github.ref == 'refs/heads/ceo/IGSH-1022'
+        run: |
+          original="$RUNNER_TEMP/crashing-workflows"
+          mkdir -p "$original"
+          git fetch --depth=1 origin e46369c3ad5e3ff5c86c6dc9552cf20849fe07f8
+          git show e46369c3ad5e3ff5c86c6dc9552cf20849fe07f8:.github/workflows/verify.yml > "$original/verify.yml"
+          if WORKFLOW_DIR="$original" node --test --test-name-pattern='session reader uses the supported software renderer' tools/workflow-inputs.test.js > "$RUNNER_TEMP/renderer-red.txt" 2>&1; then
+            cat "$RUNNER_TEMP/renderer-red.txt"
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/renderer-red.txt"
+          grep -F 'AssertionError' "$RUNNER_TEMP/renderer-red.txt"
+          node --test --test-name-pattern='session reader uses the supported software renderer' tools/workflow-inputs.test.js
+          printf 'SOFTWARE_RENDERER_RED_GREEN_OK\n'
       - name: Prove SSH fixture configuration on the supported host
         run: |
           sudo apt-get update -qq
@@ -199,7 +214,7 @@ jobs:
           target: google_apis
           profile: pixel_2
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -verbose > /tmp/native-emulator.log 2>&1
+          emulator-options: -no-window -gpu software -noaudio -no-boot-anim -camera-back none -verbose > /tmp/native-emulator.log 2>&1
           script: |
             adb install -r -g "$VERIFY_APK"
             if [ "${VERIFY_PACKAGE:-}" = dev.multiprompt.companion ]; then bash tools/release-choices/run.sh; else .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; fi

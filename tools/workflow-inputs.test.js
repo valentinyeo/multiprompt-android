@@ -22,6 +22,14 @@ test('workflow run scripts use environment values for event and dispatch data', 
   }
 });
 
+test('session reader uses the supported software renderer', () => {
+  const workflow = readFileSync(path.join(directory, 'verify.yml'), 'utf8');
+  const options = workflow.match(/emulator-options: ([^\n]+)/);
+  assert.ok(options, 'emulator launch options exist');
+  assert.match(options[1], /(?:^| )-gpu software(?: |$)/);
+  assert.doesNotMatch(options[1], /swiftshader_indirect/);
+});
+
 test('emulator journeys stay on the supported host, not the moving latest image', () => {
   const workflow = readFileSync(path.join(directory, 'verify.yml'), 'utf8');
   assert.match(workflow, /runs-on: ubuntu-24\.04/);
