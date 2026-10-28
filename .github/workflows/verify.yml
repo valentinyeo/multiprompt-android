@@ -25,6 +25,10 @@ on:
         description: Verify plain lists and real question answers on the signed release APK
         type: boolean
         default: false
+      released_chat:
+        description: Verify chat catchup on the signed published APK
+        type: boolean
+        default: false
       released_robots:
         description: Verify robot inbox and chat title on the signed APK
         type: boolean
@@ -152,7 +156,7 @@ jobs:
           python3 -m pip install Pillow
           python3 .claude/skills/verify-multiprompt-android/scripts/reactions.test.py
       - name: Prepare signed choices APK and same-signer fixture instrumentation
-        if: inputs.release_choices == true || inputs.released_reactions == true || inputs.released_terminal == true || inputs.released_robots == true
+        if: inputs.release_choices == true || inputs.released_reactions == true || inputs.released_terminal == true || inputs.released_robots == true || inputs.released_chat == true
         env:
           CANDIDATE: ${{ inputs.candidate }}
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
@@ -161,7 +165,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          [[ "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md || "$VERIFY_FEATURE" = terminal.md || "$VERIFY_FEATURE" = robot-faces.md ]]
+          [[ "$VERIFY_FEATURE" = chat-queued.md || "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md || "$VERIFY_FEATURE" = terminal.md || "$VERIFY_FEATURE" = robot-faces.md ]]
           sdkmanager --install 'build-tools;35.0.0' 'platforms;android-35'
           bash tools/release-choices/prepare.sh
           echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
@@ -180,7 +184,7 @@ jobs:
           echo "VERIFY_PACKAGE=dev.multiprompt.companion" >> "$GITHUB_ENV"
           echo "EXPECTED_VERSION=$(jq -er '.versionName' "$EVIDENCE/manifest.json")" >> "$GITHUB_ENV"
       - name: Build debug APK
-        if: inputs.release_choices != true && inputs.release_icon != true && inputs.released_reactions != true && inputs.released_terminal != true && inputs.released_robots != true
+        if: inputs.release_choices != true && inputs.release_icon != true && inputs.released_reactions != true && inputs.released_terminal != true && inputs.released_robots != true && inputs.released_chat != true
         run: |
           mkdir -p "$EVIDENCE"
           python3 .claude/skills/verify-multiprompt-android/scripts/launcher-icon.test.py

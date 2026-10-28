@@ -224,7 +224,7 @@ if [[ "$feature" == launcher-icon.md ]]; then
     exit 0
 fi
 if [[ "$package" == dev.multiprompt.companion ]]; then
-    [[ "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md ]]
+    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -586,6 +586,10 @@ LATENCY
     wait_for_text WAITING_TWO
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/queued-receipts.txt"
     sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-queued-work/a1b2c3d4-1008-4000-8000-000000001008.jsonl > "$EVIDENCE/queued-transcript.jsonl"
+    adb shell kill -INT "$recorder_pid"
+    wait "$recorder_client"
+    adb pull /sdcard/chat-catchup.mp4 "$EVIDENCE/chat-catchup.mp4"
+    recorder_pid=
     fill 'Message verify-session' FOLLOWUP
     tap_desc 'Send prompt'
     wait_receipt 'VERIFY_RECEIVED:FOLLOWUP'
