@@ -99,22 +99,9 @@ jobs:
           ram-size: 2048M
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
           disable-animations: true
-          script: bash tools/check-image-preview.sh
-        env:
-          GRADLE: gradle
-      - name: Verify day theme in a fresh emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          avd-name: day-theme
-          emulator-port: 5556
-          api-level: 35
-          emulator-build: 16428233
-          arch: x86_64
-          profile: pixel_2
-          ram-size: 2048M
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
-          disable-animations: true
-          script: bash tools/check-day-theme.sh
+          script: |
+            bash tools/check-image-preview.sh
+            bash tools/check-day-theme.sh
         env:
           GRADLE: gradle
           DAY_THEME_BASE_REF: ${{ inputs.baseline_ref }}
