@@ -48,7 +48,7 @@ runs:
         cores: 2
         ram-size: 2048M
         disable-animations: true
-        emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -feature -Vulkan -verbose > /tmp/android-proof-emulator.log 2>&1
+        emulator-options: -no-window -gpu swangle_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -feature -Vulkan -verbose > /tmp/android-proof-emulator.log 2>&1
         pre-emulator-launch-script: bash "$ANDROID_PROOF_ACTION/emulator.sh"
         script: bash "$ANDROID_PROOF_ACTION/run.sh"
     - name: Retain emulator host and exit evidence

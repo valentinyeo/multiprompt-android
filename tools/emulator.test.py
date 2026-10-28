@@ -34,7 +34,7 @@ class EmulatorProofTest(unittest.TestCase):
             self.assertNotIn('runs-on: ubuntu-latest', workflow)
             self.assertIn('runs-on: ubuntu-24.04', workflow)
         action = source('.github/actions/android-proof/action.yml')
-        for option in ('api-level: 35', 'ram-size: 2048M', '-gpu swiftshader_indirect', 'uses: actions/cache@v4',
+        for option in ('api-level: 35', 'ram-size: 2048M', '-gpu swangle_indirect', 'uses: actions/cache@v4',
                        'disable-animations: true', '-no-snapshot', '-Vulkan',
                        'test -r /dev/kvm && test -w /dev/kvm', 'kernel.txt', 'crashes', 'gdb libpulse0', 'sdk.sh', 'pre-emulator-launch-script:', 'emulator.sh'):
             self.assertIn(option, action)
