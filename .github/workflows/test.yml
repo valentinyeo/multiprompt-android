@@ -105,6 +105,8 @@ jobs:
       - name: Verify day theme in a fresh emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
+          avd-name: day-theme
+          emulator-port: 5556
           api-level: 35
           emulator-build: 16428233
           arch: x86_64
