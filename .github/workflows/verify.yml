@@ -87,6 +87,23 @@ jobs:
           grep -F 'AssertionError' "$RUNNER_TEMP/reader-red.txt"
           node --test tools/workflow-inputs.test.js
           printf 'EMULATOR_HOST_RED_GREEN_OK\n'
+      - name: Prove SSH fixture configuration on the supported host
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y openssh-server
+          sudo install -d -m 755 /run/sshd
+          if [ "$GITHUB_REF" = refs/heads/ceo/IGSH-1022 ]; then
+            git fetch --depth=1 origin 6c808de1454493a16598e469ed38ec4dad15a4ab
+            git show 6c808de1454493a16598e469ed38ec4dad15a4ab:.claude/skills/verify-multiprompt-android/scripts/fixture.sh > "$RUNNER_TEMP/original-fixture.sh"
+            if FIXTURE_SOURCE="$RUNNER_TEMP/original-fixture.sh" node --test tools/fixture.test.js > "$RUNNER_TEMP/fixture-red.txt" 2>&1; then
+              cat "$RUNNER_TEMP/fixture-red.txt"
+              exit 1
+            fi
+            cat "$RUNNER_TEMP/fixture-red.txt"
+            grep -F 'Bad configuration option: PerSourcePenalties' "$RUNNER_TEMP/fixture-red.txt"
+          fi
+          node --test tools/fixture.test.js
+          printf 'SSH_FIXTURE_RED_GREEN_OK\n'
       - name: Prepare verification paths
         run: |
           mkdir -p "$EVIDENCE"
