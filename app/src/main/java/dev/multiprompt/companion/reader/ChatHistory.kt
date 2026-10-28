@@ -59,14 +59,15 @@ data class ChatHistory(
         val own = (sent.filter { it.messageId.isNotEmpty() } + held).distinctBy { it.messageId }.sortedBy { it.sentAtMillis }
         val delivered = mutableSetOf<String>()
         val current = messages.map { message ->
-            val record = own.firstOrNull { prompt -> prompt.messageId !in delivered && prompt.delivery != QueuedMessages.Delivery.CANCELLED && deliveries[prompt.messageId] != QueuedMessages.Delivery.CANCELLED && prompt.sid == sid && prompt.inode == inode &&
-                message.role == "user" && message.offset >= prompt.afterOffset &&
-                QueuedMessages.normalize(message.text) == QueuedMessages.normalize(prompt.text) &&
-                rows.any { it.offset == message.offset && it.role == "user" && !it.queued }
+            val record = own.firstOrNull { prompt ->
+                val state = deliveries[prompt.messageId] ?: prompt.delivery
+                prompt.messageId !in delivered && state == QueuedMessages.Delivery.DELIVERED && prompt.sid == sid && prompt.inode == inode &&
+                    message.role == "user" && message.offset >= prompt.afterOffset &&
+                    QueuedMessages.normalize(message.text) == QueuedMessages.normalize(prompt.text)
             }
             if (record == null) message else {
                 delivered.add(record.messageId)
-                message.copy(delivery = "Delivered")
+                message.copy(pending = false, delivery = "Delivered")
             }
         }
         val managed = own.filter { it.messageId !in delivered }.map { prompt ->

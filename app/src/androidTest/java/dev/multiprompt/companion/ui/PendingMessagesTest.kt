@@ -176,12 +176,15 @@ class PendingMessagesTest {
             .put("normalContrast", normal).put("acceptedContrast", accepted).put("status", "passed").toString())
     }
 
-    @Test fun transcriptEntryRestoresBrightnessWithoutQueueReceipt() {
+    @Test fun hostReceiptAndTranscriptRestoreBrightness() {
         harness()
         val normal = send()
         var acceptedAt = 0L
         compose.runOnIdle {
             acceptedAt = SystemClock.elapsedRealtime()
+            val token = reader.value.sentRecord.single().messageId
+            applyRow(JSONObject().put("role", "status").put("deliveries", org.json.JSONArray()
+                .put(JSONObject().put("id", token).put("state", "delivered"))))
             applyRow(JSONObject().put("role", "user").put("text", prompt).put("id", "accepted")
                 .put("timestamp", Instant.now().toString()))
         }

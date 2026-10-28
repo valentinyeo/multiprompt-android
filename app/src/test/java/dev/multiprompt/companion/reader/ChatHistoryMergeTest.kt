@@ -187,7 +187,7 @@ class ChatHistoryMergeTest {
         assertTrue(waiting[1].pending)
         assertFalse(waiting[2].pending)
         val receipt = ChatHistoryProtocol.Row("user", "same", "received", "", 100, 150)
-        val delivered = history.copy(rows = listOf(old, receipt)).displayMessages("", AgentKind.CLAUDE, listOf(first, second), 3)
+        val delivered = history.copy(rows = listOf(old, receipt), deliveries = mapOf("first" to QueuedMessages.Delivery.DELIVERED)).displayMessages("", AgentKind.CLAUDE, listOf(first, second), 3)
         assertEquals("Delivered", delivered[1].delivery)
         assertFalse(delivered[1].pending)
         assertEquals("Cancelled", delivered.last().delivery)
