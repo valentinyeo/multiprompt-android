@@ -1053,6 +1053,7 @@ def response(q, source=None, as_owner=False):
         return search_response(q, path, agent, sid)
     rid, tmux = q["id"], q["tmux"]
     if agent == "claude" and tmux:
+        start_held_worker(tmux, sid, path, source)
         drain_held_queue(tmux, sid, path)
     rows, budget = [], 0
     queue_stamps = {}
@@ -1305,7 +1306,7 @@ QUEUE_SHOWN = 8
 def held_queue_path(tmux):
     if not isinstance(tmux, str) or not TMUX_NAME.fullmatch(tmux):
         raise ValueError("invalid tmux name")
-    return HOME / ".local/state/multiprompt/held-messages" / (hashlib.sha256(tmux.encode()).hexdigest() + ".sqlite3")
+    return HOME / ".local/state/multiprompt/held-messages" / hashlib.sha256(tmux.encode()).hexdigest() / "queue.sqlite3"
 
 
 def held_queue_db(tmux):
@@ -1327,7 +1328,85 @@ def held_message_key(q):
     return token
 
 
-def enqueue_response(q):
+def start_held_worker(tmux, sid, transcript, source):
+    if source is None or not held_queue_path(tmux).exists():
+        return
+    import fcntl
+    from contextlib import closing
+    with closing(held_queue_db(tmux)) as db:
+        if not db.execute("SELECT 1 FROM messages WHERE sid=? AND state IN ('queued','submitted') LIMIT 1", (sid,)).fetchone():
+            return
+    with held_queue_path(tmux).with_suffix(".worker").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return
+    bootstrap = "import base64,sys;s=base64.b64decode(sys.stdin.buffer.readline()).decode();exec(compile(s,'<held-queue-worker>','exec'),dict(__name__='__main__',READER_SOURCE=s))"
+    child = subprocess.Popen([sys.executable, "-u", "-c", bootstrap, "--held-worker", tmux, sid, str(transcript)],
+                             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    try:
+        child.stdin.write(base64.b64encode(source.encode()) + b"\n")
+    finally:
+        child.stdin.close()
+
+
+def held_queue_worker(tmux, sid, transcript):
+    import ctypes
+    import fcntl
+    import selectors
+    import struct
+    from contextlib import closing
+    with held_queue_path(tmux).with_suffix(".worker").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return
+        libc = ctypes.CDLL(None, use_errno=True)
+        libc.inotify_init1.argtypes = [ctypes.c_int]
+        libc.inotify_add_watch.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32]
+        fd = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
+        if fd < 0:
+            raise OSError(ctypes.get_errno(), "inotify_init1")
+        control = None
+        try:
+            for directory in {transcript.parent, held_queue_path(tmux).parent}:
+                if libc.inotify_add_watch(fd, os.fsencode(directory), 0x182) < 0:
+                    raise OSError(ctypes.get_errno(), "inotify_add_watch")
+            control = subprocess.Popen(["tmux", "-C", "attach-session", "-f", "read-only,ignore-size", "-t", "=" + tmux],
+                                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            with selectors.DefaultSelector() as selector:
+                selector.register(fd, selectors.EVENT_READ, "file")
+                selector.register(control.stdout, selectors.EVENT_READ, "tmux")
+                while True:
+                    drain_held_queue(tmux, sid, transcript)
+                    with closing(held_queue_db(tmux)) as db:
+                        pending = db.execute("SELECT 1 FROM messages WHERE sid=? AND state IN ('queued','submitted') LIMIT 1", (sid,)).fetchone()
+                    if not pending:
+                        return
+                    changed = False
+                    while not changed:
+                        for key, _mask in selector.select():
+                            data = os.read(key.fd, 65536)
+                            if not data:
+                                return
+                            if key.data == "tmux":
+                                changed = True
+                                continue
+                            at = 0
+                            while at + 16 <= len(data):
+                                _wd, mask, _cookie, length = struct.unpack_from("iIII", data, at)
+                                name = os.fsdecode(data[at + 16:at + 16 + length].split(b"\0", 1)[0])
+                                at += 16 + length
+                                if mask & 0x4000 or name in (transcript.name, held_queue_path(tmux).name):
+                                    changed = True
+        finally:
+            os.close(fd)
+            if control is not None:
+                control.terminate()
+                control.communicate()
+
+
+def enqueue_response(q, source=None):
     from contextlib import closing
     key = held_message_key(q)
     name = q["tmux"]
@@ -1339,6 +1418,7 @@ def enqueue_response(q):
     with closing(held_queue_db(name)) as db, db:
         db.execute("INSERT OR IGNORE INTO messages(key,sid,text,queued_at,state,created,origin,source_inode) VALUES (?,?,?,?,'queued',?,?,?)",
                    (key, sid, q["text"], q["queued_at"], time.time_ns(), info.st_size, info.st_ino))
+    start_held_worker(name, sid, transcript, source)
     drain_held_queue(name, sid, transcript)
     with closing(held_queue_db(name)) as db:
         identity = db.execute("SELECT sid,source_inode,origin,state,receipt FROM messages WHERE key=?", (key,)).fetchone()
@@ -1407,8 +1487,9 @@ def drain_held_queue(tmux, sid, transcript):
                     if row and row["role"] == "user" and row["text"].replace("\r", "") == text.replace("\r", ""):
                         receipt = event.get("timestamp", "")
                         break
-            with db:
-                db.execute("UPDATE messages SET scan=?,state=?,receipt=? WHERE key=? AND state='submitted'",
+            if consumed != scanned or receipt is not None:
+                with db:
+                    db.execute("UPDATE messages SET scan=?,state=?,receipt=? WHERE key=? AND state='submitted'",
                            (consumed, "delivered" if receipt is not None else "submitted", receipt or "", key))
             if receipt is None:
                 return
@@ -1495,6 +1576,25 @@ def settle_unchained(target):
     return words[0] + " " + " ".join(words[commands:])
 
 
+def held_settlement(q, sid, rows):
+    from contextlib import closing
+    identities = q.get("message_ids")
+    if identities is None:
+        return rows
+    if not isinstance(identities, list) or len(identities) != len(rows) or any(not isinstance(key, str) or key and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", key) is None for key in identities):
+        raise ValueError("invalid message identities")
+    if not any(identities):
+        return rows
+    with closing(held_queue_db(q["tmux"])) as db:
+        for row, key in zip(rows, identities):
+            if not key:
+                continue
+            stored = db.execute("SELECT receipt FROM messages WHERE key=? AND sid=? AND state='delivered'", (key, sid)).fetchone()
+            stamp = int(datetime.fromisoformat(stored[0].replace("Z", "+00:00")).timestamp() * 1000) if stored and stored[0] else 0
+            row.update(delivered_ms=stamp, line=0)
+    return rows
+
+
 def settle_response(q, source=None, as_owner=False):
     rid = q.get("id", 0)
 
@@ -1514,6 +1614,11 @@ def settle_response(q, source=None, as_owner=False):
         targets = [" ".join(clean_command_markup(text).split()) for text in texts]
         chained = [settle_unchained(target) for target in targets]
         rows = [dict(i=i, delivered_ms=0, line=0) for i in range(len(texts))]
+        identities = q.get("message_ids")
+        if identities and all(identities):
+            rows = held_settlement(q, _sid, rows)
+            return (f"@mp\t{rid}\tsettle\tok\t-\t{len(rows)}\n" +
+                    "".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows) + END + "\n")
         paths = [path]
         if agent == "claude":
             paths += sorted((p for p in path.parent.glob("*.jsonl")
@@ -1551,6 +1656,7 @@ def settle_response(q, source=None, as_owner=False):
                         hits = [i for i in open_targets if len(targets[i]) >= SETTLE_SUFFIX_MIN and f" {targets[i]} " in padded]
                     for i in hits:
                         rows[i].update(delivered_ms=stamp, line=line_number)
+        rows = held_settlement(q, _sid, rows)
         return (f"@mp\t{rid}\tsettle\tok\t-\t{len(rows)}\n" +
                 "".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows) + END + "\n")
     except (OSError, ValueError, KeyError, TypeError, IndexError):
@@ -1570,7 +1676,7 @@ def serve(source):
                 rid = 0
                 raise ValueError("invalid request id")
             if query.get("op") == "send":
-                wire = enqueue_response(query) if "message_id" in query else send_response(query)
+                wire = enqueue_response(query, source) if "message_id" in query else send_response(query)
             elif query.get("op") == "cancel_queued":
                 wire = cancel_queued_response(query)
             elif query.get("op") in ("stop", "permission"):
@@ -1584,7 +1690,9 @@ def serve(source):
         print(json.dumps(dict(id=rid, wire=wire), separators=(",", ":")), flush=True)
 
 
-if __name__ == "__main__" and sys.argv[1:] == ["--serve"]:
+if __name__ == "__main__" and sys.argv[1:2] == ["--held-worker"]:
+    held_queue_worker(sys.argv[2], sys.argv[3], Path(sys.argv[4]))
+elif __name__ == "__main__" and sys.argv[1:] == ["--serve"]:
     serve(globals().get("READER_SOURCE"))
 elif __name__ == "__main__":
     try:
