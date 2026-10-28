@@ -23,9 +23,7 @@ def receipt(text):
         stream.write(text + "\n")
 
 
-record("assistant", "Older choices:\nA. Old first option\nB. Old second option")
-record("user", "Choose a route")
-record("assistant", "Choose a route:\n\nA. **Create a new account.** Keep work separate.\n\nB. **Use your own account.** Keep the current setup.")
+record("assistant", "Still open, from my last message:\n\n1. How much money is on the account?\n2. Should the two daily jobs keep running, or pause until you top up?\n3. Should I merge the leaderboard into all ads?")
 print("Claude Code · choice protocol fixture", flush=True)
 line = input()
 receipt("VERIFY_RECEIVED:" + line)
