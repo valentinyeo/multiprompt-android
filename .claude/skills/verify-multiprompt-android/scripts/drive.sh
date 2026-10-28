@@ -190,7 +190,7 @@ if [[ "$feature" == launcher-icon.md ]]; then
     exit 0
 fi
 if [[ "$package" == dev.multiprompt.companion ]]; then
-    [[ "$feature" == chat-choices.md || "$feature" == chat-working.md ]]
+    [[ "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -711,6 +711,12 @@ if [[ "$feature" == chat-reactions.md ]]; then
     python3 "$scripts/reactions.py" check "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-reactions-fallback.png" fallback "$EVIDENCE/reactions-result.json"
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/reaction-receipts.txt"
     python3 "$scripts/reactions.py" transport "$EVIDENCE/reaction-receipts.txt" "$EVIDENCE/reaction-transport.json"
+    sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-reaction-work/a1b2c3d4-0975-4000-8000-000000000975.jsonl > "$EVIDENCE/reaction-transcript.jsonl"
+    sudo -u verifyssh python3 /home/verifyssh/reaction-console.py append-mixed
+    wait_for_text 'My follow-up stays visible'
+    wait_for_text 'Answer to the follow-up'
+    shot reactions-mixed
+    python3 "$scripts/reactions.py" mixed "$EVIDENCE/current.xml" "$EVIDENCE/reactions-mixed-result.json"
     sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-reaction-work/a1b2c3d4-0975-4000-8000-000000000975.jsonl > "$EVIDENCE/reaction-transcript.jsonl"
     printf 'ANDROID_REACTIONS_REAL_SSH_RESTART_PROVEN\n'
     exit 0

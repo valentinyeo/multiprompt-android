@@ -25,9 +25,11 @@ concurrency:
 jobs:
   test:
     name: test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -50,6 +52,19 @@ jobs:
           sudo apt-get update && sudo apt-get install -y tesseract-ocr tmux
           python3 -m pip install Pillow
 
+      - name: Reject the original unshared emulator lifecycle
+        run: |
+          git fetch --no-tags origin 7bc752421f1599727aaef1bc316e0ee81b4a0630 379589588d573b353138ea915f951f590156a9c7 48bc00c1d4cb8122d1688be9bc6962a2caab611f 11fdebca24f50fa2f21a4e1da5125bdb0589cd95 2ca0d5b6ea31c7c245e8a4334e496cbf9eaac618 f05a21c8cb474767e9faf461036041f09e459f6e
+          for ref in 7bc75242 3795895 48bc00c 11fdebc 2ca0d5b; do
+            if python3 -B tools/emulator.test.py --config-only --ref "$ref" > /tmp/emulator-red.txt 2>&1; then cat /tmp/emulator-red.txt; exit 1; fi
+            cat /tmp/emulator-red.txt
+            grep -F 'AssertionError' /tmp/emulator-red.txt
+          done
+          if python3 -B tools/emulator.test.py --ref f05a21c > /tmp/emulator-metadata-red.txt 2>&1; then cat /tmp/emulator-metadata-red.txt; exit 1; fi
+          cat /tmp/emulator-metadata-red.txt
+          grep -F 'xmlns:generic' /tmp/emulator-metadata-red.txt
+          echo EMULATOR_ORIGINAL_REJECTED
+
       - name: Root files, comments, lint and unit tests
         env:
           GRADLE: gradle
@@ -66,7 +81,7 @@ jobs:
 
   image-preview-emulator:
     name: image-preview-emulator
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -84,33 +99,16 @@ jobs:
           sudo apt-get update && sudo apt-get install -y tesseract-ocr
       - name: Build test APKs before starting the emulator
         run: gradle --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2g -Pkotlin.compiler.execution.strategy=in-process assembleDebug assembleDebugAndroidTest
-      - name: Enable emulator acceleration
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - uses: reactivecircus/android-emulator-runner@v2
+      - uses: ./.github/actions/android-proof
         with:
-          api-level: 35
-          emulator-build: 16428233
-          arch: x86_64
-          profile: pixel_2
-          ram-size: 2048M
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
-          disable-animations: true
+          stage: stage-1
           script: bash tools/check-image-preview.sh
         env:
           GRADLE: gradle
       - name: Verify day theme in a fresh emulator
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: ./.github/actions/android-proof
         with:
-          api-level: 35
-          emulator-build: 16428233
-          arch: x86_64
-          profile: pixel_2
-          ram-size: 2048M
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
-          disable-animations: true
+          stage: stage-2
           script: bash tools/check-day-theme.sh
         env:
           GRADLE: gradle
@@ -136,7 +134,7 @@ jobs:
 
   reply-notifications-emulator:
     name: reply-notifications-emulator
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -146,19 +144,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.5.1"
-      - name: Enable emulator acceleration
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - uses: reactivecircus/android-emulator-runner@v2
+      - uses: ./.github/actions/android-proof
         with:
-          api-level: 35
-          arch: x86_64
-          profile: pixel_2
-          ram-size: 2048M
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
-          disable-animations: true
+          stage: stage-3
           script: bash tools/check-reply-notifications.sh
         env:
           GRADLE: gradle
@@ -176,7 +164,7 @@ jobs:
 
   session-rows-emulator:
     name: session-rows-emulator
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -188,19 +176,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.5.1"
-      - name: Enable emulator acceleration
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - uses: reactivecircus/android-emulator-runner@v2
+      - uses: ./.github/actions/android-proof
         with:
-          api-level: 35
-          arch: x86_64
-          profile: pixel_2
-          ram-size: 2048M
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
-          disable-animations: true
+          stage: stage-4
           script: bash tools/check-session-rows.sh
         env:
           GRADLE: gradle
@@ -215,7 +193,7 @@ jobs:
 
   message-actions-emulator:
     name: message-actions-emulator
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -227,19 +205,9 @@ jobs:
           gradle-version: "9.5.1"
       - name: Install screenshot text reader
         run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
-      - name: Enable emulator acceleration
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - uses: reactivecircus/android-emulator-runner@v2
+      - uses: ./.github/actions/android-proof
         with:
-          api-level: 35
-          arch: x86_64
-          profile: pixel_2
-          ram-size: 2048M
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
-          disable-animations: true
+          stage: stage-5
           script: bash tools/check-message-actions.sh
         env:
           GRADLE: gradle
@@ -255,7 +223,7 @@ jobs:
 
   approved-style-emulator:
     name: approved-style-emulator
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -271,26 +239,15 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y tesseract-ocr
           python3 -m pip install Pillow
-      - name: Enable emulator acceleration
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
       - name: Build original screen APKs before starting the emulator
         run: bash tools/check-approved-style.sh prepare
         env:
           GRADLE: gradle
           STYLE_PHASE: before
       - name: Reject unapproved original screens
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: ./.github/actions/android-proof
         with:
-          api-level: 35
-          emulator-build: 16428233
-          arch: x86_64
-          profile: pixel_2
-          ram-size: 2048M
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
-          disable-animations: true
+          stage: stage-6
           script: bash tools/check-approved-style.sh
         env:
           GRADLE: gradle
@@ -301,15 +258,9 @@ jobs:
           GRADLE: gradle
           STYLE_PHASE: after
       - name: Verify approved screens
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: ./.github/actions/android-proof
         with:
-          api-level: 35
-          emulator-build: 16428233
-          arch: x86_64
-          profile: pixel_2
-          ram-size: 2048M
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
-          disable-animations: true
+          stage: stage-7
           script: bash tools/check-approved-style.sh
         env:
           GRADLE: gradle

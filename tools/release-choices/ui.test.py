@@ -38,6 +38,25 @@ class FieldReadbackTest(unittest.TestCase):
         self.assertEqual(result.stdout.strip(), '50 50')
 
 
+class SignedPackageAbsenceTest(unittest.TestCase):
+    def probe(self, actual, expected, text='Inbox'):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'ui.xml'
+            path.write_text(f'<hierarchy><node package="{actual}" text="{text}" /></hierarchy>')
+            return subprocess.run(['python3', str(FieldReadbackTest.script), str(path), 'absent', 'Report'],
+                env={**os.environ, 'VERIFY_PACKAGE': expected}, capture_output=True, text=True)
+
+    def test_signed_app_absence_accepts_the_signed_app(self):
+        result = self.probe('dev.multiprompt.companion', 'dev.multiprompt.companion')
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_another_package_cannot_prove_absence(self):
+        self.assertNotEqual(self.probe('unrelated.app', 'dev.multiprompt.companion').returncode, 0)
+
+    def test_visible_sheet_still_rejects_absence(self):
+        self.assertNotEqual(self.probe('dev.multiprompt.companion', 'dev.multiprompt.companion', 'Report').returncode, 0)
+
+
 class SshReadinessTest(unittest.TestCase):
     def probe(self, response):
         script = Path(__file__).resolve().parents[2] / '.claude/skills/verify-multiprompt-android/scripts/ssh-ready.sh'
