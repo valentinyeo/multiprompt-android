@@ -1608,7 +1608,11 @@ internal fun SessionsScreen(
                 Row(
                     Modifier.fillMaxWidth()
                         .then(if (LocalMaterial3.current) Modifier.height(64.dp) else Modifier)
-                        .padding(horizontal = 8.dp, vertical = if (LocalReaderStyle.current) ReaderScreenPadding else if (LocalMaterial3.current) 0.dp else 2.dp),
+                        .padding(if (LocalReaderStyle.current) {
+                            PaddingValues(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 18.dp)
+                        } else {
+                            PaddingValues(horizontal = 8.dp, vertical = if (LocalMaterial3.current) 0.dp else 2.dp)
+                        }),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

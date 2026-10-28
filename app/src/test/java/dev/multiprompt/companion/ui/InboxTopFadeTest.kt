@@ -35,7 +35,6 @@ class InboxTopFadeTest {
             compose.onNodeWithText("claude-reader").fetchSemanticsNode().boundsInRoot.bottom,
             compose.onNodeWithContentDescription("Back").fetchSemanticsNode().boundsInRoot.bottom,
         )
-        println("FADE_BOUNDS inbox=$inbox controls=$inboxControlBottom chat=$chat controls=$chatControlBottom")
         assertEquals("Inbox fade must start alongside chat", chat.top, inbox.top, 1f)
         assertEquals("Inbox fade must extend as far below its controls as chat", chat.bottom - chatControlBottom, inbox.bottom - inboxControlBottom, 1f)
     }
