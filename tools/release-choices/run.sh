@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 bash tools/release-choices/seed.sh
+if [[ "${VERIFY_FEATURE:-chat-choices.md}" == chat-queued.md ]]; then
+    trap 'kill "$(cat "$FIXTURE/offline-proxy.pid")"' EXIT
+    .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"
+    exit 0
+fi
 finish() {
     code=$?
     trap - EXIT
