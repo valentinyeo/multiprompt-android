@@ -155,7 +155,7 @@ jobs:
         run: |
           for attempt in 1 2 3; do
             printf 'SDK download attempt %s/3\n' "$attempt" | tee -a "$EVIDENCE/sdk-install.txt"
-            if sdkmanager --install 'build-tools;35.0.0' platform-tools 'platforms;android-35' emulator 'system-images;android-35;google_apis;x86_64' --channel=0 2>&1 | tee -a "$EVIDENCE/sdk-install.txt"; then
+            if sdkmanager --install 'build-tools;35.0.0' platform-tools 'platforms;android-35' emulator 'system-images;android-34;google_apis;x86_64' --channel=0 2>&1 | tee -a "$EVIDENCE/sdk-install.txt"; then
               exit 0
             fi
           done
@@ -167,7 +167,7 @@ jobs:
         continue-on-error: ${{ inputs.expect_native_missing == true }}
         uses: reactivecircus/android-emulator-runner@v2.34.0
         with:
-          api-level: 35
+          api-level: 34
           emulator-build: 16428233
           arch: x86_64
           target: google_apis
