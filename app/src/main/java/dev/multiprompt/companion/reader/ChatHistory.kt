@@ -26,10 +26,19 @@ data class ChatHistory(
     val more: Boolean = false,
     val rows: List<Row> = emptyList(),
 ) {
+    val pendingQuestions: List<PendingQuestion> by lazy {
+        val pending = LinkedHashMap<String, List<PendingQuestion>>()
+        for (row in rows) {
+            if (row.questionResult.isNotEmpty()) pending.remove(row.questionResult)
+            if (row.questions.isNotEmpty()) pending[row.id] = row.questions
+        }
+        pending.values.flatten()
+    }
+
     val messages: List<ChatHistoryMessage> by lazy {
         val grouped = LinkedHashMap<String, ChatHistoryMessage>()
         for (row in rows) {
-            if (row.settlement != null) continue
+            if (row.settlement != null || row.questions.isNotEmpty() || row.questionResult.isNotEmpty()) continue
             val key = "$sid:$inode:${row.role}:${row.id.ifEmpty { "@${row.offset}" }}"
             val previous = grouped[key]
             val text = when {
@@ -63,7 +72,7 @@ data class ChatHistory(
             "older" -> require(sameSource && page.end == start && page.oldest == page.base)
         }
         val retained = if (page.mode == "tail") emptyList() else rows
-        val merged = (retained + page.rows).associateBy { Pair(it.offset, it.role) }.values.sortedBy { it.offset }
+        val merged = (retained + page.rows).associateBy { Triple(it.offset, it.role, it.id) }.values.sortedBy { it.offset }
         return if (page.mode == "older") {
             copy(start = page.oldest, rows = merged)
         } else {

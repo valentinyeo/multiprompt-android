@@ -1,22 +1,22 @@
 package dev.multiprompt.companion.ui
 
+
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertHasNoClickAction
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import dev.multiprompt.companion.ssh.ClaudeQuestion
-import dev.multiprompt.companion.ssh.TmuxCommands
+import androidx.compose.ui.test.performTextInput
 import dev.multiprompt.companion.reader.ChatHistoryMessage
+import dev.multiprompt.companion.reader.PendingQuestion
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -32,6 +32,10 @@ import org.robolectric.annotation.GraphicsMode
 class ChatChoicesTest {
     private val scheduler = TestCoroutineScheduler()
     @get:Rule val compose = createComposeRule(effectContext = UnconfinedTestDispatcher(scheduler))
+    private val question = PendingQuestion("call", 0, "Which route?", "Account",
+        listOf(PendingQuestion.Option("Create", "Keep work separate."), PendingQuestion.Option("Keep", "Current setup.")),
+        multiSelect = false, other = true, provider = "claude")
+
     private val first = "Should the two daily jobs keep running, or pause until you top up?"
     private val second = "Which account should pay, and when should the jobs restart?"
     private val third = "Keep the current plan, or review all three open questions first?"
@@ -69,51 +73,52 @@ class ChatChoicesTest {
         compose.onNodeWithText(first).assertExists().assertHasNoClickAction()
     }
 
-    @Test
-    fun failedQuestionTransportAllowsRetry() {
-        val question = ClaudeQuestion("Choose a route", listOf(ClaudeQuestion.Option(1, "Create"), ClaudeQuestion.Option(2, "Keep")))
+    @Test fun exactQuestionAndDescriptionsStaySeparateFromLabels() {
+        var answer: Pair<Set<Int>, String>? = null
+        compose.setContent {
+            MaterialTheme { QuestionChoices(question, enabled = true) { selected, other -> answer = selected to other; true } }
+        }
+        listOf("Account", "Which route?", "Create", "Keep work separate.", "Keep", "Current setup.", "Other").forEach {
+            compose.onNodeWithText(it).assertIsDisplayed()
+        }
+        compose.onNodeWithText("Keep").performClick()
+        compose.onNodeWithText("Submit answer").performClick().assertIsNotEnabled()
+        compose.runOnIdle { assertEquals(setOf(1) to "", answer) }
+    }
+
+    @Test fun multipleSelectionsAndOtherArePreservedTogether() {
+        var answer: Pair<Set<Int>, String>? = null
+        compose.setContent {
+            MaterialTheme { QuestionChoices(question.copy(multiSelect = true), enabled = true) { selected, other -> answer = selected to other; true } }
+        }
+        compose.onNodeWithText("Create").performClick()
+        compose.onNodeWithText("Keep").performClick()
+        compose.onNodeWithText("Other").performTextInput("A third route")
+        compose.onNodeWithText("Submit answer").performClick()
+        compose.runOnIdle { assertEquals(setOf(0, 1) to "A third route", answer) }
+    }
+
+    @Test fun singleChoiceAndOtherAreExclusive() {
+        var answer: Pair<Set<Int>, String>? = null
+        compose.setContent {
+            MaterialTheme { QuestionChoices(question, enabled = true) { selected, other -> answer = selected to other; true } }
+        }
+        compose.onNodeWithText("Create").performClick()
+        compose.onNodeWithText("Other").performTextInput("Custom answer")
+        compose.onNodeWithText("Submit answer").performClick()
+        compose.runOnIdle { assertEquals(emptySet<Int>() to "Custom answer", answer) }
+    }
+
+    @Test fun failedQuestionTransportAllowsRetry() {
         val error = mutableStateOf<String?>(null)
         var attempts = 0
         compose.setContent {
-            MaterialTheme {
-                QuestionChoices(question, enabled = true, error = error.value) { attempts++; true }
-            }
+            MaterialTheme { QuestionChoices(question, enabled = true, error = error.value) { _, _ -> attempts++; true } }
         }
-        compose.onNodeWithText("2: Keep").performClick().assertIsNotEnabled()
+        compose.onNodeWithText("Keep").performClick()
+        compose.onNodeWithText("Submit answer").performClick().assertIsNotEnabled()
         compose.runOnIdle { error.value = "Connection failed" }
-        compose.onNodeWithText("2: Keep").assertIsEnabled().performClick()
+        compose.onNodeWithText("Submit answer").assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals(2, attempts) }
     }
-
-    @Test
-    fun terminalQuestionTapReachesTheSessionAsANumberKeyNotPastedText() {
-        val screen = """
-            ──────────────────────────
-            Which route should we use?
-            ❯ 1. Create a new account
-              2. Use the current account
-              3. Type something.
-            ──────────────────────────
-            Enter to select · Tab/Arrow keys to navigate · Esc to cancel
-        """.trimIndent()
-        val question = requireNotNull(ClaudeQuestion.parse(screen))
-        var received = ""
-        compose.setContent {
-            MaterialTheme {
-                ChatHistoryList(messages = emptyList(), question = question, onQuestionChoice = { index ->
-                    val command = TmuxCommands.questionAnswer("question-proof", question, screen, index)
-                    val script = sequenceOf(File("../tools/check-question-key.sh"), File("tools/check-question-key.sh")).first { it.isFile }
-                    val process = ProcessBuilder("timeout", "15", "bash", script.path, command)
-                        .redirectErrorStream(true).start()
-                    received = process.inputStream.bufferedReader().readText()
-                    check(process.waitFor() == 0) { received }
-                    true
-                })
-            }
-        }
-        compose.onNodeWithText("2: Use the current account").performClick().assertIsSelected().assertIsNotEnabled()
-        compose.runOnIdle { assertEquals("2", received) }
-        compose.onNodeWithText("1: Create a new account").assertIsNotEnabled()
-    }
-
 }
