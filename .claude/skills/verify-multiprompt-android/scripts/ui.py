@@ -16,7 +16,9 @@ for node in root.iter("node"):
         matches.append(node)
     elif mode == "editor" and node.get("class") == "android.widget.EditText" and node.get("package") == "dev.multiprompt.companion.debug":
         matches.append(node)
-    elif mode in ("field", "focused-field", "field-value") and node.get("class") == "android.widget.EditText":
+    elif mode == "field-value" and node.get("class") == "android.widget.EditText" and node.get("focused") == "true":
+        matches.append(node)
+    elif mode in ("field", "focused-field") and node.get("class") == "android.widget.EditText":
         if any(value == item.get("text") or value == item.get("content-desc") for item in node.iter()):
             matches.append(node)
 if mode in ("absent", "lacks"):
