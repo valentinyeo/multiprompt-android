@@ -54,6 +54,7 @@ jobs:
 
       - name: Reject the original unshared emulator lifecycle
         run: |
+          git fetch --no-tags origin 7bc752421f1599727aaef1bc316e0ee81b4a0630 379589588d573b353138ea915f951f590156a9c7 48bc00c1d4cb8122d1688be9bc6962a2caab611f 11fdebca24f50fa2f21a4e1da5125bdb0589cd95 2ca0d5b6ea31c7c245e8a4334e496cbf9eaac618 f05a21c8cb474767e9faf461036041f09e459f6e
           for ref in 7bc75242 3795895 48bc00c 11fdebc 2ca0d5b; do
             if python3 -B tools/emulator.test.py --config-only --ref "$ref" > /tmp/emulator-red.txt 2>&1; then cat /tmp/emulator-red.txt; exit 1; fi
             cat /tmp/emulator-red.txt

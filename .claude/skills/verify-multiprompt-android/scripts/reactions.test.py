@@ -21,7 +21,7 @@ class ReactionOracleTest(unittest.TestCase):
         ]
         image = Image.new('RGB', (300, 300), '#eeeeee')
         draw = ImageDraw.Draw(image)
-        draw.rectangle((10, 95, 49, 119), fill='#dddddd')
+        draw.rectangle((10, 95, 49, 119), fill='#353535', outline='#4a4a4a')
         draw.rectangle((20, 100, 29, 114), fill='#ffff00')
         draw.rectangle((25, 102, 32, 108), fill='#000000')
         draw.rectangle((23, 110, 29, 114), fill='#ffffff')
@@ -53,6 +53,15 @@ class ReactionOracleTest(unittest.TestCase):
 
     def test_valid_badge(self):
         self.check_case()
+
+    def test_tinted_material_badge_is_rejected(self):
+        self.check_case(lambda nodes, image: ImageDraw.Draw(image).rectangle((10, 95, 49, 119), fill='#5c4132'), False)
+
+    def test_wrong_grey_fill_is_rejected(self):
+        self.check_case(lambda nodes, image: ImageDraw.Draw(image).rectangle((10, 95, 49, 119), fill='#dddddd', outline='#4a4a4a'), False)
+
+    def test_missing_grey_outline_is_rejected(self):
+        self.check_case(lambda nodes, image: ImageDraw.Draw(image).rectangle((10, 95, 49, 119), fill='#353535'), False)
 
     def test_missing_badge(self):
         self.check_case(lambda nodes, image: nodes.pop(2), False)
