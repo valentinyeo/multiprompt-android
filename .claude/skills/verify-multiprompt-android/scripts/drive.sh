@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md) ;;
+    chat-working.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -150,7 +150,7 @@ wait_receipt() {
 adb shell settings put global hide_error_dialogs 1
 adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
 if [[ "$package" == dev.multiprompt.companion ]]; then
-    [[ "$feature" == chat-choices.md ]]
+    [[ "$feature" == chat-choices.md || "$feature" == chat-working.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -392,6 +392,11 @@ if [[ "$feature" == sessions.md ]]; then
     exit 0
 fi
 tap_text verify-session
+if [[ "$feature" == chat-working.md ]]; then
+    wait_for_text WORKING_DOTS_READY
+    python3 tools/working-dots/drive.py
+    exit 0
+fi
 if [[ "$feature" == chat-choices.md ]]; then
     wait_for_text 'Should the two daily jobs keep running, or pause until you top up?'
     shot plain-numbered-reply
