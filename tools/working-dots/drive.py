@@ -33,6 +33,17 @@ def auth_count():
     return text.count("Accepted publickey for verifyssh")
 
 
+observer_output = samples.open("w")
+observer = subprocess.Popen(["adb", "shell", "am", "instrument", "-w", "-r",
+    "dev.multiprompt.verification/dev.multiprompt.verification.Observe"], stdout=observer_output, stderr=subprocess.STDOUT)
+deadline = time.monotonic() + 60
+while time.monotonic() < deadline:
+    if '"ready":true' in samples.read_text():
+        break
+    assert observer.poll() is None, samples.read_text()
+    time.sleep(0.2)
+else:
+    raise AssertionError("Observer did not reopen the seeded reader: " + samples.read_text()[-2000:])
 shot("before-turn")
 subprocess.run(["adb", "logcat", "-c"], check=True)
 with (root / "recording.txt").open("w") as output:
@@ -60,7 +71,9 @@ try:
         if elapsed >= 80 and "disconnect" not in phases:
             before = auth_count()
             event("disconnect", authentications=before)
-            run("sudo", "ss", "-K", "sport = :2222")
+            reset = run("sudo", "ss", "-K", "sport = :2222")
+            (root / "reset-sockets.txt").write_text(reset + "\n")
+            assert len(reset.splitlines()) > 1, "No live SSH socket reset"
             phases.add("disconnect")
         if "disconnect" in phases and "reconnected" not in phases and auth_count() > before:
             event("reconnected", authentications=auth_count())
@@ -85,4 +98,7 @@ finally:
     transcript = run("sudo", "find", "/home/verifyssh/.claude/projects", "-name", "*.jsonl").splitlines()
     assert len(transcript) == 1, transcript
     (root / "transcript.jsonl").write_text(run("sudo", "cat", transcript[0]) + "\n")
+run("adb", "shell", "touch", "/sdcard/Android/data/dev.multiprompt.companion/files/working-stop")
+observer.wait(timeout=20)
+observer_output.close()
 subprocess.run(["python3", "tools/working-dots/check.py", str(root)], check=True)
