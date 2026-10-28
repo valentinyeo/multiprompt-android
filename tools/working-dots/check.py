@@ -36,6 +36,13 @@ def verify(samples, server, journey):
         appear_ms=shown - start, clear_ms=hidden - end, reconnect_ms=reconnect["at"] - disconnect["at"])
 
 
+def visible_frame(path):
+    from PIL import Image, ImageStat
+    with Image.open(path) as image:
+        assert min(image.size) > 100, "Screenshot is not a real display frame"
+        assert max(ImageStat.Stat(image.convert("RGB")).mean) > 5, "Screenshot is still screen-off black"
+
+
 def load(path):
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
@@ -49,6 +56,6 @@ if __name__ == "__main__":
     assert len(transcript) == 2, "Unexpected chat text during quiet tools"
     assert (root / "working-dots.mp4").stat().st_size > 10000, "Recording missing"
     for name in ["before-turn", "quiet-tools", "after-unlock", "after-reconnect", "after-turn"]:
-        assert (root / (name + ".png")).read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+        visible_frame(root / (name + ".png"))
     (root / "result.json").write_text(json.dumps(dict(status="pass", **result), indent=2) + "\n")
     print("RELEASE_WORKING_DOTS_PROVEN", json.dumps(result))

@@ -18,6 +18,8 @@ jobs:
       VERIFY_PACKAGE: dev.multiprompt.companion
     steps:
       - uses: actions/checkout@v4
+      - name: Install screenshot reader
+        run: python3 -m pip install Pillow
       - name: Reject the actual first-run readiness failure
         run: |
           git fetch --depth=1 origin cb29ac1f03bfe05f21efc7728a002011065578ec

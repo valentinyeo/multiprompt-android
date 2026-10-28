@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import subprocess
 import time
+from check import visible_frame
 
 root = Path(os.environ["EVIDENCE"])
 samples = root / "visibility.txt"
@@ -66,7 +67,15 @@ try:
             run("adb", "shell", "input", "keyevent", "KEYCODE_WAKEUP")
             run("adb", "shell", "wm", "dismiss-keyguard")
             event("unlock")
-            shot("after-unlock")
+            for attempt in range(20):
+                shot("after-unlock")
+                try:
+                    visible_frame(root / "after-unlock.png")
+                    break
+                except AssertionError:
+                    time.sleep(0.1)
+            else:
+                raise AssertionError("Display did not wake after unlock")
             phases.add("unlock")
         if elapsed >= 80 and "disconnect" not in phases:
             before = auth_count()

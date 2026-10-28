@@ -38,6 +38,16 @@ class WorkingEvidenceTest(unittest.TestCase):
             state = json.loads((home / ".local/state/multiprompt/tab-state.json").read_text())
             self.assertEqual(state["verify-session"]["state"], "done")
 
+    def test_screen_off_capture_is_not_unlock_proof(self):
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "frame.png"
+            Image.new("RGB", (1080, 1920), "black").save(path)
+            with self.assertRaisesRegex(AssertionError, "screen-off black"):
+                check.visible_frame(path)
+            Image.new("RGB", (1080, 1920), "white").save(path)
+            check.visible_frame(path)
+
     def test_complete_quiet_turn(self):
         self.assertEqual(check.verify(self.samples, self.server, self.journey)["tools"], 135)
 
