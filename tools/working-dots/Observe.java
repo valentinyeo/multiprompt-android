@@ -49,7 +49,8 @@ public class Observe extends Instrumentation {
         while (SystemClock.elapsedRealtime() < end && !stop.exists()) {
             Bundle result = new Bundle();
             AccessibilityNodeInfo root = getUiAutomation().getRootInActiveWindow();
-            if (text(root, "Inbox") != null) {
+            AccessibilityNodeInfo inbox = text(root, "Inbox");
+            if (inbox != null && inbox.isVisibleToUser()) {
                 AccessibilityNodeInfo session = text(root, "verify-session");
                 while (session != null && !session.isClickable()) session = session.getParent();
                 if (session != null) session.performAction(AccessibilityNodeInfo.ACTION_CLICK);
