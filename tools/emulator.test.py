@@ -181,7 +181,7 @@ out.write_bytes(b'truncated' if os.environ['CORRUPT'] == 'yes' else (p / 'fixtur
                 (path / 'android-proof').mkdir()
                 (path / 'emulator').mkdir()
                 (path / 'emulator/stale-library').write_text('old')
-                (path / 'emulator/package.xml').write_text('<repository><localPackage path="emulator"><revision><major>37</major><minor>2</minor><micro>12</micro></revision></localPackage></repository>')
+                (path / 'emulator/package.xml').write_text('<repository xmlns:generic="urn:generic" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><localPackage path="emulator"><type-details xsi:type="generic:genericDetailsType"/><revision><major>37</major><minor>2</minor><micro>12</micro></revision></localPackage></repository>')
                 env = dict(os.environ, HOME=tmp, RUNNER_TEMP=tmp, ANDROID_HOME=tmp, CORRUPT='yes' if corrupt else 'no', PATH=f'{tmp}:{os.environ["PATH"]}')
                 result = subprocess.run(['bash', str(script)], env=env, capture_output=True, text=True)
                 if corrupt:
@@ -194,6 +194,7 @@ out.write_bytes(b'truncated' if os.environ['CORRUPT'] == 'yes' else (p / 'fixtur
                     self.assertFalse((path / 'emulator/stale-library').exists())
                     revision = ET.parse(path / 'emulator/package.xml').find('localPackage/revision')
                     self.assertEqual([node.text for node in revision], ['35', '6', '11'])
+                    self.assertIn('xmlns:generic="urn:generic"', (path / 'emulator/package.xml').read_text())
                     subprocess.run(['bash', str(script)], env=env, check=True, capture_output=True)
                     self.assertEqual((path / 'downloads').read_text().count('download'), 1)
 

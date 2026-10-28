@@ -15,15 +15,14 @@ unzip -tq "$archive"
 mkdir -p "$RUNNER_TEMP/android-proof-sdk"
 unzip -oq "$archive" -d "$RUNNER_TEMP/android-proof-sdk"
 python3 - "$ANDROID_HOME/emulator/package.xml" "$RUNNER_TEMP/android-proof-sdk/emulator/package.xml" <<'PYTHON'
+from pathlib import Path
+import re
 import sys
-import xml.etree.ElementTree as ET
 
-tree = ET.parse(sys.argv[1])
-revision = next(node for node in tree.iter() if node.tag.rsplit('}', 1)[-1] == 'revision')
-for node in revision:
-    name = node.tag.rsplit('}', 1)[-1]
-    node.text = {'major': '35', 'minor': '6', 'micro': '11'}[name]
-tree.write(sys.argv[2], encoding='utf-8', xml_declaration=True)
+text = Path(sys.argv[1]).read_text()
+text, count = re.subn(r'<revision>.*?</revision>', '<revision><major>35</major><minor>6</minor><micro>11</micro></revision>', text, count=1, flags=re.S)
+assert count == 1
+Path(sys.argv[2]).write_text(text)
 PYTHON
 rm -rf "$ANDROID_HOME/emulator"
 mv "$RUNNER_TEMP/android-proof-sdk/emulator" "$ANDROID_HOME/emulator"

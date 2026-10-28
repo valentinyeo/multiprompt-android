@@ -59,6 +59,9 @@ jobs:
             cat /tmp/emulator-red.txt
             grep -F 'AssertionError' /tmp/emulator-red.txt
           done
+          if python3 -B tools/emulator.test.py --ref f05a21c > /tmp/emulator-metadata-red.txt 2>&1; then cat /tmp/emulator-metadata-red.txt; exit 1; fi
+          cat /tmp/emulator-metadata-red.txt
+          grep -F 'xmlns:generic' /tmp/emulator-metadata-red.txt
           echo EMULATOR_ORIGINAL_REJECTED
 
       - name: Root files, comments, lint and unit tests
