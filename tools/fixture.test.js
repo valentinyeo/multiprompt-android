@@ -16,7 +16,9 @@ test('ephemeral SSH fixture configuration starts on the supported host', () => {
     const key = spawnSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', path.join(directory, 'host-key')], { encoding: 'utf8' });
     assert.equal(key.status, 0, key.stderr);
     const config = path.join(directory, 'sshd_config');
-    writeFileSync(config, template[1].replaceAll('$FIXTURE', directory));
+    const render = spawnSync('bash', ['-euc', `cat <<CONFIG\n${template[1]}\nCONFIG`], { encoding: 'utf8', env: { ...process.env, FIXTURE: directory } });
+    assert.equal(render.status, 0, render.stderr);
+    writeFileSync(config, render.stdout);
     const check = spawnSync('sudo', ['/usr/sbin/sshd', '-t', '-f', config], { encoding: 'utf8' });
     assert.equal(check.status, 0, check.stderr);
   } finally {
