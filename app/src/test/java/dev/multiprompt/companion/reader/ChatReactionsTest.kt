@@ -121,6 +121,20 @@ class ChatReactionsTest {
     }
 
     @Test
+    fun mixedUserWordsKeepTheirAnswerWhilePaddedReactionOnlyRepliesStayHidden() {
+        val target = message("msg_target", "Synthetic answer")
+        val line = ChatReactions.format(ChatReactions.Emoji.LIKE, target.requestId, target.text)!!
+        val reply = message("answer", "Answer to the follow-up")
+        val mixed = message("mixed", "Please explain\n\n$line", "user")
+        val shown = ChatReactions.present(listOf(target, mixed, reply))
+        assertEquals(listOf(target, mixed.copy(text = "Please explain"), reply), shown.messages)
+        assertEquals(setOf(ChatReactions.Emoji.LIKE), shown.badges[target.key])
+        val only = mixed.copy(text = "\n$line\n")
+        assertEquals(listOf(target), ChatReactions.present(listOf(target, only, reply)).messages)
+        assertEquals("Please explain\n\n$line", mixed.transcript().text)
+    }
+
+    @Test
     fun quotesStayShortWithoutSplittingAnEmoji() {
         val line = ChatReactions.format(ChatReactions.Emoji.HEART, "id", "a".repeat(79) + "🙂 later")!!
         val quote = ChatReactions.parse(line)!!.quote
