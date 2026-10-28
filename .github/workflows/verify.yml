@@ -87,21 +87,21 @@ jobs:
           grep -F 'AssertionError' "$RUNNER_TEMP/reader-red.txt"
           node --test tools/workflow-inputs.test.js
           printf 'EMULATOR_HOST_RED_GREEN_OK\n'
-      - name: Prove software renderer regression against the crashing configuration
+      - name: Prove emulator binary regression against the crashing configuration
         if: github.ref == 'refs/heads/ceo/IGSH-1022'
         run: |
-          original="$RUNNER_TEMP/crashing-workflows"
+          original="$RUNNER_TEMP/crashing-emulator-workflows"
           mkdir -p "$original"
-          git fetch --depth=1 origin e46369c3ad5e3ff5c86c6dc9552cf20849fe07f8
-          git show e46369c3ad5e3ff5c86c6dc9552cf20849fe07f8:.github/workflows/verify.yml > "$original/verify.yml"
-          if WORKFLOW_DIR="$original" node --test --test-name-pattern='session reader uses the supported software renderer' tools/workflow-inputs.test.js > "$RUNNER_TEMP/renderer-red.txt" 2>&1; then
-            cat "$RUNNER_TEMP/renderer-red.txt"
+          git fetch --depth=1 origin f0efaed
+          git show f0efaed:.github/workflows/verify.yml > "$original/verify.yml"
+          if WORKFLOW_DIR="$original" node --test --test-name-pattern='session reader pins the pre-regression emulator binary' tools/workflow-inputs.test.js > "$RUNNER_TEMP/binary-red.txt" 2>&1; then
+            cat "$RUNNER_TEMP/binary-red.txt"
             exit 1
           fi
-          cat "$RUNNER_TEMP/renderer-red.txt"
-          grep -F 'AssertionError' "$RUNNER_TEMP/renderer-red.txt"
-          node --test --test-name-pattern='session reader uses the supported software renderer' tools/workflow-inputs.test.js
-          printf 'SOFTWARE_RENDERER_RED_GREEN_OK\n'
+          cat "$RUNNER_TEMP/binary-red.txt"
+          grep -F 'AssertionError' "$RUNNER_TEMP/binary-red.txt"
+          node --test --test-name-pattern='session reader pins the pre-regression emulator binary' tools/workflow-inputs.test.js
+          printf 'EMULATOR_BINARY_RED_GREEN_OK\n'
       - name: Prove SSH fixture configuration on the supported host
         run: |
           sudo apt-get update -qq
@@ -209,12 +209,12 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2.34.0
         with:
           api-level: 35
-          emulator-build: 16428233
+          emulator-build: 14472402
           arch: x86_64
           target: google_apis
           profile: pixel_2
           disable-animations: true
-          emulator-options: -no-window -gpu software -noaudio -no-boot-anim -camera-back none -verbose > /tmp/native-emulator.log 2>&1
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -verbose > /tmp/native-emulator.log 2>&1
           script: |
             adb install -r -g "$VERIFY_APK"
             if [ "${VERIFY_PACKAGE:-}" = dev.multiprompt.companion ]; then bash tools/release-choices/run.sh; else .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; fi
@@ -236,6 +236,10 @@ jobs:
           mkdir -p "$EVIDENCE/emulator-diagnostics"
           if [ -f /tmp/native-emulator.log ]; then cp /tmp/native-emulator.log "$EVIDENCE/emulator-diagnostics/"; fi
           if [ -d /tmp/android-runner ]; then cp -a /tmp/android-runner "$EVIDENCE/emulator-diagnostics/crashes"; fi
+          "$ANDROID_HOME/emulator/emulator" -version > "$EVIDENCE/emulator-diagnostics/version.txt" 2>&1
+          if sudo coredumpctl list --no-pager | grep -F qemu-system; then
+            sudo timeout 120s coredumpctl debug --debugger=gdb --debugger-arguments="-batch -ex 'bt 30'" > "$EVIDENCE/emulator-diagnostics/backtrace.txt" 2>&1 || true
+          fi
           sudo dmesg -T > "$EVIDENCE/emulator-diagnostics/kernel.txt"
           free -m > "$EVIDENCE/emulator-diagnostics/memory.txt"
           ps -eo pid,ppid,stat,rss,args > "$EVIDENCE/emulator-diagnostics/processes.txt"
