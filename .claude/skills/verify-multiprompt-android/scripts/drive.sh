@@ -768,10 +768,11 @@ if [[ "$feature" == terminal.md ]]; then
             adb shell dumpsys input_method > "$EVIDENCE/keyboard-history.txt"
             grep -F 'mInputShown=true' "$EVIDENCE/keyboard-history.txt"
         fi
-        for attempt in {1..60}; do
+        for attempt in {1..100}; do
             dump_ui
             if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains SHELL_HISTORY_0001 >/dev/null 2>&1; then break; fi
-            adb shell input swipe 200 400 200 900 120
+            read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
+            adb shell input swipe "$x1" "$y1" "$x2" "$y2" 120
         done
         wait_for_text SHELL_HISTORY_0001
         shot "shell-first-$keyboard_state"

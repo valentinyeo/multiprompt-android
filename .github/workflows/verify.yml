@@ -2,7 +2,7 @@ name: Verify real Android UI
 
 on:
   push:
-    branches: [ceo/IGSH-1012, ceo/IGSH-1069, ceo/IGSH-1076]
+    branches: [ceo/IGSH-1012, ceo/IGSH-1069]
   pull_request:
     paths:
       - 'app/**'
@@ -166,7 +166,7 @@ jobs:
           app_source="$GITHUB_WORKSPACE"
           if [ -d "$GITHUB_WORKSPACE/app-source" ]; then app_source="$GITHUB_WORKSPACE/app-source"; fi
           git -C "$app_source" rev-parse HEAD > "$EVIDENCE/app-source-sha.txt"
-          gradle -p "$app_source" --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="0.1.2-verify.$GITHUB_RUN_NUMBER" assembleDebug 2>&1 | tee "$EVIDENCE/build.txt"
+          gradle -p "$app_source" --refresh-dependencies --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="0.1.2-verify.$GITHUB_RUN_NUMBER" assembleDebug 2>&1 | tee "$EVIDENCE/build.txt"
           echo "VERIFY_APK=$app_source/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
           sha256sum "$app_source/app/build/outputs/apk/debug/app-debug.apk" > "$EVIDENCE/app-apk-sha256.txt"
       - name: Build routing instrumentation
