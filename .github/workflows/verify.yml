@@ -133,6 +133,7 @@ jobs:
         run: |
           test "$VERIFY_FEATURE" = launcher-icon.md
           python3 -m pip install Pillow
+          python3 .claude/skills/verify-multiprompt-android/scripts/launcher-icon.test.py
           curl -fsSL https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion-update.json -o "$EVIDENCE/manifest.json"
           curl -fsSL "$(jq -er '.apkUrl' "$EVIDENCE/manifest.json")" -o "$EVIDENCE/app.apk"
           printf '%s  %s\n' "$(jq -er '.sha256' "$EVIDENCE/manifest.json")" "$EVIDENCE/app.apk" | sha256sum --check
@@ -144,6 +145,7 @@ jobs:
         run: |
           mkdir -p "$EVIDENCE"
           python3 -m pip install Pillow
+          python3 .claude/skills/verify-multiprompt-android/scripts/launcher-icon.test.py
           python3 .claude/skills/verify-multiprompt-android/scripts/reactions.test.py
           printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/revision.txt"
           app_source="$GITHUB_WORKSPACE"

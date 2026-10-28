@@ -2,20 +2,20 @@
 
 ## Sub-features
 
-The app's launcher icon is the approved white robot head on a dark tile: an adaptive icon with a gradient head foreground and a `#1E1E1E` background, plus a one-colour monochrome layer that Android 13 and later use for themed icons.
+Approved robot artwork replaces the old launcher icon. Adaptive icons keep the dark background. Android 13 also receives a monochrome layer.
 
-## How to get to it (user POV)
+## How to get to it
 
-Go to the Android home screen and open the app drawer. The multiprompt icon sits in the alphabetical list. Nothing in the app changes; the icon comes from `app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml`.
+Launch multiprompt, then press Home. Pixel Launcher predicts the recently launched app. The robot appears in the home-screen hotseat.
 
-## Driving it with control.ps1
+## Driving it
 
-Dispatch `verify.yml` with `feature=launcher-icon.md`. `drive.sh` installs the debug APK, passes the doctor, presses Home, opens the drawer with a real swipe and scrolls until the launcher shows a cell labelled multiprompt. `launcher-icon.py check` crops the top of that cell from the real screenshot, measures only a disc around the icon centre (so the drawer background cannot count), and requires a large bright head area, a dark tile and visor area, and no pixel of the old cyan glyph. The built APK's adaptive icon is dumped with `aapt2` and must contain a `monochrome` element.
+Dispatch `verify.yml` with `feature=launcher-icon.md`. Add `release_icon=true` for the published signed APK. The published download verifies the manifest checksum.
 
-Red control: dispatch the same journey with `app_ref` set to a commit from before this change. The run must fail with `LAUNCHER_ICON_NOT_ROBOT`, not a setup error.
+The driver checks the installed version first. It captures the real home screen. The oracle requires `workspace` and rejects `apps_view`. A drawer screenshot cannot satisfy this check. The icon crop must contain the bright head. It rejects the old cyan glyph. The APK must also contain its monochrome resource.
 
-Evidence: `01-sign-in`, `launcher-home` and `launcher-drawer` screenshots with their UI XML, `launcher-icon-crop.png`, `launcher-icon-result.json`, `adaptive-icon-tree.txt`.
+For the negative control, set `app_ref` to a full pre-icon commit SHA. The same journey must report `LAUNCHER_ICON_NOT_ROBOT`.
 
-## Gotchas
+## Evidence
 
-The default emulator launcher does not place new apps on the home screen, so the drawer is the proof surface. The launcher draws its own mask on the adaptive icon, so the check measures colour areas, not exact pixels. Inspect `launcher-icon-crop.png` yourself. The themed monochrome rendering is checked in the APK, not on a themed launcher, because the emulator launcher does not apply themed icons.
+Retain `launcher-home-icon.png`, its UI XML, `launcher-icon-crop.png`, `launcher-icon-result.json`, `package.txt`, and `adaptive-icon-tree.txt`.
