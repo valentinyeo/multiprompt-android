@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import unittest
 import zipfile
+import xml.etree.ElementTree as ET
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--ref')
@@ -40,6 +41,7 @@ class EmulatorProofTest(unittest.TestCase):
         self.assertNotIn('PerSourcePenalties', source('.claude/skills/verify-multiprompt-android/scripts/fixture.sh'))
         self.assertNotIn('-gpu off', action)
         self.assertNotIn('PerSourcePenalties', source('tools/account-journey/fixture.sh'))
+        self.assertIn('package.xml', source('.github/actions/android-proof/emulator.sh'))
         self.assertNotIn('emulator-build:', action)
         self.assertIn('python3 -B tools/emulator.test.py', source('tools/check.sh'))
 
@@ -179,6 +181,7 @@ out.write_bytes(b'truncated' if os.environ['CORRUPT'] == 'yes' else (p / 'fixtur
                 (path / 'android-proof').mkdir()
                 (path / 'emulator').mkdir()
                 (path / 'emulator/stale-library').write_text('old')
+                (path / 'emulator/package.xml').write_text('<repository><localPackage path="emulator"><revision><major>37</major><minor>2</minor><micro>12</micro></revision></localPackage></repository>')
                 env = dict(os.environ, HOME=tmp, RUNNER_TEMP=tmp, ANDROID_HOME=tmp, CORRUPT='yes' if corrupt else 'no', PATH=f'{tmp}:{os.environ["PATH"]}')
                 result = subprocess.run(['bash', str(script)], env=env, capture_output=True, text=True)
                 if corrupt:
@@ -189,6 +192,8 @@ out.write_bytes(b'truncated' if os.environ['CORRUPT'] == 'yes' else (p / 'fixtur
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertIn('PINNED_EMULATOR_READY', result.stdout)
                     self.assertFalse((path / 'emulator/stale-library').exists())
+                    revision = ET.parse(path / 'emulator/package.xml').find('localPackage/revision')
+                    self.assertEqual([node.text for node in revision], ['35', '6', '11'])
                     subprocess.run(['bash', str(script)], env=env, check=True, capture_output=True)
                     self.assertEqual((path / 'downloads').read_text().count('download'), 1)
 
