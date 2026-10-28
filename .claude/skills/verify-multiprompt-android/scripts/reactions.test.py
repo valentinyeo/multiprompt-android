@@ -12,16 +12,16 @@ SCRIPT = Path(__file__).with_name('reactions.py')
 
 
 class ReactionOracleTest(unittest.TestCase):
-    def check_case(self, mutation=None, expect=True):
+    def check_case(self, mutation=None, expect=True, light=False):
         nodes = [
             dict(text='Same prefix FIRST REPLY', bounds='[10,10][210,90]'),
             dict(text='Same prefix SECOND REPLY', bounds='[10,150][210,230]'),
             {'content-desc': 'Reactions: 👍', 'bounds': '[10,95][50,120]'},
             {'class': 'android.widget.EditText', 'text': 'draft stays here', 'bounds': '[10,250][210,290]'},
         ]
-        image = Image.new('RGB', (300, 300), '#eeeeee')
+        image = Image.new('RGB', (300, 300), '#ffffff' if light else '#101010')
         draw = ImageDraw.Draw(image)
-        draw.rectangle((10, 95, 49, 119), fill='#dddddd')
+        draw.rectangle((10, 95, 49, 119), fill='#e1e1e1' if light else '#353535', outline='#9b9b9b' if light else '#4a4a4a')
         draw.rectangle((20, 100, 29, 114), fill='#ffff00')
         draw.rectangle((25, 102, 32, 108), fill='#000000')
         draw.rectangle((23, 110, 29, 114), fill='#ffffff')
@@ -53,6 +53,21 @@ class ReactionOracleTest(unittest.TestCase):
 
     def test_valid_badge(self):
         self.check_case()
+
+    def test_valid_light_badge(self):
+        self.check_case(light=True)
+
+    def test_dark_badge_on_light_chat_is_rejected(self):
+        self.check_case(lambda nodes, image: ImageDraw.Draw(image).rectangle((10, 95, 49, 119), fill='#353535', outline='#4a4a4a'), False, light=True)
+
+    def test_tinted_material_badge_is_rejected(self):
+        self.check_case(lambda nodes, image: ImageDraw.Draw(image).rectangle((10, 95, 49, 119), fill='#5c4132'), False)
+
+    def test_wrong_grey_fill_is_rejected(self):
+        self.check_case(lambda nodes, image: ImageDraw.Draw(image).rectangle((10, 95, 49, 119), fill='#dddddd', outline='#4a4a4a'), False)
+
+    def test_missing_grey_outline_is_rejected(self):
+        self.check_case(lambda nodes, image: ImageDraw.Draw(image).rectangle((10, 95, 49, 119), fill='#353535'), False)
 
     def test_missing_badge(self):
         self.check_case(lambda nodes, image: nodes.pop(2), False)
