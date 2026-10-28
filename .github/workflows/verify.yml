@@ -13,6 +13,10 @@ on:
       - '.github/actions/android-proof/**'
   workflow_dispatch:
     inputs:
+      release_icon:
+        description: Verify the approved launcher icon on the published signed APK
+        type: boolean
+        default: false
       release_choices:
         description: Verify plain lists and real question answers on the signed release APK
         type: boolean
@@ -46,6 +50,7 @@ on:
           - chat-resync.md
           - session-routing.md
           - terminal.md
+          - launcher-icon.md
       expect_native_missing:
         description: Require the original app to reject the native slash journey
         required: false
@@ -132,10 +137,23 @@ jobs:
           echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
           echo "VERIFY_PACKAGE=dev.multiprompt.companion" >> "$GITHUB_ENV"
           echo "EXPECTED_VERSION=$(cat "$EVIDENCE/version.txt")" >> "$GITHUB_ENV"
+      - name: Download published icon APK
+        if: inputs.release_icon == true
+        run: |
+          test "$VERIFY_FEATURE" = launcher-icon.md
+          python3 -m pip install Pillow
+          python3 .claude/skills/verify-multiprompt-android/scripts/launcher-icon.test.py
+          curl -fsSL https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion-update.json -o "$EVIDENCE/manifest.json"
+          curl -fsSL "$(jq -er '.apkUrl' "$EVIDENCE/manifest.json")" -o "$EVIDENCE/app.apk"
+          printf '%s  %s\n' "$(jq -er '.sha256' "$EVIDENCE/manifest.json")" "$EVIDENCE/app.apk" | sha256sum --check
+          echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
+          echo "VERIFY_PACKAGE=dev.multiprompt.companion" >> "$GITHUB_ENV"
+          echo "EXPECTED_VERSION=$(jq -er '.versionName' "$EVIDENCE/manifest.json")" >> "$GITHUB_ENV"
       - name: Build debug APK
-        if: inputs.release_choices != true && inputs.released_reactions != true
+        if: inputs.release_choices != true && inputs.release_icon != true && inputs.released_reactions != true
         run: |
           mkdir -p "$EVIDENCE"
+          python3 .claude/skills/verify-multiprompt-android/scripts/launcher-icon.test.py
           printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/revision.txt"
           app_source="$GITHUB_WORKSPACE"
           if [ -d "$GITHUB_WORKSPACE/app-source" ]; then app_source="$GITHUB_WORKSPACE/app-source"; fi
@@ -157,7 +175,7 @@ jobs:
           target: default
           script: |
             adb install -r -g "$VERIFY_APK"
-            if [ "${VERIFY_PACKAGE:-}" = dev.multiprompt.companion ]; then bash tools/release-choices/run.sh; else .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; fi
+            if [ "${VERIFY_PACKAGE:-}" = dev.multiprompt.companion ] && [ "$VERIFY_FEATURE" != launcher-icon.md ]; then bash tools/release-choices/run.sh; else .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; fi
             if [ -n "$UPDATE_BASELINE_RUN" ]; then .claude/skills/verify-multiprompt-android/scripts/update-reaction-release.sh; fi
       - name: Require the original native-skill failure
         if: inputs.expect_native_missing == true
