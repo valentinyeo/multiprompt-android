@@ -1142,10 +1142,14 @@ def response(q, source=None, as_owner=False):
                 scan_more = base + len(data) < info.st_size
                 end = base + data.rfind(b"\n") + 1
                 if end == base and scan_more:
-                    mode = "tail"
-                    base, end, data = read_tail(source, info.st_size, agent, captured)
-                    oldest = base
-                    scan_more = False
+                    source.seek(base)
+                    data = source.readline(info.st_size - base)
+                    if data.endswith(b"\n"):
+                        end = base + len(data)
+                        scan_more = end < info.st_size
+                    else:
+                        data = b""
+                        scan_more = False
                 else:
                     data = data[:end - base]
         page_more = False
