@@ -178,10 +178,15 @@ launcher_icon() {
     shot launcher-home-icon
     python3 "$scripts/launcher-icon.py" home "$EVIDENCE/current.xml"
     python3 "$scripts/launcher-icon.py" check "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-launcher-home-icon.png" "$EVIDENCE/launcher-icon-crop.png" "$EVIDENCE/launcher-icon-result.json"
-    local aapt2
+    local aapt2 icon_file monochrome_file
     aapt2=$(find "$ANDROID_HOME/build-tools" -name aapt2 | sort | tail -1)
-    "$aapt2" dump xmltree --file res/mipmap-anydpi-v26/ic_launcher.xml "$VERIFY_APK" | tee "$EVIDENCE/adaptive-icon-tree.txt"
+    "$aapt2" dump resources "$VERIFY_APK" > "$EVIDENCE/apk-resources.txt"
+    icon_file=$(python3 "$scripts/launcher-icon.py" resource-file "$EVIDENCE/apk-resources.txt" mipmap/ic_launcher)
+    "$aapt2" dump xmltree --file "$icon_file" "$VERIFY_APK" | tee "$EVIDENCE/adaptive-icon-tree.txt"
     grep -q 'monochrome' "$EVIDENCE/adaptive-icon-tree.txt"
+    monochrome_file=$(python3 "$scripts/launcher-icon.py" resource-file "$EVIDENCE/apk-resources.txt" drawable/ic_launcher_monochrome)
+    "$aapt2" dump xmltree --file "$monochrome_file" "$VERIFY_APK" > "$EVIDENCE/monochrome-icon-tree.txt"
+    grep -q 'E: vector' "$EVIDENCE/monochrome-icon-tree.txt"
     printf 'ANDROID_LAUNCHER_ROBOT_ICON_PROVEN\n'
 }
 
