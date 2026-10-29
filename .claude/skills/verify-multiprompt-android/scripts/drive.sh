@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    session-gestures.md|chat-working.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
+    session-gestures.md|chat-working.md|session-summaries.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -333,6 +333,30 @@ if ! wait_for_text verify-session; then
     exit 1
 fi
 shot sessions
+
+if [[ "$feature" == session-summaries.md ]]; then
+    wait_for_text 'Lauren Tan profile is done, checked and pushed.'
+    shot summary-reply
+    sudo -u verifyssh tmux send-keys -t verify-session summary-working Enter
+    wait_for_text 'Working: Reading CI logs'
+    shot summary-working
+    started=$(date +%s%3N)
+    sudo -u verifyssh tmux send-keys -t verify-session summary-next Enter
+    wait_for_text 'The release is ready.'
+    elapsed=$(( $(date +%s%3N) - started ))
+    test "$elapsed" -le 5000
+    shot summary-updated
+    python3 - "$EVIDENCE/current.xml" <<'PYSUMMARY'
+import sys
+import xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+texts = [node.get('text', '') for node in root.iter('node')]
+assert 'The release is ready.' in texts
+assert not any('Opus 5.5' in text or '[CAVEMAN]' in text or 'valentin@vps' in text for text in texts)
+PYSUMMARY
+    printf 'SUMMARY_REFRESH_OK elapsed_ms=%s\n' "$elapsed" | tee "$EVIDENCE/summary-result.txt"
+    exit 0
+fi
 if [[ "$feature" == robot-faces.md ]]; then
     select_node desc 'Robot verify-session'
     shot robot-inbox
