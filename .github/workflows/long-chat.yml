@@ -27,12 +27,16 @@ jobs:
       VERIFY_PACKAGE: dev.multiprompt.companion
       NEGATIVE_CONTROL: ${{ matrix.negative }}
       SMOKE_ONLY: ${{ inputs.smoke_only }}
+      CANDIDATE: ${{ github.event_name == 'push' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.1'
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
@@ -60,8 +64,10 @@ jobs:
           export EXPECTED_COMMIT="$(curl -fsSL https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion-update.json | jq -er .commit)"
           bash tools/release-choices/prepare.sh
           printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/harness-sha.txt"
-          git fetch --no-tags origin "$EXPECTED_COMMIT"
-          git diff --exit-code "$EXPECTED_COMMIT" HEAD -- app/src/main app/build.gradle.kts
+          if [[ "$CANDIDATE" != true ]]; then
+            git fetch --no-tags origin "$EXPECTED_COMMIT"
+            git diff --exit-code "$EXPECTED_COMMIT" HEAD -- app/src/main app/build.gradle.kts gradle/libs.versions.toml
+          fi
       - name: Start isolated SSH and long transcript
         run: |
           bash .claude/skills/verify-multiprompt-android/scripts/fixture.sh
