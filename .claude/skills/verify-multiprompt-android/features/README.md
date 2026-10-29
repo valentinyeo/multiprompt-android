@@ -56,3 +56,5 @@ Prerequisites below are coverage gaps, never green skips. Account routes need hu
 - **IGSH-425 shell:** multi-touch and long/wide tmux output, no extra credential. **Open live terminal**, pinch (8–28 sp, retained on reopen), pan, swipe down or **Open shell history**, then **Jump to live** / **Back to the live view**. Terminal.md proves attachment only.
 - **IGSH-414 search layout:** matching/close are automated; no credential blocks layout proof, but keyboard-visible bounds inspection is unimplemented. Inbox **Search sessions**, type in **Search all sessions**, inspect results below the box and above the keyboard before closing.
 - **IGSH-413 shared menu:** no credential blocks comparing signed-out **Sign in to sync** in Inbox **Session list actions** and reader **Session actions**; that comparison is unimplemented. OTP is needed for **Sync: signed in — sign out** and synced splits. Compare both menus, then complete sign-in manually.
+
+- [Session gestures](session-gestures.md): no session swipes, bidirectional code scroll, ten replies, back to inbox on the signed APK.

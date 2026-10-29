@@ -76,7 +76,7 @@ class ReaderActionsMenuTest {
                 signedIn = true, onSignIn = {}, onSignOut = {}, session = f.session.copy(paneCommand = "claude"),
                 unread = false, archived = archived.value, initialFontScale = 1f,
                 onBack = {}, onMarkRead = {}, onArchiveToggle = { waits++; archived.value = !archived.value },
-                onRemind = { reminders.add(it) }, onOpenTerminal = {}, onSwitchSession = {},
+                onRemind = { reminders.add(it) }, onOpenTerminal = {},
                 onFontScaleChanged = {}, onRename = { null }, onDissolve = { archives++ }, onEnd = {},
                 onSessionInteraction = {}, onSessionInput = {}, technicalMode = false,
                 onTechnicalModeChanged = {}, sunlightMode = false, onSetAppTheme = {},

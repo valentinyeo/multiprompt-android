@@ -62,6 +62,7 @@ on:
           - native-skills.md
           - chat-resync.md
           - session-routing.md
+          - session-gestures.md
           - terminal.md
           - launcher-icon.md
           - robot-faces.md
@@ -156,6 +157,27 @@ jobs:
         run: |
           python3 -m pip install Pillow
           python3 .claude/skills/verify-multiprompt-android/scripts/reactions.test.py
+      - name: Reject code scroll interception on original source
+        if: inputs.feature == 'session-gestures.md'
+        run: |
+          source=app/src/main/java/dev/multiprompt/companion/ui/ReplyableBubble.kt
+          cp "$source" "$RUNNER_TEMP/ReplyableBubble.kt"
+          git fetch origin f1e4e3ea3d25d48e4559337434a37f2f605609f7
+          git show f1e4e3ea3d25d48e4559337434a37f2f605609f7:"$source" > "$source"
+          status=0
+          gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*ReplyToMessageTest.codeScrollsBothWaysWithoutStartingReply' || status=$?
+          cp "$RUNNER_TEMP/ReplyableBubble.kt" "$source"
+          test "$status" -ne 0
+          python3 - <<'PYCONTROL'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.ReplyToMessageTest.xml').getroot()
+          case = root.find("testcase[@name='codeScrollsBothWaysWithoutStartingReply']")
+          failure = case.find('failure')
+          assert failure is not None and 'Wide code must scroll back right' in failure.get('message', '')
+          print('ORIGINAL_CODE_SCROLL_INTERCEPTION_REJECTED')
+          PYCONTROL
+          cp app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.ReplyToMessageTest.xml "$EVIDENCE/original-gesture.xml"
+          gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*ReplyToMessageTest' --tests '*ShellViewTest'
       - name: Prepare signed choices APK and same-signer fixture instrumentation
         if: inputs.release_choices == true || inputs.released_reactions == true || inputs.released_terminal == true || inputs.released_robots == true || inputs.released_chat == true
         env:
@@ -166,7 +188,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          [[ "$VERIFY_FEATURE" = chat-queued.md || "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md || "$VERIFY_FEATURE" = terminal.md || "$VERIFY_FEATURE" = robot-faces.md || "$VERIFY_FEATURE" = chat-cancel.md ]]
+          [[ "$VERIFY_FEATURE" = chat-queued.md || "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md || "$VERIFY_FEATURE" = terminal.md || "$VERIFY_FEATURE" = robot-faces.md || "$VERIFY_FEATURE" = chat-cancel.md || "$VERIFY_FEATURE" = session-gestures.md ]]
           sdkmanager --install 'build-tools;35.0.0' 'platforms;android-35'
           bash tools/release-choices/prepare.sh
           echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
