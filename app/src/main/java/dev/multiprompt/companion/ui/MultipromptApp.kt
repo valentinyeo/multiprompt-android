@@ -2960,6 +2960,7 @@ internal fun ReaderScreen(
             readerScope.launch { connection.exitHistory() }
         }
     }
+    if (sendMarkPending) SendTiming.mark("parent_composition_finished")
     val statusLabel = listOfNotNull(
         reader.eta?.let { "ETA ${it.label(etaNowMillis)}" },
         "waiting for input".takeIf { reader.waitingForInput },
@@ -3226,6 +3227,7 @@ internal fun ReaderScreen(
             )
         },
         bottomBar = {
+            if (sendMarkPending) SendTiming.mark("composer_composition_started")
             BottomFade(
                 Modifier.imePadding().padding(horizontal = ReaderScreenPadding, vertical = ReaderControlSpacing),
                 verticalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
@@ -3369,6 +3371,7 @@ internal fun ReaderScreen(
                                 }
                             }
                         }
+                        if (sendMarkPending) SendTiming.mark("field_composition_started")
                         OutlinedTextField(
                             value = promptField,
                             onValueChange = { promptField = it },
