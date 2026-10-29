@@ -132,9 +132,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -2686,15 +2684,6 @@ internal fun ReaderScreen(
             sentDraft = null
         }
     }
-    SideEffect { if (sendMarkPending && prompt.isEmpty()) SendTiming.mark("box_composed") }
-    LaunchedEffect(prompt, sendMarkPending) {
-        if (sendMarkPending && prompt.isEmpty()) {
-            SendTiming.mark("box_effect")
-            withFrameNanos { }
-            SendTiming.mark("box_cleared_frame")
-            sendMarkPending = false
-        }
-    }
     LaunchedEffect(dictationState.transcript) {
         val spoken = dictationState.transcript.trim()
         if (spoken.isNotBlank()) {
@@ -2728,7 +2717,6 @@ internal fun ReaderScreen(
                 SendTiming.mark("message_added")
                 sentDraft = draft
                 setPrompt("")
-                SendTiming.mark("box_state_cleared")
                 imageAttachments = emptyList()
                 replyTo = null
                 sendMarkPending = true
@@ -3379,7 +3367,10 @@ internal fun ReaderScreen(
                                 .border(1.dp, MaterialTheme.colorScheme.outline, ReaderComposerShape).focusRequester(promptFocusRequester)
                                 .drawWithContent {
                                     drawContent()
-                                    if (sendMarkPending && prompt.isEmpty()) SendTiming.mark("box_drawn")
+                                    if (sendMarkPending && prompt.isEmpty()) {
+                                        SendTiming.mark("box_cleared_frame")
+                                        sendMarkPending = false
+                                    }
                                 },
                             filled = true,
                             placeholder = {
