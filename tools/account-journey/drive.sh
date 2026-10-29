@@ -144,9 +144,23 @@ if [ "${RENAME_ONLY:-false}" = true ]; then
     wait_text Rename
     tap_text Rename
     wait_text 'Rename session'
-    tap_text Name
-    adb shell input keycombination 113 29
-    adb shell input text Renamed%ssession
+    selector="$MULTIPROMPT_DIR/../.claude/skills/verify-multiprompt-android/scripts/ui.py"
+    filled=false
+    for attempt in 1 2 3; do
+        dump_ui
+        read -r x y <<< "$(python3 "$selector" "$EVIDENCE/current.xml" field Name)"
+        adb shell input tap "$x" "$y"
+        dump_ui
+        python3 "$selector" "$EVIDENCE/current.xml" focused-field Name >/dev/null || continue
+        read -r -a clear_keys <<< "$(python3 "$selector" "$EVIDENCE/current.xml" clear-field Name)"
+        adb shell input keyevent "${clear_keys[@]}"
+        adb shell input text Renamed%ssession
+        dump_ui
+        if python3 "$selector" "$EVIDENCE/current.xml" field-value Name 'Renamed session'; then filled=true; break; fi
+    done
+    test "$filled" = true
+    shot rename-filled
+    adb shell input keyevent KEYCODE_BACK
     tap_text Rename
     wait_text 'Renamed session'
     shot rename-inbox
