@@ -62,7 +62,7 @@ public class RenameJourney extends Instrumentation {
                     long elapsed = SystemClock.elapsedRealtime() - started;
                     JSONObject saved = new JSONObject(context.getSharedPreferences("account_layout", 0).getString("layout::rename-proof", "")).getJSONObject("edited");
                     require(saved.getJSONArray("tabs").getJSONObject(0).getString("name").equals(NAME), "UI_RENAME_WAS_NOT_SAVED");
-                    Files.writeString(new File(output, "rename-layout.json").toPath(), saved.toString());
+                    Files.write(new File(output, "rename-layout.json").toPath(), saved.toString().getBytes(StandardCharsets.UTF_8));
                     require(find(NAME) != null && find("Rename session") == null, "STALE_INBOX_AFTER_RENAME");
                     require(elapsed <= 2000, "RENAME_EXCEEDED_TWO_SECONDS");
                     shot("inbox");
@@ -70,7 +70,7 @@ public class RenameJourney extends Instrumentation {
                     waitNode("Session actions");
                     waitNode(NAME);
                     shot("reader");
-                    Files.writeString(new File(output, "timing.json").toPath(), "{\"inbox_milliseconds\":" + elapsed + "}");
+                    Files.write(new File(output, "timing.json").toPath(), ("{\"inbox_milliseconds\":" + elapsed + "}").getBytes(StandardCharsets.UTF_8));
                 } else {
                     waitNode(NAME);
                     require(find("Old agent title") == null, "Stale title returned after restart");
@@ -78,7 +78,7 @@ public class RenameJourney extends Instrumentation {
                     JSONObject pending = new JSONObject(context.getSharedPreferences("account_layout", 0).getString("layout::rename-proof", ""));
                     JSONObject layout = pending.getJSONObject("edited");
                     require(layout.getJSONArray("tabs").getJSONObject(0).getString("name").equals(NAME), "Rename was not persisted");
-                    Files.writeString(new File(output, "rename-layout.json").toPath(), layout.toString());
+                    Files.write(new File(output, "rename-layout.json").toPath(), layout.toString().getBytes(StandardCharsets.UTF_8));
                 }
                 result.putString("stream", "RENAME_" + phase.toUpperCase() + "_OK\n");
             }
