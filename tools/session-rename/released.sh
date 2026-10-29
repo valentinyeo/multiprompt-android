@@ -44,7 +44,6 @@ adb shell am force-stop dev.multiprompt.companion
 adb shell 'screenrecord /sdcard/rename.mp4 & echo $! > /sdcard/rename.pid; wait' > "$build/record.log" 2>&1 &
 record_pid=$!
 cleanup() {
-  kill "$record_pid" 2>/dev/null || true
   adb shell 'kill -2 "$(cat /sdcard/rename.pid)"' || true
   wait "$record_pid" 2>/dev/null || true
   adb pull /sdcard/rename.mp4 "$EVIDENCE/rename.mp4" || true

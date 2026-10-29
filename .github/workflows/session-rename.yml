@@ -1,6 +1,11 @@
 name: Released session rename proof
 
 on:
+  push:
+    branches: [ceo/IGSH-1177]
+    paths:
+      - '.github/workflows/session-rename.yml'
+      - 'tools/session-rename/**'
   workflow_dispatch:
     inputs:
       android_run:
@@ -23,7 +28,7 @@ jobs:
     timeout-minutes: 20
     env:
       EVIDENCE: ${{ github.workspace }}/rename-evidence
-      EXPECT_STALE: ${{ inputs.expect_stale }}
+      EXPECT_STALE: ${{ github.event_name == 'push' || inputs.expect_stale }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -53,7 +58,7 @@ jobs:
 
   desktop-rename:
     needs: released-rename
-    if: always() && inputs.expect_stale != true && (needs.released-rename.result == 'success' || inputs.android_run != '')
+    if: always() && github.event_name != 'push' && inputs.expect_stale != true && (needs.released-rename.result == 'success' || inputs.android_run != '')
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
