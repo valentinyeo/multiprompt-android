@@ -49,7 +49,7 @@ class ChatBubbleWidthTest {
                                 Triple("agent-short", false, "Ready"), Triple("user-short", true, "Thanks"),
                             )) {
                                 ChatBubble(isUser = user, sunlight = false, contentModifier = Modifier.testTag(tag)) {
-                                    Text(text)
+                                    if (user) Text(text) else MarkdownText(text, ReaderTextSize, ReaderForeground, ReaderForeground, imagePreviews = true)
                                 }
                             }
                         }

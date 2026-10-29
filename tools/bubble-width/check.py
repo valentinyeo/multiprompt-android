@@ -26,12 +26,14 @@ def measure(directory, phase):
         assert left < bounds['left'] < bounds['right'] < right, (text, left, right, bounds)
         widths[role + '-' + size] = right - left
         edges[role + '-' + size] = [left, right]
-    padding = 16 if phase == 'before' else 12
-    chat = image.width - 2 * round(padding * density)
+    chat = image.width - 2 * round(12 * density)
     for role in ('agent', 'user'):
         expected = (0.85 if role == 'agent' else 0.7) if phase == 'before' else 0.9
-        assert abs(widths[role + '-long'] / chat - expected) < 0.006, (role, widths, chat)
-        assert widths[role + '-short'] < widths[role + '-long'] / 2
+        assert abs(widths[role + '-long'] / chat - expected) < 0.006, ('WIDTH_MAXIMUM_MISMATCH', role, widths, chat)
+        if phase == 'before' and role == 'agent':
+            assert widths[role + '-short'] == widths[role + '-long']
+        else:
+            assert widths[role + '-short'] < widths[role + '-long'] / 2
         edge = 0 if role == 'agent' else 1
         assert abs(edges[role + '-long'][edge] - edges[role + '-short'][edge]) <= 2
     result = dict(phase=phase, chatWidth=chat, widths=widths, edges=edges)

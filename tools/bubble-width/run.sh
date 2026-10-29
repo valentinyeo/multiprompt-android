@@ -26,6 +26,6 @@ if [[ "$WIDTH_PHASE" == before ]]; then
         exit 1
     fi
     cat "$EVIDENCE/old-width-red.txt"
-    grep -F AssertionError "$EVIDENCE/old-width-red.txt"
+    grep -F "AssertionError: ('WIDTH_MAXIMUM_MISMATCH'" "$EVIDENCE/old-width-red.txt"
 fi
 python3 tools/bubble-width/check.py "$EVIDENCE/screens" "$WIDTH_PHASE"
