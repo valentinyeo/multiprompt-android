@@ -47,7 +47,7 @@ if [[ "${VERIFY_FEATURE:-}" == chat-working.md || "${VERIFY_FEATURE:-}" == long-
     if [[ "$VERIFY_FEATURE" == bubble-width.md ]]; then observer=(tools/bubble-width/Observe.java); fi
     sed -i 's|</manifest>|<instrumentation android:name="dev.multiprompt.verification.Observe" android:targetPackage="dev.multiprompt.companion" /></manifest>|' "$work/AndroidManifest.xml"
 fi
-javac -source 8 -target 8 -cp "$ANDROID_HOME/platforms/android-35/android.jar" -d "$work/classes" tools/release-choices/Seed.java "${observer[@]}"
+javac -source 8 -target 8 -cp "$ANDROID_HOME/platforms/android-35/android.jar" -d "$work/classes" "${SEED_SOURCE:-tools/release-choices/Seed.java}" "${observer[@]}"
 "$tools/d8" --lib "$ANDROID_HOME/platforms/android-35/android.jar" --output "$work/dex" "$work/classes/dev/multiprompt/verification/"*.class
 "$tools/aapt" package -f -M "$work/AndroidManifest.xml" -I "$ANDROID_HOME/platforms/android-35/android.jar" -F "$work/seed-unsigned.apk"
 (cd "$work/dex" && zip -q "$work/seed-unsigned.apk" classes.dex)

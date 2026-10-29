@@ -18,7 +18,6 @@ import dev.multiprompt.companion.model.RefreshMerge
 import dev.multiprompt.companion.data.UnreadCount
 import dev.multiprompt.companion.notify.ReplyNotificationPolicy
 import dev.multiprompt.companion.notify.ReplyNotifier
-import dev.multiprompt.companion.ui.SessionPreview
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.RetiredHosts
 import dev.multiprompt.companion.data.SessionSearch
@@ -194,6 +193,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var pendingLayout = accountStore.load(syncAuth.accountId())
     private var usedStampThrottle = UsedStampThrottle(pendingLayout?.base)
     private val foreground = MutableStateFlow(false)
+    internal var notificationHistoryReader: suspend (HostProfile, TmuxSession) -> dev.multiprompt.companion.reader.ChatHistory? = { host, session ->
+        ssh.readChatHistory(host, session, app.chatHistoryScript)
+    }
     private var replyNotificationsBaselined = false
     private var pendingNotificationKey: String? = null
     private var trustRefreshQueued = false
@@ -644,8 +646,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         ReplyNotifier.cancel(app, plan.cancel)
         plan.notify.forEach { key ->
             val session = state.sessions.firstOrNull { SessionReadStore.key(it.hostId, it.name) == key } ?: return@forEach
-            val preview = SessionPreview.line(session.preview).ifBlank { "New reply" }
-            ReplyNotifier.show(app, session.hostId, session.name, session.displayName, preview)
+            if (!TranscriptProtocol.supports(session.agent)) return@forEach
+            val host = state.hosts.firstOrNull { it.id == session.hostId } ?: return@forEach
+            viewModelScope.launch {
+                val history = try {
+                    notificationHistoryReader(host, session)
+                } catch (failure: Exception) {
+                    if (failure is kotlinx.coroutines.CancellationException) throw failure
+                    null
+                } ?: return@launch
+                val text = ReplyNotificationPolicy.text(history) ?: return@launch
+                val current = _state.value
+                val front = if (foreground.value) current.terminalSession ?: current.readerSession else null
+                if (current.sessions.none { it.hostId == session.hostId && it.name == session.name && it.lastActivityEpochSeconds == session.lastActivityEpochSeconds }) return@launch
+                if (key !in favoriteReplyKeys(current, setOf(key)) || (current.unreadCounts[key] ?: 0) <= 0 ||
+                    front?.let { SessionReadStore.key(it.hostId, it.name) } == key) return@launch
+                ReplyNotifier.show(app, session.hostId, session.name, session.displayName, text)
+            }
         }
     }
 
