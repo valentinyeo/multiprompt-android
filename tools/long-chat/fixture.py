@@ -15,16 +15,21 @@ def create(home):
     transcript.parent.mkdir(parents=True, exist_ok=True)
     stamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
     with transcript.open('w') as output:
-        for index in range(941):
-            for role in ('user', 'assistant'):
-                text = f'Question {index}' if role == 'user' else (
-                    f'Reply {index}\n\n' + ('A long conversation with paragraphs, code and tool results.\n' * 420)
-                    + '\n```text\n' + 'example output\n' * 20 + '```\n')
-                if index == 940 and role == 'assistant':
-                    text = LATEST
-                output.write(json.dumps(dict(type=role, uuid=f'{role}-{index}', sessionId=SID,
-                    timestamp=stamp, message=dict(role=role, id=f'message-{index}',
-                    content=[dict(type='text', text=text)]))) + '\n')
+        def event(role, identity, content):
+            output.write(json.dumps(dict(type=role, uuid=identity, sessionId=SID,
+                timestamp=stamp, message=dict(role=role, id=identity, content=content))) + '\n')
+
+        for index in range(321):
+            event('user', f'user-{index}', f'Question {index}')
+            event('assistant', f'reply-{index}', [dict(type='text',
+                text=LATEST if index == 320 else f'Answer {index}')])
+            if index < 310:
+                for tool in range(2):
+                    identity = f'tool-{index}-{tool}'
+                    event('assistant', identity, [dict(type='tool_use', id=identity,
+                        name='Bash', input=dict(command='printf synthetic-output'))])
+                    event('user', f'result-{identity}', [dict(type='tool_result', tool_use_id=identity,
+                        content=('Synthetic tool output line.\n' * (2400 if tool == 0 else 50)))])
     assert transcript.stat().st_size > 18 * 1024 * 1024
     return cwd, transcript
 
