@@ -93,13 +93,19 @@ public class Observe extends Instrumentation {
 
     private void open(String stage) throws Exception {
         waitFor("cl-long-chat", SystemClock.elapsedRealtime() + 30000);
+        AccessibilityNodeInfo target = node("cl-long-chat");
+        while (target != null && !target.isClickable()) target = target.getParent();
+        if (target == null) throw new AssertionError("Session target missing");
         long started = SystemClock.elapsedRealtime();
-        click("cl-long-chat");
+        if (!target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) throw new AssertionError("Session click failed");
+        long tapped = SystemClock.elapsedRealtime() - started;
         waitFor(LATEST, started + 2000);
+        long visible = SystemClock.elapsedRealtime() - started;
         int ink = screenshot(stage);
         long elapsed = SystemClock.elapsedRealtime() - started;
+        report(new JSONObject().put("stage", stage).put("visibleMs", elapsed).put("latest", LATEST)
+            .put("inkPixels", ink).put("tapMs", tapped).put("nodeMs", visible).put("captureMs", elapsed - visible));
         if (elapsed > 2000) throw new AssertionError("Visible reply too late: " + elapsed);
-        report(new JSONObject().put("stage", stage).put("visibleMs", elapsed).put("latest", LATEST).put("inkPixels", ink));
     }
 
     private void seedHost() throws Exception {
