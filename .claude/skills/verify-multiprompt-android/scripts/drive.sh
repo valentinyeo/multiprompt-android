@@ -848,6 +848,7 @@ sudo sed -i 's|^|command="/home/verifyssh/send-delay.sh" |' /home/verifyssh/.ssh
 fill 'Message verify-session' VERIFY_SENT_528
 shot send-draft
 tap_desc 'Send prompt'
+timeout 15s adb logcat -s SendTiming:I -e box_cleared_frame -m 1 > "$EVIDENCE/cleared-frame-receipt.txt"
 shot eta-sending
 python3 "$scripts/no-chat-bar.py" "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-eta-sending.png" sending
 timeout 15s adb logcat -d -s SendTiming:I > "$EVIDENCE/send-timing.txt"
