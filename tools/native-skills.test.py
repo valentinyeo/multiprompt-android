@@ -84,6 +84,21 @@ class NativeSkillsTest(unittest.TestCase):
         self.write(config / "skills/bad/SKILL.md", "---\nname: bad name\n---\nbody")
         self.assertEqual(skills.discover(self.home, self.cwd, config), [dict(name="native", description="café")])
 
+    def test_native_fixture_accepts_held_messages_when_its_turn_finishes(self):
+        from unittest.mock import patch
+        root = SCRIPT.parents[4]
+        console = root / ".claude/skills/verify-multiprompt-android/scripts/skills-console.py"
+        result = subprocess.run([sys.executable, str(console), str(self.home / "receipts.txt")],
+                                input="/review-native investigation\n", capture_output=True, text=True,
+                                env=dict(os.environ, HOME=str(self.home)), check=True)
+        transcript = next((self.home / ".claude/projects").rglob("*.jsonl"))
+        reader_spec = importlib.util.spec_from_file_location("fixture_reader", SCRIPT.with_name("chat_history_reader.py"))
+        reader = importlib.util.module_from_spec(reader_spec)
+        reader_spec.loader.exec_module(reader)
+        with patch.object(reader.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, stdout=result.stdout)):
+            self.assertTrue(reader.held_queue_ready("verify-session", transcript))
+        self.assertEqual((self.home / "receipts.txt").read_text(), "VERIFY_RECEIVED:/review-native investigation\n")
+
     def test_cli_uses_exact_tmux_session_without_interpolation(self):
         self.skill(self.cwd, "local")
         name = "quoted';not-a-command"

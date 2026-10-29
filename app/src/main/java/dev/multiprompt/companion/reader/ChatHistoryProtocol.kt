@@ -49,13 +49,15 @@ object ChatHistoryProtocol {
         val mode: String,
         val oldest: Long,
         val rows: List<Row>,
+        val deliveries: Map<String, QueuedMessages.Delivery> = emptyMap(),
+        val held: List<QueuedMessages.SentPrompt> = emptyList(),
     )
 
-    fun request(id: Long, identity: Identity, history: ChatHistory, before: Long = 0): String {
+    fun request(id: Long, identity: Identity, history: ChatHistory, before: Long = 0, deliveryIds: List<String> = emptyList()): String {
         require(id > 0 && TranscriptProtocol.supports(identity.agent))
         return JSONObject().put("id", id).put("codex", identity.agent == AgentKind.CODEX)
             .put("sid", identity.sid).put("tmux", identity.tmux).put("cwd", identity.cwd)
-            .put("questions", true).put("source_offsets", true).put("no_jump", true).put("settlement", true)
+            .put("questions", true).put("held", true).put("delivery_ids", org.json.JSONArray(deliveryIds)).put("source_offsets", true).put("no_jump", true).put("settlement", true)
             .put("cached_sid", history.sid).put("inode", history.inode).put("offset", history.offset)
             .put("start", history.start).put("before", before).put("mtime", history.mtime)
             .put("probe", history.probe).toString() + "\n"
@@ -80,15 +82,31 @@ object ChatHistoryProtocol {
         val end = fields[6].toLong()
         val oldest = fields[14].toLong()
         require(oldest in 0..base && end >= base && fields[7].toLong() > 0)
+        val deliveries = mutableMapOf<String, QueuedMessages.Delivery>()
+        val held = mutableListOf<QueuedMessages.SentPrompt>()
         val rows = lines.subList(1, lines.lastIndex).mapNotNull { line ->
             val row = JSONObject(line)
+            row.optJSONArray("held")?.let { values ->
+                for (index in 0 until values.length()) {
+                    val value = values.getJSONObject(index)
+                    held.add(QueuedMessages.SentPrompt(value.getString("text"), value.getLong("queued_at"),
+                        messageId = value.getString("id"), delivery = QueuedMessages.Delivery.valueOf(value.getString("state").uppercase()),
+                        sid = value.getString("sid"), inode = value.getLong("inode"), afterOffset = value.getLong("offset")))
+                }
+            }
+            row.optJSONArray("deliveries")?.let { values ->
+                for (index in 0 until values.length()) {
+                    val value = values.getJSONObject(index)
+                    deliveries[value.getString("id")] = QueuedMessages.Delivery.valueOf(value.getString("state").uppercase())
+                }
+            }
             if (row.optString("role") !in setOf("user", "assistant")) null else parseRow(row).also {
                 require(it.offset >= base && it.end <= end && it.end > it.offset)
             }
         }
         require(rows.zipWithNext().all { (a, b) -> a.offset <= b.offset })
         return Page(fields[4], base, end, fields[7].toLong(), fields[8] == "1", fields[11].toLong(),
-            fields[12], fields[13], oldest, rows)
+            fields[12], fields[13], oldest, rows, deliveries, held)
     }
 
     class Framer {

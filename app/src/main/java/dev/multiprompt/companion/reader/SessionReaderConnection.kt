@@ -74,7 +74,8 @@ class SessionReaderConnection(
     private val historyCache: ChatHistoryCache,
 ) : AutoCloseable {
     private sealed interface Request {
-        data class Prompt(val text: String) : Request
+        data class Prompt(val record: QueuedMessages.SentPrompt) : Request
+        data class Cancel(val record: QueuedMessages.SentPrompt) : Request
         data class Action(val action: TmuxAction) : Request
         data class ModelPickerOption(val index: Int) : Request
         data class QuestionAnswer(val question: PendingQuestion, val choices: Set<Int>, val other: String) : Request
@@ -106,7 +107,7 @@ class SessionReaderConnection(
     }
 
     suspend fun resyncChat() {
-        _state.update { it.copy(sentPrompts = emptyList(), sentRecord = emptyList()) }
+        _state.update { it.copy(sentPrompts = emptyList(), sentRecord = it.sentRecord.filter { record -> record.messageId.isNotEmpty() }) }
         historyConnection?.resync()?.await()
     }
 
@@ -135,19 +136,26 @@ class SessionReaderConnection(
     }
 
     fun sendPrompt(text: String): Boolean {
-        val sent = requests.trySend(Request.Prompt(text)).isSuccess
+        val prompt = QueuedMessages.SentPrompt(text, System.currentTimeMillis(),
+            messageId = if (agent == AgentKind.CLAUDE) java.util.UUID.randomUUID().toString() else "")
+        _state.update { it.copy(sentRecord = it.sentRecord + prompt) }
+        val sent = requests.trySend(Request.Prompt(prompt)).isSuccess
+        if (!sent) _state.update { it.copy(sentRecord = it.sentRecord.filterNot { record -> record === prompt }) }
         if (sent) {
-            val prompt = QueuedMessages.SentPrompt(text, System.currentTimeMillis())
             awaitModelSwitchConfirmation(text)
             _state.update { current ->
                 current.copy(
                     output = TmuxText.mergeSnapshot(current.output, "> $text"),
                     sentPrompts = (current.sentPrompts + text).takeLast(SENT_PROMPT_MEMORY),
-                    sentRecord = (current.sentRecord + prompt).takeLast(8),
                 )
             }
         }
         return sent
+    }
+
+    fun cancelQueued(messageId: String, held: List<QueuedMessages.SentPrompt> = emptyList()): Boolean {
+        val record = (_state.value.sentRecord + held).firstOrNull { it.messageId == messageId } ?: return false
+        return requests.trySend(Request.Cancel(record)).isSuccess
     }
 
     fun sendEnter() {
@@ -372,11 +380,23 @@ class SessionReaderConnection(
                 } else null
                 withFreshClient { client ->
                     when (request) {
-                        is Request.Prompt -> repository.sendPrompt(
+                        is Request.Prompt -> if (request.record.messageId.isEmpty()) repository.sendPrompt(
                             client,
                             tmuxSessionName,
-                            request.text,
-                        )
+                            request.record.text,
+                        ) else {
+                            val receipt = repository.heldPrompt(client, historyScript, tmuxSessionName, request.record, cancel = false)
+                            _state.update { current -> current.copy(sentRecord = current.sentRecord.map { record ->
+                                if (record.messageId == request.record.messageId) record.copy(delivery = QueuedMessages.Delivery.valueOf(receipt.getString("state").uppercase()),
+                                    sid = receipt.getString("sid"), inode = receipt.getLong("inode"), afterOffset = receipt.getLong("offset")) else record
+                            }) }
+                        }
+                        is Request.Cancel -> {
+                            repository.heldPrompt(client, historyScript, tmuxSessionName, request.record, cancel = true)
+                            _state.update { current -> current.copy(sentRecord = current.sentRecord.filterNot {
+                                it.messageId == request.record.messageId
+                            } + request.record.copy(delivery = QueuedMessages.Delivery.CANCELLED)) }
+                        }
                         is Request.Action -> repository.performAction(
                             client,
                             tmuxSessionName,

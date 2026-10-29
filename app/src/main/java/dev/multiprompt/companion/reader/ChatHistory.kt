@@ -12,6 +12,7 @@ data class ChatHistoryMessage(
     val end: Long,
     val requestId: String = "",
     val pending: Boolean = false,
+    val delivery: String? = null,
 ) {
     fun transcript(): TranscriptMessage = TranscriptMessage(role, timestamp.ifEmpty { null }, text)
 }
@@ -25,6 +26,8 @@ data class ChatHistory(
     val probe: String = "",
     val more: Boolean = false,
     val rows: List<Row> = emptyList(),
+    val deliveries: Map<String, QueuedMessages.Delivery> = emptyMap(),
+    val held: List<QueuedMessages.SentPrompt> = emptyList(),
 ) {
     val pendingQuestions: List<PendingQuestion> by lazy {
         val pending = LinkedHashMap<String, List<PendingQuestion>>()
@@ -57,12 +60,37 @@ data class ChatHistory(
 
     fun displayMessages(screenOutput: String, agent: AgentKind,
         sent: List<QueuedMessages.SentPrompt>, nowMillis: Long): List<ChatHistoryMessage> {
-        val echoes = QueuedMessages.pending(messages.map { it.transcript() }, screenOutput, agent, sent, nowMillis).map { text ->
+        val echoes = QueuedMessages.pending(messages.map { it.transcript() }, screenOutput, agent, sent.filter { it.messageId.isEmpty() }, nowMillis).map { text ->
             val sentAt = sent.lastOrNull { QueuedMessages.normalize(it.text) == text }?.sentAtMillis
             ChatHistoryMessage("@queued:$text", "user", text, "", 0, 0,
                 pending = !QueuedMessages.accepted(text, sentAt, rows))
         }
-        return messages + echoes
+        val own = (sent.filter { it.messageId.isNotEmpty() } + held).distinctBy { it.messageId }.sortedBy { it.sentAtMillis }
+        val delivered = mutableSetOf<String>()
+        val current = messages.map { message ->
+            val record = own.firstOrNull { prompt ->
+                val state = deliveries[prompt.messageId] ?: prompt.delivery
+                prompt.messageId !in delivered && state == QueuedMessages.Delivery.DELIVERED && prompt.sid == sid && prompt.inode == inode &&
+                    message.role == "user" && message.offset >= prompt.afterOffset &&
+                    QueuedMessages.normalize(message.text) == QueuedMessages.normalize(prompt.text)
+            }
+            if (record == null) message else {
+                delivered.add(record.messageId)
+                message.copy(pending = false, delivery = "Delivered")
+            }
+        }
+        val managed = own.filter { it.messageId !in delivered }.map { prompt ->
+            val state = if (prompt.delivery == QueuedMessages.Delivery.CANCELLED) prompt.delivery else deliveries[prompt.messageId] ?: prompt.delivery
+            ChatHistoryMessage("@held:${prompt.messageId}", "user", prompt.text, "", 0, 0,
+                requestId = prompt.messageId, pending = state !in setOf(QueuedMessages.Delivery.CANCELLED, QueuedMessages.Delivery.DELIVERED),
+                delivery = when (state) {
+                    QueuedMessages.Delivery.CANCELLED -> "Cancelled"
+                    QueuedMessages.Delivery.DELIVERED -> "Delivered"
+                    QueuedMessages.Delivery.QUEUED -> "Queued"
+                    QueuedMessages.Delivery.SENDING, QueuedMessages.Delivery.SUBMITTED -> "Sending"
+                })
+        }
+        return current + echoes + managed
     }
 
     fun apply(page: ChatHistoryProtocol.Page): ChatHistory {
@@ -74,9 +102,9 @@ data class ChatHistory(
         val retained = if (page.mode == "tail") emptyList() else rows
         val merged = (retained + page.rows).associateBy { Triple(it.offset, it.role, it.id) }.values.sortedBy { it.offset }
         return if (page.mode == "older") {
-            copy(start = page.oldest, rows = merged)
+            copy(start = page.oldest, rows = merged, deliveries = deliveries + page.deliveries, held = page.held)
         } else {
-            ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged)
+            ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged, (if (sameSource) deliveries else emptyMap()) + page.deliveries, page.held)
         }
     }
 }

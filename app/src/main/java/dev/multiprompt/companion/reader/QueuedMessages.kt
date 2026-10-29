@@ -6,7 +6,17 @@ import java.time.Instant
 import java.time.format.DateTimeParseException
 
 object QueuedMessages {
-    data class SentPrompt(val text: String, val sentAtMillis: Long)
+    enum class Delivery { SENDING, QUEUED, SUBMITTED, DELIVERED, CANCELLED }
+
+    data class SentPrompt(
+        val text: String,
+        val sentAtMillis: Long,
+        val messageId: String = "",
+        val delivery: Delivery = Delivery.SENDING,
+        val sid: String = "",
+        val inode: Long = 0,
+        val afterOffset: Long = 0,
+    )
 
     fun pending(
         transcript: List<TranscriptMessage>,

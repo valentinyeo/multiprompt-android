@@ -34,10 +34,13 @@ receipts = Path(sys.argv[1])
 
 
 def event(role, text):
+    message = dict(role=role, content=text)
+    if role == "assistant":
+        message.update(id="message-" + uuid.uuid4().hex, stop_reason="end_turn")
     with transcript.open("a", encoding="utf-8") as output:
         output.write(json.dumps(dict(type=role, uuid=str(uuid.uuid4()), sessionId=sid,
                                     timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                                    message=dict(role=role, content=text))) + "\n")
+                                    message=message)) + "\n")
 
 
 def render():

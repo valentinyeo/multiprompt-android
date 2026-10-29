@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    chat-working.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|robot-faces.md) ;;
+    chat-working.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -224,7 +224,7 @@ if [[ "$feature" == launcher-icon.md ]]; then
     exit 0
 fi
 if [[ "$package" == dev.multiprompt.companion ]]; then
-    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md ]]
+    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -521,6 +521,60 @@ CHOICES
     printf 'FEATURE VERIFIED: %s\n' "$feature"
     exit 0
 fi
+if [[ "$feature" == chat-cancel.md ]]; then
+    if [[ "$package" != dev.multiprompt.companion ]]; then
+        adb shell 'echo $$ > /sdcard/cancel-record.pid; exec screenrecord --time-limit 180 /sdcard/cancel-proof.mp4' &
+        recording_client=$!
+    fi
+    wait_for_text VERIFY_READY_1010
+    wait_for_text 'Ready for cancel tests.'
+    shot cancel-ready
+    for word in CANCEL_KEEP_ONE CANCEL_TARGET_TWO CANCEL_KEEP_THREE; do
+        fill 'Message verify-session' "$word"
+        tap_desc 'Send prompt'
+        wait_for_text "$word"
+    done
+    shot cancel-waiting
+    python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 3 WAITING
+    if sudo test -f /home/verifyssh/receipts.txt && sudo grep -F CANCEL_ /home/verifyssh/receipts.txt; then exit 1; fi
+    read -r cancel_x cancel_y <<< "$(select_node text CANCEL_TARGET_TWO)"
+    adb shell input swipe "$cancel_x" "$cancel_y" "$cancel_x" "$cancel_y" 900
+    wait_for_text 'Cancel message'
+    shot cancel-menu
+    tap_text 'Cancel message'
+    wait_for_text Cancelled
+    shot cancel-cancelled
+    python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 2 WAITING
+    sudo -u verifyssh touch /home/verifyssh/cancel-ready
+    wait_receipt VERIFY_RECEIVED:CANCEL_KEEP_ONE
+    wait_receipt VERIFY_RECEIVED:CANCEL_KEEP_THREE
+    wait_for_text Delivered
+    wait_for_absence Queued
+    shot cancel-delivered
+    if sudo grep -F CANCEL_TARGET_TWO /home/verifyssh/receipts.txt; then exit 1; fi
+    python3 - <<'PROOF'
+from pathlib import Path
+import subprocess
+rows = subprocess.check_output(['sudo', 'cat', '/home/verifyssh/receipts.txt'], text=True).splitlines()
+assert rows == ['VERIFY_RECEIVED:CANCEL_KEEP_ONE', 'VERIFY_RECEIVED:CANCEL_KEEP_THREE'], rows
+PROOF
+    read -r cancel_x cancel_y <<< "$(select_node text CANCEL_KEEP_THREE)"
+    adb shell input swipe "$cancel_x" "$cancel_y" "$cancel_x" "$cancel_y" 900
+    wait_for_text Reply
+    shot delivered-menu
+    if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'Cancel message'; then exit 1; fi
+    adb shell input keyevent 4
+    if [[ "$package" != dev.multiprompt.companion ]]; then
+        remote_recording=$(adb shell cat /sdcard/cancel-record.pid | tr -d '\r')
+        [[ "$remote_recording" =~ ^[0-9]+$ ]]
+        adb shell kill -2 "$remote_recording"
+        wait "$recording_client"
+        adb pull /sdcard/cancel-proof.mp4 "$EVIDENCE/cancel-proof.mp4"
+    fi
+    printf 'FEATURE VERIFIED: %s\n' "$feature"
+    exit 0
+fi
+
 if [[ "$feature" == chat-queued.md ]]; then
     wait_for_text VERIFY_READY_1008
 else
