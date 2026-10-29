@@ -28,6 +28,7 @@ import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
+import dev.multiprompt.companion.reader.TranscriptProtocol
 import dev.multiprompt.companion.auth.SyncAuthManager
 import android.content.Intent
 import dev.multiprompt.companion.account.AccountHosts
@@ -849,7 +850,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 agent = session.agent,
                 historyScript = app.chatHistoryScript,
                 historyCache = app.chatHistoryCache,
-            )
+            ).also { connection ->
+                if (!_state.value.readerTechnicalMode && TranscriptProtocol.supports(session.agent)) {
+                    connection.chatHistory(session.agent, session.workingDirectory)
+                }
+            }
         }
         _state.update {
             it.copy(
