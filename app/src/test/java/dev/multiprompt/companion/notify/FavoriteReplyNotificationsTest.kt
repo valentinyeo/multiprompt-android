@@ -54,6 +54,20 @@ class FavoriteReplyNotificationsTest {
         shadowOf(Looper.getMainLooper()).idle()
     }
 
+    @Test fun slashCommandDoesNotNotify() {
+        favorite("one", true)
+        fixture.state.value = fixture.state.value.copy(sessions = listOf(fixture.session.copy(preview = "❯ /rc")))
+        reply(one)
+        assertEquals(emptySet<String>(), replies())
+    }
+
+    @Test fun typedPromptDoesNotNotify() {
+        favorite("one", true)
+        fixture.state.value = fixture.state.value.copy(sessions = listOf(fixture.session.copy(preview = "❯ Please fix the checkout")))
+        reply(one)
+        assertEquals(emptySet<String>(), replies())
+    }
+
     @Test fun noFavoritesMeansNoReplyNotifications() {
         reply(one, two)
         assertEquals(emptySet<String>(), replies())
