@@ -6,6 +6,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import dev.multiprompt.companion.AppUiState
+import dev.multiprompt.companion.MainViewModel
+import dev.multiprompt.companion.MultipromptApplication
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.cancel
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.model.HostProfile
@@ -42,6 +46,29 @@ internal fun FadeTestScreen(screen: FadeScreen, material3: Boolean, sunlight: Bo
                 InboxFixture(screen, material3, sunlight)
             }
         }
+    }
+}
+
+@Composable
+internal fun AppInboxFixture(sunlight: Boolean) {
+    val app = LocalContext.current.applicationContext as MultipromptApplication
+    val model = remember {
+        MainViewModel(app).apply {
+            setField(this, "accountRequestRunning", true)
+            field<MutableStateFlow<AppUiState>>(this, "_state").value = AppUiState(
+                signedIn = true,
+                appTheme = if (sunlight) AppTheme.SUNLIGHT else AppTheme.DARK,
+                hosts = listOf(testHost),
+                sessions = List(40) { testSession.copy(name = "Session $it", lastActivityEpochSeconds = testSession.lastActivityEpochSeconds - it * 600) },
+                newestSessionsAtBottom = false,
+            )
+        }
+    }
+    DisposableEffect(model) {
+        onDispose { model.viewModelScope.cancel() }
+    }
+    MultipromptTheme(sunlight = sunlight, material3 = false) {
+        MultipromptApp(model)
     }
 }
 

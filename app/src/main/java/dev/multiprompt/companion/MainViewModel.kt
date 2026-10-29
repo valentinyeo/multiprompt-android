@@ -28,6 +28,7 @@ import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
+import dev.multiprompt.companion.reader.TranscriptProtocol
 import dev.multiprompt.companion.auth.SyncAuthManager
 import android.content.Intent
 import dev.multiprompt.companion.account.AccountHosts
@@ -849,7 +850,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 agent = session.agent,
                 historyScript = app.chatHistoryScript,
                 historyCache = app.chatHistoryCache,
-            )
+            ).also { connection ->
+                if (!_state.value.readerTechnicalMode && TranscriptProtocol.supports(session.agent)) {
+                    connection.chatHistory(session.agent, session.workingDirectory)
+                }
+            }
         }
         _state.update {
             it.copy(
@@ -963,8 +968,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val pending = pendingLayout ?: return
         val tab = AccountHostMap.tabFor(session, pending.edited, _state.value.accountHosts) ?: return
         try {
-            saveAccountLayout(pending.copy(edited = pending.edited.stampInput(tab.identity, System.currentTimeMillis())))
-            if (usedStampThrottle.shouldPush(pendingLayout!!)) syncAccount()
+            saveAccountLayout(pending.copy(edited = pending.edited.stampInput(tab.identity, System.currentTimeMillis()))) {
+                if (usedStampThrottle.shouldPush(pendingLayout!!)) syncAccount()
+            }
         } catch (e: Exception) {
             _state.update { it.copy(accountError = e.message ?: "Could not save session use") }
         }
@@ -1562,14 +1568,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun saveAccountLayout(value: PendingLayout) {
+    private fun saveAccountLayout(value: PendingLayout, afterSaved: (() -> Unit)? = null) {
         val account = syncAuth.accountId() ?: throw IllegalStateException("Sign in before editing account workspaces")
         val mapping = AccountHostMap.resolve(_state.value.hosts, accountStore.hostOverrides())
         val next = value.copy(
             base = if (syncAuth.supportsHosts) value.base else value.base.copy(hosts = null),
             edited = value.edited.copy(hosts = if (syncAuth.supportsHosts) AccountHosts.publish(value.edited.hosts, mapping) else null),
         )
-        accountStore.save(account, next)
+        if (afterSaved == null) {
+            accountStore.save(account, next)
+        } else {
+            val generation = accountGeneration
+            val persisted = accountStore.saveAsync(account, next)
+            viewModelScope.launch {
+                try {
+                    withContext(Dispatchers.IO) { persisted.get() }
+                    if (generation == accountGeneration) afterSaved()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failed: Exception) {
+                    if (generation == accountGeneration) _state.update {
+                        it.copy(accountError = failed.cause?.message ?: failed.message ?: "Could not save session use")
+                    }
+                }
+            }
+        }
         pendingLayout = next
         publishAccountLayout()
     }

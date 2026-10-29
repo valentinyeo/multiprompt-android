@@ -52,9 +52,32 @@ object ChatReactions {
             badges.getOrPut(target.value.key) { linkedSetOf() }.add(reaction.emoji)
             return true
         }
-        val visible = messages.filterIndexed { index, message ->
-            message.role != "user" || (message.pending && !collapsePending) || !apply(message.text, index)
+        val reactions = mutableSetOf<Int>()
+        val displayed = messages.mapIndexed { index, message ->
+            if (message.role != "user" || (message.pending && !collapsePending)) return@mapIndexed message
+            val lines = message.text.lines()
+            val kept = lines.filterNot { apply(it, index) }
+            if (kept.size == lines.size) return@mapIndexed message
+            val text = kept.joinToString("\n").trim('\n')
+            if (text.isBlank()) reactions.add(index)
+            message.copy(text = text)
         }
+        val silent = hideReplies(messages, reactions)
+        val visible = displayed.filterIndexed { index, _ -> index !in reactions && index !in silent }
         return Presentation(visible, badges)
+    }
+
+    private fun hideReplies(messages: List<ChatHistoryMessage>, reactions: Set<Int>): Set<Int> {
+        val hidden = mutableSetOf<Int>()
+        for (reaction in reactions) {
+            val replies = mutableListOf<Int>()
+            var index = reaction + 1
+            while (index < messages.size && messages[index].role != "user") {
+                if (messages[index].role == "assistant") replies.add(index)
+                index++
+            }
+            if (replies.size == 1) hidden.add(replies.single())
+        }
+        return hidden
     }
 }

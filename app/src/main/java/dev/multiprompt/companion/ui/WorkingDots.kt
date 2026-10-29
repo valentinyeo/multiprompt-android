@@ -13,6 +13,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import dev.multiprompt.companion.model.AgentKind
+import dev.multiprompt.companion.reader.ReaderState
+import dev.multiprompt.companion.ssh.TmuxText
+
+internal fun ReaderState.isWorking(agent: AgentKind): Boolean = sending || (hookState?.active
+    ?: TmuxText.readerBlocks(screenOutput, agent).any {
+        it.kind == TmuxText.ReaderBlockKind.PROGRESS && isTransientProgress(it.text)
+    })
 
 @Composable
 internal fun WorkingDots() {

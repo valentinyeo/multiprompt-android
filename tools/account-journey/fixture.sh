@@ -27,7 +27,6 @@ PermitRootLogin no
 AllowUsers valentin
 UsePAM no
 PrintMotd no
-PerSourcePenalties no
 CONFIG
 sudo /usr/sbin/sshd -t -f "$FIXTURE/sshd_config"
 sudo /usr/sbin/sshd -f "$FIXTURE/sshd_config" -E "$FIXTURE/sshd.log"

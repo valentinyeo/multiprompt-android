@@ -27,7 +27,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.multiprompt.companion.reader.ChatReactions
 import dev.multiprompt.companion.reader.ChatHistoryMessage
-import dev.multiprompt.companion.ssh.ClaudeQuestion
+import dev.multiprompt.companion.reader.PendingQuestion
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 import org.json.JSONObject
@@ -144,9 +144,9 @@ class ReplyReferenceTest {
             ChatHistoryMessage("tall-source", "assistant", source, "", 21, 22) +
             (23..55).map { ChatHistoryMessage("later-$it", "assistant", "Later message $it", "", it.toLong(), it + 1L) } +
             ChatHistoryMessage("reply", "user", ReplyQuote.compose(source, "Answer to tall original"), "", 56, 57)
-        val question = ClaudeQuestion("Choose an option", listOf(ClaudeQuestion.Option(1, "A"), ClaudeQuestion.Option(2, "B")))
+        val question = PendingQuestion("call", 0, "Choose an option", "", listOf(PendingQuestion.Option("A", ""), PendingQuestion.Option("B", "")), false, true, "claude")
         compose.setContent {
-            MaterialTheme { ChatHistoryList(messages, sunlight = true, question = question, modifier = Modifier.background(Color.White)) }
+            MaterialTheme { ChatHistoryList(messages, sunlight = true, questions = listOf(question), modifier = Modifier.background(Color.White)) }
         }
         compose.onNodeWithContentDescription("Jump to original message").performClick()
         val original = compose.onNodeWithTag("chat-message-tall-source")

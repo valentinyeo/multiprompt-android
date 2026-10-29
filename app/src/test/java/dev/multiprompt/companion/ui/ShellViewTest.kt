@@ -98,6 +98,16 @@ class ShellViewTest {
     }
 
     @Test
+    fun swipeUpAlsoRevealsEarlierHistoryAndJumpReturnsToLive() {
+        shell(history = (1..500).map { "history line $it" })
+        compose.onNodeWithTag("Shell content").performTouchInput { swipeUp() }
+        compose.onNodeWithTag("Shell history").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Jump to live").assertIsDisplayed().performClick()
+        compose.onNodeWithTag("Shell history").assertDoesNotExist()
+        compose.onNodeWithText("Live terminal").assertIsDisplayed()
+    }
+
+    @Test
     fun scrollingPastNewestHistoryReturnsToLive() {
         shell(history = listOf("newest history"))
         compose.onNodeWithTag("Shell content").performTouchInput { swipeDown() }
