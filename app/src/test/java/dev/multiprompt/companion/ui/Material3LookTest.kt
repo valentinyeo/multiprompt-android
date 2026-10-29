@@ -24,9 +24,11 @@ import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
 import org.robolectric.ParameterizedRobolectricTestRunner.Parameters
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w411dp-h891dp-mdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class Material3LookTest(private val screen: M3Screen, private val sunlight: Boolean) {
     @get:Rule
     val compose = createComposeRule()
@@ -73,7 +75,7 @@ class Material3LookTest(private val screen: M3Screen, private val sunlight: Bool
             val row = compose.onNodeWithText("claude-reader").fetchSemanticsNode()
             assertTrue("tab=${tab.boundsInRoot} row=${row.boundsInRoot}", tab.boundsInRoot.bottom <= row.boundsInRoot.top)
             val title = compose.onNodeWithText("claude-reader", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-            assertEquals("single-line row=${row.boundsInRoot}", maxOf(56f, title.height + 24f), row.boundsInRoot.height, 0.01f)
+            assertEquals("avatar and preview row=${row.boundsInRoot}", 68f, row.boundsInRoot.height, 0.01f)
             val badgeNode = compose.onNodeWithContentDescription("1 unread messages", useUnmergedTree = true).fetchSemanticsNode()
             val badge = badgeNode.boundsInRoot
             val time = compose.onAllNodesWithTag("Session activity", useUnmergedTree = true).fetchSemanticsNodes()
