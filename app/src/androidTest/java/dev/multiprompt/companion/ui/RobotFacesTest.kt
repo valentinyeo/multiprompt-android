@@ -85,13 +85,13 @@ class RobotFacesTest {
         avatar.recycle()
         screenshot("robot-inbox")
         compose.onNodeWithText(names[0]).performClick()
-        compose.runOnIdle { assertEquals(sessions[0], opened) }
+        compose.runOnIdle { assertEquals(sessions[0].copy(workspaceName = workspaceNames[0]), opened) }
         compose.onNodeWithText(names[2]).performTouchInput { longClick() }
         compose.onNodeWithText("Mark unread").assertIsDisplayed()
         compose.onNodeWithText("Mark unread").performClick()
-        compose.runOnIdle { assertEquals(sessions[2], markedUnread) }
+        compose.runOnIdle { assertEquals(sessions[2].copy(workspaceName = workspaceNames[2]), markedUnread) }
         compose.onNodeWithText(names[2]).performClick()
-        compose.runOnIdle { assertEquals(sessions[2], opened) }
+        compose.runOnIdle { assertEquals(sessions[2].copy(workspaceName = workspaceNames[2]), opened) }
         compose.activityRule.scenario.onActivity { activity ->
             activity.setContent {
                 MultipromptTheme(sunlight = false, material3 = false, readerStyle = true) {
