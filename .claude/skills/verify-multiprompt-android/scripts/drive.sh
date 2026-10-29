@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    chat-working.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md) ;;
+    chat-working.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|robot-faces.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -14,6 +14,9 @@ exec > >(tee -a "$EVIDENCE/driver-transcript.txt") 2>&1
 set -x
 package=${VERIFY_PACKAGE:-dev.multiprompt.companion.debug}
 step=0
+adb logcat -c
+adb logcat -v threadtime > "$EVIDENCE/logcat-stream.txt" 2>&1 &
+logcat_stream_pid=$!
 dump_ui() {
     timeout 20s adb shell uiautomator dump /sdcard/verify-ui.xml >/dev/null || return
     timeout 20s adb pull /sdcard/verify-ui.xml "$EVIDENCE/current.xml" >/dev/null
@@ -28,8 +31,26 @@ finish() {
     code=$?
     trap - EXIT
     set +e
+    {
+        date +%T.%N
+        timeout 10s adb shell top -b -n 1 -m 15
+        timeout 10s adb shell dumpsys meminfo
+        timeout 10s adb shell dumpsys activity processes | grep -i "anr\|crash\|not responding"
+        uptime
+        free -m
+        ps -eo pid,pcpu,pmem,args --sort=-pcpu | head -8
+        pgrep -a qemu
+        adb devices
+        sudo dmesg | grep -iE "segfault|qemu|oom|killed process" | tail -20
+        ls -la /tmp/android-runner /var/crash /var/lib/systemd/coredump
+        sudo coredumpctl list --no-pager
+        sudo journalctl --no-pager -n 40 -g "qemu|coredump|apport"
+    } > "$EVIDENCE/load-at-exit.txt" 2>&1
+    sudo cat /home/verifyssh/commands.log > "$EVIDENCE/commands.txt" 2>/dev/null
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt" 2>/dev/null
     shot "exit-$code"
     timeout 15s adb logcat -d > "$EVIDENCE/logcat.txt"
+    kill "$logcat_stream_pid" 2>/dev/null
     printf 'DRIVER EXIT: %s\n' "$code"
     exit "$code"
 }
@@ -84,10 +105,12 @@ wait_for_text() {
 }
 fill() {
     local attempt
+    local -a clear_keys
     for attempt in 1 2 3; do
         tap_node field "$1"
         select_node focused-field "$1" >/dev/null || continue
-        adb shell input keycombination 113 29
+        read -r -a clear_keys < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" clear-field "$1")
+        adb shell input keyevent "${clear_keys[@]}"
         adb shell input text "$2"
         dump_ui
         if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value "$1" "${2//%s/ }"; then
@@ -147,10 +170,55 @@ wait_receipt() {
     done
     return 1
 }
+launcher_icon() {
+    adb shell dumpsys package "$package" > "$EVIDENCE/package.txt"
+    sed -n 's/^[[:space:]]*versionName=//p' "$EVIDENCE/package.txt" | grep -Fx "$EXPECTED_VERSION"
+    adb shell input keyevent KEYCODE_HOME
+    sleep 3
+    dump_ui
+    if ! python3 "$scripts/launcher-icon.py" home "$EVIDENCE/current.xml"; then
+        local size w h x y attempt
+        size=$(adb shell wm size | grep -Eo '[0-9]+x[0-9]+' | tail -1)
+        w=${size%x*}
+        h=${size#*x}
+        adb shell input swipe $((w / 2)) $((h * 7 / 10)) $((w / 2)) $((h / 4)) 500
+        sleep 2
+        for attempt in {1..8}; do
+            dump_ui
+            if python3 "$scripts/launcher-icon.py" find "$EVIDENCE/current.xml"; then break; fi
+            adb shell input swipe $((w / 2)) $((h * 7 / 10)) $((w / 2)) $((h / 4)) 500
+            sleep 2
+        done
+        shot launcher-drawer
+        python3 "$scripts/launcher-icon.py" check "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-launcher-drawer.png" "$EVIDENCE/launcher-icon-crop.png" "$EVIDENCE/launcher-icon-result.json"
+        read -r x y < <(python3 "$scripts/launcher-icon.py" position "$EVIDENCE/current.xml")
+        adb shell input touchscreen draganddrop "$x" "$y" $((w / 2)) $((h / 2)) 1800
+        adb shell input keyevent KEYCODE_HOME
+        sleep 2
+    fi
+    shot launcher-home-icon
+    python3 "$scripts/launcher-icon.py" home "$EVIDENCE/current.xml"
+    python3 "$scripts/launcher-icon.py" check "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-launcher-home-icon.png" "$EVIDENCE/launcher-icon-crop.png" "$EVIDENCE/launcher-icon-result.json"
+    local aapt2 icon_file monochrome_file
+    aapt2=$(find "$ANDROID_HOME/build-tools" -name aapt2 | sort | tail -1)
+    "$aapt2" dump resources "$VERIFY_APK" > "$EVIDENCE/apk-resources.txt"
+    icon_file=$(python3 "$scripts/launcher-icon.py" resource-file "$EVIDENCE/apk-resources.txt" mipmap/ic_launcher)
+    "$aapt2" dump xmltree --file "$icon_file" "$VERIFY_APK" | tee "$EVIDENCE/adaptive-icon-tree.txt"
+    grep -q 'monochrome' "$EVIDENCE/adaptive-icon-tree.txt"
+    monochrome_file=$(python3 "$scripts/launcher-icon.py" resource-file "$EVIDENCE/apk-resources.txt" drawable/ic_launcher_monochrome)
+    "$aapt2" dump xmltree --file "$monochrome_file" "$VERIFY_APK" > "$EVIDENCE/monochrome-icon-tree.txt"
+    grep -q 'E: vector' "$EVIDENCE/monochrome-icon-tree.txt"
+    printf 'ANDROID_LAUNCHER_ROBOT_ICON_PROVEN\n'
+}
+
 adb shell settings put global hide_error_dialogs 1
 adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
+if [[ "$feature" == launcher-icon.md ]]; then
+    launcher_icon
+    exit 0
+fi
 if [[ "$package" == dev.multiprompt.companion ]]; then
-    [[ "$feature" == chat-choices.md || "$feature" == chat-working.md ]]
+    [[ "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -259,6 +327,10 @@ if ! wait_for_text verify-session; then
     exit 1
 fi
 shot sessions
+if [[ "$feature" == robot-faces.md ]]; then
+    select_node desc 'Robot verify-session'
+    shot robot-inbox
+fi
 sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
 if [[ "$feature" == hosts.md ]]; then
     tap_desc 'Session list actions'
@@ -398,36 +470,46 @@ if [[ "$feature" == chat-working.md ]]; then
     exit 0
 fi
 if [[ "$feature" == chat-choices.md ]]; then
-    wait_for_text 'Should the two daily jobs keep running, or pause until you top up?'
-    shot plain-numbered-reply
-    python3 - "$EVIDENCE/current.xml" <<'PLAIN'
+    wait_for_text 'Which route should we use?'
+    shot structured-question-before
+    tap_node text-containing 'Use the current account'
+    tap_text 'Submit answer'
+    wait_receipt 'VERIFY_QUESTION_KEY:2'
+    wait_for_text 'What should we keep?'
+    shot multiple-question-before
+    tap_node text-containing 'History'
+    tap_node text-containing 'Settings'
+    tap_node field Other
+    adb shell input text Custom
+    adb shell input keyevent KEYCODE_BACK
+    tap_text 'Submit answer'
+    wait_receipt 'VERIFY_MULTI:{"other": "Custom", "selected": [0, 1]}'
+    wait_for_text 'Structured questions answered.'
+    wait_for_absence 'Submit answer'
+    shot structured-questions-after
+    adb shell input swipe 190 300 190 680 500
+    wait_for_text 'First route'
+    shot ordinary-lists
+    python3 - "$EVIDENCE/current.xml" <<'PLAINLISTS'
 import sys
 import xml.etree.ElementTree as ET
-nodes = list(ET.parse(sys.argv[1]).getroot().iter('node'))
-for text in ['1.', '2.', '3.', 'How much money is on the account?',
-             'Should the two daily jobs keep running, or pause until you top up?',
-             'Should I merge the leaderboard into all ads?']:
-    matches = [node for node in nodes if node.get('text') == text]
-    assert matches and all(node.get('clickable') == 'false' for node in matches), text
-assert not any(node.get('text') in ['A', 'B', 'C'] for node in nodes)
-print('PLAIN_NUMBERED_REPLY_COMPLETE_AND_READ_ONLY')
-PLAIN
-    fill 'Message verify-session' Continue
-    tap_desc 'Send prompt'
-    wait_receipt 'VERIFY_RECEIVED:Continue'
-    wait_for_text '2: Use the current account'
-    shot question-before
-    tap_text '2: Use the current account'
-    wait_receipt 'VERIFY_QUESTION_KEY:2'
-    wait_for_text 'Question answered: Use the current account'
-    shot question-after
+root = ET.parse(sys.argv[1]).getroot()
+parents = {child: parent for parent in root.iter() for child in parent}
+for text in ['First route', 'Second route', 'Ordinary bullet']:
+    node = next(node for node in root.iter('node') if node.get('text') == text)
+    while node is not None:
+        assert node.get('clickable') != 'true', (text, node.attrib)
+        node = parents.get(node)
+assert any(node.get('text') == '1.' for node in root.iter('node'))
+print('ORDINARY_LISTS_HAVE_NO_ANSWER_CARDS')
+PLAINLISTS
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt"
     python3 - "$EVIDENCE/receipts.txt" <<'CHOICES'
 import sys
 from pathlib import Path
 rows = Path(sys.argv[1]).read_text().splitlines()
-assert rows == ["VERIFY_RECEIVED:Continue", "VERIFY_QUESTION_KEY:2"], rows
-print("PLAIN LIST AND STRUCTURED QUESTION KEY VERIFIED")
+assert rows == ["VERIFY_QUESTION_KEY:2", 'VERIFY_MULTI:{"other": "Custom", "selected": [0, 1]}'], rows
+print("STRUCTURED_QUESTION_SENDS_VERIFIED")
 CHOICES
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt"
     printf 'FEATURE VERIFIED: %s\n' "$feature"
@@ -439,6 +521,13 @@ else
     wait_for_text VERIFY_READY_528
 fi
 shot reader-ready
+if [[ "$feature" == robot-faces.md ]]; then
+    select_node desc 'Robot verify-session'
+    select_node text verify-session
+    shot robot-chat-title
+    printf 'SIGNED_ROBOT_INBOX_AND_CHAT_VERIFIED\n' | tee "$EVIDENCE/robot-result.txt"
+    exit 0
+fi
 if [[ "$feature" == chat-queued.md ]]; then
     wait_for_text 'Ready for queued messages.'
     shot queued-ready
@@ -672,6 +761,12 @@ if [[ "$feature" == chat-reactions.md ]]; then
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/reaction-receipts.txt"
     python3 "$scripts/reactions.py" transport "$EVIDENCE/reaction-receipts.txt" "$EVIDENCE/reaction-transport.json"
     sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-reaction-work/a1b2c3d4-0975-4000-8000-000000000975.jsonl > "$EVIDENCE/reaction-transcript.jsonl"
+    sudo -u verifyssh python3 /home/verifyssh/reaction-console.py append-mixed
+    wait_for_text 'My follow-up stays visible'
+    wait_for_text 'Answer to the follow-up'
+    shot reactions-mixed
+    python3 "$scripts/reactions.py" mixed "$EVIDENCE/current.xml" "$EVIDENCE/reactions-mixed-result.json"
+    sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-reaction-work/a1b2c3d4-0975-4000-8000-000000000975.jsonl > "$EVIDENCE/reaction-transcript.jsonl"
     printf 'ANDROID_REACTIONS_REAL_SSH_RESTART_PROVEN\n'
     exit 0
 fi
@@ -684,12 +779,63 @@ if [[ "$feature" == session-reader.md ]]; then
     shot attach-closed
 fi
 if [[ "$feature" == terminal.md ]]; then
+    adb shell settings put secure show_ime_with_hard_keyboard 1
     tap_desc 'Session actions'
     tap_text 'Open live terminal'
     wait_for_text 'SSH · tmux attached'
     sudo -u verifyssh tmux list-clients -F '#{client_name} #{client_session}' > "$EVIDENCE/tmux-clients.txt"
     grep -F verify-session "$EVIDENCE/tmux-clients.txt"
     shot terminal-attached
+    sudo -u verifyssh tmux capture-pane -p -S - -t verify-session > "$EVIDENCE/shell-history-before.txt"
+    grep -Fx SHELL_HISTORY_0001 "$EVIDENCE/shell-history-before.txt"
+    grep -Fx SHELL_HISTORY_0500 "$EVIDENCE/shell-history-before.txt"
+    for keyboard_state in open closed; do
+        adb shell "screenrecord --time-limit 0 --bit-rate 1000000 /sdcard/shell-scroll-$keyboard_state.mp4 & echo \$! > /sdcard/shell-scroll-$keyboard_state.pid; wait" &
+        recording_pid=$!
+        tap_desc 'Show keyboard'
+        if [[ "$keyboard_state" == closed ]]; then
+            adb shell input keyevent KEYCODE_BACK
+            adb shell dumpsys input_method > "$EVIDENCE/keyboard-closed.txt"
+            grep -F 'mInputShown=false' "$EVIDENCE/keyboard-closed.txt"
+        else
+            adb shell dumpsys input_method > "$EVIDENCE/keyboard-before.txt"
+            grep -F 'mInputShown=true' "$EVIDENCE/keyboard-before.txt"
+        fi
+        adb shell input swipe 200 800 200 400 600
+        wait_for_text 'SHELL_HISTORY_'
+        select_node desc 'Jump to live'
+        if [[ "$keyboard_state" == open ]]; then
+            adb shell dumpsys input_method > "$EVIDENCE/keyboard-history.txt"
+            grep -F 'mInputShown=true' "$EVIDENCE/keyboard-history.txt"
+        fi
+        for attempt in {1..100}; do
+            dump_ui
+            if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains SHELL_HISTORY_0001 >/dev/null 2>&1; then break; fi
+            read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
+            for swipe in 1 2 3; do
+                adb shell input swipe "$x1" "$y1" "$x2" "$y2" 120
+            done
+        done
+        wait_for_text SHELL_HISTORY_0001
+        shot "shell-first-$keyboard_state"
+        marker="SHELL_NEW_${keyboard_state^^}"
+        sudo -u verifyssh tmux send-keys -l -t verify-session "$marker"
+        sudo -u verifyssh tmux send-keys -t verify-session Enter
+        wait_receipt "$marker"
+        sudo -u verifyssh tmux capture-pane -p -S - -t verify-session > "$EVIDENCE/shell-history-after-$keyboard_state.txt"
+        grep -Fx "$marker" "$EVIDENCE/shell-history-after-$keyboard_state.txt"
+        shot "shell-anchored-$keyboard_state"
+        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains SHELL_HISTORY_0001
+        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent "$marker"
+        tap_desc 'Jump to live'
+        dump_ui
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" desc 'Jump to live' >/dev/null 2>&1; then exit 1; fi
+        shot "shell-live-$keyboard_state"
+        adb shell kill -2 "$(adb shell cat "/sdcard/shell-scroll-$keyboard_state.pid" | tr -d '\r')"
+        wait "$recording_pid"
+        adb pull "/sdcard/shell-scroll-$keyboard_state.mp4" "$EVIDENCE/shell-scroll-$keyboard_state.mp4"
+    done
+    printf 'SHELL_SCROLL_500_KEYBOARD_ANCHOR_LIVE_OK\n' | tee "$EVIDENCE/shell-scroll-result.txt"
     exit 0
 fi
 sudo -u verifyssh mkdir -p /home/verifyssh/.local/state/multiprompt
@@ -701,14 +847,19 @@ shot eta-idle
 python3 "$scripts/no-chat-bar.py" "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-eta-idle.png" idle
 sudo -u verifyssh tee /home/verifyssh/send-delay.sh >/dev/null <<'DELAY'
 #!/usr/bin/env bash
+printf '%s start %s\n' "$(date +%T.%N)" "${SSH_ORIGINAL_COMMAND:0:90}" >> /home/verifyssh/commands.log
 case "$SSH_ORIGINAL_COMMAND" in *mp_buffer=*) sleep 15 ;; esac
-exec bash -c "$SSH_ORIGINAL_COMMAND"
+bash -c "$SSH_ORIGINAL_COMMAND"
+code=$?
+printf '%s exit %s %s\n' "$(date +%T.%N)" "$code" "${SSH_ORIGINAL_COMMAND:0:60}" >> /home/verifyssh/commands.log
+exit "$code"
 DELAY
 sudo chmod 755 /home/verifyssh/send-delay.sh
 sudo sed -i 's|^|command="/home/verifyssh/send-delay.sh" |' /home/verifyssh/.ssh/authorized_keys
 fill 'Message verify-session' VERIFY_SENT_528
 shot send-draft
 tap_desc 'Send prompt'
+timeout 15s adb logcat -s SendTiming:I -e box_cleared_frame -m 1 > "$EVIDENCE/cleared-frame-receipt.txt"
 shot eta-sending
 python3 "$scripts/no-chat-bar.py" "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-eta-sending.png" sending
 timeout 15s adb logcat -d -s SendTiming:I > "$EVIDENCE/send-timing.txt"

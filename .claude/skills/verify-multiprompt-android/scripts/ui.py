@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -7,22 +8,25 @@ root = ET.parse(sys.argv[1]).getroot()
 mode, value = sys.argv[2:4]
 parents = {child: parent for parent in root.iter() for child in parent}
 matches = []
+package = os.environ.get("VERIFY_PACKAGE", "dev.multiprompt.companion.debug")
 for node in root.iter("node"):
-    if mode in ("text", "absent", "version") and value == node.get("text"):
+    if mode == "scroll-back" and node.get("scrollable") == "true" and node.get("package") == package:
+        matches.append(node)
+    elif mode in ("text", "absent", "version") and value == node.get("text"):
         matches.append(node)
     elif mode in ("contains", "lacks", "text-containing") and value in node.get("text", ""):
         matches.append(node)
     elif mode in ("desc", "checked", "unchecked") and value == node.get("content-desc"):
         matches.append(node)
-    elif mode == "editor" and node.get("class") == "android.widget.EditText" and node.get("package") == "dev.multiprompt.companion.debug":
+    elif mode == "editor" and node.get("class") == "android.widget.EditText" and node.get("package") == package:
         matches.append(node)
     elif mode == "field-value" and node.get("class") == "android.widget.EditText" and node.get("focused") == "true":
         matches.append(node)
-    elif mode in ("field", "focused-field") and node.get("class") == "android.widget.EditText":
+    elif mode in ("field", "focused-field", "clear-field") and node.get("class") == "android.widget.EditText":
         if any(value == item.get("text") or value == item.get("content-desc") for item in node.iter()):
             matches.append(node)
 if mode in ("absent", "lacks"):
-    if not any(n.get("package") == "dev.multiprompt.companion.debug" for n in root.iter("node")):
+    if not any(n.get("package") == package for n in root.iter("node")):
         raise SystemExit("App UI is missing")
     if matches:
         raise SystemExit(f"Unexpected text: {value}")
@@ -36,7 +40,7 @@ if mode == "contains":
 if len(matches) != 1:
     raise SystemExit(f"Ambiguous {mode}: {value} ({len(matches)})")
 node = matches[0]
-if mode == "focused-field" and node.get("focused") != "true":
+if mode in ("focused-field", "clear-field") and node.get("focused") != "true":
     raise SystemExit(f"Field is not focused: {value}")
 if mode == "field-value":
     expected = sys.argv[4]
@@ -53,7 +57,7 @@ if mode in ("checked", "unchecked"):
         raise SystemExit(f"Expected {mode}: {value}")
 if node.get("enabled") == "false":
     raise SystemExit("Selector is disabled")
-if mode not in ("field", "focused-field", "editor", "version", "checked", "unchecked"):
+if mode not in ("field", "focused-field", "editor", "version", "checked", "unchecked", "scroll-back", "clear-field"):
     ancestor = node
     while ancestor.get("clickable") != "true" and ancestor in parents:
         ancestor = parents[ancestor]
@@ -64,7 +68,13 @@ if mode not in ("field", "focused-field", "editor", "version", "checked", "unche
 numbers = list(map(int, re.findall(r"\d+", node.get("bounds", ""))))
 if len(numbers) != 4 or numbers[2] <= numbers[0] or numbers[3] <= numbers[1]:
     raise SystemExit("Empty selector bounds")
-if mode == "version":
+if mode == "clear-field":
+    print("123", *("67" for _ in node.get("text", "")))
+elif mode == "scroll-back":
+    x = (numbers[0] + numbers[2]) // 2
+    inset = (numbers[3] - numbers[1]) // 5
+    print(x, numbers[1] + inset, x, numbers[3] - inset)
+elif mode == "version":
     print(value)
 elif mode in ("checked", "unchecked"):
     print(f"{mode}: {value}")

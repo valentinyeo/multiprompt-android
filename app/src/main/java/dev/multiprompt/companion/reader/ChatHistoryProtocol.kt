@@ -24,9 +24,17 @@ object ChatHistoryProtocol {
         val end: Long,
         val queued: Boolean = false,
         val settlement: Settlement? = null,
+        val questions: List<PendingQuestion> = emptyList(),
+        val questionResult: String = "",
     ) {
         fun json(): JSONObject = JSONObject().put("role", role).put("text", text).put("id", id)
             .put("timestamp", timestamp).put("offset", offset).put("end", end).put("queued", queued)
+            .also { row ->
+                if (questions.isNotEmpty()) row.put("question", JSONObject()
+                    .put("provider", questions.first().provider)
+                    .put("questions", org.json.JSONArray(questions.map { it.json() })))
+                if (questionResult.isNotEmpty()) row.put("questionResult", questionResult)
+            }
             .also { row -> settlement?.let { row.put("settlement", JSONObject().put("operation", it.operation.wire).put("content", it.content)) } }
     }
 
@@ -47,7 +55,7 @@ object ChatHistoryProtocol {
         require(id > 0 && TranscriptProtocol.supports(identity.agent))
         return JSONObject().put("id", id).put("codex", identity.agent == AgentKind.CODEX)
             .put("sid", identity.sid).put("tmux", identity.tmux).put("cwd", identity.cwd)
-            .put("source_offsets", true).put("no_jump", true).put("settlement", true)
+            .put("questions", true).put("source_offsets", true).put("no_jump", true).put("settlement", true)
             .put("cached_sid", history.sid).put("inode", history.inode).put("offset", history.offset)
             .put("start", history.start).put("before", before).put("mtime", history.mtime)
             .put("probe", history.probe).toString() + "\n"
@@ -109,9 +117,15 @@ object ChatHistoryProtocol {
         row.optJSONObject("settlement")?.let { fact ->
             Settlement(QueueOperation.entries.first { it.wire == fact.getString("operation") }, fact.getString("content"))
         },
+        row.optJSONObject("question")?.let { request ->
+            val questions = request.getJSONArray("questions")
+            (0 until questions.length()).map { index ->
+                PendingQuestion.parse(row.getString("id"), index, questions.getJSONObject(index), request.getString("provider"))
+            }
+        }.orEmpty(), row.optString("questionResult"),
     ).also {
         require(it.role in setOf("user", "assistant") && it.offset >= 0 && it.end > it.offset)
-        require(if (it.settlement == null) it.text.isNotBlank() else it.role == "assistant" && it.text.isEmpty())
+        require(if (it.settlement == null && it.questions.isEmpty() && it.questionResult.isEmpty()) it.text.isNotBlank() else it.role == "assistant" && it.text.isEmpty())
         require(!it.queued || it.role == "user" && it.settlement == null)
     }
 }

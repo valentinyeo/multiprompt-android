@@ -63,10 +63,49 @@ object TmuxCommands {
         return "tmux send-keys -t ${target(sessionName)} $key"
     }
 
-    fun questionAnswer(sessionName: String, question: ClaudeQuestion, screen: String, index: Int): String {
-        require(question.options.any { it.index == index })
-        check(ClaudeQuestion.parse(screen) == question) { "This question is no longer waiting for an answer" }
-        return modelPickerOption(sessionName, index)
+    fun questionAnswer(sessionName: String, question: dev.multiprompt.companion.reader.PendingQuestion,
+        screen: String, choices: Set<Int>, other: String): String {
+        require(choices.all { it in question.options.indices })
+        require(choices.isNotEmpty() || other.isNotBlank())
+        require(question.multiSelect || choices.size + (if (other.isNotBlank()) 1 else 0) == 1)
+        require(question.other || other.isEmpty())
+        val activeScreen = checkNotNull(question.activeScreen(screen)) { "This question is no longer waiting for an answer" }
+        val destination = target(sessionName)
+        val commands = mutableListOf<String>()
+        if (question.multiSelect) {
+            val rows = activeScreen.lines().map(String::trim).filter { Regex("^[❯›>]?\\s*[1-9][.)]").containsMatchIn(it) }
+            val current = rows.indexOfFirst { it.startsWith('❯') || it.startsWith('›') || it.startsWith('>') }
+            check(current >= 0 && rows.size >= question.options.size) { "Question selection is unavailable" }
+            val checked = rows.mapIndexedNotNull { index, line ->
+                index.takeIf { line.contains('☒') || line.contains('☑') || line.contains("[x]") || line.contains("[✓]") }
+            }.toSet()
+            var cursor = current
+            for (index in (checked union choices).sorted()) {
+                if ((index in checked) == (index in choices)) continue
+                val keys = List(kotlin.math.abs(index - cursor)) { if (index > cursor) "Down" else "Up" } + "Space"
+                commands.add("tmux send-keys -t $destination " + keys.joinToString(" "))
+                cursor = index
+            }
+            if (other.isNotBlank()) {
+                val keys = List(kotlin.math.abs(question.options.size - cursor)) { if (question.options.size > cursor) "Down" else "Up" } + "Space"
+                commands.add("tmux send-keys -t $destination " + keys.joinToString(" "))
+            } else commands.add("tmux send-keys -t $destination Enter")
+        } else {
+            val index = if (other.isNotBlank()) question.options.size else choices.single()
+            if (question.options.isEmpty()) {
+                check(other.isNotBlank())
+            } else if (other.isNotBlank() && question.provider == "codex") {
+                val rows = activeScreen.lines().map(String::trim).filter { Regex("^[❯›>]?\\s*[1-9][.)]").containsMatchIn(it) }
+                val current = rows.indexOfFirst { it.startsWith('❯') || it.startsWith('›') || it.startsWith('>') }
+                check(current >= 0) { "Question selection is unavailable" }
+                val keys = List(kotlin.math.abs(index - current)) { if (index > current) "Down" else "Up" } + "Enter"
+                commands.add("tmux send-keys -t $destination " + keys.joinToString(" "))
+            } else commands.add("tmux send-keys -t $destination ${index + 1}")
+        }
+        if (other.isNotBlank()) {
+            commands.add("(" + pastePrompt(sessionName) + ")")
+        }
+        return commands.joinToString(" && ")
     }
 
     fun modelPickerOption(sessionName: String, index: Int): String {
