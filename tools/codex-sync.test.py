@@ -16,6 +16,34 @@ spec.loader.exec_module(reader)
 
 
 class CodexSyncTest(unittest.TestCase):
+    def test_large_compacted_claude_queue_confirms_without_resending_or_scanning_prefix(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(reader, "HOME", Path(temporary)):
+            path = Path(temporary) / "large.jsonl"
+            origin = 452 * 1024 * 1024
+            with path.open("wb") as output:
+                output.seek(origin - 1)
+                output.write(b"\n")
+                oversized = dict(type="user", isMeta=True, message=dict(role="user", content=[dict(type="image", data="x" * (reader.TAIL_BYTES + 1024))]))
+                output.write((json.dumps(oversized) + "\n").encode())
+                for text in ("submitted phone message", "queued but already received"):
+                    output.write((json.dumps(dict(type="user", timestamp="2026-10-29T23:00:00Z", message=dict(role="user", content=text))) + "\n").encode())
+            import sqlite3
+            database = reader.held_queue_path("large-session")
+            database.parent.mkdir(parents=True)
+            with sqlite3.connect(database) as db:
+                db.execute("CREATE TABLE messages (key TEXT PRIMARY KEY, sid TEXT, text TEXT, queued_at INTEGER, state TEXT, scan INTEGER DEFAULT 0, origin INTEGER, source_inode INTEGER, receipt TEXT DEFAULT '', created INTEGER)")
+                for index, (state, text) in enumerate((("submitted", "submitted phone message"), ("queued", "queued but already received"))):
+                    db.execute("INSERT INTO messages(key,sid,text,queued_at,state,origin,source_inode,created) VALUES (?,?,?,?,?,?,?,?)", (str(index), "large-sid", text, 1793314800000, state, origin, path.stat().st_ino, index))
+            with patch.object(reader, "resolve_tmux_agent", return_value=("large-sid", path)), patch.object(reader, "held_queue_ready", return_value=False), patch.object(reader, "send_response") as send:
+                for _ in range(5):
+                    reader.drain_held_queue("large-session", "large-sid", path)
+                with sqlite3.connect(database) as db:
+                    rows = db.execute("SELECT state,scan,receipt FROM messages ORDER BY created").fetchall()
+                    self.assertEqual(["delivered", "delivered"], [row[0] for row in rows])
+                    self.assertTrue(all(row[1] > origin and row[2] for row in rows))
+                send.assert_not_called()
+                print("LARGE_CLAUDE_QUEUED_RECEIPTS_RECONCILED")
+
     def test_hax_live_descriptor_and_incremental_reply_ignore_workspace_neighbour(self):
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary)

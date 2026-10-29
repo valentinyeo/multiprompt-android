@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    chat-codex.md|session-gestures.md|chat-working.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
+    chat-codex.md|session-gestures.md|chat-working.md|session-summaries.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -224,7 +224,7 @@ if [[ "$feature" == launcher-icon.md ]]; then
     exit 0
 fi
 if [[ "$package" == dev.multiprompt.companion ]]; then
-    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md ]]
+    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -333,6 +333,30 @@ if ! wait_for_text verify-session; then
     exit 1
 fi
 shot sessions
+
+if [[ "$feature" == session-summaries.md ]]; then
+    wait_for_text 'Lauren Tan profile is done, checked and pushed.'
+    shot summary-reply
+    sudo -u verifyssh tmux send-keys -t verify-session summary-working Enter
+    wait_for_text 'Working: Reading CI logs'
+    shot summary-working
+    started=$(date +%s%3N)
+    sudo -u verifyssh tmux send-keys -t verify-session summary-next Enter
+    wait_for_text 'The release is ready.'
+    elapsed=$(( $(date +%s%3N) - started ))
+    test "$elapsed" -le 5000
+    shot summary-updated
+    python3 - "$EVIDENCE/current.xml" <<'PYSUMMARY'
+import sys
+import xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+texts = [node.get('text', '') for node in root.iter('node')]
+assert 'The release is ready.' in texts
+assert not any('Opus 5.5' in text or '[CAVEMAN]' in text or 'valentin@vps' in text for text in texts)
+PYSUMMARY
+    printf 'SUMMARY_REFRESH_OK elapsed_ms=%s\n' "$elapsed" | tee "$EVIDENCE/summary-result.txt"
+    exit 0
+fi
 if [[ "$feature" == robot-faces.md ]]; then
     select_node desc 'Robot verify-session'
     shot robot-inbox
@@ -475,7 +499,7 @@ if [[ "$feature" == chat-working.md ]]; then
     python3 tools/working-dots/drive.py
     exit 0
 fi
-if [[ "$feature" == session-gestures.md ]]; then
+if [[ "$feature" == session-gestures.md || "$feature" == session-summaries.md ]]; then
     wait_for_text GESTURE_REPLY_TARGET
     python3 tools/session-gestures/drive.py
     exit 0
@@ -616,10 +640,14 @@ if [[ "$feature" == chat-codex.md ]]; then
     adb shell input keyevent KEYCODE_BACK
     wait_for_text Inbox
     tap_text claude-control
-    wait_for_text 'FIRST REPLY'
+    wait_for_text 'CODEX_TRANSCRIPT_ONLY_claude'
     fill 'Message claude-control' CLAUDE_CONTROL
     tap_desc 'Send prompt'
-    wait_for_text 'Reply to CLAUDE_CONTROL'
+    wait_for_text 'CODEX_REPLY_claude_CLAUDE_CONTROL'
+    tap_desc 'Session actions'
+    wait_for_text 'Resync chat'
+    tap_text 'Resync chat'
+    wait_for_text 'CODEX_REPLY_claude_CLAUDE_CONTROL'
     sudo grep -Fx 'VERIFY_RECEIVED:CLAUDE_CONTROL' /home/verifyssh/claude-receipts.txt > "$EVIDENCE/claude-receipt.txt"
     shot claude-compatible
     printf 'ANDROID_CODEX_READ_SEND_CLAUDE_OK\n' | tee "$EVIDENCE/codex-result.txt"
