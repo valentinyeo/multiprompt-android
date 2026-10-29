@@ -32,6 +32,9 @@ sudo /usr/sbin/sshd -t -f "$FIXTURE/sshd_config"
 sudo /usr/sbin/sshd -f "$FIXTURE/sshd_config" -E "$FIXTURE/sshd.log"
 for name in work-main runner-1 runner-2 runner-3 notes-a; do
     sudo -u valentin tmux new-session -d -s "$name" -x 100 -y 32 "printf 'journey session $name\n'; exec bash"
+    if [ "$name" = work-main ]; then
+        sudo -u valentin tmux send-keys -t "$name" "printf 'OpenAI Codex\\n'" Enter
+    fi
     sudo -u valentin tmux set-window-option -t "$name" automatic-rename off
     sudo -u valentin tmux rename-window -t "$name" "$name"
 done
