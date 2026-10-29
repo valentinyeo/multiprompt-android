@@ -13,6 +13,9 @@ finish() {
     adb shell kill -2 "$(adb shell cat /sdcard/choices-recording.pid | tr -d '\r')"
     wait "$recording"
     adb pull /sdcard/release-choices.mp4 "$EVIDENCE/release-choices.mp4"
+    if [[ "${VERIFY_FEATURE:-}" == session-gestures.md ]]; then
+        cp "$EVIDENCE/release-choices.mp4" "$EVIDENCE/session-gestures.mp4"
+    fi
     kill "$(cat "$FIXTURE/offline-proxy.pid")"
     exit "$code"
 }
