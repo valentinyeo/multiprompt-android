@@ -258,7 +258,11 @@ jobs:
         if: inputs.feature == 'chat-codex.md'
         run: |
           curl -fsSL https://raw.githubusercontent.com/valentinyeo/multiprompt/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/chat_history_reader.py -o /tmp/desktop-codex-reader.py
-          sudo -u verifyssh python3 -B .claude/skills/verify-multiprompt-android/scripts/codex-parity.py /tmp/desktop-codex-reader.py app/src/main/assets/chat_history_reader.py | tee "$EVIDENCE/desktop-android-parity.txt"
+          install -m 644 .claude/skills/verify-multiprompt-android/scripts/codex-parity.py /tmp/codex-parity.py
+          install -m 644 app/src/main/assets/chat_history_reader.py /tmp/android-codex-reader.py
+          sudo -u verifyssh python3 -B /tmp/codex-parity.py /tmp/desktop-codex-reader.py /tmp/android-codex-reader.py > "$EVIDENCE/desktop-android-parity.txt"
+          cat "$EVIDENCE/desktop-android-parity.txt"
+          grep -Fx DESKTOP_ANDROID_POSTS_IDENTICAL "$EVIDENCE/desktop-android-parity.txt"
       - name: Require the original native-skill failure
         if: inputs.expect_native_missing == true
         env:
