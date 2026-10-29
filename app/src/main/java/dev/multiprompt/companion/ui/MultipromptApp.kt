@@ -132,7 +132,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -2733,13 +2733,6 @@ internal fun ReaderScreen(
             sentDraft = null
         }
     }
-    LaunchedEffect(prompt, sendMarkPending) {
-        if (sendMarkPending && prompt.isEmpty()) {
-            withFrameNanos { }
-            SendTiming.mark("box_cleared_frame")
-            sendMarkPending = false
-        }
-    }
     LaunchedEffect(dictationState.transcript) {
         val spoken = dictationState.transcript.trim()
         if (spoken.isNotBlank()) {
@@ -3420,7 +3413,14 @@ internal fun ReaderScreen(
                             value = promptField,
                             onValueChange = { promptField = it },
                             modifier = Modifier.weight(1f).heightIn(min = ReaderComposerHeight)
-                                .border(1.dp, MaterialTheme.colorScheme.outline, ReaderComposerShape).focusRequester(promptFocusRequester),
+                                .border(1.dp, MaterialTheme.colorScheme.outline, ReaderComposerShape).focusRequester(promptFocusRequester)
+                                .drawWithContent {
+                                    drawContent()
+                                    if (sendMarkPending && prompt.isEmpty()) {
+                                        SendTiming.mark("box_cleared_frame")
+                                        sendMarkPending = false
+                                    }
+                                },
                             filled = true,
                             placeholder = {
                                 Text("Message ${session.displayName}", maxLines = 1, overflow = TextOverflow.Ellipsis)

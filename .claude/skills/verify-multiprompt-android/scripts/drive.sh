@@ -14,6 +14,9 @@ exec > >(tee -a "$EVIDENCE/driver-transcript.txt") 2>&1
 set -x
 package=${VERIFY_PACKAGE:-dev.multiprompt.companion.debug}
 step=0
+adb logcat -c
+adb logcat -v threadtime > "$EVIDENCE/logcat-stream.txt" 2>&1 &
+logcat_stream_pid=$!
 dump_ui() {
     timeout 20s adb shell uiautomator dump /sdcard/verify-ui.xml >/dev/null || return
     timeout 20s adb pull /sdcard/verify-ui.xml "$EVIDENCE/current.xml" >/dev/null
@@ -28,8 +31,26 @@ finish() {
     code=$?
     trap - EXIT
     set +e
+    {
+        date +%T.%N
+        timeout 10s adb shell top -b -n 1 -m 15
+        timeout 10s adb shell dumpsys meminfo
+        timeout 10s adb shell dumpsys activity processes | grep -i "anr\|crash\|not responding"
+        uptime
+        free -m
+        ps -eo pid,pcpu,pmem,args --sort=-pcpu | head -8
+        pgrep -a qemu
+        adb devices
+        sudo dmesg | grep -iE "segfault|qemu|oom|killed process" | tail -20
+        ls -la /tmp/android-runner /var/crash /var/lib/systemd/coredump
+        sudo coredumpctl list --no-pager
+        sudo journalctl --no-pager -n 40 -g "qemu|coredump|apport"
+    } > "$EVIDENCE/load-at-exit.txt" 2>&1
+    sudo cat /home/verifyssh/commands.log > "$EVIDENCE/commands.txt" 2>/dev/null
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt" 2>/dev/null
     shot "exit-$code"
     timeout 15s adb logcat -d > "$EVIDENCE/logcat.txt"
+    kill "$logcat_stream_pid" 2>/dev/null
     printf 'DRIVER EXIT: %s\n' "$code"
     exit "$code"
 }
@@ -826,14 +847,19 @@ shot eta-idle
 python3 "$scripts/no-chat-bar.py" "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-eta-idle.png" idle
 sudo -u verifyssh tee /home/verifyssh/send-delay.sh >/dev/null <<'DELAY'
 #!/usr/bin/env bash
+printf '%s start %s\n' "$(date +%T.%N)" "${SSH_ORIGINAL_COMMAND:0:90}" >> /home/verifyssh/commands.log
 case "$SSH_ORIGINAL_COMMAND" in *mp_buffer=*) sleep 15 ;; esac
-exec bash -c "$SSH_ORIGINAL_COMMAND"
+bash -c "$SSH_ORIGINAL_COMMAND"
+code=$?
+printf '%s exit %s %s\n' "$(date +%T.%N)" "$code" "${SSH_ORIGINAL_COMMAND:0:60}" >> /home/verifyssh/commands.log
+exit "$code"
 DELAY
 sudo chmod 755 /home/verifyssh/send-delay.sh
 sudo sed -i 's|^|command="/home/verifyssh/send-delay.sh" |' /home/verifyssh/.ssh/authorized_keys
 fill 'Message verify-session' VERIFY_SENT_528
 shot send-draft
 tap_desc 'Send prompt'
+timeout 15s adb logcat -s SendTiming:I -e box_cleared_frame -m 1 > "$EVIDENCE/cleared-frame-receipt.txt"
 shot eta-sending
 python3 "$scripts/no-chat-bar.py" "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-eta-sending.png" sending
 timeout 15s adb logcat -d -s SendTiming:I > "$EVIDENCE/send-timing.txt"
