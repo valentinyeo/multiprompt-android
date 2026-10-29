@@ -22,6 +22,7 @@ import org.json.JSONObject;
 public class Observe extends Instrumentation {
     private Bundle arguments;
     private File evidence;
+    private int referenceInk;
     private static final String LATEST = "LONG_CHAT_LATEST_1156";
 
     @Override public void onCreate(Bundle values) {
@@ -88,8 +89,14 @@ public class Observe extends Instrumentation {
             if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) throw new AssertionError("Screenshot failed");
         }
         bitmap.recycle();
-        if (ink >= 30) return ink;
-        if (SystemClock.elapsedRealtime() >= deadline) throw new AssertionError("Visible text painted blank by deadline");
+        if (ink >= 30 && (referenceInk == 0 || Math.abs(ink - referenceInk) <= referenceInk / 10)) {
+            if (referenceInk == 0) {
+                referenceInk = ink;
+                Files.write(new File(evidence, "reference-ink").toPath(), Integer.toString(ink).getBytes("UTF-8"));
+            }
+            return ink;
+        }
+        if (SystemClock.elapsedRealtime() >= deadline) throw new AssertionError("Latest reply pixels missing by deadline");
         SystemClock.sleep(16);
         }
     }
@@ -104,7 +111,6 @@ public class Observe extends Instrumentation {
         long tapped = SystemClock.elapsedRealtime() - started;
         waitFor(LATEST, started + 2000);
         long visible = SystemClock.elapsedRealtime() - started;
-        getUiAutomation().waitForIdle(50, Math.max(1, started + 2000 - SystemClock.elapsedRealtime()));
         int ink = screenshot(stage, started + 2000);
         long elapsed = SystemClock.elapsedRealtime() - started;
         report(new JSONObject().put("stage", stage).put("visibleMs", elapsed).put("latest", LATEST)
@@ -139,7 +145,12 @@ public class Observe extends Instrumentation {
             evidence = new File(getTargetContext().getExternalFilesDir(null), "long-chat");
             if (!evidence.mkdirs() && !evidence.isDirectory()) throw new AssertionError("Evidence directory missing");
             String phase = arguments.getString("phase", "initial");
-            if (!phase.equals("reopen")) seedHost();
+            if (phase.equals("reopen")) {
+                referenceInk = Integer.parseInt(new String(Files.readAllBytes(new File(evidence, "reference-ink").toPath()), "UTF-8"));
+                if (referenceInk < 30) throw new AssertionError("Initial reply reference missing");
+            } else {
+                seedHost();
+            }
             Intent intent = getTargetContext().getPackageManager().getLaunchIntentForPackage("dev.multiprompt.companion");
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             getTargetContext().startActivity(intent);
