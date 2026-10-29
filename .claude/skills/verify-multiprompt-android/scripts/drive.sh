@@ -17,6 +17,7 @@ step=0
 adb logcat -c
 adb logcat -v threadtime > "$EVIDENCE/logcat-stream.txt" 2>&1 &
 logcat_stream_pid=$!
+recorder_pid=
 dump_ui() {
     timeout 20s adb shell uiautomator dump /sdcard/verify-ui.xml >/dev/null || return
     timeout 20s adb pull /sdcard/verify-ui.xml "$EVIDENCE/current.xml" >/dev/null
@@ -48,6 +49,11 @@ finish() {
     } > "$EVIDENCE/load-at-exit.txt" 2>&1
     sudo cat /home/verifyssh/commands.log > "$EVIDENCE/commands.txt" 2>/dev/null
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt" 2>/dev/null
+    if [[ -n "$recorder_pid" ]]; then
+        adb shell kill -INT "$recorder_pid"
+        wait "$recorder_client" || true
+        adb pull /sdcard/chat-catchup.mp4 "$EVIDENCE/chat-catchup.mp4"
+    fi
     shot "exit-$code"
     timeout 15s adb logcat -d > "$EVIDENCE/logcat.txt"
     kill "$logcat_stream_pid" 2>/dev/null
@@ -218,7 +224,7 @@ if [[ "$feature" == launcher-icon.md ]]; then
     exit 0
 fi
 if [[ "$package" == dev.multiprompt.companion ]]; then
-    [[ "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md ]]
+    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -585,6 +591,14 @@ fi
 if [[ "$feature" == chat-queued.md ]]; then
     wait_for_text 'Ready for queued messages.'
     shot queued-ready
+    adb shell 'screenrecord --time-limit 180 --bit-rate 2000000 /sdcard/chat-catchup.mp4 & echo $!; wait' > "$FIXTURE/recorder.pid" &
+    recorder_client=$!
+    for attempt in {1..20}; do
+        recorder_pid=$(head -1 "$FIXTURE/recorder.pid")
+        [[ "$recorder_pid" =~ ^[0-9]+$ ]] && break
+        sleep 0.1
+    done
+    [[ "$recorder_pid" =~ ^[0-9]+$ ]]
     fill 'Message verify-session' WAITING_ONE
     tap_desc 'Send prompt'
     wait_receipt 'VERIFY_RECEIVED:WAITING_ONE'
@@ -601,6 +615,17 @@ if [[ "$feature" == chat-queued.md ]]; then
     python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 2 TAKEN_IN_NO_REPLY
     sudo -u verifyssh python3 /home/verifyssh/queued-console.py reply
     wait_for_text 'Both messages received.'
+    sudo cat /home/verifyssh/shell-events.jsonl > "$EVIDENCE/shell-events.jsonl"
+    python3 - "$EVIDENCE/shell-events.jsonl" "$EVIDENCE/first-reply-latency.json" <<'LATENCY'
+import json
+from pathlib import Path
+import sys
+import time
+reply = next(json.loads(line) for line in reversed(Path(sys.argv[1]).read_text().splitlines()) if json.loads(line)['text'] == 'Both messages received.')
+latency = time.time() - reply['timestamp']
+assert latency <= 3, f'FIRST_REPLY_LATE: {latency:.3f}s'
+Path(sys.argv[2]).write_text(json.dumps(dict(replyLatencySeconds=latency)))
+LATENCY
     for attempt in {1..30}; do
         dump_ui
         if python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 0 REPLIED >/dev/null 2>&1; then break; fi
@@ -614,6 +639,20 @@ if [[ "$feature" == chat-queued.md ]]; then
     wait_for_text WAITING_ONE
     wait_for_text WAITING_TWO
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/queued-receipts.txt"
+    sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-queued-work/a1b2c3d4-1008-4000-8000-000000001008.jsonl > "$EVIDENCE/queued-transcript.jsonl"
+    fill 'Message verify-session' FOLLOWUP
+    tap_desc 'Send prompt'
+    wait_receipt 'VERIFY_RECEIVED:FOLLOWUP'
+    adb shell kill -INT "$recorder_pid"
+    wait "$recorder_client" || true
+    adb pull /sdcard/chat-catchup.mp4 "$EVIDENCE/chat-catchup.mp4"
+    recorder_pid=
+    sudo -u verifyssh python3 /home/verifyssh/queued-console.py followup &
+    followup_pid=$!
+    python3 "$scripts/catchup.py"
+    wait "$followup_pid"
+    shot catchup-finished
+    sudo cat /home/verifyssh/shell-events.jsonl > "$EVIDENCE/shell-events.jsonl"
     sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-queued-work/a1b2c3d4-1008-4000-8000-000000001008.jsonl > "$EVIDENCE/queued-transcript.jsonl"
     printf 'ANDROID_QUEUED_CLEARS_AFTER_REPLY\n'
     exit 0

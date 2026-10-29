@@ -23,3 +23,9 @@ For the negative control, set `app_ref` to the commit before the fix. The same j
 ## Gotchas
 
 No real Claude provider runs in CI. SSH, tmux, transcript discovery, UI gestures and message transport are real. Transcript lines are written by the fixture, not by a model.
+
+## Large-image catchup
+
+After the first answer, the driver sends FOLLOWUP through the composer. A 1 MiB image record separates its queued transcript row from its answer. The unchanged history cursor must keep the earlier rows and clear the delivered label, not jump to a new tail.
+
+The fixture prints progress every second without running a provider. The monitor compares shell and chat for 120 seconds, requires both answers within three seconds, rejects delivered Queued labels, and saves shell-and-chat.mp4 plus sample timings. The shell pane and Android recording show the same live SSH/tmux fixture session. This is emulator proof, not a recording of Valentin's phone.

@@ -2,7 +2,7 @@ name: Verify real Android UI
 
 on:
   push:
-    branches: [ceo/IGSH-1012, ceo/IGSH-1069]
+    branches: [ceo/IGSH-1012, ceo/IGSH-1069, ceo/IGSH-1075]
   pull_request:
     paths:
       - 'app/**'
@@ -23,6 +23,10 @@ on:
         default: false
       release_choices:
         description: Verify plain lists and real question answers on the signed release APK
+        type: boolean
+        default: false
+      released_chat:
+        description: Verify chat catchup on the signed published APK
         type: boolean
         default: false
       released_robots:
@@ -90,7 +94,7 @@ jobs:
     timeout-minutes: 35
     env:
       EVIDENCE: ${{ github.workspace }}/verification-evidence
-      VERIFY_FEATURE: ${{ inputs.feature || ((github.head_ref == 'ceo/IGSH-1076' || startsWith(github.ref, 'refs/heads/ceo/IGSH-1076')) && 'terminal.md') || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1069' && 'chat-choices.md') || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1012' && 'chat-reactions.md') || 'native-skills.md' }}
+      VERIFY_FEATURE: ${{ inputs.feature || (github.ref == 'refs/heads/ceo/IGSH-1075' && 'chat-queued.md') || ((github.head_ref == 'ceo/IGSH-1076' || startsWith(github.ref, 'refs/heads/ceo/IGSH-1076')) && 'terminal.md') || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1069' && 'chat-choices.md') || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1012' && 'chat-reactions.md') || 'native-skills.md' }}
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
       UPDATE_BASELINE_RUN: ${{ inputs.update_baseline_run }}
       APP_REF: ${{ inputs.app_ref }}
@@ -153,7 +157,7 @@ jobs:
           python3 -m pip install Pillow
           python3 .claude/skills/verify-multiprompt-android/scripts/reactions.test.py
       - name: Prepare signed choices APK and same-signer fixture instrumentation
-        if: inputs.release_choices == true || inputs.released_reactions == true || inputs.released_terminal == true || inputs.released_robots == true
+        if: inputs.release_choices == true || inputs.released_reactions == true || inputs.released_terminal == true || inputs.released_robots == true || inputs.released_chat == true
         env:
           CANDIDATE: ${{ inputs.candidate }}
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
@@ -162,7 +166,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          [[ "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md || "$VERIFY_FEATURE" = terminal.md || "$VERIFY_FEATURE" = robot-faces.md || "$VERIFY_FEATURE" = chat-cancel.md ]]
+          [[ "$VERIFY_FEATURE" = chat-queued.md || "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md || "$VERIFY_FEATURE" = terminal.md || "$VERIFY_FEATURE" = robot-faces.md || "$VERIFY_FEATURE" = chat-cancel.md ]]
           sdkmanager --install 'build-tools;35.0.0' 'platforms;android-35'
           bash tools/release-choices/prepare.sh
           echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
@@ -181,7 +185,7 @@ jobs:
           echo "VERIFY_PACKAGE=dev.multiprompt.companion" >> "$GITHUB_ENV"
           echo "EXPECTED_VERSION=$(jq -er '.versionName' "$EVIDENCE/manifest.json")" >> "$GITHUB_ENV"
       - name: Build debug APK
-        if: inputs.release_choices != true && inputs.release_icon != true && inputs.released_reactions != true && inputs.released_terminal != true && inputs.released_robots != true
+        if: inputs.release_choices != true && inputs.release_icon != true && inputs.released_reactions != true && inputs.released_terminal != true && inputs.released_robots != true && inputs.released_chat != true
         run: |
           mkdir -p "$EVIDENCE"
           python3 .claude/skills/verify-multiprompt-android/scripts/launcher-icon.test.py
@@ -195,6 +199,11 @@ jobs:
       - name: Build routing instrumentation
         if: inputs.feature == 'session-routing.md'
         run: gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g assembleDebugAndroidTest
+      - name: Prepare shell and chat recording
+        if: env.VERIFY_FEATURE == 'chat-queued.md'
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg
+          ffmpeg -version
       - name: Start ephemeral public-key-only SSH and tmux
         run: .claude/skills/verify-multiprompt-android/scripts/fixture.sh
       - name: Install, doctor and drive the real app
