@@ -1,5 +1,6 @@
 import unittest
-from PIL import Image, ImageDraw
+from pathlib import Path
+from PIL import Image, ImageDraw, ImageChops
 from scroll import displacement
 
 
@@ -21,6 +22,19 @@ class ScrollTest(unittest.TestCase):
     def test_stationary_and_wrong_direction_are_not_return_scroll(self):
         self.assertEqual(0, displacement(self.frame(600), self.frame(600)))
         self.assertLess(displacement(self.frame(600), self.frame(700)), 0)
+
+
+    def test_real_reverse_scroll_that_pixel_restoration_rejected(self):
+        fixtures = Path(__file__).parent / 'fixtures'
+        initial, left, right = [Image.open(fixtures / (name + '.png')).convert('RGB')
+                                for name in ('gestures-before', 'code-scrolled-left', 'code-scrolled-right')]
+        changed = sum(max(p) > 32 for p in ImageChops.difference(initial, left).getdata())
+        restored = sum(max(p) > 32 for p in ImageChops.difference(initial, right).getdata())
+        self.assertGreaterEqual(restored, changed / 2)
+        self.assertLess(displacement(initial, left), -20)
+        self.assertGreater(displacement(left, right), 20)
+        self.assertEqual(0, displacement(left, left))
+        self.assertLess(displacement(right, left), -20)
 
 
 if __name__ == '__main__':
