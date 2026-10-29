@@ -1520,8 +1520,12 @@ def drain_held_queue(tmux, sid, transcript):
         submitted = db.execute("SELECT key,text,scan FROM messages WHERE sid=? AND state='submitted' ORDER BY created", (sid,)).fetchall()
         for key, text, scanned in submitted:
             with transcript.open("rb") as source:
+                size = os.fstat(source.fileno()).st_size
                 source.seek(scanned)
-                data = source.read(TAIL_BYTES)
+                data = source.read(min(TAIL_BYTES, max(0, size - scanned)))
+                if b"\n" not in data and scanned + len(data) < size:
+                    source.seek(scanned)
+                    data = source.readline(size - scanned)
             complete = data.rfind(b"\n") + 1
             consumed, receipt = scanned, None
             for raw in data[:complete].splitlines(keepends=True):

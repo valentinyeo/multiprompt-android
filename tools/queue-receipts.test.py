@@ -57,8 +57,8 @@ class HeldQueueTest(unittest.TestCase):
         self.path.write_text(json.dumps(dict(type='user', message=dict(role='user', content=text), timestamp='2026-10-28T20:00:00Z')) + '\n')
         reader.drain_held_queue('term-1', 'sid', self.path)
         reader.drain_held_queue('term-1', 'sid', self.path)
-        self.assertEqual(reader.held_queue_fields('term-1', 'sid')['sent'], [text])
-        self.assertEqual([call.args[0]['text'] for call in self.send.call_args_list], [text, 'next'])
+        self.assertTrue(reader.held_queue_fields('term-1', 'sid')['sent'] == [text])
+        self.assertTrue([call.args[0]['text'] for call in self.send.call_args_list] == [text, 'next'])
 
     def test_incomplete_large_receipt_retains_anchor_until_completed(self):
         text = 'x' * (reader.TAIL_BYTES + 1)
@@ -78,8 +78,8 @@ class HeldQueueTest(unittest.TestCase):
             source.write('\n')
         reader.drain_held_queue('term-1', 'sid', self.path)
         reader.drain_held_queue('term-1', 'sid', self.path)
-        self.assertEqual(reader.held_queue_fields('term-1', 'sid')['sent'], [text])
-        self.assertEqual([call.args[0]['text'] for call in self.send.call_args_list], [text, 'next'])
+        self.assertTrue(reader.held_queue_fields('term-1', 'sid')['sent'] == [text])
+        self.assertTrue([call.args[0]['text'] for call in self.send.call_args_list] == [text, 'next'])
 
 
 if __name__ == "__main__":
@@ -87,7 +87,7 @@ if __name__ == "__main__":
         with tempfile.TemporaryDirectory() as directory:
             baseline = Path(directory) / "reader.py"
             baseline.write_bytes(subprocess.check_output(["git", "show", "9e643f9:" + ASSET], cwd=ROOT))
-            control = subprocess.run([sys.executable, "-B", __file__], env={**os.environ, "QUEUE_READER": str(baseline)}, capture_output=True, text=True)
+            control = subprocess.run([sys.executable, "-B", __file__], env={**os.environ, "QUEUE_READER": str(baseline)}, capture_output=True, text=True, timeout=60)
             print(control.stdout + control.stderr)
             if control.returncode == 0 or "FAILED (failures=3)" not in control.stderr:
                 raise SystemExit("Original queue stall was not reproduced")
