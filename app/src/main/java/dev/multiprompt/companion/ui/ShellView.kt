@@ -65,7 +65,6 @@ internal fun ShellContent(
     fontSize: TextUnit,
     onFontSizeChange: (Float) -> Unit,
     contentWidth: Dp,
-    onSwitchSession: (Int) -> Unit,
     onLiveTap: () -> Unit = {},
     modifier: Modifier = Modifier,
     liveContent: @Composable (Modifier) -> Unit,
@@ -101,7 +100,6 @@ internal fun ShellContent(
         Box(
             Modifier.fillMaxSize()
                 .testTag("Shell content")
-                .then(if (!historyVisible) Modifier.horizontalSwipe(onSwitchSession, PointerEventPass.Final) else Modifier)
                 .pointerInput(historyVisible) {
                     if (historyVisible) return@pointerInput
                     awaitEachGesture {

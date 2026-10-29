@@ -115,14 +115,14 @@ internal fun ReplyableBubble(
     val gestures = Modifier.pointerInput(gate, owner) {
         val threshold = 72.dp.toPx()
         awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Main)
             gate.owner = owner
             var totalX = 0f
             var totalY = 0f
             var claimed = false
             try {
                 while (true) {
-                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val event = awaitPointerEvent(PointerEventPass.Main)
                     val change = event.changes.firstOrNull { it.id == down.id } ?: break
                     if (!change.pressed) {
                         if (claimed && !change.isConsumed && totalX > threshold) currentReply()

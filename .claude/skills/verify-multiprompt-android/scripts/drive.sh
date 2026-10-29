@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    chat-working.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
+    session-gestures.md|chat-working.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -224,7 +224,7 @@ if [[ "$feature" == launcher-icon.md ]]; then
     exit 0
 fi
 if [[ "$package" == dev.multiprompt.companion ]]; then
-    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md ]]
+    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -473,6 +473,11 @@ tap_text verify-session
 if [[ "$feature" == chat-working.md ]]; then
     wait_for_text WORKING_DOTS_READY
     python3 tools/working-dots/drive.py
+    exit 0
+fi
+if [[ "$feature" == session-gestures.md ]]; then
+    wait_for_text GESTURE_REPLY_TARGET
+    python3 tools/session-gestures/drive.py
     exit 0
 fi
 if [[ "$feature" == chat-choices.md ]]; then

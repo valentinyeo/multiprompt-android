@@ -56,7 +56,7 @@ class SessionInputTest {
                     signedIn = true, onSignIn = {}, onSignOut = {}, session = visibleSession,
                     unread = false, archived = false, initialFontScale = 1f,
                     onBack = {}, onMarkRead = {}, onArchiveToggle = {}, onRemind = {},
-                    onOpenTerminal = {}, onSwitchSession = {}, onFontScaleChanged = {},
+                    onOpenTerminal = {}, onFontScaleChanged = {},
                     onRename = { null }, onDissolve = {}, onEnd = {}, onSessionInteraction = {},
                     onSessionInput = { f.model.stampSessionInput(visibleSession) },
                     technicalMode = false, onTechnicalModeChanged = {}, sunlightMode = false,

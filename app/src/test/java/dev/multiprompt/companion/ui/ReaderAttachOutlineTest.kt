@@ -83,7 +83,7 @@ class ReaderAttachOutlineTest {
                 session = f.session.copy(paneCommand = "claude"),
                 unread = false, archived = false, initialFontScale = 1f,
                 onBack = {}, onMarkRead = {}, onArchiveToggle = {}, onRemind = {},
-                onOpenTerminal = {}, onSwitchSession = {}, onFontScaleChanged = {},
+                onOpenTerminal = {}, onFontScaleChanged = {},
                 onRename = { null }, onDissolve = {}, onEnd = {}, onSessionInteraction = {},
                 onSessionInput = {}, technicalMode = false, onTechnicalModeChanged = {},
                 sunlightMode = false, onSetAppTheme = {}, onResetFontScale = { 1f },

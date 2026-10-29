@@ -154,7 +154,6 @@ private fun ReaderFixture(material3: Boolean, sunlight: Boolean) {
         onArchiveToggle = {},
         onRemind = {},
         onOpenTerminal = {},
-        onSwitchSession = {},
         onFontScaleChanged = {},
         onRename = { null },
         onDissolve = {},

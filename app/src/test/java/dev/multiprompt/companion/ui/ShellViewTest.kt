@@ -46,7 +46,6 @@ class ShellViewTest {
     val compose = createComposeRule()
 
     private val context: Context get() = RuntimeEnvironment.getApplication()
-    private var switches = 0
     private var taps = 0
 
     @Before
@@ -74,7 +73,6 @@ class ShellViewTest {
                         fontSize = it.sp
                     },
                     contentWidth = width.dp,
-                    onSwitchSession = { switches += it },
                     onLiveTap = { taps++ },
                     liveContent = { Text("Live terminal", modifier = it.fillMaxSize()) },
                 )
@@ -155,17 +153,16 @@ class ShellViewTest {
     }
 
     @Test
-    fun horizontalPanDoesNotSwitchUntilAnEdgeAndTapStillWorks() {
+    fun horizontalPanNeverSwitchesSessionAtEitherEdgeAndTapStillWorks() {
         shell()
         val initial = compose.onNodeWithText("Live terminal").getUnclippedBoundsInRoot()
         assertEquals(0f, initial.left.value, 1f)
         compose.onNodeWithTag("Shell content").performTouchInput { swipeLeft() }
         val panned = compose.onNodeWithText("Live terminal").getUnclippedBoundsInRoot()
         assertTrue(panned.left < initial.left)
-        compose.runOnIdle { assertEquals(0, switches) }
         repeat(4) { compose.onNodeWithTag("Shell content").performTouchInput { swipeRight() } }
         compose.onNodeWithTag("Shell content").performTouchInput { swipeRight() }
-        compose.runOnIdle { assertTrue(switches < 0) }
+        assertEquals(initial.left.value, compose.onNodeWithText("Live terminal").getUnclippedBoundsInRoot().left.value, 1f)
         compose.onNodeWithTag("Shell content").performTouchInput {
             down(center)
             up()

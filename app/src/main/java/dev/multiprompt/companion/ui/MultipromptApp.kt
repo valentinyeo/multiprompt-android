@@ -383,7 +383,6 @@ private fun AppScreens(viewModel: MainViewModel) {
             onFontSizeChange = viewModel::setShellFontSize,
             onBack = viewModel::closeTerminal,
             onReleaseNotes = viewModel::openReleaseNotes,
-            onSwitchSession = viewModel::openAdjacentSession,
             onSessionInput = { state.terminalSession?.let(viewModel::stampSessionInput) },
         )
         return
@@ -420,7 +419,6 @@ private fun AppScreens(viewModel: MainViewModel) {
             },
             onRemind = viewModel::archiveReaderUntilAndOpenNext,
             onOpenTerminal = { viewModel.openTerminal(readerSession, userInitiated = true) },
-            onSwitchSession = viewModel::openAdjacentReaderSession,
             onFontScaleChanged = { scale -> viewModel.saveReaderFontScale(readerSession, scale) },
             onRename = { name -> viewModel.renameSession(readerSession, name) },
             onDissolve = { viewModel.dissolveSession(readerSession) },
@@ -2520,7 +2518,6 @@ internal fun ReaderScreen(
     onArchiveToggle: () -> Unit,
     onRemind: (Long?) -> Unit,
     onOpenTerminal: () -> Unit,
-    onSwitchSession: (Int) -> Unit,
     onFontScaleChanged: (Float) -> Unit,
     onRename: (String) -> String?,
     onDissolve: () -> Unit,
@@ -3006,7 +3003,6 @@ internal fun ReaderScreen(
     ).joinToString(" · ").ifEmpty { null }
     BackHandler(onBack = onBack)
     Scaffold(
-        modifier = Modifier.horizontalSwipe(onSwitchSession, suppressRight = replyGate::suppressRight),
         floatingActionButtonPosition = androidx.compose.material3.FabPosition.Center,
         floatingActionButton = {
             if (if (historyChat) chatListState.canScrollBackward else scrollState.canScrollForward) {
@@ -4365,7 +4361,6 @@ private fun TerminalScreen(
     savedFontSize: Float?,
     onFontSizeChange: (Float) -> Unit,
     onBack: () -> Unit,
-    onSwitchSession: (Int) -> Unit,
     onSessionInput: () -> Unit,
     onReleaseNotes: () -> Unit,
 ) {
@@ -4433,7 +4428,6 @@ private fun TerminalScreen(
                 fontSize = fontSize,
                 onFontSizeChange = onFontSizeChange,
                 contentWidth = with(density) { ((columns.takeIf { it > 0 } ?: FALLBACK_COLUMNS) * charWidthPx).toDp() },
-                onSwitchSession = onSwitchSession,
                 onLiveTap = {
                     focusRequester.requestFocus()
                     keyboard?.show()

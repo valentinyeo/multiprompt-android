@@ -62,7 +62,7 @@ class ReaderProgressBarTest {
                 signedIn = true, onSignIn = {}, onSignOut = {}, session = f.session.copy(paneCommand = "claude"),
                 unread = false, archived = false, initialFontScale = 1f,
                 onBack = {}, onMarkRead = {}, onArchiveToggle = {},
-                onRemind = {}, onOpenTerminal = {}, onSwitchSession = {},
+                onRemind = {}, onOpenTerminal = {},
                 onFontScaleChanged = {}, onRename = { null }, onDissolve = {}, onEnd = {},
                 onSessionInteraction = {}, onSessionInput = {}, technicalMode = false,
                 onTechnicalModeChanged = {}, sunlightMode = false, onSetAppTheme = {},
