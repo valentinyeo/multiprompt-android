@@ -32,7 +32,14 @@ CONFIG
 sudo /usr/sbin/sshd -t -f "$FIXTURE/sshd_config"
 sudo /usr/sbin/sshd -f "$FIXTURE/sshd_config" -E "$FIXTURE/sshd.log"
 sudo install -m 755 "$(dirname "$0")/console.py" /home/verifyssh/console.py
-if [[ "${VERIFY_FEATURE:-}" == session-gestures.md ]]; then
+if [[ "${VERIFY_FEATURE:-}" == chat-codex.md ]]; then
+    sudo install -m 755 "$(dirname "$0")/codex-console.py" /home/verifyssh/codex-console.py
+    sudo install -m 755 "$(dirname "$0")/resync-console.py" /home/verifyssh/resync-console.py
+    for binary in hax codex claude; do sudo -u verifyssh ln -s "$(command -v python3)" "/home/verifyssh/$binary"; done
+    sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/hax -u /home/verifyssh/codex-console.py /home/verifyssh/receipts.txt hax'
+    sudo -u verifyssh tmux new-session -d -s codex-native -x 100 -y 32 '/home/verifyssh/codex -u /home/verifyssh/codex-console.py /home/verifyssh/codex-receipts.txt codex'
+    sudo -u verifyssh tmux new-session -d -s claude-control -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/resync-console.py /home/verifyssh/claude-receipts.txt'
+elif [[ "${VERIFY_FEATURE:-}" == session-gestures.md ]]; then
     sudo install -m 755 tools/session-gestures/console.py /home/verifyssh/gesture-console.py
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/gesture-console.py'

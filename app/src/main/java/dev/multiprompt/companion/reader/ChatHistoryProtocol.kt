@@ -55,7 +55,7 @@ object ChatHistoryProtocol {
 
     fun request(id: Long, identity: Identity, history: ChatHistory, before: Long = 0, deliveryIds: List<String> = emptyList()): String {
         require(id > 0 && TranscriptProtocol.supports(identity.agent))
-        return JSONObject().put("id", id).put("codex", identity.agent == AgentKind.CODEX)
+        return JSONObject().put("id", id).put("codex", TranscriptProtocol.wireAgent(identity.agent) == "codex")
             .put("sid", identity.sid).put("tmux", identity.tmux).put("cwd", identity.cwd)
             .put("questions", true).put("held", true).put("delivery_ids", org.json.JSONArray(deliveryIds)).put("source_offsets", true).put("no_jump", true).put("settlement", true)
             .put("cached_sid", history.sid).put("inode", history.inode).put("offset", history.offset)
@@ -74,7 +74,7 @@ object ChatHistoryProtocol {
         if (fields[3] in setOf("missing", "error")) return null
         require(fields.size == 15 && fields[3] == "ok")
         require(fields[4].matches(Regex("[A-Za-z0-9_-]{1,80}")))
-        require(fields[9] == identity.agent.name.lowercase() && fields[10] == identity.tmux.ifEmpty { "-" })
+        require(fields[9] == TranscriptProtocol.wireAgent(identity.agent) && fields[10] == identity.tmux.ifEmpty { "-" })
         if (identity.tmux.isEmpty() && identity.sid.isNotEmpty()) require(fields[4] == identity.sid)
         require(fields[8] in setOf("0", "1") && fields[13] in setOf("tail", "delta", "older"))
         require(fields[12].matches(Regex("[0-9a-f]{64}")))

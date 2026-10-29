@@ -61,6 +61,7 @@ on:
           - chat-cancel.md
           - native-skills.md
           - chat-resync.md
+          - chat-codex.md
           - session-routing.md
           - session-gestures.md
           - terminal.md
@@ -207,6 +208,18 @@ jobs:
           echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
           echo "VERIFY_PACKAGE=dev.multiprompt.companion" >> "$GITHUB_ENV"
           echo "EXPECTED_VERSION=$(jq -er '.versionName' "$EVIDENCE/manifest.json")" >> "$GITHUB_ENV"
+      - name: Reject original Codex reader
+        if: inputs.feature == 'chat-codex.md'
+        run: |
+          git fetch origin 099a8e7
+          git show 099a8e7:app/src/main/assets/chat_history_reader.py > "$RUNNER_TEMP/original-reader.py"
+          if CODEX_READER="$RUNNER_TEMP/original-reader.py" python3 -B tools/codex-sync.test.py > "$EVIDENCE/codex-original.txt" 2>&1; then
+            cat "$EVIDENCE/codex-original.txt"
+            exit 1
+          fi
+          grep -F 'AssertionError' "$EVIDENCE/codex-original.txt"
+          python3 -B tools/codex-sync.test.py 2>&1 | tee "$EVIDENCE/codex-fixed.txt"
+          echo ORIGINAL_CODEX_REJECTED
       - name: Build debug APK
         if: inputs.release_choices != true && inputs.release_icon != true && inputs.released_reactions != true && inputs.released_terminal != true && inputs.released_robots != true && inputs.released_chat != true
         run: |

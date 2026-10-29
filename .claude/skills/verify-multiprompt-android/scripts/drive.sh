@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    session-gestures.md|chat-working.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
+    chat-codex.md|session-gestures.md|chat-working.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -580,6 +580,51 @@ PROOF
     exit 0
 fi
 
+if [[ "$feature" == chat-codex.md ]]; then
+    adb shell 'screenrecord --time-limit 180 --bit-rate 2000000 /sdcard/chat-catchup.mp4 & echo $!; wait' > "$FIXTURE/recorder.pid" &
+    recorder_client=$!
+    for attempt in {1..20}; do
+        recorder_pid=$(tr -d '\r' < "$FIXTURE/recorder.pid")
+        [[ "$recorder_pid" =~ ^[0-9]+$ ]] && break
+        sleep 1
+    done
+    for mode in hax codex; do
+        if [[ "$mode" == codex ]]; then
+            adb shell input keyevent KEYCODE_BACK
+            wait_for_text Inbox
+            tap_text codex-native
+        fi
+        wait_for_text "CODEX_TRANSCRIPT_ONLY_$mode"
+        shot "codex-$mode-desktop-post"
+        destination=verify-session
+        receipt=receipts.txt
+        if [[ "$mode" == codex ]]; then destination=codex-native; receipt=codex-receipts.txt; fi
+        fill "Message $destination" PHONE_CODEX
+        tap_desc 'Send prompt'
+        started=$(date +%s%N)
+        wait_for_text "CODEX_REPLY_${mode}_PHONE_CODEX"
+        finished=$(date +%s%N)
+        sudo grep -Fx 'VERIFY_RECEIVED:PHONE_CODEX' "/home/verifyssh/$receipt" > "$EVIDENCE/$mode-receipt.txt"
+        published=$(sudo cat "/home/verifyssh/$mode-reply-ns.txt")
+        elapsed=$(( (finished - published) / 1000000 ))
+        printf '%s\n' "$elapsed" > "$EVIDENCE/$mode-visible-ms.txt"
+        [[ "$elapsed" -ge 0 && "$elapsed" -le 5000 ]]
+        shot "codex-$mode-phone-reply"
+        sudo -u verifyssh tmux capture-pane -pt "$destination" > "$EVIDENCE/$mode-terminal.txt"
+        ! grep -F "CODEX_REPLY_${mode}_PHONE_CODEX" "$EVIDENCE/$mode-terminal.txt"
+    done
+    adb shell input keyevent KEYCODE_BACK
+    wait_for_text Inbox
+    tap_text claude-control
+    wait_for_text 'FIRST REPLY'
+    fill 'Message claude-control' CLAUDE_CONTROL
+    tap_desc 'Send prompt'
+    wait_for_text 'Reply to CLAUDE_CONTROL'
+    sudo grep -Fx 'VERIFY_RECEIVED:CLAUDE_CONTROL' /home/verifyssh/claude-receipts.txt > "$EVIDENCE/claude-receipt.txt"
+    shot claude-compatible
+    printf 'ANDROID_CODEX_READ_SEND_CLAUDE_OK\n' | tee "$EVIDENCE/codex-result.txt"
+    exit 0
+fi
 if [[ "$feature" == chat-queued.md ]]; then
     wait_for_text VERIFY_READY_1008
 else
