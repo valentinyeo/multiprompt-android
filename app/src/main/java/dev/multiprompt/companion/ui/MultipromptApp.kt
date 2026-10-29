@@ -1800,7 +1800,7 @@ internal fun SessionsScreen(
                                 verticalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
                                 Box {
-                                    BotAvatar(session.name, 56.dp)
+                                    BotAvatar(session.name, 56.dp, workspaceName = session.workspaceName)
                                     if (key in state.unreadSessionKeys) {
                                         Badge(
                                             Modifier.align(Alignment.TopEnd).semantics {
@@ -2161,7 +2161,7 @@ private fun SessionCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                BotAvatar(session.name)
+                BotAvatar(session.name, workspaceName = session.workspaceName)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         session.displayName,
@@ -2378,7 +2378,7 @@ internal fun ReaderTopBar(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        BotAvatar(session.name, 28.dp)
+                        BotAvatar(session.name, 28.dp, workspaceName = session.workspaceName)
                         Text(
                             session.displayName,
                             modifier = Modifier.weight(1f, fill = false),
@@ -2416,7 +2416,7 @@ internal fun ReaderTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                BotAvatar(session.name, 28.dp)
+                BotAvatar(session.name, 28.dp, workspaceName = session.workspaceName)
                 Box(Modifier.weight(1f)) {
                     Column(
                         Modifier

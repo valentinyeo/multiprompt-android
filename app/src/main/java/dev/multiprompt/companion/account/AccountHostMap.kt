@@ -33,7 +33,7 @@ object AccountHostMap {
     fun sessionFor(tab: AccountTab, inventory: List<TmuxSession>, mapping: Map<Int, HostProfile>): TmuxSession? {
         val host = mapping[tab.host] ?: return null
         val live = inventory.firstOrNull { it.hostId == host.id && it.name.equals(tab.session, ignoreCase = true) }
-        return (live ?: TmuxSession(host.id, tab.session, 1, 0, 0)).copy(title = tab.name, windowName = tab.name, accountName = tab.name)
+        return (live ?: TmuxSession(host.id, tab.session, 1, 0, 0)).copy(title = tab.name, windowName = tab.name, accountName = tab.name, workspaceName = tab.workspace)
     }
 
     fun withAccountSessions(inventory: List<TmuxSession>, layout: AccountLayout?, mapping: Map<Int, HostProfile>): List<TmuxSession> {
@@ -43,7 +43,9 @@ object AccountHostMap {
             if (inventory.any { it.hostId == host.id && it.name.equals(tab.session, ignoreCase = true) }) null
             else sessionFor(tab, inventory, mapping)
         }
-        return inventory + missing
+        return inventory.map { session ->
+            session.copy(workspaceName = tabFor(session, layout, mapping)?.workspace.orEmpty())
+        } + missing
     }
 
     fun workspaceAssignments(inventory: List<TmuxSession>, layout: AccountLayout?, mapping: Map<Int, HostProfile>): Map<String, String> =

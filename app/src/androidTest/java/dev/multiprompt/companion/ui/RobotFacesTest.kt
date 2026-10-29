@@ -37,8 +37,9 @@ class RobotFacesTest {
         TmuxSession("host", "bot-$index", 1, 0, System.currentTimeMillis() / 1000 - index * 120,
             accountName = name, preview = "${name}: latest reply\nshift+tab to cycle")
     }
-    private val layout = AccountLayout.parse(JSONObject("""{"schema":1,"revision":1,"workspaces":[{"name":"All"}],"tabs":[${sessions.mapIndexed { index, session ->
-        """{"kind":"tmux","name":"${session.displayName}","tmux_session":"${session.name}","tmux_host":0,"workspace":"All","favorite":${index < 2}}"""
+    private val workspaceNames = listOf("inne", "Software Factory", "Hypertask", "Software Factory", "Hypertask", "inne", "inne", "Hypertask")
+    private val layout = AccountLayout.parse(JSONObject("""{"schema":1,"revision":1,"workspaces":[{"name":"inne"},{"name":"Software Factory"},{"name":"Hypertask"}],"tabs":[${sessions.mapIndexed { index, session ->
+        """{"kind":"tmux","name":"${session.displayName}","tmux_session":"${session.name}","tmux_host":0,"workspace":"${workspaceNames[index]}","favorite":${index < 2}}"""
     }.joinToString(",")}]}"""))
     private var opened: TmuxSession? = null
     private var markedUnread: TmuxSession? = null
@@ -66,6 +67,12 @@ class RobotFacesTest {
         }
         compose.waitForIdle()
         screenshot("robot-inbox")
+        assertWorkspaceHue("bot-0", 2)
+        assertWorkspaceHue("bot-1", 4)
+        assertWorkspaceHue("bot-2", 5)
+        assertWorkspaceHue("bot-3", 4)
+        assertWorkspaceHue("bot-4", 5)
+        assertWorkspaceHue("bot-5", 2)
         val pin = compose.onNodeWithContentDescription("Robot bot-0", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val row = compose.onNodeWithContentDescription("Robot bot-2", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val density = compose.activity.resources.displayMetrics.density
@@ -81,18 +88,18 @@ class RobotFacesTest {
         avatar.recycle()
         screenshot("robot-inbox")
         compose.onNodeWithText(names[0]).performClick()
-        compose.runOnIdle { assertEquals(sessions[0], opened) }
+        compose.runOnIdle { assertEquals(sessions[0].copy(workspaceName = workspaceNames[0]), opened) }
         compose.onNodeWithText(names[2]).performTouchInput { longClick() }
         compose.onNodeWithText("Mark unread").assertIsDisplayed()
         compose.onNodeWithText("Mark unread").performClick()
-        compose.runOnIdle { assertEquals(sessions[2], markedUnread) }
+        compose.runOnIdle { assertEquals(sessions[2].copy(workspaceName = workspaceNames[2]), markedUnread) }
         compose.onNodeWithText(names[2]).performClick()
-        compose.runOnIdle { assertEquals(sessions[2], opened) }
+        compose.runOnIdle { assertEquals(sessions[2].copy(workspaceName = workspaceNames[2]), opened) }
         compose.activityRule.scenario.onActivity { activity ->
             activity.setContent {
                 MultipromptTheme(sunlight = false, material3 = false, readerStyle = true) {
                     Surface {
-                        ReaderTopBar(sessions[2], null, onModelCommand = {}, onOpenTerminal = {},
+                        ReaderTopBar(sessions[2].copy(workspaceName = "Hypertask"), null, onModelCommand = {}, onOpenTerminal = {},
                             onReleaseNotes = {}, onMenuClick = {}, menuContent = {})
                     }
                 }
@@ -103,7 +110,27 @@ class RobotFacesTest {
         assertEquals(28f, titleRobot.width / density, .5f)
         compose.onNodeWithText(names[2]).assertIsDisplayed()
         compose.onNodeWithContentDescription("Session actions").assertIsDisplayed()
+        assertWorkspaceHue("bot-2", 5)
         screenshot("robot-chat-title")
+    }
+
+    private fun assertWorkspaceHue(session: String, color: Int) {
+        val bitmap = compose.onNodeWithContentDescription("Robot $session", useUnmergedTree = true).captureToImage().asAndroidBitmap()
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        val tinted = pixels.count {
+            val r = (it shr 16) and 255
+            val g = (it shr 8) and 255
+            val b = it and 255
+            when (color) {
+                2 -> r > g * 1.1 && g > b * 1.1
+                4 -> b > r * 1.1 && g > r * 1.05
+                5 -> b > g * 1.1 && r > g * 1.05
+                else -> false
+            }
+        }
+        assertTrue("workspace hue $color missing for $session", tinted > pixels.size * .08)
+        bitmap.recycle()
     }
 
     private fun screenshot(name: String) {

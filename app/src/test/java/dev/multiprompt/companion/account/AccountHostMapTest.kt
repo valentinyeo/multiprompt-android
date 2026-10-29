@@ -30,6 +30,16 @@ class AccountHostMapTest {
         assertEquals("inne", hosts[1].username); assertEquals("agent", hosts[0].username)
     }
 
+    @Test fun workspaceMetadataFollowsAccountOwnershipForLiveOfflineAndMovedSessions() {
+        val mapping = AccountHostMap.resolve(hosts, emptyMap())
+        val live = TmuxSession(valentin.id, "inne-shell", 1, 0, 0)
+        assertEquals("inne", AccountHostMap.withAccountSessions(listOf(live), layout, mapping).single().workspaceName)
+        assertEquals("inne", AccountHostMap.sessionFor(tab, emptyList(), mapping)!!.workspaceName)
+        val moved = layout.copy(workspaces = listOf("inne", "Software Factory"), tabs = listOf(tab.copy(workspace = "Software Factory")))
+        assertEquals("Software Factory", AccountHostMap.withAccountSessions(listOf(live), moved, mapping).single().workspaceName)
+        assertEquals("", AccountHostMap.withAccountSessions(listOf(live.copy(name = "unassigned")), layout, mapping).first().workspaceName)
+    }
+
     @Test fun missingOrAmbiguousHostsStayUnmappedUntilExplicitChoice() {
         assertNull(AccountHostMap.resolve(listOf(inne, agent), emptyMap())[0])
         val duplicate = valentin.copy(id = "duplicate")
