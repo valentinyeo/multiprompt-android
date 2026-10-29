@@ -32,7 +32,11 @@ CONFIG
 sudo /usr/sbin/sshd -t -f "$FIXTURE/sshd_config"
 sudo /usr/sbin/sshd -f "$FIXTURE/sshd_config" -E "$FIXTURE/sshd.log"
 sudo install -m 755 "$(dirname "$0")/console.py" /home/verifyssh/console.py
-if [[ "${VERIFY_FEATURE:-}" == session-gestures.md ]]; then
+if [[ "${VERIFY_FEATURE:-}" == session-summaries.md ]]; then
+    sudo install -m 755 tools/session-summaries/console.py /home/verifyssh/summary-console.py
+    sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
+    sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/summary-console.py'
+elif [[ "${VERIFY_FEATURE:-}" == session-gestures.md ]]; then
     sudo install -m 755 tools/session-gestures/console.py /home/verifyssh/gesture-console.py
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/gesture-console.py'

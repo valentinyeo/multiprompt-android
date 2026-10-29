@@ -1851,7 +1851,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val MAX_PRIVATE_KEY_BYTES = 256 * 1024
         const val MAX_DISPLAY_NAME_LENGTH = 63
         const val IDLE_OBSERVATIONS_TO_RELEASE = 2
-        const val SESSION_REFRESH_INTERVAL_MS = 10_000L
-        const val BACKGROUND_REFRESH_EVERY = 6
+        const val SESSION_REFRESH_INTERVAL_MS = 2_000L
+        const val BACKGROUND_REFRESH_EVERY = 30
     }
 }

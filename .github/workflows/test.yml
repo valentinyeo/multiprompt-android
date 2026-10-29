@@ -90,6 +90,25 @@ jobs:
           grep -F 'xmlns:generic' /tmp/emulator-metadata-red.txt
           echo EMULATOR_ORIGINAL_REJECTED
 
+      - name: Reject model footer summaries on original source
+        run: |
+          source=app/src/main/java/dev/multiprompt/companion/ui/SessionPreview.kt
+          cp "$source" "$RUNNER_TEMP/SessionPreview.kt"
+          git show 099a8e7:"$source" > "$source"
+          status=0
+          gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*SessionPreviewTest' || status=$?
+          cp "$RUNNER_TEMP/SessionPreview.kt" "$source"
+          test "$status" -ne 0
+          python3 - <<'PYCONTROL'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.SessionPreviewTest.xml').getroot()
+          for name in ['lastReplyStartsWithItsFirstSentenceNotTheFooter', 'liveWorkReplacesThePreviousReply', 'modelAndShellOnlyHaveNoInventedReply']:
+              assert root.find(f"testcase[@name='{name}']/failure") is not None, name
+          print('ORIGINAL_SUMMARY_FOOTER_REJECTED')
+          PYCONTROL
+          mkdir -p app/build/reports/summary-control
+          cp app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.SessionPreviewTest.xml app/build/reports/summary-control/
+
       - name: Root files, comments, lint and unit tests
         env:
           GRADLE: gradle
@@ -104,6 +123,7 @@ jobs:
             app/build/reports/igsh-844/*.png
             app/build/reports/igsh-1045/*.png
             app/build/reports/question-control/*.xml
+            app/build/reports/summary-control/*.xml
             app/build/test-results/test*UnitTest/*.xml
 
   image-preview-emulator:
