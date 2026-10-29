@@ -41,6 +41,7 @@ The counterpart checks the same user outcome.
 Desktop-only controls need an explicit phone equivalent.
 Both-app requests already cover both apps.
 Existing gap tickets are reused, never copied.
+Unlinked inventory gaps get their own requests.
 Generated counterparts never create more counterparts.
 
 New-request coverage starts 2026-10-29T22:55:59Z.

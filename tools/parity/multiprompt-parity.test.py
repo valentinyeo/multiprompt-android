@@ -21,6 +21,20 @@ def inventory():
 
 
 class ParityTests(unittest.TestCase):
+    def test_unlinked_inventory_gap_gets_a_ticket_once(self):
+        data = inventory()
+        data["features"] = [{"id": "voice", "desktop": {"status": "shipped"}, "android": {"status": "missing"}}]
+        calls = []
+        def api(*args):
+            calls.append(args)
+            return {"task": task("IGSH-2001", "Multiprompt Android", description=args[-1])}
+        result = parity.reconcile(data, [], True, api)
+        self.assertEqual(result, [{"source": "feature:voice", "target": "android", "ticket": "IGSH-2001"}])
+        self.assertIn("MP-GAP:voice:android", calls[0][-1])
+        twin = task("IGSH-2001", "Multiprompt Android", description=calls[0][-1])
+        self.assertEqual(parity.reconcile(data, [twin], True, api), [])
+        self.assertEqual(len(calls), 1)
+
     def test_new_desktop_feature_gets_android_twin(self):
         calls = []
         def api(*args):
@@ -68,8 +82,7 @@ class ParityTests(unittest.TestCase):
         data = inventory()
         data["features"] = [{"desktop": {}, "android": {"ticket": "IGSH-2000"}}]
         self.assertEqual(parity.pairs(data, [task()]), [])
-        with self.assertRaisesRegex(ValueError, "Gap ticket missing"):
-            parity.pairs(data, [])
+        self.assertEqual(parity.pairs(data, []), [])
 
     def test_malformed_date_stops_before_any_writes(self):
         calls = []
@@ -116,7 +129,7 @@ class ParityTests(unittest.TestCase):
         self.assertEqual((ROOT / "docs/multiprompt-features.md").read_text(), parity.render(data))
         broken = copy.deepcopy(data)
         gap = next(cell for row in broken["features"] for cell in (row["desktop"], row["android"]) if cell.get("ticket"))
-        del gap["ticket"]
+        gap["ticket"] = "not-a-ticket"
         with self.assertRaises(ValueError):
             parity.validate(broken)
 

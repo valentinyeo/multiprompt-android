@@ -11,6 +11,7 @@ from datetime import datetime
 ROOT = Path(__file__).resolve().parents[2]
 LABELS = {"desktop": "Multiprompt", "android": "Multiprompt Android"}
 MARKER = re.compile(r"\bMP-PAIR:(IGSH-\d+):(desktop|android)\b")
+GAP_MARKER = re.compile(r"\bMP-GAP:[a-z][a-z0-9-]+:(desktop|android)\b")
 STATES = {"shipped", "partial", "missing", "planned"}
 
 
@@ -67,8 +68,8 @@ def validate(data):
             cell = row[platform]
             if cell["status"] not in STATES or not cell["source"].startswith("https://github.com/valentinyeo/"):
                 raise ValueError("Each status needs a source reference")
-            if cell["status"] != "shipped" and not re.fullmatch(r"IGSH-\d+", cell.get("ticket", "")):
-                raise ValueError("Every gap needs its own ticket")
+            if cell.get("ticket") and not re.fullmatch(r"IGSH-\d+", cell["ticket"]):
+                raise ValueError("Invalid gap ticket reference")
     if not seen:
         raise ValueError("Empty inventory")
     return data
@@ -94,6 +95,7 @@ def render(data):
               "Automatic crash reports stay on their own app.",
               "The counterpart checks the same user outcome.", "Desktop-only controls need an explicit phone equivalent.",
               "Both-app requests already cover both apps.", "Existing gap tickets are reused, never copied.",
+              "Unlinked inventory gaps get their own requests.",
               "Generated counterparts never create more counterparts.", "",
               f"New-request coverage starts {data['track_since']}.",
               "Historical gaps remain linked in this list.", "",
@@ -106,18 +108,15 @@ def render(data):
 
 
 def pairs(data, rows):
-    by_ticket = {row["ticketNumber"]: row for row in rows}
     linked = {cell["ticket"] for row in data["features"] for cell in (row["desktop"], row["android"]) if cell.get("ticket")}
-    for ticket in linked:
-        if ticket not in by_ticket:
-            raise ValueError(f"Gap ticket missing from board: {ticket}")
     existing = set()
     for row in rows:
         existing.update(MARKER.findall(html.unescape(row.get("description") or "")))
     result = []
     for row in rows:
         description = html.unescape(row.get("description") or "")
-        if MARKER.search(description) or row["ticketNumber"] in linked or row.get("status") in ("Archive", "Deleted"):
+        if (MARKER.search(description) or GAP_MARKER.search(description)
+                or row["ticketNumber"] in linked or row.get("status") in ("Archive", "Deleted")):
             continue
         if (timestamp(row["createdAt"]) < timestamp(data["track_since"])
                 and row["ticketNumber"] not in data.get("catch_up_tickets", [])):
@@ -139,12 +138,20 @@ def pairs(data, rows):
 
 def reconcile(data, rows, apply=False, api=call):
     planned = pairs(data, rows)
+    descriptions = "\n".join(html.unescape(row.get("description") or "") for row in rows)
+    for feature in data["features"]:
+        for platform in LABELS:
+            cell = feature[platform]
+            marker = f"MP-GAP:{feature['id']}:{platform}"
+            if cell["status"] != "shipped" and not cell.get("ticket") and marker not in descriptions:
+                planned.append(({"ticketNumber": "feature:" + feature["id"], "feature": feature["id"]}, platform))
     created = []
     for source, target in planned:
         ticket = source["ticketNumber"]
-        marker = f"MP-PAIR:{ticket}:{target}"
+        marker = f"MP-GAP:{source['feature']}:{target}" if source.get("feature") else f"MP-PAIR:{ticket}:{target}"
         name = "Android" if target == "android" else "desktop"
-        url = f"https://app.hypertask.ai/detail/project-2060/{ticket.split('-')[1]}"
+        url = ("https://github.com/valentinyeo/multiprompt-android/blob/main/docs/multiprompt-features.md"
+               if source.get("feature") else f"https://app.hypertask.ai/detail/project-2060/{ticket.split('-')[1]}")
         description = (f"<h2>Problem</h2><p>The other app has a matching request.</p>"
                        f"<p><a href='{url}'>Original app request</a></p>"
                        f"<h2>Fix</h2><p>Match that outcome on {name}.</p>"
