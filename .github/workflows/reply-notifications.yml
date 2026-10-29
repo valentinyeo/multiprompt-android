@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 35
     env:
       EVIDENCE: ${{ github.workspace }}/notification-evidence
-      FIXTURE: ${{ runner.temp }}/notification-fixture
+      FIXTURE: ${{ github.workspace }}-notification-fixture
       VERIFY_PACKAGE: dev.multiprompt.companion
       EXPECTED_COMMIT: ${{ inputs.published_commit }}
       CANDIDATE: ${{ inputs.published_commit == '' }}
