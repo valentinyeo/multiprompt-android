@@ -4,6 +4,9 @@ import json
 import os
 from pathlib import Path
 import sys
+import subprocess
+import threading
+import time
 import uuid
 
 HOME = Path.home()
@@ -17,6 +20,13 @@ def append(row):
     row.update(sessionId=SID, timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"))
     with TRANSCRIPT.open("a", encoding="utf-8") as output:
         output.write(json.dumps(row, ensure_ascii=False) + "\n")
+    text = row.get("message", {}).get("content")
+    if isinstance(text, str):
+        with (HOME / "shell-events.jsonl").open("a") as output:
+            output.write(json.dumps(dict(text=text, timestamp=time.time())) + "\n")
+        tty = subprocess.check_output(["tmux", "display-message", "-p", "-t", "=verify-session:", "#{pane_tty}"], text=True).strip()
+        with open(tty, "w") as terminal:
+            terminal.write(text + "\n")
 
 
 def received():
@@ -35,6 +45,15 @@ if sys.argv[1:] == ["reply"]:
                 message=dict(role="assistant", id="msg_" + str(uuid.uuid4()), content="Both messages received.")))
     raise SystemExit(0)
 
+if sys.argv[1:] == ["followup"]:
+    append(dict(type="attachment", uuid=str(uuid.uuid4()), attachment=dict(type="queued_command", prompt="FOLLOWUP")))
+    time.sleep(10)
+    append(dict(type="user", isMeta=True, message=dict(role="user", content=[
+        dict(type="image", source=dict(type="base64", data="A" * (1024 * 1024)))])))
+    append(dict(type="assistant", uuid=str(uuid.uuid4()), message=dict(
+        role="assistant", id="msg_followup", content="Followup received.")))
+    raise SystemExit(0)
+
 CWD.mkdir(parents=True, exist_ok=True)
 os.chdir(CWD)
 TRANSCRIPT.parent.mkdir(parents=True, exist_ok=True)
@@ -45,6 +64,13 @@ meta.write_text(json.dumps(dict(sessionId=SID, cwd=str(CWD), pid=os.getpid())), 
 append(dict(type="user", uuid=str(uuid.uuid4()), message=dict(role="user", content="VERIFY_READY_1008")))
 append(dict(type="assistant", uuid=str(uuid.uuid4()), message=dict(role="assistant", id="msg_ready", content="Ready for queued messages.")))
 print("Claude Code\nVERIFY_READY_1008\nReady for queued messages.\nReady\n❯ ", flush=True)
+def working_output():
+    for second in range(900):
+        print("Working... %ss" % second, flush=True)
+        time.sleep(1)
+
+
+threading.Thread(target=working_output, daemon=True).start()
 for line in sys.stdin:
     text = line.rstrip("\r\n")
     with RECEIPTS.open("a", encoding="utf-8") as output:
