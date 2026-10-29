@@ -5,7 +5,16 @@ set -euo pipefail
 mkdir -p "$FIXTURE/offline-empty"
 python3 -m http.server 8788 --directory "$FIXTURE/offline-empty" > "$FIXTURE/offline-proxy.log" 2>&1 &
 proxy=$!
-trap 'kill "$proxy"' EXIT
+finish() {
+    status=$?
+    trap - EXIT
+    adb logcat -d > "$EVIDENCE/logcat.txt" || true
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/final-console.txt" || true
+    sudo -u verifyssh tmux display-message -pt verify-session '#{session_activity}' > "$EVIDENCE/final-activity.txt" || true
+    kill "$proxy" || true
+    exit "$status"
+}
+trap finish EXIT
 adb shell settings put global http_proxy 10.0.2.2:8788
 adb install -r "$EVIDENCE/app.apk"
 adb install -r "$RUNNER_TEMP/release-choices/seed.apk"
@@ -19,21 +28,19 @@ sleep 25
 adb shell uiautomator dump /sdcard/notification-ui.xml
 adb pull /sdcard/notification-ui.xml "$EVIDENCE/baseline-ui.txt"
 grep -F Checkout "$EVIDENCE/baseline-ui.txt"
-sudo -u verifyssh tmux send-keys -t verify-session -l '/rc'
-sudo -u verifyssh tmux send-keys -t verify-session Enter
+printf '/rc\r' | sudo -u verifyssh tee /home/verifyssh/notification-input > /dev/null
 sleep 25
 test "$(sudo cat /home/verifyssh/notification-receipt)" = /rc
 adb shell dumpsys notification --noredact > "$EVIDENCE/command-notifications.txt"
-if grep -F 'group=dev.multiprompt.companion.REPLIES' "$EVIDENCE/command-notifications.txt"; then
-    echo COMMAND_WRONGLY_NOTIFIED
+if grep -F 'dev.multiprompt.companion.REPLIES' "$EVIDENCE/command-notifications.txt"; then
+    echo COMMAND_WRONGLY_NOTIFIED | tee "$EVIDENCE/negative-control.txt"
     exit 1
 fi
 adb shell cmd statusbar expand-notifications
 sleep 2
 adb exec-out screencap -p > "$EVIDENCE/command-no-notification.png"
 adb shell cmd statusbar collapse
-sudo -u verifyssh tmux send-keys -t verify-session -l 'Fix checkout'
-sudo -u verifyssh tmux send-keys -t verify-session Enter
+printf 'Fix checkout\r' | sudo -u verifyssh tee /home/verifyssh/notification-input > /dev/null
 for attempt in $(seq 1 30); do
     adb shell dumpsys notification --noredact > "$EVIDENCE/reply-notifications.txt"
     if grep -F 'android.text=String (Checkout fixed.)' "$EVIDENCE/reply-notifications.txt"; then break; fi

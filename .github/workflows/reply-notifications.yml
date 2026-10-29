@@ -13,6 +13,10 @@ on:
         description: Published signed APK commit; empty builds a signed candidate
         type: string
         required: false
+      expect_command_notification:
+        description: Require the original APK to fail by notifying about /rc
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -56,6 +60,14 @@ jobs:
           sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/notification-console.py'
           sudo -u verifyssh tmux set-window-option -t verify-session automatic-rename off
           sudo -u verifyssh tmux rename-window -t verify-session Checkout
+          sudo install -m 755 tools/reply-notifications/tmux-input.py /home/verifyssh/notification-input.py
+          sudo -u verifyssh python3 /home/verifyssh/notification-input.py > "$FIXTURE/client.log" 2>&1 &
+          echo "$!" > "$FIXTURE/client.pid"
+          for attempt in $(seq 1 20); do
+            if sudo -u verifyssh tmux list-clients -t verify-session | grep -F xterm; then break; fi
+            sleep 0.2
+          done
+          test -p /home/verifyssh/notification-input
           python3 - <<'PY'
           import json, os
           from pathlib import Path
@@ -64,9 +76,19 @@ jobs:
           (fixture / 'config.json').write_text(json.dumps(dict(privateKey=(fixture / 'user-key').read_text(), fingerprint=(evidence / 'host-fingerprint.txt').read_text().strip())))
           PY
       - uses: ./.github/actions/android-proof
+        id: reply-content
+        continue-on-error: ${{ inputs.expect_command_notification == true }}
         with:
           stage: reply-content
           script: bash tools/reply-notifications/run.sh
+      - name: Require the original command-notification failure
+        if: inputs.expect_command_notification == true
+        env:
+          PROOF_OUTCOME: ${{ steps.reply-content.outcome }}
+        run: |
+          test "$PROOF_OUTCOME" = failure
+          test -n "$EXPECTED_COMMIT"
+          grep -Fx COMMAND_WRONGLY_NOTIFIED "$EVIDENCE/negative-control.txt"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
