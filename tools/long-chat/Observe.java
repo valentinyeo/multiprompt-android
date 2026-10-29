@@ -23,6 +23,7 @@ public class Observe extends Instrumentation {
     private Bundle arguments;
     private File evidence;
     private int referenceInk;
+    private long capturedAt;
     private static final String LATEST = "LONG_CHAT_LATEST_1156";
 
     @Override public void onCreate(Bundle values) {
@@ -77,6 +78,7 @@ public class Observe extends Instrumentation {
         Rect bounds = new Rect();
         latest.getBoundsInScreen(bounds);
         Bitmap bitmap = getUiAutomation().takeScreenshot();
+        long captured = SystemClock.elapsedRealtime();
         if (bitmap == null) throw new AssertionError("Screenshot missing");
         int ink = 0;
         for (int y = Math.max(0, bounds.top); y < Math.min(bitmap.getHeight(), bounds.bottom); y++) {
@@ -85,18 +87,25 @@ public class Observe extends Instrumentation {
                 if (((pixel >> 16) & 255) > 128 && ((pixel >> 8) & 255) > 128 && (pixel & 255) > 128) ink++;
             }
         }
-        try (FileOutputStream output = new FileOutputStream(new File(evidence, name + ".png"))) {
-            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) throw new AssertionError("Screenshot failed");
+        boolean visible = ink >= 30 && (referenceInk == 0 || Math.abs(ink - referenceInk) <= referenceInk / 10);
+        boolean expired = captured > deadline;
+        if (visible || expired) {
+            try (FileOutputStream output = new FileOutputStream(new File(evidence, name + ".png"))) {
+                if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) throw new AssertionError("Screenshot failed");
+            }
         }
         bitmap.recycle();
-        if (ink >= 30 && (referenceInk == 0 || Math.abs(ink - referenceInk) <= referenceInk / 10)) {
+        if (expired) throw new AssertionError("Latest reply pixels missed deadline: stage=" + name
+            + " lateMs=" + (captured - deadline) + " ink=" + ink + " reference=" + referenceInk);
+        if (visible) {
+            capturedAt = captured;
             if (referenceInk == 0) {
                 referenceInk = ink;
                 Files.write(new File(evidence, "reference-ink").toPath(), Integer.toString(ink).getBytes("UTF-8"));
             }
             return ink;
         }
-        if (SystemClock.elapsedRealtime() >= deadline) throw new AssertionError("Latest reply pixels missing by deadline");
+        if (SystemClock.elapsedRealtime() >= deadline) throw new AssertionError("Latest reply pixels missing by deadline: stage=" + name + " ink=" + ink);
         SystemClock.sleep(16);
         }
     }
@@ -112,9 +121,10 @@ public class Observe extends Instrumentation {
         waitFor(LATEST, started + 2000);
         long visible = SystemClock.elapsedRealtime() - started;
         int ink = screenshot(stage, started + 2000);
-        long elapsed = SystemClock.elapsedRealtime() - started;
+        long elapsed = capturedAt - started;
         report(new JSONObject().put("stage", stage).put("visibleMs", elapsed).put("latest", LATEST)
-            .put("inkPixels", ink).put("tapMs", tapped).put("nodeMs", visible).put("captureMs", elapsed - visible));
+            .put("inkPixels", ink).put("tapMs", tapped).put("nodeMs", visible).put("captureMs", elapsed - visible)
+            .put("storageMs", SystemClock.elapsedRealtime() - capturedAt));
         if (elapsed > 2000) throw new AssertionError("Visible reply too late: " + elapsed);
     }
 
