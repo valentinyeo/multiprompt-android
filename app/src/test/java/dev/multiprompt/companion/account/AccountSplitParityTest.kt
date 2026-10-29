@@ -13,7 +13,7 @@ import org.robolectric.annotation.Config
 import org.json.JSONObject
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [35])
+@Config(sdk = [35], application = android.app.Application::class)
 class AccountSplitParityTest {
     private val host = HostProfile("v", "Hetzner", "vps", username = "valentin", keySecretId = "key")
     private val mapping = mapOf(0 to host)
