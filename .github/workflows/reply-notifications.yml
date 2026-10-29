@@ -77,12 +77,12 @@ jobs:
           PY
       - uses: ./.github/actions/android-proof
         id: reply-content
-        continue-on-error: ${{ inputs.expect_command_notification == true }}
+        continue-on-error: ${{ github.event.inputs.expect_command_notification == 'true' }}
         with:
           stage: reply-content
           script: bash tools/reply-notifications/run.sh
       - name: Require the original command-notification failure
-        if: inputs.expect_command_notification == true
+        if: github.event.inputs.expect_command_notification == 'true'
         env:
           PROOF_OUTCOME: ${{ steps.reply-content.outcome }}
         run: |
