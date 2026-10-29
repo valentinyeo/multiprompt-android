@@ -4,14 +4,11 @@ import android.app.Instrumentation;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
-import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.util.Base64;
-import android.view.InputDevice;
-import android.view.MotionEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -104,7 +101,7 @@ public class RenameJourney extends Instrumentation {
             .put("port", 1).put("username", "valentin").put("keySecretId", "missing-fixture-key");
         save("hosts", "profiles_json", new JSONArray().put(host).toString());
         JSONObject tab = new JSONObject().put("kind", "tmux").put("name", "Original session").put("tmux_session", "work-main")
-            .put("tmux_host", 0).put("workspace", "Work").put("favorite", true);
+            .put("tmux_host", 0).put("workspace", "Work").put("favorite", false);
         JSONObject layout = new JSONObject().put("schema", 1).put("revision", 1)
             .put("workspaces", new JSONArray().put(new JSONObject().put("name", "Work")).put(new JSONObject().put("name", "Notes")))
             .put("tabs", new JSONArray().put(tab));
@@ -158,23 +155,11 @@ public class RenameJourney extends Instrumentation {
     }
 
     private void perform(AccessibilityNodeInfo node, int action) {
-        Rect bounds = new Rect();
-        node.getBoundsInScreen(bounds);
         while (node != null) {
             if (node.performAction(action)) return;
             node = node.getParent();
         }
-        require(!bounds.isEmpty(), "Visible action has empty bounds");
-        long down = SystemClock.uptimeMillis();
-        MotionEvent press = MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, bounds.exactCenterX(), bounds.exactCenterY(), 0);
-        press.setSource(InputDevice.SOURCE_TOUCHSCREEN);
-        require(getUiAutomation().injectInputEvent(press, true), "Visible press rejected");
-        press.recycle();
-        SystemClock.sleep(action == AccessibilityNodeInfo.ACTION_LONG_CLICK ? 750 : 50);
-        MotionEvent release = MotionEvent.obtain(down, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, bounds.exactCenterX(), bounds.exactCenterY(), 0);
-        release.setSource(InputDevice.SOURCE_TOUCHSCREEN);
-        require(getUiAutomation().injectInputEvent(release, true), "Visible release rejected");
-        release.recycle();
+        throw new AssertionError("Visible action unavailable");
     }
 
     private void action(String text, int action) { perform(waitNode(text), action); }
