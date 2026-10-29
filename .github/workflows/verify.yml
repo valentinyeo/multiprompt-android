@@ -253,6 +253,11 @@ jobs:
             adb install -r -g "$VERIFY_APK"
             if [ "${VERIFY_PACKAGE:-}" = dev.multiprompt.companion ] && [ "$VERIFY_FEATURE" != launcher-icon.md ]; then bash tools/release-choices/run.sh; else .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; fi
             if [ -n "$UPDATE_BASELINE_RUN" ]; then .claude/skills/verify-multiprompt-android/scripts/update-reaction-release.sh; fi
+      - name: Compare desktop and Android transcript posts
+        if: inputs.feature == 'chat-codex.md'
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/valentinyeo/multiprompt/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/chat_history_reader.py -o /tmp/desktop-codex-reader.py
+          sudo -u verifyssh python3 -B .claude/skills/verify-multiprompt-android/scripts/codex-parity.py /tmp/desktop-codex-reader.py app/src/main/assets/chat_history_reader.py | tee "$EVIDENCE/desktop-android-parity.txt"
       - name: Require the original native-skill failure
         if: inputs.expect_native_missing == true
         env:

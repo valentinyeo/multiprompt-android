@@ -39,6 +39,8 @@ if [[ "${VERIFY_FEATURE:-}" == chat-codex.md ]]; then
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/hax -u /home/verifyssh/codex-console.py /home/verifyssh/receipts.txt hax'
     sudo -u verifyssh tmux new-session -d -s codex-native -x 100 -y 32 '/home/verifyssh/codex -u /home/verifyssh/codex-console.py /home/verifyssh/codex-receipts.txt codex'
     sudo -u verifyssh tmux new-session -d -s claude-control -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/resync-console.py /home/verifyssh/claude-receipts.txt'
+    sudo -u verifyssh tmux set-window-option -t claude-control automatic-rename off
+    sudo -u verifyssh tmux rename-window -t claude-control claude-control
 elif [[ "${VERIFY_FEATURE:-}" == session-gestures.md ]]; then
     sudo install -m 755 tools/session-gestures/console.py /home/verifyssh/gesture-console.py
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
