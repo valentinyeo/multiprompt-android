@@ -2,6 +2,8 @@
 set -euo pipefail
 adb install -r -g "$EVIDENCE/app.apk"
 adb shell cmd uimode night yes
+adb shell svc power stayon true
+adb shell dumpsys package dev.multiprompt.companion > "$EVIDENCE/installed-package.txt"
 bash tools/release-choices/seed.sh
 adb push "$FIXTURE/user-key" /data/local/tmp/long-chat-key
 adb shell chmod 644 /data/local/tmp/long-chat-key
