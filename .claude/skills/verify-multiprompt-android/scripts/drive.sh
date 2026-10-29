@@ -845,12 +845,10 @@ exit "$code"
 DELAY
 sudo chmod 755 /home/verifyssh/send-delay.sh
 sudo sed -i 's|^|command="/home/verifyssh/send-delay.sh" |' /home/verifyssh/.ssh/authorized_keys
-adb shell atrace --async_start -b 16384 -a "$package" sched gfx view dalvik
 fill 'Message verify-session' VERIFY_SENT_528
 shot send-draft
 tap_desc 'Send prompt'
 shot eta-sending
-adb exec-out atrace --async_stop > "$EVIDENCE/send-atrace.txt"
 python3 "$scripts/no-chat-bar.py" "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-eta-sending.png" sending
 timeout 15s adb logcat -d -s SendTiming:I > "$EVIDENCE/send-timing.txt"
 python3 "$scripts/send-timing.py" "$EVIDENCE/current.xml" "$EVIDENCE/send-timing.txt" VERIFY_SENT_528

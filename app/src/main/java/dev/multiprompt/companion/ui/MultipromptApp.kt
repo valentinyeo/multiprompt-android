@@ -120,7 +120,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -2535,10 +2534,6 @@ internal fun ReaderScreen(
     val dictationSubmissionStarted = remember(connection) { AtomicBoolean(false) }
     var pendingPromptAction by remember(connection) { mutableStateOf<Long?>(null) }
     var sendMarkPending by remember(connection) { mutableStateOf(false) }
-    if (sendMarkPending) {
-        SendTiming.mark("composition_started")
-        SideEffect { SendTiming.mark("composition_applied") }
-    }
     var sentDraft by remember(connection) { mutableStateOf<SentDraft?>(null) }
     var menuExpanded by remember(connection) { mutableStateOf(false) }
     var menuPage by remember(connection) { mutableStateOf(ReaderMenuPage.MAIN) }
@@ -2725,13 +2720,9 @@ internal fun ReaderScreen(
                 imageAttachments = emptyList()
                 replyTo = null
                 sendMarkPending = true
-                SendTiming.mark("state_cleared")
                 onSessionInteraction()
-                SendTiming.mark("interaction_recorded")
                 onSessionInput()
-                SendTiming.mark("input_stamped")
                 pendingPromptAction = actionCount
-                SendTiming.mark("handler_finished")
             }
         }
     }
@@ -2960,7 +2951,6 @@ internal fun ReaderScreen(
             readerScope.launch { connection.exitHistory() }
         }
     }
-    if (sendMarkPending) SendTiming.mark("parent_composition_finished")
     val statusLabel = listOfNotNull(
         reader.eta?.let { "ETA ${it.label(etaNowMillis)}" },
         "waiting for input".takeIf { reader.waitingForInput },
@@ -3227,7 +3217,6 @@ internal fun ReaderScreen(
             )
         },
         bottomBar = {
-            if (sendMarkPending) SendTiming.mark("composer_composition_started")
             BottomFade(
                 Modifier.imePadding().padding(horizontal = ReaderScreenPadding, vertical = ReaderControlSpacing),
                 verticalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
@@ -3371,14 +3360,12 @@ internal fun ReaderScreen(
                                 }
                             }
                         }
-                        if (sendMarkPending) SendTiming.mark("field_composition_started")
                         OutlinedTextField(
                             value = promptField,
                             onValueChange = { promptField = it },
                             modifier = Modifier.weight(1f).heightIn(min = ReaderComposerHeight)
                                 .border(1.dp, MaterialTheme.colorScheme.outline, ReaderComposerShape).focusRequester(promptFocusRequester)
                                 .drawWithContent {
-                                    if (sendMarkPending) SendTiming.mark("draw_started")
                                     drawContent()
                                     if (sendMarkPending && prompt.isEmpty()) {
                                         SendTiming.mark("box_cleared_frame")
