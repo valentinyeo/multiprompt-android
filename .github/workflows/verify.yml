@@ -211,8 +211,8 @@ jobs:
       - name: Reject original Codex reader
         if: inputs.feature == 'chat-codex.md'
         run: |
-          git fetch origin 099a8e7
-          git show 099a8e7:app/src/main/assets/chat_history_reader.py > "$RUNNER_TEMP/original-reader.py"
+          git fetch origin 099a8e73b6857ff901d1166854dbbda0884122f1
+          git show 099a8e73b6857ff901d1166854dbbda0884122f1:app/src/main/assets/chat_history_reader.py > "$RUNNER_TEMP/original-reader.py"
           if CODEX_READER="$RUNNER_TEMP/original-reader.py" python3 -B tools/codex-sync.test.py > "$EVIDENCE/codex-original.txt" 2>&1; then
             cat "$EVIDENCE/codex-original.txt"
             exit 1
