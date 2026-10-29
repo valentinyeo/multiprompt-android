@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
@@ -57,8 +59,8 @@ class ReaderStyleTest {
         }
         val user = compose.onNodeWithText("User message").fetchSemanticsNode().boundsInRoot
         val agent = compose.onNodeWithText("Agent message").fetchSemanticsNode().boundsInRoot
-        assertEquals(16f, agent.left, 0.01f)
-        assertEquals(374f, user.right, 0.5f)
+        assertEquals(12f, agent.left, 0.01f)
+        assertEquals(378f, user.right, 0.5f)
         assertTrue(user.left > agent.left)
         listOf("User message", "Agent message").forEach { text ->
             val layouts = mutableListOf<TextLayoutResult>()
@@ -85,6 +87,25 @@ class ReaderStyleTest {
             assertEquals(height, layout.layoutInput.style.lineHeight.value)
             if (text == "Inline code") assertTrue(layout.layoutInput.text.spanStyles.any { it.item.fontFamily == FontFamily.SansSerif })
         }
+    }
+
+    @Test fun shortMarkdownRepliesShrinkInsideTheirBubbles() {
+        compose.setContent {
+            MultipromptTheme(readerStyle = true) {
+                Column {
+                    ChatBubble(false, false, contentModifier = Modifier.testTag("short-reply")) {
+                        MarkdownText("Ready", ReaderTextSize, ReaderForeground, ReaderChoiceBlue, imagePreviews = true)
+                    }
+                    ChatBubble(false, false, contentModifier = Modifier.testTag("long-reply")) {
+                        MarkdownText("A long reply with enough words to fill the available message width and wrap onto another line.", ReaderTextSize, ReaderForeground, ReaderChoiceBlue, imagePreviews = true)
+                    }
+                }
+            }
+        }
+        val short = compose.onNodeWithTag("short-reply").fetchSemanticsNode().boundsInRoot
+        val long = compose.onNodeWithTag("long-reply").fetchSemanticsNode().boundsInRoot
+        assertTrue("Short replies shrink around their text", short.width < long.width / 2)
+        assertEquals(short.left, long.left, 0.01f)
     }
 
     @Test fun numberedListsKeepTheirOriginalMarkersWithoutAnswerBadges() {
