@@ -66,12 +66,12 @@ public class Seed extends Instrumentation {
             context.getSharedPreferences("hosts", Context.MODE_PRIVATE).edit()
                 .putString("profiles_json", new org.json.JSONArray().put(host).toString()).commit();
             JSONObject tab = new JSONObject().put("kind", "tmux").put("name", "Checkout")
-                .put("tmux_session", "verify-session").put("tmux_host", 0).put("workspace", "Other").put("favorite", true);
+                .put("tmux_session", "verify-session").put("tmux_host", 1).put("workspace", "Other").put("favorite", true);
             JSONObject layout = new JSONObject().put("schema", 1).put("revision", 0)
                 .put("workspaces", new org.json.JSONArray().put(new JSONObject().put("name", "Other")))
                 .put("tabs", new org.json.JSONArray().put(tab));
             context.getSharedPreferences("account_layout", Context.MODE_PRIVATE).edit()
-                .putString("host::0", "notification-fixture")
+                .putString("host::1", "notification-fixture")
                 .putString("layout::isolated-release-fixture", new JSONObject().put("base", layout).put("edited", layout).toString()).commit();
             context.getSharedPreferences("updates", Context.MODE_PRIVATE).edit()
                 .putLong("last_check_ms", System.currentTimeMillis()).commit();

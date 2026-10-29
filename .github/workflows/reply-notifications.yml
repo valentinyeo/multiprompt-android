@@ -54,6 +54,8 @@ jobs:
           sudo install -m 755 tools/reply-notifications/console.py /home/verifyssh/notification-console.py
           sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
           sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/notification-console.py'
+          sudo -u verifyssh tmux set-window-option -t verify-session automatic-rename off
+          sudo -u verifyssh tmux rename-window -t verify-session Checkout
           python3 - <<'PY'
           import json, os
           from pathlib import Path
