@@ -106,9 +106,15 @@ class SessionReaderConnection(
             }
     }
 
-    suspend fun resyncChat() {
+    suspend fun resyncChat(): Boolean {
         _state.update { it.copy(sentPrompts = emptyList(), sentRecord = it.sentRecord.filter { record -> record.messageId.isNotEmpty() }) }
-        historyConnection?.resync()?.await()
+        val connection = historyConnection ?: return false
+        connection.resync().await()
+        val history = connection.state.value.history
+        return history.held.isEmpty() && _state.value.sentRecord.all { record ->
+            (history.deliveries[record.messageId] ?: record.delivery) in
+                setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
+        }
     }
 
     fun start() {

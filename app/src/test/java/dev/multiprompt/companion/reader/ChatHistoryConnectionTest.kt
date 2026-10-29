@@ -67,7 +67,7 @@ class ChatHistoryConnectionTest {
             val before = ChatHistory().displayMessages("", AgentKind.CLAUDE, reader.state.value.sentRecord, now)
             assertEquals(listOf(text), before.map { it.text })
             assertTrue(before.single().pending)
-            reader.resyncChat()
+            assertFalse(reader.resyncChat())
             assertTrue(reader.state.value.sentRecord.isEmpty())
             assertTrue(reader.state.value.sentPrompts.isEmpty())
             assertTrue(ChatHistory().displayMessages("", AgentKind.CLAUDE, reader.state.value.sentRecord, now).isEmpty())

@@ -644,6 +644,7 @@ if [[ "$feature" == chat-codex.md ]]; then
     fill 'Message claude-control' CLAUDE_CONTROL
     tap_desc 'Send prompt'
     wait_for_text 'CODEX_REPLY_claude_CLAUDE_CONTROL'
+    wait_for_absence Queued
     tap_desc 'Session actions'
     wait_for_text 'Resync chat'
     tap_text 'Resync chat'
