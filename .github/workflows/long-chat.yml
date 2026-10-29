@@ -1,0 +1,78 @@
+name: Released Android long chat
+
+on:
+  workflow_dispatch:
+    inputs:
+      negative_control:
+        description: Remove the transcript and require visible-message failure
+        type: boolean
+        default: false
+      smoke_only:
+        description: Verify the newest released APK after the full soak
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  long-chat:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      EVIDENCE: ${{ github.workspace }}/verification-evidence
+      VERIFY_FEATURE: long-chat.md
+      VERIFY_PACKAGE: dev.multiprompt.companion
+      NEGATIVE_CONTROL: ${{ inputs.negative_control }}
+      SMOKE_ONLY: ${{ inputs.smoke_only }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Test fixture and proof oracle
+        run: python3 -B tools/long-chat/check.test.py
+      - name: Prepare published APK and same-signer observer
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          mkdir -p "$EVIDENCE"
+          echo "FIXTURE=$RUNNER_TEMP/long-chat-ssh" >> "$GITHUB_ENV"
+          sdkmanager --install 'build-tools;35.0.0' 'platforms;android-35'
+          export EXPECTED_COMMIT="$(curl -fsSL https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion-update.json | jq -er .commit)"
+          bash tools/release-choices/prepare.sh
+          printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/harness-sha.txt"
+          git diff --exit-code "$EXPECTED_COMMIT" HEAD -- app/src/main app/build.gradle.kts
+      - name: Start isolated SSH and long transcript
+        run: |
+          bash .claude/skills/verify-multiprompt-android/scripts/fixture.sh
+          sudo install -m 755 tools/long-chat/fixture.py /home/verifyssh/long-chat-fixture.py
+          sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
+          sudo -u verifyssh tmux new-session -d -s cl-long-chat -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/long-chat-fixture.py /home/verifyssh/long-chat-source.json'
+          timeout 30s bash -c 'until sudo test -s /home/verifyssh/long-chat-source.json; do sleep 0.1; done'
+          sudo cat /home/verifyssh/long-chat-source.json > "$EVIDENCE/source.json"
+          if [[ "$NEGATIVE_CONTROL" == true ]]; then
+            sudo rm "$(jq -er .path "$EVIDENCE/source.json")"
+          fi
+      - uses: ./.github/actions/android-proof
+        with:
+          stage: long-chat
+          target: google_apis
+          script: bash tools/long-chat/run.sh
+      - name: Retain logs and remove ephemeral keys
+        if: always()
+        run: bash .claude/skills/verify-multiprompt-android/scripts/cleanup.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: long-chat-${{ github.run_id }}
+          path: verification-evidence/
+          retention-days: 7
+          if-no-files-found: error

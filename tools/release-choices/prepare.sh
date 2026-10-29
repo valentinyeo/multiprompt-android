@@ -41,8 +41,9 @@ cat > "$work/AndroidManifest.xml" <<'XML'
 </manifest>
 XML
 observer=()
-if [[ "${VERIFY_FEATURE:-}" == chat-working.md ]]; then
+if [[ "${VERIFY_FEATURE:-}" == chat-working.md || "${VERIFY_FEATURE:-}" == long-chat.md ]]; then
     observer=(tools/working-dots/Observe.java)
+    if [[ "$VERIFY_FEATURE" == long-chat.md ]]; then observer=(tools/long-chat/Observe.java); fi
     sed -i 's|</manifest>|<instrumentation android:name="dev.multiprompt.verification.Observe" android:targetPackage="dev.multiprompt.companion" /></manifest>|' "$work/AndroidManifest.xml"
 fi
 javac -source 8 -target 8 -cp "$ANDROID_HOME/platforms/android-35/android.jar" -d "$work/classes" tools/release-choices/Seed.java "${observer[@]}"
