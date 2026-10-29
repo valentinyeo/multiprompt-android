@@ -1,0 +1,19 @@
+name: Multiprompt parity
+on:
+  push:
+    branches: [main, 'ceo/IGSH-1222']
+  pull_request:
+    paths:
+      - 'tools/parity/**'
+      - 'docs/multiprompt-features.md'
+      - '.github/workflows/multiprompt-parity.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prove counterparts, retries, and inventory
+        run: python3 tools/parity/multiprompt-parity.test.py
