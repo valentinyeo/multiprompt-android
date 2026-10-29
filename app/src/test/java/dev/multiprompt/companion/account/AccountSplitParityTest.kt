@@ -19,7 +19,7 @@ class AccountSplitParityTest {
     @Test fun everyMappedAccountTabIsListedEvenWithoutALiveSession() {
         val listed = AccountHostMap.withAccountSessions(listOf(live), layout, mapping)
         assertEquals(listOf("live-one", "gone-one"), listed.map { it.name })
-        assertEquals(live, listed.first())
+        assertEquals(live.copy(workspaceName = "Work"), listed.first())
         assertEquals("Gone one", listed.last().accountName)
     }
 
