@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 bash tools/release-choices/seed.sh
-if [[ "${VERIFY_FEATURE:-chat-choices.md}" == chat-queued.md ]]; then
+if [[ "${VERIFY_FEATURE:-chat-choices.md}" == chat-queued.md || "${VERIFY_FEATURE:-}" == session-gestures.md ]]; then
     trap 'kill "$(cat "$FIXTURE/offline-proxy.pid")"' EXIT
     .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"
     exit 0
@@ -13,9 +13,6 @@ finish() {
     adb shell kill -2 "$(adb shell cat /sdcard/choices-recording.pid | tr -d '\r')"
     wait "$recording"
     adb pull /sdcard/release-choices.mp4 "$EVIDENCE/release-choices.mp4"
-    if [[ "${VERIFY_FEATURE:-}" == session-gestures.md ]]; then
-        cp "$EVIDENCE/release-choices.mp4" "$EVIDENCE/session-gestures.mp4"
-    fi
     kill "$(cat "$FIXTURE/offline-proxy.pid")"
     exit "$code"
 }

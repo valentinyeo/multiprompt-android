@@ -1,3 +1,4 @@
+import atexit
 import json
 import os
 from pathlib import Path
@@ -56,6 +57,20 @@ def screenshot(name):
     return Image.open(path).convert('RGB')
 
 
+recording = subprocess.Popen(['adb', 'shell', 'echo $$ > /sdcard/gesture-record.pid; exec screenrecord --time-limit 180 /sdcard/session-gestures.mp4'])
+
+
+def stop_recording():
+    try:
+        pid = adb('shell', 'cat', '/sdcard/gesture-record.pid').decode().strip()
+        adb('shell', 'kill', '-INT', pid)
+        recording.wait(timeout=15)
+        adb('pull', '/sdcard/session-gestures.mp4', str(out / 'session-gestures.mp4'))
+    except (subprocess.SubprocessError, OSError):
+        recording.terminate()
+
+
+atexit.register(stop_recording)
 root = dump()
 code = find(root, text='CODE_START')
 initial = screenshot('gestures-before')
