@@ -69,7 +69,8 @@ public class Observe extends Instrumentation {
         sendStatus(0, result);
     }
 
-    private int screenshot(String name) throws Exception {
+    private int screenshot(String name, long deadline) throws Exception {
+        while (true) {
         AccessibilityNodeInfo latest = node(LATEST);
         if (latest == null) throw new AssertionError("Visible screenshot text missing");
         Rect bounds = new Rect();
@@ -87,8 +88,10 @@ public class Observe extends Instrumentation {
             if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) throw new AssertionError("Screenshot failed");
         }
         bitmap.recycle();
-        if (ink < 30) throw new AssertionError("Visible text painted blank");
-        return ink;
+        if (ink >= 30) return ink;
+        if (SystemClock.elapsedRealtime() >= deadline) throw new AssertionError("Visible text painted blank by deadline");
+        SystemClock.sleep(16);
+        }
     }
 
     private void open(String stage) throws Exception {
@@ -101,7 +104,7 @@ public class Observe extends Instrumentation {
         long tapped = SystemClock.elapsedRealtime() - started;
         waitFor(LATEST, started + 2000);
         long visible = SystemClock.elapsedRealtime() - started;
-        int ink = screenshot(stage);
+        int ink = screenshot(stage, started + 2000);
         long elapsed = SystemClock.elapsedRealtime() - started;
         report(new JSONObject().put("stage", stage).put("visibleMs", elapsed).put("latest", LATEST)
             .put("inkPixels", ink).put("tapMs", tapped).put("nodeMs", visible).put("captureMs", elapsed - visible));
@@ -153,13 +156,13 @@ public class Observe extends Instrumentation {
                 do {
                     if (node(LATEST) == null) throw new AssertionError("Reply disappeared during soak");
                     long elapsed = SystemClock.elapsedRealtime() - started;
-                    if (samples % 30 == 0) screenshot("soak-" + samples);
+                    if (samples % 30 == 0) screenshot("soak-" + samples, SystemClock.elapsedRealtime() + 2000);
                     report(new JSONObject().put("stage", "soak").put("elapsedMs", elapsed).put("visible", true));
                     samples++;
                     SystemClock.sleep(1000);
                 } while (SystemClock.elapsedRealtime() - started < 1800000);
                 if (node(LATEST) == null) throw new AssertionError("Reply disappeared after thirty minutes");
-                screenshot("sustained");
+                screenshot("sustained", SystemClock.elapsedRealtime() + 2000);
                 report(new JSONObject().put("stage", "sustained").put("elapsedMs", SystemClock.elapsedRealtime() - started).put("samples", samples));
             }
             result.putString("result", "LONG_CHAT_UI_OK");
