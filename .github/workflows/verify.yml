@@ -198,6 +198,11 @@ jobs:
       - name: Build routing instrumentation
         if: inputs.feature == 'session-routing.md'
         run: gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g assembleDebugAndroidTest
+      - name: Prepare shell and chat recording
+        if: env.VERIFY_FEATURE == 'chat-queued.md'
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg
+          ffmpeg -version
       - name: Start ephemeral public-key-only SSH and tmux
         run: .claude/skills/verify-multiprompt-android/scripts/fixture.sh
       - name: Install, doctor and drive the real app

@@ -20,7 +20,7 @@ font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf',
 def record_shell():
     for frame in range(125):
         began = time.monotonic()
-        text = subprocess.check_output(['sudo', '-u', 'verifyssh', 'tmux', 'capture-pane', '-p', '-t', '=verify-session'], text=True)
+        text = subprocess.check_output(['sudo', '-u', 'verifyssh', 'tmux', 'capture-pane', '-p', '-t', '=verify-session:'], text=True)
         image = Image.new('RGB', (720, 1280), '#111111')
         ImageDraw.Draw(image).text((12, 20), 'Same live session: shell\n' + text, font=font, fill='white')
         image.save(frames / f'{frame:03d}.png')
