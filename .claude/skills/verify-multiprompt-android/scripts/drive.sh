@@ -849,6 +849,7 @@ fill 'Message verify-session' VERIFY_SENT_528
 shot send-draft
 tap_desc 'Send prompt'
 shot eta-sending
+adb exec-out run-as "$package" cat cache/send.trace > "$EVIDENCE/send.trace"
 python3 "$scripts/no-chat-bar.py" "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-eta-sending.png" sending
 timeout 15s adb logcat -d -s SendTiming:I > "$EVIDENCE/send-timing.txt"
 python3 "$scripts/send-timing.py" "$EVIDENCE/current.xml" "$EVIDENCE/send-timing.txt" VERIFY_SENT_528
