@@ -8,8 +8,19 @@ $env:RENAME_LAYOUT = $Layout
 $serverPath = "$desktop/service/journey/server.mjs"
 $server = Get-Content $serverPath -Raw
 $server = [regex]::Replace($server, '(?s)const layout = \{.*?\n\};', "const layout = JSON.parse(readFileSync(process.env.RENAME_LAYOUT, 'utf8'));")
+$revision = '.bind(account, 1, JSON.stringify(layout))'
+if (!$server.Contains($revision)) { throw 'Account fixture revision seed changed' }
+$server = $server.Replace($revision, '.bind(account, layout.revision, JSON.stringify(layout))')
 Set-Content $serverPath $server
 $driver = Get-Content "$desktop/tools/account-journey/drive.ps1" -Raw
+$probe = @'
+    $results.service_probe = 'device_required over https with the real hostname'
+    $shared = Invoke-RestMethod "https://$hostName/v1/layout" -Headers @{ Authorization = "Bearer $($secrets.admin_key)"; 'X-Layout-Features' = 'favorite,muted,used,visits,input,settings,hosts,host_removal' }
+    if ($shared.revision -ne $shared.layout.revision) { throw 'Shared fixture revision does not match its layout' }
+    if (@($shared.layout.tabs | Where-Object { $_.tmux_session -eq 'work-main' -and $_.name -ceq 'Renamed session' }).Count -ne 1) { throw 'Shared service lost the Android name' }
+    $shared | ConvertTo-Json -Depth 16 | Set-Content "$Output/shared-layout.json"
+'@
+$driver = $driver.Replace("    `$results.service_probe = 'device_required over https with the real hostname'", $probe)
 $proof = @'
     [void](Wait-For 'saved desktop session name' {
         if (!(Test-Path "$settings/session.json")) { return $false }
