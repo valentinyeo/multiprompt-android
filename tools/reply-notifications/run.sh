@@ -2,7 +2,8 @@
 set -euo pipefail
 [[ "${GITHUB_ACTIONS:-}" == true ]]
 [[ "$(adb get-serialno)" == emulator-* ]]
-python3 -m http.server 8788 > "$FIXTURE/offline-proxy.log" 2>&1 &
+mkdir -p "$FIXTURE/offline-empty"
+python3 -m http.server 8788 --directory "$FIXTURE/offline-empty" > "$FIXTURE/offline-proxy.log" 2>&1 &
 proxy=$!
 trap 'kill "$proxy"' EXIT
 adb shell settings put global http_proxy 10.0.2.2:8788
