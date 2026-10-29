@@ -90,7 +90,7 @@ class RobotFacesTest {
         compose.runOnIdle { assertEquals(sessions[2], opened) }
         compose.activityRule.scenario.onActivity { activity ->
             activity.setContent {
-                MultipromptTheme(sunlight = false, material3 = false) {
+                MultipromptTheme(sunlight = false, material3 = false, readerStyle = true) {
                     Surface {
                         ReaderTopBar(sessions[2], null, onModelCommand = {}, onOpenTerminal = {},
                             onReleaseNotes = {}, onMenuClick = {}, menuContent = {})

@@ -24,9 +24,11 @@ import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
 import org.robolectric.ParameterizedRobolectricTestRunner.Parameters
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w411dp-h891dp-mdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class Material3LookTest(private val screen: M3Screen, private val sunlight: Boolean) {
     @get:Rule
     val compose = createComposeRule()
