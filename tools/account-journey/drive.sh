@@ -135,6 +135,46 @@ wait_text work-main 60 hasi
 wait_text runner-3 30 hasi
 shot android-before
 
+if [ "${RENAME_ONLY:-false}" = true ]; then
+    adb shell 'screenrecord /sdcard/rename-live.mp4 & echo $! > /sdcard/rename-live.pid; wait' > "$work/record.log" 2>&1 &
+    record_pid=$!
+    dump_ui
+    read -r x y <<< "$(python3 "$here/ui.py" "$EVIDENCE/current.xml" tap work-main)"
+    adb shell input swipe "$x" "$y" "$x" "$y" 1000
+    wait_text Rename
+    tap_text Rename
+    wait_text 'Rename session'
+    tap_text Name
+    adb shell input keycombination 113 29
+    adb shell input text Renamed%ssession
+    tap_text Rename
+    wait_text 'Renamed session'
+    shot rename-inbox
+    layout "$admin" list | tee "$EVIDENCE/rename-desktop-feed.txt"
+    node --input-type=module - "$admin" "$EVIDENCE/rename-layout.json" <<'JS'
+import { writeFileSync } from 'node:fs';
+const response = await fetch('http://127.0.0.1:8787/v1/layout', { headers: { Authorization: `Bearer ${process.argv[2]}`, 'X-Layout-Features': 'favorite,muted,used,visits,input,settings,hosts,host_removal' } });
+if (response.status !== 200) throw new Error(`account feed ${response.status}`);
+const { layout } = await response.json();
+if (layout.tabs.find(tab => tab.tmux_session === 'work-main')?.name !== 'Renamed session') throw new Error('Rename did not reach the shared account service');
+writeFileSync(process.argv[3], JSON.stringify(layout));
+JS
+    tap_text 'Renamed session'
+    wait_text 'Renamed session'
+    shot rename-reader
+    adb shell input keyevent 4
+    adb shell am force-stop "$package"
+    adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
+    wait_text Work 60 selected
+    wait_text 'Renamed session'
+    shot rename-reopened
+    adb shell 'kill -2 "$(cat /sdcard/rename-live.pid)"'
+    wait "$record_pid" || true
+    adb pull /sdcard/rename-live.mp4 "$EVIDENCE/rename-live.mp4"
+    printf 'SHARED_RENAME_JOURNEY_OK\n' | tee "$EVIDENCE/rename-result.txt"
+    exit 0
+fi
+
 layout "$admin" list | tee "$EVIDENCE/cli-list.txt"
 start=$(now)
 layout "$admin" move --to Runners --create --match 'runner-*' | tee "$EVIDENCE/cli-move.txt"

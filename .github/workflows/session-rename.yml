@@ -1,0 +1,100 @@
+name: Released session rename proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      android_run:
+        description: Optional earlier shared rename journey for desktop-only branch proof
+        type: string
+        required: false
+      expect_stale:
+        description: Require the original released inbox to retain its stale name
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  released-rename:
+    if: inputs.android_run == ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      EVIDENCE: ${{ github.workspace }}/rename-evidence
+      EXPECT_STALE: ${{ inputs.expect_stale }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - uses: ./.github/actions/android-proof
+        with:
+          stage: rename
+          script: tools/session-rename/released.sh
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: released-rename
+          path: rename-evidence/
+          if-no-files-found: error
+          retention-days: 7
+
+  desktop-rename:
+    needs: released-rename
+    if: always() && inputs.expect_stale != true && (needs.released-rename.result == 'success' || inputs.android_run != '')
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: valentinyeo/multiprompt
+          ref: master
+          path: multiprompt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Restore Android rename evidence
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANDROID_RUN: ${{ inputs.android_run }}
+        run: |
+          $run = $env:ANDROID_RUN
+          $artifact = 'account-journey-android'
+          if (!$run) { $run = $env:GITHUB_RUN_ID; $artifact = 'released-rename' }
+          if ($run -notmatch '^[0-9]+$') { throw 'Invalid Android proof run' }
+          gh run download $run --repo $env:GITHUB_REPOSITORY --name $artifact --dir android-rename
+          if ($LASTEXITCODE -ne 0) { throw 'Android proof download failed' }
+      - name: Build the real desktop account service
+        working-directory: multiprompt/service
+        shell: pwsh
+        run: |
+          npm ci --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'Service dependencies failed' }
+          npx wrangler deploy --dry-run --outdir .build
+          if ($LASTEXITCODE -ne 0) { throw 'Service build failed' }
+      - name: Capture the Android name in released desktop
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./tools/session-rename/desktop.ps1 -Layout ./android-rename/rename-layout.json -Output ./desktop-rename-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-rename
+          path: desktop-rename-evidence/
+          if-no-files-found: error
+          retention-days: 7
