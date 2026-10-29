@@ -13,6 +13,10 @@ on:
       - '.github/actions/android-proof/**'
   workflow_dispatch:
     inputs:
+      released_terminal:
+        description: Verify 500-line shell scrolling on the published signed APK
+        type: boolean
+        default: false
       release_icon:
         description: Verify the approved launcher icon on the published signed APK
         type: boolean
@@ -51,6 +55,10 @@ on:
           - session-routing.md
           - terminal.md
           - launcher-icon.md
+      expect_shell_missing:
+        description: Require the original app to reject upward shell scrolling
+        type: boolean
+        default: false
       expect_native_missing:
         description: Require the original app to reject the native slash journey
         required: false
@@ -71,12 +79,12 @@ permissions:
 
 jobs:
   verify:
-    name: ${{ inputs.expect_native_missing && 'original native-skill control' || 'verify' }}
+    name: ${{ inputs.expect_shell_missing && 'original shell control' || inputs.expect_native_missing && 'original native-skill control' || 'verify' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     env:
       EVIDENCE: ${{ github.workspace }}/verification-evidence
-      VERIFY_FEATURE: ${{ inputs.feature || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1069' && 'chat-choices.md') || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1012' && 'chat-reactions.md') || 'native-skills.md' }}
+      VERIFY_FEATURE: ${{ inputs.feature || ((github.head_ref == 'ceo/IGSH-1076' || startsWith(github.ref, 'refs/heads/ceo/IGSH-1076')) && 'terminal.md') || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1069' && 'chat-choices.md') || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1012' && 'chat-reactions.md') || 'native-skills.md' }}
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
       UPDATE_BASELINE_RUN: ${{ inputs.update_baseline_run }}
       APP_REF: ${{ inputs.app_ref }}
@@ -114,9 +122,9 @@ jobs:
         with:
           packages: platform-tools
       - uses: actions/checkout@v4
-        if: inputs.app_ref != ''
+        if: env.APP_REF != ''
         with:
-          ref: ${{ inputs.app_ref }}
+          ref: ${{ env.APP_REF }}
           path: app-source
       - name: Capture signed update baseline
         if: env.VERIFY_FEATURE == 'chat-reactions.md' && inputs.update_baseline_run == ''
@@ -139,7 +147,7 @@ jobs:
           python3 -m pip install Pillow
           python3 .claude/skills/verify-multiprompt-android/scripts/reactions.test.py
       - name: Prepare signed choices APK and same-signer fixture instrumentation
-        if: inputs.release_choices == true || inputs.released_reactions == true
+        if: inputs.release_choices == true || inputs.released_reactions == true || inputs.released_terminal == true
         env:
           CANDIDATE: ${{ inputs.candidate }}
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
@@ -148,7 +156,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          [[ "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md ]]
+          [[ "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md || "$VERIFY_FEATURE" = terminal.md ]]
           sdkmanager --install 'build-tools;35.0.0' 'platforms;android-35'
           bash tools/release-choices/prepare.sh
           echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
@@ -167,7 +175,7 @@ jobs:
           echo "VERIFY_PACKAGE=dev.multiprompt.companion" >> "$GITHUB_ENV"
           echo "EXPECTED_VERSION=$(jq -er '.versionName' "$EVIDENCE/manifest.json")" >> "$GITHUB_ENV"
       - name: Build debug APK
-        if: inputs.release_choices != true && inputs.release_icon != true && inputs.released_reactions != true
+        if: inputs.release_choices != true && inputs.release_icon != true && inputs.released_reactions != true && inputs.released_terminal != true
         run: |
           mkdir -p "$EVIDENCE"
           python3 .claude/skills/verify-multiprompt-android/scripts/launcher-icon.test.py
@@ -175,7 +183,7 @@ jobs:
           app_source="$GITHUB_WORKSPACE"
           if [ -d "$GITHUB_WORKSPACE/app-source" ]; then app_source="$GITHUB_WORKSPACE/app-source"; fi
           git -C "$app_source" rev-parse HEAD > "$EVIDENCE/app-source-sha.txt"
-          gradle -p "$app_source" --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="0.1.2-verify.$GITHUB_RUN_NUMBER" assembleDebug 2>&1 | tee "$EVIDENCE/build.txt"
+          gradle -p "$app_source" --refresh-dependencies --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="0.1.2-verify.$GITHUB_RUN_NUMBER" assembleDebug 2>&1 | tee "$EVIDENCE/build.txt"
           echo "VERIFY_APK=$app_source/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
           sha256sum "$app_source/app/build/outputs/apk/debug/app-debug.apk" > "$EVIDENCE/app-apk-sha256.txt"
       - name: Build routing instrumentation
@@ -185,7 +193,7 @@ jobs:
         run: .claude/skills/verify-multiprompt-android/scripts/fixture.sh
       - name: Install, doctor and drive the real app
         id: native-ui
-        continue-on-error: ${{ inputs.expect_native_missing == true }}
+        continue-on-error: ${{ inputs.expect_native_missing == true || inputs.expect_shell_missing == true }}
         uses: ./.github/actions/android-proof
         with:
           stage: stage-1
@@ -205,6 +213,19 @@ jobs:
           test "$EMULATOR_OUTCOME" = failure
           grep -F 'NATIVE_SLASH_PICKER_MISSING' "$EVIDENCE/driver-transcript.txt"
           printf '%s\n' '{"status":"expected-red","error":"NATIVE_SLASH_PICKER_MISSING"}' > "$EVIDENCE/native-baseline-result.json"
+      - name: Require the original shell swipe failure
+        if: always() && inputs.expect_shell_missing == true
+        env:
+          EMULATOR_OUTCOME: ${{ steps.native-ui.outcome }}
+        run: |
+          test "$VERIFY_FEATURE" = terminal.md
+          test "$APP_REF" = 7f640c6336ebdc63b37373f141c656bc9dbcb0d5
+          test "$(cat "$EVIDENCE/app-source-sha.txt")" = "$APP_REF"
+          test "$EMULATOR_OUTCOME" = failure
+          grep -Fx SHELL_HISTORY_0001 "$EVIDENCE/shell-history-before.txt"
+          grep -Fx SHELL_HISTORY_0500 "$EVIDENCE/shell-history-before.txt"
+          grep -F 'Timed out waiting for SHELL_HISTORY_' "$EVIDENCE/driver-transcript.txt"
+          printf 'ORIGINAL_SHELL_SWIPE_REJECTED\n' > "$EVIDENCE/shell-baseline-result.txt"
       - name: Retain emulator exit and host memory evidence
         if: always()
         run: |
