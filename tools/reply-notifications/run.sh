@@ -8,12 +8,10 @@ trap 'kill "$proxy"' EXIT
 adb shell settings put global http_proxy 10.0.2.2:8788
 adb install -r "$EVIDENCE/app.apk"
 adb install -r "$RUNNER_TEMP/release-choices/seed.apk"
-config=/sdcard/Android/data/dev.multiprompt.companion/files/notification-fixture.json
-adb shell mkdir -p "${config%/*}"
-adb push "$FIXTURE/config.json" "$config"
+config=$(base64 -w0 "$FIXTURE/config.json")
 adb shell am instrument -w -e config "$config" dev.multiprompt.verification/dev.multiprompt.verification.Seed | tee "$EVIDENCE/seed-result.txt"
+unset config
 grep -F ISOLATED_RELEASE_SESSION_SEEDED "$EVIDENCE/seed-result.txt"
-adb shell rm "$config"
 adb shell pm grant dev.multiprompt.companion android.permission.POST_NOTIFICATIONS
 adb shell am start -n dev.multiprompt.companion/dev.multiprompt.companion.MainActivity
 sleep 25

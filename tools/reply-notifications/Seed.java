@@ -50,8 +50,7 @@ public class Seed extends Instrumentation {
                 .putString("account_device_v1", Base64.encodeToString(packed, Base64.NO_WRAP)).commit()) {
                 throw new IllegalStateException("Fixture session was not persisted");
             }
-            JSONObject fixture = new JSONObject(new String(java.nio.file.Files.readAllBytes(
-                new java.io.File(arguments.getString("config")).toPath()), "UTF-8"));
+            JSONObject fixture = new JSONObject(new String(Base64.decode(arguments.getString("config"), Base64.DEFAULT), "UTF-8"));
             cipher.init(Cipher.ENCRYPT_MODE, key);
             ciphertext = cipher.doFinal(fixture.getString("privateKey").getBytes("UTF-8"));
             packed = new byte[cipher.getIV().length + ciphertext.length];
