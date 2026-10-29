@@ -104,6 +104,7 @@ public class Observe extends Instrumentation {
         long tapped = SystemClock.elapsedRealtime() - started;
         waitFor(LATEST, started + 2000);
         long visible = SystemClock.elapsedRealtime() - started;
+        getUiAutomation().waitForIdle(50, Math.max(1, started + 2000 - SystemClock.elapsedRealtime()));
         int ink = screenshot(stage, started + 2000);
         long elapsed = SystemClock.elapsedRealtime() - started;
         report(new JSONObject().put("stage", stage).put("visibleMs", elapsed).put("latest", LATEST)

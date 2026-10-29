@@ -9,9 +9,17 @@ root = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('fixture', Path(__file__).with_name('fixture.py'))
 fixture = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fixture)
+check_spec = importlib.util.spec_from_file_location('frame_check', Path(__file__).with_name('check.py'))
+frame_check = importlib.util.module_from_spec(check_spec)
+check_spec.loader.exec_module(frame_check)
 
 
 class LongChatTest(unittest.TestCase):
+    def test_rejects_the_actual_stale_switch_frame(self):
+        path = Path(__file__).with_name('fixtures') / 'stale-switch.png'
+        with self.assertRaisesRegex(AssertionError, 'does not show the latest reply'):
+            frame_check.verify_frame(path)
+
     def test_fixture_visible_name_cannot_drift_from_session_identity(self):
         workflow = Path(os.environ.get('LONG_CHAT_WORKFLOW', root / '.github/workflows/long-chat.yml')).read_text()
         self.assertIn('tmux set-window-option -t cl-long-chat automatic-rename off', workflow)

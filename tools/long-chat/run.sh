@@ -17,7 +17,7 @@ finish() {
         wait "$record_shell" || true
     fi
     adb pull /sdcard/long-chat.mp4 "$EVIDENCE/long-chat.mp4" || true
-    adb pull /sdcard/Android/data/dev.multiprompt.companion/files/long-chat "$EVIDENCE/screens" || true
+    if [ ! -d "$EVIDENCE/screens" ]; then adb pull /sdcard/Android/data/dev.multiprompt.companion/files/long-chat "$EVIDENCE/screens" || true; fi
     adb logcat -d > "$EVIDENCE/logcat.txt" || true
     adb shell rm -f /data/local/tmp/long-chat-key
     kill "$(cat "$FIXTURE/offline-proxy.pid")"
@@ -43,4 +43,8 @@ adb shell am force-stop dev.multiprompt.companion
 adb shell am instrument -w -e phase reopen \
     dev.multiprompt.verification/dev.multiprompt.verification.Observe | tee "$EVIDENCE/reopen.txt"
 grep -F LONG_CHAT_UI_OK "$EVIDENCE/reopen.txt"
+adb pull /sdcard/Android/data/dev.multiprompt.companion/files/long-chat "$EVIDENCE/screens"
+args=()
+if [[ "${SMOKE_ONLY:-false}" == true ]]; then args=(--smoke); fi
+python3 tools/long-chat/check.py "$EVIDENCE" "${args[@]}"
 echo LONG_CHAT_RELEASE_PROVEN

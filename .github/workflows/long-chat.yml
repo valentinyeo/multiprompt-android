@@ -40,6 +40,8 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
+      - name: Install independent captured-text reader
+        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
       - name: Reject the recorded fixture-name failure
         run: |
           git fetch --no-tags origin 0e7e690087e33cf3bc1f6aa051acc3701379ea0a
