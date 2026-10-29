@@ -1,24 +1,32 @@
 name: Chat bubble width proof
 
 on:
-  pull_request:
-    paths:
-      - 'app/**'
-      - 'tools/bubble-width-proof.sh'
-      - '.github/workflows/bubble-width.yml'
+  push:
+    branches: [ceo/IGSH-1051]
   workflow_dispatch:
+    inputs:
+      released:
+        description: Verify the published signed APK
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
-concurrency:
-  group: bubble-width-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  emulator:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+  width:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        phase: ${{ fromJSON(inputs.released && '["released"]' || '["before", "after"]') }}
+    env:
+      EVIDENCE: ${{ github.workspace }}/verification-evidence
+      VERIFY_FEATURE: bubble-width.md
+      VERIFY_PACKAGE: dev.multiprompt.companion
+      CANDIDATE: ${{ matrix.phase == 'after' }}
+      WIDTH_PHASE: ${{ matrix.phase }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -28,28 +36,47 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.1'
-      - name: Build before starting emulator
-        run: bash tools/bubble-width-proof.sh build
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - uses: reactivecircus/android-emulator-runner@v2
+      - uses: android-actions/setup-android@v3
         with:
-          api-level: 35
-          emulator-build: 16428233
-          arch: x86_64
-          profile: pixel_2
-          ram-size: 2048M
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
-          disable-animations: true
-          script: bash tools/bubble-width-proof.sh test
+          packages: platform-tools
+      - name: Prepare signed APK and platform-only observer
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          python3 -m pip install Pillow
+          sdkmanager --install 'build-tools;35.0.0' 'platforms;android-35'
+          export EXPECTED_COMMIT="$(curl -fsSL https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion-update.json | jq -er .commit)"
+          bash tools/release-choices/prepare.sh
+          printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/harness-sha.txt"
+          if [[ "$WIDTH_PHASE" == released ]]; then
+            git fetch --no-tags origin "$EXPECTED_COMMIT"
+            git diff --exit-code "$EXPECTED_COMMIT" HEAD -- app/src/main app/build.gradle.kts gradle/libs.versions.toml
+          fi
+      - name: Start identical conversation fixture
+        run: |
+          echo "FIXTURE=$RUNNER_TEMP/width-ssh" >> "$GITHUB_ENV"
+          export FIXTURE="$RUNNER_TEMP/width-ssh"
+          bash .claude/skills/verify-multiprompt-android/scripts/fixture.sh
+          sudo install -m 755 tools/bubble-width/fixture.py /home/verifyssh/width-fixture.py
+          sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
+          sudo -u verifyssh tmux new-session -d -s cl-width-proof -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/width-fixture.py /home/verifyssh/width-source.json'
+          sudo -u verifyssh tmux set-window-option -t cl-width-proof automatic-rename off
+          sudo -u verifyssh tmux rename-window -t cl-width-proof cl-width-proof
+      - uses: ./.github/actions/android-proof
+        with:
+          stage: width-${{ matrix.phase }}
+          target: google_apis
+          script: bash tools/bubble-width/run.sh
+      - name: Remove ephemeral fixture keys
+        if: always()
+        run: bash .claude/skills/verify-multiprompt-android/scripts/cleanup.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: bubble-width-proof
-          path: |
-            build/bubble-width/bubble-width/**
-            build/bubble-width/*.txt
-          if-no-files-found: warn
+          name: bubble-width-${{ matrix.phase }}
+          path: verification-evidence/
+          retention-days: 7
+          if-no-files-found: error
