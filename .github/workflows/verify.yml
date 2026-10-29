@@ -160,6 +160,7 @@ jobs:
       - name: Reject code scroll interception on original source
         if: inputs.feature == 'session-gestures.md'
         run: |
+          python3 -B tools/session-gestures/scroll.test.py
           source=app/src/main/java/dev/multiprompt/companion/ui/ReplyableBubble.kt
           cp "$source" "$RUNNER_TEMP/ReplyableBubble.kt"
           git fetch origin f1e4e3ea3d25d48e4559337434a37f2f605609f7
