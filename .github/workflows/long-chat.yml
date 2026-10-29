@@ -1,12 +1,10 @@
 name: Released Android long chat
 
 on:
+  push:
+    branches: [ceo/IGSH-1156]
   workflow_dispatch:
     inputs:
-      negative_control:
-        description: Remove the transcript and require visible-message failure
-        type: boolean
-        default: false
       smoke_only:
         description: Verify the newest released APK after the full soak
         type: boolean
@@ -19,11 +17,15 @@ jobs:
   long-chat:
     runs-on: ubuntu-24.04
     timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        negative: [true, false]
     env:
       EVIDENCE: ${{ github.workspace }}/verification-evidence
       VERIFY_FEATURE: long-chat.md
       VERIFY_PACKAGE: dev.multiprompt.companion
-      NEGATIVE_CONTROL: ${{ inputs.negative_control }}
+      NEGATIVE_CONTROL: ${{ matrix.negative }}
       SMOKE_ONLY: ${{ inputs.smoke_only }}
     steps:
       - uses: actions/checkout@v4
@@ -63,7 +65,7 @@ jobs:
           fi
       - uses: ./.github/actions/android-proof
         with:
-          stage: long-chat
+          stage: long-chat-${{ matrix.negative }}
           target: google_apis
           script: bash tools/long-chat/run.sh
       - name: Retain logs and remove ephemeral keys
@@ -72,7 +74,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: long-chat-${{ github.run_id }}
+          name: long-chat-${{ matrix.negative }}-${{ github.run_id }}
           path: verification-evidence/
           retention-days: 7
           if-no-files-found: error
