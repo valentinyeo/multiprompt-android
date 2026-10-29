@@ -27,8 +27,10 @@ data class AccountLayout(
     val tabs: List<AccountTab> = emptyList(),
     val settings: Map<String, Boolean>? = null,
     val hosts: List<AccountHost>? = null,
+    val workspaceColors: Map<String, Int> = emptyMap(),
 ) {
     fun validate(): AccountLayout {
+        require(workspaceColors.all { (name, color) -> name in workspaces && color in 0..6 }) { "Invalid workspace color" }
         require(hosts == null || AccountHosts.parse(JSONArray(hosts.map { it.json() })) == hosts) { "Invalid layout hosts" }
         require(settings == null || settings.keys.all { it in setOf("frequent", "favorites", "all", "frequent_first") }) { "Invalid layout settings" }
         require(revision >= 0 && workspaces.size <= 9 && tabs.size <= 256) { "Invalid layout capacity or revision" }
@@ -46,11 +48,18 @@ data class AccountLayout(
     }
 
     fun json(): JSONObject = JSONObject().put("schema", 1).put("revision", revision)
-        .put("workspaces", JSONArray(workspaces.map { JSONObject().put("name", it) }))
+        .put("workspaces", JSONArray(workspaces.map { JSONObject().put("name", it).apply { workspaceColors[it]?.let { color -> put("color", color) } } }))
         .put("tabs", JSONArray(tabs.map { it.json() }))
         .apply { settings?.let { put("settings", JSONObject(it)) }; hosts?.let { put("hosts", JSONArray(it.map { host -> host.json() })) } }
 
-    fun sameContent(other: AccountLayout): Boolean = workspaces == other.workspaces && tabs == other.tabs && settings == other.settings && hosts.orEmpty() == other.hosts.orEmpty()
+    fun sameContent(other: AccountLayout): Boolean = workspaces == other.workspaces && workspaceColors == other.workspaceColors && tabs == other.tabs && settings == other.settings && hosts.orEmpty() == other.hosts.orEmpty()
+
+    fun workspaceColor(name: String): Int = workspaceColors[name] ?: workspaces.indexOf(name).coerceAtLeast(0) % 7
+
+    fun setWorkspaceColor(name: String, color: Int?): AccountLayout {
+        require(name in workspaces)
+        return copy(workspaceColors = if (color == null) workspaceColors - name else workspaceColors + (name to color)).validate()
+    }
 
     fun renameTab(identity: String, name: String): AccountLayout = copy(tabs = tabs.map {
         if (it.identity == identity) it.copy(name = name, manual = true) else it
@@ -80,6 +89,7 @@ data class AccountLayout(
     fun renameWorkspace(old: String, name: String): AccountLayout = copy(
         workspaces = workspaces.map { if (it == old) name else it },
         tabs = tabs.map { if (it.workspace == old) it.copy(workspace = name) else it },
+        workspaceColors = workspaceColors.mapKeys { (key, _) -> if (key == old) name else key },
     ).validate()
 
     companion object {
@@ -106,7 +116,7 @@ data class AccountLayout(
             val tabs = json.getJSONArray("tabs")
             return AccountLayout(revision.toLong(), (0 until ws.length()).map {
                 val w = ws.getJSONObject(it)
-                require(w.keys().asSequence().toSet() == setOf("name") && w.get("name") is String)
+                require(w.keys().asSequence().toSet().let { keys -> "name" in keys && (keys - setOf("name", "color")).isEmpty() } && w.get("name") is String)
                 w.getString("name")
             }, (0 until tabs.length()).map {
                 val t = tabs.getJSONObject(it)
@@ -138,7 +148,15 @@ data class AccountLayout(
                 AccountTab(t.getString("name"), t.getString("tmux_session"), host.toInt(), t.getString("workspace"),
                     t.optBoolean("manual", false), if (t.has("favorite")) t.getBoolean("favorite") else null, (used as? Number)?.toLong(), visits, (input as? Number)?.toLong(),
                     if (t.has("muted")) t.getBoolean("muted") else null)
-            }, settings, if (json.has("hosts")) AccountHosts.parse(json.opt("hosts")) else null).validate()
+            }, settings, if (json.has("hosts")) AccountHosts.parse(json.opt("hosts")) else null,
+                (0 until ws.length()).mapNotNull { index ->
+                    val workspace = ws.getJSONObject(index)
+                    if (!workspace.has("color")) null else {
+                        val color = workspace.get("color")
+                        require(color is Number && color.toDouble() == color.toInt().toDouble() && color.toInt() in 0..6)
+                        workspace.getString("name") to color.toInt()
+                    }
+                }.toMap()).validate()
         }
 
         fun response(json: JSONObject): AccountLayout {
@@ -188,7 +206,14 @@ data class AccountLayout(
                 }
                 merged.takeIf { it.isNotEmpty() || edited.settings != null || remote.settings != null }
             }
-            return remote.copy(workspaces = orderedWorkspaces, tabs = orderedTabs, settings = settings).validate()
+            val colors = remote.workspaceColors.filterKeys { it in orderedWorkspaces }.toMutableMap()
+            edited.workspaces.filter { it in orderedWorkspaces }.forEach { name ->
+                if ((name !in base.workspaces && edited.workspaceColors[name] != null) ||
+                    (name in base.workspaces && edited.workspaceColors[name] != base.workspaceColors[name])) {
+                    edited.workspaceColors[name]?.let { colors[name] = it } ?: colors.remove(name)
+                }
+            }
+            return remote.copy(workspaces = orderedWorkspaces, tabs = orderedTabs, settings = settings, workspaceColors = colors).validate()
         }
     }
 }

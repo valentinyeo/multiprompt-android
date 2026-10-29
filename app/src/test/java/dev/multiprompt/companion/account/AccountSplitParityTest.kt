@@ -53,7 +53,7 @@ class AccountSplitParityTest {
         for (current in listOf(renamed, restored)) {
             val state = AppUiState(sessions = inventory, accountLayout = current, accountHosts = mapping)
             val row = state.inboxSessions.first()
-            val reader = AccountHostMap.sessionFor(current.tabs.first(), inventory, mapping)!!
+            val reader = AccountHostMap.sessionFor(current.tabs.first(), inventory, mapping, current)!!
             assertEquals("Renamed session", row.displayName)
             assertEquals(reader.displayName, row.displayName)
             assertEquals(live.name, row.name)

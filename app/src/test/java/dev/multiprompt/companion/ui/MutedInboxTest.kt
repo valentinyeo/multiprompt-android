@@ -72,7 +72,7 @@ class MutedInboxTest {
         val tab = layout.tabs.first { it.session == "quiet_runner" }
         assertEquals(true, tab.json().get("muted"))
         assertEquals("Other", tab.workspace)
-        val session = AccountHostMap.sessionFor(tab, sessions, mapOf(0 to host))
+        val session = AccountHostMap.sessionFor(tab, sessions, mapOf(0 to host), layout)
         assertEquals("quiet_runner", session?.name)
         assertEquals(tab, AccountHostMap.tabFor(sessions.first { it.name == "quiet_runner" }, layout, mapOf(0 to host)))
     }

@@ -20,7 +20,7 @@ class AccountHostMapTest {
         assertEquals(valentin, mapping[0]); assertEquals(contabo, mapping[1]); assertEquals(cro, mapping[2])
         assertEquals("v-key", mapping[0]!!.keySecretId)
         val live = TmuxSession(valentin.id, "inne-shell", 2, 3, 4, workingDirectory = "/home/inne/projects", title = "Different", windowName = "bash")
-        val opened = AccountHostMap.sessionFor(tab, listOf(live), mapping)!!
+        val opened = AccountHostMap.sessionFor(tab, listOf(live), mapping, layout)!!
         assertEquals("v", opened.hostId); assertEquals("inne-shell", opened.name)
         assertEquals(live.workingDirectory, opened.workingDirectory)
         assertEquals(tab.name, opened.displayName)
@@ -34,7 +34,7 @@ class AccountHostMapTest {
         val mapping = AccountHostMap.resolve(hosts, emptyMap())
         val live = TmuxSession(valentin.id, "inne-shell", 1, 0, 0)
         assertEquals("inne", AccountHostMap.withAccountSessions(listOf(live), layout, mapping).single().workspaceName)
-        assertEquals("inne", AccountHostMap.sessionFor(tab, emptyList(), mapping)!!.workspaceName)
+        assertEquals("inne", AccountHostMap.sessionFor(tab, emptyList(), mapping, layout)!!.workspaceName)
         val moved = layout.copy(workspaces = listOf("inne", "Software Factory"), tabs = listOf(tab.copy(workspace = "Software Factory")))
         assertEquals("Software Factory", AccountHostMap.withAccountSessions(listOf(live), moved, mapping).single().workspaceName)
         assertEquals("", AccountHostMap.withAccountSessions(listOf(live.copy(name = "unassigned")), layout, mapping).first().workspaceName)
@@ -46,7 +46,7 @@ class AccountHostMapTest {
         assertNull(AccountHostMap.resolve(hosts + duplicate, emptyMap())[0])
         assertEquals(duplicate, AccountHostMap.resolve(hosts + duplicate, mapOf(0 to "duplicate"))[0])
         assertNull(AccountHostMap.resolve(hosts, mapOf(0 to "deleted"))[0])
-        assertNull(AccountHostMap.sessionFor(tab, emptyList(), emptyMap()))
+        assertNull(AccountHostMap.sessionFor(tab, emptyList(), emptyMap(), layout))
     }
 
     @Test fun explicitOverridesRejectOtherUsersAtSlotZeroAndNeverReuseProfiles() {
@@ -58,7 +58,7 @@ class AccountHostMapTest {
 
     @Test fun offlineAccountTabsRemainOpenableAndMembershipNeverComesFromCwd() {
         val mapping = AccountHostMap.resolve(hosts, emptyMap())
-        val session = AccountHostMap.sessionFor(tab, emptyList(), mapping)!!
+        val session = AccountHostMap.sessionFor(tab, emptyList(), mapping, layout)!!
         assertEquals("v", session.hostId); assertEquals("inne-shell", session.name); assertEquals(tab.name, session.displayName)
         assertNull(AccountHostMap.tabFor(session.copy(name = "not-in-layout", workingDirectory = "/home/inne/projects"), layout, mapping))
     }

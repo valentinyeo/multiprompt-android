@@ -543,6 +543,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onSetNewestSessionsAtBottom = viewModel::setNewestSessionsAtBottom,
                     onSetAllSplitOnRight = viewModel::setAllSplitOnRight,
                     onSetSessionListSetting = viewModel::setSessionListSetting,
+                    onSetWorkspaceColor = viewModel::setWorkspaceColor,
                     appTheme = state.appTheme,
                     onSetAppTheme = viewModel::setAppTheme,
                     onClearSessionActionError = viewModel::clearSessionActionError,
@@ -1185,6 +1186,7 @@ internal fun SessionsScreen(
     onAddHost: () -> Unit,
     nowMillis: () -> Long = System::currentTimeMillis,
     onSetSessionListSetting: (String, Boolean) -> Unit = { _, _ -> },
+    onSetWorkspaceColor: (String, Int?) -> Unit = { _, _ -> },
     material3: Boolean = LocalMaterial3.current,
 ) = MultipromptTheme(
     sunlight = when (appTheme) {
@@ -1291,6 +1293,31 @@ internal fun SessionsScreen(
                     Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    state.accountLayout?.let { layout ->
+                        layout.workspaces.forEach { workspace ->
+                            KitSectionLabel(workspace)
+                            Row(
+                                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                botColors.forEachIndexed { index, color ->
+                                    Box(
+                                        Modifier.size(44.dp).semantics {
+                                            contentDescription = "$workspace color ${index + 1}"
+                                            selected = layout.workspaceColor(workspace) == index
+                                        }.clickable { onSetWorkspaceColor(workspace, index) },
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Box(Modifier.size(28.dp).background(color, CircleShape).then(
+                                            if (layout.workspaceColor(workspace) == index) Modifier.border(2.dp, Kit.Text, CircleShape) else Modifier,
+                                        ))
+                                    }
+                                }
+                                KitTitlePill("Auto", onClick = { onSetWorkspaceColor(workspace, null) })
+                            }
+                        }
+                    }
                     listOf(
                         Triple("frequent", "Show Frequent split", state.showFrequentSplit),
                         Triple("frequent_first", "Frequent as first tab", state.frequentFirst),
@@ -1800,7 +1827,7 @@ internal fun SessionsScreen(
                                 verticalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
                                 Box {
-                                    BotAvatar(session.name, 56.dp, workspaceName = session.workspaceName)
+                                    BotAvatar(session.name, 56.dp, workspaceColor = session.workspaceColor)
                                     if (key in state.unreadSessionKeys) {
                                         Badge(
                                             Modifier.align(Alignment.TopEnd).semantics {
@@ -2161,7 +2188,7 @@ private fun SessionCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                BotAvatar(session.name, workspaceName = session.workspaceName)
+                BotAvatar(session.name, workspaceColor = session.workspaceColor)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         session.displayName,
@@ -2378,7 +2405,7 @@ internal fun ReaderTopBar(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        BotAvatar(session.name, 28.dp, workspaceName = session.workspaceName)
+                        BotAvatar(session.name, 28.dp, workspaceColor = session.workspaceColor)
                         Text(
                             session.displayName,
                             modifier = Modifier.weight(1f, fill = false),
@@ -2416,7 +2443,7 @@ internal fun ReaderTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                BotAvatar(session.name, 28.dp, workspaceName = session.workspaceName)
+                BotAvatar(session.name, 28.dp, workspaceColor = session.workspaceColor)
                 Box(Modifier.weight(1f)) {
                     Column(
                         Modifier

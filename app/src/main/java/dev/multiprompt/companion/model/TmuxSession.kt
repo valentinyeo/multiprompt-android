@@ -15,6 +15,7 @@ data class TmuxSession(
     val paneCommand: String = "",
     val accountName: String? = null,
     val workspaceName: String = "",
+    val workspaceColor: Int = 0,
 ) {
     val agent: AgentKind
         get() = AgentKind.detect(name, title, preview, paneCommand)

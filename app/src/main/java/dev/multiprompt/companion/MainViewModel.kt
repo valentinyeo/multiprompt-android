@@ -367,6 +367,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(allSplitOnRight = enabled) }
     }
 
+    fun setWorkspaceColor(name: String, color: Int?) {
+        editAccountLayout { it.setWorkspaceColor(name, color) }?.let { error -> _state.update { it.copy(accountError = error) } }
+    }
+
     fun setSessionListSetting(key: String, enabled: Boolean) {
         editAccountLayout { it.setSetting(key, enabled) }?.let { error -> _state.update { it.copy(accountError = error) } }
     }
@@ -764,12 +768,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             accountHosts = mapping,
             readerSession = current.readerSession?.let { open ->
                 val tab = current.accountLayout?.let { AccountHostMap.tabFor(open, it, mapping) }
-                tab?.let { AccountHostMap.sessionFor(it, sessions, mapping) }
+                tab?.let { AccountHostMap.sessionFor(it, sessions, mapping, current.accountLayout) }
                     ?: sessions.firstOrNull { it.hostId == open.hostId && it.name == open.name } ?: open
             },
             terminalSession = current.terminalSession?.let { open ->
                 val tab = current.accountLayout?.let { AccountHostMap.tabFor(open, it, mapping) }
-                tab?.let { AccountHostMap.sessionFor(it, sessions, mapping) }
+                tab?.let { AccountHostMap.sessionFor(it, sessions, mapping, current.accountLayout) }
                     ?: sessions.firstOrNull { it.hostId == open.hostId && it.name == open.name } ?: open
             },
             hostErrors = results.mapNotNull { result ->
@@ -878,7 +882,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 terminal = null,
                 terminalSession = null,
                 reader = reader,
-                readerSession = session,
+                readerSession = it.accountLayout?.let { layout ->
+                    AccountHostMap.tabFor(session, layout, it.accountHosts)?.let { tab ->
+                        AccountHostMap.sessionFor(tab, it.sessions, it.accountHosts, layout)
+                    }
+                } ?: session,
                 readerUnreadMessageKey = unreadMessageKey,
                 userSelectedSessionKey = key.takeIf { userInitiated },
                 readerSwipeOrder = swipeOrder,
@@ -1487,7 +1495,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update {
             it.copy(
                 terminal = terminal,
-                terminalSession = session,
+                terminalSession = it.accountLayout?.let { layout ->
+                    AccountHostMap.tabFor(session, layout, it.accountHosts)?.let { tab ->
+                        AccountHostMap.sessionFor(tab, it.sessions, it.accountHosts, layout)
+                    }
+                } ?: session,
                 userSelectedSessionKey = SessionReadStore.key(session.hostId, session.name).takeIf { userInitiated },
                 terminalFromReader = fromReader,
                 reader = null,
@@ -1574,10 +1586,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             current.copy(accountLayout = layout, accountPending = pendingLayout?.dirty == true, accountHosts = mapping,
                 workspaces = workspaces, workspaceSplitIds = listOf(null) + workspaces.map { it.id }, sessionWorkspaceIds = assignments,
                 readerSession = current.readerSession?.let { open ->
-                    layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping) } ?: open
+                    layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping, layout) } ?: open
                 },
                 terminalSession = current.terminalSession?.let { open ->
-                    layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping) } ?: open
+                    layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping, layout) } ?: open
                 },
             ).let { next ->
                 next.copy(selectedWorkspaceId = if (current.selectedWorkspaceId in next.visibleWorkspaceSplitIds) current.selectedWorkspaceId else next.visibleWorkspaceSplitIds.first())

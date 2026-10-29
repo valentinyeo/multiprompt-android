@@ -19,7 +19,14 @@ run_robots() {
     if [ -n "$result" ]; then cp "$result"/*.png "build/robot-faces/$phase/"; fi
     return "$status"
 }
-git show 0ed7a50:"$file" > "$file"
+python3 - "$avatar" <<'PYCONTROL'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+s = path.read_text()
+assert 'contentDescription = "Robot $sessionName"' in s
+path.write_text(s.replace('contentDescription = "Robot $sessionName"', 'contentDescription = "Missing avatar"'))
+PYCONTROL
 if run_robots before; then echo 'Original inbox unexpectedly shows robots' >&2; exit 1; fi
 python3 - <<'PY'
 from pathlib import Path
@@ -36,9 +43,9 @@ from pathlib import Path
 import sys
 path = Path(sys.argv[1])
 s = path.read_text()
-a = s.index('            val color = when')
-b = s.index('            return BotAppearance', a)
-path.write_text(s[:a] + '            val color = ((hash / 20u) % 8u).toInt()\n' + s[b:])
+before = 'val color = workspaceColor.mod(7)'
+assert before in s
+path.write_text(s.replace(before, 'val color = ((hash / 20u) % 7u).toInt()'))
 PYCONTROL
 if run_robots workspace-before; then echo 'Session-derived colors unexpectedly match workspaces' >&2; exit 1; fi
 python3 - <<'PYCONTROL'
@@ -55,4 +62,6 @@ trap - EXIT
 run_robots after
 test -s build/robot-faces/after/robot-inbox.png
 test -s build/robot-faces/after/robot-chat-title.png
+test -s build/robot-faces/after/robot-settings-picker.png
+test -s build/robot-faces/after/robot-inbox-override.png
 echo ROBOT_FACES_EMULATOR_VERIFIED
