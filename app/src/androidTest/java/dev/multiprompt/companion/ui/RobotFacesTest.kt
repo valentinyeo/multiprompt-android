@@ -41,6 +41,7 @@ class RobotFacesTest {
         """{"kind":"tmux","name":"${session.displayName}","tmux_session":"${session.name}","tmux_host":0,"workspace":"All","favorite":${index < 2}}"""
     }.joinToString(",")}]}"""))
     private var opened: TmuxSession? = null
+    private var markedUnread: TmuxSession? = null
 
     @Test fun robotsMatchAcrossInboxPinsAndChatAndActionsStillWork() {
         compose.activityRule.scenario.onActivity { activity ->
@@ -52,7 +53,7 @@ class RobotFacesTest {
                         unreadCounts = mapOf(SessionReadStore.key(host.id, sessions[0].name) to 1)),
                     signedIn = true, onSignIn = {}, onSignOut = {}, onOpen = { opened = it }, onOpenTerminal = {},
                     onArchive = {}, onArchiveUntil = { _, _ -> }, onRestore = {}, onDissolve = {}, onEnd = {},
-                    onRestoreDissolved = {}, onForgetDissolved = {}, onMarkUnread = {}, onToggleArchived = {},
+                    onRestoreDissolved = {}, onForgetDissolved = {}, onMarkUnread = { markedUnread = it }, onToggleArchived = {},
                     onSelectSessionBucket = {}, onSelectWorkspace = {}, onSwitchWorkspace = {},
                     onMoveWorkspaceSplit = { _, _ -> }, onResetWorkspaceSplitOrder = {}, onCreateWorkspace = { null },
                     onMoveSession = { _, _ -> }, onRenameSession = { _, _ -> null }, onSetFavorite = { _, _ -> },
@@ -83,7 +84,8 @@ class RobotFacesTest {
         compose.runOnIdle { assertEquals(sessions[0], opened) }
         compose.onNodeWithText(names[2]).performTouchInput { longClick() }
         compose.onNodeWithText("Mark unread").assertIsDisplayed()
-        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithText("Mark unread").performClick()
+        compose.runOnIdle { assertEquals(sessions[2], markedUnread) }
         compose.onNodeWithText(names[2]).performClick()
         compose.runOnIdle { assertEquals(sessions[2], opened) }
         compose.activityRule.scenario.onActivity { activity ->

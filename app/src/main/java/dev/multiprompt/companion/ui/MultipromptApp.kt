@@ -2166,6 +2166,8 @@ private fun SessionCard(
                     Text(
                         session.displayName,
                         style = MaterialTheme.typography.bodyLarge,
+                        fontSize = 16.sp,
+                        lineHeight = 20.sp,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -2174,6 +2176,7 @@ private fun SessionCard(
                         SessionPreview.line(session.preview),
                         modifier = Modifier.testTag("Session preview"),
                         fontSize = 14.sp,
+                        lineHeight = 20.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
