@@ -51,6 +51,7 @@ jobs:
           export EXPECTED_COMMIT="$(curl -fsSL https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion-update.json | jq -er .commit)"
           bash tools/release-choices/prepare.sh
           printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/harness-sha.txt"
+          git fetch --no-tags origin "$EXPECTED_COMMIT"
           git diff --exit-code "$EXPECTED_COMMIT" HEAD -- app/src/main app/build.gradle.kts
       - name: Start isolated SSH and long transcript
         run: |
