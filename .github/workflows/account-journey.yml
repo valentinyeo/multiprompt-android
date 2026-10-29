@@ -9,6 +9,11 @@ on:
       - '.github/workflows/account-journey.yml'
       - '.github/actions/android-proof/**'
   workflow_dispatch:
+    inputs:
+      rename_only:
+        description: Prove shared session rename through Android and the desktop account feed
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -25,6 +30,7 @@ jobs:
       EVIDENCE: ${{ github.workspace }}/account-journey-evidence
       FIXTURE: ${{ github.workspace }}-journey-fixture
       MULTIPROMPT_DIR: ${{ github.workspace }}/multiprompt
+      RENAME_ONLY: ${{ inputs.rename_only }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -47,6 +53,31 @@ jobs:
         run: |
           npm ci
           npx wrangler deploy --dry-run --outdir .build
+      - name: Reject stale account names on the original source
+        run: |
+          file=app/src/main/java/dev/multiprompt/companion/account/AccountHostMap.kt
+          cp "$file" "$RUNNER_TEMP/AccountHostMap.kt"
+          trap 'cp "$RUNNER_TEMP/AccountHostMap.kt" "$file"' EXIT
+          git fetch origin eb29d0a1c7dc3d5032d89820fa6480a687cb85db
+          git show eb29d0a1c7dc3d5032d89820fa6480a687cb85db:"$file" > "$file"
+          if gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*AccountSplitParityTest*'; then
+            echo 'Original stale-name projection unexpectedly passed' >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          path = 'app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.account.AccountSplitParityTest.xml'
+          case = ET.parse(path).getroot().find("testcase[@name='renamedAccountSessionUsesOneNameInInboxReaderAndPersistedLayout']")
+          assert case is not None and case.find('failure') is not None
+          assert 'Renamed session' in case.find('failure').get('message')
+          print('ORIGINAL_RENAME_REGRESSION_REPRODUCED')
+          PY
+          mkdir -p "$EVIDENCE"
+          cp app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.account.AccountSplitParityTest.xml "$EVIDENCE/original-regression.xml"
+          cp "$RUNNER_TEMP/AccountHostMap.kt" "$file"
+          trap - EXIT
+          gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*AccountSplitParityTest*'
+          cp app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.account.AccountSplitParityTest.xml "$EVIDENCE/fixed-regression.xml"
       - name: Build debug app pointed at the local service
         run: gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PaccountOrigin=http://10.0.2.2:8787 assembleDebug assembleDebugAndroidTest
       - name: Start the ssh and tmux fixture

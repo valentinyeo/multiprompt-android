@@ -1,12 +1,19 @@
 package dev.multiprompt.companion.account
 
+import dev.multiprompt.companion.AppUiState
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.json.JSONObject
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35], application = android.app.Application::class)
 class AccountSplitParityTest {
     private val host = HostProfile("v", "Hetzner", "vps", username = "valentin", keySecretId = "key")
     private val mapping = mapOf(0 to host)
@@ -19,7 +26,7 @@ class AccountSplitParityTest {
     @Test fun everyMappedAccountTabIsListedEvenWithoutALiveSession() {
         val listed = AccountHostMap.withAccountSessions(listOf(live), layout, mapping)
         assertEquals(listOf("live-one", "gone-one"), listed.map { it.name })
-        assertEquals(live.copy(workspaceName = "Work"), listed.first())
+        assertEquals(live.copy(accountName = liveTab.name, workspaceName = "Work"), listed.first())
         assertEquals("Gone one", listed.last().accountName)
     }
 
@@ -37,6 +44,28 @@ class AccountSplitParityTest {
     @Test fun liveCaseDifferenceDoesNotDuplicateTheRow() {
         val listed = AccountHostMap.withAccountSessions(listOf(live.copy(name = "LIVE-ONE")), layout, mapping)
         assertEquals(listOf("LIVE-ONE", "gone-one"), listed.map { it.name })
+    }
+
+    @Test fun renamedAccountSessionUsesOneNameInInboxReaderAndPersistedLayout() {
+        val inventory = listOf(live.copy(title = "Old agent title", windowName = "old-window"))
+        val renamed = layout.renameTab(liveTab.identity, "Renamed session")
+        val restored = AccountLayout.parse(JSONObject(renamed.json().toString()))
+        for (current in listOf(renamed, restored)) {
+            val state = AppUiState(sessions = inventory, accountLayout = current, accountHosts = mapping)
+            val row = state.inboxSessions.first()
+            val reader = AccountHostMap.sessionFor(current.tabs.first(), inventory, mapping)!!
+            assertEquals("Renamed session", row.displayName)
+            assertEquals(reader.displayName, row.displayName)
+            assertEquals(live.name, row.name)
+            assertEquals(live.lastActivityEpochSeconds, row.lastActivityEpochSeconds)
+            assertEquals(inventory.first().copy(accountName = "Renamed session", workspaceName = "Work"), row)
+        }
+    }
+
+    @Test fun unmappedProfilesKeepTheirOwnNamesAndMetadata() {
+        val other = live.copy(hostId = "different-login", title = "Local session")
+        val listed = AccountHostMap.withAccountSessions(listOf(other), layout, mapping)
+        assertEquals(other, listed.first())
     }
 
     @Test fun withoutAnAccountLayoutTheInventoryIsUnchanged() {

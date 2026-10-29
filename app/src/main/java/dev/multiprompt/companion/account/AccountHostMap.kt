@@ -44,7 +44,8 @@ object AccountHostMap {
             else sessionFor(tab, inventory, mapping)
         }
         return inventory.map { session ->
-            session.copy(workspaceName = tabFor(session, layout, mapping)?.workspace.orEmpty())
+            val tab = tabFor(session, layout, mapping)
+            session.copy(accountName = tab?.name ?: session.accountName, workspaceName = tab?.workspace.orEmpty())
         } + missing
     }
 
