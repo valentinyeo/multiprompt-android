@@ -57,7 +57,7 @@ fun MarkdownText(
     val scale = if (LocalReaderStyle.current) fontSize.value / ReaderTextSize.value else if (LocalMaterial3.current) fontSize.value / 15f else 1f
     val lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, scale)
     androidx.compose.material3.ProvideTextStyle(androidx.compose.ui.text.TextStyle(fontFamily = chatFontFamily())) {
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(if (LocalReaderStyle.current) modifier else modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         blocks.forEach { block ->
             when (block) {
                 is MdBlock.Paragraph -> if (imagePreviews) {
