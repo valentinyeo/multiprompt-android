@@ -10,7 +10,7 @@ object ReplyNotificationPolicy {
         val message = history.messages.lastOrNull()
         val reply = question ?: message?.takeIf { it.role == "assistant" }?.text ?: return null
         val text = reply.trim().replace(Regex("\\s+"), " ")
-        if (text.isEmpty() || text.startsWith("/") || text.startsWith("<")) return null
+        if (text.isEmpty() || text.startsWith("/")) return null
         val sentences = BreakIterator.getSentenceInstance(Locale.ENGLISH)
         sentences.setText(text)
         return text.substring(0, sentences.next().takeUnless { it == BreakIterator.DONE } ?: text.length).trim()
