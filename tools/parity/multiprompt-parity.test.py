@@ -82,6 +82,9 @@ class ParityTests(unittest.TestCase):
             self.fail("Dry run wrote a ticket")
         self.assertEqual(len(parity.reconcile(inventory(), [task()], False, forbidden)), 1)
 
+    def test_automatic_crash_reports_are_not_feature_requests(self):
+        self.assertEqual(parity.pairs(inventory(), [task(title="Multiprompt stopped working: report 58040069933833")]), [])
+
     def test_archived_source_is_not_copied(self):
         self.assertEqual(parity.pairs(inventory(), [task(status="Archive")]), [])
 

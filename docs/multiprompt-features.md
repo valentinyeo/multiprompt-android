@@ -35,7 +35,8 @@ Reviewed: 2026-10-29
 ## Automatic counterparts
 
 Daily checks pair new single-app requests.
-Bugs included: no feature requests get missed.
+Product fixes included: shared behavior stays matched.
+Automatic crash reports stay on their own app.
 The counterpart checks the same user outcome.
 Desktop-only controls need an explicit phone equivalent.
 Both-app requests already cover both apps.

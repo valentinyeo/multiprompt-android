@@ -90,7 +90,8 @@ def render(data):
             cells.append(text)
         lines.append(f"| {row['name']} | {' | '.join(cells)} |")
     lines += ["", "## Automatic counterparts", "",
-              "Daily checks pair new single-app requests.", "Bugs included: no feature requests get missed.",
+              "Daily checks pair new single-app requests.", "Product fixes included: shared behavior stays matched.",
+              "Automatic crash reports stay on their own app.",
               "The counterpart checks the same user outcome.", "Desktop-only controls need an explicit phone equivalent.",
               "Both-app requests already cover both apps.", "Existing gap tickets are reused, never copied.",
               "Generated counterparts never create more counterparts.", "",
@@ -124,6 +125,8 @@ def pairs(data, rows):
         labels = {item["name"] if isinstance(item, dict) else item for item in row.get("labels", [])}
         platforms = {key for key, label in LABELS.items() if label in labels}
         title = row["title"].lower()
+        if re.search(r"\bstopped working: report \d+\b", title):
+            continue
         if platforms == {"desktop"} and ("android" in title or "Mobile App" in labels):
             platforms = {"android"}
         if len(platforms) != 1:
