@@ -224,7 +224,7 @@ if [[ "$feature" == launcher-icon.md ]]; then
     exit 0
 fi
 if [[ "$package" == dev.multiprompt.companion ]]; then
-    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md ]]
+    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -499,7 +499,7 @@ if [[ "$feature" == chat-working.md ]]; then
     python3 tools/working-dots/drive.py
     exit 0
 fi
-if [[ "$feature" == session-gestures.md ]]; then
+if [[ "$feature" == session-gestures.md || "$feature" == session-summaries.md ]]; then
     wait_for_text GESTURE_REPLY_TARGET
     python3 tools/session-gestures/drive.py
     exit 0
