@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 adb install -r -g "$EVIDENCE/app.apk"
+adb shell cmd uimode night yes
 bash tools/release-choices/seed.sh
 adb push "$FIXTURE/user-key" /data/local/tmp/long-chat-key
 adb shell chmod 644 /data/local/tmp/long-chat-key

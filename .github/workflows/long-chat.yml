@@ -36,6 +36,15 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
+      - name: Reject the recorded fixture-name failure
+        run: |
+          git fetch --no-tags origin 0e7e690087e33cf3bc1f6aa051acc3701379ea0a
+          git show FETCH_HEAD:.github/workflows/long-chat.yml > "$RUNNER_TEMP/original-long-chat.yml"
+          if LONG_CHAT_WORKFLOW="$RUNNER_TEMP/original-long-chat.yml" python3 -B tools/long-chat/check.test.py LongChatTest.test_fixture_visible_name_cannot_drift_from_session_identity; then
+            echo 'Original fixture-name failure incorrectly passed' >&2
+            exit 1
+          fi
+          echo RECORDED_FIXTURE_NAME_FAILURE_REJECTED
       - name: Test fixture and proof oracle
         run: python3 -B tools/long-chat/check.test.py
       - name: Prepare published APK and same-signer observer
@@ -59,6 +68,8 @@ jobs:
           sudo install -m 755 tools/long-chat/fixture.py /home/verifyssh/long-chat-fixture.py
           sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
           sudo -u verifyssh tmux new-session -d -s cl-long-chat -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/long-chat-fixture.py /home/verifyssh/long-chat-source.json'
+          sudo -u verifyssh tmux set-window-option -t cl-long-chat automatic-rename off
+          sudo -u verifyssh tmux rename-window -t cl-long-chat cl-long-chat
           timeout 30s bash -c 'until sudo test -s /home/verifyssh/long-chat-source.json; do sleep 0.1; done'
           sudo cat /home/verifyssh/long-chat-source.json > "$EVIDENCE/source.json"
           if [[ "$NEGATIVE_CONTROL" == true ]]; then
