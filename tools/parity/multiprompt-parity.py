@@ -24,11 +24,11 @@ def call(*args):
     return data
 
 
-def board(api=call):
+def board(api=call, status="Normal"):
     rows, cursors, seen = [], set(), set()
     cursor = None
     while True:
-        args = ["task", "list", "--project", "2060", "--limit", "100"]
+        args = ["task", "list", "--project", "2060", "--limit", "100", "--status", status]
         if cursor:
             args += ["--cursor", cursor]
         page = api(*args)
@@ -96,7 +96,8 @@ def render(data):
               "The counterpart checks the same user outcome.", "Desktop-only controls need an explicit phone equivalent.",
               "Both-app requests already cover both apps.", "Existing gap tickets are reused, never copied.",
               "Unlinked inventory gaps get their own requests.",
-              "Generated counterparts never create more counterparts.", "",
+              "Generated counterparts never create more counterparts.",
+              "Archived counterparts still count as already paired.", "",
               f"New-request coverage starts {data['track_since']}.",
               "Historical gaps remain linked in this list.", "",
               "Agent operation: `python3 tools/parity/multiprompt-parity.py --apply`.",
@@ -144,7 +145,7 @@ def reconcile(data, rows, apply=False, api=call):
             cell = feature[platform]
             marker = f"MP-GAP:{feature['id']}:{platform}"
             if cell["status"] != "shipped" and not cell.get("ticket") and marker not in descriptions:
-                planned.append(({"ticketNumber": "feature:" + feature["id"], "feature": feature["id"]}, platform))
+                planned.append(({"ticketNumber": "feature:" + feature["id"], "feature": feature["id"], "name": feature["name"]}, platform))
     created = []
     for source, target in planned:
         ticket = source["ticketNumber"]
@@ -152,7 +153,8 @@ def reconcile(data, rows, apply=False, api=call):
         name = "Android" if target == "android" else "desktop"
         url = ("https://github.com/valentinyeo/multiprompt-android/blob/main/docs/multiprompt-features.md"
                if source.get("feature") else f"https://app.hypertask.ai/detail/project-2060/{ticket.split('-')[1]}")
-        description = (f"<h2>Problem</h2><p>The other app has a matching request.</p>"
+        feature_name = f"<p>{html.escape(source['name'])}</p>" if source.get("feature") else ""
+        description = (f"<h2>Problem</h2><p>The other app has a matching request.</p>{feature_name}"
                        f"<p><a href='{url}'>Original app request</a></p>"
                        f"<h2>Fix</h2><p>Match that outcome on {name}.</p>"
                        "<p>Check existing support before changing anything.</p>"
@@ -162,7 +164,8 @@ def reconcile(data, rows, apply=False, api=call):
                        f"<h2>Decision</h2><p>None.</p><p>{marker}</p>")
         if apply:
             response = api("task", "create", "--project", "2060", "--section", "Todo",
-                           "--labels", LABELS[target], "--title", f"Match the linked request on {name}",
+                           "--labels", LABELS[target], "--title",
+                           f"{name}: {source['name']}" if source.get("feature") else f"Match the linked request on {name}",
                            "--description", description)
             tasks = response.get("tasks") or ([response["task"]] if response.get("task") else [])
             if not tasks or not re.fullmatch(r"IGSH-\d+", tasks[0].get("ticketNumber", "")):
@@ -186,7 +189,10 @@ def main():
     state.mkdir(parents=True, exist_ok=True)
     with (state / "run.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        result = reconcile(data, board(), args.apply)
+        rows = board() + board(status="Archive")
+        if len({row["ticketNumber"] for row in rows}) != len(rows):
+            raise ValueError("Board changed between active and archived reads; retry next run")
+        result = reconcile(data, rows, args.apply)
         receipt = {"apply": args.apply, "pairs": result}
         if args.apply:
             (state / "last-run.json").write_text(json.dumps(receipt, indent=2) + "\n")

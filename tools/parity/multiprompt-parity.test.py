@@ -23,7 +23,7 @@ def inventory():
 class ParityTests(unittest.TestCase):
     def test_unlinked_inventory_gap_gets_a_ticket_once(self):
         data = inventory()
-        data["features"] = [{"id": "voice", "desktop": {"status": "shipped"}, "android": {"status": "missing"}}]
+        data["features"] = [{"id": "voice", "name": "Spoken replies", "desktop": {"status": "shipped"}, "android": {"status": "missing"}}]
         calls = []
         def api(*args):
             calls.append(args)
@@ -61,6 +61,10 @@ class ParityTests(unittest.TestCase):
             parity.reconcile(inventory(), rows, True, lost)
         self.assertEqual(parity.reconcile(inventory(), rows, True, lost), [])
         self.assertEqual(len(calls), 1)
+
+    def test_archived_counterpart_still_prevents_duplicate(self):
+        twin = task("IGSH-2001", "Multiprompt Android", status="Archive", description="<p>MP-PAIR:IGSH-2000:android</p>")
+        self.assertEqual(parity.pairs(inventory(), [task(), twin]), [])
 
     def test_generated_twin_never_spawns_more_twins(self):
         row = task(label="Multiprompt Android", description="<p>MP-PAIR:IGSH-1999:android</p>")
