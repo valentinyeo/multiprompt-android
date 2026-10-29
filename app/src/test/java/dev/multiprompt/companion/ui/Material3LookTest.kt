@@ -73,7 +73,7 @@ class Material3LookTest(private val screen: M3Screen, private val sunlight: Bool
             val row = compose.onNodeWithText("claude-reader").fetchSemanticsNode()
             assertTrue("tab=${tab.boundsInRoot} row=${row.boundsInRoot}", tab.boundsInRoot.bottom <= row.boundsInRoot.top)
             val title = compose.onNodeWithText("claude-reader", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-            assertEquals("single-line row=${row.boundsInRoot}", maxOf(56f, title.height + 24f), row.boundsInRoot.height, 0.01f)
+            assertEquals("avatar and preview row=${row.boundsInRoot}", 68f, row.boundsInRoot.height, 0.01f)
             val badgeNode = compose.onNodeWithContentDescription("1 unread messages", useUnmergedTree = true).fetchSemanticsNode()
             val badge = badgeNode.boundsInRoot
             val time = compose.onAllNodesWithTag("Session activity", useUnmergedTree = true).fetchSemanticsNodes()
