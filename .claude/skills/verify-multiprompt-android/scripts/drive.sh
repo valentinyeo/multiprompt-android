@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    chat-working.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md) ;;
+    chat-working.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|robot-faces.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -197,7 +197,7 @@ if [[ "$feature" == launcher-icon.md ]]; then
     exit 0
 fi
 if [[ "$package" == dev.multiprompt.companion ]]; then
-    [[ "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md ]]
+    [[ "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -306,6 +306,10 @@ if ! wait_for_text verify-session; then
     exit 1
 fi
 shot sessions
+if [[ "$feature" == robot-faces.md ]]; then
+    select_node desc 'Robot verify-session'
+    shot robot-inbox
+fi
 sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
 if [[ "$feature" == hosts.md ]]; then
     tap_desc 'Session list actions'
@@ -496,6 +500,13 @@ else
     wait_for_text VERIFY_READY_528
 fi
 shot reader-ready
+if [[ "$feature" == robot-faces.md ]]; then
+    select_node desc 'Robot verify-session'
+    select_node text verify-session
+    shot robot-chat-title
+    printf 'SIGNED_ROBOT_INBOX_AND_CHAT_VERIFIED\n' | tee "$EVIDENCE/robot-result.txt"
+    exit 0
+fi
 if [[ "$feature" == chat-queued.md ]]; then
     wait_for_text 'Ready for queued messages.'
     shot queued-ready
