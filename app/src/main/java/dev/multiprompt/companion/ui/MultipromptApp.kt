@@ -120,6 +120,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -2534,6 +2535,10 @@ internal fun ReaderScreen(
     val dictationSubmissionStarted = remember(connection) { AtomicBoolean(false) }
     var pendingPromptAction by remember(connection) { mutableStateOf<Long?>(null) }
     var sendMarkPending by remember(connection) { mutableStateOf(false) }
+    if (sendMarkPending) {
+        SendTiming.mark("composition_started")
+        SideEffect { SendTiming.mark("composition_applied") }
+    }
     var sentDraft by remember(connection) { mutableStateOf<SentDraft?>(null) }
     var menuExpanded by remember(connection) { mutableStateOf(false) }
     var menuPage by remember(connection) { mutableStateOf(ReaderMenuPage.MAIN) }
@@ -2720,9 +2725,13 @@ internal fun ReaderScreen(
                 imageAttachments = emptyList()
                 replyTo = null
                 sendMarkPending = true
+                SendTiming.mark("state_cleared")
                 onSessionInteraction()
+                SendTiming.mark("interaction_recorded")
                 onSessionInput()
+                SendTiming.mark("input_stamped")
                 pendingPromptAction = actionCount
+                SendTiming.mark("handler_finished")
             }
         }
     }
@@ -3366,6 +3375,7 @@ internal fun ReaderScreen(
                             modifier = Modifier.weight(1f).heightIn(min = ReaderComposerHeight)
                                 .border(1.dp, MaterialTheme.colorScheme.outline, ReaderComposerShape).focusRequester(promptFocusRequester)
                                 .drawWithContent {
+                                    if (sendMarkPending) SendTiming.mark("draw_started")
                                     drawContent()
                                     if (sendMarkPending && prompt.isEmpty()) {
                                         SendTiming.mark("box_cleared_frame")
