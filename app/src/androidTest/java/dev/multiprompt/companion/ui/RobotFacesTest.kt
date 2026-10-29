@@ -37,9 +37,9 @@ class RobotFacesTest {
         TmuxSession("host", "bot-$index", 1, 0, System.currentTimeMillis() / 1000 - index * 120,
             accountName = name, preview = "${name}: latest reply\nshift+tab to cycle")
     }
-    private val workspaceNames = listOf("inne", "Software Factory", "Hypertask")
+    private val workspaceNames = listOf("inne", "Software Factory", "Hypertask", "Software Factory", "Hypertask", "inne", "inne", "Hypertask")
     private val layout = AccountLayout.parse(JSONObject("""{"schema":1,"revision":1,"workspaces":[{"name":"inne"},{"name":"Software Factory"},{"name":"Hypertask"}],"tabs":[${sessions.mapIndexed { index, session ->
-        """{"kind":"tmux","name":"${session.displayName}","tmux_session":"${session.name}","tmux_host":0,"workspace":"${workspaceNames[index % 3]}","favorite":${index < 2}}"""
+        """{"kind":"tmux","name":"${session.displayName}","tmux_session":"${session.name}","tmux_host":0,"workspace":"${workspaceNames[index]}","favorite":${index < 2}}"""
     }.joinToString(",")}]}"""))
     private var opened: TmuxSession? = null
     private var markedUnread: TmuxSession? = null
@@ -70,6 +70,9 @@ class RobotFacesTest {
         assertWorkspaceHue("bot-0", 2)
         assertWorkspaceHue("bot-1", 4)
         assertWorkspaceHue("bot-2", 5)
+        assertWorkspaceHue("bot-3", 4)
+        assertWorkspaceHue("bot-4", 5)
+        assertWorkspaceHue("bot-5", 2)
         val pin = compose.onNodeWithContentDescription("Robot bot-0", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val row = compose.onNodeWithContentDescription("Robot bot-2", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val density = compose.activity.resources.displayMetrics.density
