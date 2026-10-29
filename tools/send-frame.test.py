@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import textwrap
 import unittest
+from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,7 +19,8 @@ class SendFrameCaptureTest(unittest.TestCase):
         segment = driver[start:end]
         with tempfile.TemporaryDirectory() as directory:
             evidence = Path(directory)
-            (evidence / 'input.xml').write_text('<hierarchy><node class="android.widget.EditText" text=""/><node class="android.widget.TextView" text="VERIFY_SENT_528"/></hierarchy>')
+            (evidence / 'input.xml').write_text('<hierarchy><node class="android.widget.EditText" text="" bounds="[0,60][100,100]"/><node class="android.widget.ProgressBar" bounds="[70,70][90,90]"/><node class="android.widget.TextView" text="VERIFY_SENT_528"/></hierarchy>')
+            Image.new('RGB', (100, 100), (20, 20, 20)).save(evidence / 'input.png')
             (evidence / 'device-log.txt').write_text(f'I SendTiming: message_added +5ms\nI SendTiming: box_cleared_frame +{milliseconds}ms\n')
             adb = evidence / 'adb'
             adb.write_text(textwrap.dedent('''\
@@ -41,13 +43,16 @@ class SendFrameCaptureTest(unittest.TestCase):
             adb.chmod(0o700)
             env = dict(os.environ, EVIDENCE=str(evidence), scripts=str(SCRIPTS), PATH=f'{evidence}{os.pathsep}{os.environ["PATH"]}')
             harness = '''set -euo pipefail
+                step=0
                 tap_desc() { :; }
                 shot() {
                     if ! test -f "$EVIDENCE/frame-observed"; then
                         printf 'Screenshot started before composer draw receipt\\n' >&2
                         return 1
                     fi
+                    step=$((step + 1))
                     cp "$EVIDENCE/input.xml" "$EVIDENCE/current.xml"
+                    cp "$EVIDENCE/input.png" "$EVIDENCE/$(printf '%02d' "$step")-$1.png"
                 }
             '''
             result = subprocess.run(['bash', '-c', harness + segment], env=env, capture_output=True, text=True)
