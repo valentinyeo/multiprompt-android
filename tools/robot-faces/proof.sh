@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+file=app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt
+mkdir -p build/robot-faces
+cp "$file" build/robot-faces/candidate.kt
+restore() { cp build/robot-faces/candidate.kt "$file"; }
+trap restore EXIT
+run_robots() {
+    local phase=$1 status=0 result
+    rm -rf app/build/outputs/connected_android_test_additional_output
+    "${GRADLE:-gradle}" --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2g connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.multiprompt.companion.ui.RobotFacesTest > "build/robot-faces/$phase.log" 2>&1 || status=$?
+    cat "build/robot-faces/$phase.log"
+    mkdir -p "build/robot-faces/$phase"
+    cp app/build/outputs/androidTest-results/connected/debug/TEST-*.xml "build/robot-faces/$phase/"
+    result=$(find app/build/outputs -type d -name robot-faces -print -quit)
+    if [ -n "$result" ]; then cp "$result"/*.png "build/robot-faces/$phase/"; fi
+    return "$status"
+}
+git show 0ed7a50:"$file" > "$file"
+if run_robots before; then echo 'Original inbox unexpectedly shows robots' >&2; exit 1; fi
+python3 - <<'PY'
+from pathlib import Path
+import xml.etree.ElementTree as ET
+cases = [c for f in Path('build/robot-faces/before').glob('TEST-*.xml') for c in ET.parse(f).iter('testcase')]
+assert len(cases) == 1
+failure = cases[0].find('failure')
+assert failure is not None and 'Robot bot-0' in failure.text, ET.tostring(cases[0])
+print('ORIGINAL_ROBOTS_REJECTED')
+PY
+restore
+trap - EXIT
+run_robots after
+test -s build/robot-faces/after/robot-inbox.png
+test -s build/robot-faces/after/robot-chat-title.png
+echo ROBOT_FACES_EMULATOR_VERIFIED

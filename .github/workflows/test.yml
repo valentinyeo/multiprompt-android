@@ -52,6 +52,31 @@ jobs:
           sudo apt-get update && sudo apt-get install -y tesseract-ocr tmux
           python3 -m pip install Pillow
 
+      - name: Prove ordinary-list regression on original source
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: 41f3847b42a3d56ac9d3a1ce32e62fac23066132
+        run: |
+          git fetch origin "$BASE_SHA"
+          git worktree add "$RUNNER_TEMP/question-control" "$BASE_SHA"
+          cp app/src/test/java/dev/multiprompt/companion/ui/PlainListsTest.kt "$RUNNER_TEMP/question-control/app/src/test/java/dev/multiprompt/companion/ui/"
+          set +e
+          gradle -p "$RUNNER_TEMP/question-control" --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*PlainListsTest*'
+          status=$?
+          set -e
+          test "$status" -ne 0
+          python3 - "$RUNNER_TEMP/question-control/app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.PlainListsTest.xml" <<'PYCONTROL'
+          import sys
+          import xml.etree.ElementTree as ET
+          root = ET.parse(sys.argv[1]).getroot()
+          case = root.find("testcase[@name='plainNumberedListsKeepTheirNumbersAndHaveNoCards']")
+          assert case is not None and case.find('failure') is not None
+          print('ORIGINAL_LIST_CARD_REGRESSION_REPRODUCED')
+          PYCONTROL
+          mkdir -p app/build/reports/question-control
+          cp "$RUNNER_TEMP/question-control/app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.PlainListsTest.xml" app/build/reports/question-control/
+          git worktree remove --force "$RUNNER_TEMP/question-control"
+
       - name: Reject the original unshared emulator lifecycle
         run: |
           git fetch --no-tags origin 7bc752421f1599727aaef1bc316e0ee81b4a0630 379589588d573b353138ea915f951f590156a9c7 48bc00c1d4cb8122d1688be9bc6962a2caab611f 11fdebca24f50fa2f21a4e1da5125bdb0589cd95 2ca0d5b6ea31c7c245e8a4334e496cbf9eaac618 f05a21c8cb474767e9faf461036041f09e459f6e
@@ -77,6 +102,8 @@ jobs:
           name: chat-regression-proof
           path: |
             app/build/reports/igsh-844/*.png
+            app/build/reports/igsh-1045/*.png
+            app/build/reports/question-control/*.xml
             app/build/test-results/test*UnitTest/*.xml
 
   image-preview-emulator:

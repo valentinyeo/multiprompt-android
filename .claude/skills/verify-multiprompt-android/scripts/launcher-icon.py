@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+from pathlib import Path
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -59,6 +60,17 @@ def icon_region(cell_bounds):
 
 
 mode = sys.argv[1]
+if mode == "resource-file":
+    table = Path(sys.argv[2]).read_text()
+    name = sys.argv[3]
+    entries = re.split(r"(?m)^\s*resource ", table)
+    matches = [entry for entry in entries[1:] if re.match(r"\S+\s+" + re.escape(name) + r"(?:\s|$)", entry)]
+    assert len(matches) == 1, f"LAUNCHER_RESOURCE_NOT_UNIQUE: {name}"
+    paths = set(re.findall(r"(?m)^\s*\([^)]*\)\s+\(file\)\s+(\S+\.xml)(?:\s|$)", matches[0]))
+    assert len(paths) == 1, f"LAUNCHER_RESOURCE_FILE_NOT_UNIQUE: {name}"
+    print(paths.pop())
+    raise SystemExit(0)
+
 if mode in ("find", "home", "position"):
     cells = launcher_cells(sys.argv[2])
     if len(cells) != 1:

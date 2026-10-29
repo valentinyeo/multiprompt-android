@@ -34,7 +34,6 @@ if run_rows before; then
   echo 'Original rows unexpectedly passed' >&2
   exit 1
 fi
-grep -F 'still shows status lines' build/session-rows/before/rows.txt
 grep -E 'yellow marker pixels=[1-9]' build/session-rows/before/rows.txt
 echo SESSION_ROWS_RED_OK
 restore

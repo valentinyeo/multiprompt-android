@@ -33,6 +33,14 @@ def verify_image(path, screen):
                 missing = [label for label in SCREENS[screen] if label not in text]
                 if not missing:
                     break
+    if missing and screen == "menu":
+        with Image.open(path) as image, tempfile.NamedTemporaryFile(suffix=".png") as menu:
+            image.crop((int(image.width * .44), int(image.height * .1), image.width, int(image.height * .7))).save(menu.name)
+            result = subprocess.run(
+                ["tesseract", menu.name, "stdout", "--psm", "6"], check=True, capture_output=True, text=True
+            )
+            text += " " + " ".join(re.findall(r"[a-z0-9]+", result.stdout.lower()))
+            missing = [label for label in SCREENS[screen] if label not in text]
     if missing:
         raise ValueError(f"{path}: missing expected {screen} text: {missing}; OCR: {text}")
     print(f"NAMED_SCREEN_OK {path.name} {screen}")

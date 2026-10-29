@@ -2,7 +2,6 @@ package dev.multiprompt.companion.reader
 
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.AgentKind
-import dev.multiprompt.companion.ssh.ClaudeQuestion
 import dev.multiprompt.companion.ssh.SshRepository
 import dev.multiprompt.companion.ssh.TmuxAction
 import dev.multiprompt.companion.ssh.TmuxText
@@ -79,7 +78,7 @@ class SessionReaderConnection(
         data class Cancel(val record: QueuedMessages.SentPrompt) : Request
         data class Action(val action: TmuxAction) : Request
         data class ModelPickerOption(val index: Int) : Request
-        data class QuestionAnswer(val question: ClaudeQuestion, val index: Int) : Request
+        data class QuestionAnswer(val question: PendingQuestion, val choices: Set<Int>, val other: String) : Request
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -301,10 +300,10 @@ class SessionReaderConnection(
         return requests.trySend(Request.ModelPickerOption(index)).isSuccess
     }
 
-    fun answerQuestion(question: ClaudeQuestion, index: Int): Boolean {
-        if (agent != AgentKind.CLAUDE || _state.value.sending ||
-            ClaudeQuestion.parse(_state.value.screenOutput) != question || question.options.none { it.index == index }) return false
-        return requests.trySend(Request.QuestionAnswer(question, index)).isSuccess
+    fun answerQuestion(question: PendingQuestion, choices: Set<Int>, other: String): Boolean {
+        if (_state.value.sending || !question.isVisible(_state.value.screenOutput) ||
+            historyConnection?.state?.value?.history?.pendingQuestions?.contains(question) != true) return false
+        return requests.trySend(Request.QuestionAnswer(question, choices, other)).isSuccess
     }
 
     private fun startStream() {
@@ -408,7 +407,8 @@ class SessionReaderConnection(
                             tmuxSessionName,
                             request.question,
                             requireNotNull(questionScreen),
-                            request.index,
+                            request.choices,
+                            request.other,
                         )
                         is Request.ModelPickerOption -> repository.selectModelPickerOption(
                             client,
