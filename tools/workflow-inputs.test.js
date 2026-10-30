@@ -21,3 +21,13 @@ test('workflow run scripts use environment values for event and dispatch data', 
     }
   }
 });
+
+test('Android SDK setup never requests the removed default tools package', () => {
+  const files = readdirSync(directory).filter(file => file.endsWith('.yml'));
+  for (const file of files) {
+    const source = readFileSync(path.join(directory, file), 'utf8');
+    for (const match of source.matchAll(/^(\s*)- uses: android-actions\/setup-android[^\n]*\n([\s\S]*?)(?=^\1- |$(?![\s\S]))/gm)) {
+      assert.match(match[2], /^\s+packages:\s*platform-tools\s*$/m, `${file}: choose supported SDK packages explicitly`);
+    }
+  }
+});

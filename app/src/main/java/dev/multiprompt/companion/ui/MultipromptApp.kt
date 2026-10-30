@@ -122,6 +122,7 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -134,7 +135,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -210,7 +211,6 @@ import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.dictation.DictationState
-import dev.multiprompt.companion.reader.QueuedMessages
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.skills.NativeSkill
@@ -381,7 +381,6 @@ private fun AppScreens(viewModel: MainViewModel) {
             onFontSizeChange = viewModel::setShellFontSize,
             onBack = viewModel::closeTerminal,
             onReleaseNotes = viewModel::openReleaseNotes,
-            onSwitchSession = viewModel::openAdjacentSession,
             onSessionInput = { state.terminalSession?.let(viewModel::stampSessionInput) },
         )
         return
@@ -418,7 +417,6 @@ private fun AppScreens(viewModel: MainViewModel) {
             },
             onRemind = viewModel::archiveReaderUntilAndOpenNext,
             onOpenTerminal = { viewModel.openTerminal(readerSession, userInitiated = true) },
-            onSwitchSession = viewModel::openAdjacentReaderSession,
             onFontScaleChanged = { scale -> viewModel.saveReaderFontScale(readerSession, scale) },
             onRename = { name -> viewModel.renameSession(readerSession, name) },
             onDissolve = { viewModel.dissolveSession(readerSession) },
@@ -477,6 +475,8 @@ private fun AppScreens(viewModel: MainViewModel) {
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        contentWindowInsets = if (state.section == AppSection.SESSIONS && inboxVisible)
+            WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
         topBar = {
             Column(if (state.section == AppSection.SESSIONS && updateState !is UpdateState.Available) Modifier else Modifier.statusBarsPadding()) {
                 if (state.section != AppSection.SESSIONS) {
@@ -1574,6 +1574,10 @@ internal fun SessionsScreen(
     val visibleSessions = if (state.selectedWorkspaceId == FREQUENT_SPLIT_ID) {
         frequentSessions(matchingSessions, state.accountLayout, state.accountHosts, etaNowMillis)
     } else SessionSearch.newestFirst(matchingSessions, state.sessionInteractionEpochSeconds)
+    val pinnedSessions = if (state.sessionBucket == SessionBucket.OPEN && normalizedQuery.isBlank() &&
+        state.selectedWorkspaceId != FAVORITES_SPLIT_ID && state.selectedWorkspaceId != FREQUENT_SPLIT_ID
+    ) visibleSessions.filter { isFavoriteSession(it, state.accountLayout, state.accountHosts) } else emptyList()
+    val rowSessions = visibleSessions.filterNot { it in pinnedSessions }
     val visibleDissolvedSessions = if (state.sessionBucket == SessionBucket.ARCHIVE && state.selectedWorkspaceId != FAVORITES_SPLIT_ID && state.selectedWorkspaceId != FREQUENT_SPLIT_ID) {
         state.dissolvedSessions.filter { session ->
             normalizedQuery.isBlank() ||
@@ -1592,7 +1596,8 @@ internal fun SessionsScreen(
                 Row(
                     Modifier.fillMaxWidth()
                         .then(if (LocalMaterial3.current) Modifier.height(64.dp) else Modifier)
-                        .padding(horizontal = 8.dp, vertical = if (LocalMaterial3.current) 0.dp else 2.dp),
+                        .padding(horizontal = 8.dp, vertical = if (LocalReaderStyle.current) ReaderScreenPadding else if (LocalMaterial3.current) 0.dp else 2.dp)
+                        .then(if (LocalReaderStyle.current) Modifier.offset(y = (-6).dp) else Modifier),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -1761,6 +1766,35 @@ internal fun SessionsScreen(
                         }
                     }
                 }
+                if (pinnedSessions.isNotEmpty()) {
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        pinnedSessions.forEach { session ->
+                            val key = SessionReadStore.key(session.hostId, session.name)
+                            Column(
+                                Modifier.width(80.dp).height(90.dp).clickable { onOpen(session) },
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Box {
+                                    BotAvatar(session.name, 56.dp, workspaceColor = session.workspaceColor)
+                                    if (key in state.unreadSessionKeys) {
+                                        Badge(
+                                            Modifier.align(Alignment.TopEnd).semantics {
+                                                contentDescription = "${(state.unreadCounts[key] ?: 1).coerceAtLeast(1)} unread messages"
+                                            },
+                                            containerColor = Color(0xFF89B4F8),
+                                            contentColor = Color(0xFF121212),
+                                        ) { Text(UnreadCount.label(state.unreadCounts[key] ?: 1)) }
+                                    }
+                                }
+                                Text(session.displayName, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
                 if (state.updatingHostIds.isNotEmpty()) {
                     UpdatingSessionsNotice(hostLabels = state.updatingHostIds.mapNotNull { hostLabels[it] })
                 }
@@ -1824,7 +1858,7 @@ internal fun SessionsScreen(
                     item(key = "error-$hostId") { InlineError(error) }
                 }
             }
-            items(visibleSessions, key = { "${it.hostId}:${it.name}" }) { session ->
+            items(rowSessions, key = { "${it.hostId}:${it.name}" }) { session ->
                 val key = SessionReadStore.key(session.hostId, session.name)
                 val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
                 val starred = tab?.favorite == true
@@ -2064,16 +2098,6 @@ private fun SessionCard(
             false
         },
     )
-    val title: @Composable RowScope.() -> Unit = {
-        Text(
-            session.displayName,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = if (unread) FontWeight.Medium else FontWeight.Normal,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
     SwipeToDismissBox(
         state = dismissState,
         enableDismissFromStartToEnd = !archived,
@@ -2111,17 +2135,37 @@ private fun SessionCard(
                         onLongClickLabel = "Session actions",
                         onLongClick = { menuExpanded = true },
                     )
-                    .heightIn(min = if (LocalReaderStyle.current) 52.dp else 56.dp)
-                    .padding(horizontal = if (LocalReaderStyle.current) 20.dp else 16.dp, vertical = if (LocalReaderStyle.current) 10.dp else 12.dp),
+                    .heightIn(min = 68.dp)
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                title()
+                BotAvatar(session.name, workspaceColor = session.workspaceColor)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        session.displayName,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontSize = 16.sp,
+                        lineHeight = 20.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        SessionPreview.line(session.preview),
+                        modifier = Modifier.testTag("Session preview"),
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Text(
                     sessionActivityLabel(session.lastActivityEpochSeconds, System.currentTimeMillis() / 1000),
                     modifier = Modifier.testTag("Session activity"),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp,
+                    fontSize = 13.sp,
                     lineHeight = 16.sp,
                     maxLines = 1,
                 )
@@ -2144,7 +2188,7 @@ private fun SessionCard(
                 ) {
                     onToggleFavorite?.let { toggle ->
                         DropdownMenuItem(
-                            text = { Text(if (starred) "Unstar" else "Star") },
+                            text = { Text(if (starred) "Unfavorite" else "Favorite") },
                             onClick = {
                                 menuExpanded = false
                                 toggle()
@@ -2306,17 +2350,23 @@ internal fun ReaderTopBar(
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                 }
                 Box(Modifier.weight(1f)) {
-                    Text(
-                        session.displayName,
-                        modifier = Modifier
-                            .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
+                    Row(
+                        Modifier.background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
                             .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                            .padding(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        BotAvatar(session.name, 28.dp, workspaceColor = session.workspaceColor)
+                        Text(
+                            session.displayName,
+                            modifier = Modifier.weight(1f, fill = false),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 Box {
                     IconButton(onClick = onMenuClick, modifier = Modifier.roundOutlined()) {
@@ -2345,7 +2395,7 @@ internal fun ReaderTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                AgentIcon(session.agent, Modifier.size(22.dp))
+                BotAvatar(session.name, 28.dp, workspaceColor = session.workspaceColor)
                 Box(Modifier.weight(1f)) {
                     Column(
                         Modifier
@@ -2449,7 +2499,6 @@ internal fun ReaderScreen(
     onArchiveToggle: () -> Unit,
     onRemind: (Long?) -> Unit,
     onOpenTerminal: () -> Unit,
-    onSwitchSession: (Int) -> Unit,
     onFontScaleChanged: (Float) -> Unit,
     onRename: (String) -> String?,
     onDissolve: () -> Unit,
@@ -2660,13 +2709,6 @@ internal fun ReaderScreen(
                 replyTo = replyTo ?: draft.replyTo
             }
             sentDraft = null
-        }
-    }
-    LaunchedEffect(prompt, sendMarkPending) {
-        if (sendMarkPending && prompt.isEmpty()) {
-            withFrameNanos { }
-            SendTiming.mark("box_cleared_frame")
-            sendMarkPending = false
         }
     }
     LaunchedEffect(dictationState.transcript) {
@@ -2942,7 +2984,6 @@ internal fun ReaderScreen(
     ).joinToString(" · ").ifEmpty { null }
     BackHandler(onBack = onBack)
     Scaffold(
-        modifier = Modifier.horizontalSwipe(onSwitchSession, suppressRight = replyGate::suppressRight),
         floatingActionButtonPosition = androidx.compose.material3.FabPosition.Center,
         floatingActionButton = {
             if (if (historyChat) chatListState.canScrollBackward else scrollState.canScrollForward) {
@@ -3070,9 +3111,9 @@ internal fun ReaderScreen(
                                     onClick = {
                                         menuExpanded = false
                                         readerScope.launch {
-                                            connection.resyncChat()
+                                            val confirmed = connection.resyncChat()
                                             followRequest++
-                                            android.widget.Toast.makeText(context, "Synced", android.widget.Toast.LENGTH_SHORT).show()
+                                            android.widget.Toast.makeText(context, if (confirmed) "Synced" else "Some messages could not be confirmed", android.widget.Toast.LENGTH_SHORT).show()
                                         }
                                     },
                                 )
@@ -3349,7 +3390,14 @@ internal fun ReaderScreen(
                             value = promptField,
                             onValueChange = { promptField = it },
                             modifier = Modifier.weight(1f).heightIn(min = ReaderComposerHeight)
-                                .border(1.dp, MaterialTheme.colorScheme.outline, ReaderComposerShape).focusRequester(promptFocusRequester),
+                                .border(1.dp, MaterialTheme.colorScheme.outline, ReaderComposerShape).focusRequester(promptFocusRequester)
+                                .drawWithContent {
+                                    drawContent()
+                                    if (sendMarkPending && prompt.isEmpty()) {
+                                        SendTiming.mark("box_cleared_frame")
+                                        sendMarkPending = false
+                                    }
+                                },
                             filled = true,
                             placeholder = {
                                 Text("Message ${session.displayName}", maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -3570,12 +3618,6 @@ internal fun ReaderScreen(
                         block.kind == TmuxText.ReaderBlockKind.CODE
                     )
             }
-            val nowMillis = System.currentTimeMillis()
-            val queuedMessages = remember(transcript, reader.screenOutput, session.agent, reader.sentRecord, nowMillis) {
-                transcript?.let {
-                    QueuedMessages.pending(it, reader.screenOutput, session.agent, reader.sentRecord, nowMillis)
-                }.orEmpty()
-            }
             var expandedReaderBlocks by remember(connection) { mutableStateOf(emptySet<String>()) }
             val transcriptFontSize = chatFontSize((14f * transcriptZoom).sp, transcriptZoom)
             Column(
@@ -3714,34 +3756,7 @@ internal fun ReaderScreen(
                         }
                     }
                 }
-                queuedMessages.forEach { text ->
-                    ChatBubble(isUser = true, sunlight = sunlightMode) {
-                        Text(
-                            "Queued",
-                            fontFamily = chatFontFamily(),
-                            fontSize = chromeFontSize((transcriptFontSize.value - 3f).coerceAtLeast(8f).sp),
-                            color = chatHintColor(sunlightMode),
-                        )
-                        SelectionContainer {
-                            ChatLinkText(text) { line ->
-                                Text(
-                                    terminalLinks(line, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
-                                    fontFamily = chatFontFamily(),
-                                    fontSize = transcriptFontSize,
-                                    lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
-                                    color = chatTextColor(sunlightMode),
-                                )
-                            }
-                        }
-                        Text(
-                            "The agent reads it after its current step",
-                            fontFamily = chatFontFamily(),
-                            fontSize = chromeFontSize((transcriptFontSize.value - 3f).coerceAtLeast(8f).sp),
-                            color = chatHintColor(sunlightMode),
-                        )
-                    }
-                }
-                if ((transcript?.isEmpty() ?: visibleReaderBlocks.isEmpty()) && queuedMessages.isEmpty()) {
+                if (transcript?.isEmpty() ?: visibleReaderBlocks.isEmpty()) {
                     Text(
                         "No recent output",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -4210,7 +4225,6 @@ private fun TerminalScreen(
     savedFontSize: Float?,
     onFontSizeChange: (Float) -> Unit,
     onBack: () -> Unit,
-    onSwitchSession: (Int) -> Unit,
     onSessionInput: () -> Unit,
     onReleaseNotes: () -> Unit,
 ) {
@@ -4243,7 +4257,7 @@ private fun TerminalScreen(
                 subtitle = "${connection.tmuxSessionName} · ${statusLabel(status)}",
                 onBack = onBack,
                 onReleaseNotes = onReleaseNotes,
-                onOpenHistory = { historyVisible = true; keyboard?.hide() },
+                onOpenHistory = { historyVisible = true },
                 onLiveView = { historyVisible = false },
                 onShowKeyboard = { focusRequester.requestFocus(); keyboard?.show() },
             )
@@ -4272,16 +4286,12 @@ private fun TerminalScreen(
             }
             ShellContent(
                 historyVisible = historyVisible,
-                onOpenHistory = {
-                    historyVisible = true
-                    keyboard?.hide()
-                },
+                onOpenHistory = { historyVisible = true },
                 onJumpToLive = { historyVisible = false },
                 loadHistory = connection::history,
                 fontSize = fontSize,
                 onFontSizeChange = onFontSizeChange,
                 contentWidth = with(density) { ((columns.takeIf { it > 0 } ?: FALLBACK_COLUMNS) * charWidthPx).toDp() },
-                onSwitchSession = onSwitchSession,
                 onLiveTap = {
                     focusRequester.requestFocus()
                     keyboard?.show()

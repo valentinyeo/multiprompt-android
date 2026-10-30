@@ -135,6 +135,60 @@ wait_text work-main 60 hasi
 wait_text runner-3 30 hasi
 shot android-before
 
+if [ "${RENAME_ONLY:-false}" = true ]; then
+    adb shell 'screenrecord /sdcard/rename-live.mp4 & echo $! > /sdcard/rename-live.pid; wait' > "$work/record.log" 2>&1 &
+    record_pid=$!
+    dump_ui
+    read -r x y <<< "$(python3 "$here/ui.py" "$EVIDENCE/current.xml" tap work-main)"
+    adb shell input swipe "$x" "$y" "$x" "$y" 1000
+    wait_text Rename
+    tap_text Rename
+    wait_text 'Rename session'
+    selector="$MULTIPROMPT_DIR/../.claude/skills/verify-multiprompt-android/scripts/ui.py"
+    filled=false
+    for attempt in 1 2 3; do
+        dump_ui
+        read -r x y <<< "$(python3 "$selector" "$EVIDENCE/current.xml" field Name)"
+        adb shell input tap "$x" "$y"
+        dump_ui
+        python3 "$selector" "$EVIDENCE/current.xml" focused-field Name >/dev/null || continue
+        read -r -a clear_keys <<< "$(python3 "$selector" "$EVIDENCE/current.xml" clear-field Name)"
+        adb shell input keyevent "${clear_keys[@]}"
+        adb shell input text Renamed%ssession
+        dump_ui
+        if python3 "$selector" "$EVIDENCE/current.xml" field-value Name 'Renamed session'; then filled=true; break; fi
+    done
+    test "$filled" = true
+    shot rename-filled
+    adb shell input keyevent KEYCODE_BACK
+    tap_text Rename
+    wait_text 'Renamed session'
+    shot rename-inbox
+    layout "$admin" list | tee "$EVIDENCE/rename-desktop-feed.txt"
+    node --input-type=module - "$admin" "$EVIDENCE/rename-layout.json" <<'JS'
+import { writeFileSync } from 'node:fs';
+const response = await fetch('http://127.0.0.1:8787/v1/layout', { headers: { Authorization: `Bearer ${process.argv[2]}`, 'X-Layout-Features': 'favorite,muted,used,visits,input,settings,hosts,host_removal' } });
+if (response.status !== 200) throw new Error(`account feed ${response.status}`);
+const { layout } = await response.json();
+if (layout.tabs.find(tab => tab.tmux_session === 'work-main')?.name !== 'Renamed session') throw new Error('Rename did not reach the shared account service');
+writeFileSync(process.argv[3], JSON.stringify(layout));
+JS
+    tap_text 'Renamed session'
+    wait_text 'Renamed session'
+    shot rename-reader
+    adb shell input keyevent 4
+    adb shell am force-stop "$package"
+    adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
+    wait_text Work 60 selected
+    wait_text 'Renamed session'
+    shot rename-reopened
+    adb shell 'kill -2 "$(cat /sdcard/rename-live.pid)"'
+    wait "$record_pid" || true
+    adb pull /sdcard/rename-live.mp4 "$EVIDENCE/rename-live.mp4"
+    printf 'SHARED_RENAME_JOURNEY_OK\n' | tee "$EVIDENCE/rename-result.txt"
+    exit 0
+fi
+
 layout "$admin" list | tee "$EVIDENCE/cli-list.txt"
 start=$(now)
 layout "$admin" move --to Runners --create --match 'runner-*' | tee "$EVIDENCE/cli-move.txt"
@@ -175,10 +229,27 @@ if ! wait_text ghost-fav 30 hasi; then
     exit 1
 fi
 shot android-favorites-with-ghost
-stars unstar runner-1 | tee "$EVIDENCE/favorites-unset.json"
-wait_gone runner-1 60 hasi
+dump_ui
+read -r x y <<< "$(python3 "$here/ui.py" "$EVIDENCE/current.xml" tap runner-1)"
+adb shell input swipe "$x" "$y" "$x" "$y" 1000
+wait_text 'Unfavorite' 10
+shot android-favorite-remove-menu
+tap_text 'Unfavorite'
+wait_gone runner-1 10 hasi
 wait_text ghost-fav 5 hasi
 shot android-favorites-after-unstar
+node "$here/favorites.mjs" http://127.0.0.1:8787 "$admin" read runner-1 false "$EVIDENCE/favorites-set.json" ghost-fav | tee "$EVIDENCE/favorites-unset.json"
+tap_split All
+wait_text runner-1 30 hasi
+dump_ui
+read -r x y <<< "$(python3 "$here/ui.py" "$EVIDENCE/current.xml" tap runner-1)"
+adb shell input swipe "$x" "$y" "$x" "$y" 1000
+wait_text 'Favorite' 10
+tap_text 'Favorite'
+tap_split Favorites
+wait_text runner-1 10 hasi
+shot android-favorite-added-back
+node "$here/favorites.mjs" http://127.0.0.1:8787 "$admin" read runner-1 true "$EVIDENCE/favorites-set.json" ghost-fav | tee "$EVIDENCE/favorites-added-back.json"
 printf 'favorites-parity ok\n'
 
 printf '{"section_seconds": %s, "open_seconds": %s}\n' "$section_seconds" "$open_seconds" | tee "$EVIDENCE/result.json"

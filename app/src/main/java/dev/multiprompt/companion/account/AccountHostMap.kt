@@ -30,10 +30,10 @@ object AccountHostMap {
         return layout.tabs.firstOrNull { it.host == slot && it.session.equals(session.name, ignoreCase = true) }
     }
 
-    fun sessionFor(tab: AccountTab, inventory: List<TmuxSession>, mapping: Map<Int, HostProfile>): TmuxSession? {
+    fun sessionFor(tab: AccountTab, inventory: List<TmuxSession>, mapping: Map<Int, HostProfile>, layout: AccountLayout? = null): TmuxSession? {
         val host = mapping[tab.host] ?: return null
         val live = inventory.firstOrNull { it.hostId == host.id && it.name.equals(tab.session, ignoreCase = true) }
-        return (live ?: TmuxSession(host.id, tab.session, 1, 0, 0)).copy(title = tab.name, windowName = tab.name, accountName = tab.name)
+        return (live ?: TmuxSession(host.id, tab.session, 1, 0, 0)).copy(title = tab.name, windowName = tab.name, accountName = tab.name, workspaceName = tab.workspace, workspaceColor = layout?.workspaceColor(tab.workspace) ?: 0)
     }
 
     fun withAccountSessions(inventory: List<TmuxSession>, layout: AccountLayout?, mapping: Map<Int, HostProfile>): List<TmuxSession> {
@@ -41,9 +41,12 @@ object AccountHostMap {
         val missing = layout.tabs.mapNotNull { tab ->
             val host = mapping[tab.host] ?: return@mapNotNull null
             if (inventory.any { it.hostId == host.id && it.name.equals(tab.session, ignoreCase = true) }) null
-            else sessionFor(tab, inventory, mapping)
+            else sessionFor(tab, inventory, mapping, layout)
         }
-        return inventory + missing
+        return inventory.map { session ->
+            val tab = tabFor(session, layout, mapping)
+            session.copy(accountName = tab?.name ?: session.accountName, workspaceName = tab?.workspace.orEmpty(), workspaceColor = layout.workspaceColor(tab?.workspace.orEmpty()))
+        } + missing
     }
 
     fun workspaceAssignments(inventory: List<TmuxSession>, layout: AccountLayout?, mapping: Map<Int, HostProfile>): Map<String, String> =

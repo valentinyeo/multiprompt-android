@@ -1,16 +1,56 @@
 name: Verify real Android UI
 
 on:
-  push:
-    branches: [ceo/IGSH-1012, ceo/IGSH-1032]
+  schedule:
+    - cron: '23 3 * * *'
   pull_request:
     paths:
       - 'app/**'
       - 'tools/native-skills.test.py'
+      - 'tools/release-choices/**'
       - '.claude/skills/verify-multiprompt-android/**'
       - '.github/workflows/verify.yml'
+      - '.github/actions/android-proof/**'
   workflow_dispatch:
     inputs:
+      released_terminal:
+        description: Verify 500-line shell scrolling on the published signed APK
+        type: boolean
+        default: false
+      release_icon:
+        description: Verify the approved launcher icon on the published signed APK
+        type: boolean
+        default: false
+      release_choices:
+        description: Verify plain lists and real question answers on the signed release APK
+        type: boolean
+        default: false
+      released_chat:
+        description: Verify chat catchup on the signed published APK
+        type: boolean
+        default: false
+      released_robots:
+        description: Verify robot inbox and chat title on the signed APK
+        type: boolean
+        default: false
+      released_reactions:
+        description: Verify reaction display and transport on the signed APK
+        type: boolean
+        default: false
+      candidate:
+        description: Build signed branch candidate instead of downloading the published APK
+        type: boolean
+        default: false
+      channel:
+        description: Signed recovery release channel
+        type: choice
+        default: android-latest
+        options:
+          - android-latest
+          - android-m3-latest
+      expected_commit:
+        description: Required published manifest commit for release choices proof
+        type: string
       feature:
         description: User journey from the verification feature map
         required: true
@@ -21,14 +61,25 @@ on:
           - hosts-retired.md
           - host-changed-key.md
           - sessions.md
+          - session-summaries.md
           - session-reader.md
           - chat-choices.md
           - chat-reactions.md
           - chat-queued.md
+          - chat-cancel.md
           - native-skills.md
           - chat-resync.md
+          - chat-codex.md
           - session-routing.md
+          - session-gestures.md
+          - session-favorites.md
           - terminal.md
+          - launcher-icon.md
+          - robot-faces.md
+      expect_shell_missing:
+        description: Require the original app to reject upward shell scrolling
+        type: boolean
+        default: false
       expect_native_missing:
         description: Require the original app to reject the native slash journey
         required: false
@@ -49,17 +100,64 @@ permissions:
 
 jobs:
   verify:
-    name: ${{ inputs.expect_native_missing && 'original native-skill control' || 'verify' }}
-    runs-on: ubuntu-latest
+    name: ${{ inputs.expect_shell_missing && 'original shell control' || inputs.expect_native_missing && 'original native-skill control' || 'verify' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     env:
       EVIDENCE: ${{ github.workspace }}/verification-evidence
-      VERIFY_FEATURE: ${{ inputs.feature || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1012' && 'chat-reactions.md') || 'native-skills.md' }}
+      VERIFY_FEATURE: ${{ inputs.feature || (github.ref == 'refs/heads/ceo/IGSH-1075' && 'chat-queued.md') || ((github.head_ref == 'ceo/IGSH-1076' || startsWith(github.ref, 'refs/heads/ceo/IGSH-1076')) && 'terminal.md') || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1069' && 'chat-choices.md') || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1012' && 'chat-reactions.md') || 'native-skills.md' }}
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
       UPDATE_BASELINE_RUN: ${{ inputs.update_baseline_run }}
       APP_REF: ${{ inputs.app_ref }}
+      RELEASE_CHANNEL: ${{ inputs.channel || 'android-latest' }}
     steps:
       - uses: actions/checkout@v4
+      - name: Validate signed recovery channel
+        env:
+          RELEASED_CHAT: ${{ inputs.released_chat }}
+          CANDIDATE: ${{ inputs.candidate }}
+          EXPECT_SHELL_MISSING: ${{ inputs.expect_shell_missing }}
+          EXPECT_NATIVE_MISSING: ${{ inputs.expect_native_missing }}
+          RELEASE_CHOICES: ${{ inputs.release_choices }}
+          RELEASE_ICON: ${{ inputs.release_icon }}
+          RELEASED_REACTIONS: ${{ inputs.released_reactions }}
+          RELEASED_TERMINAL: ${{ inputs.released_terminal }}
+          RELEASED_ROBOTS: ${{ inputs.released_robots }}
+        run: |
+          if [[ "$VERIFY_FEATURE" == session-routing.md ]]; then
+            [[ "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true ]]
+            [[ "$EXPECT_SHELL_MISSING" != true && "$EXPECT_NATIVE_MISSING" != true ]]
+            if [[ "$CANDIDATE" == true ]]; then [[ "$RELEASED_CHAT" == true ]]; fi
+          fi
+          if [[ "$VERIFY_FEATURE" == session-favorites.md || ( "$VERIFY_FEATURE" == session-routing.md && ( "$RELEASED_CHAT" == true || "$RELEASE_CHANNEL" == android-m3-latest ) ) ]]; then
+            [[ "$RELEASED_CHAT" == true && -z "$APP_REF" && -z "$UPDATE_BASELINE_RUN" ]]
+            [[ "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true ]]
+          fi
+          case "$RELEASE_CHANNEL" in
+            android-latest) ;;
+            android-m3-latest)
+              [[ ( "$VERIFY_FEATURE" == chat-resync.md || "$VERIFY_FEATURE" == session-favorites.md || "$VERIFY_FEATURE" == chat-queued.md || "$VERIFY_FEATURE" == session-routing.md ) && "$RELEASED_CHAT" == true && -z "$APP_REF" && -z "$UPDATE_BASELINE_RUN" ]]
+              [[ "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true ]]
+              ;;
+            *) exit 1 ;;
+          esac
+      - name: Prove SSH fixture configuration on the supported host
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y openssh-server
+          sudo install -d -m 755 /run/sshd
+          if [ "$GITHUB_REF" = refs/heads/ceo/IGSH-1022 ]; then
+            git fetch --depth=1 origin 6c808de1454493a16598e469ed38ec4dad15a4ab
+            git show 6c808de1454493a16598e469ed38ec4dad15a4ab:.claude/skills/verify-multiprompt-android/scripts/fixture.sh > "$RUNNER_TEMP/original-fixture.sh"
+            if FIXTURE_SOURCE="$RUNNER_TEMP/original-fixture.sh" node --test tools/fixture.test.js > "$RUNNER_TEMP/fixture-red.txt" 2>&1; then
+              cat "$RUNNER_TEMP/fixture-red.txt"
+              exit 1
+            fi
+            cat "$RUNNER_TEMP/fixture-red.txt"
+            grep -F 'Bad configuration option: PerSourcePenalties' "$RUNNER_TEMP/fixture-red.txt"
+          fi
+          node --test tools/fixture.test.js
+          printf 'SSH_FIXTURE_RED_GREEN_OK\n'
       - name: Prepare verification paths
         run: |
           mkdir -p "$EVIDENCE"
@@ -75,9 +173,9 @@ jobs:
         with:
           packages: platform-tools
       - uses: actions/checkout@v4
-        if: inputs.app_ref != ''
+        if: env.APP_REF != ''
         with:
-          ref: ${{ inputs.app_ref }}
+          ref: ${{ env.APP_REF }}
           path: app-source
       - name: Capture signed update baseline
         if: env.VERIFY_FEATURE == 'chat-reactions.md' && inputs.update_baseline_run == ''
@@ -95,54 +193,117 @@ jobs:
           [[ "$BASELINE_RUN" =~ ^[0-9]+$ ]]
           gh run download "$BASELINE_RUN" --repo "$GITHUB_REPOSITORY" --name "verify-chat-reactions.md-$BASELINE_RUN" --dir "$RUNNER_TEMP/update-baseline"
           cp -a "$RUNNER_TEMP/update-baseline/signed-update-baseline" "$EVIDENCE/"
-      - name: Build debug APK
+      - name: Check reaction screenshot oracle
         run: |
-          mkdir -p "$EVIDENCE"
           python3 -m pip install Pillow
           python3 .claude/skills/verify-multiprompt-android/scripts/reactions.test.py
+      - name: Check recovery UI oracle
+        if: env.VERIFY_FEATURE == 'chat-resync.md'
+        run: python3 -B tools/release-choices/ui.test.py
+      - name: Reject code scroll interception on original source
+        if: inputs.feature == 'session-gestures.md'
+        run: |
+          python3 -B tools/session-gestures/scroll.test.py
+          source=app/src/main/java/dev/multiprompt/companion/ui/ReplyableBubble.kt
+          cp "$source" "$RUNNER_TEMP/ReplyableBubble.kt"
+          git fetch origin f1e4e3ea3d25d48e4559337434a37f2f605609f7
+          git show f1e4e3ea3d25d48e4559337434a37f2f605609f7:"$source" > "$source"
+          status=0
+          gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*ReplyToMessageTest.codeScrollsBothWaysWithoutStartingReply' || status=$?
+          cp "$RUNNER_TEMP/ReplyableBubble.kt" "$source"
+          test "$status" -ne 0
+          python3 - <<'PYCONTROL'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.ReplyToMessageTest.xml').getroot()
+          case = root.find("testcase[@name='codeScrollsBothWaysWithoutStartingReply']")
+          failure = case.find('failure')
+          assert failure is not None and 'Wide code must scroll back right' in failure.get('message', '')
+          print('ORIGINAL_CODE_SCROLL_INTERCEPTION_REJECTED')
+          PYCONTROL
+          cp app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.ReplyToMessageTest.xml "$EVIDENCE/original-gesture.xml"
+          gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*ReplyToMessageTest' --tests '*ShellViewTest'
+      - name: Prepare signed choices APK and same-signer fixture instrumentation
+        if: inputs.release_choices == true || inputs.released_reactions == true || inputs.released_terminal == true || inputs.released_robots == true || inputs.released_chat == true
+        env:
+          CANDIDATE: ${{ inputs.candidate }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          [[ "$VERIFY_FEATURE" = chat-queued.md || "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md || "$VERIFY_FEATURE" = terminal.md || "$VERIFY_FEATURE" = robot-faces.md || "$VERIFY_FEATURE" = chat-cancel.md || "$VERIFY_FEATURE" = session-gestures.md || "$VERIFY_FEATURE" = session-summaries.md || "$VERIFY_FEATURE" = chat-resync.md || "$VERIFY_FEATURE" = session-favorites.md || "$VERIFY_FEATURE" = session-routing.md ]]
+          sdkmanager --install 'build-tools;35.0.0' 'platforms;android-35'
+          bash tools/release-choices/prepare.sh
+          echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
+          echo "VERIFY_PACKAGE=$(cat "$EVIDENCE/package-name.txt")" >> "$GITHUB_ENV"
+          echo "EXPECTED_VERSION=$(cat "$EVIDENCE/version.txt")" >> "$GITHUB_ENV"
+      - name: Download published icon APK
+        if: inputs.release_icon == true
+        run: |
+          test "$VERIFY_FEATURE" = launcher-icon.md
+          python3 -m pip install Pillow
+          python3 .claude/skills/verify-multiprompt-android/scripts/launcher-icon.test.py
+          curl -fsSL https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion-update.json -o "$EVIDENCE/manifest.json"
+          curl -fsSL "$(jq -er '.apkUrl' "$EVIDENCE/manifest.json")" -o "$EVIDENCE/app.apk"
+          printf '%s  %s\n' "$(jq -er '.sha256' "$EVIDENCE/manifest.json")" "$EVIDENCE/app.apk" | sha256sum --check
+          echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
+          echo "VERIFY_PACKAGE=dev.multiprompt.companion" >> "$GITHUB_ENV"
+          echo "EXPECTED_VERSION=$(jq -er '.versionName' "$EVIDENCE/manifest.json")" >> "$GITHUB_ENV"
+      - name: Reject original Codex reader
+        if: inputs.feature == 'chat-codex.md'
+        run: |
+          git fetch origin 099a8e73b6857ff901d1166854dbbda0884122f1
+          git show 099a8e73b6857ff901d1166854dbbda0884122f1:app/src/main/assets/chat_history_reader.py > "$RUNNER_TEMP/original-reader.py"
+          if CODEX_READER="$RUNNER_TEMP/original-reader.py" python3 -B tools/codex-sync.test.py > "$EVIDENCE/codex-original.txt" 2>&1; then
+            cat "$EVIDENCE/codex-original.txt"
+            exit 1
+          fi
+          grep -F 'AssertionError' "$EVIDENCE/codex-original.txt"
+          python3 -B tools/codex-sync.test.py 2>&1 | tee "$EVIDENCE/codex-fixed.txt"
+          echo ORIGINAL_CODEX_REJECTED
+      - name: Build debug APK
+        if: inputs.release_choices != true && inputs.release_icon != true && inputs.released_reactions != true && inputs.released_terminal != true && inputs.released_robots != true && inputs.released_chat != true
+        run: |
+          mkdir -p "$EVIDENCE"
+          python3 .claude/skills/verify-multiprompt-android/scripts/launcher-icon.test.py
           printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/revision.txt"
           app_source="$GITHUB_WORKSPACE"
           if [ -d "$GITHUB_WORKSPACE/app-source" ]; then app_source="$GITHUB_WORKSPACE/app-source"; fi
           git -C "$app_source" rev-parse HEAD > "$EVIDENCE/app-source-sha.txt"
-          gradle -p "$app_source" --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="0.1.2-verify.$GITHUB_RUN_NUMBER" assembleDebug 2>&1 | tee "$EVIDENCE/build.txt"
+          gradle -p "$app_source" --refresh-dependencies --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="0.1.2-verify.$GITHUB_RUN_NUMBER" assembleDebug 2>&1 | tee "$EVIDENCE/build.txt"
           echo "VERIFY_APK=$app_source/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
           sha256sum "$app_source/app/build/outputs/apk/debug/app-debug.apk" > "$EVIDENCE/app-apk-sha256.txt"
       - name: Build fixture instrumentation
+        if: inputs.released_chat != true && inputs.release_choices != true && inputs.release_icon != true && inputs.released_reactions != true && inputs.released_terminal != true && inputs.released_robots != true
         run: gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g assembleDebugAndroidTest
-      - name: Enable KVM
+      - name: Prepare shell and chat recording
+        if: env.VERIFY_FEATURE == 'chat-queued.md'
         run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: Download emulator SDK with bounded retries
-        timeout-minutes: 15
-        run: |
-          for attempt in 1 2 3; do
-            printf 'SDK download attempt %s/3\n' "$attempt" | tee -a "$EVIDENCE/sdk-install.txt"
-            if sdkmanager --install 'build-tools;35.0.0' platform-tools 'platforms;android-35' emulator 'system-images;android-35;google_apis;x86_64' --channel=0 2>&1 | tee -a "$EVIDENCE/sdk-install.txt"; then
-              exit 0
-            fi
-          done
-          exit 1
+          sudo apt-get update && sudo apt-get install -y ffmpeg tesseract-ocr
+          ffmpeg -version
       - name: Start ephemeral public-key-only SSH and tmux
         run: .claude/skills/verify-multiprompt-android/scripts/fixture.sh
       - name: Install, doctor and drive the real app
         id: native-ui
-        continue-on-error: ${{ inputs.expect_native_missing == true }}
-        uses: reactivecircus/android-emulator-runner@v2.34.0
+        continue-on-error: ${{ inputs.expect_native_missing == true || inputs.expect_shell_missing == true }}
+        uses: ./.github/actions/android-proof
         with:
-          api-level: 35
-          emulator-build: 16428233
-          arch: x86_64
-          target: google_apis
-          profile: pixel_2
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          stage: stage-1
+          target: default
           script: |
             adb install -r -g "$VERIFY_APK"
-            adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-            .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"
+            if [[ "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion || "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion.m3 ]] && [ "$VERIFY_FEATURE" != launcher-icon.md ]; then bash tools/release-choices/run.sh; else adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk; .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; fi
             if [ -n "$UPDATE_BASELINE_RUN" ]; then .claude/skills/verify-multiprompt-android/scripts/update-reaction-release.sh; fi
+      - name: Compare desktop and Android transcript posts
+        if: inputs.feature == 'chat-codex.md'
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/valentinyeo/multiprompt/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/chat_history_reader.py -o /tmp/desktop-codex-reader.py
+          install -m 644 .claude/skills/verify-multiprompt-android/scripts/codex-parity.py /tmp/codex-parity.py
+          install -m 644 app/src/main/assets/chat_history_reader.py /tmp/android-codex-reader.py
+          sudo -u verifyssh python3 -B /tmp/codex-parity.py /tmp/desktop-codex-reader.py /tmp/android-codex-reader.py > "$EVIDENCE/desktop-android-parity.txt"
+          cat "$EVIDENCE/desktop-android-parity.txt"
+          grep -Fx DESKTOP_ANDROID_POSTS_IDENTICAL "$EVIDENCE/desktop-android-parity.txt"
       - name: Require the original native-skill failure
         if: inputs.expect_native_missing == true
         env:
@@ -154,6 +315,28 @@ jobs:
           test "$EMULATOR_OUTCOME" = failure
           grep -F 'NATIVE_SLASH_PICKER_MISSING' "$EVIDENCE/driver-transcript.txt"
           printf '%s\n' '{"status":"expected-red","error":"NATIVE_SLASH_PICKER_MISSING"}' > "$EVIDENCE/native-baseline-result.json"
+      - name: Require the original shell swipe failure
+        if: always() && inputs.expect_shell_missing == true
+        env:
+          EMULATOR_OUTCOME: ${{ steps.native-ui.outcome }}
+        run: |
+          test "$VERIFY_FEATURE" = terminal.md
+          test "$APP_REF" = 7f640c6336ebdc63b37373f141c656bc9dbcb0d5
+          test "$(cat "$EVIDENCE/app-source-sha.txt")" = "$APP_REF"
+          test "$EMULATOR_OUTCOME" = failure
+          grep -Fx SHELL_HISTORY_0001 "$EVIDENCE/shell-history-before.txt"
+          grep -Fx SHELL_HISTORY_0500 "$EVIDENCE/shell-history-before.txt"
+          grep -F 'Timed out waiting for SHELL_HISTORY_' "$EVIDENCE/driver-transcript.txt"
+          printf 'ORIGINAL_SHELL_SWIPE_REJECTED\n' > "$EVIDENCE/shell-baseline-result.txt"
+      - name: Retain emulator exit and host memory evidence
+        if: always()
+        run: |
+          mkdir -p "$EVIDENCE/emulator-diagnostics"
+          if [ -f /tmp/native-emulator.log ]; then cp /tmp/native-emulator.log "$EVIDENCE/emulator-diagnostics/"; fi
+          if [ -d /tmp/android-runner ]; then cp -a /tmp/android-runner "$EVIDENCE/emulator-diagnostics/crashes"; fi
+          sudo dmesg -T > "$EVIDENCE/emulator-diagnostics/kernel.txt"
+          free -m > "$EVIDENCE/emulator-diagnostics/memory.txt"
+          ps -eo pid,ppid,stat,rss,args > "$EVIDENCE/emulator-diagnostics/processes.txt"
       - name: Stop recorded fixture processes and retain logs
         timeout-minutes: 2
         if: always()

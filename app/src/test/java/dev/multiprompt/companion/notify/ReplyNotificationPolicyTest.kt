@@ -5,6 +5,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReplyNotificationPolicyTest {
+    private fun history(vararg messages: Pair<String, String>) = dev.multiprompt.companion.reader.ChatHistory(
+        sid = "proof", rows = messages.mapIndexed { index, (role, text) ->
+            dev.multiprompt.companion.reader.ChatHistoryProtocol.Row(role, text, "$index", "", index.toLong(), index + 1L)
+        },
+    )
+
+    @Test fun onlyLatestAssistantReplyMayNotify() {
+        assertEquals(null, ReplyNotificationPolicy.text(history("user" to "/rc")))
+        assertEquals(null, ReplyNotificationPolicy.text(history("assistant" to "Old reply.", "user" to "/rc")))
+        assertEquals(null, ReplyNotificationPolicy.text(history("user" to "Please fix checkout")))
+        assertEquals(null, ReplyNotificationPolicy.text(history("assistant" to "/rc")))
+        assertEquals(null, ReplyNotificationPolicy.text(history()))
+        assertEquals("Checkout fixed.", ReplyNotificationPolicy.text(history("user" to "Fix checkout", "assistant" to "Checkout fixed. Tests passed.")))
+        assertEquals("Need your approval?", ReplyNotificationPolicy.text(history("assistant" to "Need your approval? Please review.")))
+    }
+
     @Test fun firstRefreshOnlyBaselinesAndNeverNotifies() {
         val plan = ReplyNotificationPolicy.plan(false, setOf("a", "b"), mapOf("a" to 3, "b" to 1), null, emptySet(), setOf("a", "b"))
         assertTrue(plan.notify.isEmpty())

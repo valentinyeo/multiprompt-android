@@ -41,6 +41,7 @@ class ChatHistoryConnection(
     @Volatile private var resyncing: CompletableDeferred<Unit>? = null
     @Volatile private var nearTop = false
     @Volatile private var awaitingMessages = false
+    @Volatile private var deliveryIds: List<String> = emptyList()
     private val cacheKey = listOf(host.id, host.hostname, host.port.toString(), host.username,
         identity.agent.name, identity.tmux, identity.cwd).joinToString("\u0000")
 
@@ -53,6 +54,12 @@ class ChatHistoryConnection(
         if (value == awaitingMessages) return
         awaitingMessages = value
         if (value) wake.trySend(Unit)
+    }
+
+    fun deliveryIds(ids: List<String>) {
+        if (deliveryIds == ids) return
+        deliveryIds = ids
+        wake.trySend(Unit)
     }
 
     fun resync(): CompletableDeferred<Unit> = CompletableDeferred<Unit>().also {
@@ -76,11 +83,12 @@ class ChatHistoryConnection(
                             var wasOlder = false
                             while (isActive) {
                                 resyncing = resyncing ?: resyncs.tryReceive().getOrNull()
-                                val current = if (resyncing != null) ChatHistory() else _state.value.history
+                                val current = if (resyncing != null) _state.value.history.resetSeed() else _state.value.history
                                 val before = if (nearTop && !wasOlder && !current.more) current.start else 0
                                 requestId++
                                 val page = ChatHistoryProtocol.parse(
-                                    exchange(ChatHistoryProtocol.request(requestId, identity, current, before)),
+                                    exchange(ChatHistoryProtocol.request(requestId, identity,
+                                        if (resyncing != null) current.copy(sid = "") else current, before, deliveryIds)),
                                     requestId, identity,
                                 ) ?: error("History unavailable")
                                 val next = current.apply(page)
@@ -100,6 +108,8 @@ class ChatHistoryConnection(
                     }
                 } catch (failure: Exception) {
                     if (failure is CancellationException && !isActive) throw failure
+                    (resyncing ?: resyncs.tryReceive().getOrNull())?.completeExceptionally(failure)
+                    resyncing = null
                     _state.value = _state.value.copy(retrying = true)
                 }
                 delay(retryDelay)

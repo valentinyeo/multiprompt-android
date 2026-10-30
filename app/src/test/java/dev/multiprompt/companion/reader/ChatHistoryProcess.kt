@@ -13,6 +13,7 @@ internal class ChatHistoryProcess(
     cwd: String,
     home: File? = null,
     agent: AgentKind = AgentKind.CLAUDE,
+    initial: ChatHistory = ChatHistory(),
 ) : AutoCloseable {
     val identity = ChatHistoryProtocol.Identity(agent, "", cwd, sid)
     private val script = sequenceOf(File("src/main/assets/chat_history_reader.py"),
@@ -29,7 +30,7 @@ internal class ChatHistoryProcess(
     private val output = process.inputStream.bufferedReader(Charsets.UTF_8)
     private val executor = Executors.newSingleThreadExecutor()
     private var id = 0L
-    var history = ChatHistory()
+    var history = initial
         private set
     var pages = 0
         private set

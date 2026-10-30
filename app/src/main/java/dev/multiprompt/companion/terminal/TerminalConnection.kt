@@ -3,7 +3,7 @@ package dev.multiprompt.companion.terminal
 import androidx.compose.ui.graphics.Color
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.ssh.SshRepository
-import dev.multiprompt.companion.ssh.TmuxParser
+import dev.multiprompt.companion.ssh.TmuxCommands
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -81,8 +81,7 @@ class TerminalConnection(
                     ),
                 ) { "The SSH server refused a PTY" }
 
-                val target = TmuxParser.shellQuote(tmuxSessionName)
-                val command = "exec tmux attach-session -f ignore-size -t $target"
+                val command = TmuxCommands.attach(tmuxSessionName)
                 check(connectedSession.requestExec(command)) { "tmux attach was refused" }
                 _status.value = TerminalStatus.Connected
 

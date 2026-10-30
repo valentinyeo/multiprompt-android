@@ -18,7 +18,6 @@ import dev.multiprompt.companion.model.RefreshMerge
 import dev.multiprompt.companion.data.UnreadCount
 import dev.multiprompt.companion.notify.ReplyNotificationPolicy
 import dev.multiprompt.companion.notify.ReplyNotifier
-import dev.multiprompt.companion.ui.SessionPreview
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.RetiredHosts
 import dev.multiprompt.companion.data.SessionSearch
@@ -28,6 +27,7 @@ import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
+import dev.multiprompt.companion.reader.TranscriptProtocol
 import dev.multiprompt.companion.auth.SyncAuthManager
 import android.content.Intent
 import dev.multiprompt.companion.account.AccountHosts
@@ -193,6 +193,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var pendingLayout = accountStore.load(syncAuth.accountId())
     private var usedStampThrottle = UsedStampThrottle(pendingLayout?.base)
     private val foreground = MutableStateFlow(false)
+    internal var notificationHistoryReader: suspend (HostProfile, TmuxSession) -> dev.multiprompt.companion.reader.ChatHistory? = { host, session ->
+        ssh.readChatHistory(host, session, app.chatHistoryScript)
+    }
     private var replyNotificationsBaselined = false
     private var pendingNotificationKey: String? = null
     private var trustRefreshQueued = false
@@ -643,8 +646,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         ReplyNotifier.cancel(app, plan.cancel)
         plan.notify.forEach { key ->
             val session = state.sessions.firstOrNull { SessionReadStore.key(it.hostId, it.name) == key } ?: return@forEach
-            val preview = SessionPreview.line(session.preview).ifBlank { "New reply" }
-            ReplyNotifier.show(app, session.hostId, session.name, session.displayName, preview)
+            if (!TranscriptProtocol.supports(session.agent)) return@forEach
+            val host = state.hosts.firstOrNull { it.id == session.hostId } ?: return@forEach
+            viewModelScope.launch {
+                val history = try {
+                    notificationHistoryReader(host, session)
+                } catch (failure: Exception) {
+                    if (failure is kotlinx.coroutines.CancellationException) throw failure
+                    null
+                } ?: return@launch
+                val text = ReplyNotificationPolicy.text(history) ?: return@launch
+                val current = _state.value
+                val front = if (foreground.value) current.terminalSession ?: current.readerSession else null
+                if (current.sessions.none { it.hostId == session.hostId && it.name == session.name && it.lastActivityEpochSeconds == session.lastActivityEpochSeconds }) return@launch
+                if (key !in favoriteReplyKeys(current, setOf(key)) || (current.unreadCounts[key] ?: 0) <= 0 ||
+                    front?.let { SessionReadStore.key(it.hostId, it.name) } == key) return@launch
+                ReplyNotifier.show(app, session.hostId, session.name, session.displayName, text)
+            }
         }
     }
 
@@ -746,12 +764,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             accountHosts = mapping,
             readerSession = current.readerSession?.let { open ->
                 val tab = current.accountLayout?.let { AccountHostMap.tabFor(open, it, mapping) }
-                tab?.let { AccountHostMap.sessionFor(it, sessions, mapping) }
+                tab?.let { AccountHostMap.sessionFor(it, sessions, mapping, current.accountLayout) }
                     ?: sessions.firstOrNull { it.hostId == open.hostId && it.name == open.name } ?: open
             },
             terminalSession = current.terminalSession?.let { open ->
                 val tab = current.accountLayout?.let { AccountHostMap.tabFor(open, it, mapping) }
-                tab?.let { AccountHostMap.sessionFor(it, sessions, mapping) }
+                tab?.let { AccountHostMap.sessionFor(it, sessions, mapping, current.accountLayout) }
                     ?: sessions.firstOrNull { it.hostId == open.hostId && it.name == open.name } ?: open
             },
             hostErrors = results.mapNotNull { result ->
@@ -849,7 +867,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 agent = session.agent,
                 historyScript = app.chatHistoryScript,
                 historyCache = app.chatHistoryCache,
-            )
+            ).also { connection ->
+                if (!_state.value.readerTechnicalMode && TranscriptProtocol.supports(session.agent)) {
+                    connection.chatHistory(session.agent, session.workingDirectory)
+                }
+            }
         }
         _state.update {
             it.copy(
@@ -963,8 +985,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val pending = pendingLayout ?: return
         val tab = AccountHostMap.tabFor(session, pending.edited, _state.value.accountHosts) ?: return
         try {
-            saveAccountLayout(pending.copy(edited = pending.edited.stampInput(tab.identity, System.currentTimeMillis())))
-            if (usedStampThrottle.shouldPush(pendingLayout!!)) syncAccount()
+            saveAccountLayout(pending.copy(edited = pending.edited.stampInput(tab.identity, System.currentTimeMillis()))) {
+                if (usedStampThrottle.shouldPush(pendingLayout!!)) syncAccount()
+            }
         } catch (e: Exception) {
             _state.update { it.copy(accountError = e.message ?: "Could not save session use") }
         }
@@ -1551,10 +1574,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             current.copy(accountLayout = layout, accountPending = pendingLayout?.dirty == true, accountHosts = mapping,
                 workspaces = workspaces, workspaceSplitIds = listOf(null) + workspaces.map { it.id }, sessionWorkspaceIds = assignments,
                 readerSession = current.readerSession?.let { open ->
-                    layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping) } ?: open
+                    layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping, layout) } ?: open
                 },
                 terminalSession = current.terminalSession?.let { open ->
-                    layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping) } ?: open
+                    layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping, layout) } ?: open
                 },
             ).let { next ->
                 next.copy(selectedWorkspaceId = if (current.selectedWorkspaceId in next.visibleWorkspaceSplitIds) current.selectedWorkspaceId else next.visibleWorkspaceSplitIds.first())
@@ -1562,14 +1585,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun saveAccountLayout(value: PendingLayout) {
+    private fun saveAccountLayout(value: PendingLayout, afterSaved: (() -> Unit)? = null) {
         val account = syncAuth.accountId() ?: throw IllegalStateException("Sign in before editing account workspaces")
         val mapping = AccountHostMap.resolve(_state.value.hosts, accountStore.hostOverrides())
         val next = value.copy(
             base = if (syncAuth.supportsHosts) value.base else value.base.copy(hosts = null),
             edited = value.edited.copy(hosts = if (syncAuth.supportsHosts) AccountHosts.publish(value.edited.hosts, mapping) else null),
         )
-        accountStore.save(account, next)
+        if (afterSaved == null) {
+            accountStore.save(account, next)
+        } else {
+            val generation = accountGeneration
+            val persisted = accountStore.saveAsync(account, next)
+            viewModelScope.launch {
+                try {
+                    withContext(Dispatchers.IO) { persisted.get() }
+                    if (generation == accountGeneration) afterSaved()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failed: Exception) {
+                    if (generation == accountGeneration) _state.update {
+                        it.copy(accountError = failed.cause?.message ?: failed.message ?: "Could not save session use")
+                    }
+                }
+            }
+        }
         pendingLayout = next
         publishAccountLayout()
     }
@@ -1578,7 +1618,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (!_state.value.signedIn) return "Sign in before editing account workspaces"
         val pending = pendingLayout ?: return "Pull the account layout before editing"
         return try {
-            saveAccountLayout(pending.copy(edited = edit(pending.edited).validate()))
+            saveAccountLayout(pending.edit(edit(pending.edited).validate()))
+            syncAccount()
+            null
+        } catch (e: Exception) { e.message ?: "Could not save account edit" }
+    }
+
+    fun renameAccountWorkspace(old: String, name: String): String? {
+        if (!_state.value.signedIn) return "Sign in before editing account workspaces"
+        val pending = pendingLayout ?: return "Pull the account layout before editing"
+        return try {
+            saveAccountLayout(pending.renameWorkspace(old, name))
             syncAccount()
             null
         } catch (e: Exception) { e.message ?: "Could not save account edit" }
@@ -1741,8 +1791,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 var retries = 0
                 var retryConflict = false
                 while (pendingLayout?.let { it.dirty && (retryConflict || usedStampThrottle.shouldPush(it)) } == true && retries++ < 4) {
-                    val sent = pendingLayout!!.edited
-                    val reply = syncAuth.request("PUT", "/v1/layout", JSONObject().put("base_revision", remote.revision).put("layout", sent.copy(hosts = if (syncAuth.supportsHosts) AccountHosts.publish(remote.hosts, _state.value.accountHosts) else null).json()))
+                    val sentPending = pendingLayout!!
+                    val sent = sentPending.edited
+                    val reply = syncAuth.request("PUT", "/v1/layout", JSONObject().put("base_revision", remote.revision).put("layout", sent.copy(hosts = if (syncAuth.supportsHosts) AccountHosts.publish(remote.hosts, _state.value.accountHosts) else null).json(includeWorkspaceColors = syncAuth.supportsWorkspaceColors)))
                     if (generation != accountGeneration) return@launch
                     retryConflict = reply.status == 409
                     if (retryConflict) {
@@ -1755,7 +1806,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         remote = AccountLayout.response(reply.json)
                         importAccountHosts(remote)
                         usedStampThrottle.observe(remote)
-                        saveAccountLayout(pendingLayout!!.acknowledge(sent, remote))
+                        saveAccountLayout(pendingLayout!!.acknowledge(sentPending, remote))
                     }
                 }
                 _state.update { it.copy(accountError = if (pendingLayout?.let { usedStampThrottle.shouldPush(it) } == true) "Account changed repeatedly; pending edits will retry" else null) }
@@ -1811,7 +1862,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val MAX_PRIVATE_KEY_BYTES = 256 * 1024
         const val MAX_DISPLAY_NAME_LENGTH = 63
         const val IDLE_OBSERVATIONS_TO_RELEASE = 2
-        const val SESSION_REFRESH_INTERVAL_MS = 10_000L
-        const val BACKGROUND_REFRESH_EVERY = 6
+        const val SESSION_REFRESH_INTERVAL_MS = 2_000L
+        const val BACKGROUND_REFRESH_EVERY = 30
     }
 }

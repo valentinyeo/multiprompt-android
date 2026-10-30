@@ -12,6 +12,7 @@ import dev.multiprompt.companion.security.SecretStorage
 import dev.multiprompt.companion.account.DeviceKeys
 import dev.multiprompt.companion.account.DeviceKeyStore
 import dev.multiprompt.companion.reader.TranscriptProtocol
+import dev.multiprompt.companion.reader.ChatHistory
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import java.util.Base64
 import kotlinx.coroutines.CancellationException
@@ -236,6 +237,19 @@ class SshRepository(private val secrets: SecretStorage) {
         }
     }
 
+    suspend fun readChatHistory(host: HostProfile, session: TmuxSession, script: ByteArray): ChatHistory? =
+        withContext(Dispatchers.IO) {
+            withAuthenticatedClient(host) { client ->
+                val identity = ChatHistoryProtocol.Identity(session.agent, session.name, session.workingDirectory)
+                var history: ChatHistory? = null
+                streamChatHistory(client, script) { exchange ->
+                    val page = ChatHistoryProtocol.parse(exchange(ChatHistoryProtocol.request(1, identity, ChatHistory())), 1, identity)
+                    history = page?.let { ChatHistory().apply(it) }
+                }
+                history
+            }
+        }
+
     suspend fun streamChatHistory(
         client: SshClient,
         script: ByteArray,
@@ -321,6 +335,29 @@ class SshRepository(private val secrets: SecretStorage) {
         } finally {
             session.close()
         }
+    }
+
+    suspend fun heldPrompt(
+        client: SshClient,
+        script: ByteArray,
+        sessionName: String,
+        record: dev.multiprompt.companion.reader.QueuedMessages.SentPrompt,
+        cancel: Boolean,
+    ): org.json.JSONObject {
+        val op = if (cancel) "cancel_queued" else "send"
+        val query = org.json.JSONObject().put("op", op).put("id", 1).put("tmux", sessionName)
+            .put("text", record.text).put("queued_at", record.sentAtMillis).put("message_id", record.messageId)
+        var receipt = org.json.JSONObject()
+        streamChatHistory(client, script) { exchange ->
+            val wire = org.json.JSONObject(exchange(query.toString() + "\n")).getString("wire")
+            if (!wire.startsWith("@mp\t1\t$op\tok\t")) {
+                throw SshProblem.Connection(if (cancel && wire.contains("\tnot_queued\t"))
+                    "Message already sent to the terminal; cannot cancel" else "The host could not confirm this message action")
+            }
+            if (!cancel) receipt = wire.lineSequence().filter { it.startsWith("{") }
+                .map { org.json.JSONObject(it) }.first { it.optString("role") == "delivery" }
+        }
+        return receipt
     }
 
     suspend fun sendPrompt(client: SshClient, sessionName: String, prompt: String) {
@@ -496,8 +533,9 @@ class SshRepository(private val secrets: SecretStorage) {
         }
     }
 
-    suspend fun answerQuestion(client: SshClient, sessionName: String, question: ClaudeQuestion, screen: String, index: Int) {
-        execute(client, TmuxCommands.questionAnswer(sessionName, question, screen, index)).requireSuccess("answer the question")
+    suspend fun answerQuestion(client: SshClient, sessionName: String, question: dev.multiprompt.companion.reader.PendingQuestion, screen: String, choices: Set<Int>, other: String) {
+        execute(client, TmuxCommands.questionAnswer(sessionName, question, screen, choices, other),
+            other.takeIf { it.isNotBlank() }?.toByteArray(Charsets.UTF_8)).requireSuccess("answer the question")
     }
 
     suspend fun selectModelPickerOption(client: SshClient, sessionName: String, index: Int) {

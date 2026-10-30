@@ -52,7 +52,7 @@ class ReaderSessionRoutingTest {
                     signedIn = true, onSignIn = {}, onSignOut = {}, session = if (switched) b else a,
                     unread = false, archived = false, initialFontScale = 1f,
                     onBack = {}, onMarkRead = {}, onArchiveToggle = {}, onRemind = {},
-                    onOpenTerminal = {}, onSwitchSession = { switched = !switched }, onFontScaleChanged = {},
+                    onOpenTerminal = {}, onFontScaleChanged = {},
                     onRename = { null }, onDissolve = {}, onEnd = {}, onSessionInteraction = {}, onSessionInput = {},
                     technicalMode = false, onTechnicalModeChanged = {}, sunlightMode = false,
                     onSetAppTheme = {}, onResetFontScale = { 1f }, sessionActionError = null,
@@ -61,8 +61,7 @@ class ReaderSessionRoutingTest {
             compose.waitUntil(30_000) { first.state.value.status == ReaderStatus.Live && second.state.value.status == ReaderStatus.Live }
             listOf(false, true).forEach { target ->
                 repeat(4) { compose.runOnIdle { switched = !switched } }
-                if (target) compose.onRoot().performTouchInput { swipeLeft() }
-                else compose.runOnIdle { switched = false }
+                compose.runOnIdle { switched = target }
                 val connection = if (target) second else first
                 val suffix = if (target) "B" else "A"
                 compose.onNodeWithText(if (target) b.name else a.name).assertIsDisplayed()

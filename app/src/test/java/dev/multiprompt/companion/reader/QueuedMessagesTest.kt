@@ -1,136 +1,147 @@
 package dev.multiprompt.companion.reader
 
-import dev.multiprompt.companion.model.AgentKind
-import dev.multiprompt.companion.ssh.TmuxText
-import java.time.Instant
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
+import org.junit.Assert.*
 import org.junit.Test
 
 class QueuedMessagesTest {
-    private val now = Instant.parse("2026-05-01T12:00:00Z").toEpochMilli()
-    private val recorded = "Post this this is reall good but use the one that is not pixelated " +
-        "I didn't like the pixelated one in the end"
-    private val captions = "Actually, do not post this. Add the captions first. Did you add captions? " +
-        "We need captions. In this."
-    private val cadence = "And did you do the right cadence with the the video that we got about how to do a " +
-        "viral short where the cadence was sped up? I think this has the right cutting cadence. Right?"
-    private val screen = """
-        > Post this this is reall good but use the one that is not pixelated
-          I didn't like the pixelated one in the end
+    private val first = QueuedMessages.SentPrompt("same", 1, "first", QueuedMessages.Delivery.QUEUED, "sid", 9, 100)
+    private val second = first.copy(messageId = "second")
+    private fun ChatHistory.display(sent: List<QueuedMessages.SentPrompt> = listOf(first, second)) =
+        displayMessages(sent)
 
-        ● Bash(ffmpeg -i original.mp4 -vf scale=1080:1920 preview.mp4)
-          ⎿  Process exited with code 0
-
-        > Actually, do not post this. Add the captions first. Did you add captions?
-          We need captions. In this.
-        > And did you do the right cadence with the the video that we got about how to do a
-          viral short where the cadence was sped up? I think this has the right cutting cadence. Right?
-
-        ✻ Churning… (1m 38s · ↓ 453 tokens)
-        ──────────────────────────────────────────────────────────────────────────────
-        > Press up to edit queued messages
-        ──────────────────────────────────────────────────────────────────────────────
-          Opus 4.7 · bypass permissions on (shift+tab to cycle)
-    """.trimIndent()
-
-    @Test fun phoneSendIsQueuedUntilRecorded() {
-        val sent = listOf(QueuedMessages.SentPrompt("Stop, don't do that", now))
-        assertEquals(listOf("Stop, don't do that"), pending(sent = sent))
-        assertTrue(pending(listOf(user("Stop, don't do that")), sent = sent).isEmpty())
+    @Test fun onlyIdFactsSettleAndIdenticalIntentionsStaySeparate() {
+        val row = ChatHistoryProtocol.Row("user", "same", "row", "2099-01-01T00:00:00Z", 100, 110, queued = true)
+        val reply = ChatHistoryProtocol.Row("assistant", "same", "reply", "", 111, 120)
+        val removal = ChatHistoryProtocol.Row("assistant", "", "removal", "", 121, 122,
+            settlement = ChatHistoryProtocol.Settlement(ChatHistoryProtocol.QueueOperation.REMOVE, "same"))
+        val history = ChatHistory(sid = "sid", inode = 9, rows = listOf(row, reply, removal))
+        assertFalse(history.messages.first().pending)
+        val waiting = history.display()
+        assertEquals(listOf("first", "second"), waiting.takeLast(2).map { it.requestId })
+        assertEquals(listOf("Queued", "Queued"), waiting.takeLast(2).map { it.delivery })
+        assertTrue(waiting.takeLast(2).all { it.pending })
+        val settled = history.copy(deliveries = mapOf("first" to QueuedMessages.Delivery.DELIVERED,
+            "second" to QueuedMessages.Delivery.CANCELLED)).display()
+        assertEquals("Delivered", settled.first().delivery)
+        assertEquals("Cancelled", settled.last().delivery)
+        assertTrue(settled.none { it.pending })
     }
 
-    @Test fun bugScreenYieldsExactlyTwoUnwrappedQueuedPrompts() {
-        assertEquals(listOf(captions, cadence), pending(listOf(user(recorded)), screen))
-        assertEquals(
-            listOf(captions, cadence),
-            pending(listOf(user(recorded)), TmuxText.leftAligned(screen)),
-        )
+    @Test fun terminalFactsOverrideOlderHeldSnapshots() {
+        for (terminal in listOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)) {
+            val history = ChatHistory(sid = "sid", inode = 9, held = listOf(first))
+            val localReceipt = first.copy(delivery = terminal)
+            val fromLocal = history.display(listOf(localReceipt)).single()
+            assertEquals(terminal.name.lowercase().replaceFirstChar { it.uppercase() }, fromLocal.delivery)
+            assertFalse(fromLocal.pending)
+            assertTrue(unconfirmedAfterResync(history, listOf(localReceipt)).isEmpty())
+            val fromMap = history.copy(deliveries = mapOf("first" to terminal))
+            assertEquals(fromLocal.delivery, fromMap.display(listOf(first)).single().delivery)
+            assertTrue(unconfirmedAfterResync(fromMap, listOf(first)).isEmpty())
+        }
+        val submitted = first.copy(delivery = QueuedMessages.Delivery.SUBMITTED)
+        val history = ChatHistory(sid = "sid", inode = 9, held = listOf(first))
+        assertEquals("Queued", history.display(listOf(submitted)).single().delivery)
+        assertEquals(listOf(submitted), unconfirmedAfterResync(history, listOf(submitted)))
     }
 
-    @Test fun recordedScreenPromptsDisappearWithoutDuplicates() {
-        val sent = listOf(QueuedMessages.SentPrompt(captions, now))
-        assertEquals(listOf(cadence), pending(listOf(user(recorded), user(captions)), screen, sent))
-        assertTrue(pending(listOf(user(recorded), user(captions), user(cadence)), screen, sent).isEmpty())
+    @Test fun staleHistoryPageCannotOverwriteTerminalDelivery() {
+        for (terminal in listOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)) {
+            val history = ChatHistory(sid = "sid", inode = 9, deliveries = mapOf("first" to terminal))
+            val page = ChatHistoryProtocol.Page("sid", 0, 0, 9, false, 0, "", "tail", 0, emptyList(),
+                deliveries = mapOf("first" to QueuedMessages.Delivery.QUEUED), held = listOf(first))
+            val updated = history.apply(page)
+            assertEquals(terminal, updated.deliveries["first"])
+            assertFalse(updated.display(listOf(first)).single().pending)
+            assertTrue(unconfirmedAfterResync(updated, listOf(first)).isEmpty())
+            assertEquals(QueuedMessages.Delivery.QUEUED, history.apply(page.copy(sid = "other")).deliveries["first"])
+        }
     }
 
-    @Test fun screenNeedsQueueHint() {
-        assertTrue(pending(listOf(user(recorded)), screen.replace("Press up to edit queued messages", "")).isEmpty())
-        assertEquals(
-            listOf(captions, cadence),
-            pending(listOf(user(recorded)), screen.replace("Press up to edit queued messages", "PRESS UP TO EDIT QUEUED MESSAGES")),
-        )
+    @Test fun offPageDeliveryAndCancellationDoNotNeedTranscript() {
+        val history = ChatHistory(sid = "sid", deliveries = mapOf("first" to QueuedMessages.Delivery.DELIVERED,
+            "second" to QueuedMessages.Delivery.CANCELLED))
+        assertEquals(listOf("Delivered", "Cancelled"), history.display().map { it.delivery })
+        assertTrue(unconfirmedAfterResync(history, listOf(first, second)).isEmpty())
     }
 
-    @Test fun phoneAndScreenCopiesAppearOnce() {
-        assertEquals(
-            listOf(captions, cadence),
-            pending(listOf(user(recorded)), screen, listOf(QueuedMessages.SentPrompt(captions, now))),
-        )
+    @Test fun duplicateIdsCollapseButDuplicateTextsDoNot() {
+        val result = ChatHistory(held = listOf(first)).display(listOf(first, first, second))
+        assertEquals(listOf("first", "second"), result.map { it.requestId })
+        assertEquals(2, result.map { it.key }.toSet().size)
     }
 
-    @Test fun expiredSendsAndSlashCommandsAreIgnored() {
-        assertTrue(
-            pending(sent = listOf(
-                QueuedMessages.SentPrompt("Old message", now - 16 * 60_000),
-                QueuedMessages.SentPrompt("  /model opus  ", now),
-                QueuedMessages.SentPrompt(" \n\t ", now),
-            )).isEmpty(),
-        )
-        assertEquals(listOf("Still pending"), pending(sent = listOf(QueuedMessages.SentPrompt("Still pending", now - 15 * 60_000))))
+    @Test fun nativeIntentionsStayDistinctFromIdenticalTranscriptOccurrences() {
+        val native = QueuedMessages.SentPrompt("same", 1, sid = "sid", inode = 9, afterOffset = 100)
+        val another = QueuedMessages.SentPrompt("same", 2, sid = "sid", inode = 9, afterOffset = 100)
+        val sent = listOf(native, another)
+        fun row(offset: Long) = ChatHistoryProtocol.Row("user", "same", "id$offset", "2099-01-01T00:00:00Z", offset, offset + 1)
+        val history = ChatHistory(sid = "sid", inode = 9)
+        val keys = sent.map { "@local:${it.localId}" }
+        for (rows in listOf(emptyList(), listOf(row(101)), listOf(row(101), row(102)))) {
+            val snapshot = history.copy(rows = rows)
+            val result = snapshot.display(sent)
+            assertEquals(rows.size + 2, result.size)
+            assertEquals(keys, result.takeLast(2).map { it.key })
+            assertEquals(keys, snapshot.display(sent).takeLast(2).map { it.key })
+            assertTrue(result.take(rows.size).all { it.delivery == null })
+            assertTrue(result.takeLast(2).all { !it.pending && it.requestId.isEmpty() && it.delivery == "Local · unconfirmed" })
+            assertEquals(sent, unconfirmedAfterResync(snapshot, sent))
+        }
+        val threeRows = history.copy(rows = listOf(row(50), row(101), row(102)))
+        assertEquals(5, threeRows.display(sent).size)
+        assertEquals(3, threeRows.copy(sid = "other").display(sent).size)
+        assertEquals(keys, threeRows.copy(inode = 10).display(sent).takeLast(2).map { it.key })
+        assertEquals(keys, threeRows.display(sent.map { it.copy(sid = "") }).takeLast(2).map { it.key })
     }
 
-    @Test fun phoneSendsAreOldestFirstWithoutDuplicates() {
-        assertEquals(
-            listOf("First prompt", "Second prompt"),
-            pending(sent = listOf(
-                QueuedMessages.SentPrompt("Second prompt", now),
-                QueuedMessages.SentPrompt("  First\n\t prompt  ", now - 1000),
-                QueuedMessages.SentPrompt("First prompt", now),
-            )),
-        )
+    @Test fun nativeIntentionsSurviveHistoryRefreshAndDelayedOccurrences() {
+        val native = QueuedMessages.SentPrompt("same", 1, sid = "sid", inode = 9, afterOffset = 100)
+        val sent = listOf(native)
+        val occurrence = ChatHistoryProtocol.Row("user", "same", "other-client", "", 101, 102)
+        val reply = ChatHistoryProtocol.Row("assistant", "reply", "reply", "2099", 103, 104)
+        val initial = ChatHistory(sid = "sid", inode = 9, offset = 100, start = 0)
+        val delta = ChatHistoryProtocol.Page("sid", 100, 104, 9, false, 0, "", "delta", 0, listOf(occurrence, reply))
+        val loaded = initial.apply(delta)
+        val olderBase = ChatHistory(sid = "sid", inode = 9, offset = 104, start = 100, rows = listOf(occurrence, reply))
+        val older = olderBase.apply(ChatHistoryProtocol.Page("sid", 0, 100, 9, false, 0, "", "older", 0,
+            listOf(ChatHistoryProtocol.Row("user", "same", "delayed", "", 50, 51))))
+        val refreshed = loaded.apply(delta.copy(mode = "tail", base = 0, inode = 10))
+        val emptied = refreshed.apply(delta.copy(mode = "tail", base = 0, inode = 10, end = 0, rows = emptyList()))
+        for (history in listOf(initial, loaded, older, refreshed, emptied, refreshed.resetSeed())) {
+            val echo = history.display(sent).last()
+            assertEquals("@local:${native.localId}", echo.key)
+            assertEquals("Local · unconfirmed", echo.delivery)
+            assertEquals(sent, unconfirmedAfterResync(history, sent))
+        }
+        assertEquals(listOf("same", "same", "reply", "same"), older.display(sent).map { it.text })
+        assertEquals(listOf("same", "reply", "same"), loaded.display(sent).map { it.text })
+        assertEquals(listOf("same", "reply", "same"), refreshed.display(sent).map { it.text })
+    }
+    @Test fun deliveredDisplayMatchesOnlyTrailingAsciiSpacesOneToOne() {
+        val text = "x".repeat(200)
+        val one = first.copy(text = "$text ", delivery = QueuedMessages.Delivery.DELIVERED)
+        val two = one.copy(messageId = "second", sentAtMillis = 2)
+        fun row(body: String, offset: Long) = ChatHistoryProtocol.Row("user", body, "row$offset", "", offset, offset + 1)
+        val history = ChatHistory(sid = "sid", inode = 9, rows = listOf(row(text, 100)))
+        assertEquals(1, history.display(listOf(one)).size)
+        assertEquals(2, history.display(listOf(one, two)).size)
+        assertEquals(2, history.copy(rows = listOf(row(text, 100), row(text, 101))).display(listOf(one, two)).size)
+        assertEquals(2, history.copy(rows = listOf(row("$text\t", 100))).display(listOf(one)).size)
+        assertEquals(2, history.copy(rows = listOf(row(text.dropLast(1), 100))).display(listOf(one)).size)
+        assertEquals(2, history.copy(inode = 10).display(listOf(one)).size)
+        assertEquals(2, history.copy(rows = listOf(row(text, 99))).display(listOf(one)).size)
+        assertEquals(2, history.display(listOf(one.copy(delivery = QueuedMessages.Delivery.QUEUED))).size)
     }
 
-    @Test fun matchingNormalizesWhitespaceAndOnlyUsesUserMessages() {
-        val sent = listOf(QueuedMessages.SentPrompt("Stop now", now))
-        assertTrue(pending(listOf(user(" \nStop\t now \n")), sent = sent).isEmpty())
-        assertEquals(listOf("Stop now"), pending(listOf(TranscriptMessage("assistant", null, "Stop now")), sent = sent))
+    @Test fun differentSessionRecordsStayUnresolvedAndInvisible() {
+        val native = QueuedMessages.SentPrompt("native old", 1, sid = "old", inode = 9)
+        val managed = first.copy(text = "managed old", sid = "old")
+        val blank = QueuedMessages.SentPrompt("pending", 3)
+        val history = ChatHistory(sid = "new", inode = 9, deliveries = mapOf("first" to QueuedMessages.Delivery.DELIVERED))
+        assertEquals(listOf("pending"), history.display(listOf(native, managed, blank)).map { it.text })
+        assertEquals(listOf(native, managed, blank), unconfirmedAfterResync(history, listOf(native, managed, blank)))
+        assertEquals(listOf(managed), unconfirmedAfterResync(history, listOf(managed.copy(delivery = QueuedMessages.Delivery.QUEUED))))
     }
 
-    @Test fun truncationMatchesInEitherDirectionOnlyWithFortyCharacters() {
-        val full = "Please stop posting this video until the captions have been added"
-        val prefix = full.take(40)
-        assertTrue(pending(listOf(user(full)), sent = listOf(QueuedMessages.SentPrompt(prefix, now))).isEmpty())
-        assertTrue(pending(listOf(user(prefix)), sent = listOf(QueuedMessages.SentPrompt(full, now))).isEmpty())
-        assertEquals(listOf(full), pending(listOf(user(full.take(39))), sent = listOf(QueuedMessages.SentPrompt(full, now))))
-        assertEquals(listOf("Stop now"), pending(listOf(user("Stop")), sent = listOf(QueuedMessages.SentPrompt("Stop now", now))))
-    }
-
-    @Test fun oldTranscriptDoesNotHideANewRepeatSend() {
-        val sent = listOf(QueuedMessages.SentPrompt("Stop now", now))
-        assertEquals(listOf("Stop now"), pending(listOf(user("Stop now", now - 5 * 60_000 - 1)), sent = sent))
-        assertTrue(pending(listOf(user("Stop now", now - 5 * 60_000)), sent = sent).isEmpty())
-        assertTrue(pending(listOf(user("Stop now", now)), sent = sent).isEmpty())
-        assertTrue(pending(listOf(user("Stop now")), sent = sent).isEmpty())
-        assertTrue(pending(listOf(TranscriptMessage("user", "invalid", "Stop now")), sent = sent).isEmpty())
-    }
-
-    @Test fun screenDeduplicatesTruncatedCopiesAndAcceptsClaudePromptMarker() {
-        val truncated = captions.take(45)
-        val repeated = screen.replace("✻ Churning", "❯ $truncated\n\n✻ Churning")
-            .replace("> Actually", "❯ Actually")
-        assertEquals(listOf(captions, cadence), pending(listOf(user(recorded)), repeated))
-    }
-
-    private fun user(text: String, timestampMillis: Long? = null) = TranscriptMessage(
-        "user",
-        timestampMillis?.let { Instant.ofEpochMilli(it).toString() },
-        text,
-    )
-
-    private fun pending(
-        transcript: List<TranscriptMessage> = emptyList(),
-        output: String = "",
-        sent: List<QueuedMessages.SentPrompt> = emptyList(),
-    ): List<String> = QueuedMessages.pending(transcript, output, AgentKind.CLAUDE, sent, now)
 }

@@ -1,25 +1,15 @@
-# Sent messages stop saying Queued once the session replies
+# Claude queue delivery while busy
 
-## Sub-features
+The hosted journey uses a simulated Claude provider. SSH, host-key trust, tmux, Android composer, and the APK's reader are real. No model runs. Console stdin logs input and shows a native-queue hint; it does not create a consumption receipt. Explicit fixture consumption appends one synthetic main-chain `queued_command` row. Only the unmodified canonical reader decides delivery states.
 
-- A message the session has not taken in stays dim with the Queued label.
-- A message the session has taken in but not answered keeps the label.
-- Once the session replies, every earlier message returns to normal style.
-- Two messages sent in a row clear together.
+The terminal begins with `FIXTURE_OWNED_DRAFT`. Two phone sends produce distinct stable IDs, queued/queued, no claims and zero inputs. After clearing the terminal draft, one input arrives: submitted/queued, no claims. Android shows Sending/Queued. Clearing only the queue hint, then using **Resync chat** and publishing a new unrelated assistant marker, must leave those IDs, states, claims and input count unchanged. This is an observation window, not a delivery timeout.
 
-## How to get to it (user POV)
+Explicitly consume the first input. Its synthetic receipt permits delivered/submitted; the second input has no claim and remains Sending. Explicitly consume the second, then require delivered/delivered, one claim per ID, exactly two inputs and two synthetic receipt rows. Only then publish the assistant answer. Send FOLLOWUP, require submitted without a claim, explicitly consume it, then require Delivered and one claim. The existing 1 MiB image, 120-second shell/chat observer and three-second catchup bound remain.
 
-Open a session chat and send a message while the agent is busy. The bubble is dim and says Queued. When the agent answers, the bubble turns normal.
+After catchup, send `UNCERTAIN_ONE` and `UNCERTAIN_TWO`. The fixture receives only the first and consumes neither. With the native hint cleared and terminal draft empty, require submitted/queued, zero new claims and no replay. Repeat **Resync chat** with fresh unrelated assistant markers; the second pass also preserves a phone draft. Require stable IDs and states, unchanged previous claims, four total inputs and exactly three synthetic receipt rows. The unresolved pair never receives consumption during this observed journey. Read-only SQLite projections and independent fixture inputs and transcript rows are retained in the artifact.
 
-## Driving it with the CI journey
+Use `verify.yml` with `feature=chat-queued.md`. For a signed M3 candidate set `released_chat=true`, `candidate=true`, `channel=android-m3-latest`; app_ref and update_baseline_run must be empty. Published mode uses `candidate=false` and the exact published manifest `expected_commit`. A signed candidate is not a published APK. The debug `app_ref` control is separate; failure must reach the intended handoff assertion rather than infrastructure.
 
-Dispatch `verify.yml` with `feature=chat-queued.md`.
-The existing host-import and fingerprint comparison run first. The fixture is a foreground process named claude that records every received message and writes a Claude Code style transcript.
+This branch bundles Desktop GEN5 commit `e62769a0862c8518a68a74ea6bfc6030b03dad3b`: full reader SHA-256 `3c5c2f1923f2a5346e65ed7fc235aab998b9e67054535541f3ea18b51466cdfd`, selected inner SHA-256 `e0830af90a1673a45ab1d70340b4dd5acfd915e4449c7a8d4579b91c7a1a9035`; its canonical corpus has 211 reader, 7 transcript and 9 runtime tests. Previously published Android 0.1.299-m3 bundled GEN3. An installed newer runtime may be selected; inspect actual APK and runtime provenance.
 
-The driver sends `WAITING_ONE` and `WAITING_TWO` through the real composer and requires two Queued labels. The fixture then writes the transcript lines Claude Code writes when it takes queued messages in, plus an unrelated queue removal. The driver requires both labels to remain. The fixture then writes an assistant reply. The driver requires zero Queued labels and both messages still visible.
-
-For the negative control, set `app_ref` to the commit before the fix. The same journey must fail with `IGSH1008_QUEUED_STUCK`.
-
-## Gotchas
-
-No real Claude provider runs in CI. SSH, tmux, transcript discovery, UI gestures and message transport are real. Transcript lines are written by the fixture, not by a model.
+Synthetic inputs and receipt rows are not real Claude admission or consumption. This does not prove real-provider behavior, native Codex/Hax queues, twenty native arrivals, process-death draft durability, physical devices, a Desktop/Android pair, GEN5 terminal-send writer-lock contention or projection deduplication, or universal exactly-once delivery. Server-held backlog is not provider admission.

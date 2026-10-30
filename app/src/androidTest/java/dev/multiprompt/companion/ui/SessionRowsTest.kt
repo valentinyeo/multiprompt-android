@@ -13,6 +13,8 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
 import dev.multiprompt.companion.MainActivity
@@ -41,8 +43,8 @@ class SessionRowsTest {
         TmuxSession("host", "claude-runner-$index", 1, 0, 1_799_999_880 - index * 60L,
             preview = "[CAVEMAN] Opus 5.5 medium software-factory $index")
     }
-    private val layout = AccountLayout.parse(JSONObject("""{"schema":1,"revision":1,"workspaces":[{"name":"Android"}],"tabs":[${sessions.joinToString(",") {
-        """{"kind":"tmux","name":"${it.name}","tmux_session":"${it.name}","tmux_host":0,"workspace":"Android","favorite":true,"input":1799999940000}"""
+    private val layout = AccountLayout.parse(JSONObject("""{"schema":1,"revision":1,"workspaces":[{"name":"Android"}],"tabs":[${sessions.mapIndexed { index, session -> index to session }.joinToString(",") { (index, session) ->
+        """{"kind":"tmux","name":"${session.name}","tmux_session":"${session.name}","tmux_host":0,"workspace":"Android","favorite":${index < 2},"input":1799999940000}"""
     }}]}"""))
     private val workspace = Workspace("work", "Android", "host", "/home/user/android")
     private val state = mutableStateOf(AppUiState(
@@ -64,7 +66,9 @@ class SessionRowsTest {
                 onMarkUnread = {}, onToggleArchived = {}, onSelectSessionBucket = {}, onSelectWorkspace = {},
                 onSwitchWorkspace = {}, onMoveWorkspaceSplit = { _, _ -> }, onResetWorkspaceSplitOrder = {},
                 onCreateWorkspace = { null }, onMoveSession = { _, _ -> }, onRenameSession = { _, _ -> null },
-                onSetFavorite = { _, _ -> }, onRefresh = {}, onSelectSection = {}, onForgetSession = {},
+                onSetFavorite = { tab, value ->
+                    state.value = state.value.copy(accountLayout = state.value.accountLayout!!.setFavorite(tab.identity, value))
+                }, onRefresh = {}, onSelectSection = {}, onForgetSession = {},
                 onStartNewSession = {}, onSetNewestSessionsAtBottom = {}, onSetAllSplitOnRight = {},
                 appTheme = AppTheme.DARK, onSetAppTheme = {}, onClearSessionActionError = {},
                 readerDefaultFontScale = 1f, onSetReaderDefaultFontScale = {}, crashReport = null,
@@ -72,6 +76,51 @@ class SessionRowsTest {
             )
             }
         }
+    }
+
+    @Test fun longPressRemovesAndAddsFavoriteWithoutOpeningOrDeletingSession() {
+        state.value = state.value.copy(selectedWorkspaceId = FAVORITES_SPLIT_ID)
+        render()
+        val output = File(checkNotNull(InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")), "session-rows").apply { mkdirs() }
+        fun capture(name: String) {
+            compose.waitForIdle()
+            val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+            File(output, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        compose.onNodeWithText(sessions[0].name).assertIsDisplayed()
+        capture("favorite-before")
+        compose.onNodeWithText(sessions[0].name).performTouchInput { longClick() }
+        capture("favorite-menu")
+        if (compose.onAllNodesWithText("Unfavorite").fetchSemanticsNodes().isEmpty()) {
+            compose.onNodeWithText("Unstar").assertIsDisplayed()
+            throw AssertionError("FAVORITE_DESKTOP_WORDS_MISSING: expected Unfavorite, found Unstar")
+        }
+        compose.onNodeWithText("Unfavorite").assertIsDisplayed()
+        compose.onNodeWithText("Unfavorite").performClick()
+        compose.onNodeWithText(sessions[0].name).assertDoesNotExist()
+        compose.onNodeWithText(sessions[1].name).assertIsDisplayed()
+        capture("favorite-after")
+        compose.runOnIdle {
+            val edited = checkNotNull(state.value.accountLayout)
+            val stored = AccountLayout.parse(JSONObject(edited.json().toString()))
+            assertEquals(false, stored.tabs[0].favorite)
+            assertEquals(layout.tabs.drop(1), stored.tabs.drop(1))
+            assertEquals(layout.tabs.size, stored.tabs.size)
+            assertEquals(sessions, state.value.sessions)
+            assertEquals(null, opened)
+            state.value = state.value.copy(selectedWorkspaceId = null)
+        }
+        compose.onNodeWithText(sessions[0].name).assertIsDisplayed()
+        compose.onNodeWithText(sessions[0].name).performTouchInput { longClick() }
+        compose.onNodeWithText("Favorite").assertIsDisplayed().performClick()
+        compose.runOnIdle { state.value = state.value.copy(selectedWorkspaceId = FAVORITES_SPLIT_ID) }
+        compose.onNodeWithText(sessions[0].name).assertIsDisplayed()
+        compose.runOnIdle {
+            assertEquals(true, state.value.accountLayout!!.tabs[0].favorite)
+            assertEquals(null, opened)
+        }
+        capture("favorite-added-back")
+        File(output, "favorite-actions.txt").writeText("FAVORITE_ACTIONS_OK: removed immediately, stored false, session retained, added back, never opened")
     }
 
     @Test fun rowsStayCompactAcrossSplitsAndStillOpen() {
@@ -86,17 +135,18 @@ class SessionRowsTest {
                     archivedSessionKeys = if (label == "waiting") sessions.map { SessionReadStore.key(it.hostId, it.name) }.toSet() else emptySet())
             }
             compose.waitForIdle()
-            val first = compose.onNodeWithText(sessions[0].name)
+            val firstIndex = if (label in listOf("all", "workspace")) 2 else 0
+            val first = compose.onNodeWithText(sessions[firstIndex].name)
             first.assertIsDisplayed()
             assertTrue("$label must show unread badges", compose.onAllNodesWithContentDescription("3 unread messages", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
             assertTrue("$label must show activity times", compose.onAllNodesWithTag("Session activity", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
-            val title = compose.onNodeWithText(sessions[0].name, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-            val next = compose.onNodeWithText(sessions[1].name, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            val title = compose.onNodeWithText(sessions[firstIndex].name, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            val next = compose.onNodeWithText(sessions[firstIndex + 1].name, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
             val density = compose.activity.resources.displayMetrics.density
             val pitch = (next.top - title.top) / density
-            if (pitch > 56f || pitch < 48f) problems += "$label row pitch=$pitch"
+            if (pitch > 69f || pitch < 68f) problems += "$label row pitch=$pitch"
             val previews = compose.onAllNodesWithTag("Session preview", useUnmergedTree = true).fetchSemanticsNodes()
-            if (previews.isNotEmpty()) problems += "$label still shows status lines"
+            if (previews.isEmpty()) problems += "$label is missing message previews"
             val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
             val pixels = IntArray(bitmap.width * bitmap.height)
             bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
@@ -109,7 +159,7 @@ class SessionRowsTest {
             File(output, "$label.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
             report += "$label pitch=$pitch yellow=$yellow previews=${previews.size}"
             first.performClick()
-            compose.runOnIdle { assertEquals(sessions[0].name, opened); opened = null }
+            compose.runOnIdle { assertEquals(sessions[firstIndex].name, opened); opened = null }
         }
         File(output, "rows.txt").writeText((report + problems).joinToString("\n"))
         assertTrue("COMPACT_ROWS: ${problems.joinToString("; ")}", problems.isEmpty())

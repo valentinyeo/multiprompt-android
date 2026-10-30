@@ -1,0 +1,8 @@
+[Unit]
+Description=Keep Multiprompt desktop and Android requests paired
+
+[Service]
+Type=oneshot
+Environment="CEO_AGENT=Hax Runner 14"
+ExecStart=/usr/bin/python3 %h/.local/share/multiprompt-parity/tools/parity/multiprompt-parity.py --apply
+UMask=0077

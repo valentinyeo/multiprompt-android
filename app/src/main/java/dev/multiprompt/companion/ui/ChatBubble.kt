@@ -103,7 +103,7 @@ fun ChatBubble(
                         androidx.compose.material3.LocalTextStyle.current
                     },
                 ) {
-                    Column(if (LocalReaderStyle.current) Modifier.padding(ReaderCardPadding) else Modifier.padding(horizontal = if (LocalMaterial3.current) 16.dp else 12.dp, vertical = 10.dp)) { content() }
+                    Column(if (LocalReaderStyle.current) Modifier.padding(horizontal = 12.dp, vertical = ReaderCardPadding) else Modifier.padding(horizontal = if (LocalMaterial3.current) 16.dp else 12.dp, vertical = 10.dp)) { content() }
                 }
             }
         }

@@ -1,16 +1,21 @@
 name: Android scroll-under proof
 
 on:
+  schedule:
+    - cron: '23 3 * * *'
   pull_request:
     paths:
       - 'app/**'
       - 'gradle/**'
       - 'tools/top-fade-proof.sh'
       - '.github/workflows/top-fade.yml'
-  push:
-    branches: [main, ceo/IGSH-1032]
+      - '.github/actions/android-proof/**'
   workflow_dispatch:
     inputs:
+      baseline_ref:
+        description: Original commit for native before and after proof
+        type: string
+        required: false
       release_smoke:
         description: Install and verify the published signed APK after screen tests
         type: boolean
@@ -26,9 +31,13 @@ concurrency:
 
 jobs:
   emulator:
-    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -36,46 +45,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.1'
-      - name: Install emulator exit tracer
-        run: sudo apt-get update && sudo apt-get install -y strace
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - uses: reactivecircus/android-emulator-runner@v2
+      - uses: ./.github/actions/android-proof
         env:
-          RELEASE_SMOKE: ${{ inputs.release_smoke || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
-          GH_TOKEN: ${{ github.token }}
+          RELEASE_SMOKE: ${{ inputs.release_smoke || github.event_name == 'workflow_run' }}
+          TOP_FADE_BASE_REF: ${{ inputs.baseline_ref || (github.ref == 'refs/heads/ceo/IGSH-1073' && '41f3847') || '' }}
         with:
-          api-level: 35
-          arch: x86_64
-          profile: pixel_2
-          ram-size: 2048M
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan -verbose > /tmp/top-fade-emulator.log 2>&1
-          disable-animations: true
+          stage: stage-1
           script: |
             mkdir -p build/top-fade-diagnostics
-            sudo strace -f -e trace=process -e signal=all -p "$(pgrep -f '^/usr/local/lib/android/sdk/emulator/qemu/linux-x86_64/qemu-system-x86_64')" -o /tmp/top-fade-exit.txt > /tmp/top-fade-tracer.txt 2>&1 &
             tools/top-fade-proof.sh
-      - name: Retain emulator diagnostics
-        if: always()
-        run: |
-          mkdir -p build/top-fade-diagnostics
-          if [ -f /tmp/top-fade-emulator.log ]; then
-            cp /tmp/top-fade-emulator.log build/top-fade-diagnostics/emulator.txt
-          fi
-          for file in /tmp/top-fade-exit.txt /tmp/top-fade-tracer.txt; do
-            if [ -f "$file" ]; then
-              sudo cp "$file" build/top-fade-diagnostics/
-            fi
-          done
-          sudo dmesg -T > build/top-fade-diagnostics/kernel.txt
-          free -m > build/top-fade-diagnostics/memory.txt
-          ps -eo pid,ppid,stat,rss,args > build/top-fade-diagnostics/processes.txt
-          if [ -d /tmp/android-runner ]; then
-            cp -a /tmp/android-runner build/top-fade-diagnostics/crashes
-          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:

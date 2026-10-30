@@ -82,8 +82,8 @@ internal val ReaderBadgeTextSize = 12.sp
 internal val ReaderBadgeGap = 8.dp
 
 val ChatBubbleRadius = 4.dp
-const val ChatUserMaxWidthFraction = 0.7f
-const val ChatAgentMaxWidthFraction = 0.85f
+const val ChatUserMaxWidthFraction = 0.9f
+const val ChatAgentMaxWidthFraction = 0.9f
 val ChatBubbleUserDark = Color(0xFF353535)
 val ChatBubbleAgentDark = Color(0xFF242424)
 val ChatBubbleUserLight = Color(0xFFE5E5E5)

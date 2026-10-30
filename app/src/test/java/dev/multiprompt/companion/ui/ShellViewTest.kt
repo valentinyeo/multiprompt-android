@@ -46,7 +46,6 @@ class ShellViewTest {
     val compose = createComposeRule()
 
     private val context: Context get() = RuntimeEnvironment.getApplication()
-    private var switches = 0
     private var taps = 0
 
     @Before
@@ -74,7 +73,6 @@ class ShellViewTest {
                         fontSize = it.sp
                     },
                     contentWidth = width.dp,
-                    onSwitchSession = { switches += it },
                     onLiveTap = { taps++ },
                     liveContent = { Text("Live terminal", modifier = it.fillMaxSize()) },
                 )
@@ -93,6 +91,16 @@ class ShellViewTest {
         compose.onNodeWithTag("Shell history").performTouchInput { swipeDown(durationMillis = 1000) }
         compose.onNodeWithText("history line 30").assertIsDisplayed()
         compose.onNodeWithContentDescription("Jump to live").performClick()
+        compose.onNodeWithTag("Shell history").assertDoesNotExist()
+        compose.onNodeWithText("Live terminal").assertIsDisplayed()
+    }
+
+    @Test
+    fun swipeUpAlsoRevealsEarlierHistoryAndJumpReturnsToLive() {
+        shell(history = (1..500).map { "history line $it" })
+        compose.onNodeWithTag("Shell content").performTouchInput { swipeUp() }
+        compose.onNodeWithTag("Shell history").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Jump to live").assertIsDisplayed().performClick()
         compose.onNodeWithTag("Shell history").assertDoesNotExist()
         compose.onNodeWithText("Live terminal").assertIsDisplayed()
     }
@@ -145,17 +153,16 @@ class ShellViewTest {
     }
 
     @Test
-    fun horizontalPanDoesNotSwitchUntilAnEdgeAndTapStillWorks() {
+    fun horizontalPanNeverSwitchesSessionAtEitherEdgeAndTapStillWorks() {
         shell()
         val initial = compose.onNodeWithText("Live terminal").getUnclippedBoundsInRoot()
         assertEquals(0f, initial.left.value, 1f)
         compose.onNodeWithTag("Shell content").performTouchInput { swipeLeft() }
         val panned = compose.onNodeWithText("Live terminal").getUnclippedBoundsInRoot()
         assertTrue(panned.left < initial.left)
-        compose.runOnIdle { assertEquals(0, switches) }
         repeat(4) { compose.onNodeWithTag("Shell content").performTouchInput { swipeRight() } }
         compose.onNodeWithTag("Shell content").performTouchInput { swipeRight() }
-        compose.runOnIdle { assertTrue(switches < 0) }
+        assertEquals(initial.left.value, compose.onNodeWithText("Live terminal").getUnclippedBoundsInRoot().left.value, 1f)
         compose.onNodeWithTag("Shell content").performTouchInput {
             down(center)
             up()
