@@ -105,6 +105,23 @@ tap_node() {
 }
 tap_text() { tap_node text "$1"; }
 tap_desc() { tap_node desc "$1"; }
+browser_handoff() {
+    local action=$1 evidence=$2 resolved attempt
+    resolved=$(adb shell cmd package resolve-activity --brief --user 0 \
+        -a android.intent.action.VIEW -c android.intent.category.BROWSABLE \
+        -d https://account.multiprompt.dev/login | tr -d '\r' | tail -1)
+    [[ "$resolved" == */* && "$resolved" != android/* ]]
+    tap_text "$action"
+    for attempt in {1..30}; do
+        if adb shell dumpsys activity activities | python3 "$scripts/browser-handoff.py" "$resolved" "$package" > "$EVIDENCE/$evidence.txt"; then
+            shot "$evidence"
+            return
+        fi
+        sleep 1
+    done
+    printf 'Timed out waiting for the resolved authorization browser\n' >&2
+    return 1
+}
 dismiss_system_anr() {
     if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "isn't responding" >/dev/null 2>&1; then
         printf 'System ANR dialog dismissed with Wait\n' | tee -a "$EVIDENCE/system-anr.txt"
@@ -270,14 +287,7 @@ else
     shot sign-in
 fi
 if [[ "$feature" == sign-in.md ]]; then
-    tap_text 'Sign in'
-    for attempt in {1..30}; do
-        adb shell dumpsys activity activities > "$EVIDENCE/browser-activity.txt"
-        if grep -E '(mResumedActivity|topResumedActivity).*com.android.chrome/' "$EVIDENCE/browser-activity.txt"; then break; fi
-        sleep 1
-    done
-    grep -E '(mResumedActivity|topResumedActivity).*com.android.chrome/' "$EVIDENCE/browser-activity.txt"
-    shot access-browser
+    browser_handoff 'Sign in' access-browser
     printf 'SIGN-IN HANDOFF VERIFIED; OTP completion is NOT verified\n'
     exit 0
 fi
@@ -406,27 +416,14 @@ if [[ "$feature" == settings-navigation.md ]]; then
     wait_for_text '1 · Contabo UK: Not mapped'
     shot mapping-automatic-restarted
     tap_text Done
-    tap_text 'Switch / renew login'
-    for attempt in {1..30}; do
-        adb shell dumpsys activity activities > "$EVIDENCE/settings-browser.txt"
-        if grep -E '(mResumedActivity|topResumedActivity).*com.android.chrome/' "$EVIDENCE/settings-browser.txt"; then break; fi
-        sleep 1
-    done
-    grep -E '(mResumedActivity|topResumedActivity).*com.android.chrome/' "$EVIDENCE/settings-browser.txt"
-    shot settings-browser-handoff
+    browser_handoff 'Switch / renew login' settings-browser-handoff
     adb shell input keyevent KEYCODE_BACK
     wait_for_text 'Session list settings'
     tap_text 'Sign out'
     wait_for_text 'Sign in'
     shot settings-signed-out
-    tap_text 'Sign in'
-    for attempt in {1..30}; do
-        adb shell dumpsys activity activities > "$EVIDENCE/settings-sign-in-browser.txt"
-        if grep -E '(mResumedActivity|topResumedActivity).*com.android.chrome/' "$EVIDENCE/settings-sign-in-browser.txt"; then break; fi
-        sleep 1
-    done
-    grep -E '(mResumedActivity|topResumedActivity).*com.android.chrome/' "$EVIDENCE/settings-sign-in-browser.txt"
-    shot settings-sign-in-browser-handoff
+    browser_handoff 'Sign in' settings-sign-in-browser-handoff
+    ! cmp -s "$EVIDENCE/settings-browser-handoff.txt" "$EVIDENCE/settings-sign-in-browser-handoff.txt"
     printf 'SETTINGS JOURNEY VERIFIED; OTP completion is NOT verified\n'
     exit 0
 fi

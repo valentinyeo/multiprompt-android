@@ -20,9 +20,8 @@ import dev.multiprompt.companion.account.AccountHostMap
 @Composable
 internal fun HostMappingDialog(state: AppUiState, onMap: (Int, String?) -> Unit, onDismiss: () -> Unit) {
     var selectedSlot by remember { mutableStateOf<Int?>(null) }
-    val dismiss = { if (selectedSlot != null) selectedSlot = null else onDismiss() }
-    BackHandler { dismiss() }
-    KitSheet(onDismiss = dismiss) {
+    KitSheet(onDismiss = onDismiss) {
+        BackHandler { if (selectedSlot != null) selectedSlot = null else onDismiss() }
         Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
             Text("Desktop tmux hosts", style = Kit.BodyStrong, color = Kit.Text)
             val slot = selectedSlot

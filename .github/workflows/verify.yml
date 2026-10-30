@@ -296,7 +296,7 @@ jobs:
         run: .claude/skills/verify-multiprompt-android/scripts/fixture.sh
       - name: Install, doctor and drive the real app
         id: native-ui
-        continue-on-error: ${{ inputs.expect_native_missing == true || inputs.expect_shell_missing == true || inputs.expect_settings_missing == true }}
+        continue-on-error: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.expect_native_missing == 'true' || github.event.inputs.expect_shell_missing == 'true' || github.event.inputs.expect_settings_missing == 'true') }}
         uses: ./.github/actions/android-proof
         with:
           stage: stage-1
@@ -320,7 +320,7 @@ jobs:
           cat "$EVIDENCE/desktop-android-parity.txt"
           grep -Fx DESKTOP_ANDROID_POSTS_IDENTICAL "$EVIDENCE/desktop-android-parity.txt"
       - name: Require the Android 301 settings failure
-        if: inputs.expect_settings_missing == true
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.expect_settings_missing == 'true'
         env:
           EMULATOR_OUTCOME: ${{ steps.native-ui.outcome }}
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
@@ -336,7 +336,7 @@ jobs:
           grep -Ex 'SETTINGS_NAVIGATION_RETIRED_DESTINATION|SETTINGS_NAVIGATION_MISSING_HOST_MAPPING' "$EVIDENCE/settings-baseline.txt"
           printf 'ANDROID_301_SETTINGS_REJECTED\n' > "$EVIDENCE/settings-baseline-result.txt"
       - name: Require the original native-skill failure
-        if: inputs.expect_native_missing == true
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.expect_native_missing == 'true'
         env:
           EMULATOR_OUTCOME: ${{ steps.native-ui.outcome }}
         run: |
@@ -347,7 +347,7 @@ jobs:
           grep -F 'NATIVE_SLASH_PICKER_MISSING' "$EVIDENCE/driver-transcript.txt"
           printf '%s\n' '{"status":"expected-red","error":"NATIVE_SLASH_PICKER_MISSING"}' > "$EVIDENCE/native-baseline-result.json"
       - name: Require the original shell swipe failure
-        if: always() && inputs.expect_shell_missing == true
+        if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.expect_shell_missing == 'true'
         env:
           EMULATOR_OUTCOME: ${{ steps.native-ui.outcome }}
         run: |
