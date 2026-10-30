@@ -49,7 +49,7 @@ finish() {
     } > "$EVIDENCE/load-at-exit.txt" 2>&1
     sudo cat /home/verifyssh/commands.log > "$EVIDENCE/commands.txt" 2>/dev/null
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt" 2>/dev/null
-    if [[ -n "$recorder_pid" ]]; then
+    if [[ "$recorder_pid" =~ ^[0-9]+$ ]]; then
         adb shell kill -INT "$recorder_pid"
         wait "$recorder_client" || true
         adb pull /sdcard/chat-catchup.mp4 "$EVIDENCE/chat-catchup.mp4"
@@ -605,6 +605,7 @@ PROOF
 fi
 
 if [[ "$feature" == chat-codex.md ]]; then
+    : > "$FIXTURE/recorder.pid"
     adb shell 'screenrecord --time-limit 180 --bit-rate 2000000 /sdcard/chat-catchup.mp4 & echo $!; wait' > "$FIXTURE/recorder.pid" &
     recorder_client=$!
     for attempt in {1..20}; do
@@ -612,6 +613,7 @@ if [[ "$feature" == chat-codex.md ]]; then
         [[ "$recorder_pid" =~ ^[0-9]+$ ]] && break
         sleep 1
     done
+    [[ "$recorder_pid" =~ ^[0-9]+$ ]]
     for mode in hax codex; do
         if [[ "$mode" == codex ]]; then
             adb shell input keyevent KEYCODE_BACK
@@ -670,6 +672,7 @@ fi
 if [[ "$feature" == chat-queued.md ]]; then
     wait_for_text 'Ready for queued messages.'
     shot queued-ready
+    : > "$FIXTURE/recorder.pid"
     adb shell 'screenrecord --time-limit 180 --bit-rate 2000000 /sdcard/chat-catchup.mp4 & echo $!; wait' > "$FIXTURE/recorder.pid" &
     recorder_client=$!
     for attempt in {1..20}; do
