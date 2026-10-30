@@ -859,6 +859,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val key = SessionReadStore.key(session.hostId, session.name)
         ReplyNotifier.cancel(app, key)
         _state.value.terminal?.close()
+        warmReaders[key]?.takeUnless { it.matches(host, session.agent) }?.let {
+            warmReaders.remove(key)
+            warmReaderTouchedAt.remove(key)
+            it.close()
+        }
         val reader = warmReader(key) {
             SessionReaderConnection(
                 repository = ssh,
@@ -867,12 +872,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 agent = session.agent,
                 historyScript = app.chatHistoryScript,
                 historyCache = app.chatHistoryCache,
+                messageJournal = app.messageJournal,
+                messageGate = app.messageGate,
             ).also { connection ->
-                if (!_state.value.readerTechnicalMode && TranscriptProtocol.supports(session.agent)) {
+                if (TranscriptProtocol.supports(session.agent)) {
                     connection.chatHistory(session.agent, session.workingDirectory)
                 }
             }
         }
+        if (TranscriptProtocol.supports(session.agent)) reader.chatHistory(session.agent, session.workingDirectory)
+        _state.value.reader?.takeIf { it !== reader }?.select(false)
+        reader.select(true)
         _state.update {
             it.copy(
                 terminal = null,
@@ -1249,6 +1259,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun closeReader() {
+        _state.value.reader?.select(false)
         _state.update { it.copy(reader = null, readerSession = null, readerSwipeOrder = emptyList()) }
         sweepWarmReaders()
     }
@@ -1470,6 +1481,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openTerminal(session: TmuxSession, userInitiated: Boolean = false) {
+        _state.value.reader?.select(false)
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
         val fromReader = _state.value.readerSession?.let {
             it.hostId == session.hostId && it.name == session.name

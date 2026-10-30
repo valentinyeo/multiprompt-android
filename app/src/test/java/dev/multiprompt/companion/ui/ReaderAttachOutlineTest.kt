@@ -31,6 +31,7 @@ import java.io.File
 import java.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -127,6 +128,15 @@ class ReaderAttachOutlineTest {
     private fun hasOutlineAlongRow(bitmap: Bitmap, y: Int, width: Int): Boolean =
         (0 until minOf(width, bitmap.width)).any { isOutline(bitmap.getPixel(it, y)) }
 
+    private fun assertRuntimeCommand(expected: String) {
+        val requests = f.field<Channel<Any>>(connection, "requests")
+        val request = checkNotNull(requests.tryReceive().getOrNull())
+        assertEquals("RuntimeCommand", request.javaClass.simpleName)
+        assertEquals(expected, f.field<String>(request, "text"))
+        assertTrue(requests.tryReceive().isFailure)
+        assertTrue(connection.state.value.sentPrompts.isEmpty())
+    }
+
     @Test fun plusButtonIsDrawnWithAnOutline() {
         render()
         val plus = compose.onNodeWithContentDescription("Attach").assertIsDisplayed()
@@ -142,14 +152,13 @@ class ReaderAttachOutlineTest {
         compose.onNodeWithText("Use Claude Sonnet").performClick()
         compose.onNode(hasSetTextAction()).assertTextEquals("keep my draft")
         compose.runOnIdle {
-            assertEquals("/model sonnet", connection.state.value.sentPrompts.last())
-            f.field<MutableStateFlow<ReaderState>>(connection, "_state").value = connection.state.value.copy(completedActions = 1)
+            assertRuntimeCommand("/model sonnet")
         }
         compose.onNodeWithContentDescription("Attach").performClick()
         compose.onNodeWithText("Effort").performClick()
         compose.onNodeWithText("Set effort: high").performClick()
         compose.onNode(hasSetTextAction()).assertTextEquals("keep my draft")
-        compose.runOnIdle { assertEquals("/effort high", connection.state.value.sentPrompts.last()) }
+        compose.runOnIdle { assertRuntimeCommand("/effort high") }
     }
 
     @Test fun attachMenuIsACardWithAnOutlineAndLineIcons() {

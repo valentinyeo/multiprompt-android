@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
@@ -51,6 +52,9 @@ import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private data class ReplyJump(val message: ChatHistoryMessage, val reply: ReplyQuote.Reply)
 
@@ -76,14 +80,62 @@ internal fun ChatHistoryView(
 ) {
     val history = remember(connection, agent, workingDirectory) { connection.chatHistory(agent, workingDirectory) }
     val state by history.state.collectAsState()
-    val messages = state.history.displayMessages(reader.sentRecord)
+    val managed = agent == AgentKind.CLAUDE || agent == AgentKind.CODEX
+    val messages = if (managed) state.history.managedMessages(state.replica, state.unresolved) else state.history.displayMessages(reader.sentRecord)
+    val actionScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var retryRow by remember { mutableStateOf<Pair<dev.multiprompt.companion.reader.MessageProtocol.Row, Long>?>(null) }
+    var hiddenRetry by remember { mutableStateOf<Pair<String, Long>?>(null) }
+    suspend fun showResult(result: dev.multiprompt.companion.reader.MessageActionResult) {
+        val text = when (result) {
+            dev.multiprompt.companion.reader.MessageActionResult.Applied -> "Request confirmed"
+            dev.multiprompt.companion.reader.MessageActionResult.Unknown -> "Confirmation unknown"
+            dev.multiprompt.companion.reader.MessageActionResult.BlockedRecovery -> "Resolve unknown messages first"
+            is dev.multiprompt.companion.reader.MessageActionResult.Rejected -> result.reason
+        }
+        withContext(Dispatchers.Main) {
+            android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+    retryRow?.let { (row, token) ->
+        KitSheet(onDismiss = { retryRow = null }) {
+            Text("Send again?")
+            Text("Your agent may already have this message. Sending again may duplicate it. Send again?")
+            KitPrimaryButton("Send again", onClick = { retryRow = null; actionScope.launch { showResult(history.retryFailed(row, true, token)) } })
+            KitSecondaryButton("Cancel", onClick = { retryRow = null })
+        }
+    }
+    hiddenRetry?.let { (id, token) ->
+        KitSheet(onDismiss = { hiddenRetry = null }) {
+            Text("Send again?")
+            Text("Your agent may already have this message. Sending again may duplicate it. Send again?")
+            KitPrimaryButton("Send again", onClick = { hiddenRetry = null; actionScope.launch { showResult(history.replayUnknown(id, token)) } })
+            KitSecondaryButton("Cancel", onClick = { hiddenRetry = null })
+        }
+    }
     SideEffect {
         history.awaitingMessages(messages.any { it.pending })
-        history.deliveryIds(reader.sentRecord.map { it.messageId }.filter { it.isNotEmpty() })
+        if (!managed) history.deliveryIds(reader.sentRecord.map { it.messageId }.filter { it.isNotEmpty() })
     }
     DisposableEffect(history) { onDispose { history.awaitingMessages(false) } }
     val questions = state.history.pendingQuestions
     Column(modifier.fillMaxSize()) {
+        state.messageError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(8.dp)) }
+        if (managed && state.unresolved.any { it.operation == "reset" }) {
+            KitSecondaryButton("Check reset", onClick = { val token = history.actionToken(); actionScope.launch { showResult(history.recoverReset(token)) } })
+        }
+        state.unresolved.filter { entry -> managed && entry.operation == "retry" &&
+            state.replica?.messages?.get(entry.messageId)?.state == dev.multiprompt.companion.reader.MessageProtocol.State.CANCELLED
+        }.forEach { entry ->
+            KitSecondaryButton("Send again", onClick = { hiddenRetry = entry.id to history.actionToken() })
+        }
+        state.unresolved.filter { entry -> managed && entry.operation == "dismiss" && entry.text != null &&
+            state.unresolved.none { it.operation == "submit" && it.sameChat(entry.account, entry.scope) && it.messageId == entry.messageId && it.text == entry.text } &&
+            (state.replica?.messages?.get(entry.messageId) == null ||
+                state.replica?.messages?.get(entry.messageId)?.state == dev.multiprompt.companion.reader.MessageProtocol.State.CANCELLED)
+        }.forEach { entry ->
+            KitSecondaryButton("Remove", onClick = { val token = history.actionToken(); actionScope.launch { showResult(history.removeUnknown(entry.id, token)) } })
+        }
         if (state.retrying) {
             Text(
                 "Disconnected · retrying",
@@ -118,9 +170,21 @@ internal fun ChatHistoryView(
             unreadMessageKey = unreadMessageKey,
             onMarkUnread = onMarkUnread,
             onReaction = onReaction,
-            onCancelPending = if (!reader.sending && reader.status == ReaderStatus.Live) { target ->
+            onCancelPending = if (!managed && !reader.sending && reader.status == ReaderStatus.Live) { target ->
                 connection.cancelQueued(target.requestId, state.history.held)
             } else null,
+            onSharedAction = if (managed) { message, action ->
+                val token = history.actionToken()
+                when (action) {
+                    "status" -> actionScope.launch { showResult(history.checkStatus(requireNotNull(message.unknownId), token)) }
+                    "replay" -> actionScope.launch { showResult(history.replayUnknown(requireNotNull(message.unknownId), token)) }
+                    "retry" -> retryRow = message.sharedRow?.let { it to token }
+                    "dismiss" -> actionScope.launch { showResult(history.dismiss(requireNotNull(message.sharedRow), token)) }
+                    "removeUnknown" -> actionScope.launch { showResult(history.removeUnknown(requireNotNull(message.unknownId), token)) }
+                }
+            } else null,
+            sharedEpoch = state.replica?.epoch,
+            unresolved = state.unresolved,
             collapsePendingReactions = reader.actionError == null,
             working = reader.isWorking(agent),
             onNearTop = history::nearTop,
@@ -156,6 +220,9 @@ internal fun ChatHistoryList(
     hasOlder: Boolean = false,
     onReaction: ((ChatHistoryMessage, ChatReactions.Emoji) -> Unit)? = null,
     onCancelPending: ((ChatHistoryMessage) -> Unit)? = null,
+    onSharedAction: ((ChatHistoryMessage, String) -> Unit)? = null,
+    sharedEpoch: Long? = null,
+    unresolved: List<dev.multiprompt.companion.reader.MessageJournal.Entry> = emptyList(),
     collapsePendingReactions: Boolean = true,
     working: Boolean = false,
     bottomPadding: Dp = 0.dp,
@@ -241,6 +308,29 @@ internal fun ChatHistoryList(
                     onCancel = if (message.role == "user" && message.delivery == "Queued" && message.requestId.isNotEmpty() && onCancelPending != null) {
                         { onCancelPending(message) }
                     } else null)
+                if (onSharedAction != null) {
+                    if (message.unknownId != null) {
+                        val original = unresolved.firstOrNull { it.id == message.unknownId && it.operation == "submit" }
+                        val cancelling = original != null && unresolved.any { it.operation == "dismiss" && it.sameChat(original.account, original.scope) && it.messageId == message.requestId && it.text == message.text }
+                        KitSecondaryButton("Check status", onClick = { onSharedAction(message, "status") })
+                        if (!cancelling) KitSecondaryButton("Send again", onClick = { onSharedAction(message, "replay") })
+                        KitSecondaryButton("Remove", onClick = { onSharedAction(message, "removeUnknown") })
+                    }
+                    val row = message.sharedRow
+                    val uncertain = unresolved.firstOrNull { it.messageId == row?.id && it.operation in setOf("retry", "dismiss") &&
+                        (it.text == null || it.text == row?.text) }
+                    if (uncertain != null) {
+                        val recovery = message.copy(unknownId = uncertain.id)
+                        KitSecondaryButton(if (uncertain.operation == "retry") "Send again" else "Remove", onClick = {
+                            onSharedAction(recovery, if (uncertain.operation == "dismiss" && uncertain.text != null) "removeUnknown" else "replay")
+                        })
+                    } else if (row != null && row.epoch == sharedEpoch) {
+                        if (row.state == dev.multiprompt.companion.reader.MessageProtocol.State.FAILED)
+                            KitSecondaryButton("Send again", onClick = { onSharedAction(message, "retry") })
+                        if (row.state in setOf(dev.multiprompt.companion.reader.MessageProtocol.State.QUEUED, dev.multiprompt.companion.reader.MessageProtocol.State.FAILED))
+                            KitSecondaryButton("Remove", onClick = { onSharedAction(message, "dismiss") })
+                    }
+                }
             }
         }
         if (presentation.messages.isEmpty()) {
@@ -274,7 +364,7 @@ private fun HistoryBubble(
 ) {
     val fontSize = chatFontSize((14f * fontScale).sp, fontScale)
     val isUser = role == "user"
-    val note = remember(text, isUser, pending, key) { if (isUser && !pending && !key.startsWith("@local:")) SessionNote.parse(text) else null }
+    val note = remember(text, isUser, pending, key) { if (isUser && !pending && listOf("@local:", "@shared:", "@unknown:").none(key::startsWith)) SessionNote.parse(text) else null }
     val reply = remember(text, isUser, note) { if (isUser && note == null) ReplyQuote.parse(text) else null }
     val start = remember { BringIntoViewRequester() }
     LaunchedEffect(highlighted) {

@@ -4,6 +4,33 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tokenize } from './strip-comments.mjs';
+const checks = 'Checks and fixes, no visible change';
+
+const reviewedReleases = {
+  'v0.28.1027': ['77690fa1b105d6cd8070484decb8273d835334bf', { 'IGSH-1154': checks }],
+  'v0.28.1028': ['93ff8a0631761eefaf772b58ccb7a6318c7edc02', { 'IGSH-1154': 'Large messages no longer block queue receipts.' }],
+  'v0.28.1029': ['cf508172357d1344bfc6be893dc857fdeb87af91', { 'IGSH-1154': 'Stuck messages can recover without duplicate sends.' }],
+  'v0.28.1030': ['967eee1cbabc094772d567daf3d75cc2d713d9e3', { 'IGSH-1154': checks }],
+  'v0.28.1031': ['1648c59e146e06be0fec8247f6db800da4fba3ad', { 'IGSH-1193': 'The app title stays Multi Bot.' }],
+  'v0.28.1032': ['f2bcef5380210cbbcf57d06c75031676e66f88f1', { 'IGSH-1229': 'Codex conversations stay with their sessions.', 'IGSH-1217': 'Codex conversations stay with their sessions.' }],
+  'v0.28.1033': ['2959b4bb020415fe98730f0155e526f68a4308dd', { 'IGSH-1229': checks }],
+  'v0.28.1034': ['af3ea232f557386345bd9628fa28c97e5d038deb', { 'IGSH-1154': 'Queued messages can recover after missed confirmations.' }],
+  'v0.28.1035': ['c490189d5d85ebf4c1c65ad801feac634994d5b3', { 'IGSH-1239': 'Chat clients can share one message reader.' }],
+  'v0.28.1036': ['3aa30b208e28eefd8b005ef252f2f208a99afa4b', { 'IGSH-1239': 'Damaged reader settings no longer select older versions.' }],
+  'v0.28.1037': ['3d9dc2d44eaa91e47098c69054c0b02b4edd2c5f', { 'IGSH-1229': 'Unknown chats stay out of neighbouring sessions.', 'IGSH-1239': 'Unknown chats stay out of neighbouring sessions.' }],
+  'v0.28.1038': ['920dffe80a424393d74e5bd0b8514b6bddb2df12', { 'IGSH-1154': 'Messages can queue while the bot works.', 'IGSH-1239': 'Messages can queue while the bot works.' }],
+  'v0.28.1039': ['76f39d4c0ee1a140e4304c8995074daf81e86b53', { 'IGSH-1154': checks }],
+  'v0.28.1040': ['8c4b6c99cef41bd6b8c9ab48e789c3f09430cb68', { 'IGSH-1239': checks }],
+  'v0.28.1042': ['9ee03f97b05f50238aaac77154ebf11be3cc30b7', { 'IGSH-1154': checks, 'IGSH-1239': checks }],
+  'v0.28.1043': ['fc76d5714ced43500552fa0398f8b2f56ee41bd5', { 'IGSH-1154': 'Confirmed message copies match by receipt.', 'IGSH-1239': 'Confirmed message copies match by receipt.' }],
+  'v0.28.1044': ['28b4cc4cf52133396321b7e5fc7557bb2337843d', { 'IGSH-1154': checks, 'IGSH-1239': checks }],
+  'v0.28.1045': ['62c6637d826fcd8c35e43ca52f9161cf8d4c154a', { 'IGSH-1154': checks }],
+  'v0.28.1046': ['1c5e0cccc66cf1c6f962746b4d23506ff0d366f5', { 'IGSH-1154': 'Queued sends avoid competing terminal handoffs.' }],
+  'v0.28.1047': ['4ebe5f53eeda7d8a945cfb3af2598672a87c0218', { 'IGSH-1154': checks }],
+  'v0.28.1048': ['e62769a0862c8518a68a74ea6bfc6030b03dad3b', { 'IGSH-1154': checks, 'IGSH-1239': checks }],
+};
+
+const checksOnly = checks;
 
 const mainPath = 'src/main.zig';
 const changelogPath = 'src/changelog.zig';
@@ -112,31 +139,68 @@ export function classifyTrees(base, head, changed) {
 const fragmentFiles = tree => Object.fromEntries(Object.entries(tree).filter(([file]) => file.startsWith('changelog.d/') && file !== 'changelog.d/README.md'));
 const addedSince = (current, previous) => Object.fromEntries(Object.entries(current).filter(([file, text]) => previous[file] !== text));
 
-export function buildChangelog(files, tag, history = []) {
+export function buildChangelog(files, tag, history = [], commits = []) {
   if (!/^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(tag)) throw new Error('Invalid release tag');
   const version = tag.slice(1);
-  if (files[changelogPath]?.match(/\.ver\s*=\s*"([^"]+)"/)?.[1] === version) return files[changelogPath];
+  if (files[changelogPath]?.match(/\.ver\s*=\s*"([^"]+)"/)?.[1] === version) {
+    if (compareTags(tag, 'v0.28.1027') >= 0) throw new Error(`Release ${tag} already exists in source; generate from the previous release`);
+    return files[changelogPath];
+  }
   let result = { ...files };
-  const stamp = (stepTag, fragments) => {
-    const tree = { ...result };
-    for (const file of Object.keys(fragmentFiles(tree))) delete tree[file];
-    Object.assign(tree, fragments);
-    if (Object.values(fragments).some(text => text.split(/\r?\n/).some(productChange))) {
-      result[changelogPath] = stampTree(tree, stepTag.slice(1)).files[changelogPath];
-    } else {
-      if (!changelogStart.test(result[changelogPath] || '')) throw new Error('Missing CHANGELOG in src/changelog.zig');
-      result[changelogPath] = result[changelogPath].replace(changelogStart, start => `${start}\n    .{ .ver = "${stepTag.slice(1)}", .items = &.{\n    } },`);
+  const stamp = (stepTag, fragments, stepCommits, sha, current) => {
+    if (compareTags(stepTag, 'v0.28.1027') < 0) {
+      const tree = { ...result };
+      for (const file of Object.keys(fragmentFiles(tree))) delete tree[file];
+      Object.assign(tree, fragments);
+      for (const [file, text] of Object.entries(fragments)) fragmentLines(file, text);
+      if (Object.values(fragments).some(text => text.split(/\r?\n/).some(productChange))) {
+        result[changelogPath] = stampTree(tree, stepTag.slice(1)).files[changelogPath];
+      } else if (current) {
+        throw new Error('No unpublished product changes; wait for the next useful update');
+      } else {
+        if (!changelogStart.test(result[changelogPath] || '')) throw new Error('Missing CHANGELOG in src/changelog.zig');
+        result[changelogPath] = result[changelogPath].replace(changelogStart, start => `${start}\n    .{ .ver = "${stepTag.slice(1)}", .items = &.{\n    } },`);
+      }
+      return;
     }
+    const reviewed = reviewedReleases[stepTag];
+    if (reviewed && sha !== reviewed[0]) throw new Error(`${stepTag}: reviewed release commit does not match ${sha || 'missing commit'}`);
+    const notes = new Map(Object.entries(reviewed?.[1] || {}));
+    if (!reviewed) {
+      for (const commit of stepCommits || []) {
+        const match = /^(IGSH-\d+)(?::|\s)/.exec(commit.subject);
+        if (!match) throw new Error(`${stepTag}: commit ${commit.sha} lacks a leading ticket ID; add reviewed attribution before releasing`);
+        if (!notes.has(match[1])) notes.set(match[1], checksOnly);
+      }
+    }
+    const fragmentNotes = new Map();
+    for (const [file, text] of Object.entries(fragments).sort(([a], [b]) => a.localeCompare(b))) {
+      const ticket = /^changelog\.d\/([A-Z][A-Z0-9]*-\d+)-/.exec(file)?.[1];
+      const lines = fragmentLines(file, text).filter(productChange);
+      if (lines.length) fragmentNotes.set(ticket, [...(fragmentNotes.get(ticket) || []), ...lines]);
+    }
+    for (const [ticket, lines] of fragmentNotes) {
+      if (!reviewed && !notes.has(ticket)) throw new Error(`${stepTag}: ${ticket} fragment has no matching commit ticket`);
+      notes.set(ticket, lines.join(' '));
+    }
+    if (!notes.size) throw new Error(`${stepTag}: no ticketed release lines; add a ticketed commit before releasing`);
+    for (const [ticket, text] of notes) {
+      if (!/^IGSH-\d+$/.test(ticket) || !plainChange(text) || !(productChange(text) || text === checksOnly)) {
+        throw new Error(`${stepTag}: invalid ticketed line for ${ticket}`);
+      }
+    }
+    if (!changelogStart.test(result[changelogPath] || '')) throw new Error('Missing CHANGELOG in src/changelog.zig');
+    const escape = text => text.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('\t', '\\t');
+    const bullets = [...notes].map(([ticket, text]) => `        .{ .text = "${escape(text)}", .ticket = "${ticket}" },`);
+    result[changelogPath] = result[changelogPath].replace(changelogStart, start => `${start}\n    .{ .ver = "${stepTag.slice(1)}", .items = &.{\n${bullets.join('\n')}\n    } },`);
   };
   let previous = history.length ? fragmentFiles(history[0].files) : {};
   for (const step of history.slice(1)) {
-    const added = Object.fromEntries(Object.entries(addedSince(fragmentFiles(step.files), previous))
-      .filter(([file, text]) => fragmentLines(file, text).some(productChange)));
-    stamp(step.tag, added);
+    const added = addedSince(fragmentFiles(step.files), previous);
+    stamp(step.tag, added, step.commits, step.sha, false);
     previous = fragmentFiles(step.files);
   }
-  const added = addedSince(fragmentFiles(files), previous);
-  stamp(tag, added);
+  stamp(tag, addedSince(fragmentFiles(files), previous), commits, undefined, true);
   return result[changelogPath];
 }
 
@@ -179,7 +243,24 @@ function releaseHistory(tag, changelog, publishedTags) {
       git(['fetch', '--no-tags', 'origin', `${ref}:${ref}`]);
     }
   }
-  return history.map(name => ({ tag: name, files: readTree(`refs/tags/${name}`) }));
+  return history.map((name, i) => {
+    const ref = `refs/tags/${name}`;
+    return {
+      tag: name,
+      files: readTree(ref),
+      sha: git(['rev-parse', `${ref}^{commit}`]).trim(),
+      commits: i && compareTags(name, 'v0.28.1027') >= 0 && !reviewedReleases[name] ? releaseCommits(`refs/tags/${history[i - 1]}`, ref) : [],
+    };
+  });
+}
+
+function releaseCommits(previous, head) {
+  git(['merge-base', '--is-ancestor', previous, head]);
+  return git(['log', '--reverse', '--format=%H%x09%s', `${previous}..${head}`])
+    .split(/\r?\n/).filter(Boolean).map(line => {
+      const tab = line.indexOf('\t');
+      return { sha: line.slice(0, tab), subject: line.slice(tab + 1) };
+    });
 }
 
 function check(baseRev, headRev) {
@@ -304,7 +385,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       const publishedTags = head ? JSON.parse(head) : execFileSync('gh', ['api', '--paginate', 'repos/{owner}/{repo}/releases', '--jq', '.[] | select(.draft == false and .prerelease == false) | .tag_name'], { encoding: 'utf8' }).trim().split(/\r?\n/).filter(Boolean);
       if (!Array.isArray(publishedTags) || publishedTags.some(tag => typeof tag !== 'string')) throw new Error('Expected an array of published release tags');
       const files = readTree('HEAD');
-      fs.writeFileSync(changelogPath, buildChangelog(files, base, releaseHistory(base, files[changelogPath], publishedTags)));
+      const history = releaseHistory(base, files[changelogPath], publishedTags);
+      if (!history.length && compareTags(base, 'v0.28.1027') >= 0) throw new Error('No published baseline; fetch published release tags before building');
+      const commits = history.length ? releaseCommits(`refs/tags/${history.at(-1).tag}`, 'HEAD') : [];
+      fs.writeFileSync(changelogPath, buildChangelog(files, base, history, commits));
     } else if (command === 'release' && !base) await release();
     else throw new Error('Usage: node tools/version-stamp.mjs check <base> <head> | pending <published-tag> <head> | build <tag> [published-tags-json] | release');
   } catch (error) {

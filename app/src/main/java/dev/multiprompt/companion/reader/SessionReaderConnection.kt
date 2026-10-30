@@ -71,6 +71,12 @@ internal fun unconfirmedAfterResync(history: ChatHistory, sent: List<QueuedMessa
             history.deliveryState(record) !in setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
     }
 
+sealed interface PromptAdmission {
+    data class Recorded(val messageId: String) : PromptAdmission
+    data object LegacyEnqueued : PromptAdmission
+    data class Rejected(val reason: String) : PromptAdmission
+}
+
 class SessionReaderConnection(
     private val repository: SshRepository,
     private val host: HostProfile,
@@ -78,9 +84,12 @@ class SessionReaderConnection(
     private val agent: AgentKind = AgentKind.OTHER,
     private val historyScript: ByteArray,
     private val historyCache: ChatHistoryCache,
+    private val messageJournal: MessageJournal? = null,
+    private val messageGate: MessageGate? = null,
 ) : AutoCloseable {
     private sealed interface Request {
         data class Prompt(val record: QueuedMessages.SentPrompt) : Request
+        data class RuntimeCommand(val text: String) : Request
         data class Cancel(val record: QueuedMessages.SentPrompt) : Request
         data class Action(val action: TmuxAction) : Request
         data class ModelPickerOption(val index: Int) : Request
@@ -98,16 +107,25 @@ class SessionReaderConnection(
 
     private var historyConnection: ChatHistoryConnection? = null
     private var historyIdentity: ChatHistoryProtocol.Identity? = null
+    @Volatile private var selected = false
+
+    fun matches(host: HostProfile, agent: AgentKind): Boolean = this.host == host && this.agent == agent
+
+    fun select(value: Boolean) {
+        selected = value
+        historyConnection?.select(value)
+    }
 
     fun chatHistory(agent: AgentKind, cwd: String): ChatHistoryConnection {
         require(TranscriptProtocol.supports(agent))
         val identity = ChatHistoryProtocol.Identity(agent, tmuxSessionName, cwd)
         if (historyIdentity == identity) return requireNotNull(historyConnection)
         historyConnection?.close()
-        return ChatHistoryConnection(repository, host, identity, historyScript, historyCache)
+        return ChatHistoryConnection(repository, host, identity, historyScript, historyCache, messageJournal, messageGate)
             .also {
                 historyIdentity = identity
                 historyConnection = it
+                it.select(selected)
                 it.start()
             }
     }
@@ -134,6 +152,9 @@ class SessionReaderConnection(
         return confirmed
     }
 
+    fun resetConversation(): kotlinx.coroutines.Deferred<MessageActionResult> =
+        historyConnection?.resetConversation() ?: kotlinx.coroutines.CompletableDeferred(MessageActionResult.Rejected("Chat is not ready"))
+
     fun start() {
         if (actionJob == null) {
             actionJob = scope.launch {
@@ -158,16 +179,18 @@ class SessionReaderConnection(
         }
     }
 
-    fun sendPrompt(text: String): Boolean {
+    suspend fun sendPrompt(text: String): PromptAdmission {
+        if (agent == AgentKind.CLAUDE || agent == AgentKind.CODEX) {
+            return historyConnection?.submit(text) ?: PromptAdmission.Rejected("Chat is not ready")
+        }
         val origin = historyConnection?.state?.value?.takeIf { it.loaded }?.history
         val prompt = QueuedMessages.SentPrompt(text, System.currentTimeMillis(),
-            messageId = if (agent == AgentKind.CLAUDE) java.util.UUID.randomUUID().toString() else "",
+            messageId = "",
             sid = origin?.sid.orEmpty(), inode = origin?.inode ?: 0, afterOffset = origin?.offset ?: 0)
         _state.update { it.copy(sentRecord = it.sentRecord + prompt) }
         val sent = requests.trySend(Request.Prompt(prompt)).isSuccess
         if (!sent) _state.update { it.copy(sentRecord = it.sentRecord.filterNot { record -> record === prompt }) }
         if (sent) {
-            awaitModelSwitchConfirmation(text)
             _state.update { current ->
                 current.copy(
                     output = TmuxText.mergeSnapshot(current.output, "> $text"),
@@ -175,6 +198,12 @@ class SessionReaderConnection(
                 )
             }
         }
+        return if (sent) PromptAdmission.LegacyEnqueued else PromptAdmission.Rejected("Could not send")
+    }
+
+    fun sendRuntimeCommand(command: String): Boolean {
+        val sent = requests.trySend(Request.RuntimeCommand(command)).isSuccess
+        if (sent) awaitModelSwitchConfirmation(command)
         return sent
     }
 
@@ -405,17 +434,12 @@ class SessionReaderConnection(
                 } else null
                 withFreshClient { client ->
                     when (request) {
-                        is Request.Prompt -> if (request.record.messageId.isEmpty()) repository.sendPrompt(
+                        is Request.RuntimeCommand -> repository.sendPrompt(client, tmuxSessionName, request.text)
+                        is Request.Prompt -> repository.sendPrompt(
                             client,
                             tmuxSessionName,
                             request.record.text,
-                        ) else {
-                            val receipt = repository.heldPrompt(client, historyScript, tmuxSessionName, request.record, cancel = false)
-                            _state.update { current -> current.copy(sentRecord = current.sentRecord.map { record ->
-                                if (record.messageId == request.record.messageId) record.copy(delivery = QueuedMessages.Delivery.valueOf(receipt.getString("state").uppercase()),
-                                    sid = receipt.getString("sid"), inode = receipt.getLong("inode"), afterOffset = receipt.getLong("offset")) else record
-                            }) }
-                        }
+                        )
                         is Request.Cancel -> {
                             repository.heldPrompt(client, historyScript, tmuxSessionName, request.record, cancel = true)
                             _state.update { current -> current.copy(sentRecord = current.sentRecord.filterNot {

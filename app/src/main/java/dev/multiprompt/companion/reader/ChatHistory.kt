@@ -12,6 +12,8 @@ data class ChatHistoryMessage(
     val requestId: String = "",
     val pending: Boolean = false,
     val delivery: String? = null,
+    val sharedRow: MessageProtocol.Row? = null,
+    val unknownId: String? = null,
 ) {
     fun transcript(): TranscriptMessage = TranscriptMessage(role, timestamp.ifEmpty { null }, text)
 }
@@ -45,6 +47,50 @@ data class ChatHistory(
                 previous?.offset ?: row.offset, row.end, row.id)
         }
         grouped.values.toList()
+    }
+
+    fun managedMessages(replica: MessageReplica?, unresolved: List<MessageJournal.Entry>): List<ChatHistoryMessage> {
+        val source = rows.toMutableList()
+        replica?.nativeFacts?.values?.forEach { fact ->
+            if (fact.inode == inode && fact.offset != null && fact.offset >= offset) {
+                val parsed = runCatching { ChatHistoryProtocol.parseRow(org.json.JSONObject(fact.json).getJSONObject("row")) }.getOrNull()
+                if (parsed != null) source.add(parsed)
+            }
+        }
+        val grouped = LinkedHashMap<String, ChatHistoryMessage>()
+        source.distinctBy { listOf(it.offset, it.end, it.role, it.id, it.normalized) }.sortedBy { it.offset }
+            .filter { (it.settlement == null || it.text.isNotBlank()) && it.questions.isEmpty() && it.questionResult.isEmpty() }
+            .forEach { row ->
+                val metadata = if (row.normalized.isEmpty()) org.json.JSONObject() else org.json.JSONObject(row.normalized)
+                val readId = metadata.optString("read_id")
+                val segment = if (metadata.has("segment")) metadata.get("segment").toString() else ""
+                val identity = when {
+                    readId.isNotEmpty() -> "read:$readId:$segment"
+                    row.id.isNotEmpty() -> "native:${row.id}:$segment"
+                    else -> "@${row.offset}:${row.end}"
+                }
+                val key = "$sid:$inode:${row.role}:$identity"
+                val previous = grouped[key]
+                val text = when {
+                    previous == null -> row.text
+                    previous.text.startsWith(row.text) -> previous.text
+                    row.text.startsWith(previous.text) -> row.text
+                    else -> previous.text + "\n" + row.text
+                }
+                grouped[key] = ChatHistoryMessage(key, row.role, text, previous?.timestamp ?: row.timestamp,
+                    previous?.offset ?: row.offset, row.end, row.id)
+            }
+        val occurrences = grouped.values.toList()
+        val cards = replica?.messages?.values.orEmpty().filter { it.state != MessageProtocol.State.CANCELLED }.sortedBy { it.position }.map { row ->
+            ChatHistoryMessage("@shared:${row.id}", "user", row.text, "", 0, 0, row.id,
+                pending = row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT),
+                delivery = row.state.name.lowercase().replaceFirstChar { it.uppercase() }, sharedRow = row)
+        }
+        val unknown = unresolved.filter { entry -> entry.operation == "submit" && replica?.messages?.get(entry.messageId)?.text != entry.text }.map { entry ->
+            ChatHistoryMessage("@unknown:${entry.id}", "user", entry.text.orEmpty(), "", 0, 0, entry.messageId,
+                delivery = "Confirmation unknown", unknownId = entry.id)
+        }
+        return occurrences + cards + unknown
     }
 
     internal fun deliveryState(prompt: QueuedMessages.SentPrompt): QueuedMessages.Delivery {
@@ -109,7 +155,7 @@ data class ChatHistory(
             "older" -> require(sameSource && page.end == start && page.oldest == page.base)
         }
         val retained = if (page.mode == "tail") emptyList() else rows
-        val merged = (retained + page.rows).associateBy { Triple(it.offset, it.role, it.id) }.values.sortedBy { it.offset }
+        val merged = (retained + page.rows).associateBy { listOf(it.offset, it.end, it.role, it.id, it.normalized) }.values.sortedBy { it.offset }
         val previousDeliveries = when {
             sameSource -> deliveries
             sid == page.sid -> resetSeed().deliveries

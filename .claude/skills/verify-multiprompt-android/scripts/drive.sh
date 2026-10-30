@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    settings-navigation.md|chat-codex.md|session-gestures.md|session-favorites.md|chat-working.md|session-summaries.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
+    settings-navigation.md|chat-codex.md|session-gestures.md|session-favorites.md|chat-working.md|session-summaries.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|chat-shared.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -275,8 +275,8 @@ if [[ "$feature" == launcher-icon.md ]]; then
     exit 0
 fi
 if [[ "$package" == dev.multiprompt.companion || "$package" == dev.multiprompt.companion.m3 ]]; then
-    if [[ "$package" == dev.multiprompt.companion.m3 ]]; then [[ "$feature" == settings-navigation.md || "$feature" == chat-resync.md || "$feature" == session-favorites.md || "$feature" == chat-queued.md || "$feature" == session-routing.md ]]; fi
-    [[ "$feature" == settings-navigation.md || "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md || "$feature" == chat-resync.md || "$feature" == session-favorites.md || "$feature" == session-routing.md ]]
+    if [[ "$package" == dev.multiprompt.companion.m3 ]]; then [[ "$feature" == settings-navigation.md || "$feature" == chat-shared.md || "$feature" == chat-resync.md || "$feature" == session-favorites.md || "$feature" == chat-queued.md || "$feature" == session-routing.md ]]; fi
+    [[ "$feature" == settings-navigation.md || "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md || "$feature" == chat-shared.md || "$feature" == chat-resync.md || "$feature" == session-favorites.md || "$feature" == session-routing.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -863,6 +863,147 @@ if [[ "$feature" == sessions.md ]]; then
     exit 0
 fi
 tap_text verify-session
+if [[ "$feature" == chat-shared.md ]]; then
+    [[ "${GITHUB_ACTIONS:-}" == true ]]
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py engine-info > "$EVIDENCE/shared-engine-info.json"
+    jq -e '.engine_info.generation >= 22 and .bundle_bytes == 224961 and .bundle_sha256 == "999ef191b364af22994311f4d8b168e22c67a7103585a0c22e0e9c1cc7a9c316"' "$EVIDENCE/shared-engine-info.json" >/dev/null
+    wait_for_text 'Ready for queued messages.'
+    fill 'Message verify-session' SHARED_PHONE_SYNTHETIC
+    tap_desc 'Send prompt'
+    for attempt in {1..30}; do
+        sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read > "$EVIDENCE/shared-phone.json"
+        jq -e '(.epoch | type) == "number" and (.rows | type) == "array"' "$EVIDENCE/shared-phone.json" >/dev/null
+        if jq -e '[.rows[] | select(.body == "SHARED_PHONE_SYNTHETIC" and .state == "queued")] | length == 1' "$EVIDENCE/shared-phone.json" >/dev/null; then break; fi
+        sleep 1
+    done
+    if ! jq -e '[.rows[] | select(.body == "SHARED_PHONE_SYNTHETIC" and .state == "queued")] | length == 1' "$EVIDENCE/shared-phone.json" >/dev/null; then
+        printf 'SHARED_HOST_ADMISSION_MISSING\n' | tee "$EVIDENCE/shared-negative-marker.txt"
+        exit 1
+    fi
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py desktop-submit > "$EVIDENCE/shared-desktop-submit.json"
+    if ! wait_for_text SHARED_DESKTOP_SYNTHETIC; then
+        if [[ "${EXPECT_SHARED_MISSING:-}" == true ]]; then
+            sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read > "$EVIDENCE/shared-remote-missing-host.json"
+            dump_ui
+            cp "$EVIDENCE/current.xml" "$EVIDENCE/shared-remote-missing-ui.xml"
+            if python3 "$scripts/shared-remote-oracle.py" "$EVIDENCE/shared-remote-missing-host.json" "$EVIDENCE/shared-remote-missing-ui.xml"; then
+                printf 'SHARED_REMOTE_MESSAGE_NOT_VISIBLE\n' | tee "$EVIDENCE/shared-negative-marker.txt"
+            fi
+        fi
+        exit 1
+    fi
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read > "$EVIDENCE/shared-before-reset.json"
+    jq -e '(.rows | length) == 2 and ([.rows[] | select(.state == "queued" and (.id | length) > 0 and (.attempt | length) > 0)] | length) == 2 and ([.rows[].id] | unique | length) == 2' "$EVIDENCE/shared-before-reset.json" >/dev/null
+    fill 'Message verify-session' DRAFT_PRESERVED_SYNTHETIC
+    shot shared-before-reset
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read codex > "$EVIDENCE/shared-codex-before-claude-reset.json"
+    tap_desc 'Session actions'
+    tap_text 'Resync chat'
+    for attempt in {1..30}; do
+        sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read > "$EVIDENCE/shared-after-reset.json"
+        if jq -e '[.rows[] | select(.state == "cancelled")] | length == 2' "$EVIDENCE/shared-after-reset.json" >/dev/null; then break; fi
+        sleep 1
+    done
+    jq -e '(.epoch | type) == "number" and (.rows | type) == "array"' "$EVIDENCE/shared-after-reset.json" >/dev/null
+    if ! python3 - "$EVIDENCE/shared-before-reset.json" "$EVIDENCE/shared-after-reset.json" <<'PYSHAREDORACLE'
+import json, sys
+before, after = [json.load(open(path)) for path in sys.argv[1:]]
+assert after['epoch'] == before['epoch'] + 1
+assert len(before['rows']) == len(after['rows']) == 2
+assert all(row['state'] == 'cancelled' for row in after['rows'])
+assert {(row['id'], row['attempt']) for row in before['rows']} == {(row['id'], row['attempt']) for row in after['rows']}
+PYSHAREDORACLE
+    then
+        printf 'SHARED_HOST_RESET_NOT_APPLIED\n' | tee "$EVIDENCE/shared-negative-marker.txt"
+        exit 1
+    fi
+    python3 - "$EVIDENCE/shared-before-reset.json" "$EVIDENCE/shared-after-reset.json" <<'PYSHARED'
+import json, sys
+before, after = [json.load(open(path)) for path in sys.argv[1:]]
+assert after['epoch'] == before['epoch'] + 1
+assert {(row['id'], row['attempt']) for row in before['rows']} == {(row['id'], row['attempt']) for row in after['rows']}
+PYSHARED
+    wait_for_absence SHARED_PHONE_SYNTHETIC
+    wait_for_absence SHARED_DESKTOP_SYNTHETIC
+    shot shared-after-reset
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read codex > "$EVIDENCE/shared-codex-after-claude-reset.json"
+    cmp "$EVIDENCE/shared-codex-before-claude-reset.json" "$EVIDENCE/shared-codex-after-claude-reset.json"
+    for neighbor in neighbor codex-neighbor; do
+        sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read "$neighbor" > "$EVIDENCE/shared-$neighbor-after-claude.json"
+        cmp "$EVIDENCE/shared-$neighbor-before.json" "$EVIDENCE/shared-$neighbor-after-claude.json"
+    done
+    grep -F 'DRAFT_PRESERVED_SYNTHETIC' "$EVIDENCE/current.xml" >/dev/null
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/shared-terminal.txt"
+    grep -F 'FIXTURE_OWNED_DRAFT' "$EVIDENCE/shared-terminal.txt" >/dev/null
+    adb shell input keyevent KEYCODE_BACK
+    wait_for_text Inbox
+    tap_text codex-native
+    wait_for_text CODEX_TRANSCRIPT_ONLY_codex
+    fill 'Message codex-native' SHARED_CODEX_PHONE
+    tap_desc 'Send prompt'
+    for attempt in {1..30}; do
+        sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read codex > "$EVIDENCE/shared-codex-phone.json"
+        if jq -e '[.rows[] | select(.body == "SHARED_CODEX_PHONE" and .state == "queued")] | length == 1' "$EVIDENCE/shared-codex-phone.json" >/dev/null; then break; fi
+        sleep 1
+    done
+    jq -e '[.rows[] | select(.body == "SHARED_CODEX_PHONE" and .state == "queued")] | length == 1' "$EVIDENCE/shared-codex-phone.json" >/dev/null
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py desktop-submit codex > "$EVIDENCE/shared-codex-desktop-submit.json"
+    wait_for_text SHARED_CODEX_DESKTOP
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read codex > "$EVIDENCE/shared-codex-before-restart.json"
+    jq -e '(.rows | length) == 2 and ([.rows[] | select(.state == "queued" and (.id | length) > 0 and (.attempt | length) > 0)] | length) == 2 and ([.rows[].id] | unique | length) == 2' "$EVIDENCE/shared-codex-before-restart.json" >/dev/null
+    relaunch_app
+    wait_for_text codex-native
+    tap_text codex-native
+    wait_for_text SHARED_CODEX_PHONE
+    wait_for_text SHARED_CODEX_DESKTOP
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read codex > "$EVIDENCE/shared-codex-after-restart.json"
+    cmp "$EVIDENCE/shared-codex-before-restart.json" "$EVIDENCE/shared-codex-after-restart.json"
+    shot shared-codex-before-reset
+    tap_desc 'Session actions'
+    tap_text 'Resync chat'
+    for attempt in {1..30}; do
+        sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read codex > "$EVIDENCE/shared-codex-after-reset.json"
+        if jq -e '[.rows[] | select(.state == "cancelled")] | length == 2' "$EVIDENCE/shared-codex-after-reset.json" >/dev/null; then break; fi
+        sleep 1
+    done
+    python3 - "$EVIDENCE/shared-codex-before-restart.json" "$EVIDENCE/shared-codex-after-reset.json" <<'PYCODEXSHARED'
+import json, sys
+before, after = [json.load(open(path)) for path in sys.argv[1:]]
+assert before['provider'] == after['provider'] == 'codex' and before['sid'] == after['sid'] == 'verify-codex'
+assert after['epoch'] == before['epoch'] + 1
+assert len(before['rows']) == len(after['rows']) == 2
+assert all(row['state'] == 'cancelled' for row in after['rows'])
+assert {(row['id'], row['attempt']) for row in before['rows']} == {(row['id'], row['attempt']) for row in after['rows']}
+PYCODEXSHARED
+    wait_for_absence SHARED_CODEX_PHONE
+    wait_for_absence SHARED_CODEX_DESKTOP
+    shot shared-codex-after-reset
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read neighbor > "$EVIDENCE/shared-neighbor-after.json"
+    cmp "$EVIDENCE/shared-neighbor-before.json" "$EVIDENCE/shared-neighbor-after.json"
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read codex-neighbor > "$EVIDENCE/shared-codex-neighbor-after.json"
+    cmp "$EVIDENCE/shared-codex-neighbor-before.json" "$EVIDENCE/shared-codex-neighbor-after.json"
+    for neighbor in neighbor codex-neighbor; do
+        python3 - "$EVIDENCE/shared-$neighbor-before.json" "$EVIDENCE/shared-$neighbor-mutated.json" <<'PYNEIGHBOR'
+import json, sys
+with open(sys.argv[1]) as source:
+    before = json.load(source)
+assert len(before['rows']) == 1 and before['rows'][0]['attempt']
+original_epoch, original_seq = before['epoch'], before['seq']
+before['rows'][0]['state'] = 'cancelled'
+assert (before['epoch'], before['seq']) == (original_epoch, original_seq)
+with open(sys.argv[2], 'w') as target:
+    print(json.dumps(before), file=target)
+PYNEIGHBOR
+        if cmp -s "$EVIDENCE/shared-$neighbor-before.json" "$EVIDENCE/shared-$neighbor-mutated.json"; then
+            echo 'Neighbor oracle accepted a changed row' >&2
+            exit 1
+        fi
+    done
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read claude > "$EVIDENCE/shared-claude-after-codex-reset.json"
+    cmp "$EVIDENCE/shared-after-reset.json" "$EVIDENCE/shared-claude-after-codex-reset.json"
+    printf 'SHARED_STORE_RESET_OK\n' | tee "$EVIDENCE/shared-result.txt"
+    exit 0
+fi
 if [[ "$feature" == chat-working.md ]]; then
     wait_for_text WORKING_DOTS_READY
     python3 tools/working-dots/drive.py

@@ -70,6 +70,7 @@ on:
           - chat-cancel.md
           - native-skills.md
           - chat-resync.md
+          - chat-shared.md
           - chat-codex.md
           - session-routing.md
           - session-gestures.md
@@ -88,6 +89,10 @@ on:
       expect_native_missing:
         description: Require the original app to reject the native slash journey
         required: false
+        type: boolean
+        default: false
+      expect_shared_missing:
+        description: Require Android 303 to fail the shared host-state journey
         type: boolean
         default: false
       app_ref:
@@ -114,6 +119,7 @@ jobs:
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
       UPDATE_BASELINE_RUN: ${{ inputs.update_baseline_run }}
       APP_REF: ${{ inputs.app_ref }}
+      EXPECT_SHARED_MISSING: ${{ inputs.expect_shared_missing }}
       RELEASE_CHANNEL: ${{ inputs.channel || 'android-latest' }}
     steps:
       - uses: actions/checkout@v4
@@ -123,12 +129,17 @@ jobs:
           CANDIDATE: ${{ inputs.candidate }}
           EXPECT_SHELL_MISSING: ${{ inputs.expect_shell_missing }}
           EXPECT_NATIVE_MISSING: ${{ inputs.expect_native_missing }}
+          EXPECT_SETTINGS_MISSING: ${{ inputs.expect_settings_missing }}
           RELEASE_CHOICES: ${{ inputs.release_choices }}
           RELEASE_ICON: ${{ inputs.release_icon }}
           RELEASED_REACTIONS: ${{ inputs.released_reactions }}
           RELEASED_TERMINAL: ${{ inputs.released_terminal }}
           RELEASED_ROBOTS: ${{ inputs.released_robots }}
         run: |
+          if [[ "$EXPECT_SHARED_MISSING" == true ]]; then
+            [[ "$VERIFY_FEATURE" == chat-shared.md && "$APP_REF" == 9198aad3721905b09931cdd85628988fe0bd3292 && "$RELEASE_CHANNEL" == android-latest && -z "$UPDATE_BASELINE_RUN" ]]
+            [[ "$CANDIDATE" != true && "$RELEASED_CHAT" != true && "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true && "$EXPECT_SHELL_MISSING" != true && "$EXPECT_NATIVE_MISSING" != true && "$EXPECT_SETTINGS_MISSING" != true ]]
+          fi
           if [[ "$VERIFY_FEATURE" == session-routing.md ]]; then
             [[ "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true ]]
             [[ "$EXPECT_SHELL_MISSING" != true && "$EXPECT_NATIVE_MISSING" != true ]]
@@ -145,7 +156,7 @@ jobs:
                 [[ "$RELEASE_CHOICES" == true && "$RELEASED_CHAT" != true && -z "$APP_REF" && -z "$UPDATE_BASELINE_RUN" ]]
                 [[ "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true && "$EXPECT_SHELL_MISSING" != true && "$EXPECT_NATIVE_MISSING" != true ]]
               else
-                [[ ( "$VERIFY_FEATURE" == chat-resync.md || "$VERIFY_FEATURE" == session-favorites.md || "$VERIFY_FEATURE" == chat-queued.md || "$VERIFY_FEATURE" == session-routing.md ) && "$RELEASED_CHAT" == true && -z "$APP_REF" && -z "$UPDATE_BASELINE_RUN" ]]
+                [[ ( "$VERIFY_FEATURE" == chat-resync.md || "$VERIFY_FEATURE" == chat-shared.md || "$VERIFY_FEATURE" == session-favorites.md || "$VERIFY_FEATURE" == chat-queued.md || "$VERIFY_FEATURE" == session-routing.md ) && "$RELEASED_CHAT" == true && -z "$APP_REF" && -z "$UPDATE_BASELINE_RUN" ]]
                 [[ "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true ]]
               fi
               ;;
@@ -242,7 +253,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          [[ "$VERIFY_FEATURE" = settings-navigation.md || "$VERIFY_FEATURE" = chat-queued.md || "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md || "$VERIFY_FEATURE" = terminal.md || "$VERIFY_FEATURE" = robot-faces.md || "$VERIFY_FEATURE" = chat-cancel.md || "$VERIFY_FEATURE" = session-gestures.md || "$VERIFY_FEATURE" = session-summaries.md || "$VERIFY_FEATURE" = chat-resync.md || "$VERIFY_FEATURE" = session-favorites.md || "$VERIFY_FEATURE" = session-routing.md ]]
+          [[ "$VERIFY_FEATURE" = settings-navigation.md || "$VERIFY_FEATURE" = chat-queued.md || "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md || "$VERIFY_FEATURE" = terminal.md || "$VERIFY_FEATURE" = robot-faces.md || "$VERIFY_FEATURE" = chat-cancel.md || "$VERIFY_FEATURE" = session-gestures.md || "$VERIFY_FEATURE" = session-summaries.md || "$VERIFY_FEATURE" = chat-resync.md || "$VERIFY_FEATURE" = chat-shared.md || "$VERIFY_FEATURE" = session-favorites.md || "$VERIFY_FEATURE" = session-routing.md ]]
           sdkmanager --install 'build-tools;35.0.0' 'platforms;android-35'
           bash tools/release-choices/prepare.sh
           echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
@@ -296,7 +307,7 @@ jobs:
         run: .claude/skills/verify-multiprompt-android/scripts/fixture.sh
       - name: Install, doctor and drive the real app
         id: native-ui
-        continue-on-error: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.expect_native_missing == 'true' || github.event.inputs.expect_shell_missing == 'true' || github.event.inputs.expect_settings_missing == 'true') }}
+        continue-on-error: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.expect_native_missing == 'true' || github.event.inputs.expect_shell_missing == 'true' || github.event.inputs.expect_settings_missing == 'true' || github.event.inputs.expect_shared_missing == 'true') }}
         uses: ./.github/actions/android-proof
         with:
           stage: stage-1
@@ -335,6 +346,25 @@ jobs:
           test "$EMULATOR_OUTCOME" = failure
           grep -Ex 'SETTINGS_NAVIGATION_RETIRED_DESTINATION|SETTINGS_NAVIGATION_MISSING_HOST_MAPPING' "$EVIDENCE/settings-baseline.txt"
           printf 'ANDROID_301_SETTINGS_REJECTED\n' > "$EVIDENCE/settings-baseline-result.txt"
+      - name: Require Android 303 shared host-state failure
+        if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.expect_shared_missing == 'true'
+        env:
+          EMULATOR_OUTCOME: ${{ steps.native-ui.outcome }}
+        run: |
+          test "$VERIFY_FEATURE" = chat-shared.md
+          test "$APP_REF" = 9198aad3721905b09931cdd85628988fe0bd3292
+          test "$(cat "$EVIDENCE/app-source-sha.txt")" = "$APP_REF"
+          test "$EMULATOR_OUTCOME" = failure
+          jq -e '.engine_info.generation == 22 and .bundle_sha256 == "999ef191b364af22994311f4d8b168e22c67a7103585a0c22e0e9c1cc7a9c316" and (.snapshot | type) == "object" and (.snapshot | has("next_cursor")) and .snapshot.next_cursor == null and (.snapshot.items | type) == "array" and (.snapshot.items | length) == 0' "$EVIDENCE/shared-bootstrap.json" >/dev/null
+          marker=$(cat "$EVIDENCE/shared-negative-marker.txt")
+          case "$marker" in
+            SHARED_HOST_RESET_NOT_APPLIED|SHARED_HOST_ADMISSION_MISSING) ;;
+            SHARED_REMOTE_MESSAGE_NOT_VISIBLE)
+              python3 .claude/skills/verify-multiprompt-android/scripts/shared-remote-oracle.py "$EVIDENCE/shared-remote-missing-host.json" "$EVIDENCE/shared-remote-missing-ui.xml" --self-check
+              ;;
+            *) exit 1 ;;
+          esac
+          printf 'ANDROID_303_SHARED_HOST_STATE_REJECTED\n' > "$EVIDENCE/shared-negative-result.txt"
       - name: Require the original native-skill failure
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.expect_native_missing == 'true'
         env:

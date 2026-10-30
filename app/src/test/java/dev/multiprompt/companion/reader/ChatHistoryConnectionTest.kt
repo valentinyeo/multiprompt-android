@@ -58,18 +58,13 @@ class ChatHistoryConnectionTest {
     }
 
     @Test
-    fun resyncWithoutConnectionPreservesUnconfirmedMessages() = runBlocking {
+    fun nativeSendWithoutFreshConnectionKeepsDraftUnsent() = runBlocking {
         SessionReaderConnection(repository(), host, "tmux", agent = AgentKind.CLAUDE, historyScript = byteArrayOf(),
             historyCache = ChatHistoryCache(temporary.newFolder())).use { reader ->
             val text = "Any idea when the visual update of the inbox is coming?"
-            assertTrue(reader.sendPrompt(text))
-            val before = ChatHistory().displayMessages(reader.state.value.sentRecord)
-            assertEquals(listOf(text), before.map { it.text })
-            assertTrue(before.single().pending)
+            assertTrue(reader.sendPrompt(text) is PromptAdmission.Rejected)
             assertFalse(reader.resyncChat())
-            assertEquals(listOf(text), reader.state.value.sentRecord.map { it.text })
-            assertEquals(listOf(text), reader.state.value.sentPrompts)
-            assertTrue(ChatHistory().displayMessages(reader.state.value.sentRecord).single().pending)
+            assertTrue(reader.state.value.sentRecord.isEmpty())
         }
     }
 

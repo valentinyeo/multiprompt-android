@@ -54,7 +54,7 @@ object ChatReactions {
         }
         val reactions = mutableSetOf<Int>()
         val displayed = messages.mapIndexed { index, message ->
-            if (message.role != "user" || (message.pending && !collapsePending)) return@mapIndexed message
+            if (message.role != "user" || message.sharedRow != null || message.unknownId != null || (message.pending && !collapsePending)) return@mapIndexed message
             val lines = message.text.lines()
             val kept = lines.filterNot { apply(it, index) }
             if (kept.size == lines.size) return@mapIndexed message

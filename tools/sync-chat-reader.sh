@@ -1,25 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-revision=e62769a0862c8518a68a74ea6bfc6030b03dad3b
-sha256=3c5c2f1923f2a5346e65ed7fc235aab998b9e67054535541f3ea18b51466cdfd
-asset=app/src/main/assets/chat_history_reader.py
+revision=1bbbb9958be4bbcc3451698a4a5450d1773047a5
 [[ "$(cat app/src/main/assets/chat_history_reader.sha)" == "$revision" ]]
 [[ $# -le 1 && ( "${1:-}" == "" || "${1:-}" == --check ) ]]
-tmp=$(mktemp)
-trap 'rm -f "$tmp"' EXIT
-if [[ -n "${MULTIPROMPT_DESKTOP_REPO:-}" ]]; then
-    git -C "$MULTIPROMPT_DESKTOP_REPO" show "$revision:src/chat_history_reader.py" > "$tmp"
-elif [[ "${GITHUB_ACTIONS:-}" == true ]]; then
-    curl --fail --silent --show-error --location "https://raw.githubusercontent.com/valentinyeo/multiprompt/$revision/src/chat_history_reader.py" > "$tmp"
-else
-    printf 'Set MULTIPROMPT_DESKTOP_REPO to the canonical desktop repository\n' >&2
-    exit 1
-fi
-printf '%s  %s\n' "$sha256" "$tmp" | sha256sum --check --status
-if [[ "${1:-}" == --check ]]; then
-    cmp "$tmp" "$asset"
-    printf 'Bundled reader matches canonical revision and SHA256\n'
-else
-    cp "$tmp" "$asset"
-fi
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+for entry in \
+    'chat_history_reader.py b4acba203981d203daf0d283b3abf20c873ba54f1a6dd104ab47184a341faea0' \
+    'chat_connectors/claude.py 1c42945eec4dc66b5edb65f720dfc32a878609253ef3220d4b367eda56fec0ed' \
+    'chat_connectors/codex.py 07e448dc7d5a849cbbf4b914ce375e147f9343906f213bcda00a7d7663757a31'; do
+    read -r path hash <<< "$entry"
+    mkdir -p "$tmp/$(dirname "$path")"
+    if [[ -n "${MULTIPROMPT_DESKTOP_REPO:-}" ]]; then
+        git -C "$MULTIPROMPT_DESKTOP_REPO" show "$revision:src/$path" > "$tmp/$path"
+    elif [[ "${GITHUB_ACTIONS:-}" == true ]]; then
+        curl --fail --silent --show-error --location "https://raw.githubusercontent.com/valentinyeo/multiprompt/$revision/src/$path" > "$tmp/$path"
+    else
+        printf 'Set MULTIPROMPT_DESKTOP_REPO to the canonical desktop repository\n' >&2
+        exit 1
+    fi
+    printf '%s  %s\n' "$hash" "$tmp/$path" | sha256sum --check --status
+    asset="app/src/main/assets/$path"
+    if [[ "${1:-}" == --check ]]; then
+        cmp "$tmp/$path" "$asset"
+    else
+        mkdir -p "$(dirname "$asset")"
+        cp "$tmp/$path" "$asset"
+    fi
+done
+printf 'Reader and connectors match canonical revision and SHA256\n'
