@@ -52,7 +52,9 @@ import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private data class ReplyJump(val message: ChatHistoryMessage, val reply: ReplyQuote.Reply)
 
@@ -84,14 +86,16 @@ internal fun ChatHistoryView(
     val context = LocalContext.current
     var retryRow by remember { mutableStateOf<Pair<dev.multiprompt.companion.reader.MessageProtocol.Row, Long>?>(null) }
     var hiddenRetry by remember { mutableStateOf<Pair<String, Long>?>(null) }
-    fun showResult(result: dev.multiprompt.companion.reader.MessageActionResult) {
+    suspend fun showResult(result: dev.multiprompt.companion.reader.MessageActionResult) {
         val text = when (result) {
             dev.multiprompt.companion.reader.MessageActionResult.Applied -> "Request confirmed"
             dev.multiprompt.companion.reader.MessageActionResult.Unknown -> "Confirmation unknown"
             dev.multiprompt.companion.reader.MessageActionResult.BlockedRecovery -> "Resolve unknown messages first"
             is dev.multiprompt.companion.reader.MessageActionResult.Rejected -> result.reason
         }
-        android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
+        withContext(Dispatchers.Main) {
+            android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
+        }
     }
     retryRow?.let { (row, token) ->
         KitSheet(onDismiss = { retryRow = null }) {

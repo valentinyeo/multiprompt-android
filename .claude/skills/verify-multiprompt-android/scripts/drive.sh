@@ -885,7 +885,6 @@ if [[ "$feature" == chat-shared.md ]]; then
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read > "$EVIDENCE/shared-before-reset.json"
     jq -e '(.rows | length) == 2 and ([.rows[] | select(.state == "queued" and (.id | length) > 0 and (.attempt | length) > 0)] | length) == 2 and ([.rows[].id] | unique | length) == 2' "$EVIDENCE/shared-before-reset.json" >/dev/null
     fill 'Message verify-session' DRAFT_PRESERVED_SYNTHETIC
-    adb shell input keyevent KEYCODE_BACK
     shot shared-before-reset
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read codex > "$EVIDENCE/shared-codex-before-claude-reset.json"
     tap_desc 'Session actions'
