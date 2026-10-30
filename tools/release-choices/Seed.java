@@ -6,15 +6,12 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
-import android.provider.Settings;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.util.Base64;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
-import javax.crypto.spec.GCMParameterSpec;
-import java.util.Arrays;
 import java.security.KeyStore;
 import org.json.JSONObject;
 import org.json.JSONArray;
@@ -40,11 +37,7 @@ public class Seed extends Instrumentation {
                 if (!(Build.HARDWARE.contains("ranchu") || Build.HARDWARE.contains("goldfish"))) {
                     throw new IllegalStateException("Emulator required");
                 }
-                if (mode.equals("settings-seed") || mode.equals("settings-snapshot")) {
-                    requireSettingsFixture(context);
-                    if (mode.equals("settings-seed")) seedSettings(context, result);
-                    else snapshotSettings(context, result);
-                } else if (mode.equals("host-seed")) seedHost(context, result);
+                if (mode.equals("host-seed")) seedHost(context, result);
                 else if (mode.equals("favorites-seed")) seedFavorites(context, result);
                 else if (mode.equals("favorites-snapshot")) snapshotFavorites(context, result);
                 else throw new IllegalStateException("Unknown fixture mode");
@@ -85,9 +78,7 @@ public class Seed extends Instrumentation {
             result.putString("result", "ISOLATED_RELEASE_SESSION_SEEDED");
             finish(Activity.RESULT_OK, result);
         } catch (Exception error) {
-            if (arguments != null && arguments.getString("mode", "account").startsWith("settings-")) {
-                result.putString("error", "Settings fixture rejected");
-            } else if (arguments != null && arguments.getString("mode", "account").startsWith("favorites-")) {
+            if (arguments != null && arguments.getString("mode", "account").startsWith("favorites-")) {
                 result.putString("error", error instanceof IllegalStateException ? error.getMessage() : error.getClass().getSimpleName());
             } else {
                 result.putString("error", error.toString());
@@ -95,85 +86,6 @@ public class Seed extends Instrumentation {
             finish(Activity.RESULT_CANCELED, result);
         }
     }
-    private static final String[] SETTINGS = {"frequent", "frequent_first", "favorites", "all"};
-    private static final String LAYOUT_KEY = "layout::isolated-release-fixture";
-
-    private void requireSettingsFixture(Context context) throws Exception {
-        if (!"10.0.2.2:8788".equals(Settings.Global.getString(context.getContentResolver(), "http_proxy"))
-            || !context.getSharedPreferences("hosts", Context.MODE_PRIVATE).getAll().isEmpty()) {
-            throw new IllegalStateException();
-        }
-        String encoded = context.getSharedPreferences("encrypted_secrets", Context.MODE_PRIVATE)
-            .getString("account_device_v1", null);
-        byte[] packed = Base64.decode(encoded, Base64.NO_WRAP);
-        if (packed.length <= 12) throw new IllegalStateException();
-        KeyStore store = KeyStore.getInstance("AndroidKeyStore");
-        store.load(null);
-        SecretKey key = (SecretKey) store.getKey("multiprompt_companion_secrets_v1", null);
-        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(128, Arrays.copyOfRange(packed, 0, 12)));
-        JSONObject session = new JSONObject(new String(cipher.doFinal(Arrays.copyOfRange(packed, 12, packed.length)), "UTF-8"));
-        Object expires = session.get("expires_at");
-        if (!"isolated-release-fixture".equals(session.get("account_id"))
-            || !"github-emulator".equals(session.get("device_id"))
-            || !"offline-fixture".equals(session.get("access_token"))
-            || !"offline-fixture".equals(session.get("refresh_token"))
-            || !(expires instanceof Number) || ((Number) expires).longValue() <= System.currentTimeMillis()) {
-            throw new IllegalStateException();
-        }
-    }
-
-    private void seedSettings(Context context, Bundle result) throws Exception {
-        SharedPreferences prefs = context.getSharedPreferences("account_layout", Context.MODE_PRIVATE);
-        if (!prefs.getAll().isEmpty()) throw new IllegalStateException();
-        JSONObject flags = new JSONObject();
-        for (String key : SETTINGS) flags.put(key, true);
-        JSONObject layout = new JSONObject().put("schema", 1).put("revision", 0)
-            .put("workspaces", new JSONArray()).put("tabs", new JSONArray()).put("settings", flags);
-        if (!prefs.edit().putString(LAYOUT_KEY, new JSONObject().put("base", layout).put("edited", layout).toString()).commit()) {
-            throw new IllegalStateException();
-        }
-        result.putString("result", "ISOLATED_SETTINGS_SEEDED");
-    }
-
-    private void snapshotSettings(Context context, Bundle result) throws Exception {
-        SharedPreferences layouts = context.getSharedPreferences("account_layout", Context.MODE_PRIVATE);
-        if (layouts.getAll().size() > (layouts.contains(LAYOUT_KEY) ? 1 : 0)) throw new IllegalStateException();
-        String raw = layouts.getString(LAYOUT_KEY, null);
-        JSONObject flags = null;
-        if (raw != null) {
-            JSONObject pending = new JSONObject(raw);
-            if (pending.length() != 2) throw new IllegalStateException();
-            for (String part : new String[] {"base", "edited"}) {
-                JSONObject layout = pending.getJSONObject(part);
-                if (layout.length() != 5 || layout.getInt("schema") != 1 || layout.getLong("revision") != 0
-                    || layout.getJSONArray("workspaces").length() != 0 || layout.getJSONArray("tabs").length() != 0) {
-                    throw new IllegalStateException();
-                }
-                JSONObject values = layout.getJSONObject("settings");
-                if (values.length() != SETTINGS.length) throw new IllegalStateException();
-                for (String key : SETTINGS) if (!(values.get(key) instanceof Boolean)) throw new IllegalStateException();
-                if (part.equals("edited")) flags = values;
-            }
-        }
-        SharedPreferences local = context.getSharedPreferences("session_read_state", Context.MODE_PRIVATE);
-        if (local.contains("sunlight_mode")) throw new IllegalStateException();
-        JSONObject values = new JSONObject()
-            .put("newest_sessions_at_bottom", local.getBoolean("newest_sessions_at_bottom", true))
-            .put("all_split_on_right", local.getBoolean("all_split_on_right", true))
-            .put("app_theme", local.getString("app_theme", "SYSTEM"))
-            .put("reader_default_font_scale", local.getFloat("reader_default_font_scale", 1f));
-        String theme = values.getString("app_theme");
-        if (!theme.equals("SYSTEM") && !theme.equals("DARK") && !theme.equals("SUNLIGHT")) throw new IllegalStateException();
-        JSONObject present = new JSONObject();
-        for (String key : new String[] {"newest_sessions_at_bottom", "all_split_on_right", "app_theme", "reader_default_font_scale"}) {
-            present.put(key, local.contains(key));
-        }
-        result.putString("state", new JSONObject().put("layout_present", raw != null)
-            .put("settings", flags == null ? JSONObject.NULL : flags).put("local", values).put("present", present).toString());
-        result.putString("result", "ISOLATED_SETTINGS_SNAPSHOT");
-    }
-
     private void seedHost(Context context, Bundle result) throws Exception {
         SharedPreferences secrets = context.getSharedPreferences("encrypted_secrets", Context.MODE_PRIVATE);
         if (!secrets.contains("account_device_v1")) throw new IllegalStateException("Fixture account required");
