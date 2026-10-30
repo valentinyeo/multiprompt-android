@@ -7,8 +7,8 @@ root = ET.parse(xml).getroot()
 parents = {child: parent for parent in root.iter() for child in parent}
 labels = [n for n in root.iter('node') if n.get('text') == 'Queued']
 assert len(labels) == expected, f'{name}: expected {expected} Queued labels, found {len(labels)}'
-if name in ('WAITING', 'FIRST_DELIVERED', 'BOTH_DELIVERED'):
-    states = {'WAITING': ('Queued', 'Queued'), 'FIRST_DELIVERED': ('Delivered', 'Queued'), 'BOTH_DELIVERED': ('Delivered', 'Delivered')}[name]
+if name in ('QUEUE_WAITING', 'QUEUE_FIRST_DELIVERED', 'QUEUE_BOTH_DELIVERED'):
+    states = {'QUEUE_WAITING': ('Queued', 'Queued'), 'QUEUE_FIRST_DELIVERED': ('Delivered', 'Queued'), 'QUEUE_BOTH_DELIVERED': ('Delivered', 'Delivered')}[name]
     for body, state in zip(('WAITING_ONE', 'WAITING_TWO'), states):
         matches = [n for n in root.iter('node') if n.get('text') == body]
         assert len(matches) == 1, f'{name}: {body} occurs {len(matches)} times'

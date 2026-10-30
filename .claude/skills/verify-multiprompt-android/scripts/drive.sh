@@ -566,7 +566,9 @@ if [[ "$feature" == chat-cancel.md ]]; then
     done
     shot cancel-waiting
     python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 3 WAITING
-    if sudo test -f /home/verifyssh/receipts.txt && sudo grep -F CANCEL_ /home/verifyssh/receipts.txt; then exit 1; fi
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/cancel-draft-before.txt"
+    grep -Fx '❯ FIXTURE_OWNED_DRAFT' "$EVIDENCE/cancel-draft-before.txt"
+    sudo test ! -s /home/verifyssh/receipts.txt
     read -r cancel_x cancel_y <<< "$(select_node text CANCEL_TARGET_TWO)"
     adb shell input swipe "$cancel_x" "$cancel_y" "$cancel_x" "$cancel_y" 900
     wait_for_text 'Cancel message'
@@ -575,6 +577,7 @@ if [[ "$feature" == chat-cancel.md ]]; then
     wait_for_text Cancelled
     shot cancel-cancelled
     python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 2 WAITING
+    sudo test ! -s /home/verifyssh/receipts.txt
     sudo -u verifyssh touch /home/verifyssh/cancel-ready
     wait_receipt VERIFY_RECEIVED:CANCEL_KEEP_ONE
     wait_receipt VERIFY_RECEIVED:CANCEL_KEEP_THREE
@@ -714,7 +717,7 @@ if [[ "$feature" == chat-queued.md ]]; then
     tap_desc 'Send prompt'
     wait_for_text WAITING_TWO
     queue_states queued queued | tee "$EVIDENCE/queue-pending.json"
-    queue_ui 2 WAITING
+    queue_ui 2 QUEUE_WAITING
     shot queued-waiting
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/draft-before.txt"
     grep -F '❯ FIXTURE_OWNED_DRAFT' "$EVIDENCE/draft-before.txt"
@@ -723,7 +726,7 @@ if [[ "$feature" == chat-queued.md ]]; then
     provider_event clear-draft
     wait_receipt 'VERIFY_RECEIVED:WAITING_ONE'
     queue_states delivered queued | tee "$EVIDENCE/queue-first-delivered.json"
-    queue_ui 1 FIRST_DELIVERED
+    queue_ui 1 QUEUE_FIRST_DELIVERED
     wait_for_text WAITING_ONE
     wait_for_text WAITING_TWO
     shot queued-first-delivered
@@ -733,7 +736,7 @@ if [[ "$feature" == chat-queued.md ]]; then
     provider_event consume:WAITING_ONE
     wait_receipt 'VERIFY_RECEIVED:WAITING_TWO'
     queue_states delivered delivered | tee "$EVIDENCE/queue-both-delivered.json"
-    queue_ui 0 BOTH_DELIVERED
+    queue_ui 0 QUEUE_BOTH_DELIVERED
     wait_for_text WAITING_ONE
     wait_for_text WAITING_TWO
     shot queued-both-delivered
