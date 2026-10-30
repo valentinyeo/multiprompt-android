@@ -33,6 +33,8 @@ import dev.multiprompt.companion.reader.SessionReaderConnection
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
@@ -339,6 +341,7 @@ class PendingMessagesTest {
     @Test fun claudeVisibleRemoveRejectsSnapshotConflict() = visibleRemoveRejectsSnapshotConflict("claude")
     @Test fun codexVisibleRemoveRejectsSnapshotConflict() = visibleRemoveRejectsSnapshotConflict("codex")
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun visibleRemoveRejectsSnapshotConflict(provider: String) {
         val f = ChatHistoryActorTest().Fixture(provider)
         val submit = f.journal.create(f.account, f.wire.copy(tmux = "old-alias"), "submit", text = "Original prompt", epoch = 1)
@@ -347,13 +350,18 @@ class PendingMessagesTest {
         val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MultipromptApplication
         try {
             runBlocking { owner.select(true); owner.start(); f.ready(owner) }
+            val initialReplica = owner.state.value.replica
             f.row = f.row("queued").put("id", submit.id).put("text", "Conflicting prompt")
             f.paged = true
             f.targetOnLaterPage = true
-            f.pauseSecondSnapshot = CompletableDeferred()
+            f.targetOnThirdPage = true
+            f.blockLaterPage = true
+            f.pauseRestartSnapshot = CompletableDeferred()
+            f.failNextEvents.set(true)
             owner.resync()
-            runBlocking { withTimeout(10_000) { f.secondSnapshotStarted.await() } }
-            f.pauseSnapshot = CompletableDeferred()
+            runBlocking { withTimeout(10_000) { f.laterPageRequested.await() } }
+            val commands = owner.javaClass.getDeclaredField("commands").apply { isAccessible = true }.get(owner) as Channel<*>
+            val raw = f.prefs.all.toMap()
             connection = SessionReaderConnection(app.sshRepository, f.host, f.identity.tmux, f.identity.agent, app.chatHistoryScript, app.chatHistoryCache)
             connection.javaClass.getDeclaredField("historyIdentity").apply { isAccessible = true }.set(connection, f.identity)
             connection.javaClass.getDeclaredField("historyConnection").apply { isAccessible = true }.set(connection, owner)
@@ -366,15 +374,19 @@ class PendingMessagesTest {
             }
             compose.onNodeWithText("Original prompt").assertIsDisplayed()
             compose.onNodeWithText("Remove").performClick()
-            compose.runOnIdle { }
-            f.pauseSecondSnapshot!!.complete(Unit)
-            runBlocking { withTimeout(10_000) { f.thirdSnapshotStarted.await() } }
+            compose.waitUntil(10_000) { !commands.isEmpty }
+            f.laterPageRelease.complete(Unit)
+            runBlocking { withTimeout(10_000) { f.restartSnapshotStarted.await() } }
             compose.onNodeWithText("Original prompt").assertIsDisplayed()
             compose.onNodeWithText("Conflicting prompt").assertDoesNotExist()
             assertTrue(f.row!!.getString("state") == "queued")
             assertTrue(f.dismissCalls == 0 && f.submitCalls == 0 && f.retryCalls == 0)
             assertTrue(f.journal.entries().single().id == submit.id)
-        } finally { f.pauseSecondSnapshot?.complete(Unit); f.pauseSnapshot?.complete(Unit); owner.close() }
+            assertTrue(f.prefs.all == raw)
+            assertTrue(f.lastStatus!!.getString("message_id") == submit.id && f.lastStatus!!.getString("tmux") == "chat")
+            assertTrue(!f.thirdPageRequested.isCompleted)
+            assertTrue(owner.state.value.replica == initialReplica)
+        } finally { f.laterPageRelease.complete(Unit); f.pauseRestartSnapshot?.complete(Unit); owner.close() }
     }
 
     private fun contrast(bitmap: Bitmap): Double {

@@ -64,6 +64,10 @@ class ChatHistoryActorTest {
         var dropReset = false
         var paged = false
         var targetOnLaterPage = false
+        var targetOnThirdPage = false
+        val failNextEvents = java.util.concurrent.atomic.AtomicBoolean(false)
+        var pauseRestartSnapshot: CompletableDeferred<Unit>? = null
+        val restartSnapshotStarted = CompletableDeferred<Unit>()
         var statusPause: CompletableDeferred<Unit>? = null
         val statusStarted = CompletableDeferred<Unit>()
         var lastStatus: JSONObject? = null
@@ -74,6 +78,7 @@ class ChatHistoryActorTest {
         var pauseSecondSnapshot: CompletableDeferred<Unit>? = null
         var snapshotCount = 0
         val laterPageRequested = CompletableDeferred<Unit>()
+        val thirdPageRequested = CompletableDeferred<Unit>()
         val laterPageRelease = CompletableDeferred<Unit>()
         var blockLaterPage = false
         val resetRequested = CompletableDeferred<Unit>()
@@ -99,24 +104,31 @@ class ChatHistoryActorTest {
                 "message_snapshot" -> {
                     val number = ++snapshotCount
                     val cursor = request.optLong("cursor", 0)
+                    if (cursor == 2L) thirdPageRequested.complete(Unit)
                     if (cursor > 0) {
                         laterPageRequested.complete(Unit)
                         if (blockLaterPage) laterPageRelease.await()
                     }
                     val items = JSONArray()
                     if (targetOnLaterPage && cursor == 0L) items.put(JSONObject().put("message", row("queued").put("id", "sentinel123456789")))
-                    if (!hideSnapshotRow && (cursor == 0L && !targetOnLaterPage || cursor == 1L && targetOnLaterPage))
+                    if (targetOnThirdPage && cursor == 1L) items.put(JSONObject().put("message", row("queued").put("id", "sentinel223456789")))
+                    if (!hideSnapshotRow && (cursor == 0L && !targetOnLaterPage || cursor == 1L && targetOnLaterPage && !targetOnThirdPage || cursor == 2L && targetOnThirdPage))
                         row?.let { items.put(JSONObject().put("message", JSONObject(it.toString()))) }
-                    val next = if (paged && cursor == 0L) 1 else JSONObject.NULL
+                    val next = if (paged && cursor == 0L) 1 else if (targetOnThirdPage && cursor == 1L) 2 else JSONObject.NULL
                     val response = result(JSONObject().put("snapshot_id", "snapshot").put("epoch", epoch).put("seq", 0).put("items", items).put("next_cursor", next))
                     val pause = if (number == 2 && pauseSecondSnapshot != null) pauseSecondSnapshot else pauseSnapshot
                     if (number == 1) snapshotStarted.complete(Unit)
                     if (number == 2) secondSnapshotStarted.complete(Unit)
                     if (number == 3) thirdSnapshotStarted.complete(Unit)
                     pause?.await()
+                    if (cursor == 0L && laterPageRequested.isCompleted && pauseRestartSnapshot != null) {
+                        restartSnapshotStarted.complete(Unit)
+                        pauseRestartSnapshot!!.await()
+                    }
                     response
                 }
                 "message_events" -> {
+                    if (failNextEvents.getAndSet(false)) error("fixture disconnect")
                     eventCalls++
                     val native = nativeRows
                     if (native != null) {
