@@ -68,7 +68,7 @@ object MessageProtocol {
         require(integral(info.get("protocol")) == 1L)
         val generation = integral(info.get("generation"))
         val hash = text(info.get("sha256"))
-        require(generation >= 17 && hash.matches(Regex("[a-f0-9]{64}")))
+        require(generation >= 20 && hash.matches(Regex("[a-f0-9]{64}")))
         val protocols = array(envelope.get("message_protocols"))
         require((0 until protocols.length()).any { integral(protocols.get(it)) == 1L })
         return generation to hash
@@ -110,6 +110,8 @@ object MessageProtocol {
             require(integral(row.get("offset")) == offset && integral(row.get("end")) == end)
             if (row.has("inode")) require(integral(row.get("inode")) == inode)
             require(row.get("role") is String && row.get("text") is String)
+            for (field in listOf("id", "read_id")) if (row.has(field)) require(row.get(field) is String)
+            if (row.has("segment")) integral(row.get("segment"))
             ChatHistoryProtocol.parseRow(row)
         }
         return Fact(sid, eventId, inode, offset, end, value.toString())

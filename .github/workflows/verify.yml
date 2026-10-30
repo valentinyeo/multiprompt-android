@@ -355,7 +355,7 @@ jobs:
           test "$APP_REF" = 9198aad3721905b09931cdd85628988fe0bd3292
           test "$(cat "$EVIDENCE/app-source-sha.txt")" = "$APP_REF"
           test "$EMULATOR_OUTCOME" = failure
-          jq -e '.engine_info.generation == 17 and .bundle_sha256 == "c93f6148e0437b2c9588ce0dc49277202ab25bf8a201db4f63bfe107a5e1dc06" and .snapshot.next_cursor == null and (.snapshot.items | length) == 0' "$EVIDENCE/shared-bootstrap.json" >/dev/null
+          jq -e '.engine_info.generation == 20 and .bundle_sha256 == "47567abeb0277d32e12648267bdd73acc9c902aaefd3d68f7a6f9028ab79af4a" and .snapshot.next_cursor == null and (.snapshot.items | length) == 0' "$EVIDENCE/shared-bootstrap.json" >/dev/null
           grep -Ex 'SHARED_HOST_RESET_NOT_APPLIED|SHARED_HOST_ADMISSION_MISSING' "$EVIDENCE/shared-negative-marker.txt"
           printf 'ANDROID_303_SHARED_HOST_STATE_REJECTED\n' > "$EVIDENCE/shared-negative-result.txt"
       - name: Require the original native-skill failure

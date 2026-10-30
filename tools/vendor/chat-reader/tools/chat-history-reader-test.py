@@ -3897,6 +3897,25 @@ class HeldQueueTest(unittest.TestCase):
             self.assertEqual(json.loads(wire.splitlines()[1])['delivered_ms'], 0)
         self.send.assert_not_called()
 
+    def test_settle_without_a_start_time_never_sweeps_other_transcripts(self):
+        self.path.write_text('')
+        row = json.dumps(dict(type='user', message=dict(role='user', content='elsewhere'), timestamp='2026-10-28T20:00:00Z')) + '\n'
+        for n in range(6):
+            (self.path.parent / f'other-{n}.jsonl').write_text(row)
+        query = dict(id=7, tmux='term-1', texts=['elsewhere'], message_ids=[''], after_ms=0)
+        opened = []
+        real_open = Path.open
+        def tracking_open(path, *args, **kwargs):
+            opened.append(path.name)
+            return real_open(path, *args, **kwargs)
+        with patch.object(reader, 'resolve_response_path', return_value=('claude', 'sid', self.path, None)), patch.object(Path, 'open', tracking_open):
+            wire = reader.settle_response(query)
+            self.assertEqual(json.loads(wire.splitlines()[1])['delivered_ms'], 0)
+            self.assertFalse([name for name in opened if name.startswith('other-')])
+            opened.clear()
+            wire = reader.settle_response(dict(query, after_ms=1))
+            self.assertLessEqual(len([name for name in opened if name.startswith('other-')]), reader.SETTLE_SIBLINGS_MAX)
+
 
     def test_worker_lock_never_strands_a_new_session(self):
         import fcntl
@@ -4190,6 +4209,21 @@ class IGSH_1266_PreserveDraftHostTest(unittest.TestCase):
                 self.assertFalse(any('send-keys' in command and 'paste-buffer' not in command for command in commands))
                 self.assertFalse(any('delete-buffer' in command and 'send-keys' in command for command in commands))
 
+
+    def test_own_mirrored_draft_is_cleared_and_sent(self):
+        request = dict(tmux='fixture', sid='sid', text='https://example.com/a.png This happens on every message.')
+        boxes = iter(['https://example.com/a.png This happens', ''])
+        def run(command, **kwargs):
+            return types.SimpleNamespace(returncode=0, stdout='')
+        with patch.object(reader, 'resolve_tmux_agent', return_value=('sid', '/synthetic/sid.jsonl')), \
+                patch.object(reader, 'box_draft', return_value='https://example.com/a.png This\nhappens'), \
+                patch.object(reader, 'prompt_box_text', side_effect=lambda target: next(boxes)), \
+                patch.object(reader.subprocess, 'run', side_effect=run) as calls:
+            result = reader.send_response_preserve_draft(request)
+        self.assertEqual(result['status'], 'sent')
+        commands = [call.args[0] for call in calls.call_args_list]
+        self.assertEqual(len([command for command in commands if 'paste-buffer' in command]), 1)
+        self.assertTrue(any('C-u' in command for command in commands))
 
 if __name__ == '__main__':
     unittest.main()

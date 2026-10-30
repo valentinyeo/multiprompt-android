@@ -1,9 +1,11 @@
 package dev.multiprompt.companion.reader
 
+import android.content.SharedPreferences
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.multiprompt.companion.MultipromptApplication
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.model.HostProfile
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
@@ -21,19 +23,34 @@ class ChatHistoryActorTest {
     private val app get() = context.applicationContext as MultipromptApplication
     private val messageId = "1234567890123456"
 
-    private inner class Fixture(val provider: String) {
+    internal inner class Fixture(val provider: String) {
         val host = HostProfile(UUID.randomUUID().toString(), "test", "host", username = "user")
         val identity = ChatHistoryProtocol.Identity(if (provider == "claude") AgentKind.CLAUDE else AgentKind.CODEX, "chat")
         val account = listOf(host.id, host.hostname, host.port.toString(), host.username, "", "", "").joinToString("\u0000")
         val prefs = context.getSharedPreferences(UUID.randomUUID().toString(), 0)
-        val journal = MessageJournal(prefs)
+        @Volatile var failJournalRead = false
+        @Volatile var failJournalWrite = false
+        val journal = MessageJournal(object : SharedPreferences by prefs {
+            override fun getAll(): MutableMap<String, *> {
+                if (failJournalRead) error("preference read failed")
+                return prefs.all
+            }
+            override fun edit(): SharedPreferences.Editor {
+                if (failJournalWrite) error("preference write failed")
+                return prefs.edit()
+            }
+        })
         val gate = MessageGate()
         var sid = "sid"
         var epoch = 1L
         var row: JSONObject? = null
         var retryCalls = 0
         var lastRetryId: String? = null
+        var dropRetryAfterAdmission = false
+        var admittedRetryId: String? = null
+        var retryAdmissions = 0
         var submitCalls = 0
+        var dismissCalls = 0
         var resetCalls = 0
         var dropSubmit = false
         var dropAfterAdmission = false
@@ -44,6 +61,16 @@ class ChatHistoryActorTest {
         val secondSnapshotStarted = CompletableDeferred<Unit>()
         var pauseSecondSnapshot: CompletableDeferred<Unit>? = null
         var snapshotCount = 0
+        val laterPageRequested = CompletableDeferred<Unit>()
+        val laterPageRelease = CompletableDeferred<Unit>()
+        var blockLaterPage = false
+        val resetRequested = CompletableDeferred<Unit>()
+        var historyPause: CompletableDeferred<Unit>? = null
+        val historyPaused = CompletableDeferred<Unit>()
+        var growingEvents = false
+        @Volatile var nativeRows: List<JSONObject>? = null
+        val nativeDelivered = CompletableDeferred<Unit>()
+        var eventCalls = 0
         var admissionPause: CompletableDeferred<Unit>? = null
         val admissionStarted = CompletableDeferred<Unit>()
         val wire get() = MessageProtocol.Scope(provider, sid, "chat")
@@ -56,10 +83,14 @@ class ChatHistoryActorTest {
             val id = request.getLong("id")
             fun result(value: JSONObject) = JSONObject().put("id", id).put("message_protocol", 1).put("result", value).toString()
             return when (request.optString("op")) {
-                "engine_info" -> JSONObject().put("id", id).put("engine_info", JSONObject().put("protocol", 1).put("generation", 17).put("sha256", "a".repeat(64))).put("message_protocols", JSONArray().put(1)).toString()
+                "engine_info" -> JSONObject().put("id", id).put("engine_info", JSONObject().put("protocol", 1).put("generation", 20).put("sha256", "a".repeat(64))).put("message_protocols", JSONArray().put(1)).toString()
                 "message_snapshot" -> {
                     val number = ++snapshotCount
                     val cursor = request.optLong("cursor", 0)
+                    if (cursor > 0) {
+                        laterPageRequested.complete(Unit)
+                        if (blockLaterPage) laterPageRelease.await()
+                    }
                     val items = JSONArray()
                     if (cursor == 0L) row?.let { items.put(JSONObject().put("message", JSONObject(it.toString()))) }
                     val next = if (paged && cursor == 0L) 1 else JSONObject.NULL
@@ -70,7 +101,29 @@ class ChatHistoryActorTest {
                     pause?.await()
                     response
                 }
-                "message_events" -> result(JSONObject().put("epoch", epoch).put("seq", 0).put("events", JSONArray()).put("next_after", 0))
+                "message_events" -> {
+                    eventCalls++
+                    val native = nativeRows
+                    if (native != null) {
+                        val after = request.getLong("after")
+                        val events = JSONArray()
+                        native.forEachIndexed { index, row ->
+                            val seq = index + 1L
+                            if (seq > after) {
+                                val fact = JSONObject().put("sid", sid).put("event_id", "native-$seq").put("inode", 1)
+                                    .put("offset", row.getLong("offset")).put("end", row.getLong("end")).put("row", row)
+                                events.put(JSONObject().put("seq", seq).put("event", JSONObject().put("native_message", fact)))
+                            }
+                        }
+                        nativeDelivered.complete(Unit)
+                        result(JSONObject().put("epoch", epoch).put("seq", native.size).put("events", events).put("next_after", native.size))
+                    } else if (!growingEvents) result(JSONObject().put("epoch", epoch).put("seq", 0).put("events", JSONArray()).put("next_after", 0))
+                    else {
+                        val next = request.getLong("after") + 1
+                        val event = JSONObject().put("seq", next).put("event", JSONObject().put("message", row ?: row("queued")))
+                        result(JSONObject().put("epoch", epoch).put("seq", next + 1).put("events", JSONArray().put(event)).put("next_after", next))
+                    }
+                }
                 "message_status" -> result(JSONObject().put("epoch", epoch).put("seq", 0).put("message", JSONObject.NULL))
                 "message_submit" -> {
                     assertEquals(provider, request.getString("provider"))
@@ -84,10 +137,15 @@ class ChatHistoryActorTest {
                     }
                     result(JSONObject().put("epoch", epoch).put("seq", 0).put("message", row))
                 }
+                "message_dismiss" -> {
+                    dismissCalls++
+                    result(JSONObject().put("epoch", epoch).put("seq", 0).put("message", row))
+                }
                 "message_reset" -> {
                     assertEquals(provider, request.getString("provider"))
                     assertEquals(sid, request.getString("sid"))
                     resetCalls++
+                    resetRequested.complete(Unit)
                     if (dropReset) error("lost reset acknowledgement")
                     epoch++
                     paged = false
@@ -97,9 +155,17 @@ class ChatHistoryActorTest {
                 "message_retry" -> {
                     retryCalls++
                     lastRetryId = request.getString("retry_id")
+                    if (dropRetryAfterAdmission && admittedRetryId == null) {
+                        admittedRetryId = lastRetryId
+                        retryAdmissions++
+                        row?.put("state", "queued")?.put("attempt", "retry-attempt")
+                        dropRetryAfterAdmission = false
+                        error("lost retry acknowledgement after admission")
+                    }
                     result(JSONObject().put("epoch", epoch).put("seq", 0).put("message", row))
                 }
                 else -> {
+                    historyPause?.let { historyPaused.complete(Unit); it.await() }
                     val wire = "@mp\t$id\thistory\tok\t$sid\t0\t0\t1\t0\t$provider\tchat\t1\t${"a".repeat(64)}\ttail\t0\n${TranscriptProtocol.END}\n"
                     JSONObject().put("id", id).put("wire", wire).toString()
                 }
@@ -110,6 +176,154 @@ class ChatHistoryActorTest {
             connectedExchange = { block -> block { query -> exchange(query) } },
             beforeAdmission = { admissionPause?.let { admissionStarted.complete(Unit); it.await() } })
         suspend fun ready(connection: ChatHistoryConnection) = withTimeout(10_000) { connection.state.first { it.replica != null && it.history.sid == sid } }
+    }
+
+    @Test fun journalReadFailuresPreserveRawAndSettleAllCommands() = runBlocking {
+        for (failure in listOf("malformed", "non-string", "bad-scope", "throwing")) {
+            val f = Fixture("claude")
+            val valid = f.journal.create(f.account, f.wire, "retry", messageId, epoch = 1, attempt = "attempt")
+            f.journal.markIssued(valid.id)
+            val owner = f.connection()
+            val badKey = "unrelated12345678"
+            try {
+                owner.select(true); owner.start(); f.ready(owner)
+                f.historyPause = CompletableDeferred()
+                owner.nearTop(true)
+                withTimeout(10_000) { f.historyPaused.await() }
+                when (failure) {
+                    "malformed" -> f.prefs.edit().putString(badKey, "not json").commit()
+                    "non-string" -> f.prefs.edit().putInt(badKey, 12).commit()
+                    "bad-scope" -> f.prefs.edit().putString(badKey, """{"account":"other","provider":"bad","sid":"other","tmux":"chat","operation":"reset","message_id":""}""").commit()
+                    else -> f.failJournalRead = true
+                }
+                val rawBefore = f.prefs.all.toMap()
+                val eventsBefore = f.eventCalls
+                val snapshotsBefore = f.snapshotCount
+                val send = async(start = CoroutineStart.UNDISPATCHED) { owner.submit("must not send") }
+                val action = async(start = CoroutineStart.UNDISPATCHED) { owner.replayUnknown(valid.id) }
+                val firstSync = owner.resync()
+                val secondSync = owner.resync()
+                f.historyPause!!.complete(Unit)
+                assertTrue(withTimeout(10_000) { send.await() } is PromptAdmission.Rejected)
+                assertEquals(MessageActionResult.Unknown, withTimeout(10_000) { action.await() })
+                assertTrue(withTimeout(10_000) { runCatching { firstSync.await() }.isFailure })
+                assertTrue(withTimeout(10_000) { runCatching { secondSync.await() }.isFailure })
+                val failed = withTimeout(10_000) { owner.state.first { it.messageError?.contains("Local storage failure") == true } }
+                assertEquals(valid.id, failed.unresolved.single().id)
+                assertEquals(eventsBefore, f.eventCalls)
+                assertEquals(snapshotsBefore, f.snapshotCount)
+                assertEquals(rawBefore, f.prefs.all)
+                assertEquals(0, f.submitCalls)
+                assertEquals(0, f.retryCalls)
+                assertEquals(0, f.resetCalls)
+                f.failJournalRead = false
+                f.prefs.edit().remove(badKey).commit()
+                assertEquals(valid.id, f.journal.entries().single().id)
+                assertTrue(f.journal.entries().single().issued)
+            } finally { owner.close() }
+        }
+    }
+
+    @Test fun journalWriteFailurePublishesStorageErrorWithoutSending() = runBlocking {
+        val f = Fixture("claude")
+        val owner = f.connection()
+        try {
+            owner.select(true); owner.start(); f.ready(owner)
+            f.historyPause = CompletableDeferred()
+            owner.nearTop(true)
+            withTimeout(10_000) { f.historyPaused.await() }
+            f.failJournalWrite = true
+            val send = async(start = CoroutineStart.UNDISPATCHED) { owner.submit("must not send") }
+            f.historyPause!!.complete(Unit)
+            assertTrue(withTimeout(10_000) { send.await() } is PromptAdmission.Rejected)
+            withTimeout(10_000) { owner.state.first { it.messageError?.contains("Local storage failure") == true } }
+            assertTrue(f.prefs.all.isEmpty())
+            assertEquals(0, f.submitCalls)
+        } finally { owner.close() }
+    }
+
+    @Test fun growingEventHeadRejectsCommandsWithoutSending() = runBlocking {
+        val f = Fixture("codex")
+        f.row = f.row("queued")
+        val owner = f.connection()
+        try {
+            owner.select(true); owner.start()
+            val ready = f.ready(owner)
+            val row = requireNotNull(ready.replica?.messages?.get(messageId))
+            f.historyPause = CompletableDeferred()
+            owner.nearTop(true)
+            withTimeout(10_000) { f.historyPaused.await() }
+            f.growingEvents = true
+            val old = owner.actionToken()
+            owner.select(false); owner.select(true)
+            val stale = async(start = CoroutineStart.UNDISPATCHED) { owner.checkStatus(messageId, old) }
+            val send = async(start = CoroutineStart.UNDISPATCHED) { owner.submit("must not send") }
+            val status = async(start = CoroutineStart.UNDISPATCHED) { owner.checkStatus(messageId) }
+            val replay = async(start = CoroutineStart.UNDISPATCHED) { owner.replayUnknown(messageId) }
+            val remove = async(start = CoroutineStart.UNDISPATCHED) { owner.dismiss(row) }
+            f.historyPause!!.complete(Unit)
+            assertEquals("Chat changed", (withTimeout(10_000) { stale.await() } as MessageActionResult.Rejected).reason)
+            assertEquals("Chat is catching up", (withTimeout(10_000) { send.await() } as PromptAdmission.Rejected).reason)
+            for (command in listOf(status, replay, remove)) {
+                assertEquals("Chat is catching up", (withTimeout(10_000) { command.await() } as MessageActionResult.Rejected).reason)
+            }
+            assertTrue(f.eventCalls > 1)
+            assertEquals(0, f.submitCalls)
+            assertEquals(0, f.retryCalls)
+            assertEquals(0, f.dismissCalls)
+            assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
+            assertEquals(1, f.resetCalls)
+            assertTrue(owner.state.value.history.managedMessages(owner.state.value.replica, owner.state.value.unresolved).none { it.text == "hello" })
+        } finally { owner.close() }
+    }
+
+    @Test fun malformedNativeIdentityKeepsOwnerCursorAndJournalThenAcceptsReplacement() = runBlocking {
+        val malformed = listOf(
+            "id" to 7, "id" to JSONObject(), "read_id" to 7, "read_id" to JSONObject(),
+            "segment" to "0", "segment" to 0.5,
+        )
+        for ((field, bad) in malformed) {
+            val f = Fixture("codex")
+            val entry = f.journal.create(f.account, f.wire, "retry", messageId, epoch = 1, attempt = "attempt")
+            f.journal.markIssued(entry.id)
+            val owner = f.connection()
+            fun native(offset: Int, text: String, segment: Int) = JSONObject().put("role", "assistant")
+                .put("text", text).put("id", "native-$offset").put("read_id", "read")
+                .put("segment", segment).put("offset", offset).put("end", offset + 1)
+            try {
+                owner.select(true); owner.start(); f.ready(owner)
+                f.historyPause = CompletableDeferred()
+                owner.nearTop(true)
+                withTimeout(10_000) { f.historyPaused.await() }
+                f.nativeRows = listOf(native(1, "first", 0).put(field, bad))
+                f.historyPause!!.complete(Unit)
+                withTimeout(10_000) { f.nativeDelivered.await() }
+                val disconnected = withTimeout(10_000) { owner.state.first { it.retrying } }
+                assertEquals(0L, disconnected.replica?.cursor)
+                assertEquals(entry.id, f.journal.entries().single().id)
+                f.nativeRows = listOf(native(1, "first", 0), native(2, "second", 1))
+                val recovered = withTimeout(15_000) { owner.state.first { !it.retrying && it.replica?.cursor == 2L } }
+                assertEquals(listOf("first", "second"), recovered.history.managedMessages(recovered.replica, recovered.unresolved).map { it.text })
+                assertEquals(2, recovered.replica?.nativeFacts?.size)
+                assertEquals(entry.id, f.journal.entries().single().id)
+            } finally { owner.close() }
+        }
+    }
+
+    @Test fun cancelledRetryCanBeAcknowledgedBeforeReset() = runBlocking {
+        val f = Fixture("claude")
+        val entry = f.journal.create(f.account, f.wire, "retry", messageId, epoch = 1, attempt = "attempt")
+        f.journal.markIssued(entry.id)
+        f.row = f.row("cancelled")
+        val owner = f.connection()
+        try {
+            owner.select(true); owner.start(); f.ready(owner)
+            assertTrue(owner.state.value.history.managedMessages(owner.state.value.replica, owner.state.value.unresolved).none { it.text == "hello" })
+            assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.replayUnknown(entry.id) })
+            assertEquals(entry.id, f.lastRetryId)
+            assertTrue(f.journal.entries().isEmpty())
+            assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
+        } finally { owner.close() }
     }
 
     @Test fun staleRetryNeverCallsHostForNewFailedAttempt() = runBlocking {
@@ -259,6 +473,7 @@ class ChatHistoryActorTest {
         f.row = f.row("queued")
         f.paged = true
         f.pauseSnapshot = CompletableDeferred()
+        f.blockLaterPage = true
         val owner = f.connection()
         try {
             owner.select(true); owner.start()
@@ -266,10 +481,12 @@ class ChatHistoryActorTest {
             val reset = owner.resetConversation()
             assertNull(owner.state.value.replica)
             f.pauseSnapshot!!.complete(Unit)
+            withTimeout(10_000) { f.resetRequested.await() }
+            assertFalse("Later page was fetched before Reset", f.laterPageRequested.isCompleted)
             assertEquals(MessageActionResult.Applied, withTimeout(10_000) { reset.await() })
             assertEquals(2L, withTimeout(10_000) { owner.state.first { it.replica?.epoch == 2L } }.replica?.epoch)
             assertTrue(f.journal.entries().isEmpty())
-        } finally { owner.close() }
+        } finally { f.laterPageRelease.complete(Unit); owner.close() }
     }
 
     @Test fun queuedAndSentNeverProbeAnOldRetry() = runBlocking {

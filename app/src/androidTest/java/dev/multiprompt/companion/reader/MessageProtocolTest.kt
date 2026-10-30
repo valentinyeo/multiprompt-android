@@ -12,6 +12,16 @@ class MessageProtocolTest {
     private fun row(state: String = "queued") = JSONObject("""{"id":"$id","provider":"codex","sid":"sid","text":"hello","position":1,"attempt":"attempt","state":"$state","deadline":null,"receipt":"not_sent","epoch":1,"created":1.0}""")
     private fun envelope(result: JSONObject) = JSONObject().put("id", 1).put("message_protocol", 1).put("result", result).toString()
 
+    @Test fun engineRequiresPublishedGenerationAndAcceptsNewerCompatibleRuntime() {
+        fun engine(generation: Int, protocols: JSONArray = JSONArray().put(1)) = JSONObject()
+            .put("id", 1).put("engine_info", JSONObject().put("protocol", 1).put("generation", generation).put("sha256", "a".repeat(64)))
+            .put("message_protocols", protocols).toString()
+        assertTrue(runCatching { MessageProtocol.engine(engine(19), 1) }.isFailure)
+        assertEquals(20L, MessageProtocol.engine(engine(20), 1).first)
+        assertEquals(21L, MessageProtocol.engine(engine(21), 1).first)
+        assertTrue(runCatching { MessageProtocol.engine(engine(20, JSONArray().put(2)), 1) }.isFailure)
+    }
+
     @Test fun correlatesHostRowAndOpaqueReceipt() {
         val reply = envelope(JSONObject().put("epoch", 1).put("seq", 4).put("message", row("failed")))
         val result = MessageProtocol.mutation(reply, 1, scope, id, "hello")
@@ -145,7 +155,10 @@ class MessageProtocolTest {
         val initial = MessageReplica(1, 3)
         val valid = JSONObject().put("role", "assistant").put("text", "hello").put("offset", 1).put("end", 2)
         val badRows = listOf(JSONObject(), JSONObject(valid.toString()).put("offset", "1"),
-            JSONObject(valid.toString()).put("end", 2.5), JSONObject(valid.toString()).put("end", 3))
+            JSONObject(valid.toString()).put("end", 2.5), JSONObject(valid.toString()).put("end", 3),
+            JSONObject(valid.toString()).put("id", 7), JSONObject(valid.toString()).put("id", JSONObject()),
+            JSONObject(valid.toString()).put("read_id", 7), JSONObject(valid.toString()).put("read_id", JSONObject()),
+            JSONObject(valid.toString()).put("segment", "0"), JSONObject(valid.toString()).put("segment", 0.5))
         for (bad in badRows) {
             val fact = JSONObject().put("sid", "sid").put("event_id", "event").put("inode", 1)
                 .put("offset", 1).put("end", 2).put("row", bad)
@@ -162,6 +175,8 @@ class MessageProtocolTest {
         val result = JSONObject().put("epoch", 1).put("seq", 4).put("events", JSONArray().put(event)).put("next_after", 4)
         assertTrue(runCatching { MessageProtocol.events(envelope(result), 1, scope, 3) }.isFailure)
         ambiguous.remove("message")
+        valid.put("id", "native").put("read_id", "read").put("segment", 0)
+        fact.put("row", valid)
         assertEquals(4L, initial.apply(MessageProtocol.events(envelope(result), 1, scope, 3)).cursor)
     }
 

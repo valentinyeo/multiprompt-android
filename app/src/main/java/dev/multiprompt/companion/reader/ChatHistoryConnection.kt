@@ -84,7 +84,13 @@ class ChatHistoryConnection(
     private fun key(sid: String) = "$account\u0000$provider\u0000$sid"
     private fun wire(sid: String) = MessageProtocol.Scope(requireNotNull(provider), sid, identity.tmux)
     private fun owns(sid: String) = selected && ownedKey == key(sid) && gate?.owns(key(sid), token) == true
-    private fun pending(sid: String) = journal?.entries().orEmpty().filter { it.account == account && it.scope.provider == provider && it.scope.sid == sid }
+    private class JournalStorageFailure(cause: Exception) : Exception(cause)
+    private inline fun <T> journalAccess(block: () -> T): T = try {
+        block()
+    } catch (failure: Exception) { throw JournalStorageFailure(failure) }
+    private fun pending(sid: String) = journalAccess {
+        journal?.entries().orEmpty().filter { it.account == account && it.scope.provider == provider && it.scope.sid == sid }
+    }
 
     private fun admit(sid: String, observed: Long, block: () -> MessageJournal.Entry): MessageJournal.Entry? =
         synchronized(this) {
@@ -94,7 +100,7 @@ class ChatHistoryConnection(
 
     private fun markIssued(sid: String, observed: Long, id: String): Boolean = synchronized(this) {
         if (generation != observed || !selected || ownedKey != key(sid)) false
-        else gate?.ifOwned(key(sid), token) { requireNotNull(journal).markIssued(id); true } ?: false
+        else gate?.ifOwned(key(sid), token) { journalAccess { requireNotNull(journal).markIssued(id) }; true } ?: false
     }
 
     @Synchronized fun select(value: Boolean) {
@@ -131,9 +137,12 @@ class ChatHistoryConnection(
     }
 
     suspend fun submit(text: String): PromptAdmission {
-        if (freshSid == null || !selected || resetFence) return PromptAdmission.Rejected("Chat is not ready")
+        if (text.isBlank() || '\u0000' in text) return PromptAdmission.Rejected("Message is empty or invalid")
         val result = CompletableDeferred<PromptAdmission>()
-        if (commands.trySend(Command.Submit(text, generation, result)).isFailure) return PromptAdmission.Rejected("Chat is unavailable")
+        synchronized(this) {
+            if (freshSid == null || !selected || resetFence) return PromptAdmission.Rejected("Chat is not ready")
+            if (commands.trySend(Command.Submit(text, generation, result)).isFailure) return PromptAdmission.Rejected("Chat is unavailable")
+        }
         wake.trySend(Unit)
         return result.await()
     }
@@ -152,7 +161,7 @@ class ChatHistoryConnection(
         resetFence = true
         val result = CompletableDeferred<MessageActionResult>()
         if (commands.trySend(Command.Action("reset", "", null, null, generation, result)).isFailure) {
-            resetFence = freshSid?.let { pending(it).any { entry -> entry.operation == "reset" } } ?: false
+            resetFence = freshSid?.let { sid -> runCatching { pending(sid).any { it.operation == "reset" } }.getOrDefault(true) } ?: false
             result.complete(MessageActionResult.Rejected("Chat is unavailable"))
         }
         wake.trySend(Unit)
@@ -166,7 +175,11 @@ class ChatHistoryConnection(
 
     private suspend fun action(kind: String, id: String, epoch: Long? = null, attempt: String? = null, observed: Long = generation): MessageActionResult {
         val result = CompletableDeferred<MessageActionResult>()
-        if (commands.trySend(Command.Action(kind, id, epoch, attempt, observed, result)).isFailure) return MessageActionResult.Rejected("Chat is unavailable")
+        synchronized(this) {
+            if (observed != generation) return MessageActionResult.Rejected("Chat changed")
+            if (freshSid == null || !selected) return MessageActionResult.Rejected("Chat is not ready")
+            if (commands.trySend(Command.Action(kind, id, epoch, attempt, observed, result)).isFailure) return MessageActionResult.Rejected("Chat is unavailable")
+        }
         wake.trySend(Unit)
         return result.await()
     }
@@ -197,14 +210,16 @@ class ChatHistoryConnection(
             runCatching { cache.restore(cacheKey) }.getOrNull()?.let {
                 synchronized(this@ChatHistoryConnection) {
                     if (generation == restoreGeneration && freshSid == null) {
-                        val unresolved = runCatching { pending(it.sid) }.getOrDefault(emptyList())
-                        _state.value = ChatHistoryState(it, loaded = true, unresolved = unresolved)
+                        val unresolved = runCatching { pending(it.sid) }
+                        _state.value = ChatHistoryState(it, loaded = true, unresolved = unresolved.getOrNull() ?: _state.value.unresolved,
+                            messageError = if (unresolved.isFailure) "Local storage failure; messages cannot be safely sent" else null)
                     }
                 }
             }
             var retryDelay = 2_000L
             var requestId = 0L
             val deferredCommands = java.util.ArrayDeque<Command>()
+            var activeCommand: Command? = null
             while (isActive) {
                 var connectionGeneration = generation
                 try {
@@ -243,6 +258,7 @@ class ChatHistoryConnection(
                                 connectionGeneration = cycleGeneration
                                 val messageScope = if (provider != null && engine != null) wire(page.sid) else null
                                 if (messageScope != null) {
+                                    pending(page.sid)
                                     if (replica == null) {
                                         val pages = mutableListOf<MessageProtocol.SnapshotPage>()
                                         var cursor: Long? = 0
@@ -271,6 +287,7 @@ class ChatHistoryConnection(
                                                             is Command.Action -> queued.result.complete(MessageActionResult.Rejected("Chat changed"))
                                                         }
                                                     } else if (queued is Command.Action && queued.kind == "reset") {
+                                                        activeCommand = queued
                                                         val previous = MessageReplica(snapshot.epoch, snapshot.seq)
                                                         val lock = gate?.claimIfOwned(key(page.sid), token)
                                                         if (lock == null) {
@@ -313,12 +330,12 @@ class ChatHistoryConnection(
                                     else if (messageScope != null) gate?.ifOwned(key(page.sid), token) {
                                         if (selected && ownedKey == key(page.sid)) {
                                             val materialized = requireNotNull(replica)
-                                            pending(page.sid).filter { it.operation == "submit" && materialized.messages[it.messageId]?.text == it.text }.forEach { journal?.remove(it.id) }
-                                            pending(page.sid).filter { it.operation == "dismiss" && materialized.messages[it.messageId]?.state == MessageProtocol.State.CANCELLED }.forEach { journal?.remove(it.id) }
+                                            pending(page.sid).filter { it.operation == "submit" && materialized.messages[it.messageId]?.text == it.text }.forEach { journalAccess { journal?.remove(it.id) } }
+                                            pending(page.sid).filter { it.operation == "dismiss" && materialized.messages[it.messageId]?.state == MessageProtocol.State.CANCELLED }.forEach { journalAccess { journal?.remove(it.id) } }
                                             resetFence = resetFence || pending(page.sid).any { it.operation == "reset" }
                                             val ack = resetAck
                                             if (ack != null && ack.sid == page.sid && ack.generation == cycleGeneration && materialized.epoch >= ack.epoch && pending(page.sid).any { it.id == ack.id && it.operation == "reset" }) {
-                                                journal?.remove(ack.id)
+                                                journalAccess { journal?.remove(ack.id) }
                                                 resetAck = null
                                                 resetFence = false
                                                 resetReply?.complete(MessageActionResult.Applied)
@@ -357,9 +374,18 @@ class ChatHistoryConnection(
                                                 break
                                             }
                                         }
-                                        reset
+                                        reset ?: if (deferredCommands.isEmpty()) null else deferredCommands.removeFirst()
                                     }
                                     if (command == null) break
+                                    activeCommand = command
+                                    if (!caughtUp && !(command is Command.Action && command.kind == "reset")) {
+                                        when (command) {
+                                            is Command.Submit -> command.result.complete(PromptAdmission.Rejected("Chat is catching up"))
+                                            is Command.Action -> command.result.complete(MessageActionResult.Rejected(if (command.generation != generation) "Chat changed" else "Chat is catching up"))
+                                        }
+                                        activeCommand = null
+                                        continue
+                                    }
                                     val observed = replica
                                     if (messageScope == null || observed == null) {
                                         when (command) {
@@ -393,8 +419,8 @@ class ChatHistoryConnection(
                                                     beforeAdmission?.invoke()
                                                     val entry = try { admit(page.sid, command.generation) {
                                                         if (resetFence) error("Reset pending")
-                                                        requireNotNull(journal).create(account, messageScope, "submit", text = command.text, epoch = observed.epoch)
-                                                    } } catch (_: Exception) { null }
+                                                        journalAccess { requireNotNull(journal).create(account, messageScope, "submit", text = command.text, epoch = observed.epoch) }
+                                                    } } catch (failure: JournalStorageFailure) { throw failure } catch (_: Exception) { null }
                                                     if (entry == null) command.result.complete(PromptAdmission.Rejected("Could not save message")) else {
                                                         command.result.complete(PromptAdmission.Recorded(entry.id))
                                                         synchronized(this@ChatHistoryConnection) {
@@ -436,6 +462,7 @@ class ChatHistoryConnection(
                                             }
                                         }
                                     }
+                                    activeCommand = null
                                     if (replica == null) break
                                 }
                                 if (!next.more && !(nearTop && next.start > 0)) withTimeoutOrNull(if (awaitingMessages) 250L else 2_000L) { wake.receive() }
@@ -449,25 +476,32 @@ class ChatHistoryConnection(
                             resetReply = null
                             resetAck = null
                             freshSid = null
-                            _state.value = _state.value.copy(retrying = true, messageError = "Connection lost; confirmation may be unknown",
-                                unresolved = disconnectedSid?.let { pending(it) } ?: _state.value.unresolved)
+                            _state.value = _state.value.copy(retrying = true,
+                                messageError = if (failure is JournalStorageFailure) "Local storage failure; messages cannot be safely sent" else "Connection lost; confirmation may be unknown")
                         }
                     }
+                    when (val command = activeCommand) {
+                        is Command.Submit -> command.result.complete(PromptAdmission.Rejected("Chat is disconnected"))
+                        is Command.Action -> command.result.complete(MessageActionResult.Unknown)
+                        null -> Unit
+                    }
+                    activeCommand = null
                     while (deferredCommands.isNotEmpty()) {
                         when (val command = deferredCommands.removeFirst()) {
                             is Command.Submit -> command.result.complete(PromptAdmission.Rejected("Chat is disconnected"))
                             is Command.Action -> command.result.complete(MessageActionResult.Unknown)
                         }
                     }
-                    if (failure is CancellationException && !isActive) throw failure
-                    (resyncing ?: resyncs.tryReceive().getOrNull())?.completeExceptionally(failure)
+                    resyncing?.completeExceptionally(failure)
                     resyncing = null
+                    while (true) (resyncs.tryReceive().getOrNull() ?: break).completeExceptionally(failure)
                     while (true) {
                         when (val command = commands.tryReceive().getOrNull() ?: break) {
                             is Command.Submit -> command.result.complete(PromptAdmission.Rejected("Chat is disconnected"))
                             is Command.Action -> command.result.complete(MessageActionResult.Unknown)
                         }
                     }
+                    if (failure is CancellationException && !isActive) throw failure
                 }
                 delay(retryDelay)
                 retryDelay = (retryDelay * 2).coerceAtMost(30_000L)
@@ -510,7 +544,7 @@ class ChatHistoryConnection(
                     (command.kind == "dismiss" && row.state !in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.FAILED))) return MessageActionResult.Rejected("Message changed")
                 beforeAdmission?.invoke()
                 entry = entries.firstOrNull { it.operation == command.kind && it.messageId == row.id }
-                    ?: admit(wire.sid, command.generation) { requireNotNull(journal).create(account, wire, command.kind, row.id, epoch = row.epoch, attempt = row.attempt) }
+                    ?: admit(wire.sid, command.generation) { journalAccess { requireNotNull(journal).create(account, wire, command.kind, row.id, epoch = row.epoch, attempt = row.attempt) } }
                     ?: return MessageActionResult.Rejected("Chat changed")
                 operation = "message_${command.kind}"; args.put("message_id", row.id)
                 if (command.kind == "retry") args.put("retry_id", entry.id)
@@ -527,9 +561,9 @@ class ChatHistoryConnection(
                             blocked = true
                             null
                         } else {
-                            unresolved.forEach { requireNotNull(journal).remove(it.id) }
+                            unresolved.forEach { journalAccess { requireNotNull(journal).remove(it.id) } }
                             current.firstOrNull { it.operation == "reset" }
-                                ?: requireNotNull(journal).create(account, wire, "reset", epoch = replica.epoch)
+                                ?: journalAccess { requireNotNull(journal).create(account, wire, "reset", epoch = replica.epoch) }
                         }
                     }
                 }
@@ -553,7 +587,7 @@ class ChatHistoryConnection(
             val result = if (operation == "message_status") MessageProtocol.mutation(response, id, wire, existing?.messageId, existing?.text)
                 else MessageProtocol.requiredMutation(response, id, wire, requireNotNull(entry).messageId, if (operation == "message_submit") entry.text else null)
             if (result.row == null) return MessageActionResult.Unknown
-            if (entry != null && entry.operation != "submit") journal?.remove(entry.id)
+            if (entry != null && entry.operation != "submit") journalAccess { journal?.remove(entry.id) }
         }
         return if (command.generation == generation && owns(wire.sid)) MessageActionResult.Applied else MessageActionResult.Unknown
     }

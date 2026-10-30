@@ -11,7 +11,7 @@ class ChatReaderBundleTest {
         val bundle = app.chatHistoryScript
         val hash = MessageDigest.getInstance("SHA-256").digest(bundle)
             .joinToString("") { "%02x".format(it.toInt() and 0xff) }
-        assertEquals(222844, bundle.size)
-        assertEquals("c93f6148e0437b2c9588ce0dc49277202ab25bf8a201db4f63bfe107a5e1dc06", hash)
+        assertEquals(223175, bundle.size)
+        assertEquals("47567abeb0277d32e12648267bdd73acc9c902aaefd3d68f7a6f9028ab79af4a", hash)
     }
 }

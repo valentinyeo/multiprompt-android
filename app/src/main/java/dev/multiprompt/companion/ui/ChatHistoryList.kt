@@ -83,6 +83,7 @@ internal fun ChatHistoryView(
     val actionScope = rememberCoroutineScope()
     val context = LocalContext.current
     var retryRow by remember { mutableStateOf<Pair<dev.multiprompt.companion.reader.MessageProtocol.Row, Long>?>(null) }
+    var hiddenRetry by remember { mutableStateOf<Pair<String, Long>?>(null) }
     fun showResult(result: dev.multiprompt.companion.reader.MessageActionResult) {
         val text = when (result) {
             dev.multiprompt.companion.reader.MessageActionResult.Applied -> "Request confirmed"
@@ -100,6 +101,14 @@ internal fun ChatHistoryView(
             KitSecondaryButton("Cancel", onClick = { retryRow = null })
         }
     }
+    hiddenRetry?.let { (id, token) ->
+        KitSheet(onDismiss = { hiddenRetry = null }) {
+            Text("Send again?")
+            Text("Your agent may already have this message. Sending again may duplicate it. Send again?")
+            KitPrimaryButton("Send again", onClick = { hiddenRetry = null; actionScope.launch { showResult(history.replayUnknown(id, token)) } })
+            KitSecondaryButton("Cancel", onClick = { hiddenRetry = null })
+        }
+    }
     SideEffect {
         history.awaitingMessages(messages.any { it.pending })
         if (!managed) history.deliveryIds(reader.sentRecord.map { it.messageId }.filter { it.isNotEmpty() })
@@ -110,6 +119,11 @@ internal fun ChatHistoryView(
         state.messageError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(8.dp)) }
         if (managed && state.unresolved.any { it.operation == "reset" }) {
             KitSecondaryButton("Check reset", onClick = { val token = history.actionToken(); actionScope.launch { showResult(history.recoverReset(token)) } })
+        }
+        state.unresolved.filter { entry -> managed && entry.operation == "retry" &&
+            state.replica?.messages?.get(entry.messageId)?.state == dev.multiprompt.companion.reader.MessageProtocol.State.CANCELLED
+        }.forEach { entry ->
+            KitSecondaryButton("Send again", onClick = { hiddenRetry = entry.id to history.actionToken() })
         }
         if (state.retrying) {
             Text(

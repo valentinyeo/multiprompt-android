@@ -105,13 +105,24 @@ elif [[ "${VERIFY_FEATURE:-}" == chat-queued.md || "${VERIFY_FEATURE:-}" == chat
         sudo -u verifyssh tmux rename-window -t codex-native codex-native
         sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s shared-lock-claude 'env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-lock.py claude a1b2c3d4-1008-4000-8000-000000001008'
         sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s shared-lock-codex 'env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-lock.py codex verify-codex'
-        for attempt in {1..30}; do [[ -f /home/verifyssh/shared-lock-ready-claude && -f /home/verifyssh/shared-lock-ready-codex ]] && break; sleep 1; done
-        [[ -f /home/verifyssh/shared-lock-ready-claude && -f /home/verifyssh/shared-lock-ready-codex ]]
+        for attempt in {1..30}; do [[ -f /home/verifyssh/shared-lock-ready-claude-a1b2c3d4-1008-4000-8000-000000001008 && -f /home/verifyssh/shared-lock-ready-codex-verify-codex ]] && break; sleep 1; done
+        [[ -f /home/verifyssh/shared-lock-ready-claude-a1b2c3d4-1008-4000-8000-000000001008 && -f /home/verifyssh/shared-lock-ready-codex-verify-codex ]]
         sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py bootstrap > "$EVIDENCE/shared-bootstrap.json"
-        jq -e '.engine_info.generation == 17 and .bundle_bytes == 222844 and .bundle_sha256 == "c93f6148e0437b2c9588ce0dc49277202ab25bf8a201db4f63bfe107a5e1dc06" and .snapshot.next_cursor == null and (.snapshot.items | length) == 0' "$EVIDENCE/shared-bootstrap.json" >/dev/null
+        jq -e '.engine_info.generation == 20 and .bundle_bytes == 223175 and .bundle_sha256 == "47567abeb0277d32e12648267bdd73acc9c902aaefd3d68f7a6f9028ab79af4a" and .snapshot.next_cursor == null and (.snapshot.items | length) == 0' "$EVIDENCE/shared-bootstrap.json" >/dev/null
         sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py bootstrap codex > "$EVIDENCE/shared-bootstrap-codex.json"
         sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py bootstrap neighbor > "$EVIDENCE/shared-bootstrap-neighbor.json"
-        sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read neighbor > "$EVIDENCE/shared-neighbor-before.json"
+        sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s shared-lock-neighbor 'env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-lock.py claude a1b2c3d4-1008-4000-8000-000000001009'
+        sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s shared-lock-codex-neighbor 'env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-lock.py codex verify-codex-neighbor'
+        for attempt in {1..30}; do [[ -f /home/verifyssh/shared-lock-ready-claude-a1b2c3d4-1008-4000-8000-000000001009 && -f /home/verifyssh/shared-lock-ready-codex-verify-codex-neighbor ]] && break; sleep 1; done
+        [[ -f /home/verifyssh/shared-lock-ready-claude-a1b2c3d4-1008-4000-8000-000000001009 && -f /home/verifyssh/shared-lock-ready-codex-verify-codex-neighbor ]]
+        sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py bootstrap codex-neighbor > "$EVIDENCE/shared-bootstrap-codex-neighbor.json"
+        for neighbor in neighbor codex-neighbor; do
+            sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py neighbor-submit "$neighbor" > "$EVIDENCE/shared-$neighbor-submit.json"
+            sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read "$neighbor" > "$EVIDENCE/shared-$neighbor-before.json"
+            jq -e '(.rows | length) == 1 and .rows[0].state == "queued" and (.rows[0].id | length) > 0 and (.rows[0].attempt | length) > 0' "$EVIDENCE/shared-$neighbor-before.json" >/dev/null
+        done
+        jq -e '.rows[0].id == "sentinelclaude000000000000000001"' "$EVIDENCE/shared-neighbor-before.json" >/dev/null
+        jq -e '.rows[0].id == "sentinelcodex0000000000000000002"' "$EVIDENCE/shared-codex-neighbor-before.json" >/dev/null
     fi
 elif [[ "${VERIFY_FEATURE:-}" == chat-resync.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true ]]

@@ -866,7 +866,7 @@ tap_text verify-session
 if [[ "$feature" == chat-shared.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true ]]
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py engine-info > "$EVIDENCE/shared-engine-info.json"
-    jq -e '.engine_info.generation >= 17 and .bundle_bytes == 222844 and .bundle_sha256 == "c93f6148e0437b2c9588ce0dc49277202ab25bf8a201db4f63bfe107a5e1dc06"' "$EVIDENCE/shared-engine-info.json" >/dev/null
+    jq -e '.engine_info.generation >= 20 and .bundle_bytes == 223175 and .bundle_sha256 == "47567abeb0277d32e12648267bdd73acc9c902aaefd3d68f7a6f9028ab79af4a"' "$EVIDENCE/shared-engine-info.json" >/dev/null
     wait_for_text 'Ready for queued messages.'
     fill 'Message verify-session' SHARED_PHONE_SYNTHETIC
     tap_desc 'Send prompt'
@@ -919,6 +919,10 @@ PYSHARED
     shot shared-after-reset
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read codex > "$EVIDENCE/shared-codex-after-claude-reset.json"
     cmp "$EVIDENCE/shared-codex-before-claude-reset.json" "$EVIDENCE/shared-codex-after-claude-reset.json"
+    for neighbor in neighbor codex-neighbor; do
+        sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read "$neighbor" > "$EVIDENCE/shared-$neighbor-after-claude.json"
+        cmp "$EVIDENCE/shared-$neighbor-before.json" "$EVIDENCE/shared-$neighbor-after-claude.json"
+    done
     grep -F 'DRAFT_PRESERVED_SYNTHETIC' "$EVIDENCE/current.xml" >/dev/null
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/shared-terminal.txt"
     grep -F 'FIXTURE_OWNED_DRAFT' "$EVIDENCE/shared-terminal.txt" >/dev/null
@@ -967,6 +971,25 @@ PYCODEXSHARED
     shot shared-codex-after-reset
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read neighbor > "$EVIDENCE/shared-neighbor-after.json"
     cmp "$EVIDENCE/shared-neighbor-before.json" "$EVIDENCE/shared-neighbor-after.json"
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read codex-neighbor > "$EVIDENCE/shared-codex-neighbor-after.json"
+    cmp "$EVIDENCE/shared-codex-neighbor-before.json" "$EVIDENCE/shared-codex-neighbor-after.json"
+    for neighbor in neighbor codex-neighbor; do
+        python3 - "$EVIDENCE/shared-$neighbor-before.json" "$EVIDENCE/shared-$neighbor-mutated.json" <<'PYNEIGHBOR'
+import json, sys
+with open(sys.argv[1]) as source:
+    before = json.load(source)
+assert len(before['rows']) == 1 and before['rows'][0]['attempt']
+original_epoch, original_seq = before['epoch'], before['seq']
+before['rows'][0]['state'] = 'cancelled'
+assert (before['epoch'], before['seq']) == (original_epoch, original_seq)
+with open(sys.argv[2], 'w') as target:
+    print(json.dumps(before), file=target)
+PYNEIGHBOR
+        if cmp -s "$EVIDENCE/shared-$neighbor-before.json" "$EVIDENCE/shared-$neighbor-mutated.json"; then
+            echo 'Neighbor oracle accepted a changed row' >&2
+            exit 1
+        fi
+    done
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read claude > "$EVIDENCE/shared-claude-after-codex-reset.json"
     cmp "$EVIDENCE/shared-after-reset.json" "$EVIDENCE/shared-claude-after-codex-reset.json"
     printf 'SHARED_STORE_RESET_OK\n' | tee "$EVIDENCE/shared-result.txt"
