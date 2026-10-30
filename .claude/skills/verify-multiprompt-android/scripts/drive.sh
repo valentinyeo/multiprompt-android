@@ -676,7 +676,7 @@ PYDRAFT
             [[ "$name" == verify-session && "$id" =~ ^\$[0-9]+$ ]]
             [[ "$(tmux display-message -p -t "$id" "#{session_id} #{session_name}")" == "$id $name" ]]
             tmux kill-session -t "$id"
-            ! tmux has-session -t "=verify-session" 2>/dev/null
+            if tmux has-session -t "=verify-session" 2>/dev/null; then exit 1; fi
             for label in b c; do
                 read -r id name < "/home/verifyssh/routing-$label-id"
                 [[ "$(tmux display-message -p -t "$id" "#{session_id} #{session_name}")" == "$id $name" ]]
