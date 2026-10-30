@@ -15,7 +15,7 @@ case "${RELEASE_CHANNEL:-android-latest}" in
         apk_url=https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion.apk
         ;;
     android-m3-latest)
-        [[ ( "${VERIFY_FEATURE:-}" == chat-resync.md || "${VERIFY_FEATURE:-}" == session-favorites.md || "${VERIFY_FEATURE:-}" == chat-queued.md ) && -z "${APP_REF:-}" ]]
+        [[ ( "${VERIFY_FEATURE:-}" == chat-resync.md || "${VERIFY_FEATURE:-}" == session-favorites.md || "${VERIFY_FEATURE:-}" == chat-queued.md || "${VERIFY_FEATURE:-}" == session-routing.md ) && -z "${APP_REF:-}" ]]
         package=dev.multiprompt.companion.m3
         task=assembleM3
         apk=app/build/outputs/apk/m3/app-m3.apk
@@ -47,6 +47,9 @@ else
     curl -fsSL "$(jq -er '.apkUrl' "$EVIDENCE/manifest.json")" -o "$EVIDENCE/app.apk"
     printf '%s  %s\n' "$(jq -er '.sha256' "$EVIDENCE/manifest.json")" "$EVIDENCE/app.apk" | sha256sum --check
     test "$(stat -c%s "$EVIDENCE/app.apk")" = "$(jq -er '.sizeBytes' "$EVIDENCE/manifest.json")"
+    if [[ "${VERIFY_FEATURE:-}" == session-routing.md && "${RELEASE_CHANNEL:-}" == android-m3-latest && "$EXPECTED_COMMIT" == 056ee39de07940f27c16123b3652ae4f3017bf5a ]]; then
+        [[ "$(jq -er '.sha256' "$EVIDENCE/manifest.json")" == d70eb97be6c633198058db524e4b2d336d7aa818a5cddf1b46ea1fa6c2e57a42 ]]
+    fi
     jq -er '.commit' "$EVIDENCE/manifest.json" > "$EVIDENCE/app-source-sha.txt"
     jq -er '.versionName' "$EVIDENCE/manifest.json" > "$EVIDENCE/version.txt"
 fi
@@ -54,6 +57,9 @@ sha256sum "$EVIDENCE/app.apk" > "$EVIDENCE/app-apk-sha256.txt"
 "$tools/apksigner" verify --print-certs "$EVIDENCE/app.apk" > "$EVIDENCE/apk-certificate.txt"
 "$tools/aapt" dump badging "$EVIDENCE/app.apk" > "$EVIDENCE/apk-package.txt"
 grep -F "package: name='$package'" "$EVIDENCE/apk-package.txt"
+if [[ "${VERIFY_FEATURE:-}" == session-routing.md ]]; then
+    grep -F "versionName='$(cat "$EVIDENCE/version.txt")'" "$EVIDENCE/apk-package.txt"
+fi
 printf '%s\n' "$package" > "$EVIDENCE/package-name.txt"
 cat > "$work/AndroidManifest.xml" <<XML
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.multiprompt.verification">

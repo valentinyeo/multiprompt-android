@@ -10,12 +10,12 @@ finish() {
     code=$?
     trap - EXIT
     set +e
-    if [[ "${VERIFY_FEATURE:-}" == session-favorites.md || "${VERIFY_FEATURE:-}" == chat-queued.md ]]; then
+    if [[ "${VERIFY_FEATURE:-}" == session-favorites.md || "${VERIFY_FEATURE:-}" == chat-queued.md || "${VERIFY_FEATURE:-}" == session-routing.md ]]; then
         adb shell kill -0 "$(adb shell cat /sdcard/choices-recording.pid | tr -d '\r')" || code=1
     fi
     adb shell kill -2 "$(adb shell cat /sdcard/choices-recording.pid | tr -d '\r')"
     wait "$recording"
-    if [[ "${VERIFY_FEATURE:-}" == session-favorites.md || "${VERIFY_FEATURE:-}" == chat-queued.md ]]; then
+    if [[ "${VERIFY_FEATURE:-}" == session-favorites.md || "${VERIFY_FEATURE:-}" == chat-queued.md || "${VERIFY_FEATURE:-}" == session-routing.md ]]; then
         adb pull /sdcard/release-choices.mp4 "$EVIDENCE/release-choices.mp4" || code=1
         test -s "$EVIDENCE/release-choices.mp4" || code=1
     else
@@ -24,7 +24,7 @@ finish() {
     kill "$(cat "$FIXTURE/offline-proxy.pid")"
     exit "$code"
 }
-if [[ "${VERIFY_FEATURE:-}" == session-favorites.md || "${VERIFY_FEATURE:-}" == chat-queued.md ]]; then
+if [[ "${VERIFY_FEATURE:-}" == session-favorites.md || "${VERIFY_FEATURE:-}" == chat-queued.md || "${VERIFY_FEATURE:-}" == session-routing.md ]]; then
     adb shell 'screenrecord --time-limit 0 /sdcard/release-choices.mp4 & echo $! > /sdcard/choices-recording.pid; wait' > "$FIXTURE/recording.log" 2>&1 &
 else
     adb shell 'screenrecord --time-limit 180 /sdcard/release-choices.mp4 & echo $! > /sdcard/choices-recording.pid; wait' > "$FIXTURE/recording.log" 2>&1 &
