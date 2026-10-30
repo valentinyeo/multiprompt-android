@@ -748,7 +748,12 @@ if [[ "$feature" == chat-codex.md ]]; then
         [[ "$elapsed" -ge 0 && "$elapsed" -le 5000 ]]
         shot "codex-$mode-phone-reply"
         sudo -u verifyssh tmux capture-pane -pt "$destination" > "$EVIDENCE/$mode-terminal.txt"
-        ! grep -F "CODEX_REPLY_${mode}_PHONE_CODEX" "$EVIDENCE/$mode-terminal.txt"
+        test -s "$EVIDENCE/$mode-terminal.txt"
+        if grep -F "CODEX_REPLY_${mode}_PHONE_CODEX" "$EVIDENCE/$mode-terminal.txt"; then
+            exit 1
+        else
+            [[ $? -eq 1 ]]
+        fi
     done
     adb shell input keyevent KEYCODE_BACK
     wait_for_text Inbox
@@ -862,7 +867,11 @@ QUEUE_COUNTS
     provider_event clear-hint
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/native-hint-cleared.txt"
     grep -E '^❯[[:space:]]*$' "$EVIDENCE/native-hint-cleared.txt"
-    ! grep -F 'edit queued messages' "$EVIDENCE/native-hint-cleared.txt"
+    if grep -F 'edit queued messages' "$EVIDENCE/native-hint-cleared.txt"; then
+        exit 1
+    else
+        [[ $? -eq 1 ]]
+    fi
     resync_marker BEFORE_CONSUMPTION_MARKER
     queue_states waiting submitted queued | tee "$EVIDENCE/queue-after-resync.json"
     queue_ui 1 QUEUE_SUBMITTED
@@ -919,7 +928,11 @@ QUEUE_COUNTS
     provider_event clear-hint
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/uncertain-hint-cleared.txt"
     grep -E '^❯[[:space:]]*$' "$EVIDENCE/uncertain-hint-cleared.txt"
-    ! grep -F 'edit queued messages' "$EVIDENCE/uncertain-hint-cleared.txt"
+    if grep -F 'edit queued messages' "$EVIDENCE/uncertain-hint-cleared.txt"; then
+        exit 1
+    else
+        [[ $? -eq 1 ]]
+    fi
     resync_marker UNCERTAIN_MARKER_1
     queue_states uncertain submitted queued | tee "$EVIDENCE/queue-uncertain-resync-1.json"
     queue_ui 1 UNCERTAIN_SUBMITTED
@@ -939,7 +952,11 @@ QUEUE_DRAFT
     fixture_counts WAITING_ONE,WAITING_TWO,FOLLOWUP,UNCERTAIN_ONE WAITING_ONE,WAITING_TWO,FOLLOWUP
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/uncertain-draft-after.txt"
     grep -E '^❯[[:space:]]*$' "$EVIDENCE/uncertain-draft-after.txt"
-    ! grep -F 'edit queued messages' "$EVIDENCE/uncertain-draft-after.txt"
+    if grep -F 'edit queued messages' "$EVIDENCE/uncertain-draft-after.txt"; then
+        exit 1
+    else
+        [[ $? -eq 1 ]]
+    fi
     shot queued-uncertain-resync-2
     queue_states waiting delivered delivered | tee "$EVIDENCE/queue-waiting-final.json"
     queue_states followup delivered | tee "$EVIDENCE/queue-followup-final.json"
