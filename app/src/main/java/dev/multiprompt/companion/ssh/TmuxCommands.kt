@@ -228,7 +228,11 @@ object TmuxCommands {
     internal fun sessionRows(format: String): String {
         val destination = "\"${exactName("\$mp_session")}:\""
         return "tmux list-sessions -F '#{session_name}' | while IFS= read -r mp_session; do " +
-            "tmux display-message -p -t $destination -F ${TmuxParser.shellQuote(format)} || continue; " +
+            "mp_row=\$(tmux display-message -p -t $destination -F ${TmuxParser.shellQuote(format)}) || continue; " +
+            "case \"\$mp_row\" in *'${TmuxParser.FIELD_SEPARATOR}'*) ;; *) continue;; esac; " +
+            "mp_name=\${mp_row%%${TmuxParser.FIELD_SEPARATOR}*}; " +
+            "[ \"\$mp_name\" = \"\$mp_session\" ] || continue; " +
+            "printf '%s\\n' \"\$mp_row\"; " +
             "printf '${TmuxParser.PREVIEW_PREFIX}'; " +
             "tmux capture-pane -p -J -S -12 -t $destination 2>/dev/null | " +
             "tail -c 4096 | od -An -v -tx1 | tr -d ' \\n'; " +

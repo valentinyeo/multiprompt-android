@@ -117,21 +117,30 @@ class TmuxExactTargetBehaviorTest {
 
     @Test
     fun creationAndSelectionKeepSpecialNamesLiteral() {
-        val names = listOf("literal[ab]*", "=literal", "\$literal", "quote'name")
+        data class Case(val raw: String, val stored: String, val printed: String)
+        val cases = listOf(
+            Case("literal[ab]*", "literal[ab]*", "literal[ab]*"),
+            Case("=literal", "=literal", "=literal"),
+            Case("\$literal", "\\\$literal", "\\\\\$literal"),
+            Case("quote'name", "quote'name", "quote'name"),
+        )
         val creations = mutableListOf<Pair<String, Result>>()
-        for (name in names) {
-            val command = TmuxCommands.createShellSession(name, dir.toString())
+        for (case in cases) {
+            val command = TmuxCommands.createShellSession(case.raw, dir.toString())
             val creation = run(command)
             creations.add(command to creation)
             assertEquals(creation.output, 0, creation.status)
+            assertEquals(describe(command, creation), "${TmuxCommands.CREATED_PREFIX}${case.raw}\n", creation.output)
         }
         val listingCommand = "tmux list-sessions -F '#{session_name}'"
         val listing = run(listingCommand)
         assertEquals(0, listing.status)
         val listedNames = listing.output.trim().lines().toSet()
-        val details = if (names.toSet() != listedNames) {
-            val controlCommand = "tmux new-session -d -P -F '#{session_id}::#{session_name}' -s '\$native_control'"
-            val control = run(controlCommand)
+        val controlCommand = "tmux new-session -d -P -F '#{session_id}::#{session_name}' -s '\$native_control'"
+        val control = run(controlCommand)
+        val expectedNames = cases.map { it.printed }.toSet()
+        val details = if (expectedNames != listedNames || control.status != 0 ||
+            control.output.substringAfter("::", "").trimEnd('\n', '\r') != "\\\\\$native_control") {
             val versionCommand = "tmux -V"
             buildString {
                 appendLine(describe(listingCommand, listing))
@@ -140,10 +149,14 @@ class TmuxExactTargetBehaviorTest {
                 appendLine(describe(versionCommand, run(versionCommand)))
             }
         } else ""
-        assertEquals(details, names.toSet(), listedNames)
-        for (name in names) {
-            assertEquals(name, 0, run(TmuxCommands.action(name, TmuxAction.ENTER)).status)
-            assertEquals(name, 0, run(TmuxCommands.capture(name)).status)
+        assertEquals(details, 0, control.status)
+        val controlId = control.output.substringBefore("::")
+        assertTrue(details, controlId.startsWith("\$") && controlId.drop(1).isNotEmpty() && controlId.drop(1).all { it.isDigit() })
+        assertEquals(details, "\\\\\$native_control", control.output.substringAfter("::", "").trimEnd('\n', '\r'))
+        assertEquals(details, expectedNames, listedNames)
+        for (case in cases) {
+            assertEquals(case.stored, 0, run(TmuxCommands.action(case.stored, TmuxAction.ENTER)).status)
+            assertEquals(case.stored, 0, run(TmuxCommands.capture(case.stored)).status)
         }
     }
 
@@ -197,6 +210,7 @@ class TmuxExactTargetBehaviorTest {
         } else ""
         assertEquals(details, 0, result.status)
         assertEquals(details, 2, rows.size)
+        assertEquals(details, 2, result.output.lineSequence().count { it.startsWith(TmuxParser.PREVIEW_PREFIX) })
         assertEquals(details, setOf("a-stable", "b-vanished-neighbor"), sessions.keys)
         assertTrue(details, sessions.getValue("a-stable").preview.contains("STABLE_SCREEN_1230"))
         assertTrue(details, sessions.getValue("b-vanished-neighbor").preview.contains("NEIGHBOR_SCREEN_1230"))
