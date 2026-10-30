@@ -45,6 +45,25 @@ class TmuxExactTargetBehaviorTest {
         return Result(process.exitValue(), process.inputStream.bufferedReader().readText())
     }
 
+    private fun describe(value: String): String {
+        val escaped = buildString {
+            for (char in value) {
+                append(when (char) {
+                    '\\' -> "\\\\"
+                    '\n' -> "\\n"
+                    '\r' -> "\\r"
+                    '\t' -> "\\t"
+                    else -> if (char.isISOControl()) "\\u%04x".format(char.code) else char.toString()
+                })
+            }
+        }
+        val bytes = value.toByteArray(Charsets.UTF_8)
+        return "length=${value.length} escaped=$escaped utf8hex=" + bytes.joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    }
+
+    private fun describe(command: String, result: Result): String =
+        "command=${describe(command)} status=${result.status} output=${describe(result.output)}"
+
     private fun neighbor(name: String): Path {
         val receipt = dir.resolve("receipt")
         val command = "tmux new-session -d -s '$name' 'printf CANARY_SCREEN_1230; exec cat >> $receipt'"
@@ -99,13 +118,29 @@ class TmuxExactTargetBehaviorTest {
     @Test
     fun creationAndSelectionKeepSpecialNamesLiteral() {
         val names = listOf("literal[ab]*", "=literal", "\$literal", "quote'name")
+        val creations = mutableListOf<Pair<String, Result>>()
         for (name in names) {
-            val creation = run(TmuxCommands.createShellSession(name, dir.toString()))
+            val command = TmuxCommands.createShellSession(name, dir.toString())
+            val creation = run(command)
+            creations.add(command to creation)
             assertEquals(creation.output, 0, creation.status)
         }
-        val listing = run("tmux list-sessions -F '#{session_name}'")
+        val listingCommand = "tmux list-sessions -F '#{session_name}'"
+        val listing = run(listingCommand)
         assertEquals(0, listing.status)
-        assertEquals(names.toSet(), listing.output.trim().lines().toSet())
+        val listedNames = listing.output.trim().lines().toSet()
+        val details = if (names.toSet() != listedNames) {
+            val controlCommand = "tmux new-session -d -P -F '#{session_id}::#{session_name}' -s '\$native_control'"
+            val control = run(controlCommand)
+            val versionCommand = "tmux -V"
+            buildString {
+                appendLine(describe(listingCommand, listing))
+                for ((command, result) in creations) appendLine(describe(command, result))
+                appendLine(describe(controlCommand, control))
+                appendLine(describe(versionCommand, run(versionCommand)))
+            }
+        } else ""
+        assertEquals(details, names.toSet(), listedNames)
         for (name in names) {
             assertEquals(name, 0, run(TmuxCommands.action(name, TmuxAction.ENTER)).status)
             assertEquals(name, 0, run(TmuxCommands.capture(name)).status)
@@ -135,12 +170,35 @@ class TmuxExactTargetBehaviorTest {
                 "  cat '$dir/snapshot'\n" +
                 "else exec /usr/bin/tmux -S '$socket' \"\$@\"; fi\n").toByteArray(Charsets.UTF_8))
         val result = run(TmuxParser.command())
-        assertEquals(result.output, 0, result.status)
         val rows = TmuxParser.parse("fixture", result.output)
-        assertEquals(2, rows.size)
         val sessions = rows.associateBy { it.name }
-        assertEquals(setOf("a-stable", "b-vanished-neighbor"), sessions.keys)
-        assertTrue(sessions.getValue("a-stable").preview.contains("STABLE_SCREEN_1230"))
-        assertTrue(sessions.getValue("b-vanished-neighbor").preview.contains("NEIGHBOR_SCREEN_1230"))
+        val stable = sessions["a-stable"]?.preview.orEmpty()
+        val neighbor = sessions["b-vanished-neighbor"]?.preview.orEmpty()
+        val details = if (result.status != 0 || rows.size != 2 ||
+            sessions.keys != setOf("a-stable", "b-vanished-neighbor") ||
+            !stable.contains("STABLE_SCREEN_1230") || !neighbor.contains("NEIGHBOR_SCREEN_1230")) {
+            buildString {
+                appendLine(describe("production listing", result))
+                for (row in rows) appendLine("row name=${describe(row.name)} preview=${describe(row.preview)}")
+                val snapshot = dir.resolve("snapshot")
+                appendLine("snapshot=" + if (Files.exists(snapshot)) describe(String(Files.readAllBytes(snapshot), Charsets.UTF_8)) else "missing")
+                val versionCommand = "tmux -V"
+                appendLine(describe(versionCommand, run(versionCommand)))
+                val format = "#{session_name}::#{session_id}::#{pane_id}::#{window_width}::#{window_height}::#{alternate_on}::#{pane_dead}::#{cursor_x}::#{cursor_y}"
+                for (name in listOf("a-stable", "b-vanished-neighbor")) {
+                    val metadata = "tmux display-message -p -t '=$name:' -F '$format'"
+                    val plain = "tmux capture-pane -p -t '=$name:'"
+                    val history = "tmux capture-pane -p -J -S -12 -t '=$name:'"
+                    for (command in listOf(metadata, plain, history)) appendLine(describe(command, run(command)))
+                }
+                val missing = "tmux display-message -p -t '=b-vanished:' -F '$format'"
+                appendLine(describe(missing, run(missing)))
+            }
+        } else ""
+        assertEquals(details, 0, result.status)
+        assertEquals(details, 2, rows.size)
+        assertEquals(details, setOf("a-stable", "b-vanished-neighbor"), sessions.keys)
+        assertTrue(details, sessions.getValue("a-stable").preview.contains("STABLE_SCREEN_1230"))
+        assertTrue(details, sessions.getValue("b-vanished-neighbor").preview.contains("NEIGHBOR_SCREEN_1230"))
     }
 }
