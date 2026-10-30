@@ -107,6 +107,8 @@ class ChatHistoryConnection(
                     }
                 } catch (failure: Exception) {
                     if (failure is CancellationException && !isActive) throw failure
+                    (resyncing ?: resyncs.tryReceive().getOrNull())?.completeExceptionally(failure)
+                    resyncing = null
                     _state.value = _state.value.copy(retrying = true)
                 }
                 delay(retryDelay)

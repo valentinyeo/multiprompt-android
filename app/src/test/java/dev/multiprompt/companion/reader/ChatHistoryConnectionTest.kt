@@ -58,7 +58,7 @@ class ChatHistoryConnectionTest {
     }
 
     @Test
-    fun resyncChatForgetsEverySentMessageRecordSoNoQueuedBubbleSurvives() = runBlocking {
+    fun resyncWithoutConnectionPreservesUnconfirmedMessages() = runBlocking {
         SessionReaderConnection(repository(), host, "tmux", historyScript = byteArrayOf(),
             historyCache = ChatHistoryCache(temporary.newFolder())).use { reader ->
             val text = "Any idea when the visual update of the inbox is coming?"
@@ -68,10 +68,31 @@ class ChatHistoryConnectionTest {
             assertEquals(listOf(text), before.map { it.text })
             assertTrue(before.single().pending)
             assertFalse(reader.resyncChat())
-            assertTrue(reader.state.value.sentRecord.isEmpty())
-            assertTrue(reader.state.value.sentPrompts.isEmpty())
-            assertTrue(ChatHistory().displayMessages("", AgentKind.CLAUDE, reader.state.value.sentRecord, now).isEmpty())
+            assertEquals(listOf(text), reader.state.value.sentRecord.map { it.text })
+            assertEquals(listOf(text), reader.state.value.sentPrompts)
+            assertTrue(ChatHistory().displayMessages("", AgentKind.CLAUDE, reader.state.value.sentRecord, now).single().pending)
         }
+    }
+
+    @Test
+    fun resyncConfirmsOnlyObservedNativeAndSettledManagedMessages() {
+        val delivered = QueuedMessages.SentPrompt("delivered", 1_700_000_000_000)
+        val pending = delivered.copy(text = "pending")
+        val queued = delivered.copy(text = "queued")
+        val managed = delivered.copy(text = "managed", messageId = "id", delivery = QueuedMessages.Delivery.QUEUED)
+        val history = ChatHistory(rows = listOf(
+            ChatHistoryProtocol.Row("user", "delivered", "one", "2023-11-14T22:13:20Z", 1, 2),
+            ChatHistoryProtocol.Row("user", "queued", "two", "2023-11-14T22:13:20Z", 3, 4, queued = true),
+        ), deliveries = mapOf("id" to QueuedMessages.Delivery.DELIVERED))
+        for (agent in listOf(AgentKind.CODEX, AgentKind.HAX)) {
+            val sent = listOf(delivered, pending, queued, managed)
+            assertEquals(listOf(pending, queued), unconfirmedAfterResync(history, sent))
+            assertTrue(history.displayMessages("", agent, sent, delivered.sentAtMillis).any { it.text == "pending" && it.pending })
+        }
+        assertEquals(listOf(pending), unconfirmedAfterResync(ChatHistory(), listOf(pending)))
+        val previous = history.copy(sid = "session", inode = 1)
+        assertTrue(unconfirmedAfterResync(ChatHistory(sid = "session", inode = 1), listOf(delivered), previous).isEmpty())
+        assertEquals(listOf(delivered), unconfirmedAfterResync(ChatHistory(sid = "other", inode = 1), listOf(delivered), previous))
     }
 
     @Test

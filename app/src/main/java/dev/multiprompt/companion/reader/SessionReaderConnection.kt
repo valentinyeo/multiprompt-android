@@ -65,6 +65,18 @@ internal fun transcriptAfterUpdate(
     else -> null
 }
 
+internal fun unconfirmedAfterResync(history: ChatHistory, sent: List<QueuedMessages.SentPrompt>,
+    previous: ChatHistory = ChatHistory()): List<QueuedMessages.SentPrompt> =
+    sent.filter { record ->
+        if (record.messageId.isEmpty()) {
+            val observed = history.messages + if (history.sid.isNotEmpty() && history.sid == previous.sid && history.inode == previous.inode) previous.messages else emptyList()
+            observed.none { !it.pending && QueuedMessages.recorded(record, it.transcript()) }
+        } else {
+            (history.deliveries[record.messageId] ?: record.delivery) !in
+                setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
+        }
+    }
+
 class SessionReaderConnection(
     private val repository: SshRepository,
     private val host: HostProfile,
@@ -107,14 +119,25 @@ class SessionReaderConnection(
     }
 
     suspend fun resyncChat(): Boolean {
-        _state.update { it.copy(sentPrompts = emptyList(), sentRecord = it.sentRecord.filter { record -> record.messageId.isNotEmpty() }) }
         val connection = historyConnection ?: return false
-        connection.resync().await()
-        val history = connection.state.value.history
-        return history.held.isEmpty() && _state.value.sentRecord.all { record ->
-            (history.deliveries[record.messageId] ?: record.delivery) in
-                setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
+        val previous = connection.state.value.history
+        try {
+            connection.resync().await()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            return false
         }
+        val history = connection.state.value.history
+        var confirmed = false
+        _state.update { current ->
+            val remaining = unconfirmedAfterResync(history, current.sentRecord, previous)
+            confirmed = history.held.isEmpty() && remaining.isEmpty()
+            current.copy(sentPrompts = emptyList(), sentRecord = current.sentRecord.filter { record ->
+                record.messageId.isNotEmpty() || record in remaining
+            })
+        }
+        return confirmed
     }
 
     fun start() {
