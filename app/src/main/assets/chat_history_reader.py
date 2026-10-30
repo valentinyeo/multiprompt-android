@@ -1516,6 +1516,13 @@ def live_fields(source, size, tmux, shown=None, sid=None):
     queue, sent = queue_replay(source, size, with_receipts=True)
     fields = dict(queue=[queue_item(text) for text in queue[:QUEUE_SHOWN]])
     if sid is not None:
+        inode = os.fstat(source.fileno()).st_ino
+        identities = {identity for text, receipt in sent if receipt is not None
+                      if (identity := _consumed_identity(source, sid, inode, *receipt, text)) is not None}
+        for text, receipt in held_queue_fields(tmux, sid, with_receipts=True)["sent"]:
+            identity = _consumed_identity(source, sid, *receipt, text) if receipt is not None else None
+            if identity is None or identity not in identities:
+                sent.append((text, None))
         from contextlib import closing
         with closing(message_store_db(tmux)) as db:
             fields['received'] = [row[0] for row in db.execute("SELECT b.token FROM legacy_bindings b JOIN shared_messages m ON m.id=b.id WHERE b.sid=? AND m.state IN ('accepted','started') AND b.token LIKE 'desktop-%' ORDER BY m.position DESC", (sid,))]
@@ -2055,7 +2062,7 @@ def message_event(db, provider, sid, message, emit=True):
                     db.execute('ATTACH DATABASE ? AS ' + alias, (path,))
                     databases[path] = alias
                 db.execute('INSERT OR IGNORE INTO ' + alias + '.v1_admission VALUES (?)', (sid,))
-                db.execute("INSERT INTO " + alias + ".messages(key,sid,text,queued_at,state,origin,source_inode,receipt,created) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET state=excluded.state,receipt=excluded.receipt WHERE sid=excluded.sid", (token, sid, message['text'], stamp, state, origin, inode, marker, int(message['created'] * 1000000000)))
+                db.execute("INSERT INTO " + alias + ".messages(key,sid,text,queued_at,state,scan,recovery_scan,origin,source_inode,receipt,created) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET state=excluded.state,receipt=excluded.receipt,recovery_scan=COALESCE(recovery_scan,excluded.recovery_scan) WHERE sid=excluded.sid", (token, sid, message['text'], stamp, state, origin, origin, origin, inode, marker, int(message['created'] * 1000000000)))
     if not emit:
         return db.execute('SELECT seq FROM message_chats WHERE provider=? AND sid=?', (provider, sid)).fetchone()[0]
     db.execute("UPDATE message_chats SET seq=seq+1 WHERE provider=? AND sid=?", (provider, sid))
@@ -2750,9 +2757,11 @@ def drain_held_queue(tmux, sid, transcript):
             return
         with transcript.open("rb") as source, db:
             db.execute("BEGIN IMMEDIATE")
+            if db.execute("SELECT 1 FROM v1_admission WHERE sid=?", (sid,)).fetchone():
+                return
             info = os.fstat(source.fileno())
             db.execute("UPDATE messages SET recovery_scan=origin WHERE recovery_scan IS NULL")
-            pending = db.execute("SELECT key,text,recovery_scan,origin,source_inode,state,created FROM messages WHERE sid=? AND state IN ('submitted','queued') ORDER BY CASE state WHEN 'submitted' THEN 0 ELSE 1 END,created", (sid,)).fetchall()
+            pending = db.execute("SELECT key,text,recovery_scan,origin,source_inode,state,created FROM messages WHERE sid=? AND state IN ('submitted','queued') AND receipt NOT LIKE '@mp-shared-v1:%' ORDER BY CASE state WHEN 'submitted' THEN 0 ELSE 1 END,created", (sid,)).fetchall()
             if any(inode != info.st_ino or origin > info.st_size or scan > info.st_size for _, _, scan, origin, inode, _, _ in pending):
                 return
             deferred = []
@@ -2863,7 +2872,7 @@ def held_queue_fields(tmux, sid, with_receipts=False):
         return dict(queue=[], sent=[])
     with closing(held_queue_db(tmux)) as db:
         queued = db.execute("SELECT text FROM messages WHERE sid=? AND state='queued' ORDER BY created LIMIT ?", (sid, QUEUE_SHOWN)).fetchall()
-        sql = "SELECT key,text,source_inode,origin FROM messages WHERE sid=? AND state='delivered' ORDER BY created DESC LIMIT ?"
+        sql = "SELECT key,text,source_inode,origin FROM messages WHERE sid=? AND state='delivered' AND receipt NOT LIKE '@mp-shared-v1:%' ORDER BY created DESC LIMIT ?"
         sent = db.execute(sql, (sid, QUEUE_SHOWN)).fetchall()
         result = []
         for key, text, inode, origin in reversed(sent):
@@ -3345,7 +3354,7 @@ elif __name__ == "__main__":
 
 '''
 READER_SOURCE = 'CONNECTOR_SOURCES = ' + repr(globals().get('CONNECTOR_SOURCES', {})) + '\n' + READER_SOURCE
-RUNTIME_GENERATION = 21
+RUNTIME_GENERATION = 22
 
 if __name__ == '__main__':
     import fcntl

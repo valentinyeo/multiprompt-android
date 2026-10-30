@@ -10,6 +10,6 @@ After catchup, send `UNCERTAIN_ONE` and `UNCERTAIN_TWO`. The fixture receives on
 
 Use `verify.yml` with `feature=chat-queued.md`. For a signed M3 candidate set `released_chat=true`, `candidate=true`, `channel=android-m3-latest`; app_ref and update_baseline_run must be empty. Published mode uses `candidate=false` and the exact published manifest `expected_commit`. A signed candidate is not a published APK. The debug `app_ref` control is separate; failure must reach the intended handoff assertion rather than infrastructure.
 
-This branch bundles Desktop v0.28.1079, generation 21. See `docs/canonical-chat-reader.md` for exact hashes. Previously published Android 0.1.299-m3 bundled GEN3. An installed newer runtime may be selected; inspect actual APK and runtime provenance.
+This branch bundles Desktop v0.28.1080, generation 22. See `docs/canonical-chat-reader.md` for exact hashes. Previously published Android 0.1.299-m3 bundled GEN3. An installed newer runtime may be selected; inspect actual APK and runtime provenance.
 
 Synthetic inputs and receipt rows are not real Claude admission or consumption. This does not prove real-provider behavior, native Codex/Hax queues, twenty native arrivals, process-death draft durability, physical devices, a Desktop/Android pair, GEN5 terminal-send writer-lock contention or projection deduplication, or universal exactly-once delivery. Server-held backlog is not provider admission.

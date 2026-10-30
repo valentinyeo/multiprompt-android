@@ -68,7 +68,7 @@ object MessageProtocol {
         require(integral(info.get("protocol")) == 1L)
         val generation = integral(info.get("generation"))
         val hash = text(info.get("sha256"))
-        require(generation >= 21 && hash.matches(Regex("[a-f0-9]{64}")))
+        require(generation >= 22 && hash.matches(Regex("[a-f0-9]{64}")))
         val protocols = array(envelope.get("message_protocols"))
         require((0 until protocols.length()).any { integral(protocols.get(it)) == 1L })
         return generation to hash

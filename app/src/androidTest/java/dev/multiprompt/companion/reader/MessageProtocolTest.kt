@@ -18,8 +18,10 @@ class MessageProtocolTest {
             .put("message_protocols", protocols).toString()
         assertTrue(runCatching { MessageProtocol.engine(engine(19), 1) }.isFailure)
         assertTrue(runCatching { MessageProtocol.engine(engine(20), 1) }.isFailure)
-        assertEquals(21L, MessageProtocol.engine(engine(21), 1).first)
-        assertTrue(runCatching { MessageProtocol.engine(engine(21, JSONArray().put(2)), 1) }.isFailure)
+        assertTrue(runCatching { MessageProtocol.engine(engine(21), 1) }.isFailure)
+        assertEquals(22L, MessageProtocol.engine(engine(22), 1).first)
+        assertEquals(23L, MessageProtocol.engine(engine(23), 1).first)
+        assertTrue(runCatching { MessageProtocol.engine(engine(22, JSONArray().put(2)), 1) }.isFailure)
     }
 
     @Test fun correlatesHostRowAndOpaqueReceipt() {

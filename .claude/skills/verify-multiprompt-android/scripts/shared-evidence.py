@@ -43,9 +43,9 @@ if sys.argv[1] in ('desktop-submit', 'neighbor-submit', 'engine-info', 'bootstra
         info = packet['engine_info']
         assert 1 in packet['message_protocols']
         if sys.argv[1] == 'bootstrap':
-            assert info['generation'] == 21
+            assert info['generation'] == 22
         else:
-            assert info['generation'] >= 21
+            assert info['generation'] >= 22
         installed = home / '.multiprompt-runtime' / (info['sha256'] + '.py')
         assert hashlib.sha256(installed.read_bytes()).hexdigest() == info['sha256']
         evidence = dict(engine_info=info, message_protocols=packet['message_protocols'], bundle_sha256=hashlib.sha256(bundle.encode()).hexdigest(), bundle_bytes=len(bundle.encode()), asset_sha256={name: hashlib.sha256((home / ('shared-' + name + '.py')).read_bytes()).hexdigest() for name in ('reader', 'claude', 'codex')})

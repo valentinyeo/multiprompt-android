@@ -100,7 +100,7 @@ class ChatHistoryActorTest {
             val id = request.getLong("id")
             fun result(value: JSONObject) = JSONObject().put("id", id).put("message_protocol", 1).put("result", value).toString()
             return when (request.optString("op")) {
-                "engine_info" -> JSONObject().put("id", id).put("engine_info", JSONObject().put("protocol", 1).put("generation", 21).put("sha256", "a".repeat(64))).put("message_protocols", JSONArray().put(1)).toString()
+                "engine_info" -> JSONObject().put("id", id).put("engine_info", JSONObject().put("protocol", 1).put("generation", 22).put("sha256", "a".repeat(64))).put("message_protocols", JSONArray().put(1)).toString()
                 "message_snapshot" -> {
                     val number = ++snapshotCount
                     val cursor = request.optLong("cursor", 0)
