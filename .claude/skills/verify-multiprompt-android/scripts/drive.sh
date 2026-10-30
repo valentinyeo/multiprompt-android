@@ -881,7 +881,17 @@ if [[ "$feature" == chat-shared.md ]]; then
         exit 1
     fi
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py desktop-submit > "$EVIDENCE/shared-desktop-submit.json"
-    wait_for_text SHARED_DESKTOP_SYNTHETIC
+    if ! wait_for_text SHARED_DESKTOP_SYNTHETIC; then
+        if [[ "${EXPECT_SHARED_MISSING:-}" == true ]]; then
+            sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read > "$EVIDENCE/shared-remote-missing-host.json"
+            dump_ui
+            cp "$EVIDENCE/current.xml" "$EVIDENCE/shared-remote-missing-ui.xml"
+            if python3 "$scripts/shared-remote-oracle.py" "$EVIDENCE/shared-remote-missing-host.json" "$EVIDENCE/shared-remote-missing-ui.xml"; then
+                printf 'SHARED_REMOTE_MESSAGE_NOT_VISIBLE\n' | tee "$EVIDENCE/shared-negative-marker.txt"
+            fi
+        fi
+        exit 1
+    fi
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read > "$EVIDENCE/shared-before-reset.json"
     jq -e '(.rows | length) == 2 and ([.rows[] | select(.state == "queued" and (.id | length) > 0 and (.attempt | length) > 0)] | length) == 2 and ([.rows[].id] | unique | length) == 2' "$EVIDENCE/shared-before-reset.json" >/dev/null
     fill 'Message verify-session' DRAFT_PRESERVED_SYNTHETIC

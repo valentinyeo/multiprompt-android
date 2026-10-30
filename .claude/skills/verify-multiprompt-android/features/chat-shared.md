@@ -25,7 +25,11 @@ A neighboring SID must remain unchanged.
 The negative control builds Android 303.
 Set `app_ref=9198aad3721905b09931cdd85628988fe0bd3292` and `expect_shared_missing=true`.
 Use debug and `android-latest`.
-Its failure must be `SHARED_HOST_ADMISSION_MISSING` or `SHARED_HOST_RESET_NOT_APPLIED`.
+Android 303 can still send phone messages.
+Shared history misses the second client's message.
+Failure marker: `SHARED_REMOTE_MESSAGE_NOT_VISIBLE`.
+Host and screen evidence are required.
+The existing `SHARED_HOST_ADMISSION_MISSING` and `SHARED_HOST_RESET_NOT_APPLIED` markers remain valid.
 The workflow verifies app source and initialized store.
 It also requires the specific failure marker.
 Missing labels cannot satisfy this control.
