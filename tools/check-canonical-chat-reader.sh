@@ -10,3 +10,4 @@ cp -R tools/vendor/chat-reader/tools "$tmp/tools"
 cp app/src/main/assets/chat_history_reader.py "$tmp/src/chat_history_reader.py"
 python3 -B "$tmp/tools/chat-history-reader-test.py" -v
 python3 -B "$tmp/tools/chat-transcript-reconcile.test.py"
+python3 -B "$tmp/tools/chat-shared-runtime.test.py"

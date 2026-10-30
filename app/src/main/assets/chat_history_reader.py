@@ -2345,7 +2345,7 @@ def watch(source, as_owner=False):
             owner = discovered[1]
             q = dict(q, discovery_pid=discovered[0])
     if owner and owner[1] != HOME and not as_owner:
-        bootstrap = "import base64,sys;exec(base64.b64decode(sys.stdin.buffer.readline()))"
+        bootstrap = "import base64,sys;s=base64.b64decode(sys.stdin.buffer.readline()).decode();exec(compile(s,'<watch-owner>','exec'),dict(__name__='__main__',READER_SOURCE=s))"
         child = subprocess.Popen(["sudo", "-n", "-H", "-u", owner[0], "--", "python3", "-u", "-c", bootstrap, "--watch", "--owner"], stdin=subprocess.PIPE)
         try:
             child.stdin.write(base64.b64encode(source.encode()) + b"\n" + json.dumps(q).encode() + b"\n")
@@ -2396,6 +2396,9 @@ def serve(source):
             if type(rid) is not int or rid < 0:
                 rid = 0
                 raise ValueError("invalid request id")
+            if query.get("op") == "engine_info":
+                print(json.dumps(dict(id=rid, engine_info=globals().get("ENGINE_INFO")), separators=(",", ":")), flush=True)
+                continue
             if query.get("op") in ("send", "question_text"):
                 wire = enqueue_response(query, source) if "message_id" in query else send_response(query)
             elif query.get("op") == "cancel_queued":
@@ -2434,4 +2437,122 @@ elif __name__ == "__main__":
         print("@mp\t0\thistory\terror\t-\t0\n" + END)
 
 '''
+RUNTIME_GENERATION = 1
+
+if __name__ == '__main__':
+    import fcntl
+    import hashlib as _hashlib
+    import json as _json
+    import os as _os
+    import stat as _stat
+    import sys as _sys
+    import tempfile as _tempfile
+
+    def _select_runtime(source):
+        generation = RUNTIME_GENERATION
+        digest = _hashlib.sha256(source).hexdigest()
+        home = _os.path.expanduser('~')
+        home_fd = _os.open(home, _os.O_RDONLY | _os.O_DIRECTORY | _os.O_NOFOLLOW)
+        try:
+            try:
+                _os.mkdir('.multiprompt-runtime', 0o700, dir_fd=home_fd)
+            except FileExistsError:
+                pass
+            directory = _os.open('.multiprompt-runtime', _os.O_RDONLY | _os.O_DIRECTORY | _os.O_NOFOLLOW, dir_fd=home_fd)
+        finally:
+            _os.close(home_fd)
+        try:
+            def check(fd, mode):
+                st = _os.fstat(fd)
+                if st.st_uid != _os.geteuid() or _stat.S_IMODE(st.st_mode) != mode:
+                    raise ValueError('unsafe runtime permissions')
+            check(directory, 0o700)
+            lock = _os.open('lock', _os.O_RDWR | _os.O_CREAT | _os.O_NOFOLLOW, 0o600, dir_fd=directory)
+            try:
+                check(lock, 0o600)
+                if not _stat.S_ISREG(_os.fstat(lock).st_mode):
+                    raise ValueError('invalid lock')
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                def read(name, limit):
+                    fd = _os.open(name, _os.O_RDONLY | _os.O_NOFOLLOW | _os.O_NONBLOCK, dir_fd=directory)
+                    try:
+                        check(fd, 0o600)
+                        st = _os.fstat(fd)
+                        if not _stat.S_ISREG(st.st_mode) or st.st_size > limit:
+                            raise ValueError('invalid runtime file')
+                        with _os.fdopen(fd, 'rb', closefd=False) as stream:
+                            return stream.read(limit + 1)
+                    finally:
+                        _os.close(fd)
+                def publish(name, data):
+                    fd, path = _tempfile.mkstemp(prefix='.tmp-', dir=_os.path.join(home, '.multiprompt-runtime'))
+                    try:
+                        with _os.fdopen(fd, 'wb') as stream:
+                            stream.write(data)
+                            stream.flush()
+                            _os.fsync(stream.fileno())
+                        _os.replace(path, name, dst_dir_fd=directory)
+                        _os.fsync(directory)
+                    finally:
+                        if _os.path.exists(path):
+                            _os.unlink(path)
+                try:
+                    active = _json.loads(read('active.json', 4096))
+                except FileNotFoundError:
+                    active = None
+                if active is not None:
+                    if (not isinstance(active, dict) or set(active) != {'protocol', 'generation', 'sha256'} or
+                            type(active['protocol']) is not int or active['protocol'] != 1 or
+                            type(active['generation']) is not int or active['generation'] < 1 or
+                            not isinstance(active['sha256'], str) or len(active['sha256']) != 64 or
+                            any(c not in '0123456789abcdef' for c in active['sha256'])):
+                        raise ValueError('invalid runtime selection')
+                    installed = read(active['sha256'] + '.py', 4 * 1024 * 1024)
+                    if _hashlib.sha256(installed).hexdigest() != active['sha256']:
+                        raise ValueError('corrupt runtime')
+                    if active['generation'] > generation:
+                        return installed, active
+                    if active['generation'] == generation:
+                        if active['sha256'] != digest:
+                            raise ValueError('conflicting runtime generation')
+                        return installed, active
+                try:
+                    installed = read(digest + '.py', 4 * 1024 * 1024)
+                except FileNotFoundError:
+                    publish(digest + '.py', source)
+                else:
+                    if installed != source:
+                        raise ValueError('corrupt runtime')
+                active = dict(protocol=1, generation=generation, sha256=digest)
+                publish('active.json', _json.dumps(active, separators=(',', ':')).encode())
+                return source, active
+            finally:
+                _os.close(lock)
+        finally:
+            _os.close(directory)
+
+    try:
+        _selected, _info = _select_runtime(READER_SOURCE.encode('utf-8'))
+        _worker_source = 'ENGINE_INFO = ' + repr(_info) + '\n' + _selected.decode('utf-8')
+        READER_SOURCE = 'READER_SOURCE = ' + repr(_worker_source) + '\n' + _worker_source
+    except (OSError, ValueError, UnicodeError):
+        def _error(line):
+            try:
+                request = _json.loads(line)
+                rid = request.get('id', 0)
+                if type(rid) is not int or rid < 0:
+                    rid = 0
+            except (ValueError, AttributeError, TypeError):
+                rid = 0
+            wire = f'@mp\t{rid}\thistory\terror\t-\t0\n@@MP_END@@\n'
+            return _json.dumps(dict(id=rid, wire=wire), separators=(',', ':'))
+        if _sys.argv[1:] == ['--serve']:
+            for _line in _sys.stdin.buffer:
+                print(_error(_line), flush=True)
+        elif '--watch' in _sys.argv[1:]:
+            print(_error(_sys.stdin.buffer.readline()), flush=True)
+        else:
+            print('@mp\t0\thistory\terror\t-\t0\n@@MP_END@@')
+        _sys.exit(1)
+
 exec(compile(READER_SOURCE, '<chat-history-reader>', 'exec'))
