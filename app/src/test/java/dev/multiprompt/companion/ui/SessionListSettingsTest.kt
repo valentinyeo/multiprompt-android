@@ -196,7 +196,7 @@ class SessionListSettingsTest {
             dialog.onBackPressed()
         }
         compose.onNodeWithText("Copy report").assertDoesNotExist()
-        compose.onNodeWithText("Session list settings").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Session list settings").assertIsDisplayed()
         viewReport()
         compose.onNodeWithText("Close").performClick()
         viewReport()
