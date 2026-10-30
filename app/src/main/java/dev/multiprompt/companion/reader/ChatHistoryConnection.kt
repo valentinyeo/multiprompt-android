@@ -83,11 +83,12 @@ class ChatHistoryConnection(
                             var wasOlder = false
                             while (isActive) {
                                 resyncing = resyncing ?: resyncs.tryReceive().getOrNull()
-                                val current = if (resyncing != null) ChatHistory() else _state.value.history
+                                val current = if (resyncing != null) _state.value.history.resetSeed() else _state.value.history
                                 val before = if (nearTop && !wasOlder && !current.more) current.start else 0
                                 requestId++
                                 val page = ChatHistoryProtocol.parse(
-                                    exchange(ChatHistoryProtocol.request(requestId, identity, current, before, deliveryIds)),
+                                    exchange(ChatHistoryProtocol.request(requestId, identity,
+                                        if (resyncing != null) current.copy(sid = "") else current, before, deliveryIds)),
                                     requestId, identity,
                                 ) ?: error("History unavailable")
                                 val next = current.apply(page)

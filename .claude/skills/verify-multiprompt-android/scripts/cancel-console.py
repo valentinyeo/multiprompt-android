@@ -8,11 +8,15 @@ import termios
 import tty
 import uuid
 
-HOME = Path.home()
+if os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('HOME') != '/home/verifyssh' or os.geteuid() == 0:
+    raise SystemExit('cancel console requires the hosted fixture')
+
+HOME = Path('/home/verifyssh')
 CWD = HOME / 'cancel-work'
 SID = 'c001c001-1010-4000-8000-000000001010'
 TRANSCRIPT = HOME / '.claude/projects' / str(CWD).replace('/', '-') / (SID + '.jsonl')
 READY = HOME / 'cancel-ready'
+DRAFT = 'FIXTURE_OWNED_DRAFT'
 receipts = Path(sys.argv[1])
 CWD.mkdir(exist_ok=True)
 os.chdir(CWD)
@@ -32,9 +36,12 @@ def event(role, text):
             timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(), message=message)) + '\n')
 
 
+draft = DRAFT if not READY.exists() else ''
+
+
 def render():
     print('\x1b[2J\x1b[HClaude Code\nVERIFY_READY_1010\n' +
-          ('Ready' if READY.exists() else 'Working... (esc to interrupt)') + '\n\n❯ \n' + '─' * 70, flush=True)
+          ('Ready' if READY.exists() else 'Working... (esc to interrupt)') + '\n\n❯ ' + draft + '\n' + '─' * 70, flush=True)
 
 
 event('user', 'VERIFY_READY_1010')
@@ -49,6 +56,9 @@ try:
         ready, _, _ = select.select([sys.stdin], [], [], 0.1)
         if READY.exists() != was_ready:
             was_ready = READY.exists()
+            if was_ready:
+                assert draft == DRAFT
+                draft = ''
             render()
         if not ready:
             continue

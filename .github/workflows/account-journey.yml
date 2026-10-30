@@ -61,7 +61,23 @@ jobs:
           cp "$file" "$RUNNER_TEMP/AccountHostMap.kt"
           trap 'cp "$RUNNER_TEMP/AccountHostMap.kt" "$file"' EXIT
           git fetch origin eb29d0a1c7dc3d5032d89820fa6480a687cb85db
-          git show eb29d0a1c7dc3d5032d89820fa6480a687cb85db:"$file" > "$file"
+          git show eb29d0a1c7dc3d5032d89820fa6480a687cb85db:"$file" > "$RUNNER_TEMP/AccountHostMap-original.kt"
+          python3 - "$file" "$RUNNER_TEMP/AccountHostMap-original.kt" <<'PY'
+          from pathlib import Path
+          import sys
+          current, original = map(Path, sys.argv[1:])
+          start = '    fun withAccountSessions('
+          end = '    fun workspaceAssignments('
+          def split(source):
+              assert source.count(start) == 1 and source.count(end) == 1
+              before, rest = source.split(start)
+              body, after = rest.split(end)
+              return before, body, after
+          before, _, after = split(current.read_text())
+          _, original_body, _ = split(original.read_text())
+          current.write_text(before + start + original_body + end + after)
+          PY
+          rm -f app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.account.AccountSplitParityTest.xml
           if gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*AccountSplitParityTest*'; then
             echo 'Original stale-name projection unexpectedly passed' >&2
             exit 1

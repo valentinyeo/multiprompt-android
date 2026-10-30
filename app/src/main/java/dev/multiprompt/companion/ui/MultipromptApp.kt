@@ -211,7 +211,6 @@ import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.dictation.DictationState
-import dev.multiprompt.companion.reader.QueuedMessages
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.skills.NativeSkill
@@ -1798,7 +1797,7 @@ internal fun SessionsScreen(
                                 verticalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
                                 Box {
-                                    BotAvatar(session.name, 56.dp, workspaceName = session.workspaceName)
+                                    BotAvatar(session.name, 56.dp, workspaceColor = session.workspaceColor)
                                     if (key in state.unreadSessionKeys) {
                                         Badge(
                                             Modifier.align(Alignment.TopEnd).semantics {
@@ -2159,7 +2158,7 @@ private fun SessionCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                BotAvatar(session.name, workspaceName = session.workspaceName)
+                BotAvatar(session.name, workspaceColor = session.workspaceColor)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         session.displayName,
@@ -2376,7 +2375,7 @@ internal fun ReaderTopBar(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        BotAvatar(session.name, 28.dp, workspaceName = session.workspaceName)
+                        BotAvatar(session.name, 28.dp, workspaceColor = session.workspaceColor)
                         Text(
                             session.displayName,
                             modifier = Modifier.weight(1f, fill = false),
@@ -2414,7 +2413,7 @@ internal fun ReaderTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                BotAvatar(session.name, 28.dp, workspaceName = session.workspaceName)
+                BotAvatar(session.name, 28.dp, workspaceColor = session.workspaceColor)
                 Box(Modifier.weight(1f)) {
                     Column(
                         Modifier
@@ -3637,12 +3636,6 @@ internal fun ReaderScreen(
                         block.kind == TmuxText.ReaderBlockKind.CODE
                     )
             }
-            val nowMillis = System.currentTimeMillis()
-            val queuedMessages = remember(transcript, reader.screenOutput, session.agent, reader.sentRecord, nowMillis) {
-                transcript?.let {
-                    QueuedMessages.pending(it, reader.screenOutput, session.agent, reader.sentRecord, nowMillis)
-                }.orEmpty()
-            }
             var expandedReaderBlocks by remember(connection) { mutableStateOf(emptySet<String>()) }
             val transcriptFontSize = chatFontSize((14f * transcriptZoom).sp, transcriptZoom)
             Column(
@@ -3781,34 +3774,7 @@ internal fun ReaderScreen(
                         }
                     }
                 }
-                queuedMessages.forEach { text ->
-                    ChatBubble(isUser = true, sunlight = sunlightMode) {
-                        Text(
-                            "Queued",
-                            fontFamily = chatFontFamily(),
-                            fontSize = chromeFontSize((transcriptFontSize.value - 3f).coerceAtLeast(8f).sp),
-                            color = chatHintColor(sunlightMode),
-                        )
-                        SelectionContainer {
-                            ChatLinkText(text) { line ->
-                                Text(
-                                    terminalLinks(line, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
-                                    fontFamily = chatFontFamily(),
-                                    fontSize = transcriptFontSize,
-                                    lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
-                                    color = chatTextColor(sunlightMode),
-                                )
-                            }
-                        }
-                        Text(
-                            "The agent reads it after its current step",
-                            fontFamily = chatFontFamily(),
-                            fontSize = chromeFontSize((transcriptFontSize.value - 3f).coerceAtLeast(8f).sp),
-                            color = chatHintColor(sunlightMode),
-                        )
-                    }
-                }
-                if ((transcript?.isEmpty() ?: visibleReaderBlocks.isEmpty()) && queuedMessages.isEmpty()) {
+                if (transcript?.isEmpty() ?: visibleReaderBlocks.isEmpty()) {
                     Text(
                         "No recent output",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

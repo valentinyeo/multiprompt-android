@@ -126,6 +126,31 @@ class AccountHostsAppTest {
         }
     }
 
+    @Test fun sharedColorsReachInboxAndSurviveSyncRestartAndUnrelatedPhoneEdits() {
+        features = "favorite,used,visits,input,settings,hosts,workspace_color"
+        remote = remote.copy(workspaces = listOf("Cedar", "Orbit"), workspaceColors = mapOf("Cedar" to 4),
+            tabs = listOf(AccountTab("One", "one", 0, "Cedar")))
+        setup()
+        sync()
+        compose.runOnIdle {
+            assertTrue(model.syncAuth.supportsWorkspaceColors)
+            assertEquals(4, model.state.value.inboxSessions.single().workspaceColor)
+            assertEquals(4, AccountLayoutStore(app).load("test-account")!!.edited.workspaceColor("Cedar"))
+            assertNull(model.editAccountLayout { it.setSetting("frequent", true) })
+            remote = remote.copy(revision = remote.revision + 1, workspaceColors = mapOf("Cedar" to 6))
+        }
+        sync()
+        compose.runOnIdle {
+            assertEquals(6, remote.workspaceColor("Cedar"))
+            assertEquals(true, remote.settings?.get("frequent"))
+            assertEquals(6, model.state.value.inboxSessions.single().workspaceColor)
+            val reopened = AccountLayoutStore(app).load("test-account")!!
+            assertFalse(reopened.dirty)
+            assertEquals(6, reopened.edited.workspaceColor("Cedar"))
+            assertTrue(puts.all { it.getJSONObject("layout").getJSONArray("workspaces").getJSONObject(0).getInt("color") == 6 })
+        }
+    }
+
     @Test fun signedInFreshInstallPullsHostsIntoPersistentHostListAndRendersServers() {
         setup()
         sync()

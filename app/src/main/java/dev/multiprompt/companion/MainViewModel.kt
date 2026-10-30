@@ -764,12 +764,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             accountHosts = mapping,
             readerSession = current.readerSession?.let { open ->
                 val tab = current.accountLayout?.let { AccountHostMap.tabFor(open, it, mapping) }
-                tab?.let { AccountHostMap.sessionFor(it, sessions, mapping) }
+                tab?.let { AccountHostMap.sessionFor(it, sessions, mapping, current.accountLayout) }
                     ?: sessions.firstOrNull { it.hostId == open.hostId && it.name == open.name } ?: open
             },
             terminalSession = current.terminalSession?.let { open ->
                 val tab = current.accountLayout?.let { AccountHostMap.tabFor(open, it, mapping) }
-                tab?.let { AccountHostMap.sessionFor(it, sessions, mapping) }
+                tab?.let { AccountHostMap.sessionFor(it, sessions, mapping, current.accountLayout) }
                     ?: sessions.firstOrNull { it.hostId == open.hostId && it.name == open.name } ?: open
             },
             hostErrors = results.mapNotNull { result ->
@@ -1574,10 +1574,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             current.copy(accountLayout = layout, accountPending = pendingLayout?.dirty == true, accountHosts = mapping,
                 workspaces = workspaces, workspaceSplitIds = listOf(null) + workspaces.map { it.id }, sessionWorkspaceIds = assignments,
                 readerSession = current.readerSession?.let { open ->
-                    layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping) } ?: open
+                    layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping, layout) } ?: open
                 },
                 terminalSession = current.terminalSession?.let { open ->
-                    layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping) } ?: open
+                    layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping, layout) } ?: open
                 },
             ).let { next ->
                 next.copy(selectedWorkspaceId = if (current.selectedWorkspaceId in next.visibleWorkspaceSplitIds) current.selectedWorkspaceId else next.visibleWorkspaceSplitIds.first())
@@ -1618,7 +1618,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (!_state.value.signedIn) return "Sign in before editing account workspaces"
         val pending = pendingLayout ?: return "Pull the account layout before editing"
         return try {
-            saveAccountLayout(pending.copy(edited = edit(pending.edited).validate()))
+            saveAccountLayout(pending.edit(edit(pending.edited).validate()))
+            syncAccount()
+            null
+        } catch (e: Exception) { e.message ?: "Could not save account edit" }
+    }
+
+    fun renameAccountWorkspace(old: String, name: String): String? {
+        if (!_state.value.signedIn) return "Sign in before editing account workspaces"
+        val pending = pendingLayout ?: return "Pull the account layout before editing"
+        return try {
+            saveAccountLayout(pending.renameWorkspace(old, name))
             syncAccount()
             null
         } catch (e: Exception) { e.message ?: "Could not save account edit" }
@@ -1781,8 +1791,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 var retries = 0
                 var retryConflict = false
                 while (pendingLayout?.let { it.dirty && (retryConflict || usedStampThrottle.shouldPush(it)) } == true && retries++ < 4) {
-                    val sent = pendingLayout!!.edited
-                    val reply = syncAuth.request("PUT", "/v1/layout", JSONObject().put("base_revision", remote.revision).put("layout", sent.copy(hosts = if (syncAuth.supportsHosts) AccountHosts.publish(remote.hosts, _state.value.accountHosts) else null).json()))
+                    val sentPending = pendingLayout!!
+                    val sent = sentPending.edited
+                    val reply = syncAuth.request("PUT", "/v1/layout", JSONObject().put("base_revision", remote.revision).put("layout", sent.copy(hosts = if (syncAuth.supportsHosts) AccountHosts.publish(remote.hosts, _state.value.accountHosts) else null).json(includeWorkspaceColors = syncAuth.supportsWorkspaceColors)))
                     if (generation != accountGeneration) return@launch
                     retryConflict = reply.status == 409
                     if (retryConflict) {
@@ -1795,7 +1806,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         remote = AccountLayout.response(reply.json)
                         importAccountHosts(remote)
                         usedStampThrottle.observe(remote)
-                        saveAccountLayout(pendingLayout!!.acknowledge(sent, remote))
+                        saveAccountLayout(pendingLayout!!.acknowledge(sentPending, remote))
                     }
                 }
                 _state.update { it.copy(accountError = if (pendingLayout?.let { usedStampThrottle.shouldPush(it) } == true) "Account changed repeatedly; pending edits will retry" else null) }

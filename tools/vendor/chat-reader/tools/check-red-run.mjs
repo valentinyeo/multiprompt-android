@@ -1,0 +1,90 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { autoRevertBranch, classifyTrees } from './version-stamp.mjs';
+
+const [baseRef, headRef] = process.argv.slice(2);
+if (!baseRef || !headRef || process.argv.length !== 4) {
+  console.error('usage: node tools/check-red-run.mjs <base> <head>');
+  process.exit(2);
+}
+
+const git = (...args) => execFileSync('git', args, { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }).trim();
+const root = git('rev-parse', '--show-toplevel');
+const base = git('merge-base', baseRef, headRef);
+const head = git('rev-parse', '--verify', `${headRef}^{commit}`);
+const changed = git('diff', '--name-only', '-z', base, head).split('\0').filter(Boolean);
+const present = git('diff', '--name-only', '-z', '--diff-filter=ACMRT', base, head).split('\0').filter(Boolean);
+const testFile = file => /(?:\.test\.[cm]?js|(?:\.test|-test)\.py)$/.test(file);
+const tests = present.filter(testFile);
+const docs = /^(?:docs\/|openwiki\/|docs-site\/|changelog\.d\/|[^/]+\.md$)/;
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'check-red-run-'));
+const green = path.join(scratch, 'head');
+const red = path.join(scratch, 'base');
+const worktrees = [];
+
+function snapshot(dir) {
+  const result = {};
+  const files = ['src/main.zig', 'src/changelog.zig'];
+  const fragments = path.join(dir, 'changelog.d');
+  if (fs.existsSync(fragments)) files.push(...fs.readdirSync(fragments).map(file => `changelog.d/${file}`));
+  for (const file of files) if (fs.existsSync(path.join(dir, file))) result[file] = fs.readFileSync(path.join(dir, file), 'utf8');
+  return result;
+}
+
+function run(file, dir) {
+  const python = file.endsWith('.py');
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  const result = spawnSync(python ? 'python3' : process.execPath, python ? [file] : ['--test', '--test-reporter=tap', file], {
+    cwd: dir, env, encoding: 'utf8', timeout: 300000, maxBuffer: 16 * 1024 * 1024,
+  });
+  return { ...result, output: (result.stdout || '') + (result.stderr || '') };
+}
+
+try {
+  console.log(`merge-base=${base} head=${head}`);
+  if (changed.length && changed.every(file => docs.test(file))) {
+    console.log('RED_RUN_NOT_REQUIRED documentation only');
+  } else if (autoRevertBranch()) {
+    console.log('RED_RUN_NOT_REQUIRED auto-revert branch undoes a master change');
+  } else {
+    for (const [dir, ref] of [[green, head], [red, base]]) {
+      git('worktree', 'add', '--quiet', '--detach', dir, ref);
+      worktrees.push(dir);
+    }
+    const stampPaths = /^(?:src\/(?:main|changelog)\.zig|changelog\.d\/[^/]+)$/;
+    if (changed.length && changed.every(file => stampPaths.test(file)) && classifyTrees(snapshot(red), snapshot(green), changed) === 'STAMP') {
+      console.log('RED_RUN_NOT_REQUIRED verified mechanical release stamp');
+    } else {
+      if (!tests.length) throw new Error('No changed regression tests. Add a portable .test.js, .test.mjs, .test.cjs or Python regression that fails on merge-base source.');
+      const inputs = changed.filter(file => /^(?:tools\/fixtures\/|tools\/[^/]*fixture[^/]*$|tests\/fixtures\/)/.test(file));
+      execFileSync('git', ['-C', red, 'restore', `--source=${head}`, '--worktree', '--', ...tests, ...inputs], { stdio: 'pipe' });
+      const testOnly = changed.every(file => docs.test(file) || (file.startsWith('tools/') && testFile(file)));
+      for (const file of tests) {
+        const fixed = run(file, green);
+        console.log(`HEAD ${file}\n${fixed.output}`);
+        if (fixed.error || fixed.status !== 0 || (!file.endsWith('.py') && !/^# tests [1-9]\d*$/m.test(fixed.output))) {
+          throw new Error(`${file} does not pass on PR source; cannot prove red.`);
+        }
+        if (testOnly) continue;
+        const before = run(file, red);
+        console.log(`MERGE_BASE ${file}\n${before.output}`);
+        if (before.status === 0) throw new Error(`${file} stayed green on merge-base source; the test does not prove this fix.`);
+        const assertion = file.endsWith('.py')
+          ? /^FAIL: /m.test(before.output) && /AssertionError/.test(before.output) && !/^ERROR: /m.test(before.output)
+          : /^# fail [1-9]\d*$/m.test(before.output) && /code: ['"]ERR_ASSERTION['"]/.test(before.output) && !/(?:code: ['"](?:MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND|ENOENT)['"]|name: ['"](?:Syntax|Reference|Type)Error['"])/.test(before.output);
+        if (before.error || before.status !== 1 || !assertion) throw new Error(`${file} needs an assertion failure on merge-base source, not an infrastructure or loading error.`);
+        console.log(`RED PROVEN ${file} exit=${before.status} merge-base=${base}`);
+      }
+      console.log(`${testOnly ? 'TEST_ONLY_PROVEN' : 'RED_RUN_PROVEN'} ${tests.length} changed suites`);
+    }
+  }
+} catch (error) {
+  console.error(error.message);
+  process.exitCode = 1;
+} finally {
+  for (const dir of worktrees.reverse()) execFileSync('git', ['-C', root, 'worktree', 'remove', '--force', dir], { stdio: 'pipe' });
+  fs.rmSync(scratch, { recursive: true, force: true });
+}

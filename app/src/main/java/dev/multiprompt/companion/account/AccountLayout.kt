@@ -27,8 +27,10 @@ data class AccountLayout(
     val tabs: List<AccountTab> = emptyList(),
     val settings: Map<String, Boolean>? = null,
     val hosts: List<AccountHost>? = null,
+    val workspaceColors: Map<String, Int> = emptyMap(),
 ) {
     fun validate(): AccountLayout {
+        require(workspaceColors.all { (name, color) -> name in workspaces && color in 0..6 }) { "Invalid workspace color" }
         require(hosts == null || AccountHosts.parse(JSONArray(hosts.map { it.json() })) == hosts) { "Invalid layout hosts" }
         require(settings == null || settings.keys.all { it in setOf("frequent", "favorites", "all", "frequent_first") }) { "Invalid layout settings" }
         require(revision >= 0 && workspaces.size <= 9 && tabs.size <= 256) { "Invalid layout capacity or revision" }
@@ -45,12 +47,14 @@ data class AccountLayout(
         return this
     }
 
-    fun json(): JSONObject = JSONObject().put("schema", 1).put("revision", revision)
-        .put("workspaces", JSONArray(workspaces.map { JSONObject().put("name", it) }))
+    fun json(includeWorkspaceColors: Boolean = true): JSONObject = JSONObject().put("schema", 1).put("revision", revision)
+        .put("workspaces", JSONArray(workspaces.map { JSONObject().put("name", it).apply { if (includeWorkspaceColors) workspaceColors[it]?.let { color -> put("color", color) } } }))
         .put("tabs", JSONArray(tabs.map { it.json() }))
         .apply { settings?.let { put("settings", JSONObject(it)) }; hosts?.let { put("hosts", JSONArray(it.map { host -> host.json() })) } }
 
-    fun sameContent(other: AccountLayout): Boolean = workspaces == other.workspaces && tabs == other.tabs && settings == other.settings && hosts.orEmpty() == other.hosts.orEmpty()
+    fun sameContent(other: AccountLayout): Boolean = workspaces == other.workspaces && workspaceColors == other.workspaceColors && tabs == other.tabs && settings == other.settings && hosts.orEmpty() == other.hosts.orEmpty()
+
+    fun workspaceColor(name: String): Int = workspaceColors[name] ?: workspaces.indexOf(name).coerceAtLeast(0) % 7
 
     fun renameTab(identity: String, name: String): AccountLayout = copy(tabs = tabs.map {
         if (it.identity == identity) it.copy(name = name, manual = true) else it
@@ -79,6 +83,7 @@ data class AccountLayout(
     }
     fun renameWorkspace(old: String, name: String): AccountLayout = copy(
         workspaces = workspaces.map { if (it == old) name else it },
+        workspaceColors = workspaceColors.mapKeys { (key, _) -> if (key == old) name else key },
         tabs = tabs.map { if (it.workspace == old) it.copy(workspace = name) else it },
     ).validate()
 
@@ -106,7 +111,11 @@ data class AccountLayout(
             val tabs = json.getJSONArray("tabs")
             return AccountLayout(revision.toLong(), (0 until ws.length()).map {
                 val w = ws.getJSONObject(it)
-                require(w.keys().asSequence().toSet() == setOf("name") && w.get("name") is String)
+                require(w.keys().asSequence().toSet() in setOf(setOf("name"), setOf("name", "color")) && w.get("name") is String)
+                if (w.has("color")) {
+                    val color = w.get("color")
+                    require(color is Number && color.toDouble() in 0.0..6.0 && color.toDouble() == color.toInt().toDouble())
+                }
                 w.getString("name")
             }, (0 until tabs.length()).map {
                 val t = tabs.getJSONObject(it)
@@ -138,7 +147,9 @@ data class AccountLayout(
                 AccountTab(t.getString("name"), t.getString("tmux_session"), host.toInt(), t.getString("workspace"),
                     t.optBoolean("manual", false), if (t.has("favorite")) t.getBoolean("favorite") else null, (used as? Number)?.toLong(), visits, (input as? Number)?.toLong(),
                     if (t.has("muted")) t.getBoolean("muted") else null)
-            }, settings, if (json.has("hosts")) AccountHosts.parse(json.opt("hosts")) else null).validate()
+            }, settings, if (json.has("hosts")) AccountHosts.parse(json.opt("hosts")) else null,
+                (0 until ws.length()).map { ws.getJSONObject(it) }.filter { it.has("color") }
+                    .associate { it.getString("name") to it.getInt("color") }).validate()
         }
 
         fun response(json: JSONObject): AccountLayout {
@@ -147,7 +158,7 @@ data class AccountLayout(
             return layout
         }
 
-        fun rebase(base: AccountLayout, edited: AccountLayout, remote: AccountLayout): AccountLayout {
+        fun rebase(base: AccountLayout, edited: AccountLayout, remote: AccountLayout, renames: Map<String, String> = emptyMap()): AccountLayout {
             val old = base.tabs.associateBy { it.identity }
             val local = edited.tabs.associateBy { it.identity }
             val workspaces = remote.workspaces.filterNot { it in base.workspaces && it !in edited.workspaces }.toMutableList()
@@ -188,17 +199,69 @@ data class AccountLayout(
                 }
                 merged.takeIf { it.isNotEmpty() || edited.settings != null || remote.settings != null }
             }
-            return remote.copy(workspaces = orderedWorkspaces, tabs = orderedTabs, settings = settings).validate()
+            val colors = remote.workspaceColors.toMutableMap()
+            (base.workspaceColors.keys + edited.workspaceColors.keys).forEach { name ->
+                if (edited.workspaceColors[name] != base.workspaceColors[name]) {
+                    edited.workspaceColors[name]?.let { colors[name] = it } ?: colors.remove(name)
+                }
+            }
+            renames.forEach { (old, name) ->
+                if (old in base.workspaces && old in remote.workspaces && name in edited.workspaces &&
+                    edited.workspaceColors[name] == base.workspaceColors[old]) {
+                    remote.workspaceColors[old]?.let { colors[name] = it } ?: colors.remove(name)
+                }
+            }
+            return remote.copy(workspaces = orderedWorkspaces, tabs = orderedTabs, settings = settings,
+                workspaceColors = colors.filterKeys { it in orderedWorkspaces }).validate()
         }
     }
 }
 
-data class PendingLayout(val base: AccountLayout, val edited: AccountLayout = base) {
+data class PendingLayout(
+    val base: AccountLayout,
+    val edited: AccountLayout = base,
+    val workspaceRenames: Map<String, String> = emptyMap(),
+) {
     val dirty: Boolean get() = !base.sameContent(edited)
-    fun pull(remote: AccountLayout): PendingLayout = PendingLayout(remote, AccountLayout.rebase(base, edited, remote))
-    fun acknowledge(sent: AccountLayout, remote: AccountLayout): PendingLayout = PendingLayout(remote, AccountLayout.rebase(sent, edited, remote))
+
+    fun edit(layout: AccountLayout): PendingLayout = copy(
+        edited = layout,
+        workspaceRenames = workspaceRenames.filterValues { it in layout.workspaces },
+    )
+
+    fun renameWorkspace(old: String, name: String): PendingLayout {
+        val layout = edited.renameWorkspace(old, name)
+        if (old == name) return edit(layout)
+        val origin = workspaceRenames.entries.firstOrNull { it.value == old }?.key ?: old
+        val renames = workspaceRenames - origin
+        return copy(edited = layout, workspaceRenames = renames + (origin to name))
+    }
+
+    fun pull(remote: AccountLayout): PendingLayout {
+        val renames = workspaceRenames.filter { (old, name) -> old in remote.workspaces && name in edited.workspaces }
+        return PendingLayout(remote, AccountLayout.rebase(base, edited, remote, workspaceRenames), renames)
+    }
+
+    fun acknowledge(sent: AccountLayout, remote: AccountLayout): PendingLayout =
+        PendingLayout(remote, AccountLayout.rebase(sent, edited, remote))
+
+    fun acknowledge(sent: PendingLayout, remote: AccountLayout): PendingLayout {
+        val renames = workspaceRenames.mapNotNull { (origin, name) ->
+            val sentName = sent.workspaceRenames[origin] ?: origin
+            if (sentName in sent.edited.workspaces && sentName != name && name in edited.workspaces) sentName to name else null
+        }.toMap()
+        return PendingLayout(remote, AccountLayout.rebase(sent.edited, edited, remote, renames),
+            renames.filterKeys { it in remote.workspaces })
+    }
+
     fun json(): JSONObject = JSONObject().put("base", base.json()).put("edited", edited.json())
+        .apply { if (workspaceRenames.isNotEmpty()) put("workspaceRenames", JSONObject(workspaceRenames)) }
+
     companion object {
-        fun parse(json: JSONObject): PendingLayout = PendingLayout(AccountLayout.parse(json.getJSONObject("base")), AccountLayout.parse(json.getJSONObject("edited")))
+        fun parse(json: JSONObject): PendingLayout {
+            val renames = json.optJSONObject("workspaceRenames")
+            return PendingLayout(AccountLayout.parse(json.getJSONObject("base")), AccountLayout.parse(json.getJSONObject("edited")),
+                renames?.keys()?.asSequence()?.associateWith { renames.getString(it) }.orEmpty())
+        }
     }
 }

@@ -223,8 +223,9 @@ if [[ "$feature" == launcher-icon.md ]]; then
     launcher_icon
     exit 0
 fi
-if [[ "$package" == dev.multiprompt.companion ]]; then
-    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md ]]
+if [[ "$package" == dev.multiprompt.companion || "$package" == dev.multiprompt.companion.m3 ]]; then
+    if [[ "$package" == dev.multiprompt.companion.m3 ]]; then [[ "$feature" == chat-resync.md ]]; fi
+    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md || "$feature" == chat-resync.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -565,7 +566,9 @@ if [[ "$feature" == chat-cancel.md ]]; then
     done
     shot cancel-waiting
     python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 3 WAITING
-    if sudo test -f /home/verifyssh/receipts.txt && sudo grep -F CANCEL_ /home/verifyssh/receipts.txt; then exit 1; fi
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/cancel-draft-before.txt"
+    grep -Fx '❯ FIXTURE_OWNED_DRAFT' "$EVIDENCE/cancel-draft-before.txt"
+    sudo test ! -s /home/verifyssh/receipts.txt
     read -r cancel_x cancel_y <<< "$(select_node text CANCEL_TARGET_TWO)"
     adb shell input swipe "$cancel_x" "$cancel_y" "$cancel_x" "$cancel_y" 900
     wait_for_text 'Cancel message'
@@ -574,6 +577,7 @@ if [[ "$feature" == chat-cancel.md ]]; then
     wait_for_text Cancelled
     shot cancel-cancelled
     python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 2 WAITING
+    sudo test ! -s /home/verifyssh/receipts.txt
     sudo -u verifyssh touch /home/verifyssh/cancel-ready
     wait_receipt VERIFY_RECEIVED:CANCEL_KEEP_ONE
     wait_receipt VERIFY_RECEIVED:CANCEL_KEEP_THREE
@@ -657,7 +661,10 @@ if [[ "$feature" == chat-codex.md ]]; then
     exit 0
 fi
 if [[ "$feature" == chat-queued.md ]]; then
+    [[ "${GITHUB_ACTIONS:-}" == true ]]
     wait_for_text VERIFY_READY_1008
+elif [[ "$feature" == chat-resync.md ]]; then
+    wait_for_text ACCEPTED_FOURTH
 else
     wait_for_text VERIFY_READY_528
 fi
@@ -681,62 +688,106 @@ if [[ "$feature" == chat-queued.md ]]; then
         sleep 0.1
     done
     [[ "$recorder_pid" =~ ^[0-9]+$ ]]
+    queue_states() {
+        local attempt
+        for attempt in {1..60}; do
+            if sudo env GITHUB_ACTIONS="$GITHUB_ACTIONS" python3 "$scripts/queue-evidence.py" "$@" > "$EVIDENCE/queue-state.tmp" 2>/dev/null; then
+                cat "$EVIDENCE/queue-state.tmp"
+                return
+            fi
+            sleep 1
+        done
+        sudo env GITHUB_ACTIONS="$GITHUB_ACTIONS" python3 "$scripts/queue-evidence.py" "$@"
+        return 1
+    }
+    queue_ui() {
+        local expected=$1 name=$2 attempt
+        for attempt in {1..30}; do
+            dump_ui
+            if python3 "$scripts/queued.py" "$EVIDENCE/current.xml" "$expected" "$name" >/dev/null 2>&1; then return; fi
+            sleep 1
+        done
+        python3 "$scripts/queued.py" "$EVIDENCE/current.xml" "$expected" "$name"
+    }
+    provider_event() { sudo -u verifyssh env GITHUB_ACTIONS="$GITHUB_ACTIONS" HOME=/home/verifyssh python3 /home/verifyssh/queued-console.py "$1"; }
     fill 'Message verify-session' WAITING_ONE
     tap_desc 'Send prompt'
-    wait_receipt 'VERIFY_RECEIVED:WAITING_ONE'
     wait_for_text WAITING_ONE
     fill 'Message verify-session' WAITING_TWO
     tap_desc 'Send prompt'
-    wait_receipt 'VERIFY_RECEIVED:WAITING_TWO'
     wait_for_text WAITING_TWO
+    queue_states queued queued | tee "$EVIDENCE/queue-pending.json"
+    queue_ui 2 QUEUE_WAITING
     shot queued-waiting
-    python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 2 WAITING
-    sudo -u verifyssh python3 /home/verifyssh/queued-console.py take-in
-    sleep 8
-    shot queued-taken-in
-    python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 2 TAKEN_IN_NO_REPLY
-    sudo -u verifyssh python3 /home/verifyssh/queued-console.py reply
-    wait_for_text 'Both messages received.'
-    sudo cat /home/verifyssh/shell-events.jsonl > "$EVIDENCE/shell-events.jsonl"
-    python3 - "$EVIDENCE/shell-events.jsonl" "$EVIDENCE/first-reply-latency.json" <<'LATENCY'
-import json
-from pathlib import Path
-import sys
-import time
-reply = next(json.loads(line) for line in reversed(Path(sys.argv[1]).read_text().splitlines()) if json.loads(line)['text'] == 'Both messages received.')
-latency = time.time() - reply['timestamp']
-assert latency <= 3, f'FIRST_REPLY_LATE: {latency:.3f}s'
-Path(sys.argv[2]).write_text(json.dumps(dict(replyLatencySeconds=latency)))
-LATENCY
-    for attempt in {1..30}; do
-        dump_ui
-        if python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 0 REPLIED >/dev/null 2>&1; then break; fi
-        sleep 1
-    done
-    shot queued-replied
-    if ! python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 0 REPLIED; then
-        printf 'IGSH1008_QUEUED_STUCK\n' >&2
-        exit 1
-    fi
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/draft-before.txt"
+    grep -F '❯ FIXTURE_OWNED_DRAFT' "$EVIDENCE/draft-before.txt"
+    sudo test -f /home/verifyssh/receipts.txt
+    sudo test ! -s /home/verifyssh/receipts.txt
+    provider_event clear-draft
+    wait_receipt 'VERIFY_RECEIVED:WAITING_ONE'
+    queue_states delivered queued | tee "$EVIDENCE/queue-first-delivered.json"
+    queue_ui 1 QUEUE_FIRST_DELIVERED
     wait_for_text WAITING_ONE
     wait_for_text WAITING_TWO
-    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/queued-receipts.txt"
-    sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-queued-work/a1b2c3d4-1008-4000-8000-000000001008.jsonl > "$EVIDENCE/queued-transcript.jsonl"
+    shot queued-first-delivered
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/native-queue-blocked.txt"
+    grep -F 'edit queued messages' "$EVIDENCE/native-queue-blocked.txt"
+    [[ $(sudo awk 'END {print NR}' /home/verifyssh/receipts.txt) -eq 1 ]]
+    provider_event consume:WAITING_ONE
+    wait_receipt 'VERIFY_RECEIVED:WAITING_TWO'
+    queue_states delivered delivered | tee "$EVIDENCE/queue-both-delivered.json"
+    queue_ui 0 QUEUE_BOTH_DELIVERED
+    wait_for_text WAITING_ONE
+    wait_for_text WAITING_TWO
+    shot queued-both-delivered
+    provider_event consume:WAITING_TWO
+    provider_event reply
+    wait_for_text 'Both messages received.'
     fill 'Message verify-session' FOLLOWUP
     tap_desc 'Send prompt'
     wait_receipt 'VERIFY_RECEIVED:FOLLOWUP'
+    wait_for_text FOLLOWUP
+    queue_ui 0 FOLLOWUP_DELIVERED
+    provider_event consume:FOLLOWUP
     adb shell kill -INT "$recorder_pid"
     wait "$recorder_client" || true
     adb pull /sdcard/chat-catchup.mp4 "$EVIDENCE/chat-catchup.mp4"
     recorder_pid=
-    sudo -u verifyssh python3 /home/verifyssh/queued-console.py followup &
-    followup_pid=$!
-    python3 "$scripts/catchup.py"
-    wait "$followup_pid"
+    python3 "$scripts/catchup.py" &
+    catchup_pid=$!
+    for attempt in {1..30}; do
+        [[ -f "$EVIDENCE/catchup-monitor-ready" ]] && break
+        kill -0 "$catchup_pid"
+        sleep 1
+    done
+    [[ -f "$EVIDENCE/catchup-monitor-ready" ]]
+    provider_event followup
+    wait "$catchup_pid"
     shot catchup-finished
-    sudo cat /home/verifyssh/shell-events.jsonl > "$EVIDENCE/shell-events.jsonl"
+    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/queued-receipts.txt"
     sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-queued-work/a1b2c3d4-1008-4000-8000-000000001008.jsonl > "$EVIDENCE/queued-transcript.jsonl"
-    printf 'ANDROID_QUEUED_CLEARS_AFTER_REPLY\n'
+    sudo cat /home/verifyssh/shell-events.jsonl > "$EVIDENCE/shell-events.jsonl"
+    python3 - "$EVIDENCE" <<'QUEUE_RESULT'
+import json
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+expected = ['WAITING_ONE', 'WAITING_TWO', 'FOLLOWUP']
+inputs = root.joinpath('queued-receipts.txt').read_text().splitlines()
+assert inputs == ['VERIFY_RECEIVED:' + text for text in expected], inputs
+rows = [json.loads(line) for line in root.joinpath('queued-transcript.jsonl').read_text().splitlines()]
+receipts = [r['attachment']['prompt'] for r in rows if r.get('type') == 'attachment' and r.get('attachment', {}).get('type') == 'queued_command' and not r.get('isSidechain')]
+assert receipts == expected, receipts
+states = [json.loads(root.joinpath(name).read_text()) for name in ('queue-pending.json', 'queue-first-delivered.json', 'queue-both-delivered.json')]
+assert [[r['id'] for r in state] for state in states] == [[r['id'] for r in states[0]]] * 3
+result = dict(inputs=inputs, provider_receipts=receipts, count=len(receipts), states=states,
+              harness_revision=__import__('os').environ['GITHUB_SHA'],
+              app_source=root.joinpath('app-source-sha.txt').read_text().strip(),
+              apk_sha256=root.joinpath('app-apk-sha256.txt').read_text().strip(),
+              provider='simulated Claude; real SSH, tmux, client and embedded engine')
+root.joinpath('queue-result.json').write_text(json.dumps(result, indent=2) + '\n')
+print('QUEUE_JOURNEY_RESULT', json.dumps(result))
+QUEUE_RESULT
     exit 0
 fi
 if [[ "$feature" == native-skills.md ]]; then
@@ -835,26 +886,48 @@ NATIVE
     exit 0
 fi
 if [[ "$feature" == chat-resync.md ]]; then
-    wait_for_text 'FIRST REPLY'
-    for message in SYNC_ONE SYNC_TWO; do
-        fill 'Message verify-session' "$message"
-        tap_desc 'Send prompt'
-        wait_receipt "VERIFY_RECEIVED:$message"
-        wait_for_text "Reply to $message"
-    done
-    wait_for_text Queued
-    shot out-of-sync
-    queued_before=$(grep -o 'text="Queued"' "$EVIDENCE/current.xml" | wc -l)
-    printf '%s\n' "$queued_before" > "$EVIDENCE/queued-before.txt"
-    [[ "$queued_before" == 2 ]]
+    resync_event() {
+        sudo -u verifyssh env GITHUB_ACTIONS=true python3 /home/verifyssh/resync-console.py event "$1"
+    }
+    resync_rows() {
+        local phase=$1 identity direction attempt found x1 y1 x2 y2
+        for identity in recovery-head pending-one pending-two accepted-fourth; do
+            found=false
+            for direction in older newer; do
+                for attempt in {1..10}; do
+                    shot "resync-$phase-$identity-$direction-$attempt"
+                    if python3 "$scripts/resync-console.py" ui-row "$EVIDENCE/current.xml" "$identity" "$phase" > "$EVIDENCE/resync-$phase-$identity.json" 2> "$EVIDENCE/resync-row-error.txt"; then
+                        found=true
+                        break
+                    fi
+                    read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
+                    if [[ "$direction" == older ]]; then
+                        adb shell input swipe "$x1" "$y1" "$x2" "$y2" 450
+                    else
+                        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 450
+                    fi
+                    sleep 1
+                done
+                if [[ "$found" == true ]]; then break; fi
+            done
+            if [[ "$found" != true ]]; then
+                cat "$EVIDENCE/resync-row-error.txt" >&2
+                printf 'RESYNC_UI_ROW_NOT_PROVEN:%s:%s\n' "$phase" "$identity" >&2
+                return 1
+            fi
+        done
+    }
+    unzip -p "$VERIFY_APK" assets/chat_history_reader.py | sha256sum > "$EVIDENCE/embedded-reader-sha256.txt"
+    cp tools/vendor/chat-reader/SHA256SUMS "$EVIDENCE/canonical-corpus-sha256.txt"
+    resync_event before > "$EVIDENCE/resync-server-before.json"
+    resync_rows before
     fill 'Message verify-session' 'draft%sstays%shere'
-    shot draft-before
+    shot resync-draft-before
+    python3 "$scripts/resync-console.py" draft "$EVIDENCE/current.xml" "$EVIDENCE/resync-draft-before.bin"
     tap_desc 'Session actions'
-    if ! wait_for_text 'Resync chat'; then
-        printf 'IGSH1011_RESYNC_MISSING\n' >&2
-        exit 1
-    fi
+    wait_for_text 'Resync chat'
     shot resync-menu
+    resync_event accept > "$EVIDENCE/resync-receipt-event.json"
     tap_text 'Resync chat'
     toast_shots=()
     for attempt in {1..8}; do
@@ -863,26 +936,33 @@ if [[ "$feature" == chat-resync.md ]]; then
     done
     sleep 5
     adb exec-out screencap -p > "$EVIDENCE/toast-settled.png"
+    settled=false
+    for attempt in {1..30}; do
+        if resync_event after > "$EVIDENCE/resync-server-after.json" 2> "$EVIDENCE/resync-server-error.txt"; then
+            settled=true
+            break
+        fi
+        sleep 1
+    done
+    if [[ "$settled" != true ]]; then
+        cat "$EVIDENCE/resync-server-after.json" "$EVIDENCE/resync-server-error.txt" >&2
+        exit 1
+    fi
     python3 "$scripts/toast.py" "$EVIDENCE/toast-settled.png" "${toast_shots[@]}" | tee "$EVIDENCE/toast-result.txt"
-    wait_for_absence Queued
-    shot synced
-    wait_for_text 'Reply to SYNC_ONE'
-    wait_for_text 'Reply to SYNC_TWO'
-    wait_for_text '[phone] SYNC_ONE'
-    wait_for_text '[phone] SYNC_TWO'
-    dump_ui
-    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field 'draft stays here'
-    shot resynced
-    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt"
-    python3 - "$EVIDENCE/receipts.txt" <<'RESYNC'
-import sys
-from pathlib import Path
-rows = Path(sys.argv[1]).read_text().splitlines()
-assert rows == ["VERIFY_RECEIVED:SYNC_ONE", "VERIFY_RECEIVED:SYNC_TWO"], rows
-print("RESYNC CLEARED STALE QUEUED; NOTHING RESENT")
-RESYNC
-    sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-resync-work/a1b2c3d4-1011-4000-8000-000000001011.jsonl > "$EVIDENCE/resync-transcript.jsonl"
-    printf 'ANDROID_CHAT_RESYNC_VERIFIED\n'
+    resync_rows after
+    shot resync-draft-after
+    python3 "$scripts/resync-console.py" draft "$EVIDENCE/current.xml" "$EVIDENCE/resync-draft-after.bin"
+    cmp "$EVIDENCE/resync-draft-before.bin" "$EVIDENCE/resync-draft-after.bin"
+    tap_desc 'Session actions'
+    wait_for_text 'Resync chat'
+    tap_text 'Resync chat'
+    sleep 5
+    resync_rows repeat
+    shot resync-draft-repeat
+    python3 "$scripts/resync-console.py" draft "$EVIDENCE/current.xml" "$EVIDENCE/resync-draft-repeat.bin"
+    cmp "$EVIDENCE/resync-draft-before.bin" "$EVIDENCE/resync-draft-repeat.bin"
+    resync_event repeat > "$EVIDENCE/resync-server-repeat.json"
+    printf 'ANDROID_RECOVERY_TWO_ACCEPTED_TWO_PENDING_NO_SENDS\n' | tee "$EVIDENCE/resync-result.txt"
     exit 0
 fi
 if [[ "$feature" == chat-reactions.md ]]; then

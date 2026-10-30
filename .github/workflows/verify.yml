@@ -41,6 +41,13 @@ on:
         description: Build signed branch candidate instead of downloading the published APK
         type: boolean
         default: false
+      channel:
+        description: Signed recovery release channel
+        type: choice
+        default: android-latest
+        options:
+          - android-latest
+          - android-m3-latest
       expected_commit:
         description: Required published manifest commit for release choices proof
         type: string
@@ -101,8 +108,26 @@ jobs:
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
       UPDATE_BASELINE_RUN: ${{ inputs.update_baseline_run }}
       APP_REF: ${{ inputs.app_ref }}
+      RELEASE_CHANNEL: ${{ inputs.channel || 'android-latest' }}
     steps:
       - uses: actions/checkout@v4
+      - name: Validate signed recovery channel
+        env:
+          RELEASED_CHAT: ${{ inputs.released_chat }}
+          RELEASE_CHOICES: ${{ inputs.release_choices }}
+          RELEASE_ICON: ${{ inputs.release_icon }}
+          RELEASED_REACTIONS: ${{ inputs.released_reactions }}
+          RELEASED_TERMINAL: ${{ inputs.released_terminal }}
+          RELEASED_ROBOTS: ${{ inputs.released_robots }}
+        run: |
+          case "$RELEASE_CHANNEL" in
+            android-latest) ;;
+            android-m3-latest)
+              [[ "$VERIFY_FEATURE" == chat-resync.md && "$RELEASED_CHAT" == true && -z "$APP_REF" && -z "$UPDATE_BASELINE_RUN" ]]
+              [[ "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true ]]
+              ;;
+            *) exit 1 ;;
+          esac
       - name: Prove SSH fixture configuration on the supported host
         run: |
           sudo apt-get update -qq
@@ -159,6 +184,9 @@ jobs:
         run: |
           python3 -m pip install Pillow
           python3 .claude/skills/verify-multiprompt-android/scripts/reactions.test.py
+      - name: Check recovery UI oracle
+        if: env.VERIFY_FEATURE == 'chat-resync.md'
+        run: python3 -B tools/release-choices/ui.test.py
       - name: Reject code scroll interception on original source
         if: inputs.feature == 'session-gestures.md'
         run: |
@@ -191,11 +219,11 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          [[ "$VERIFY_FEATURE" = chat-queued.md || "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md || "$VERIFY_FEATURE" = terminal.md || "$VERIFY_FEATURE" = robot-faces.md || "$VERIFY_FEATURE" = chat-cancel.md || "$VERIFY_FEATURE" = session-gestures.md || "$VERIFY_FEATURE" = session-summaries.md ]]
+          [[ "$VERIFY_FEATURE" = chat-queued.md || "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md || "$VERIFY_FEATURE" = terminal.md || "$VERIFY_FEATURE" = robot-faces.md || "$VERIFY_FEATURE" = chat-cancel.md || "$VERIFY_FEATURE" = session-gestures.md || "$VERIFY_FEATURE" = session-summaries.md || "$VERIFY_FEATURE" = chat-resync.md ]]
           sdkmanager --install 'build-tools;35.0.0' 'platforms;android-35'
           bash tools/release-choices/prepare.sh
           echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
-          echo "VERIFY_PACKAGE=dev.multiprompt.companion" >> "$GITHUB_ENV"
+          echo "VERIFY_PACKAGE=$(cat "$EVIDENCE/package-name.txt")" >> "$GITHUB_ENV"
           echo "EXPECTED_VERSION=$(cat "$EVIDENCE/version.txt")" >> "$GITHUB_ENV"
       - name: Download published icon APK
         if: inputs.release_icon == true
@@ -239,7 +267,7 @@ jobs:
       - name: Prepare shell and chat recording
         if: env.VERIFY_FEATURE == 'chat-queued.md'
         run: |
-          sudo apt-get update && sudo apt-get install -y ffmpeg
+          sudo apt-get update && sudo apt-get install -y ffmpeg tesseract-ocr
           ffmpeg -version
       - name: Start ephemeral public-key-only SSH and tmux
         run: .claude/skills/verify-multiprompt-android/scripts/fixture.sh
@@ -252,7 +280,7 @@ jobs:
           target: default
           script: |
             adb install -r -g "$VERIFY_APK"
-            if [ "${VERIFY_PACKAGE:-}" = dev.multiprompt.companion ] && [ "$VERIFY_FEATURE" != launcher-icon.md ]; then bash tools/release-choices/run.sh; else .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; fi
+            if [[ "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion || "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion.m3 ]] && [ "$VERIFY_FEATURE" != launcher-icon.md ]; then bash tools/release-choices/run.sh; else .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; fi
             if [ -n "$UPDATE_BASELINE_RUN" ]; then .claude/skills/verify-multiprompt-android/scripts/update-reaction-release.sh; fi
       - name: Compare desktop and Android transcript posts
         if: inputs.feature == 'chat-codex.md'
