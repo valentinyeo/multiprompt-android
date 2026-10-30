@@ -10,6 +10,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.text.TextLayoutResult
@@ -217,7 +220,13 @@ class SessionListSettingsTest {
             val saved = AccountLayoutStore(fixture.app).load("test-account")!!
             assertEquals(false, saved.edited.settings!![key])
         }
-        if (key == "frequent") compose.onNodeWithContentDescription("Frequent as first tab").assertIsNotEnabled()
+        if (key == "frequent") {
+            compose.onNodeWithContentDescription("Frequent as first tab")
+                .assertIsNotEnabled()
+                .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch))
+                .assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.On))
+                .assert(!hasClickAction())
+        }
         closeSettings()
         compose.onNodeWithText(split).assertDoesNotExist()
         openSettings()

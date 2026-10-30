@@ -122,6 +122,8 @@ jobs:
           path: |
             app/build/reports/igsh-844/*.png
             app/build/reports/igsh-1045/*.png
+            app/build/reports/igsh-1015/*.png
+            app/build/outputs/igsh-423/*.png
             app/build/reports/question-control/*.xml
             app/build/reports/summary-control/*.xml
             app/build/test-results/test*UnitTest/*.xml
