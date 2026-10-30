@@ -267,7 +267,7 @@ jobs:
       - name: Prepare shell and chat recording
         if: env.VERIFY_FEATURE == 'chat-queued.md'
         run: |
-          sudo apt-get update && sudo apt-get install -y ffmpeg
+          sudo apt-get update && sudo apt-get install -y ffmpeg tesseract-ocr
           ffmpeg -version
       - name: Start ephemeral public-key-only SSH and tmux
         run: .claude/skills/verify-multiprompt-android/scripts/fixture.sh
