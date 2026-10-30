@@ -138,6 +138,11 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
@@ -1252,7 +1257,7 @@ internal fun SessionsScreen(
             ) { padding ->
                 Column(
                     Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(Kit.ControlGap),
                 ) {
                     KitListGroup {
                         KitListRow(if (signedIn) "Switch / renew login" else "Sign in", onClick = onSignIn)
@@ -1260,105 +1265,85 @@ internal fun SessionsScreen(
                         KitListRow("Host mapping", onClick = { settingsPage = SettingsPage.MAPPING })
                         KitListRow("Update", onClick = { settingsPage = SettingsPage.HIDDEN; onSelectSection(AppSection.UPDATE) })
                     }
-                    state.accountError?.let { Text(it, style = Kit.Body, color = Kit.Danger) }
-                    listOf(
-                        Triple("frequent", "Show Frequent split", state.showFrequentSplit),
-                        Triple("frequent_first", "Frequent as first tab", state.frequentFirst),
-                        Triple("favorites", "Show Favorites split", state.showFavoritesSplit),
-                        Triple("all", "Show All split", state.showAllSplit),
-                    ).forEach { (key, label, checked) ->
+                    state.accountError?.let { error ->
+                        KitListGroup { Text(error, Modifier.padding(Kit.SideChange), style = Kit.Body, color = Kit.Danger) }
+                    }
+                    KitListGroup {
+                        listOf(
+                            Triple("frequent", "Show Frequent split", state.showFrequentSplit),
+                            Triple("frequent_first", "Frequent as first tab", state.frequentFirst),
+                            Triple("favorites", "Show Favorites split", state.showFavoritesSplit),
+                            Triple("all", "Show All split", state.showAllSplit),
+                        ).forEach { (key, label, checked) ->
+                            val enabled = key != "frequent_first" || state.showFrequentSplit
+                            Row(
+                                Modifier.fillMaxWidth().heightIn(min = Kit.RowHeight).padding(horizontal = Kit.SideChange, vertical = Kit.ControlGap),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(Kit.ScreenEdge),
+                            ) {
+                                Text(label, Modifier.weight(1f), style = Kit.Body, color = Kit.Text)
+                                KitToggle(
+                                    checked = checked,
+                                    onCheckedChange = if (enabled) { value -> onSetSessionListSetting(key, value) } else null,
+                                    modifier = Modifier.semantics {
+                                        contentDescription = label
+                                        if (!enabled) {
+                                            role = Role.Switch
+                                            toggleableState = ToggleableState(checked)
+                                            disabled()
+                                        }
+                                    },
+                                )
+                            }
+                        }
                         Row(
-                            Modifier.fillMaxWidth(),
+                            Modifier.fillMaxWidth().heightIn(min = Kit.RowHeight).padding(horizontal = Kit.SideChange, vertical = Kit.ControlGap),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(Kit.ScreenEdge),
                         ) {
-                            Text(label, Modifier.weight(1f))
-                            Switch(
-                                checked = checked,
-                                onCheckedChange = { onSetSessionListSetting(key, it) },
-                                enabled = key != "frequent_first" || state.showFrequentSplit,
-                                modifier = Modifier.semantics { contentDescription = label },
+                            Text("Newest sessions at bottom", Modifier.weight(1f), style = Kit.Body, color = Kit.Text)
+                            KitToggle(state.newestSessionsAtBottom, onSetNewestSessionsAtBottom)
+                        }
+                        Row(
+                            Modifier.fillMaxWidth().heightIn(min = Kit.RowHeight).padding(horizontal = Kit.SideChange, vertical = Kit.ControlGap),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(Kit.ScreenEdge),
+                        ) {
+                            Text("All split on right", Modifier.weight(1f), style = Kit.Body, color = Kit.Text)
+                            KitToggle(state.allSplitOnRight, onSetAllSplitOnRight)
+                        }
+                    }
+                    KitListGroup {
+                        Column(Modifier.padding(vertical = Kit.SideChange), verticalArrangement = Arrangement.spacedBy(Kit.ControlGap)) {
+                            Text("Theme", Modifier.padding(horizontal = Kit.SideChange), style = Kit.Body, color = Kit.Text)
+                            KitSegmented(
+                                listOf(AppTheme.SYSTEM to "System", AppTheme.DARK to "Dark", AppTheme.SUNLIGHT to "Sunlight"),
+                                appTheme,
+                                onSetAppTheme,
+                            )
+                            Text("Default Reader font size", Modifier.padding(horizontal = Kit.SideChange), style = Kit.Body, color = Kit.Text)
+                            val fontOptions = listOf(0.9f to "Small", 1f to "Normal", 1.15f to "Large")
+                            KitSegmented(
+                                fontOptions,
+                                fontOptions.firstOrNull { kotlin.math.abs(readerDefaultFontScale - it.first) < 0.01f }?.first
+                                    ?: readerDefaultFontScale,
+                                onSetReaderDefaultFontScale,
                             )
                         }
                     }
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Text("Newest sessions at bottom", Modifier.weight(1f))
-                        Switch(
-                            checked = state.newestSessionsAtBottom,
-                            onCheckedChange = onSetNewestSessionsAtBottom,
-                        )
-                    }
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Text("All split on right", Modifier.weight(1f))
-                        Switch(
-                            checked = state.allSplitOnRight,
-                            onCheckedChange = onSetAllSplitOnRight,
-                        )
-                    }
-                    Text("Theme")
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        listOf(
-                            AppTheme.SYSTEM to "System",
-                            AppTheme.DARK to "Dark",
-                            AppTheme.SUNLIGHT to "Sunlight",
-                        ).forEach { (theme, label) ->
-                            if (appTheme == theme) {
-                                FilledTonalButton(
-                                    onClick = { onSetAppTheme(theme) },
-                                    modifier = Modifier.weight(1f),
-                                    contentPadding = PaddingValues(horizontal = 8.dp),
-                                ) { Text(label, Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, softWrap = false) }
-                            } else {
-                                OutlinedButton(
-                                    onClick = { onSetAppTheme(theme) },
-                                    modifier = Modifier.weight(1f),
-                                    contentPadding = PaddingValues(horizontal = 8.dp),
-                                ) { Text(label, Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, softWrap = false) }
-                            }
-                        }
-                    }
-                    Text("Default Reader font size")
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        listOf(0.9f to "Small", 1f to "Normal", 1.15f to "Large").forEach { (scale, label) ->
-                            if (kotlin.math.abs(readerDefaultFontScale - scale) < 0.01f) {
-                                FilledTonalButton(
-                                    onClick = { onSetReaderDefaultFontScale(scale) },
-                                    modifier = Modifier.weight(1f),
-                                    contentPadding = PaddingValues(horizontal = 8.dp),
-                                ) { Text(label, Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, softWrap = false) }
-                            } else {
-                                OutlinedButton(
-                                    onClick = { onSetReaderDefaultFontScale(scale) },
-                                    modifier = Modifier.weight(1f),
-                                    contentPadding = PaddingValues(horizontal = 8.dp),
-                                ) { Text(label, Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, softWrap = false) }
-                            }
-                        }
-                    }
                     crashReport?.let {
-                        HorizontalDivider()
-                        Text(
-                            "A crash report from the previous launch is available.",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            OutlinedButton(onClick = { crashReportVisible = true }) { Text("View report") }
-                            TextButton(onClick = onClearCrashReport) { Text("Dismiss") }
+                        KitListGroup {
+                            Column(Modifier.padding(Kit.SideChange), verticalArrangement = Arrangement.spacedBy(Kit.ControlGap)) {
+                                Text(
+                                    "A crash report from the previous launch is available.",
+                                    color = Kit.TextMuted,
+                                    style = Kit.Hint,
+                                )
+                                Column(verticalArrangement = Arrangement.spacedBy(Kit.ControlGap)) {
+                                    KitSecondaryButton("View report", onClick = { crashReportVisible = true })
+                                    KitSecondaryButton("Dismiss", onClick = onClearCrashReport)
+                                }
+                            }
                         }
                     }
                 }
@@ -1366,34 +1351,25 @@ internal fun SessionsScreen(
         }
     }
     if (crashReportVisible) {
-        MultipromptTheme(sunlight = sunlight, material3 = false) {
-            crashReport?.let { report ->
-                AlertDialog(
-                    onDismissRequest = { crashReportVisible = false },
-                    title = { Text("Crash report") },
-                    text = {
-                        SelectionContainer {
-                            Text(
-                                report.asText(),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 360.dp)
-                                    .verticalScroll(rememberScrollState()),
-                                fontSize = 11.sp,
-                            )
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clipboard.setPrimaryClip(ClipData.newPlainText("multiprompt crash report", report.asText()))
-                            crashReportVisible = false
-                        }) { Text("Copy report") }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { crashReportVisible = false }) { Text("Close") }
-                    },
-                )
+        crashReport?.let { report ->
+            KitSheet(onDismiss = { crashReportVisible = false }) {
+                Text("Crash report", style = Kit.BodyStrong, color = Kit.Text)
+                SelectionContainer(modifier = Modifier.weight(1f, fill = false)) {
+                    Text(
+                        report.asText(),
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+                        style = Kit.Body.copy(fontSize = 11.sp),
+                        color = Kit.Text,
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(Kit.ControlGap)) {
+                    KitSecondaryButton("Copy report", onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("multiprompt crash report", report.asText()))
+                        crashReportVisible = false
+                    })
+                    KitSecondaryButton("Close", onClick = { crashReportVisible = false })
+                }
             }
         }
     }

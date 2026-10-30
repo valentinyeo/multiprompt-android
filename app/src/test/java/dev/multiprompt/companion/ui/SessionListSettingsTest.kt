@@ -1,18 +1,26 @@
 package dev.multiprompt.companion.ui
 
 import android.app.Application
+import android.content.ClipboardManager
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Looper
+import androidx.activity.ComponentDialog
 import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.text.TextLayoutResult
+import dev.multiprompt.companion.data.CrashReport
 import dev.multiprompt.companion.account.AccountLayout
 import dev.multiprompt.companion.account.AccountLayoutStore
 import dev.multiprompt.companion.account.FAVORITES_SPLIT_ID
@@ -33,6 +41,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowDialog
 import org.robolectric.util.ReflectionHelpers
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.Config
@@ -51,7 +60,8 @@ class SessionListSettingsTest {
         if (::fixture.isInitialized) fixture.close()
     }
 
-    private fun render() {
+    private fun render(report: CrashReport? = null) {
+        val displayedReport = mutableStateOf(report)
         fixture = SessionActivityFixture()
         compose.setContent {
             back = LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
@@ -73,7 +83,7 @@ class SessionListSettingsTest {
                 appTheme = state.appTheme, onSetAppTheme = fixture.model::setAppTheme,
                 onClearSessionActionError = {}, readerDefaultFontScale = state.readerDefaultFontScale,
                 onSetReaderDefaultFontScale = fixture.model::setReaderDefaultFontScale,
-                crashReport = null, onClearCrashReport = {}, onMapAccountHost = { _, _ -> },
+                crashReport = displayedReport.value, onClearCrashReport = { displayedReport.value = null }, onMapAccountHost = { _, _ -> },
             )
         }
     }
@@ -161,6 +171,40 @@ class SessionListSettingsTest {
         checkChoiceLabelsAndActions()
     }
 
+    @Test
+    @Config(qualifiers = "w390dp-h390dp")
+    fun crashReportActionsRemainReachableOnShortScreen() {
+        RuntimeEnvironment.setFontScale(2f)
+        val report = CrashReport(1, "main", "Failure", "Long report\n".repeat(200), "id", "1", "35")
+        render(report)
+        openSettings()
+        fun viewReport() {
+            compose.onNodeWithText("View report").performScrollTo().performClick()
+            compose.onNodeWithText("Copy report").assertIsDisplayed()
+            compose.onNodeWithText("Close").assertIsDisplayed()
+        }
+        viewReport()
+        compose.onNodeWithText("Copy report").performClick()
+        compose.runOnIdle {
+            val clipboard = fixture.app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            assertEquals(report.asText(), clipboard.primaryClip!!.getItemAt(0).text.toString())
+        }
+        viewReport()
+        compose.runOnIdle {
+            val dialog = ShadowDialog.getLatestDialog() as ComponentDialog
+            assertTrue(dialog.isShowing)
+            dialog.onBackPressed()
+        }
+        compose.onNodeWithText("Copy report").assertDoesNotExist()
+        compose.onNodeWithText("Session list settings").assertIsDisplayed()
+        viewReport()
+        compose.onNodeWithText("Close").performClick()
+        viewReport()
+        compose.onNodeWithText("Close").performClick()
+        compose.onNodeWithText("Dismiss").performScrollTo().performClick()
+        compose.onNodeWithText("View report").assertDoesNotExist()
+    }
+
     private fun screenshot(name: String) {
         val root = compose.onRoot()
         val view = (root.fetchSemanticsNode().root as ViewRootForTest).view.rootView
@@ -217,7 +261,13 @@ class SessionListSettingsTest {
             val saved = AccountLayoutStore(fixture.app).load("test-account")!!
             assertEquals(false, saved.edited.settings!![key])
         }
-        if (key == "frequent") compose.onNodeWithContentDescription("Frequent as first tab").assertIsNotEnabled()
+        if (key == "frequent") {
+            compose.onNodeWithContentDescription("Frequent as first tab")
+                .assertIsNotEnabled()
+                .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch))
+                .assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.On))
+                .assert(!hasClickAction())
+        }
         closeSettings()
         compose.onNodeWithText(split).assertDoesNotExist()
         openSettings()

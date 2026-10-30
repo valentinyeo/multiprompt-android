@@ -176,7 +176,15 @@ internal fun <T> KitSegmented(
                     .selectable(isSelected, role = Role.RadioButton) { onSelect(value) },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(label, style = Kit.Body.copy(fontSize = 15.sp, lineHeight = 20.sp), color = if (isSelected) Kit.Text else Kit.TextMuted)
+                Text(
+                    label,
+                    modifier = Modifier.fillMaxWidth(),
+                    style = Kit.Body.copy(fontSize = 15.sp, lineHeight = 20.sp),
+                    color = if (isSelected) Kit.Text else Kit.TextMuted,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    softWrap = false,
+                )
             }
         }
     }
