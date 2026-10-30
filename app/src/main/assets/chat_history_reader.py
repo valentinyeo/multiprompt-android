@@ -4,10 +4,14 @@ import base64
 import difflib
 from datetime import datetime
 import hashlib
+import html
 import json
 import mmap
 import os
-import pwd
+try:
+    import pwd
+except ImportError:
+    pwd = None
 import re
 import subprocess
 import sys
@@ -16,12 +20,11 @@ from pathlib import Path
 
 HOME = Path.home()
 SESSION_ID = re.compile(r"[A-Za-z0-9_-]{1,80}\Z")
-SGR = re.compile(r"\x1b\[([0-9;:]*)m")
-ANSI = re.compile(r"\x1b(?:\[[0-9;:?]*[ -/]*[@-~]|[@-Z\\-_])")
 TMUX_NAME = re.compile(r"[A-Za-z0-9_.:-]{1,80}\Z")
 _COMMAND_NAME = re.compile(r"<command-name>\s*(.*?)\s*</command-name>", re.S)
 _COMMAND_ARGS = re.compile(r"<command-args>(.*?)</command-args>", re.S)
 _LOCAL_COMMAND = re.compile(r"<(local-command-stdout|local-command-stderr|local-command-caveat)>.*?</\1>", re.S)
+_SYSTEM_REMINDER = re.compile(r"^[ \t]*<system-reminder>.*?</system-reminder>[ \t]*(?:\r?\n|$)", re.S | re.M)
 SEARCH_ASCII_FOLDS = "ßİŉſǰẖẗẘẙẚẞKﬀﬁﬂﬃﬄﬅﬆ"
 END = "@@MP_END@@"
 PAGE_BYTES = 350000
@@ -29,13 +32,21 @@ SCAN_BYTES = 512 * 1024
 TAIL_BYTES = 512 * 1024
 QUESTION_SCAN_BYTES = 16 * TAIL_BYTES
 STATUS_CACHE = {}
+QUEUE_CACHE = {}
+QUEUE_SCAN_BYTES = 4 * 1024 * 1024
+QUEUE_SHOWN = 8
+QUEUE_TEXT = 500
+DRAFT_TEXT = 4000
+SGR = re.compile(r"\x1b\[([0-9;:]*)m")
+ANSI = re.compile(r"\x1b(?:\[[0-9;:?]*[ -/]*[@-~]|[@-Z\\-_])")
 SETTLE_SUFFIX_MIN = 24
-IGSH_345_STALE_JUMPS_TO_TAIL = True
-IGSH_349_QUEUED_STAMP_FROM_QUEUE = True
-IGSH_358_TAIL_STARTS_AT_QUESTION = True
-IGSH_263_TOOL_STEPS = True
-IGSH_268_CHAT_FIND = True
-IGSH_270_DIFF_CARDS = True
+ISSUE_345_STALE_JUMPS_TO_TAIL = True
+ISSUE_349_QUEUED_STAMP_FROM_QUEUE = True
+ISSUE_358_TAIL_STARTS_AT_QUESTION = True
+ISSUE_631_TAIL_FILLS_SHOWN_BUDGET = True
+ISSUE_263_TOOL_STEPS = True
+ISSUE_268_CHAT_FIND = True
+ISSUE_270_DIFF_CARDS = True
 
 
 def read_json(path):
@@ -50,6 +61,8 @@ def claude_config_dirs(home):
     return ([Path(configured).expanduser()] if configured else []) + [home / ".claude", home / ".config/claude"]
 
 def conversation_owner(cwd):
+    if pwd is None:
+        return None
     parts = Path(cwd).parts
     if (len(parts) < 4 or parts[:2] != ("/", "home") or ".." in parts or
             not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]{0,31}", parts[2])):
@@ -92,11 +105,16 @@ def conversation_path(agent, sid, cwd, home=None):
                     denied = error
                 except OSError:
                     pass
-    state_home = Path(os.environ.get("XDG_STATE_HOME", home / ".local/state")) if home == HOME else home / ".local/state"
+    state_home = Path(os.environ.get("XDG_STATE_HOME", str(home / ".local/state"))) if home == HOME else home / ".local/state"
     hax_root = state_home / "hax/sessions"
-    for path in hax_root.glob("*/*_" + sid + ".jsonl"):
-        if path.resolve().is_relative_to(hax_root.resolve()) and hax_session_header(path):
-            return path
+    try:
+        for path in hax_root.glob("*/*_" + sid + ".jsonl"):
+            if path.resolve().is_relative_to(hax_root.resolve()):
+                header = hax_session_header(path)
+                if header and header["id"] == sid:
+                    return path
+    except PermissionError as error:
+        denied = error
     if denied is not None:
         raise denied
     return None
@@ -147,6 +165,7 @@ def agent_pid_for_panes(pane_pids, table, agent):
     children = {}
     for pid, (ppid, _argv) in table.items():
         children.setdefault(ppid, []).append(pid)
+    matches = []
     for pane in pane_pids:
         queue = [pane]
         seen = set()
@@ -159,9 +178,25 @@ def agent_pid_for_panes(pane_pids, table, agent):
             if argv and (process_basename(argv[0]) in (agent, "hax") or
                          process_basename(argv[0]) in ("node", "bun") and len(argv) > 1 and
                          process_basename(argv[1]) in (agent, agent + ".js")):
-                return pid
+                if agent != "codex" or process_basename(argv[0]) == "hax":
+                    return pid
+                matches.append(pid)
+                continue
+            if argv and process_basename(argv[0]) == "tmux" and pwd is not None:
+                try:
+                    user = pwd.getpwuid(Path(f"/proc/{pid}").stat().st_uid)
+                    if user.pw_uid != 0:
+                        clients = subprocess.run(["sudo", "-n", "-H", "-u", user.pw_name, "--", "tmux", "list-clients", "-F", "#{client_pid}\t#{pane_pid}"],
+                                                 capture_output=True, text=True, timeout=3, check=False)
+                        if clients.returncode == 0:
+                            for line in clients.stdout.splitlines():
+                                fields = line.split()
+                                if len(fields) == 2 and fields[0] == str(pid) and fields[1].isdigit():
+                                    queue.append(int(fields[1]))
+                except (OSError, KeyError, subprocess.SubprocessError):
+                    pass
             queue.extend(children.get(pid, []))
-    return None
+    return matches[0] if len(matches) == 1 else None
 
 def claude_project_folder(cwd):
     return re.sub(r"[^A-Za-z0-9]", "-", str(cwd))
@@ -180,16 +215,29 @@ def newest_jsonl(paths):
             best, best_mtime = path, mtime
     return best
 
-def process_table(root=Path("/proc")):
+def process_table(root=Path("/proc"), pids=None):
 
     table = {}
     try:
-        entries = list(root.iterdir())
+        entries = list(root.iterdir()) if pids is None else [root / str(pid) for pid in pids]
     except OSError:
         return table
+    seen = set()
     for entry in entries:
-        if not entry.name.isdigit():
+        if not entry.name.isdigit() or entry.name in seen:
             continue
+        seen.add(entry.name)
+        if pids is not None:
+            try:
+                tasks = list((entry / "task").iterdir())
+            except OSError:
+                tasks = []
+            for task in tasks:
+                try:
+                    children = (task / "children").read_text().split()
+                    entries.extend(root / child for child in children if child.isdigit())
+                except OSError:
+                    pass
         try:
             stat = (entry / "stat").read_text(encoding="utf-8", errors="replace")
             raw = (entry / "cmdline").read_bytes()
@@ -243,7 +291,8 @@ def local_ssh_process_table(root=Path("/proc")):
     return link_local_ssh(table, connections)
 
 def tmux_owner_process(agent, name, source):
-
+    if pwd is None:
+        return None
     try:
         panes = subprocess.run(["tmux", "list-panes", "-t", "=" + name, "-F", "#{pane_pid}"],
                                capture_output=True, text=True, timeout=3, check=False)
@@ -324,32 +373,56 @@ def claude_session_metadata(pid):
     return (sid if isinstance(sid, str) and SESSION_ID.fullmatch(sid) else None,
             cwd if isinstance(cwd, str) and cwd else None)
 
-def open_codex_transcript(pid):
-    matches = set()
-    owners = [pid] + [child for child, (parent, argv) in process_table().items()
-                      if parent == pid and argv and process_basename(argv[0]) == "codex"]
-    for owner in owners:
-        try:
-            descriptors = list(Path(f"/proc/{owner}/fd").iterdir())
-        except OSError:
+def claude_transcript_for_cwd(cwd):
+    folder = HOME / ".claude/projects" / claude_project_folder(cwd)
+    if not folder.is_dir():
+        return None
+    return newest_jsonl(folder.glob("*.jsonl"))
+
+def open_codex_transcript(pid, table):
+    children = {}
+    for child, (parent, _argv) in table.items():
+        children.setdefault(parent, []).append(child)
+    candidates = set()
+    queue = [pid]
+    seen = set()
+    root = (HOME / ".codex/sessions").resolve()
+    while queue:
+        current = queue.pop(0)
+        if current in seen:
             continue
-        for fd in descriptors:
-            try:
-                path = Path(os.readlink(fd))
-                if (path.suffix != ".jsonl" or not path.name.startswith("rollout-") or
-                        (HOME / ".codex/sessions").resolve() not in path.resolve().parents):
-                    continue
-                with path.open(encoding="utf-8") as source:
-                    meta = json.loads(source.readline())
-                sid = meta.get("payload", {}).get("id")
-                if isinstance(sid, str) and SESSION_ID.fullmatch(sid):
-                    matches.add((sid, path))
-            except (OSError, ValueError, AttributeError):
-                pass
-    return next(iter(matches)) if len(matches) == 1 else None
+        seen.add(current)
+        queue.extend(children.get(current, []))
+        argv = table.get(current, (0, []))[1]
+        if not argv or not (process_basename(argv[0]) == "codex" or
+                            process_basename(argv[0]) in ("node", "bun") and len(argv) > 1 and
+                            process_basename(argv[1]) in ("codex", "codex.js")):
+            continue
+        try:
+            for fd in Path(f"/proc/{current}/fd").iterdir():
+                try:
+                    path = Path(os.readlink(fd))
+                    if not path.resolve().is_relative_to(root):
+                        continue
+                    with path.open("rb") as source:
+                        if not os.path.samestat(fd.stat(), os.fstat(source.fileno())):
+                            continue
+                        meta = json.loads(source.readline())
+                    payload = meta.get("payload") if isinstance(meta, dict) and meta.get("type") == "session_meta" else None
+                    sid = payload.get("id") if isinstance(payload, dict) else None
+                    if (isinstance(sid, str) and SESSION_ID.fullmatch(sid) and
+                            payload.get("session_id", sid) == sid and path.name.startswith("rollout-") and path.name.endswith("-" + sid + ".jsonl")):
+                        candidates.add((sid, path.resolve()))
+                except (OSError, ValueError):
+                    pass
+        except OSError:
+            pass
+    return next(iter(candidates)) if len(candidates) == 1 else None
 
-def resolve_tmux_agent(agent, name, pid=None):
 
+def resolve_tmux_agent(agent, name, pid=None, require_bound=False):
+
+    table = None
     if pid is None:
         try:
             result = subprocess.run(["tmux", "list-panes", "-t", "=" + name, "-F", "#{pane_pid}"],
@@ -361,12 +434,19 @@ def resolve_tmux_agent(agent, name, pid=None):
         pane_pids = [int(line) for line in result.stdout.split() if line.isdigit()]
         if not pane_pids:
             return None
-        pid = agent_pid_for_panes(pane_pids, process_table(), agent)
+        table = process_table(pids=pane_pids)
+        pid = agent_pid_for_panes(pane_pids, table, agent)
         if pid is None:
             return None
+    try:
+        argv = table[pid][1] if table is not None else Path(f"/proc/{pid}/cmdline").read_bytes().decode("utf-8", "replace").split("\0")
+    except (OSError, KeyError):
+        argv = []
     hax = open_hax_transcript(pid)
     if hax is not None:
         return hax
+    if argv and process_basename(argv[0]) == "hax":
+        return None
     cwd = read_process_cwd(pid)
     if agent == "claude":
         opened = open_claude_transcript(pid)
@@ -376,15 +456,29 @@ def resolve_tmux_agent(agent, name, pid=None):
         cwd = mapped_cwd or cwd
         if sid:
             path = conversation_path("claude", sid, cwd) if cwd else None
-            return (sid, path) if path is not None else None
-        return None
-    return open_codex_transcript(pid)
+            if path is not None:
+                return sid, path
+        for index, argument in enumerate(argv[:-1]):
+            if argument == "--resume" and SESSION_ID.fullmatch(argv[index + 1]):
+                resumed = argv[index + 1]
+                path = conversation_path("claude", resumed, cwd or "")
+                return (resumed, path) if path is not None else None
+        if sid:
+            return None
+        if require_bound:
+            return None
+        fallback = claude_transcript_for_cwd(cwd) if cwd else None
+        if fallback is None:
+            return None
+        return fallback.stem, fallback
+    if table is None:
+        table = process_table(pids=[pid])
+    return open_codex_transcript(pid, table)
 
 
 def conversation_event(event, agent):
     if not isinstance(event, dict):
         return None
-    attachment = None
     if event.get("kind") in ("user", "assistant"):
         if event.get("origin") == "compact_seed":
             return None
@@ -413,6 +507,7 @@ def conversation_event(event, agent):
                          and isinstance(part.get("text"), str))
     else:
         text = content if isinstance(content, str) else ""
+    text = _SYSTEM_REMINDER.sub("", text)
     if role == "user":
         if text.lstrip().startswith("<task-notification>"):
             return None
@@ -421,11 +516,11 @@ def conversation_event(event, agent):
         return None
     identity = message.get("id") or event.get("uuid") or ""
     timestamp = event.get("timestamp") or ""
-    row = dict(role=role, timestamp=timestamp if isinstance(timestamp, str) else "",
-               text=text, id=identity if isinstance(identity, str) else "")
-    if agent == "claude" and isinstance(attachment, dict) and attachment.get("type") == "queued_command":
-        row["queued"] = True
-    return row
+    result = dict(role=role, timestamp=timestamp if isinstance(timestamp, str) else "",
+                  text=text, id=identity if isinstance(identity, str) else "")
+    if not result["id"] and result["timestamp"]:
+        result["read_id"] = "event:" + hashlib.sha256(json.dumps(event, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    return result
 
 
 
@@ -586,7 +681,7 @@ def tool_result_diff(event):
 
 
 def tool_events(event, agent, search=False):
-    if not IGSH_263_TOOL_STEPS or not isinstance(event, dict):
+    if not ISSUE_263_TOOL_STEPS or not isinstance(event, dict):
         return []
     timestamp = event.get("timestamp", "")
     timestamp = timestamp if isinstance(timestamp, str) else ""
@@ -613,62 +708,44 @@ def tool_events(event, agent, search=False):
             value = part.get("input", part.get("arguments", part.get("action", {})))
             rows.append(dict(role="tool", id=identity, timestamp=timestamp, text=tool_summary(name, value),
                              status="running", detail=tool_cap(tool_text(value), 4000)))
-            if IGSH_270_DIFF_CARDS:
+            if ISSUE_270_DIFF_CARDS:
                 tool_diff(rows[-1], tool_input_diff(name, value))
         else:
             output = part.get("content") if agent == "claude" else part.get("output", "")
             failed = not search and (part.get("is_error") is True if agent == "claude" else tool_failed(part))
             rows.append(dict(role="tool_result", id=identity, timestamp=timestamp, text="",
                              status="error" if failed else "ok", detail=tool_cap(tool_text(output), 4000)))
-            if IGSH_270_DIFF_CARDS and agent == "claude":
+            if ISSUE_270_DIFF_CARDS and agent == "claude":
                 tool_diff(rows[-1], tool_result_diff(event))
     return rows
 
 
-def question_events(event, agent):
-    if not isinstance(event, dict):
-        return []
-    if agent == "claude":
-        if event.get("type") not in ("user", "assistant") or any(event.get(key) for key in
-                ("isMeta", "isSidechain", "isCompactSummary", "isVisibleInTranscriptOnly")):
-            return []
-        parts = (event.get("message") or {}).get("content", [])
-        parts = parts if isinstance(parts, list) else []
-    else:
-        parts = [event.get("payload")] if event.get("type") == "response_item" else []
+def conversation_rows(event, agent, offset=0, search=False):
+    message = conversation_event(event, agent)
+    if message and event.get("kind") in ("user", "assistant"):
+        message["id"] = "hax:" + str(offset) + ":" + hashlib.sha256(wire_row(event).encode("utf-8")).hexdigest()[:16]
+    tools = tool_events(event, agent, search=search)
+    if not tools or agent != "claude" or event.get("type") != "assistant":
+        return ([message] if message else []) + tools
+    content = event["message"]["content"]
     rows = []
-    for part in parts:
-        if not isinstance(part, dict):
+    start = 0
+    for index in range(len(content) + 1):
+        part_event = dict(event, message=dict(event["message"], content=content[index:index + 1]))
+        tools = tool_events(part_event, agent, search=search) if index < len(content) else []
+        if index < len(content) and not tools:
             continue
-        kind = part.get("type")
-        call = kind in ("tool_use", "function_call")
-        result = kind in ("tool_result", "function_call_output")
-        identity = part.get("id") if agent == "claude" and call else part.get("tool_use_id") if agent == "claude" else part.get("call_id")
-        if not isinstance(identity, str) or not identity:
-            continue
-        if result:
-            rows.append(dict(role="assistant", id=identity, timestamp=event.get("timestamp", ""),
-                             text="", questionResult=identity))
-        elif call and part.get("name") in ("AskUserQuestion", "request_user_input"):
-            value = part.get("input", part.get("arguments", {}))
-            if isinstance(value, str):
-                try:
-                    value = json.loads(value)
-                except ValueError:
-                    continue
-            if not isinstance(value, dict) or not isinstance(value.get("questions"), list) or not value["questions"]:
-                continue
-            questions = [dict(q, options=q.get("options") or []) if agent == "codex" and isinstance(q, dict) else q
-                         for q in value["questions"]]
-            if not all(isinstance(q, dict) and isinstance(q.get("question"), str) and q["question"].strip()
-                       and isinstance(q.get("options"), list) and (q["options"] or agent == "codex")
-                       and all(isinstance(o, dict) and isinstance(o.get("label"), str) and o["label"].strip()
-                               and isinstance(o.get("description", ""), str) for o in q["options"])
-                       and isinstance(q.get("header", ""), str) and isinstance(q.get("multiSelect", False), bool)
-                       for q in questions):
-                continue
-            rows.append(dict(role="assistant", id=identity, timestamp=event.get("timestamp", ""), text="",
-                             question=dict(provider=agent, questions=questions)))
+        text_event = dict(event, message=dict(event["message"], content=content[start:index]))
+        text = conversation_event(text_event, agent)
+        if text:
+            text["segment"] = start
+            if rows or not text["id"]:
+                stable_id = event.get("uuid") or text.get("read_id") or text["id"]
+                text["read_id"] = f"{stable_id}:text:{start}" if stable_id else ""
+                text["id"] = f"{text['id']}:text:{offset}:{start}"
+            rows.append(text)
+        rows.extend(tools)
+        start = index + 1
     return rows
 
 
@@ -744,27 +821,30 @@ def asks_question(raw, agent):
     return message is not None and message.get("role") == "user"
 
 
-def read_tail(source, size, agent, captured=None):
+def read_tail(source, size, agent, captured=None, fill=True):
+    fill = fill and ISSUE_631_TAIL_FILLS_SHOWN_BUDGET
     base, end, data = read_window(source, size, captured=captured)
-    if not IGSH_358_TAIL_STARTS_AT_QUESTION or not base or not data or any(asks_question(raw, agent) for raw in data.splitlines()):
+    if not ISSUE_358_TAIL_STARTS_AT_QUESTION or not base or (not data and not fill) or any(asks_question(raw, agent) for raw in data.splitlines()):
         return base, end, data
     start, _, older = read_window(source, base, QUESTION_SCAN_BYTES - TAIL_BYTES, captured)
     shown = 0
     offset = base
+    if fill:
+        held = sum(len(wire_row(row)) + 1 for raw in data.splitlines() for row in conversation_rows(load_line(raw), agent, base))
+        fill = fill and held < TAIL_BYTES // 2
+        fill_at = base
     for raw in reversed(older.splitlines(keepends=True)):
         offset -= len(raw)
-        event = load_line(raw)
-        message = conversation_event(event, agent)
-        if message is None:
-            shown += sum(len(wire_row(row)) + 1 for row in tool_events(event, agent))
-            if shown > TAIL_BYTES:
-                break
-            continue
-        shown += sum(len(wire_row(row)) + 1 for row in [message, *tool_events(event, agent)])
+        messages = conversation_rows(load_line(raw), agent, offset)
+        shown += sum(len(wire_row(row)) + 1 for row in messages)
         if shown > TAIL_BYTES:
             break
-        if message.get("role") == "user":
+        if any(row["role"] == "user" for row in messages):
             return offset, end, older[offset - start:] + data
+        if fill and held + shown <= TAIL_BYTES:
+            fill_at = offset
+    if fill:
+        return fill_at, end, older[fill_at - start:] + data
     return base, end, data
 
 
@@ -782,6 +862,9 @@ def status_header(source, size, agent, captured=()):
             if source.read(probe_bytes) != previous[5]:
                 previous = None
     model = usage = todos = None
+    question = None
+    question_known = False
+    completed_questions = set()
     window = 200000
     end = size
     lower = previous[0] if previous is not None else 0
@@ -791,7 +874,7 @@ def status_header(source, size, agent, captured=()):
     pending = b""
     first = True
     extra_budget = max(0, QUESTION_SCAN_BYTES - probe_bytes - sum(len(data) for _, data in captured))
-    while end > lower and remaining and (model is None or usage is None or todos is None):
+    while end > lower and remaining and (model is None or usage is None or todos is None or not question_known):
         count = min(TAIL_BYTES, end - lower, remaining)
         cached = next(((start, data) for start, data in captured if start < end <= start + len(data)), None)
         if cached is not None:
@@ -821,7 +904,8 @@ def status_header(source, size, agent, captured=()):
         for raw in reversed(parts):
             markers = (((b'"model"',) if model is None else ()) +
                        ((b'"usage"', b'token_count') if usage is None else ()) +
-                       ((b'TodoWrite', b'update_plan') if todos is None else ()))
+                       ((b'TodoWrite', b'update_plan') if todos is None else ()) +
+                       ((b'AskUserQuestion', b'request_user_input', b'tool_result', b'function_call_output') if not question_known else ()))
             if not any(marker in raw for marker in markers):
                 continue
             try:
@@ -830,6 +914,37 @@ def status_header(source, size, agent, captured=()):
                 continue
             if not isinstance(event, dict) or event.get("isSidechain"):
                 continue
+            if not question_known:
+                if agent == "claude":
+                    message = event.get("message")
+                    parts = message.get("content", []) if isinstance(message, dict) and event.get("type") in ("assistant", "user") and not any(event.get(key) for key in ("isMeta", "isCompactSummary", "isVisibleInTranscriptOnly")) else []
+                    parts = parts if isinstance(parts, list) else []
+                else:
+                    parts = [event.get("payload")] if event.get("type") == "response_item" else []
+                for part in reversed(parts):
+                    if not isinstance(part, dict):
+                        continue
+                    kind = part.get("type")
+                    if kind in ("tool_result", "function_call_output"):
+                        identity = part.get("tool_use_id") if agent == "claude" else part.get("call_id")
+                        if isinstance(identity, str):
+                            completed_questions.add(identity)
+                    elif ((agent == "claude" and kind == "tool_use" and part.get("name") == "AskUserQuestion") or
+                          (agent != "claude" and kind == "function_call" and part.get("name") == "request_user_input")):
+                        identity = part.get("id") if agent == "claude" else part.get("call_id")
+                        value = part.get("input") if agent == "claude" else part.get("arguments")
+                        if isinstance(value, str):
+                            try:
+                                value = json.loads(value)
+                            except ValueError:
+                                value = None
+                        questions = value.get("questions") if isinstance(value, dict) else None
+                        if isinstance(identity, str) and isinstance(questions, list) and questions:
+                            question = dict(id=identity, questions=questions) if identity not in completed_questions else None
+                            if question is not None and agent != "claude":
+                                question["provider"] = "codex"
+                            question_known = True
+                            break
             if agent == "claude":
                 if event.get("type") != "assistant":
                     continue
@@ -875,17 +990,23 @@ def status_header(source, size, agent, captured=()):
                         continue
                     if isinstance(value, dict) and isinstance(value.get("plan"), list):
                         todos = value["plan"]
-            if model is not None and usage is not None and todos is not None:
+            if model is not None and usage is not None and todos is not None and question_known:
                 break
     if previous is not None:
         model = previous[1] if model is None else model
         if usage is None:
             usage, window = previous[2:4]
         todos = previous[4] if todos is None else todos
-    STATUS_CACHE[key] = (scanned_end, model, usage, window, todos[:50] if todos is not None else None, probe)
+        if not question_known:
+            question = previous[6]
+            if question is not None and question["id"] in completed_questions:
+                question = None
+    STATUS_CACHE[key] = (scanned_end, model, usage, window, todos[:50] if todos is not None else None, probe, question)
     if len(STATUS_CACHE) > 256:
         del STATUS_CACHE[next(iter(STATUS_CACHE))]
     result = {"role": "status"}
+    if question is not None or previous is not None and previous[6] is not None:
+        result["question"] = question
     if model:
         display = model.removeprefix("claude-")
         match = re.match(r"(opus|sonnet|fable|haiku)-(\d+)-(\d+)", display)
@@ -906,6 +1027,242 @@ def status_header(source, size, agent, captured=()):
     return result if len(result) > 1 else None
 
 
+def queue_apply(state, event):
+    queue, sent = state
+    operation = event.get("operation")
+    content = event.get("content")
+    if operation == "enqueue" and isinstance(content, str):
+        if content.lstrip().startswith("<task-notification>"):
+            return
+        if not queue:
+            sent.clear()
+        queue.append(content)
+    elif operation in ("dequeue", "remove") and queue:
+        if isinstance(content, str) and content:
+            key = queue_key(content)
+            index = next((i for i, item in enumerate(queue) if queue_key(item) == key), None)
+            if index is None:
+                return
+        else:
+            index = 0
+        sent.append(queue.pop(index))
+        del sent[:-QUEUE_SHOWN]
+        return index
+    elif operation == "popAll":
+        queue.clear()
+        sent.clear()
+
+
+def queue_replay(source, size):
+    key = (str(Path(source.name).resolve()), os.fstat(source.fileno()).st_ino)
+    previous = QUEUE_CACHE.get(key)
+    start, state = 0, ([], [])
+    queued, receipts = [], []
+    resumed = False
+    if previous is not None and previous[0] <= size:
+        source.seek(max(0, previous[0] - 64))
+        if hashlib.sha256(source.read(min(previous[0], 64))).hexdigest() == previous[2]:
+            start, state, resumed = previous[0], (list(previous[1][0]), list(previous[1][1])), True
+            queued, receipts = list(previous[3]), list(previous[4])
+    trim = not resumed and size > QUEUE_SCAN_BYTES
+    if trim:
+        start = size - QUEUE_SCAN_BYTES
+    source.seek(start)
+    data = source.read(size - start)
+    if trim:
+        data = data[data.find(b"\n") + 1:] if b"\n" in data else b""
+        start = size - len(data)
+    end = data.rfind(b"\n") + 1
+    position = start
+    for raw in data[:end].splitlines(keepends=True):
+        position += len(raw)
+        try:
+            event = json.loads(raw)
+        except (ValueError, UnicodeDecodeError):
+            continue
+        if not isinstance(event, dict) or event.get("isSidechain"):
+            continue
+        try:
+            stamp = datetime.fromisoformat(event.get("timestamp", "").replace("Z", "+00:00")).timestamp()
+        except (ValueError, TypeError, AttributeError, OverflowError):
+            stamp = None
+        if event.get("type") == "queue-operation":
+            count = len(state[0])
+            previous_sent = list(state[1])
+            removed = queue_apply(state, event)
+            if len(state[0]) > count:
+                receipt = (state[0][-1], stamp, position)
+                queued.append(receipt)
+                receipts.append(receipt)
+            elif removed is not None:
+                receipt = queued.pop(removed)
+                if receipt not in receipts:
+                    state[1][:] = previous_sent
+            elif event.get("operation") == "popAll":
+                queued.clear()
+            continue
+        message = conversation_event(event, "claude")
+        if message is None or message["role"] != "user" or stamp is None:
+            continue
+        for i, receipt in enumerate(receipts):
+            text, queued_stamp, _ = receipt
+            if queued_stamp is None or stamp < queued_stamp or message["text"] != text:
+                continue
+            receipts.pop(i)
+            if receipt in queued:
+                state[1].append(text)
+                del state[1][:-QUEUE_SHOWN]
+            break
+    scanned = start + end
+    source.seek(max(0, scanned - 64))
+    probe = hashlib.sha256(source.read(min(scanned, 64))).hexdigest()
+    QUEUE_CACHE[key] = (scanned, state, probe, queued, receipts)
+    if len(QUEUE_CACHE) > 256:
+        del QUEUE_CACHE[next(iter(QUEUE_CACHE))]
+    return [receipt[0] for receipt in queued if receipt in receipts], state[1]
+
+
+def grey_code(params):
+    values = [int(part) if part.isdigit() else 0 for part in params.replace(":", ";").split(";")] if params else [0]
+    index = 0
+    dim = inverse = None
+    grey = None
+    while index < len(values):
+        value = values[index]
+        if value == 0:
+            dim, inverse, grey = False, False, False
+        elif value == 2:
+            dim = True
+        elif value == 22:
+            dim = False
+        elif value == 7:
+            inverse = True
+        elif value == 27:
+            inverse = False
+        elif value == 39 or 30 <= value <= 37 or 91 <= value <= 97:
+            grey = False
+        elif value == 90:
+            grey = True
+        elif value == 38 and index + 2 < len(values) and values[index + 1] == 5:
+            grey = values[index + 2] == 8 or 238 <= values[index + 2] <= 250
+            index += 2
+        elif value == 38 and index + 4 < len(values) and values[index + 1] == 2:
+            red, green, blue = values[index + 2:index + 5]
+            grey = max(red, green, blue) - min(red, green, blue) <= 8 and 60 <= red <= 190
+            index += 4
+        index += 1
+    return dim, inverse, grey
+
+
+def styled_chars(line):
+    dim = inverse = grey = False
+    result = []
+    position = 0
+    for match in ANSI.finditer(line):
+        for char in line[position:match.start()]:
+            result.append((char, dim or grey, inverse))
+        position = match.end()
+        sgr = SGR.fullmatch(match.group(0))
+        if sgr:
+            new_dim, new_inverse, new_grey = grey_code(sgr.group(1))
+            dim = dim if new_dim is None else new_dim
+            inverse = inverse if new_inverse is None else new_inverse
+            grey = grey if new_grey is None else new_grey
+    for char in line[position:]:
+        result.append((char, dim or grey, inverse))
+    return result
+
+
+def box_draft_text(shown):
+    lines = [styled_chars(line) for line in shown.splitlines()]
+    plain = ["".join(char for char, _dim, _inverse in line) for line in lines]
+    starts = [i for i, line in enumerate(plain) if line.startswith("❯")]
+    if not starts:
+        return None
+    rows = []
+    for number, i in enumerate(range(starts[-1], len(lines))):
+        if plain[i].startswith("─"):
+            break
+        rows.append(lines[i][1:] if number == 0 else lines[i])
+    kept = []
+    dimmed = False
+    for number, row in enumerate(rows):
+        if number == 0 and row and row[0][0] == " ":
+            row = row[1:]
+        elif number:
+            lead = 0
+            while lead < min(2, len(row)) and row[lead][0] == " ":
+                lead += 1
+            row = row[lead:]
+        dimmed = dimmed or any(dim for _char, dim, _inverse in row)
+        kept.append([item for item in row if not item[1]])
+    visible = [item for row in kept for item in row]
+    if dimmed and len("".join(char for char, _dim, _inverse in visible).strip()) <= 1 and all(inverse for _char, _dim, inverse in visible):
+        return ""
+    return "\n".join("".join(char for char, _dim, _inverse in row).rstrip() for row in kept).rstrip()
+
+
+def box_draft(target):
+    try:
+        shown = subprocess.run(["tmux", "capture-pane", "-p", "-e", "-J", "-t", target], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError, UnicodeError):
+        return None
+    return box_draft_text(shown) if isinstance(shown, str) else None
+
+
+def queue_envelope(text):
+    envelope = re.fullmatch(r"""\s*<(cross-session-message|task-notification)(?=[\s>])((?:[^>"']|"[^"]*"|'[^']*')*)>(.*?)</\1>\s*""", text, re.S)
+    if envelope is None:
+        return None
+    kind, attrs, body = envelope.groups()
+    if '</' + kind + '>' in body:
+        return None
+    sender = ''
+    while attrs.strip():
+        attr = re.match(r"""\s*([^=\s]+)\s*=\s*(["'])(.*?)\2(?=\s|$)""", attrs, re.S)
+        if attr is None:
+            return None
+        name, _quote, value = attr.groups()
+        if name == 'from-name' and value.strip():
+            sender = value
+        attrs = attrs[attr.end():]
+    return kind, sender, body
+
+
+def queue_key(text):
+    envelope = queue_envelope(text)
+    if envelope is None:
+        return text
+    kind, sender, body = envelope
+    return kind, html.unescape(sender), html.unescape(body).strip()
+
+
+def queue_item(text):
+    envelope = queue_envelope(text)
+    if envelope is None:
+        return text[:QUEUE_TEXT]
+    kind, sender, body = envelope
+    body = re.sub(r"""</?[A-Za-z](?:[^>"']|"[^"]*"|'[^']*')*>""", '', body.strip())
+    return dict(text=html.unescape(body)[:QUEUE_TEXT], sender='Task' if kind == 'task-notification' else html.unescape(sender or 'another session'), injected=True)
+
+
+def live_fields(source, size, tmux, shown=None, sid=None):
+    queue, sent = queue_replay(source, size)
+    fields = dict(queue=[queue_item(text) for text in queue[:QUEUE_SHOWN]], sent=[queue_item(text) for text in sent[-QUEUE_SHOWN:]])
+    if sid is not None:
+        held = held_queue_fields(tmux, sid)
+        fields["queue"] = (held["queue"] + fields["queue"])[:QUEUE_SHOWN]
+        fields["sent"] = (fields["sent"] + held["sent"])[-QUEUE_SHOWN:]
+        if held_queue_path(tmux).exists():
+            from contextlib import closing
+            with closing(held_queue_db(tmux)) as db:
+                fields["received"] = [row[0] for row in db.execute("SELECT key FROM messages WHERE sid=? AND state='delivered' AND key LIKE 'desktop-%' ORDER BY created DESC LIMIT 20", (sid,))]
+    draft = box_draft_text(shown) if shown is not None else box_draft("=" + tmux + ":")
+    if draft is not None:
+        fields["draft"] = draft[:DRAFT_TEXT]
+    return fields
+
+
 def resolve_response_path(q, source=None, as_owner=False):
     rid, agent = q["id"], "codex" if q["codex"] else "claude"
     sid, tmux, cwd = q["sid"], q["tmux"], q["cwd"]
@@ -914,14 +1271,19 @@ def resolve_response_path(q, source=None, as_owner=False):
             tmux and not TMUX_NAME.fullmatch(tmux) or not sid and not tmux or
             cwd and not Path(cwd).is_absolute()):
         raise ValueError("invalid identity")
+    follow = bool(tmux and (q.get("follow") or agent == "codex"))
     denied = False
     delegated = None
     try:
-        path = conversation_path(agent, sid, cwd) if sid else None
+        path = conversation_path(agent, sid, cwd) if sid and not follow else None
     except PermissionError:
         path, denied = None, True
-    owner = conversation_owner(cwd) if agent == "claude" and sid else None
-    if path is None and owner and owner[1] != HOME:
+    owner = conversation_owner(cwd) if agent == "claude" else None
+    if follow and owner and owner[1] != HOME and source is not None and not as_owner:
+        delegated = owner_response(dict(q, sid=""), owner, source)
+        if delegated != missing_response(q, "session transcript not found"):
+            return agent, sid, None, delegated
+    if path is None and sid and not follow and owner and owner[1] != HOME:
         try:
             path = conversation_path(agent, sid, cwd, owner[1])
         except PermissionError:
@@ -938,6 +1300,13 @@ def resolve_response_path(q, source=None, as_owner=False):
         except PermissionError:
             resolved, denied = None, True
         sid, path = resolved if resolved else ("", None)
+        if path is None and follow and q["sid"]:
+            try:
+                pinned = conversation_path(agent, q["sid"], cwd)
+                if pinned is not None and hax_session_header(pinned):
+                    sid, path = q["sid"], pinned
+            except PermissionError:
+                denied = True
         if path is None and source is not None and not as_owner:
             discovered = tmux_owner_process(agent, tmux, source)
             if discovered:
@@ -1027,13 +1396,12 @@ def search_response(q, path, agent, sid):
                         event = json.loads(raw)
                     except (ValueError, UnicodeError):
                         continue
-                    message = conversation_event(event, agent)
-                    if message and needle in message["text"].casefold():
-                        selected.add(offset)
-                    for row in tool_events(event, agent, search=True):
-                        if needle not in (row["text"] + "\n" + row["detail"]).casefold():
+                    for row in conversation_rows(event, agent, offset, search=True):
+                        if needle not in (row["text"] + "\n" + row.get("detail", "")).casefold():
                             continue
                         selected.add(offset)
+                        if not row["role"].startswith("tool"):
+                            continue
                         identity = row["id"]
                         if not identity.isascii() or any(ord(char) < 32 or char in '"\\/' for char in identity):
                             token = b""
@@ -1080,8 +1448,7 @@ def search_response(q, path, agent, sid):
             except (ValueError, UnicodeError):
                 offset = end
                 continue
-            message = conversation_event(event, agent)
-            rows = ([message] if message else []) + tool_events(event, agent, search=True)
+            rows = conversation_rows(event, agent, offset, search=True)
             for row in rows:
                 text = row.get("text", "")
                 if row["role"] == "tool":
@@ -1115,6 +1482,8 @@ def search_response(q, path, agent, sid):
                 start = max(0, match - 60)
                 hit = dict(offset=offset, end=end, role="tool" if row["role"].startswith("tool") else row["role"],
                            timestamp=row["timestamp"], snippet=text[start:start + 160])
+                if "segment" in row:
+                    hit["segment"] = row["segment"]
                 hits.append(hit)
                 if row["role"] == "tool":
                     calls[row["id"]].update(hit=hit, match_end=match + len(query))
@@ -1130,20 +1499,21 @@ def search_response(q, path, agent, sid):
     return "\n".join((header, *(wire_row(row) for row in hits), END, ""))
 
 
-def response(q, source=None, as_owner=False):
-    if IGSH_268_CHAT_FIND and "search" in q:
+def response(q, source=None, as_owner=False, resolved=None):
+    q["_held_queue_progress"] = False
+    if ISSUE_268_CHAT_FIND and "search" in q:
         query = q["search"]
         if not isinstance(query, str) or not 1 <= len(query) <= 200:
             raise ValueError("invalid search")
-    agent, sid, path, delegated = resolve_response_path(q, source, as_owner)
+    agent, sid, path, delegated = resolved or resolve_response_path(q, source, as_owner)
     if delegated is not None:
         return delegated
-    if IGSH_268_CHAT_FIND and "search" in q:
+    if ISSUE_268_CHAT_FIND and "search" in q:
         return search_response(q, path, agent, sid)
     rid, tmux = q["id"], q["tmux"]
     if agent == "claude" and tmux:
         start_held_worker(tmux, sid, path, source)
-        drain_held_queue(tmux, sid, path)
+        q["_held_queue_progress"] = bool(drain_held_queue(tmux, sid, path))
     rows, budget = [], 0
     queue_stamps = {}
     with path.open("rb") as source:
@@ -1174,8 +1544,8 @@ def response(q, source=None, as_owner=False):
             oldest = base
         else:
             mode = "delta"
-            if IGSH_345_STALE_JUMPS_TO_TAIL and not q.get("no_jump") and info.st_size - offset > 2 * SCAN_BYTES:
-                base, end, data = read_tail(source, info.st_size, agent, captured)
+            if ISSUE_345_STALE_JUMPS_TO_TAIL and not q.get("no_jump") and info.st_size - offset > 2 * SCAN_BYTES:
+                base, end, data = read_tail(source, info.st_size, agent, captured, fill=False)
                 if data:
                     jumped = True
                     mode = "tail"
@@ -1204,8 +1574,9 @@ def response(q, source=None, as_owner=False):
         consumed = base
         for raw in data.splitlines(keepends=True):
             event = load_line(raw)
-            message = conversation_event(event, agent)
-            if IGSH_349_QUEUED_STAMP_FROM_QUEUE and agent == "claude" and isinstance(event, dict):
+            messages = conversation_rows(event, agent, consumed)
+            message = next((row for row in messages if row["role"] in ("user", "assistant")), None)
+            if ISSUE_349_QUEUED_STAMP_FROM_QUEUE and agent == "claude" and isinstance(event, dict):
                 attachment = event.get("attachment") or {}
                 queued = event.get("type") == "attachment" and isinstance(attachment, dict) and attachment.get("type") == "queued_command"
                 operation = event.get("operation") if event.get("type") == "queue-operation" else None
@@ -1222,10 +1593,9 @@ def response(q, source=None, as_owner=False):
                     elif operation in ("enqueue", "remove") and stamp >= previous[0]:
                         queue_stamps[content] = (stamp, timestamp)
             if message is None and q.get("settlement"):
-                message = settlement_event(event, agent)
-            messages = ([message] if message else []) + tool_events(event, agent)
-            if q.get("questions"):
-                messages.extend(question_events(event, agent))
+                fact = settlement_event(event, agent)
+                if fact:
+                    messages.insert(0, fact)
             if q.get("source_offsets"):
                 for row in messages:
                     row.update(offset=consumed, end=consumed + len(raw))
@@ -1248,8 +1618,12 @@ def response(q, source=None, as_owner=False):
             oldest = base
             rows = rows[row_start:]
         if jumped and not rows:
-            return response(dict(q, no_jump=True), source, as_owner)
+            return response(dict(q, no_jump=True), source, as_owner, resolved)
+        if mode == "delta":
+            captured.append((base, data))
         status = status_header(source, info.st_size, agent, captured)
+        if q.get("live") is True and agent == "claude" and tmux and mode != "older":
+            status = dict(status or dict(role="status"), **live_fields(source, info.st_size, tmux, q.get("watch_screen"), sid))
         if q.get("held") is True and agent == "claude" and tmux and held_queue_path(tmux).exists():
             from contextlib import closing
             with closing(held_queue_db(tmux)) as db:
@@ -1279,7 +1653,10 @@ def prompt_box_text(target):
         shown = subprocess.run(["tmux", "capture-pane", "-p", "-e", "-J", "-t", target], capture_output=True, text=True, timeout=5).stdout
     except (OSError, subprocess.SubprocessError, UnicodeError):
         return ""
-    return (box_draft_text(shown) or "") if isinstance(shown, str) else ""
+    draft = box_draft_text(shown) if isinstance(shown, str) else None
+    if not draft:
+        return ""
+    return "\n".join(" ".join(line.split()) for line in draft.split("\n")).strip()
 
 
 def stop_response(q):
@@ -1288,103 +1665,50 @@ def stop_response(q):
     op = q.get("op", "stop")
     digit = q.get("digit")
     key = chr(digit) if op == "permission" and type(digit) is int and 49 <= digit <= 57 else "Escape"
+    keys = None
     reason = None
-    if op == "permission" and key == "Escape":
+    if op == "question":
+        values = q.get("keys")
+        if not isinstance(values, list) or not values or any(type(value) is not int or value not in (9, 13) and not 49 <= value <= 57 for value in values):
+            reason = "invalid_question_keys"
+        else:
+            keys = [key for value in values for key in (["Up", "Tab"] if value == 9 else ["Enter"] if value == 13 else [chr(value)])]
+    elif op == "permission" and key == "Escape":
         reason = "invalid_permission_digit"
-    elif not isinstance(name, str) or re.fullmatch(r"[A-Za-z0-9._:-]{1,64}", name) is None:
+    if not isinstance(name, str) or re.fullmatch(r"[A-Za-z0-9._:-]{1,64}", name) is None:
         reason = "invalid_tmux_name"
-    else:
+    if reason is None:
         try:
-            subprocess.run(["tmux", "send-keys", "-t", "=" + name + ":", key], check=True, capture_output=True, timeout=5)
+            if keys is None:
+                keys = ["C-x", "C-s"] if op == "send_queued" else ["Up"] if op == "edit_queued" else [key]
+            subprocess.run(["tmux", "send-keys", "-t", "=" + name + ":", *keys], check=True, capture_output=True, timeout=5)
         except (OSError, subprocess.SubprocessError):
             reason = "tmux_stop_failed"
     status = "error" if reason else "ok"
     return f"@mp\t{rid}\t{op}\t{status}\t{reason or '-'}\t0\n{END}\n"
 
 
-def grey_code(params):
-    values = [int(part) if part.isdigit() else 0 for part in params.replace(":", ";").split(";")] if params else [0]
-    index = 0
-    dim = inverse = None
-    grey = None
-    while index < len(values):
-        value = values[index]
-        if value == 0:
-            dim, inverse, grey = False, False, False
-        elif value == 2:
-            dim = True
-        elif value == 22:
-            dim = False
-        elif value == 7:
-            inverse = True
-        elif value == 27:
-            inverse = False
-        elif value == 39 or 30 <= value <= 37 or 91 <= value <= 97:
-            grey = False
-        elif value == 90:
-            grey = True
-        elif value == 38 and index + 2 < len(values) and values[index + 1] == 5:
-            grey = values[index + 2] == 8 or 238 <= values[index + 2] <= 250
-            index += 2
-        elif value == 38 and index + 4 < len(values) and values[index + 1] == 2:
-            red, green, blue = values[index + 2:index + 5]
-            grey = max(red, green, blue) - min(red, green, blue) <= 8 and 60 <= red <= 190
-            index += 4
-        index += 1
-    return dim, inverse, grey
+def box_is_empty(box):
+    return not box
 
 
-def styled_chars(line):
-    dim = inverse = grey = False
-    result = []
-    position = 0
-    for match in ANSI.finditer(line):
-        for char in line[position:match.start()]:
-            result.append((char, dim or grey, inverse))
-        position = match.end()
-        sgr = SGR.fullmatch(match.group(0))
-        if sgr:
-            new_dim, new_inverse, new_grey = grey_code(sgr.group(1))
-            dim = dim if new_dim is None else new_dim
-            inverse = inverse if new_inverse is None else new_inverse
-            grey = grey if new_grey is None else new_grey
-    for char in line[position:]:
-        result.append((char, dim or grey, inverse))
-    return result
-
-
-def box_draft_text(shown):
-    lines = [styled_chars(line) for line in shown.splitlines()]
-    plain = ["".join(char for char, _dim, _inverse in line) for line in lines]
-    starts = [i for i, line in enumerate(plain) if line.startswith("❯")]
-    if not starts:
-        return None
-    rows = []
-    for number, i in enumerate(range(starts[-1], len(lines))):
-        if plain[i].startswith("─"):
+def clear_prompt_box(target, box):
+    presses = 0
+    stalled = 0
+    stuck = False
+    limit = len(box) + 2
+    while not box_is_empty(box) and presses < limit:
+        subprocess.run(["tmux", "send-keys", "-t", target, "C-u"], check=True, capture_output=True, timeout=5)
+        presses += 1
+        after = prompt_box_text(target)
+        stalled = stalled + 1 if after == box else 0
+        box = after
+        if stalled == 2:
+            subprocess.run(["tmux", "send-keys", "-t", target, "C-k"], check=True, capture_output=True, timeout=5)
+            box = prompt_box_text(target)
+            stuck = True
             break
-        rows.append(lines[i][1:] if number == 0 else lines[i])
-    kept = []
-    dimmed = False
-    for number, row in enumerate(rows):
-        if number == 0 and row and row[0][0] == " ":
-            row = row[1:]
-        elif number:
-            lead = 0
-            while lead < min(2, len(row)) and row[lead][0] == " ":
-                lead += 1
-            row = row[lead:]
-        dimmed = dimmed or any(dim for _char, dim, _inverse in row)
-        kept.append([item for item in row if not item[1]])
-    visible = [item for row in kept for item in row]
-    if dimmed and len("".join(char for char, _dim, _inverse in visible).strip()) <= 1 and all(inverse for _char, _dim, inverse in visible):
-        return ""
-    return "\n".join("".join(char for char, _dim, _inverse in row).rstrip() for row in kept).rstrip()
-
-
-
-
-QUEUE_SHOWN = 8
+    return box, stuck
 
 
 def held_queue_path(tmux):
@@ -1407,6 +1731,11 @@ def held_queue_db(tmux):
         if db.execute("PRAGMA user_version").fetchone()[0] < 1:
             db.execute("UPDATE messages SET scan=origin WHERE state IN ('queued','submitted')")
             db.execute("PRAGMA user_version=1")
+        if "recovery_scan" not in {row[1] for row in db.execute("PRAGMA table_info(messages)")}:
+            db.execute("ALTER TABLE messages ADD COLUMN recovery_scan INTEGER")
+        db.execute("UPDATE messages SET recovery_scan=origin WHERE recovery_scan IS NULL")
+        if db.execute("PRAGMA user_version").fetchone()[0] < 2:
+            db.execute("PRAGMA user_version=2")
         db.execute("CREATE TABLE IF NOT EXISTS held_receipts (sid TEXT NOT NULL, inode INTEGER NOT NULL, offset INTEGER NOT NULL, key TEXT NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(sid,inode,offset))")
     return db
 
@@ -1469,10 +1798,13 @@ def held_queue_worker(tmux, sid, transcript):
                 selector.register(fd, selectors.EVENT_READ, "file")
                 selector.register(control.stdout, selectors.EVENT_READ, "tmux")
                 while True:
-                    current = resolve_tmux_agent("claude", tmux)
+                    current = resolve_tmux_agent("claude", tmux, require_bound=True)
                     if current is None or current[0] != sid or Path(current[1]) != Path(transcript):
                         return
-                    drain_held_queue(tmux, sid, transcript)
+                    progressing = drain_held_queue(tmux, sid, transcript)
+                    if progressing:
+                        time.sleep(0.01)
+                        continue
                     with closing(held_queue_db(tmux)) as db:
                         pending = db.execute("SELECT 1 FROM messages WHERE sid=? AND state IN ('queued','submitted') LIMIT 1", (sid,)).fetchone()
                     if not pending:
@@ -1504,7 +1836,7 @@ def enqueue_response(q, source=None):
     from contextlib import closing
     key = held_message_key(q)
     name = q["tmux"]
-    resolved = resolve_tmux_agent("claude", name)
+    resolved = resolve_tmux_agent("claude", name, require_bound=True)
     if not resolved:
         return f"@mp\t{q['id']}\tsend\terror\tagent_unavailable\t0\n{END}\n"
     sid, transcript = resolved
@@ -1512,6 +1844,7 @@ def enqueue_response(q, source=None):
     with closing(held_queue_db(name)) as db, db:
         db.execute("INSERT OR IGNORE INTO messages(key,sid,text,queued_at,state,created,origin,source_inode) VALUES (?,?,?,?,'queued',?,?,?)",
                    (key, sid, q["text"], q["queued_at"], time.time_ns(), info.st_size, info.st_ino))
+        db.execute("UPDATE messages SET scan=origin WHERE key=? AND state='queued' AND scan=0", (key,))
     start_held_worker(name, sid, transcript, source)
     drain_held_queue(name, sid, transcript)
     with closing(held_queue_db(name)) as db:
@@ -1566,17 +1899,19 @@ def drain_held_queue(tmux, sid, transcript):
     if not held_queue_path(tmux).exists():
         return
     with closing(held_queue_db(tmux)) as db:
-        current = resolve_tmux_agent("claude", tmux)
+        current = resolve_tmux_agent("claude", tmux, require_bound=True)
         if current is None or current[0] != sid or Path(current[1]) != Path(transcript):
             return
         with transcript.open("rb") as source, db:
             db.execute("BEGIN IMMEDIATE")
             info = os.fstat(source.fileno())
-            pending = db.execute("SELECT key,text,scan,origin,source_inode,state,created FROM messages WHERE sid=? AND state IN ('submitted','queued') ORDER BY CASE state WHEN 'submitted' THEN 0 ELSE 1 END,created", (sid,)).fetchall()
+            db.execute("UPDATE messages SET recovery_scan=origin WHERE recovery_scan IS NULL")
+            pending = db.execute("SELECT key,text,recovery_scan,origin,source_inode,state,created FROM messages WHERE sid=? AND state IN ('submitted','queued') ORDER BY CASE state WHEN 'submitted' THEN 0 ELSE 1 END,created", (sid,)).fetchall()
             if any(inode != info.st_ino or origin > info.st_size or scan > info.st_size for _, _, scan, origin, inode, _, _ in pending):
                 return
             deferred = []
             unfinished = False
+            progressing = False
             delivered = db.execute("SELECT text,created,source_inode,origin FROM messages WHERE sid=? AND state='delivered'", (sid,)).fetchall()
             for key, text, scanned, origin, inode, state, created in pending:
                 claim = db.execute("SELECT offset,digest FROM held_receipts WHERE key=? AND sid=? AND inode=? AND offset>=? ORDER BY offset LIMIT 1", (key, sid, inode, origin)).fetchone()
@@ -1587,14 +1922,14 @@ def drain_held_queue(tmux, sid, transcript):
                     if not raw.endswith(b"\n") or hashlib.sha256(raw).hexdigest() != digest:
                         return
                     event = load_line(raw)
-                    if not isinstance(event, dict) or event.get("type") not in ("user", "attachment") or event.get("isSidechain") or not any(row["role"] == "user" and row["text"].replace("\r", "").rstrip(" ") == text.replace("\r", "").rstrip(" ") for row in [conversation_event(event, "claude")] if row):
+                    if not isinstance(event, dict) or event.get("type") not in ("user", "attachment") or event.get("isSidechain") or not any(row["role"] == "user" and row["text"].replace("\r", "").rstrip(" ") == text.replace("\r", "").rstrip(" ") for row in conversation_rows(event, "claude", offset)):
                         return
                     if state == "submitted":
                         delivered.append((text, created, inode, origin))
                         deferred.append((offset + len(raw), event.get("timestamp", ""), key))
                     else:
                         delivered.append((text, created, inode, origin))
-                        db.execute("UPDATE messages SET scan=?,state='delivered',receipt=? WHERE key=? AND state='queued'", (offset + len(raw), event.get("timestamp", ""), key))
+                        db.execute("UPDATE messages SET scan=?1,recovery_scan=?1,state='delivered',receipt=?2 WHERE key=?3 AND state='queued'", (offset + len(raw), event.get("timestamp", ""), key))
                     continue
                 scanned = max(scanned, origin)
                 source.seek(scanned)
@@ -1609,7 +1944,7 @@ def drain_held_queue(tmux, sid, transcript):
                     consumed += len(raw)
                     event = load_line(raw)
                     if isinstance(event, dict) and event.get("type") in ("user", "attachment") and not event.get("isSidechain"):
-                        if any(row["role"] == "user" and row["text"].replace("\r", "").rstrip(" ") == text.replace("\r", "").rstrip(" ") for row in [conversation_event(event, "claude")] if row):
+                        if any(row["role"] == "user" and row["text"].replace("\r", "").rstrip(" ") == text.replace("\r", "").rstrip(" ") for row in conversation_rows(event, "claude", offset)):
                             owner = db.execute("SELECT key FROM held_receipts WHERE sid=? AND inode=? AND offset=?", (sid, inode, offset)).fetchone()
                             if owner and owner[0] != key:
                                 continue
@@ -1627,22 +1962,23 @@ def drain_held_queue(tmux, sid, transcript):
                     deferred.append((consumed, receipt, key))
                 elif receipt is not None:
                     delivered.append((text, created, inode, origin))
-                    db.execute("UPDATE messages SET scan=?,state='delivered',receipt=? WHERE key=? AND state='queued'", (consumed, receipt, key))
+                    db.execute("UPDATE messages SET scan=?1,recovery_scan=?1,state='delivered',receipt=?2 WHERE key=?3 AND state='queued'", (consumed, receipt, key))
                 else:
-                    db.execute("UPDATE messages SET scan=? WHERE key=? AND state=?", (consumed, key, state))
+                    progressing |= consumed > scanned
+                    db.execute("UPDATE messages SET scan=?1,recovery_scan=?1 WHERE key=?2 AND state=?3 AND (scan!=?1 OR recovery_scan!=?1)", (consumed, key, state))
                     if consumed < info.st_size:
                         unfinished = True
             if unfinished:
-                return
+                return progressing
             for consumed, receipt, key in deferred:
-                db.execute("UPDATE messages SET scan=?,state='delivered',receipt=? WHERE key=? AND state='submitted'", (consumed, receipt, key))
+                db.execute("UPDATE messages SET scan=?1,recovery_scan=?1,state='delivered',receipt=?2 WHERE key=?3 AND state='submitted'", (consumed, receipt, key))
             if db.execute("SELECT 1 FROM messages WHERE sid=? AND state='submitted' LIMIT 1", (sid,)).fetchone():
                 return
             if not db.execute("SELECT 1 FROM messages WHERE sid=? AND state='queued' LIMIT 1", (sid,)).fetchone():
                 return
         if not held_queue_ready(tmux, transcript):
             return
-        current = resolve_tmux_agent("claude", tmux)
+        current = resolve_tmux_agent("claude", tmux, require_bound=True)
         if current is None or current[0] != sid or Path(current[1]) != Path(transcript):
             return
         with db:
@@ -1654,9 +1990,9 @@ def drain_held_queue(tmux, sid, transcript):
                 return
             key, text, inode = pending
             info = transcript.stat()
-            if info.st_ino != inode or db.execute("SELECT 1 FROM messages WHERE sid=? AND state='queued' AND (source_inode!=? OR scan<?) LIMIT 1", (sid, info.st_ino, info.st_size)).fetchone():
+            if info.st_ino != inode or db.execute("SELECT 1 FROM messages WHERE sid=? AND state='queued' AND (source_inode!=? OR recovery_scan IS NULL OR recovery_scan<?) LIMIT 1", (sid, info.st_ino, info.st_size)).fetchone():
                 return
-            db.execute("UPDATE messages SET state='submitted',scan=? WHERE key=? AND state='queued'", (info.st_size, key))
+            db.execute("UPDATE messages SET state='submitted',scan=?1,recovery_scan=?1 WHERE key=?2 AND state='queued'", (info.st_size, key))
         try:
             result = send_response(dict(id=0, tmux=tmux, text=text))
             failure = "Terminal handoff failed; receipt not confirmed" if "\tsend\terror\t" in result else ""
@@ -1689,29 +2025,76 @@ def send_response(q):
     else:
         try:
             target = "=" + name + ":"
-            wanted = " ".join(text.split())
-            if wanted and wanted in prompt_box_text(target):
+            wanted = "".join(text.split())
+            box = prompt_box_text(target)
+            if wanted and wanted == "".join(box.split()):
                 pass
-            elif "\n" in text or "\r" in text:
-                buffer = "mp-send-" + str(os.getpid()) + "-" + str(rid)
-                subprocess.run(["tmux", "load-buffer", "-b", buffer, "-"], input=text.encode("utf-8"), check=True, capture_output=True, timeout=5)
-                try:
-                    pasted = subprocess.run(["tmux", "paste-buffer", "-p", "-d", "-b", buffer, "-t", target], capture_output=True, timeout=5)
-                    if pasted.returncode:
-                        subprocess.run(["tmux", "send-keys", "-t", target, "-l", "--", text], check=True, capture_output=True, timeout=5)
-                finally:
-                    subprocess.run(["tmux", "delete-buffer", "-b", buffer], capture_output=True, timeout=5)
             else:
-                subprocess.run(["tmux", "send-keys", "-t", target, "-l", "--", text], check=True, capture_output=True, timeout=5)
-            time.sleep(0.15)
-            subprocess.run(["tmux", "send-keys", "-t", target, "Enter"], check=True, capture_output=True, timeout=5)
-            time.sleep(0.4)
-            if wanted and wanted in prompt_box_text(target):
+                box, stuck = clear_prompt_box(target, box)
+                if not stuck and not box_is_empty(box):
+                    reason = "box_not_clear"
+                if reason is None:
+                    if "\n" in text or "\r" in text:
+                        buffer = "mp-send-" + str(os.getpid()) + "-" + str(rid)
+                        subprocess.run(["tmux", "load-buffer", "-b", buffer, "-"], input=text.encode("utf-8"), check=True, capture_output=True, timeout=5)
+                        try:
+                            pasted = subprocess.run(["tmux", "paste-buffer", "-p", "-d", "-b", buffer, "-t", target], capture_output=True, timeout=5)
+                            if pasted.returncode:
+                                subprocess.run(["tmux", "send-keys", "-t", target, "-l", "--", text], check=True, capture_output=True, timeout=5)
+                        finally:
+                            subprocess.run(["tmux", "delete-buffer", "-b", buffer], capture_output=True, timeout=5)
+                    else:
+                        subprocess.run(["tmux", "send-keys", "-t", target, "-l", "--", text], check=True, capture_output=True, timeout=5)
+            if reason is None:
+                time.sleep(0.15)
                 subprocess.run(["tmux", "send-keys", "-t", target, "Enter"], check=True, capture_output=True, timeout=5)
+                time.sleep(0.4)
+                if wanted and wanted in "".join(prompt_box_text(target).split()):
+                    subprocess.run(["tmux", "send-keys", "-t", target, "Enter"], check=True, capture_output=True, timeout=5)
         except (OSError, subprocess.SubprocessError, UnicodeError):
             reason = "tmux_send_failed"
     status = "error" if reason else "ok"
-    return f"@mp\t{rid}\tsend\t{status}\t{reason or '-'}\t0\n{END}\n"
+    op = "question_text" if q.get("op") == "question_text" else "send"
+    return f"@mp\t{rid}\t{op}\t{status}\t{reason or '-'}\t0\n{END}\n"
+
+
+def type_into_box(target, text, rid):
+    if "\n" in text or "\r" in text:
+        buffer = "mp-draft-" + str(os.getpid()) + "-" + str(rid)
+        subprocess.run(["tmux", "load-buffer", "-b", buffer, "-"], input=text.encode("utf-8"), check=True, capture_output=True, timeout=5)
+        try:
+            pasted = subprocess.run(["tmux", "paste-buffer", "-p", "-d", "-b", buffer, "-t", target], capture_output=True, timeout=5)
+            if pasted.returncode:
+                subprocess.run(["tmux", "send-keys", "-t", target, "-l", "--", text], check=True, capture_output=True, timeout=5)
+        finally:
+            subprocess.run(["tmux", "delete-buffer", "-b", buffer], capture_output=True, timeout=5)
+    else:
+        subprocess.run(["tmux", "send-keys", "-t", target, "-l", "--", text], check=True, capture_output=True, timeout=5)
+
+
+def draft_response(q):
+    rid = q.get("id", 0)
+    name = q.get("tmux")
+    text = q.get("text")
+    reason = None
+    if not isinstance(name, str) or re.fullmatch(r"[A-Za-z0-9._:-]{1,64}", name) is None:
+        reason = "invalid_tmux_name"
+    elif not isinstance(text, str) or "\x00" in text or len(text) > DRAFT_TEXT:
+        reason = "invalid_text"
+    else:
+        try:
+            target = "=" + name + ":"
+            box = box_draft(target)
+            if box is None or box.strip() != text.strip():
+                box, _ = clear_prompt_box(target, prompt_box_text(target))
+                if not box_is_empty(box):
+                    reason = "box_not_clear"
+                elif text:
+                    type_into_box(target, text, rid)
+        except (OSError, subprocess.SubprocessError, UnicodeError):
+            reason = "tmux_draft_failed"
+    status = "error" if reason else "ok"
+    return f"@mp\t{rid}\tdraft\t{status}\t{reason or '-'}\t0\n{END}\n"
 
 
 def settle_unchained(target):
@@ -1811,6 +2194,196 @@ def settle_response(q, source=None, as_owner=False):
         return error("read_failed")
 
 
+def watch_changes(q, resolved, source, as_owner):
+    import ctypes
+    import selectors
+    import struct
+
+    agent, sid, path, delegated = resolved
+    libc = ctypes.CDLL(None, use_errno=True)
+    libc.inotify_init1.argtypes = [ctypes.c_int]
+    libc.inotify_add_watch.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32]
+    fd = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
+    if fd < 0:
+        raise OSError(ctypes.get_errno(), "inotify_init1")
+    control = None
+    control_buffer = b""
+    attached = False
+
+    def capture():
+        nonlocal control_buffer, attached
+        control.stdin.write(("capture-pane -p -e -J -t =" + q["tmux"] + ":\n").encode())
+        control.stdin.flush()
+        block = None
+        rows = []
+        while True:
+            while b"\n" not in control_buffer:
+                output = os.read(control.stdout.fileno(), 65536)
+                if not output:
+                    raise OSError("tmux control closed")
+                control_buffer += output
+            line, control_buffer = control_buffer.split(b"\n", 1)
+            if not attached:
+                if line.startswith(b"%end "):
+                    attached = True
+            elif block is None:
+                if line.startswith(b"%begin "):
+                    block = line[7:]
+            elif line == b"%end " + block:
+                return b"\n".join(rows).decode("utf-8", "replace")
+            elif line == b"%error " + block:
+                raise OSError("tmux capture failed")
+            else:
+                rows.append(line)
+
+    def refresh_screen():
+        if control is not None:
+            started = time.perf_counter_ns()
+            q["watch_screen"] = capture()
+            q["watch_capture_us"] = (time.perf_counter_ns() - started) // 1000
+
+    def refresh_codex_binding():
+        nonlocal resolved, agent, sid, path, delegated
+        if agent != "codex" or not q.get("tmux"):
+            return True
+        latest = resolve_response_path(dict(q, follow=True), source, as_owner)
+        if latest[2] is None:
+            resolved = latest
+            return False
+        if latest[2] != path:
+            resolved = latest
+            agent, sid, path, delegated = latest
+            q["sid"] = sid
+            if libc.inotify_add_watch(fd, os.fsencode(path.parent), 0x00000FCE) < 0:
+                raise OSError(ctypes.get_errno(), "inotify_add_watch")
+        return True
+
+    try:
+        if libc.inotify_add_watch(fd, os.fsencode(path.parent), 0x00000FCE) < 0:
+            raise OSError(ctypes.get_errno(), "inotify_add_watch")
+        metadata = HOME / ".claude/sessions"
+        metadata_watch = (libc.inotify_add_watch(fd, os.fsencode(metadata), 0x00000FCE)
+                          if agent == "claude" and q.get("tmux") and metadata.is_dir() else -1)
+        with selectors.DefaultSelector() as selector:
+            selector.register(fd, selectors.EVENT_READ, "file")
+            selector.register(sys.stdin.fileno(), selectors.EVENT_READ, "input")
+            if as_owner:
+                q["watch_screen"] = ""
+            if q.get("tmux") and not as_owner:
+                control = subprocess.Popen(["tmux", "-C", "attach-session", "-f", "read-only,ignore-size", "-t", "=" + q["tmux"]],
+                                           stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                selector.register(control.stdout, selectors.EVENT_READ, "tmux")
+            refresh_screen()
+            yield resolved
+            while True:
+                changed = False
+                screen_changed = False
+                if b"\n" in control_buffer:
+                    lines = control_buffer.split(b"\n")
+                    control_buffer = lines.pop()
+                    changed = any(line.startswith((b"%output ", b"%extended-output ")) for line in lines)
+                    if changed:
+                        refresh_screen()
+                        bound = refresh_codex_binding()
+                        yield resolved
+                        if not bound:
+                            return
+                        continue
+                for key, _mask in selector.select():
+                    if key.data == "input":
+                        if not os.read(key.fd, 4096):
+                            return
+                    elif key.data == "tmux":
+                        output = os.read(key.fd, 65536)
+                        if not output:
+                            return
+                        control_buffer += output
+                        lines = control_buffer.split(b"\n")
+                        control_buffer = lines.pop()
+                        screen_changed = screen_changed or any(line.startswith((b"%output ", b"%extended-output ")) for line in lines)
+                        changed = changed or screen_changed
+                    else:
+                        events = os.read(fd, 65536)
+                        at = 0
+                        while at + 16 <= len(events):
+                            _wd, mask, _cookie, length = struct.unpack_from("iIII", events, at)
+                            name = os.fsdecode(events[at + 16:at + 16 + length].split(b"\0", 1)[0])
+                            at += 16 + length
+                            if mask & 0x4000 or name == path.name:
+                                changed = True
+                            elif q.get("tmux") and mask & 0x18A and (name.endswith(".jsonl") or _wd == metadata_watch and name.endswith(".json")):
+                                latest = resolve_response_path(dict(q, follow=True), source, as_owner)
+                                if latest[2] is None and as_owner:
+                                    return
+                                if latest[2] is not None and latest[2] != path:
+                                    resolved = latest
+                                    agent, sid, path, delegated = latest
+                                    q["sid"] = sid
+                                    if libc.inotify_add_watch(fd, os.fsencode(path.parent), 0x00000FCE) < 0:
+                                        raise OSError(ctypes.get_errno(), "inotify_add_watch")
+                                    changed = True
+                if changed:
+                    if screen_changed:
+                        refresh_screen()
+                    bound = refresh_codex_binding()
+                    yield resolved
+                    if not bound:
+                        return
+    finally:
+        os.close(fd)
+        if control is not None:
+            control.terminate()
+            control.communicate()
+
+
+def watch(source, as_owner=False):
+    q = json.loads(sys.stdin.buffer.readline())
+    owner = conversation_owner(q.get("cwd", "")) if not q.get("codex") else None
+    if not as_owner and q.get("tmux"):
+        discovered = tmux_owner_process("codex" if q.get("codex") else "claude", q["tmux"], source)
+        if discovered:
+            owner = discovered[1]
+            q = dict(q, discovery_pid=discovered[0])
+    if owner and owner[1] != HOME and not as_owner:
+        bootstrap = "import base64,sys;exec(base64.b64decode(sys.stdin.buffer.readline()))"
+        child = subprocess.Popen(["sudo", "-n", "-H", "-u", owner[0], "--", "python3", "-u", "-c", bootstrap, "--watch", "--owner"], stdin=subprocess.PIPE)
+        try:
+            child.stdin.write(base64.b64encode(source.encode()) + b"\n" + json.dumps(q).encode() + b"\n")
+            child.stdin.flush()
+            while os.read(sys.stdin.fileno(), 4096):
+                pass
+        finally:
+            child.stdin.close()
+            child.wait()
+        return
+    resolved = resolve_response_path(q, source, as_owner)
+    agent, sid, path, delegated = resolved
+    if delegated is not None or path is None:
+        print(json.dumps(dict(id=q["id"], wire=delegated or missing_response(q, "session transcript not found"))), flush=True)
+        return
+    q = dict(q, sid=sid, follow=False)
+    previous = None
+    for resolved in watch_changes(q, resolved, source, as_owner):
+        while True:
+            started = time.perf_counter_ns() - q.pop("watch_capture_us", 0) * 1000
+            wire = response(q, source, as_owner, resolved)
+            fields = wire.split("\n", 1)[0].split("\t")
+            if fields[3] != "ok":
+                print(json.dumps(dict(id=q["id"], wire=wire)), flush=True)
+                return
+            signature = (fields[4], fields[6], fields[7], fields[12], tuple(line for line in wire.splitlines()[1:-1] if json.loads(line).get("role") == "status"))
+            if signature != previous:
+                frame = dict(id=q["id"], wire=wire, read_us=(time.perf_counter_ns() - started) // 1000)
+                print(json.dumps(frame, separators=(",", ":")), flush=True)
+                previous = signature
+            q.update(cached_sid=fields[4], offset=int(fields[6]), inode=int(fields[7]),
+                     mtime=int(fields[11]), probe=fields[12], start=int(fields[14]), before=0)
+            if fields[8] != "1":
+                if not q["_held_queue_progress"]:
+                    break
+                time.sleep(0.01)
+
+
 def serve(source):
     for line in sys.stdin.buffer:
         query = None
@@ -1823,11 +2396,13 @@ def serve(source):
             if type(rid) is not int or rid < 0:
                 rid = 0
                 raise ValueError("invalid request id")
-            if query.get("op") == "send":
+            if query.get("op") in ("send", "question_text"):
                 wire = enqueue_response(query, source) if "message_id" in query else send_response(query)
             elif query.get("op") == "cancel_queued":
                 wire = cancel_queued_response(query)
-            elif query.get("op") in ("stop", "permission"):
+            elif query.get("op") == "draft":
+                wire = draft_response(query)
+            elif query.get("op") in ("stop", "permission", "question", "send_queued", "edit_queued"):
                 wire = stop_response(query)
             elif query.get("op") == "settle":
                 wire = settle_response(query, source)
@@ -1838,7 +2413,9 @@ def serve(source):
         print(json.dumps(dict(id=rid, wire=wire), separators=(",", ":")), flush=True)
 
 
-if __name__ == "__main__" and sys.argv[1:2] == ["--held-worker"]:
+if __name__ == "__main__" and "--watch" in sys.argv[1:]:
+    watch(globals().get("READER_SOURCE"), "--owner" in sys.argv[1:])
+elif __name__ == "__main__" and sys.argv[1:2] == ["--held-worker"]:
     held_queue_worker(sys.argv[2], sys.argv[3], Path(sys.argv[4]))
 elif __name__ == "__main__" and sys.argv[1:] == ["--serve"]:
     serve(globals().get("READER_SOURCE"))
@@ -1848,7 +2425,7 @@ elif __name__ == "__main__":
 
         if "--discover" in sys.argv[2:]:
             pid = agent_pid_for_panes(query["panes"], local_ssh_process_table(), query["agent"])
-            user = pwd.getpwuid(Path(f"/proc/{pid}").stat().st_uid) if pid is not None else None
+            user = pwd.getpwuid(Path(f"/proc/{pid}").stat().st_uid) if pid is not None and pwd is not None else None
             print(json.dumps(dict(pid=pid, user=user.pw_name) if user else None))
         else:
             handler = settle_response if query.get("op") == "settle" else response

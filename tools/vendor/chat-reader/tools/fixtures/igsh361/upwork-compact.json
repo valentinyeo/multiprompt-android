@@ -1,0 +1,81 @@
+{
+ "source": "UPWORK session transcript on project-vps, 2026-10-17: last real answer, the compact boundary and the compaction summary record (body omitted)",
+ "records": [
+  {
+   "type": "system",
+   "subtype": "compact_boundary",
+   "timestamp": "2026-10-03T15:36:28.273Z",
+   "isMeta": false
+  },
+  {
+   "type": "user",
+   "timestamp": "2026-10-03T15:36:28.264Z",
+   "isCompactSummary": true,
+   "isVisibleInTranscriptOnly": true,
+   "message": {
+    "role": "user",
+    "content": "This session is being continued from a previous conversation that ran out of context. (summary body omitted)"
+   }
+  },
+  {
+   "type": "system",
+   "subtype": "compact_boundary",
+   "timestamp": "2026-10-14T17:59:25.689Z"
+  },
+  {
+   "type": "user",
+   "timestamp": "2026-10-14T17:59:25.437Z",
+   "isCompactSummary": true,
+   "isVisibleInTranscriptOnly": true,
+   "message": {
+    "role": "user",
+    "content": "This session is being continued from a previous conversation that ran out of context. (summary body omitted)"
+   }
+  },
+  {
+   "type": "system",
+   "subtype": "compact_boundary",
+   "timestamp": "2026-10-15T18:21:27.464Z",
+   "isMeta": false
+  },
+  {
+   "type": "user",
+   "timestamp": "2026-10-15T18:21:27.459Z",
+   "isCompactSummary": true,
+   "isVisibleInTranscriptOnly": true,
+   "message": {
+    "role": "user",
+    "content": "This session is being continued from a previous conversation that ran out of context. (summary body omitted)"
+   }
+  },
+  {
+   "type": "assistant",
+   "timestamp": "2026-10-17T18:09:36.926Z",
+   "message": {
+    "role": "assistant",
+    "content": [
+     {
+      "type": "text",
+      "text": "**Yes, I've sent 3 more proposals, so 12 are live now.** None of them used a boost, as the rules say.\n\n- **Stoopid Energy (energy drinks):** $500 fixed, 18 Connects. I looked at their site and said the first fixes would be:\n  - Their homepage shows no product or price.\n  - The footer still says \"prelaunch waitlist\".\n  - The 24-pack never shows that it's cheaper per can.\n\n  https://www.upwork.com/jobs/~022111463090578451797\n- **Australian sales job:** $95/hr, 18 Connects. I asked them for the store link and one of their ads. https://www.upwork.com/jobs/~022111459459708784225\n- **Veriheal CRO Lead trial:** $95/hr, 20 Connects. I wrote to Grant, the contact named in their reviews, with 2 fixes from their Louisiana page and said up front that our rate is above theirs. One risk: they've already made someone an offer. https://www.upwork.com/jobs/~022111115492959639925\n- **233 Connects left.**\n\nThe records are saved in the repo. Saving them broke an automatic check because I'd stored summaries instead of the letters as sent. I fixed it and all checks pass now.\n\n**Next:** I check for replies tomorrow morning, and any reply becomes a ticket on the Acquisition board. Your call is still open: should the scan run every 2 hours so we apply within the first hour of a job going up?"
+     }
+    ]
+   }
+  },
+  {
+   "type": "system",
+   "subtype": "compact_boundary",
+   "timestamp": "2026-10-17T19:04:06.325Z",
+   "isMeta": false
+  },
+  {
+   "type": "user",
+   "timestamp": "2026-10-17T19:04:06.319Z",
+   "isCompactSummary": true,
+   "isVisibleInTranscriptOnly": true,
+   "message": {
+    "role": "user",
+    "content": "This session is being continued from a previous conversation that ran out of context. (summary body omitted)"
+   }
+  }
+ ]
+}
