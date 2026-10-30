@@ -2307,8 +2307,17 @@ def message_store_transaction(q):
         if op == 'message_dismiss':
             token = q.get('message_id')
             row = db.execute('SELECT * FROM shared_messages WHERE id=? AND provider=? AND sid=?', (token, provider, sid)).fetchone()
-            if not row or row[9] != epoch:
-                raise ValueError('message not found')
+            if not row:
+                text = q.get('text')
+                if not isinstance(token, str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,80}', token) or not isinstance(text, str) or '\x00' in text or db.execute('SELECT 1 FROM shared_messages WHERE id=?', (token,)).fetchone():
+                    raise ValueError('message not found')
+                position = db.execute('SELECT COALESCE(MAX(position),0)+1 FROM shared_messages WHERE provider=? AND sid=?', (provider, sid)).fetchone()[0]
+                db.execute("INSERT INTO shared_messages VALUES (?,?,?,?,?,?,'cancelled',NULL,NULL,?,?)", (token, provider, sid, text, position, uuid.uuid4().hex, epoch, time.time()))
+                row = db.execute('SELECT * FROM shared_messages WHERE id=?', (token,)).fetchone()
+                seq = message_event(db, provider, sid, message_row(row))
+                return dict(message=message_row(row), epoch=epoch, seq=seq)
+            if row[9] != epoch:
+                return dict(message=dict(message_row(row), state='cancelled'), epoch=epoch, seq=seq)
             if row[6] in ('queued', 'failed'):
                 db.execute("UPDATE shared_messages SET state='cancelled',deadline=NULL WHERE id=? AND epoch=? AND state IN ('queued','failed')", (token, epoch))
                 row = db.execute('SELECT * FROM shared_messages WHERE id=?', (token,)).fetchone()
@@ -3336,7 +3345,7 @@ elif __name__ == "__main__":
 
 '''
 READER_SOURCE = 'CONNECTOR_SOURCES = ' + repr(globals().get('CONNECTOR_SOURCES', {})) + '\n' + READER_SOURCE
-RUNTIME_GENERATION = 20
+RUNTIME_GENERATION = 21
 
 if __name__ == '__main__':
     import fcntl

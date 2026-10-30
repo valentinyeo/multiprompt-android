@@ -129,6 +129,13 @@ internal fun ChatHistoryView(
         }.forEach { entry ->
             KitSecondaryButton("Send again", onClick = { hiddenRetry = entry.id to history.actionToken() })
         }
+        state.unresolved.filter { entry -> managed && entry.operation == "dismiss" && entry.text != null &&
+            state.unresolved.none { it.operation == "submit" && it.sameChat(entry.account, entry.scope) && it.messageId == entry.messageId && it.text == entry.text } &&
+            (state.replica?.messages?.get(entry.messageId) == null ||
+                state.replica?.messages?.get(entry.messageId)?.state == dev.multiprompt.companion.reader.MessageProtocol.State.CANCELLED)
+        }.forEach { entry ->
+            KitSecondaryButton("Remove", onClick = { val token = history.actionToken(); actionScope.launch { showResult(history.removeUnknown(entry.id, token)) } })
+        }
         if (state.retrying) {
             Text(
                 "Disconnected · retrying",
@@ -173,6 +180,7 @@ internal fun ChatHistoryView(
                     "replay" -> actionScope.launch { showResult(history.replayUnknown(requireNotNull(message.unknownId), token)) }
                     "retry" -> retryRow = message.sharedRow?.let { it to token }
                     "dismiss" -> actionScope.launch { showResult(history.dismiss(requireNotNull(message.sharedRow), token)) }
+                    "removeUnknown" -> actionScope.launch { showResult(history.removeUnknown(requireNotNull(message.unknownId), token)) }
                 }
             } else null,
             sharedEpoch = state.replica?.epoch,
@@ -302,14 +310,20 @@ internal fun ChatHistoryList(
                     } else null)
                 if (onSharedAction != null) {
                     if (message.unknownId != null) {
+                        val original = unresolved.firstOrNull { it.id == message.unknownId && it.operation == "submit" }
+                        val cancelling = original != null && unresolved.any { it.operation == "dismiss" && it.sameChat(original.account, original.scope) && it.messageId == message.requestId && it.text == message.text }
                         KitSecondaryButton("Check status", onClick = { onSharedAction(message, "status") })
-                        KitSecondaryButton("Send again", onClick = { onSharedAction(message, "replay") })
+                        if (!cancelling) KitSecondaryButton("Send again", onClick = { onSharedAction(message, "replay") })
+                        KitSecondaryButton("Remove", onClick = { onSharedAction(message, "removeUnknown") })
                     }
                     val row = message.sharedRow
-                    val uncertain = unresolved.firstOrNull { it.messageId == row?.id && it.operation in setOf("retry", "dismiss") }
+                    val uncertain = unresolved.firstOrNull { it.messageId == row?.id && it.operation in setOf("retry", "dismiss") &&
+                        (it.text == null || it.text == row?.text) }
                     if (uncertain != null) {
                         val recovery = message.copy(unknownId = uncertain.id)
-                        KitSecondaryButton(if (uncertain.operation == "retry") "Send again" else "Remove", onClick = { onSharedAction(recovery, "replay") })
+                        KitSecondaryButton(if (uncertain.operation == "retry") "Send again" else "Remove", onClick = {
+                            onSharedAction(recovery, if (uncertain.operation == "dismiss" && uncertain.text != null) "removeUnknown" else "replay")
+                        })
                     } else if (row != null && row.epoch == sharedEpoch) {
                         if (row.state == dev.multiprompt.companion.reader.MessageProtocol.State.FAILED)
                             KitSecondaryButton("Send again", onClick = { onSharedAction(message, "retry") })

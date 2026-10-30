@@ -1,5 +1,5 @@
 7b6c38cee8aca2d8418d3c19f416804e4b835619e45bed2a6b1a845a55e12963  tools/chat-bench/reader-service.py
-2732cb8d8fad807c362946601f3ccc7059f331811926fcdc7aa760adf07fb4a9  tools/chat-history-reader-test.py
+19a16cb66d1e0c1a8e91b646f6ff45e76afce59e7ea7cfa24c24a45e6c23800b  tools/chat-history-reader-test.py
 aae1a19639c9ea7f046e2d40559c53dda46aa8c93b412b179abc5e16ad9b16ef  tools/chat-shared-runtime.test.py
 6b8fea5966b38bae0b11e4b18a1a67615cff25abcba90d09ba32af1881359f8b  tools/chat-transcript-reconcile.test.py
 12c787e59bc1b4a9f01bba4f096ed318eeb7811f920ceb3cf18478005892e5f1  tools/check-red-run.mjs

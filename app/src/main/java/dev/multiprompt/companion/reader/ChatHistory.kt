@@ -86,7 +86,7 @@ data class ChatHistory(
                 pending = row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT),
                 delivery = row.state.name.lowercase().replaceFirstChar { it.uppercase() }, sharedRow = row)
         }
-        val unknown = unresolved.filter { it.operation == "submit" && replica?.messages?.containsKey(it.messageId) != true }.map { entry ->
+        val unknown = unresolved.filter { entry -> entry.operation == "submit" && replica?.messages?.get(entry.messageId)?.text != entry.text }.map { entry ->
             ChatHistoryMessage("@unknown:${entry.id}", "user", entry.text.orEmpty(), "", 0, 0, entry.messageId,
                 delivery = "Confirmation unknown", unknownId = entry.id)
         }

@@ -51,14 +51,26 @@ class ChatHistoryActorTest {
         var retryAdmissions = 0
         var submitCalls = 0
         var dismissCalls = 0
+        var lastDismiss: JSONObject? = null
+        var dropDismissAfterAdmission = false
+        var dropDismissBeforeAdmission = false
+        var directHandedOffReply = false
+        var hideSnapshotRow = false
+        var dismissPause: CompletableDeferred<Unit>? = null
+        val dismissStarted = CompletableDeferred<Unit>()
         var resetCalls = 0
         var dropSubmit = false
         var dropAfterAdmission = false
         var dropReset = false
         var paged = false
+        var targetOnLaterPage = false
+        var statusPause: CompletableDeferred<Unit>? = null
+        val statusStarted = CompletableDeferred<Unit>()
+        var lastStatus: JSONObject? = null
         var pauseSnapshot: CompletableDeferred<Unit>? = null
         val snapshotStarted = CompletableDeferred<Unit>()
         val secondSnapshotStarted = CompletableDeferred<Unit>()
+        val thirdSnapshotStarted = CompletableDeferred<Unit>()
         var pauseSecondSnapshot: CompletableDeferred<Unit>? = null
         var snapshotCount = 0
         val laterPageRequested = CompletableDeferred<Unit>()
@@ -83,7 +95,7 @@ class ChatHistoryActorTest {
             val id = request.getLong("id")
             fun result(value: JSONObject) = JSONObject().put("id", id).put("message_protocol", 1).put("result", value).toString()
             return when (request.optString("op")) {
-                "engine_info" -> JSONObject().put("id", id).put("engine_info", JSONObject().put("protocol", 1).put("generation", 20).put("sha256", "a".repeat(64))).put("message_protocols", JSONArray().put(1)).toString()
+                "engine_info" -> JSONObject().put("id", id).put("engine_info", JSONObject().put("protocol", 1).put("generation", 21).put("sha256", "a".repeat(64))).put("message_protocols", JSONArray().put(1)).toString()
                 "message_snapshot" -> {
                     val number = ++snapshotCount
                     val cursor = request.optLong("cursor", 0)
@@ -92,12 +104,15 @@ class ChatHistoryActorTest {
                         if (blockLaterPage) laterPageRelease.await()
                     }
                     val items = JSONArray()
-                    if (cursor == 0L) row?.let { items.put(JSONObject().put("message", JSONObject(it.toString()))) }
+                    if (targetOnLaterPage && cursor == 0L) items.put(JSONObject().put("message", row("queued").put("id", "sentinel123456789")))
+                    if (!hideSnapshotRow && (cursor == 0L && !targetOnLaterPage || cursor == 1L && targetOnLaterPage))
+                        row?.let { items.put(JSONObject().put("message", JSONObject(it.toString()))) }
                     val next = if (paged && cursor == 0L) 1 else JSONObject.NULL
                     val response = result(JSONObject().put("snapshot_id", "snapshot").put("epoch", epoch).put("seq", 0).put("items", items).put("next_cursor", next))
                     val pause = if (number == 2 && pauseSecondSnapshot != null) pauseSecondSnapshot else pauseSnapshot
                     if (number == 1) snapshotStarted.complete(Unit)
                     if (number == 2) secondSnapshotStarted.complete(Unit)
+                    if (number == 3) thirdSnapshotStarted.complete(Unit)
                     pause?.await()
                     response
                 }
@@ -124,13 +139,19 @@ class ChatHistoryActorTest {
                         result(JSONObject().put("epoch", epoch).put("seq", next + 1).put("events", JSONArray().put(event)).put("next_after", next))
                     }
                 }
-                "message_status" -> result(JSONObject().put("epoch", epoch).put("seq", 0).put("message", JSONObject.NULL))
+                "message_status" -> {
+                    lastStatus = JSONObject(request.toString())
+                    statusPause?.let { statusStarted.complete(Unit); it.await() }
+                    result(JSONObject().put("epoch", epoch).put("seq", 0).put("message", row?.takeIf { it.getString("id") == request.getString("message_id") } ?: JSONObject.NULL))
+                }
                 "message_submit" -> {
                     assertEquals(provider, request.getString("provider"))
                     assertEquals(sid, request.getString("sid"))
                     submitCalls++
                     if (dropSubmit) error("lost acknowledgement")
-                    row = row("queued").put("id", request.getString("message_id")).put("text", request.getString("text"))
+                    if (row?.optString("id") != request.getString("message_id"))
+                        row = row("queued").put("id", request.getString("message_id")).put("text", request.getString("text"))
+                    else require(row?.getString("text") == request.getString("text"))
                     if (dropAfterAdmission) {
                         dropAfterAdmission = false
                         error("lost acknowledgement after admission")
@@ -138,8 +159,33 @@ class ChatHistoryActorTest {
                     result(JSONObject().put("epoch", epoch).put("seq", 0).put("message", row))
                 }
                 "message_dismiss" -> {
+                    assertEquals(provider, request.getString("provider"))
+                    assertEquals(sid, request.getString("sid"))
                     dismissCalls++
-                    result(JSONObject().put("epoch", epoch).put("seq", 0).put("message", row))
+                    lastDismiss = JSONObject(request.toString())
+                    dismissStarted.complete(Unit)
+                    dismissPause?.await()
+                    if (dropDismissBeforeAdmission) {
+                        dropDismissBeforeAdmission = false
+                        error("lost dismiss before admission")
+                    }
+                    val target = request.getString("message_id")
+                    if (row == null) row = row("cancelled").put("id", target).put("text", request.getString("text"))
+                    val current = requireNotNull(row)
+                    require(current.getString("id") == target)
+                    if (current.getLong("epoch") != epoch) {
+                        result(JSONObject().put("epoch", epoch).put("seq", 0).put("message", JSONObject(current.toString()).put("state", "cancelled")))
+                    } else if (current.getString("state") in setOf("sent", "accepted", "started")) {
+                        if (directHandedOffReply) result(JSONObject().put("epoch", epoch).put("seq", 0).put("message", current))
+                        else JSONObject().put("id", id).put("wire", "@mp\t$id\thistory\terror\t-\t0\n${TranscriptProtocol.END}\n").toString()
+                    } else {
+                        current.put("state", "cancelled")
+                        if (dropDismissAfterAdmission) {
+                            dropDismissAfterAdmission = false
+                            error("lost dismiss acknowledgement")
+                        }
+                        result(JSONObject().put("epoch", epoch).put("seq", 0).put("message", current))
+                    }
                 }
                 "message_reset" -> {
                     assertEquals(provider, request.getString("provider"))
@@ -149,7 +195,10 @@ class ChatHistoryActorTest {
                     if (dropReset) error("lost reset acknowledgement")
                     epoch++
                     paged = false
-                    row?.put("state", "cancelled")
+                    row?.let { current ->
+                        if (current.getString("state") in setOf("accepted", "started")) current.put("epoch", epoch)
+                        else current.put("state", "cancelled")
+                    }
                     result(JSONObject().put("epoch", epoch).put("seq", 0))
                 }
                 "message_retry" -> {
@@ -503,6 +552,581 @@ class ChatHistoryActorTest {
                 assertTrue(f.journal.entries().any { it.id == entry.id })
             } finally { owner.close() }
         }
+    }
+
+    @Test fun aliasUnknownRemoveUsesCurrentLocatorAndPreservesOtherChats() = runBlocking {
+        for (provider in listOf("claude", "codex")) {
+            val f = Fixture(provider)
+            val old = f.wire.copy(tmux = "old-alias")
+            val submit = f.journal.create(f.account, old, "submit", text = "alias original", epoch = 1)
+            f.journal.markIssued(submit.id)
+            val foreign = listOf(
+                f.journal.create("other-account", old, "dismiss", submit.id, submit.text, 1),
+                f.journal.create(f.account, MessageProtocol.Scope(if (provider == "claude") "codex" else "claude", f.sid, "chat"), "dismiss", submit.id, submit.text, 1),
+                f.journal.create(f.account, MessageProtocol.Scope(provider, "other-sid", "chat"), "dismiss", submit.id, submit.text, 1),
+            )
+            foreign.forEach { f.journal.markIssued(it.id) }
+            val raw = foreign.associate { it.id to f.prefs.getString(it.id, null) }
+            val owner = f.connection()
+            try {
+                owner.select(true); owner.start(); f.ready(owner)
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.removeUnknown(submit.id) })
+                assertEquals(submit.id, f.lastDismiss!!.getString("message_id"))
+                assertEquals(submit.text, f.lastDismiss!!.getString("text"))
+                assertEquals("chat", f.lastDismiss!!.getString("tmux"))
+                assertEquals("chat", f.lastStatus!!.getString("tmux"))
+                assertEquals("cancelled", f.row!!.getString("state"))
+                assertEquals(raw, foreign.associate { it.id to f.prefs.getString(it.id, null) })
+                assertEquals(foreign.map { it.id }.toSet(), f.journal.entries().map { it.id }.toSet())
+                assertEquals(0, f.submitCalls); assertEquals(0, f.retryCalls)
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
+                assertEquals(raw, foreign.associate { it.id to f.prefs.getString(it.id, null) })
+            } finally { owner.close() }
+        }
+    }
+
+    @Test fun aliasDismissBlocksSubmitReplayAndReusesIntent() = runBlocking {
+        for (provider in listOf("claude", "codex")) {
+            val f = Fixture(provider)
+            val submit = f.journal.create(f.account, f.wire.copy(tmux = "old-alias"), "submit", text = "alias pending", epoch = 1)
+            f.journal.markIssued(submit.id)
+            val dismiss = f.journal.create(f.account, f.wire, "dismiss", submit.id, submit.text, 1)
+            f.journal.markIssued(dismiss.id)
+            f.dismissPause = CompletableDeferred()
+            val owner = f.connection()
+            try {
+                owner.select(true); owner.start(); f.ready(owner)
+                assertEquals(MessageActionResult.Rejected("Remove confirmation is unknown"), owner.replayUnknown(submit.id))
+                val remove = async { owner.removeUnknown(submit.id) }
+                withTimeout(10_000) { f.dismissStarted.await() }
+                assertEquals(listOf(dismiss.id), f.journal.entries().filter { it.operation == "dismiss" }.map { it.id })
+                f.dismissPause!!.complete(Unit)
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { remove.await() })
+                assertTrue(f.journal.entries().isEmpty())
+                assertEquals(0, f.submitCalls); assertEquals(0, f.retryCalls)
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
+            } finally { f.dismissPause?.complete(Unit); owner.close() }
+        }
+    }
+
+    @Test fun aliasAcceptedAndCancelledSnapshotsSettleWithoutMutation() = runBlocking {
+        for (provider in listOf("claude", "codex")) for (state in listOf("accepted", "cancelled")) {
+            val f = Fixture(provider)
+            val submit = f.journal.create(f.account, f.wire.copy(tmux = "old-alias"), "submit", text = "existing", epoch = 1)
+            f.journal.markIssued(submit.id)
+            if (state == "cancelled") {
+                val dismiss = f.journal.create(f.account, f.wire, "dismiss", submit.id, submit.text, 1)
+                f.journal.markIssued(dismiss.id)
+            }
+            f.row = f.row(state).put("id", submit.id).put("text", submit.text)
+            f.nativeRows = listOf(JSONObject().put("role", "user").put("text", "native existing").put("id", "native").put("offset", 1).put("end", 2))
+            val owner = f.connection()
+            try {
+                owner.select(true); owner.start()
+                val ready = withTimeout(10_000) { owner.state.first {
+                    it.replica != null && it.history.sid == f.sid && it.unresolved.isEmpty() &&
+                        it.history.managedMessages(it.replica, it.unresolved).any { message -> message.text == "native existing" }
+                } }
+                assertTrue(ready.unresolved.isEmpty())
+                assertTrue(ready.history.managedMessages(ready.replica, ready.unresolved).any { it.text == "native existing" })
+                if (state == "accepted") assertTrue(ready.history.managedMessages(ready.replica, ready.unresolved).any { it.text == "existing" })
+                assertEquals(0, f.submitCalls); assertEquals(0, f.retryCalls); assertEquals(0, f.dismissCalls)
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
+                if (state == "accepted") assertEquals("accepted", f.row!!.getString("state"))
+            } finally { owner.close() }
+        }
+    }
+
+    @Test fun aliasKnownRowCancelAckSettlesOriginalFromOtherLocator() = runBlocking {
+        for (provider in listOf("claude", "codex")) {
+            val f = Fixture(provider)
+            val submit = f.journal.create(f.account, f.wire.copy(tmux = "old-alias"), "submit", text = "queued alias", epoch = 1)
+            f.journal.markIssued(submit.id)
+            val raw = f.prefs.getString(submit.id, null)
+            f.journal.remove(submit.id)
+            f.row = f.row("queued").put("id", submit.id).put("text", submit.text)
+            f.dismissPause = CompletableDeferred()
+            val owner = f.connection()
+            try {
+                owner.select(true); owner.start()
+                val row = requireNotNull(f.ready(owner).replica?.messages?.get(submit.id))
+                val remove = async { owner.dismiss(row) }
+                withTimeout(10_000) { f.dismissStarted.await() }
+                f.prefs.edit().putString(submit.id, raw).commit()
+                f.dismissPause!!.complete(Unit)
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { remove.await() })
+                assertTrue(f.journal.entries().isEmpty())
+                assertEquals("chat", f.lastDismiss!!.getString("tmux"))
+                assertEquals(submit.id, f.lastDismiss!!.getString("message_id"))
+                assertEquals(0, f.submitCalls); assertEquals(0, f.retryCalls)
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
+            } finally { f.dismissPause?.complete(Unit); owner.close() }
+        }
+    }
+
+    @Test fun aliasLostCancelAckReconcilesOnRestart() = runBlocking {
+        for (provider in listOf("claude", "codex")) {
+            val f = Fixture(provider)
+            val submit = f.journal.create(f.account, f.wire.copy(tmux = "old-alias"), "submit", text = "alias lost", epoch = 1)
+            f.journal.markIssued(submit.id)
+            f.hideSnapshotRow = true
+            val first = f.connection()
+            var second: ChatHistoryConnection? = null
+            try {
+                first.select(true); first.start(); f.ready(first)
+                f.dropDismissAfterAdmission = true
+                assertEquals(MessageActionResult.Unknown, withTimeout(10_000) { first.removeUnknown(submit.id) })
+                first.close()
+                assertEquals(setOf("submit", "dismiss"), f.journal.entries().map { it.operation }.toSet())
+                f.hideSnapshotRow = false
+                val recovered = f.connection(); second = recovered
+                recovered.select(true); recovered.start(); f.ready(recovered)
+                withTimeout(10_000) { recovered.state.first { it.unresolved.isEmpty() } }
+                assertEquals(1, f.dismissCalls); assertEquals(0, f.submitCalls); assertEquals(0, f.retryCalls)
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { recovered.resetConversation().await() })
+            } finally { first.close(); second?.close() }
+        }
+    }
+
+    @Test fun unknownRemoveCreatesTombstoneBeforeAndAfterAdmission() = runBlocking {
+        for (provider in listOf("claude", "codex")) for (admitted in listOf(false, true)) {
+            val f = Fixture(provider)
+            f.hideSnapshotRow = true
+            f.dropSubmit = !admitted
+            f.dropAfterAdmission = admitted
+            val other = f.journal.create(f.account, MessageProtocol.Scope(provider, "other", "chat"), "submit", text = "unrelated", epoch = 1)
+            val owner = f.connection()
+            try {
+                owner.select(true); owner.start(); f.ready(owner)
+                val original = (withTimeout(10_000) { owner.submit("original text") } as PromptAdmission.Recorded).messageId
+                withTimeout(10_000) { owner.state.first { it.retrying } }
+                f.dropSubmit = false
+                withTimeout(15_000) { owner.state.first { !it.retrying && it.unresolved.any { e -> e.id == original } } }
+                f.dismissPause = CompletableDeferred()
+                val removal = async { owner.removeUnknown(original) }
+                withTimeout(10_000) { f.dismissStarted.await() }
+                val entries = f.journal.entries()
+                val dismiss = entries.single { it.operation == "dismiss" }
+                assertEquals(original, dismiss.messageId)
+                assertEquals("original text", dismiss.text)
+                assertNull(dismiss.attempt)
+                assertTrue(dismiss.issued)
+                assertTrue(entries.any { it.id == original && it.issued })
+                assertEquals(original, f.lastDismiss!!.getString("message_id"))
+                assertEquals("original text", f.lastDismiss!!.getString("text"))
+                f.hideSnapshotRow = false
+                f.dismissPause!!.complete(Unit)
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { removal.await() })
+                withTimeout(10_000) { owner.state.first { it.replica?.messages?.get(original)?.state == MessageProtocol.State.CANCELLED } }
+                assertEquals(listOf(other.id), f.journal.entries().map { it.id })
+                assertEquals(1, f.submitCalls)
+                val late = f.exchange(MessageProtocol.request(900, f.wire, "message_submit", JSONObject().put("message_id", original).put("text", "original text")))
+                assertEquals(MessageProtocol.State.CANCELLED, MessageProtocol.requiredMutation(late, 900, f.wire, original, "original text").row?.state)
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
+                assertEquals(listOf(other.id), f.journal.entries().map { it.id })
+            } finally { f.dismissPause?.complete(Unit); owner.close() }
+        }
+    }
+
+    @Test fun lostCancelAckReconcilesAfterRestartWithoutResending() = runBlocking {
+        for (provider in listOf("claude", "codex")) {
+            val f = Fixture(provider)
+            f.hideSnapshotRow = true
+            f.dropSubmit = true
+            val first = f.connection()
+            var second: ChatHistoryConnection? = null
+            try {
+                first.select(true); first.start(); f.ready(first)
+                val id = (first.submit("lost cancel") as PromptAdmission.Recorded).messageId
+                withTimeout(10_000) { first.state.first { it.retrying } }
+                f.dropSubmit = false
+                withTimeout(15_000) { first.state.first { !it.retrying && it.unresolved.any { e -> e.id == id } } }
+                f.dropDismissAfterAdmission = true
+                assertEquals(MessageActionResult.Unknown, withTimeout(10_000) { first.removeUnknown(id) })
+                first.close()
+                assertEquals(setOf("submit", "dismiss"), f.journal.entries().map { it.operation }.toSet())
+                assertEquals("cancelled", f.row!!.getString("state"))
+                f.hideSnapshotRow = false
+                val recovered = f.connection(); second = recovered
+                recovered.select(true); recovered.start(); f.ready(recovered)
+                withTimeout(10_000) { recovered.state.first { it.unresolved.isEmpty() } }
+                assertEquals(1, f.dismissCalls)
+                assertEquals(1, f.submitCalls)
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { recovered.resetConversation().await() })
+            } finally { first.close(); second?.close() }
+        }
+    }
+
+    @Test fun lostCancelBeforeAdmissionNeedsExplicitSameIntentRecovery() = runBlocking {
+        for (provider in listOf("claude", "codex")) {
+            val f = Fixture(provider)
+            val submit = f.journal.create(f.account, f.wire, "submit", text = "recover", epoch = 1)
+            f.journal.markIssued(submit.id)
+            val owner = f.connection()
+            try {
+                owner.select(true); owner.start(); f.ready(owner)
+                f.dropDismissBeforeAdmission = true
+                assertEquals(MessageActionResult.Unknown, withTimeout(10_000) { owner.removeUnknown(submit.id) })
+                val dismiss = f.journal.entries().single { it.operation == "dismiss" }
+                assertTrue(dismiss.issued)
+                withTimeout(10_000) { owner.state.first { it.retrying } }
+                withTimeout(15_000) { owner.state.first { !it.retrying && it.unresolved.any { e -> e.id == dismiss.id } } }
+                assertEquals(1, f.dismissCalls)
+                assertEquals(0, f.submitCalls)
+                assertTrue(owner.replayUnknown(submit.id) is MessageActionResult.Rejected)
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.removeUnknown(dismiss.id) })
+                assertEquals(2, f.dismissCalls)
+                assertEquals(submit.id, f.lastDismiss!!.getString("message_id"))
+                assertEquals("recover", f.lastDismiss!!.getString("text"))
+                assertTrue(f.journal.entries().isEmpty())
+                assertEquals(0, f.submitCalls)
+            } finally { owner.close() }
+        }
+    }
+
+    @Test fun mismatchedCanonicalTextNeverSettlesOrCancelsUnknownIntent() = runBlocking {
+        for (provider in listOf("claude", "codex")) {
+            val f = Fixture(provider)
+            val submit = f.journal.create(f.account, f.wire, "submit", text = "original", epoch = 1)
+            f.journal.markIssued(submit.id)
+            val dismiss = f.journal.create(f.account, f.wire, "dismiss", submit.id, submit.text, 1, null)
+            f.journal.markIssued(dismiss.id)
+            f.row = f.row("cancelled").put("id", submit.id).put("text", "different")
+            val owner = f.connection()
+            try {
+                owner.select(true); owner.start()
+                val ready = f.ready(owner)
+                assertEquals(setOf(submit.id, dismiss.id), f.journal.entries().map { it.id }.toSet())
+                assertTrue(ready.history.managedMessages(ready.replica, ready.unresolved).any { it.text == "original" })
+                assertEquals(MessageActionResult.Rejected("Message changed"), owner.removeUnknown(submit.id))
+                assertEquals(0, f.dismissCalls)
+                assertEquals(0, f.submitCalls)
+                assertEquals(setOf(submit.id, dismiss.id), f.journal.entries().map { it.id }.toSet())
+            } finally { owner.close() }
+        }
+    }
+
+    @Test fun oldEpochSubmitWithoutCancelStillCannotReplay() = runBlocking {
+        for (provider in listOf("claude", "codex")) {
+            val f = Fixture(provider)
+            val submit = f.journal.create(f.account, f.wire, "submit", text = "old", epoch = 1)
+            f.journal.markIssued(submit.id)
+            f.epoch = 2
+            val owner = f.connection()
+            try {
+                owner.select(true); owner.start(); f.ready(owner)
+                assertEquals(MessageActionResult.Rejected("Message belongs to an earlier reset"), owner.replayUnknown(submit.id))
+                assertEquals(0, f.submitCalls)
+                assertEquals(submit.id, f.journal.entries().single().id)
+            } finally { owner.close() }
+        }
+    }
+
+    @Test fun badRawJournalBlocksUnknownRemoveWithoutDeletingAnything() = runBlocking {
+        val f = Fixture("codex")
+        val submit = f.journal.create(f.account, f.wire, "submit", text = "preserve", epoch = 1)
+        f.journal.markIssued(submit.id)
+        val owner = f.connection()
+        try {
+            owner.select(true); owner.start(); f.ready(owner)
+            f.admissionPause = CompletableDeferred()
+            val remove = async { owner.removeUnknown(submit.id) }
+            withTimeout(10_000) { f.admissionStarted.await() }
+            f.prefs.edit().putString("badraw1234567890", "not json").commit()
+            val before = f.prefs.all.toMap()
+            f.admissionPause!!.complete(Unit)
+            assertEquals(MessageActionResult.Unknown, withTimeout(10_000) { remove.await() })
+            withTimeout(10_000) { owner.state.first { it.messageError?.contains("Local storage failure") == true } }
+            assertEquals(before, f.prefs.all)
+            assertEquals(0, f.dismissCalls)
+            assertEquals(0, f.submitCalls)
+        } finally { f.admissionPause?.complete(Unit); owner.close() }
+    }
+
+    @Test fun oldEpochCancelRecoveryPreservesAcceptedHostWork() = runBlocking {
+        for (provider in listOf("claude", "codex")) {
+            val f = Fixture(provider)
+            val submit = f.journal.create(f.account, f.wire, "submit", text = "old accepted", epoch = 1)
+            f.journal.markIssued(submit.id)
+            val dismiss = f.journal.create(f.account, f.wire, "dismiss", submit.messageId, submit.text, 1, null)
+            f.journal.markIssued(dismiss.id)
+            f.epoch = 2
+            f.row = f.row("accepted", epoch = 1).put("id", submit.id).put("text", submit.text)
+            f.hideSnapshotRow = true
+            val owner = f.connection()
+            try {
+                owner.select(true); owner.start(); f.ready(owner)
+                assertTrue(owner.replayUnknown(submit.id) is MessageActionResult.Rejected)
+                assertEquals(0, f.submitCalls)
+                assertEquals(0, f.dismissCalls)
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.removeUnknown(dismiss.id) })
+                assertEquals("accepted", f.row!!.getString("state"))
+                assertTrue(f.journal.entries().isEmpty())
+                assertEquals(1, f.dismissCalls)
+                assertEquals(0, f.submitCalls)
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
+            } finally { owner.close() }
+        }
+    }
+
+    @Test fun handedOffUnknownIsNotRemovedAndDoesNotBlockReset() = runBlocking {
+        for (provider in listOf("claude", "codex")) for (state in listOf("sent", "accepted", "started")) for (direct in listOf(false, true)) {
+            val f = Fixture(provider)
+            f.directHandedOffReply = direct
+            val submit = f.journal.create(f.account, f.wire, "submit", text = "real work", epoch = 1)
+            f.journal.markIssued(submit.id)
+            f.row = f.row(state).put("id", submit.id).put("text", submit.text)
+            f.hideSnapshotRow = true
+            f.nativeRows = listOf(JSONObject().put("role", "user").put("text", "real transcript").put("id", "native")
+                .put("offset", 1).put("end", 2))
+            val owner = f.connection()
+            try {
+                owner.select(true); owner.start(); f.ready(owner)
+                f.dismissPause = CompletableDeferred()
+                val removal = async { owner.removeUnknown(submit.id) }
+                withTimeout(10_000) { f.dismissStarted.await() }
+                f.hideSnapshotRow = false
+                f.dismissPause!!.complete(Unit)
+                assertEquals(MessageActionResult.Rejected("Could not remove message"), withTimeout(10_000) { removal.await() })
+                val refreshed = withTimeout(10_000) { owner.state.first {
+                    it.replica?.messages?.get(submit.id)?.state?.name?.lowercase() == state && it.unresolved.isEmpty() &&
+                        it.history.managedMessages(it.replica, it.unresolved).any { message -> message.text == "real transcript" }
+                } }
+                assertTrue(refreshed.history.managedMessages(refreshed.replica, refreshed.unresolved).any { it.text == "real work" })
+                assertTrue(refreshed.history.managedMessages(refreshed.replica, refreshed.unresolved).any { it.text == "real transcript" })
+                assertEquals(state, f.row!!.getString("state"))
+                assertEquals(0, f.submitCalls)
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
+            } finally { f.dismissPause?.complete(Unit); owner.close() }
+        }
+    }
+
+    @Test fun handedOffOutcomeSurvivesRestartUntilCanonicalRefresh() = runBlocking {
+        for (provider in listOf("claude", "codex")) {
+            val f = Fixture(provider)
+            val submit = f.journal.create(f.account, f.wire, "submit", text = "accepted work", epoch = 1)
+            f.journal.markIssued(submit.id)
+            f.row = f.row("accepted").put("id", submit.id).put("text", submit.text)
+            f.hideSnapshotRow = true
+            val first = f.connection()
+            var second: ChatHistoryConnection? = null
+            try {
+                first.select(true); first.start(); f.ready(first)
+                assertEquals(MessageActionResult.Rejected("Could not remove message"), withTimeout(10_000) { first.removeUnknown(submit.id) })
+                first.close()
+                val pending = f.journal.entries()
+                assertTrue(pending.any { it.operation == "submit" && it.id == submit.id })
+                assertTrue(pending.single { it.operation == "dismiss" }.notRemovable)
+                f.hideSnapshotRow = false
+                val recovered = f.connection(); second = recovered
+                recovered.select(true); recovered.start()
+                val refreshed = withTimeout(10_000) { recovered.state.first { it.replica?.messages?.get(submit.id)?.state == MessageProtocol.State.ACCEPTED && it.unresolved.isEmpty() } }
+                assertTrue(refreshed.history.managedMessages(refreshed.replica, refreshed.unresolved).any { it.text == "accepted work" })
+                assertEquals(1, f.dismissCalls)
+                assertEquals(0, f.submitCalls)
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { recovered.resetConversation().await() })
+            } finally { first.close(); second?.close() }
+        }
+    }
+
+    @Test fun unknownRemoveSurvivesGrowingHeadThenReset() = runBlocking {
+        for (provider in listOf("claude", "codex")) {
+            val f = Fixture(provider)
+            val submit = f.journal.create(f.account, f.wire, "submit", text = "repair", epoch = 1)
+            f.journal.markIssued(submit.id)
+            val owner = f.connection()
+            try {
+                owner.select(true); owner.start(); f.ready(owner)
+                f.historyPause = CompletableDeferred()
+                owner.nearTop(true)
+                withTimeout(10_000) { f.historyPaused.await() }
+                f.row = f.row("queued").put("id", submit.id).put("text", submit.text)
+                f.growingEvents = true
+                val remove = async(start = CoroutineStart.UNDISPATCHED) { owner.removeUnknown(submit.id) }
+                f.historyPause!!.complete(Unit)
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { remove.await() })
+                assertTrue(f.eventCalls > 1)
+                assertEquals(1, f.dismissCalls)
+                assertEquals(0, f.submitCalls)
+                assertEquals("cancelled", f.row!!.getString("state"))
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
+                assertTrue(f.journal.entries().isEmpty())
+            } finally { f.historyPause?.complete(Unit); owner.close() }
+        }
+    }
+
+    @Test fun unknownRemoveNavigationAndTakeoverBeforeAdmissionPreserveJournal() = runBlocking {
+        for (provider in listOf("claude", "codex")) for (takeover in listOf(false, true)) {
+            val f = Fixture(provider)
+            val submit = f.journal.create(f.account, f.wire, "submit", text = "preserve", epoch = 1)
+            f.journal.markIssued(submit.id)
+            val old = f.connection()
+            var current: ChatHistoryConnection? = null
+            try {
+                old.select(true); old.start(); f.ready(old)
+                val before = f.prefs.all.toMap()
+                f.admissionPause = CompletableDeferred()
+                val remove = async { old.removeUnknown(submit.id) }
+                withTimeout(10_000) { f.admissionStarted.await() }
+                if (takeover) {
+                    val next = f.connection(); current = next
+                    next.select(true); next.start(); f.ready(next)
+                } else old.select(false)
+                f.admissionPause!!.complete(Unit)
+                assertTrue(withTimeout(10_000) { remove.await() } is MessageActionResult.Rejected)
+                assertEquals(before, f.prefs.all)
+                assertEquals(0, f.dismissCalls)
+                assertEquals(0, f.submitCalls)
+            } finally { f.admissionPause?.complete(Unit); old.close(); current?.close() }
+        }
+    }
+
+    @Test fun oldKnownDismissRecoversAcrossResetWithoutChangingAcceptedWork() = runBlocking {
+        for (provider in listOf("claude", "codex")) {
+            val f = Fixture(provider)
+            val entry = f.journal.create(f.account, f.wire.copy(tmux = "old-alias"), "dismiss", messageId, epoch = 0, attempt = "old")
+            f.journal.markIssued(entry.id)
+            f.epoch = 1
+            f.row = f.row("accepted", epoch = 0)
+            f.nativeRows = listOf(JSONObject().put("role", "user").put("text", "native accepted").put("id", "native").put("offset", 1).put("end", 2))
+            val owner = f.connection()
+            try {
+                owner.select(true); owner.start()
+                val ready = withTimeout(10_000) { owner.state.first {
+                    it.replica != null && it.history.sid == f.sid &&
+                        it.history.managedMessages(it.replica, it.unresolved).any { message -> message.text == "native accepted" }
+                } }
+                assertTrue(ready.history.managedMessages(ready.replica, ready.unresolved).any { it.text == "native accepted" })
+                assertEquals(MessageActionResult.BlockedRecovery, withTimeout(10_000) { owner.resetConversation().await() })
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.replayUnknown(entry.id) })
+                assertEquals(messageId, f.lastDismiss!!.getString("message_id"))
+                assertFalse(f.lastDismiss!!.has("text"))
+                assertEquals("chat", f.lastDismiss!!.getString("tmux"))
+                assertEquals("accepted", f.row!!.getString("state"))
+                assertTrue(f.journal.entries().isEmpty())
+                assertEquals(0, f.submitCalls); assertEquals(0, f.retryCalls)
+                val after = withTimeout(10_000) { owner.state.first {
+                    it.replica?.messages?.get(messageId)?.state == MessageProtocol.State.ACCEPTED && it.unresolved.isEmpty() &&
+                        it.history.managedMessages(it.replica, it.unresolved).any { message -> message.text == "native accepted" }
+                } }
+                assertTrue(after.history.managedMessages(after.replica, after.unresolved).any { it.text == "native accepted" })
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
+                assertEquals("accepted", f.row!!.getString("state"))
+            } finally { owner.close() }
+        }
+    }
+
+    @Test fun reissuedNotRemovableDismissLosingAckRemainsRecoverable() = runBlocking {
+        for (provider in listOf("claude", "codex")) {
+            val f = Fixture(provider)
+            val submit = f.journal.create(f.account, f.wire.copy(tmux = "old-alias"), "submit", text = "reissue", epoch = 1)
+            f.journal.markIssued(submit.id)
+            val dismiss = f.journal.create(f.account, f.wire, "dismiss", submit.id, submit.text, 1)
+            f.journal.markIssued(dismiss.id)
+            f.journal.markNotRemovable(dismiss.id)
+            f.hideSnapshotRow = true
+            f.row = f.row("failed").put("id", submit.id).put("text", submit.text)
+            f.dropDismissAfterAdmission = true
+            val first = f.connection()
+            var second: ChatHistoryConnection? = null
+            try {
+                first.select(true); first.start(); f.ready(first)
+                assertEquals(MessageActionResult.Unknown, withTimeout(10_000) { first.removeUnknown(dismiss.id) })
+                first.close()
+                val saved = f.journal.entries().single { it.id == dismiss.id }
+                assertFalse(saved.notRemovable)
+                assertTrue(saved.issued)
+                assertTrue(f.journal.entries().any { it.id == submit.id })
+                assertEquals("cancelled", f.row!!.getString("state"))
+                f.hideSnapshotRow = false
+                val recovered = f.connection(); second = recovered
+                recovered.select(true); recovered.start(); f.ready(recovered)
+                withTimeout(10_000) { recovered.state.first { it.unresolved.isEmpty() } }
+                assertEquals(1, f.dismissCalls); assertEquals(0, f.submitCalls); assertEquals(0, f.retryCalls)
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { recovered.resetConversation().await() })
+            } finally { first.close(); second?.close() }
+        }
+    }
+
+    @Test fun snapshotPreemptionChecksUnseenConflictingBodyBeforeDismiss() = runBlocking {
+        for (provider in listOf("claude", "codex")) for (state in listOf("queued", "failed")) for (later in listOf(false, true)) {
+            val f = Fixture(provider)
+            val submit = f.journal.create(f.account, f.wire.copy(tmux = "old-alias"), "submit", text = "original", epoch = 1)
+            f.journal.markIssued(submit.id)
+            f.row = f.row(state).put("id", submit.id).put("text", "different")
+            f.paged = true
+            f.targetOnLaterPage = later
+            f.pauseSnapshot = CompletableDeferred()
+            f.pauseSecondSnapshot = CompletableDeferred()
+            f.blockLaterPage = true
+            val raw = f.prefs.all.toMap()
+            val owner = f.connection()
+            try {
+                owner.select(true); owner.start()
+                withTimeout(10_000) { f.snapshotStarted.await() }
+                val remove = async(start = CoroutineStart.UNDISPATCHED) { owner.removeUnknown(submit.id) }
+                f.pauseSnapshot!!.complete(Unit)
+                assertEquals(MessageActionResult.Rejected("Message changed"), withTimeout(10_000) { remove.await() })
+                withTimeout(10_000) { f.secondSnapshotStarted.await() }
+                assertNull(owner.state.value.replica)
+                assertFalse(f.laterPageRequested.isCompleted)
+                assertEquals(state, f.row!!.getString("state"))
+                assertEquals("different", f.row!!.getString("text"))
+                assertEquals(raw, f.prefs.all)
+                assertEquals(submit.id, f.lastStatus!!.getString("message_id"))
+                assertEquals("chat", f.lastStatus!!.getString("tmux"))
+                assertEquals(0, f.dismissCalls); assertEquals(0, f.submitCalls); assertEquals(0, f.retryCalls)
+            } finally { f.pauseSecondSnapshot?.complete(Unit); f.laterPageRelease.complete(Unit); owner.close() }
+        }
+    }
+
+    @Test fun navigationDuringCancelStatusDoesNotAdmitOrMutate() = runBlocking {
+        for (provider in listOf("claude", "codex")) for (takeover in listOf(false, true)) {
+            val f = Fixture(provider)
+            val submit = f.journal.create(f.account, f.wire.copy(tmux = "old-alias"), "submit", text = "status race", epoch = 1)
+            f.journal.markIssued(submit.id)
+            val owner = f.connection()
+            var current: ChatHistoryConnection? = null
+            try {
+                owner.select(true); owner.start(); f.ready(owner)
+                val raw = f.prefs.all.toMap()
+                f.statusPause = CompletableDeferred()
+                val remove = async { owner.removeUnknown(submit.id) }
+                withTimeout(10_000) { f.statusStarted.await() }
+                if (takeover) {
+                    val next = f.connection(); current = next
+                    next.select(true); next.start()
+                    withTimeout(10_000) { f.secondSnapshotStarted.await() }
+                } else owner.select(false)
+                f.statusPause!!.complete(Unit)
+                assertTrue(withTimeout(10_000) { remove.await() } is MessageActionResult.Rejected)
+                assertEquals(raw, f.prefs.all)
+                assertEquals(0, f.dismissCalls); assertEquals(0, f.submitCalls); assertEquals(0, f.retryCalls)
+            } finally { f.statusPause?.complete(Unit); owner.close(); current?.close() }
+        }
+    }
+
+    @Test fun unknownRemovePreemptsSnapshotWithoutPublishingPartialRows() = runBlocking {
+        val f = Fixture("claude")
+        val submit = f.journal.create(f.account, f.wire, "submit", text = "snapshot", epoch = 1)
+        f.journal.markIssued(submit.id)
+        f.row = f.row("queued").put("id", submit.id).put("text", submit.text)
+        f.paged = true
+        f.pauseSnapshot = CompletableDeferred()
+        f.blockLaterPage = true
+        val owner = f.connection()
+        try {
+            owner.select(true); owner.start()
+            withTimeout(10_000) { f.snapshotStarted.await() }
+            val removal = async(start = CoroutineStart.UNDISPATCHED) { owner.removeUnknown(submit.id) }
+            assertNull(owner.state.value.replica)
+            f.pauseSnapshot!!.complete(Unit)
+            withTimeout(10_000) { f.dismissStarted.await() }
+            assertFalse(f.laterPageRequested.isCompleted)
+            assertEquals(MessageActionResult.Applied, withTimeout(10_000) { removal.await() })
+            assertNull(owner.state.value.replica)
+            assertTrue(f.journal.entries().isEmpty())
+        } finally { f.laterPageRelease.complete(Unit); owner.close() }
     }
 
     @Test fun bothProvidersAdmitAndResetThroughProductionOwner() = runBlocking {

@@ -68,7 +68,7 @@ object MessageProtocol {
         require(integral(info.get("protocol")) == 1L)
         val generation = integral(info.get("generation"))
         val hash = text(info.get("sha256"))
-        require(generation >= 20 && hash.matches(Regex("[a-f0-9]{64}")))
+        require(generation >= 21 && hash.matches(Regex("[a-f0-9]{64}")))
         val protocols = array(envelope.get("message_protocols"))
         require((0 until protocols.length()).any { integral(protocols.get(it)) == 1L })
         return generation to hash
@@ -115,6 +115,15 @@ object MessageProtocol {
             ChatHistoryProtocol.parseRow(row)
         }
         return Fact(sid, eventId, inode, offset, end, value.toString())
+    }
+
+    fun rejectedMutation(reply: String, id: Long): Boolean {
+        require(reply.toByteArray(Charsets.UTF_8).size <= ChatHistoryProtocol.MAX_REPLY_BYTES)
+        val envelope = JSONObject(reply)
+        require(integral(envelope.get("id")) == id)
+        if (!envelope.has("wire")) return false
+        require(!envelope.has("message_protocol") && !envelope.has("result"))
+        return text(envelope.get("wire")) == "@mp\t$id\thistory\terror\t-\t0\n${TranscriptProtocol.END}\n"
     }
 
     fun mutation(reply: String, id: Long, scope: Scope, messageId: String?, text: String? = null): Result {

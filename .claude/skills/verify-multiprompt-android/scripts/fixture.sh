@@ -108,7 +108,7 @@ elif [[ "${VERIFY_FEATURE:-}" == chat-queued.md || "${VERIFY_FEATURE:-}" == chat
         for attempt in {1..30}; do [[ -f /home/verifyssh/shared-lock-ready-claude-a1b2c3d4-1008-4000-8000-000000001008 && -f /home/verifyssh/shared-lock-ready-codex-verify-codex ]] && break; sleep 1; done
         [[ -f /home/verifyssh/shared-lock-ready-claude-a1b2c3d4-1008-4000-8000-000000001008 && -f /home/verifyssh/shared-lock-ready-codex-verify-codex ]]
         sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py bootstrap > "$EVIDENCE/shared-bootstrap.json"
-        jq -e '.engine_info.generation == 20 and .bundle_bytes == 223175 and .bundle_sha256 == "47567abeb0277d32e12648267bdd73acc9c902aaefd3d68f7a6f9028ab79af4a" and .snapshot.next_cursor == null and (.snapshot.items | length) == 0' "$EVIDENCE/shared-bootstrap.json" >/dev/null
+        jq -e '.engine_info.generation == 21 and .bundle_bytes == 224140 and .bundle_sha256 == "43d0205c4f673178f116e53bc702db0080be4d613ee66a8e31427e531ce7a44f" and .snapshot.next_cursor == null and (.snapshot.items | length) == 0' "$EVIDENCE/shared-bootstrap.json" >/dev/null
         sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py bootstrap codex > "$EVIDENCE/shared-bootstrap-codex.json"
         sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py bootstrap neighbor > "$EVIDENCE/shared-bootstrap-neighbor.json"
         sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s shared-lock-neighbor 'env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-lock.py claude a1b2c3d4-1008-4000-8000-000000001009'

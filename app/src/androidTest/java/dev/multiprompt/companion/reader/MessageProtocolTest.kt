@@ -17,9 +17,9 @@ class MessageProtocolTest {
             .put("id", 1).put("engine_info", JSONObject().put("protocol", 1).put("generation", generation).put("sha256", "a".repeat(64)))
             .put("message_protocols", protocols).toString()
         assertTrue(runCatching { MessageProtocol.engine(engine(19), 1) }.isFailure)
-        assertEquals(20L, MessageProtocol.engine(engine(20), 1).first)
+        assertTrue(runCatching { MessageProtocol.engine(engine(20), 1) }.isFailure)
         assertEquals(21L, MessageProtocol.engine(engine(21), 1).first)
-        assertTrue(runCatching { MessageProtocol.engine(engine(20, JSONArray().put(2)), 1) }.isFailure)
+        assertTrue(runCatching { MessageProtocol.engine(engine(21, JSONArray().put(2)), 1) }.isFailure)
     }
 
     @Test fun correlatesHostRowAndOpaqueReceipt() {
@@ -54,6 +54,27 @@ class MessageProtocolTest {
         assertEquals(submitted.id, restored.messageId)
         MessageJournal(prefs).remove(submitted.id)
         assertTrue(MessageJournal(prefs).entries().isEmpty())
+    }
+
+    @Test fun dismissJournalRoundTripsOldAndUnknownForms() {
+        val prefs = InstrumentationRegistry.getInstrumentation().targetContext.getSharedPreferences("message-dismiss-test", 0)
+        prefs.edit().clear().commit()
+        val journal = MessageJournal(prefs)
+        val old = journal.create("host:user", scope, "dismiss", id, epoch = 1, attempt = "attempt")
+        val unknown = journal.create("host:user", scope, "dismiss", "other123456789012", text = "original", epoch = 1)
+        assertEquals(setOf(old, unknown), MessageJournal(prefs).entries().toSet())
+        assertNull(old.text)
+        assertNull(unknown.attempt)
+        assertTrue(runCatching { journal.create("host:user", scope, "dismiss", id, text = "bad\u0000text") }.isFailure)
+        journal.remove(old.id); journal.remove(unknown.id)
+    }
+
+    @Test fun dismissErrorMustBeCorrelated() {
+        val wire = "@mp\t1\thistory\terror\t-\t0\n${TranscriptProtocol.END}\n"
+        val reply = JSONObject().put("id", 1).put("wire", wire).toString()
+        assertTrue(MessageProtocol.rejectedMutation(reply, 1))
+        assertTrue(runCatching { MessageProtocol.rejectedMutation(reply, 2) }.isFailure)
+        assertFalse(MessageProtocol.rejectedMutation(JSONObject().put("id", 1).put("wire", "error").toString(), 1))
     }
 
     @Test fun rejectsNullMutationAndLegacyError() {

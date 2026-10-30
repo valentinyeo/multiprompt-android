@@ -53,7 +53,7 @@ class ChatHistoryConnection(
 ) : AutoCloseable {
     private sealed interface Command {
         data class Submit(val text: String, val generation: Long, val result: CompletableDeferred<PromptAdmission>) : Command
-        data class Action(val kind: String, val id: String, val epoch: Long?, val attempt: String?, val generation: Long, val result: CompletableDeferred<MessageActionResult>) : Command
+        data class Action(val kind: String, val id: String, val epoch: Long?, val attempt: String?, val generation: Long, val result: CompletableDeferred<MessageActionResult>, val target: MessageJournal.Entry? = null) : Command
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -153,6 +153,7 @@ class ChatHistoryConnection(
     suspend fun retryFailed(row: MessageProtocol.Row, confirmed: Boolean, observed: Long = generation): MessageActionResult =
         if (!confirmed) MessageActionResult.Rejected("Retry requires confirmation") else action("retry", row.id, row.epoch, row.attempt, observed)
     suspend fun dismiss(row: MessageProtocol.Row, observed: Long = generation) = action("dismiss", row.id, row.epoch, row.attempt, observed)
+    suspend fun removeUnknown(id: String, observed: Long = generation) = action("removeUnknown", id, observed = observed)
     suspend fun recoverReset(observed: Long = generation) = action("reset", "", observed = observed)
 
     @Synchronized fun resetConversation(): Deferred<MessageActionResult> {
@@ -178,7 +179,8 @@ class ChatHistoryConnection(
         synchronized(this) {
             if (observed != generation) return MessageActionResult.Rejected("Chat changed")
             if (freshSid == null || !selected) return MessageActionResult.Rejected("Chat is not ready")
-            if (commands.trySend(Command.Action(kind, id, epoch, attempt, observed, result)).isFailure) return MessageActionResult.Rejected("Chat is unavailable")
+            val target = if (kind == "removeUnknown") _state.value.unresolved.firstOrNull { it.id == id } else null
+            if (commands.trySend(Command.Action(kind, id, epoch, attempt, observed, result, target)).isFailure) return MessageActionResult.Rejected("Chat is unavailable")
         }
         wake.trySend(Unit)
         return result.await()
@@ -286,7 +288,7 @@ class ChatHistoryConnection(
                                                             is Command.Submit -> queued.result.complete(PromptAdmission.Rejected("Chat changed"))
                                                             is Command.Action -> queued.result.complete(MessageActionResult.Rejected("Chat changed"))
                                                         }
-                                                    } else if (queued is Command.Action && queued.kind == "reset") {
+                                                    } else if (queued is Command.Action && queued.kind in setOf("reset", "removeUnknown")) {
                                                         activeCommand = queued
                                                         val previous = MessageReplica(snapshot.epoch, snapshot.seq)
                                                         val lock = gate?.claimIfOwned(key(page.sid), token)
@@ -297,7 +299,7 @@ class ChatHistoryConnection(
                                                             val outcome = try { performAction(queued, previous, messageScope, exchange) { ++requestId } }
                                                             catch (failure: Exception) { queued.result.complete(MessageActionResult.Unknown); throw failure }
                                                             synchronized(this@ChatHistoryConnection) {
-                                                                if (outcome == MessageActionResult.Applied && queued.generation == generation && owns(page.sid)) {
+                                                                if (queued.kind == "reset" && outcome == MessageActionResult.Applied && queued.generation == generation && owns(page.sid)) {
                                                                     resetReply = queued.result
                                                                 } else {
                                                                     clearUnrecordedReset(queued, page.sid)
@@ -330,8 +332,20 @@ class ChatHistoryConnection(
                                     else if (messageScope != null) gate?.ifOwned(key(page.sid), token) {
                                         if (selected && ownedKey == key(page.sid)) {
                                             val materialized = requireNotNull(replica)
-                                            pending(page.sid).filter { it.operation == "submit" && materialized.messages[it.messageId]?.text == it.text }.forEach { journalAccess { journal?.remove(it.id) } }
-                                            pending(page.sid).filter { it.operation == "dismiss" && materialized.messages[it.messageId]?.state == MessageProtocol.State.CANCELLED }.forEach { journalAccess { journal?.remove(it.id) } }
+                                            val entries = pending(page.sid)
+                                            entries.filter { entry ->
+                                                val row = materialized.messages[entry.messageId]
+                                                entry.sameChat(account, messageScope) && entry.operation == "submit" && row != null && row.text == entry.text &&
+                                                    (row.state == MessageProtocol.State.CANCELLED || entries.none {
+                                                        it.operation == "dismiss" && !it.notRemovable && it.sameChat(entry.account, entry.scope) && it.messageId == entry.messageId && it.text == entry.text
+                                                    })
+                                            }.forEach { journalAccess { journal?.remove(it.id) } }
+                                            entries.filter { entry ->
+                                                val row = materialized.messages[entry.messageId]
+                                                entry.sameChat(account, messageScope) && entry.operation == "dismiss" && row != null &&
+                                                    (row.state == MessageProtocol.State.CANCELLED || entry.notRemovable) &&
+                                                    (entry.text == null || row.text == entry.text)
+                                            }.forEach { journalAccess { journal?.remove(it.id) } }
                                             resetFence = resetFence || pending(page.sid).any { it.operation == "reset" }
                                             val ack = resetAck
                                             if (ack != null && ack.sid == page.sid && ack.generation == cycleGeneration && materialized.epoch >= ack.epoch && pending(page.sid).any { it.id == ack.id && it.operation == "reset" }) {
@@ -368,7 +382,7 @@ class ChatHistoryConnection(
                                         var reset: Command? = null
                                         while (iterator.hasNext()) {
                                             val candidate = iterator.next()
-                                            if (candidate is Command.Action && candidate.kind == "reset") {
+                                            if (candidate is Command.Action && candidate.kind in setOf("reset", "removeUnknown")) {
                                                 iterator.remove()
                                                 reset = candidate
                                                 break
@@ -378,7 +392,7 @@ class ChatHistoryConnection(
                                     }
                                     if (command == null) break
                                     activeCommand = command
-                                    if (!caughtUp && !(command is Command.Action && command.kind == "reset")) {
+                                    if (!caughtUp && !(command is Command.Action && command.kind in setOf("reset", "removeUnknown"))) {
                                         when (command) {
                                             is Command.Submit -> command.result.complete(PromptAdmission.Rejected("Chat is catching up"))
                                             is Command.Action -> command.result.complete(MessageActionResult.Rejected(if (command.generation != generation) "Chat changed" else "Chat is catching up"))
@@ -444,7 +458,7 @@ class ChatHistoryConnection(
                                                 }
                                                 synchronized(this@ChatHistoryConnection) {
                                                     if (command.generation != generation || !owns(page.sid)) {
-                                                        command.result.complete(MessageActionResult.Unknown)
+                                                        command.result.complete(if (result is MessageActionResult.Rejected) result else MessageActionResult.Unknown)
                                                         replica = null
                                                     } else if (command.kind == "reset" && result == MessageActionResult.Applied) {
                                                         resetReply = command.result
@@ -453,7 +467,7 @@ class ChatHistoryConnection(
                                                     } else {
                                                         if (result != MessageActionResult.Applied) clearUnrecordedReset(command, page.sid)
                                                         command.result.complete(result)
-                                                        if (result == MessageActionResult.Applied) replica = null
+                                                        if (result == MessageActionResult.Applied || command.kind in setOf("dismiss", "removeUnknown", "replay")) replica = null
                                                     }
                                                 }
                                                 synchronized(this@ChatHistoryConnection) {
@@ -513,7 +527,7 @@ class ChatHistoryConnection(
         exchange: suspend (String) -> String, nextId: () -> Long): MessageActionResult {
         if (command.generation != generation) return MessageActionResult.Rejected("Chat changed")
         val entries = pending(wire.sid)
-        val existing = entries.firstOrNull { it.id == command.id || it.messageId == command.id }
+        val existing = entries.firstOrNull { it.id == command.id } ?: entries.firstOrNull { it.messageId == command.id }
         val row = replica.messages[command.id]
         val args = JSONObject()
         val operation: String
@@ -523,19 +537,58 @@ class ChatHistoryConnection(
                 if (existing == null || existing.operation != "submit") return MessageActionResult.Rejected("Message is not unknown")
                 operation = "message_status"; args.put("message_id", existing.messageId)
             }
+            "removeUnknown" -> {
+                val target = (entries.firstOrNull { it.id == command.id } ?: command.target)
+                    ?.takeIf { it.id == command.id && it.sameChat(account, wire) && it.operation in setOf("submit", "dismiss") }
+                    ?: return MessageActionResult.Rejected("Message is not unknown")
+                if (target.text == null) return MessageActionResult.Rejected("Message is not unknown")
+                val observed = replica.messages[target.messageId]
+                if (observed != null && observed.text != target.text) return MessageActionResult.Rejected("Message changed")
+                beforeAdmission?.invoke()
+                if (command.generation != generation || !owns(wire.sid)) return MessageActionResult.Rejected("Chat changed")
+                val statusId = nextId()
+                val status = MessageProtocol.mutation(exchange(MessageProtocol.request(statusId, wire, "message_status", JSONObject().put("message_id", target.messageId))),
+                    statusId, wire, target.messageId)
+                if (command.generation != generation || !owns(wire.sid)) return MessageActionResult.Rejected("Chat changed")
+                if (status.row != null && status.row.text != target.text) return MessageActionResult.Rejected("Message changed")
+                entry = try { admit(wire.sid, command.generation) {
+                    val current = pending(wire.sid)
+                    val saved = current.firstOrNull { it.id == target.id && it.sameChat(account, wire) && it.text == target.text }
+                        ?: target.takeIf { it.operation == "submit" && it == command.target }
+                        ?: error("Message changed")
+                    current.firstOrNull { it.operation == "dismiss" && it.sameChat(saved.account, saved.scope) && it.messageId == saved.messageId && it.text == saved.text }
+                        ?: if (saved.operation == "submit" && !resetFence) journalAccess {
+                            requireNotNull(journal).create(account, wire, "dismiss", saved.messageId, saved.text, saved.epoch, null)
+                        } else error("Message changed")
+                } } catch (failure: JournalStorageFailure) { throw failure } catch (_: IllegalStateException) { null }
+                    ?: return MessageActionResult.Rejected("Chat changed")
+                operation = "message_dismiss"
+                val dismiss = requireNotNull(entry)
+                args.put("message_id", dismiss.messageId).put("text", dismiss.text)
+            }
             "replay" -> {
                 if (existing == null || existing.operation !in setOf("submit", "retry", "dismiss")) return MessageActionResult.Rejected("No recovery operation")
+                if (existing.operation == "submit" && entries.any { it.operation == "dismiss" && it.sameChat(existing.account, existing.scope) && it.messageId == existing.messageId && it.text == existing.text })
+                    return MessageActionResult.Rejected("Remove confirmation is unknown")
                 if (existing.operation == "retry") {
                     val current = replica.messages[existing.messageId]
                         ?: return MessageActionResult.Rejected("Retry cannot be confirmed yet")
                     val safeProbe = current.state in setOf(MessageProtocol.State.ACCEPTED, MessageProtocol.State.STARTED, MessageProtocol.State.CANCELLED)
                     val sameFailedAttempt = current.state == MessageProtocol.State.FAILED && current.attempt == existing.attempt && existing.epoch == replica.epoch
                     if (!safeProbe && !sameFailedAttempt) return MessageActionResult.Rejected("Retry cannot be confirmed yet")
-                } else if (existing.epoch != replica.epoch) return MessageActionResult.Rejected("Message belongs to an earlier reset")
+                } else if (existing.operation != "dismiss" && existing.epoch != replica.epoch) return MessageActionResult.Rejected("Message belongs to an earlier reset")
+                if (existing.operation == "dismiss" && existing.text != null) {
+                    if (command.generation != generation || !owns(wire.sid)) return MessageActionResult.Rejected("Chat changed")
+                    val statusId = nextId()
+                    val status = MessageProtocol.mutation(exchange(MessageProtocol.request(statusId, wire, "message_status", JSONObject().put("message_id", existing.messageId))),
+                        statusId, wire, existing.messageId)
+                    if (command.generation != generation || !owns(wire.sid)) return MessageActionResult.Rejected("Chat changed")
+                    if (status.row != null && status.row.text != existing.text) return MessageActionResult.Rejected("Message changed")
+                }
                 entry = existing
                 operation = "message_${existing.operation}"
                 args.put("message_id", existing.messageId)
-                if (existing.operation == "submit") args.put("text", existing.text)
+                if (existing.operation == "submit" || (existing.operation == "dismiss" && existing.text != null)) args.put("text", existing.text)
                 if (existing.operation == "retry") args.put("retry_id", existing.id)
             }
             "retry", "dismiss" -> {
@@ -574,6 +627,11 @@ class ChatHistoryConnection(
             else -> return MessageActionResult.Rejected("Unknown action")
         }
         if (command.generation != generation || !owns(wire.sid)) return MessageActionResult.Rejected("Chat changed")
+        if (command.kind == "removeUnknown") synchronized(this) {
+            if (command.generation == generation && selected && ownedKey == key(wire.sid)) gate?.ifOwned(key(wire.sid), token) {
+                _state.value = _state.value.copy(unresolved = pending(wire.sid))
+            }
+        }
         if (entry != null && !markIssued(wire.sid, command.generation, entry.id)) return MessageActionResult.Rejected("Chat changed")
         val id = nextId()
         val response = exchange(MessageProtocol.request(id, wire, operation, args))
@@ -583,6 +641,32 @@ class ChatHistoryConnection(
                 if (command.generation == generation && owns(wire.sid))
                     resetAck = ResetAck(wire.sid, requireNotNull(entry).id, result.epoch, command.generation)
             }
+        } else if (operation == "message_dismiss") {
+            val dismiss = requireNotNull(entry)
+            val rejected = MessageProtocol.rejectedMutation(response, id)
+            val result = if (rejected) {
+                if (command.generation != generation || !owns(wire.sid)) return MessageActionResult.Unknown
+                val statusId = nextId()
+                MessageProtocol.mutation(exchange(MessageProtocol.request(statusId, wire, "message_status", JSONObject().put("message_id", dismiss.messageId))),
+                    statusId, wire, dismiss.messageId, dismiss.text)
+            } else MessageProtocol.requiredMutation(response, id, wire, dismiss.messageId, dismiss.text)
+            val row = result.row ?: return MessageActionResult.Unknown
+            val cancelled = row.state == MessageProtocol.State.CANCELLED && !rejected
+            val handedOff = row.state in setOf(MessageProtocol.State.SENT, MessageProtocol.State.ACCEPTED, MessageProtocol.State.STARTED)
+            if (!cancelled && !handedOff) return MessageActionResult.Unknown
+            val settled = synchronized(this) {
+                if (command.generation != generation || !selected || ownedKey != key(wire.sid)) false
+                else gate?.ifOwned(key(wire.sid), token) {
+                    if (cancelled) {
+                        pending(wire.sid).filter { it.operation == "submit" && it.sameChat(dismiss.account, dismiss.scope) && it.messageId == dismiss.messageId && it.text == row.text }
+                            .forEach { journalAccess { journal?.remove(it.id) } }
+                        journalAccess { journal?.remove(dismiss.id) }
+                    } else journalAccess { requireNotNull(journal).markNotRemovable(dismiss.id) }
+                    true
+                } ?: false
+            }
+            if (!settled) return MessageActionResult.Unknown
+            if (!cancelled) return MessageActionResult.Rejected("Could not remove message")
         } else {
             val result = if (operation == "message_status") MessageProtocol.mutation(response, id, wire, existing?.messageId, existing?.text)
                 else MessageProtocol.requiredMutation(response, id, wire, requireNotNull(entry).messageId, if (operation == "message_submit") entry.text else null)

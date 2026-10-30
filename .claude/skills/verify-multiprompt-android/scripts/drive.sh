@@ -866,7 +866,7 @@ tap_text verify-session
 if [[ "$feature" == chat-shared.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true ]]
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py engine-info > "$EVIDENCE/shared-engine-info.json"
-    jq -e '.engine_info.generation >= 20 and .bundle_bytes == 223175 and .bundle_sha256 == "47567abeb0277d32e12648267bdd73acc9c902aaefd3d68f7a6f9028ab79af4a"' "$EVIDENCE/shared-engine-info.json" >/dev/null
+    jq -e '.engine_info.generation >= 21 and .bundle_bytes == 224140 and .bundle_sha256 == "43d0205c4f673178f116e53bc702db0080be4d613ee66a8e31427e531ce7a44f"' "$EVIDENCE/shared-engine-info.json" >/dev/null
     wait_for_text 'Ready for queued messages.'
     fill 'Message verify-session' SHARED_PHONE_SYNTHETIC
     tap_desc 'Send prompt'

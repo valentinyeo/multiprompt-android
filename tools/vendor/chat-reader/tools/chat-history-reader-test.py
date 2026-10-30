@@ -3989,6 +3989,21 @@ class IGSH_1266_SharedMessageHostTest(unittest.TestCase):
             self.submit(text='different synthetic prompt')
         self.assertEqual(self.status()['state'], 'sent')
 
+    def test_remove_works_for_failed_unknown_and_reset_messages(self):
+        self.submit()
+        with patch.object(reader, 'send_response_preserve_draft', return_value={'status': 'not_sent', 'reason': 'draft_present'}):
+            self.request('dispatch')
+        self.assertEqual(self.status()['state'], 'failed')
+        self.assertEqual(self.request('dismiss', message_id='message_fixture_0001', text='synthetic prompt')['message']['state'], 'cancelled')
+        unknown = self.request('dismiss', message_id='message_fixture_0002', text='never arrived')['message']
+        self.assertEqual(unknown['state'], 'cancelled')
+        self.assertEqual(self.submit('message_fixture_0002', 'never arrived')['state'], 'cancelled')
+        self.request('dispatch')
+        self.assertEqual(self.send.call_count, 0)
+        self.submit('message_fixture_0003', 'before reset')
+        self.request('reset', reset_id='reset_fixture_0001')
+        self.assertEqual(self.request('dismiss', message_id='message_fixture_0003', text='before reset')['message']['state'], 'cancelled')
+
     def test_global_id_replay_across_tmux_locators(self):
         first = self.submit()
         self.request('dispatch')
