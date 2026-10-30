@@ -1,14 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-source_repo="${ZIGSHELL_REPO:-/home/valentin/projects/zigshell}"
+revision=920dffe80a424393d74e5bd0b8514b6bddb2df12
+sha256=27e681fab0bbebf4620f0ff47c66d1fcc4442152fb1c7046eac376726a2672d0
 asset=app/src/main/assets/chat_history_reader.py
-revision=app/src/main/assets/chat_history_reader.sha
-if [[ "${1:-}" == --check ]]; then
-    git -C "$source_repo" show "$(cat "$revision"):src/chat_history_reader.py" | cmp - "$asset"
-    printf 'Bundled reader matches recorded revision\n'
+[[ "$(cat app/src/main/assets/chat_history_reader.sha)" == "$revision" ]]
+[[ $# -le 1 && ( "${1:-}" == "" || "${1:-}" == --check ) ]]
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+if [[ -n "${MULTIPROMPT_DESKTOP_REPO:-}" ]]; then
+    git -C "$MULTIPROMPT_DESKTOP_REPO" show "$revision:src/chat_history_reader.py" > "$tmp"
+elif [[ "${GITHUB_ACTIONS:-}" == true ]]; then
+    curl --fail --silent --show-error --location "https://raw.githubusercontent.com/valentinyeo/multiprompt/$revision/src/chat_history_reader.py" > "$tmp"
 else
-    sha=$(git -C "$source_repo" rev-parse origin/master)
-    git -C "$source_repo" show "$sha:src/chat_history_reader.py" > "$asset"
-    printf '%s\n' "$sha" > "$revision"
+    printf 'Set MULTIPROMPT_DESKTOP_REPO to the canonical desktop repository\n' >&2
+    exit 1
+fi
+printf '%s  %s\n' "$sha256" "$tmp" | sha256sum --check --status
+if [[ "${1:-}" == --check ]]; then
+    cmp "$tmp" "$asset"
+    printf 'Bundled reader matches canonical revision and SHA256\n'
+else
+    cp "$tmp" "$asset"
 fi

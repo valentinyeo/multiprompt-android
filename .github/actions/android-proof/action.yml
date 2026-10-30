@@ -1,0 +1,70 @@
+name: Stable Android proof
+description: Shared accelerated emulator lifecycle and retained diagnostics
+inputs:
+  script:
+    description: Complete bash proof stage
+    required: true
+  target:
+    description: Android system image target
+    default: default
+  stage:
+    description: Unique stage name within the job
+    default: proof
+runs:
+  using: composite
+  steps:
+    - name: Cache emulator SDK packages
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/android-proof
+          ${{ env.ANDROID_HOME }}/system-images/android-35/${{ inputs.target }}/x86_64
+        key: android-proof-${{ runner.os }}-24.04-35-${{ inputs.target }}-emulator-13610412-v2
+    - name: Prepare accelerated emulator
+      shell: bash
+      env:
+        PROOF_SCRIPT: ${{ inputs.script }}
+        PROOF_TARGET: ${{ inputs.target }}
+      run: |
+        sudo apt-get update && sudo apt-get install -y gdb libpulse0
+        bash "${{ github.action_path }}/sdk.sh"
+        test -c /dev/kvm
+        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --name-match=kvm
+        test -r /dev/kvm && test -w /dev/kvm
+        mkdir -p "$RUNNER_TEMP/android-proof"
+        free -m | tee "$RUNNER_TEMP/android-proof/memory-before.txt"
+        df -h "$ANDROID_HOME" | tee "$RUNNER_TEMP/android-proof/disk-before.txt"
+        printf '%s\n' "$PROOF_SCRIPT" > "$RUNNER_TEMP/android-proof/stage.sh"
+    - uses: reactivecircus/android-emulator-runner@v2.34.0
+      env:
+        ANDROID_PROOF_ACTION: ${{ github.action_path }}
+      with:
+        api-level: 35
+        arch: x86_64
+        target: ${{ inputs.target }}
+        profile: pixel_2
+        cores: 2
+        ram-size: 2048M
+        disable-animations: true
+        emulator-options: -no-window -gpu swangle_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -feature -Vulkan -verbose > /tmp/android-proof-emulator.log 2>&1
+        pre-emulator-launch-script: bash "$ANDROID_PROOF_ACTION/emulator.sh"
+        script: bash "$ANDROID_PROOF_ACTION/run.sh"
+    - name: Retain emulator host and exit evidence
+      if: always()
+      shell: bash
+      run: |
+        mkdir -p "$RUNNER_TEMP/android-proof"
+        sudo dmesg -T > "$RUNNER_TEMP/android-proof/kernel.txt"
+        free -m > "$RUNNER_TEMP/android-proof/memory-after.txt"
+        df -h > "$RUNNER_TEMP/android-proof/disk-after.txt"
+        ps -eo pid,ppid,stat,rss,args > "$RUNNER_TEMP/android-proof/processes.txt"
+        if [ -f /tmp/android-proof-emulator.log ]; then cp /tmp/android-proof-emulator.log "$RUNNER_TEMP/android-proof/emulator.txt"; fi
+        if [ -d /tmp/android-runner ]; then cp -a /tmp/android-runner "$RUNNER_TEMP/android-proof/crashes"; fi
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: emulator-${{ github.job }}-${{ inputs.stage }}
+        path: ${{ runner.temp }}/android-proof/
+        retention-days: 7

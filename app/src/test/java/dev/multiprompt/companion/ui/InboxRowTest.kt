@@ -24,10 +24,11 @@ class InboxRowTest {
     val compose = createComposeRule()
 
     @Test
-    fun classicRowShowsOnlyNameAndTimeWithoutPerRowMenuButton() {
+    fun classicRowShowsRobotNamePreviewAndTimeWithoutPerRowMenuButton() {
         compose.setContent { M3TestScreen(M3Screen.INBOX_LIST, material3 = false, sunlight = false) }
         compose.onNodeWithText("claude-reader").assertIsDisplayed()
-        compose.onAllNodesWithText("Ready for your next prompt").assertCountEquals(0)
+        compose.onAllNodesWithText("Ready for your next prompt").assertCountEquals(2)
+        compose.onNodeWithContentDescription("Robot claude-reader", useUnmergedTree = true).assertIsDisplayed()
         assertEquals(2, compose.onAllNodesWithTag("Session activity", useUnmergedTree = true).fetchSemanticsNodes().size)
         compose.onNodeWithContentDescription("Session actions").assertDoesNotExist()
     }

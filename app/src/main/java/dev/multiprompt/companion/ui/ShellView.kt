@@ -8,6 +8,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentWidth
@@ -64,7 +65,6 @@ internal fun ShellContent(
     fontSize: TextUnit,
     onFontSizeChange: (Float) -> Unit,
     contentWidth: Dp,
-    onSwitchSession: (Int) -> Unit,
     onLiveTap: () -> Unit = {},
     modifier: Modifier = Modifier,
     liveContent: @Composable (Modifier) -> Unit,
@@ -100,7 +100,6 @@ internal fun ShellContent(
         Box(
             Modifier.fillMaxSize()
                 .testTag("Shell content")
-                .then(if (!historyVisible) Modifier.horizontalSwipe(onSwitchSession, PointerEventPass.Final) else Modifier)
                 .pointerInput(historyVisible) {
                     if (historyVisible) return@pointerInput
                     awaitEachGesture {
@@ -128,13 +127,13 @@ internal fun ShellContent(
                                         change.consume()
                                     }
                                 }
-                                if (total.y > viewConfiguration.touchSlop && total.y > abs(total.x) * 2) {
+                                if (abs(total.y) > viewConfiguration.touchSlop && abs(total.y) > abs(total.x) * 2) {
                                     change.consume()
                                 }
                             }
                         } while (event.changes.any { it.pressed })
-                        if (!zooming && !panning && total.y > 32.dp.toPx() && total.y > abs(total.x) * 2) {
-                            historyDrag = total.y
+                        if (!zooming && !panning && abs(total.y) > 32.dp.toPx() && abs(total.y) > abs(total.x) * 2) {
+                            historyDrag = abs(total.y)
                             currentOnOpenHistory()
                         } else if (!zooming && total.getDistance() < viewConfiguration.touchSlop) {
                             currentOnLiveTap()
@@ -153,7 +152,7 @@ internal fun ShellContent(
             })
         }
         if (historyVisible) {
-            Box(Modifier.fillMaxSize().background(TerminalBackground)) {
+            Box(Modifier.fillMaxSize().imePadding().background(TerminalBackground)) {
                 ShellHistory(lines.orEmpty(), fontSize, onJumpToLive, initialScrollPx = historyDrag)
                 if (lines == null && error == null) CircularProgressIndicator(Modifier.align(Alignment.Center))
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.align(Alignment.Center)) }

@@ -19,11 +19,17 @@ concurrency:
 
 jobs:
   build-and-publish:
-    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 200
+          fetch-depth: 0
+
+      - name: Scan release history for secrets
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz | tar -xz -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" detect --no-banner --source . --redact --log-opts "$GITHUB_SHA"
 
       - uses: actions/setup-java@v4
         with:
@@ -75,14 +81,55 @@ jobs:
           keyPassword=$KEY_PASSWORD
           EOF
 
-      - name: Install terminal-key test dependency
-        run: sudo apt-get update && sudo apt-get install -y tmux
-
-      - name: Test and build signed APK
+      - name: Build signed APKs
         run: >-
-          gradle --no-daemon lintDebug test testM3UnitTest assembleRelease assembleM3
+          gradle --no-daemon assembleRelease assembleM3
           -PversionCode="$VERSION_CODE"
           -PversionName="$VERSION_NAME"
+
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Prepare launch evidence
+        run: mkdir -p build/release-launch-evidence
+
+      - name: Launch signed M3 APK
+        uses: reactivecircus/android-emulator-runner@v2.34.0
+        timeout-minutes: 5
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          emulator-boot-timeout: 180
+          emulator-options: -no-window -gpu swangle_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -feature -Vulkan -verbose > /tmp/android-proof-emulator.log 2>&1
+          script: bash tools/release-launch.sh
+
+      - name: Upload launch evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-launch-evidence
+          path: build/release-launch-evidence/
+          if-no-files-found: warn
+
+      - name: Reject older releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for channel in android-latest android-m3-latest; do
+            case "$channel" in
+              android-latest) manifest=multiprompt-companion-update.json ;;
+              *) manifest=multiprompt-m3-update.json ;;
+            esac
+            gh release view "$channel" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' > "$RUNNER_TEMP/assets"
+            grep -Fx "$manifest" "$RUNNER_TEMP/assets"
+            curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/download/${channel}/${manifest}" -o "$RUNNER_TEMP/$manifest"
+            previous_code=$(jq -er '.versionCode | select(type == "number" and . >= 0 and floor == .)' "$RUNNER_TEMP/$manifest")
+            test "$VERSION_CODE" -gt "$previous_code"
+          done
 
       - name: Build verified update manifest and carry forward its changelog history
         shell: bash

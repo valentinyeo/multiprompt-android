@@ -1,25 +1,13 @@
-# Sent messages stop saying Queued once the session replies
+# Claude queue delivery while busy
 
-## Sub-features
+The hosted journey uses a simulated Claude provider. SSH, host-key trust, tmux, Android composer, and the APK's embedded reader are real. No model runs. The provider owns its prompt, input log, native queue and transcript; it does not decide engine delivery states.
 
-- A message the session has not taken in stays dim with the Queued label.
-- A message the session has taken in but not answered keeps the label.
-- Once the session replies, every earlier message returns to normal style.
-- Two messages sent in a row clear together.
+The provider starts busy with `FIXTURE_OWNED_DRAFT` in its terminal prompt. The phone sends `WAITING_ONE` and `WAITING_TWO`. Read-only server SQLite evidence must show two distinct client-generated IDs in `queued` state. Both unique bodies must show Queued, and the independent input log must be empty. The driver checks the draft remains intact, then asks the provider to clear only that draft. Its redraw matches the canonical busy prompt: `Working... (esc to interrupt)`, `❯ `, and the separator.
 
-## How to get to it (user POV)
+Each stdin handoff is logged once and immediately gets a main-chain `queued_command` transcript receipt. The provider redraws a native queue-edit hint before that receipt. The first ID must become Delivered while the second remains Queued; the provider then consumes its first native entry and redraws busy-empty. The second must become Delivered. The driver checks the bodies, states, input order and exact receipt count before any assistant reply. SQLite is never modified by the fixture.
 
-Open a session chat and send a message while the agent is busy. The bubble is dim and says Queued. When the agent answers, the bubble turns normal.
+Afterward, FOLLOWUP receives its own input and receipt. A 1 MiB image JSONL record precedes its assistant answer. The 120-second shell/chat monitor, latency check, strict host trust, independent input log and screen recordings remain. Evidence includes SQLite snapshots, transcript, inputs, screenshots, recording, and `queue-result.json` with harness and APK provenance.
 
-## Driving it with the CI journey
+Dispatch `.github/workflows/verify.yml` with `feature=chat-queued.md`. For the signed branch APK, set `released_chat=true` and `candidate=true`; it builds from the workflow revision. For an unchanged-harness old-app control, use the debug journey with `app_ref` pinned to the old Android commit. The control must fail specifically at the first busy-empty handoff; the earlier run 40998253286 used a different harness and is not that control. A signed candidate ignores `app_ref`; do not use it to claim an old-app comparison.
 
-Dispatch `verify.yml` with `feature=chat-queued.md`.
-The existing host-import and fingerprint comparison run first. The fixture is a foreground process named claude that records every received message and writes a Claude Code style transcript.
-
-The driver sends `WAITING_ONE` and `WAITING_TWO` through the real composer and requires two Queued labels. The fixture then writes the transcript lines Claude Code writes when it takes queued messages in, plus an unrelated queue removal. The driver requires both labels to remain. The fixture then writes an assistant reply. The driver requires zero Queued labels and both messages still visible.
-
-For the negative control, set `app_ref` to the commit before the fix. The same journey must fail with `IGSH1008_QUEUED_STUCK`.
-
-## Gotchas
-
-No real Claude provider runs in CI. SSH, tmux, transcript discovery, UI gestures and message transport are real. Transcript lines are written by the fixture, not by a model.
+This branch embeds generation 2. Generation 3 must be pinned separately in the integration branch. The readiness reference is desktop commit `920dffe80a424393d74e5bd0b8514b6bddb2df12`: busy-empty is eligible; a nonempty draft and queue-edit or selection hints remain blocked. This journey covers Claude, not native Codex/Hax managed queues.

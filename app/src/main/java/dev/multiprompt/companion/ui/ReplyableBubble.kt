@@ -28,6 +28,8 @@ import dev.multiprompt.companion.BuildConfig
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -96,6 +98,7 @@ internal fun ReplyableBubble(
     highlighted: Boolean = false,
     reactions: Set<ChatReactions.Emoji> = emptySet(),
     onReaction: ((ChatReactions.Emoji) -> Unit)? = null,
+    onCancel: (() -> Unit)? = null,
     content: @Composable (selectable: Boolean) -> Unit,
 ) {
     var selectable by remember { mutableStateOf(false) }
@@ -112,14 +115,14 @@ internal fun ReplyableBubble(
     val gestures = Modifier.pointerInput(gate, owner) {
         val threshold = 72.dp.toPx()
         awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Main)
             gate.owner = owner
             var totalX = 0f
             var totalY = 0f
             var claimed = false
             try {
                 while (true) {
-                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val event = awaitPointerEvent(PointerEventPass.Main)
                     val change = event.changes.firstOrNull { it.id == down.id } ?: break
                     if (!change.pressed) {
                         if (claimed && !change.isConsumed && totalX > threshold) currentReply()
@@ -164,7 +167,8 @@ internal fun ReplyableBubble(
                 Row(
                     Modifier.padding(top = 6.dp).testTag("reaction-badges:$messageId")
                         .semantics { contentDescription = "Reactions: " + shown.joinToString(" ") { it.text } }
-                        .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(12.dp))
+                        .background(if (sunlight) Color(0xFFE1E1E1) else ChatBubbleUserDark, RoundedCornerShape(12.dp))
+                        .border(1.dp, if (sunlight) Color(0xFF9B9B9B) else ReaderBubbleUserOutline, RoundedCornerShape(12.dp))
                         .padding(horizontal = 8.dp, vertical = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
@@ -210,6 +214,11 @@ internal fun ReplyableBubble(
                                 ) { Text(emoji.text, fontSize = 28.sp) }
                             }
                         }
+                    }
+                }
+                if (onCancel != null) {
+                    group {
+                        action("Cancel message", Icons.Default.Close) { onCancel() }
                     }
                 }
                 group {

@@ -128,7 +128,7 @@ internal fun AccountWorkspacesScreen(
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(layout?.tabs.orEmpty().filter { it.workspace == selected &&
                     (it.name.contains(query, true) || it.session.contains(query, true)) }, key = { it.identity }) { tab ->
-                    val session = AccountHostMap.sessionFor(tab, state.sessions, state.accountHosts)
+                    val session = AccountHostMap.sessionFor(tab, state.sessions, state.accountHosts, layout)
                     Card(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                         Column(Modifier.padding(12.dp)) {
                             Text(tab.name, Modifier.fillMaxWidth().clickable(enabled = session != null) {
@@ -157,7 +157,7 @@ internal fun AccountWorkspacesScreen(
                     items(state.sessions.filter { it.hostId == host.id &&
                         (it.displayName.contains(query, true) || it.name.contains(query, true)) }.sortedBy { it.name }, key = { "${it.hostId}:${it.name}" }) { raw ->
                         val tab = layout?.let { AccountHostMap.tabFor(raw, it, state.accountHosts) }
-                        val session = tab?.let { AccountHostMap.sessionFor(it, state.sessions, state.accountHosts) } ?: raw
+                        val session = tab?.let { AccountHostMap.sessionFor(it, state.sessions, state.accountHosts, layout) } ?: raw
                         Card(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                             Column(Modifier.padding(12.dp)) {
                                 Text(session.displayName, Modifier.fillMaxWidth().clickable { viewModel.openReader(session) }, style = MaterialTheme.typography.titleMedium)
@@ -190,9 +190,10 @@ internal fun AccountWorkspacesScreen(
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         } },
         confirmButton = { TextButton(onClick = {
-            error = viewModel.editAccountLayout { current ->
+            error = if (renameTab == null && oldWorkspace != null) {
+                viewModel.renameAccountWorkspace(oldWorkspace!!, workspaceName.trim())
+            } else viewModel.editAccountLayout { current ->
                 renameTab?.let { current.renameTab(it.identity, tabName.trim()) }
-                    ?: oldWorkspace?.let { current.renameWorkspace(it, workspaceName.trim()) }
                     ?: current.copy(workspaces = current.workspaces + workspaceName.trim())
             }
             if (error == null) { workspaceEditor = false; renameTab = null }

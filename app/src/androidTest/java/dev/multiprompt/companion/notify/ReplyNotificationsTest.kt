@@ -58,8 +58,8 @@ class ReplyNotificationsTest {
     @Test fun onlyFavoriteRepliesAppearAndUnfavoritingClearsThem() {
         val app = context.applicationContext as MultipromptApplication
         val host = HostProfile("favorite-proof", "Hetzner", "127.0.0.1", username = "valentin", keySecretId = "missing")
-        val alpha = TmuxSession(host.id, "alpha", 1, 0, 0, title = "Favorite alpha")
-        val beta = TmuxSession(host.id, "beta", 1, 0, 0, title = "Runner beta")
+        val alpha = TmuxSession(host.id, "alpha", 1, 0, 0, title = "Favorite alpha", paneCommand = "claude")
+        val beta = TmuxSession(host.id, "beta", 1, 0, 0, title = "Runner beta", paneCommand = "claude")
         val alphaKey = SessionReadStore.key(host.id, alpha.name)
         val betaKey = SessionReadStore.key(host.id, beta.name)
         val layout = AccountLayout(workspaces = listOf("Other"), tabs = listOf(
@@ -69,6 +69,8 @@ class ReplyNotificationsTest {
         val authField = app.syncAuth.javaClass.getDeclaredField("auth").apply { isAccessible = true }
         val originalAuth = authField.get(app.syncAuth)
         var model: MainViewModel? = null
+        var historyRole = "user"
+        var historyText = "/rc"
         fun reply() = instrumentation.runOnMainSync {
             val current = checkNotNull(model)
             val stateField = current.javaClass.getDeclaredField("_state").apply { isAccessible = true }
@@ -86,6 +88,11 @@ class ReplyNotificationsTest {
                 app.getSharedPreferences("updates", android.content.Context.MODE_PRIVATE).edit().putLong("last_check_ms", System.currentTimeMillis()).commit()
                 val current = MainViewModel(app)
                 model = current
+                current.notificationHistoryReader = { _, _ ->
+                    dev.multiprompt.companion.reader.ChatHistory(sid = "proof", rows = listOf(
+                        dev.multiprompt.companion.reader.ChatHistoryProtocol.Row(historyRole, historyText, "reply", "", 0, 1),
+                    ))
+                }
                 val auth = AccountAuth("test://callback", object : AccountHttp {
                     override fun request(method: String, path: String, token: String?, body: JSONObject?): AccountReply = error("No account network expected")
                 }, { if (it == AccountAuth.TOKENS) "{\"account_id\":\"notification-proof\"}" else null }, { _, _ -> })
@@ -100,7 +107,17 @@ class ReplyNotificationsTest {
                     accountLayout = layout, accountHosts = mapOf(0 to host))
             }
             reply()
+            instrumentation.waitForIdleSync()
+            assertTrue("/rc must not notify", replies().isEmpty())
+            historyText = "Please fix checkout"
+            reply()
+            instrumentation.waitForIdleSync()
+            assertTrue("user typing must not notify", replies().isEmpty())
+            historyRole = "assistant"
+            historyText = "Checkout fixed. Tests passed."
+            reply()
             waitFor(10_000) { children().isNotEmpty() }
+            assertEquals("Checkout fixed.", text(children().single().notification))
             assertEquals("only the favorite may notify", setOf(alphaKey), ReplyNotifier.activeKeys(context))
             assertEquals("Favorite alpha", title(children().single().notification))
             val shade = File(checkNotNull(InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")), "favorite-only-notifications-shade.png")

@@ -29,12 +29,15 @@ Numbered PNG/XML pairs show action and result. The transcript records commands a
 - [Session settings](session-settings.md): full-screen split switches; saving is blocked without account OTP and a pulled layout.
 - [Session routing](session-routing.md): Inbox and swipe switching, typed and simulated dictated sends, independent SSH receipts.
 - [Chat choices](chat-choices.md): latest-reply option taps and live question number keys, with independent SSH/tmux receipts.
+- [Working dots on the signed release](chat-working.md): quiet tools, lock/unlock, real SSH reconnect, recording and timed visible-state samples. Uses `working-dots.yml`.
+- [Cancel waiting messages](chat-cancel.md): exact cancellation, surviving order, host receipt and delivered actions, with a recording.
 - [Queued label](chat-queued.md): sent messages show Queued until taken in and answered, then return to normal.
 - [Native Claude controls](native-skills.md): slash filtering, shared plus entry, actual session model/effort and retained image picker.
 - [Claude reactions](chat-reactions.md): quoted sends, one badge, restart identity, fallback and signed update offers.
 - [Resync chat](chat-resync.md): the three-dot Resync chat entry clears stale Queued labels, keeps the draft, resends nothing.
 - [Session reader](session-reader.md): native output, Send, Enter/approve and Interrupt, with independent console receipts.
 - [Terminal](terminal.md): real SSH PTY/tmux fallback attachment.
+- [Launcher icon](launcher-icon.md): the robot launcher icon in the emulator's app drawer, with the themed-icon layer present in the built APK.
 
 ## Shipped but not automated
 
@@ -53,3 +56,5 @@ Prerequisites below are coverage gaps, never green skips. Account routes need hu
 - **IGSH-425 shell:** multi-touch and long/wide tmux output, no extra credential. **Open live terminal**, pinch (8–28 sp, retained on reopen), pan, swipe down or **Open shell history**, then **Jump to live** / **Back to the live view**. Terminal.md proves attachment only.
 - **IGSH-414 search layout:** matching/close are automated; no credential blocks layout proof, but keyboard-visible bounds inspection is unimplemented. Inbox **Search sessions**, type in **Search all sessions**, inspect results below the box and above the keyboard before closing.
 - **IGSH-413 shared menu:** no credential blocks comparing signed-out **Sign in to sync** in Inbox **Session list actions** and reader **Session actions**; that comparison is unimplemented. OTP is needed for **Sync: signed in — sign out** and synced splits. Compare both menus, then complete sign-in manually.
+
+- [Session gestures](session-gestures.md): no session swipes, bidirectional code scroll, ten replies, back to inbox on the signed APK.

@@ -41,6 +41,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import java.io.File
 import java.time.Duration
@@ -72,7 +74,6 @@ class ReplyToMessageTest {
     @get:Rule
     val compose = createComposeRule(effectContext = UnconfinedTestDispatcher(scheduler))
 
-    private val switches = mutableListOf<Int>()
     private val sent = mutableListOf<String>()
     private lateinit var clipboard: ClipboardManager
     private lateinit var view: View
@@ -87,7 +88,6 @@ class ReplyToMessageTest {
                 view = LocalView.current
                 Column(
                     Modifier.fillMaxWidth().background(Color.White)
-                        .horizontalSwipe({ switches.add(it) }, suppressRight = gate::suppressRight)
                         .verticalScroll(rememberScrollState()).padding(16.dp).testTag("harness"),
                 ) {
                     ReplyableBubble(
@@ -106,7 +106,7 @@ class ReplyToMessageTest {
                         onReply = { replyTo = it; author = "Claude" },
                         gate = gate,
                         modifier = Modifier.testTag("agent"),
-                    ) { Text("Claude\n$agentText") }
+                    ) { MarkdownText(agentText, 14.sp, Color.Black, Color.Blue) }
                     Spacer(Modifier.fillMaxWidth().height(90.dp).testTag("outside"))
                     replyTo?.let {
                         ReplyQuoteBar(message = it, author = author, onCancel = { replyTo = null })
@@ -127,9 +127,21 @@ class ReplyToMessageTest {
         compose.onNodeWithText("First line Second line").assertIsDisplayed()
         compose.onNodeWithText("Send").performClick()
         compose.runOnIdle {
-            assertTrue(switches.isEmpty())
             assertEquals(listOf("> First line\n> Second line\n\nmy answer"), sent)
         }
+    }
+
+    @Test
+    fun codeScrollsBothWaysWithoutStartingReply() {
+        harness("```\n" + "wide_code_".repeat(30) + "\n```")
+        val code = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.HorizontalScrollAxisRange))
+        fun position() = code.fetchSemanticsNode().config[SemanticsProperties.HorizontalScrollAxisRange].value()
+        code.performTouchInput { swipeLeft() }
+        val afterLeft = position()
+        assertTrue("Wide code must scroll left", afterLeft > 0f)
+        code.performTouchInput { swipeRight() }
+        assertTrue("Wide code must scroll back right", position() < afterLeft)
+        compose.onNodeWithContentDescription("Cancel reply").assertDoesNotExist()
     }
 
     @Test
@@ -153,19 +165,17 @@ class ReplyToMessageTest {
     }
 
     @Test
-    fun leftSwipeOnBubbleStillSwitchesToNextSession() {
+    fun leftSwipeOnBubbleDoesNotStartReply() {
         harness()
         compose.onNodeWithTag("agent").performTouchInput { swipeLeft() }
         compose.onNodeWithContentDescription("Cancel reply").assertDoesNotExist()
-        compose.runOnIdle { assertEquals(listOf(1), switches) }
     }
 
     @Test
-    fun rightSwipeOutsideBubbleStillSwitchesToPreviousSession() {
+    fun rightSwipeOutsideBubbleDoesNotStartReply() {
         harness()
         compose.onNodeWithTag("outside").performTouchInput { swipeRight() }
         compose.onNodeWithContentDescription("Cancel reply").assertDoesNotExist()
-        compose.runOnIdle { assertEquals(listOf(-1), switches) }
     }
 
     @Test

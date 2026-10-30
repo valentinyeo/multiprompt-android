@@ -24,6 +24,13 @@ class TranscriptProtocolTest {
         append("@@MP_END@@\n")
     }
 
+    @Test fun haxUsesCodexHistoryWireWithoutLosingItsSessionIdentity() {
+        val identity = TranscriptProtocol.Identity(AgentKind.HAX, "hax-runner-10", "/project")
+        assertEquals("8\ttranscript\tcodex\ttmux:hax-runner-10\t/project\t-\n", TranscriptProtocol.request(8, identity))
+        val reply = wire(listOf(row("assistant", "Codex reply")), identity).replace("\thax\t", "\tcodex\t")
+        assertEquals("Codex reply", TranscriptProtocol.parse(reply, 7, identity)!!.messages.single().text)
+    }
+
     @Test fun requestsHaveSixFieldsAndUseResolvedSidAndToken() {
         assertEquals("7\ttranscript\tclaude\ttmux:claude-project\t/home/me/project\t-\n", TranscriptProtocol.request(7, tmux))
         assertEquals("8\ttranscript\tclaude\t123.456\t/home/me/project\tsession-id\n", TranscriptProtocol.request(8, sid, "123.456"))
@@ -31,13 +38,13 @@ class TranscriptProtocolTest {
     }
 
     @Test fun requestsRejectControlCharactersAndUnsupportedAgents() {
-        listOf(tmux.copy(tmuxName = "bad\nname"), tmux.copy(cwd = "/bad\tpath"), tmux.copy(sid = "bad\nsid"), tmux.copy(agent = AgentKind.HAX)).forEach {
+        listOf(tmux.copy(tmuxName = "bad\nname"), tmux.copy(cwd = "/bad\tpath"), tmux.copy(sid = "bad\nsid"), tmux.copy(agent = AgentKind.PI)).forEach {
             try {
                 TranscriptProtocol.request(7, it)
                 throw AssertionError("Invalid identity accepted")
             } catch (_: IllegalArgumentException) { }
         }
-        AgentKind.entries.forEach { assertEquals(it in listOf(AgentKind.CLAUDE, AgentKind.CODEX), TranscriptProtocol.supports(it)) }
+        AgentKind.entries.forEach { assertEquals(it in listOf(AgentKind.CLAUDE, AgentKind.CODEX, AgentKind.HAX), TranscriptProtocol.supports(it)) }
     }
 
     @Test fun headerResolvesIdentityAndRowsPreserveRolesOrderTimestampAndUnicode() {

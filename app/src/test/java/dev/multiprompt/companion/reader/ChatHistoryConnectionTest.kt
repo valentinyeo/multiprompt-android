@@ -58,20 +58,52 @@ class ChatHistoryConnectionTest {
     }
 
     @Test
-    fun resyncChatForgetsEverySentMessageRecordSoNoQueuedBubbleSurvives() = runBlocking {
-        SessionReaderConnection(repository(), host, "tmux", historyScript = byteArrayOf(),
+    fun resyncWithoutConnectionPreservesUnconfirmedMessages() = runBlocking {
+        SessionReaderConnection(repository(), host, "tmux", agent = AgentKind.CLAUDE, historyScript = byteArrayOf(),
             historyCache = ChatHistoryCache(temporary.newFolder())).use { reader ->
             val text = "Any idea when the visual update of the inbox is coming?"
             assertTrue(reader.sendPrompt(text))
-            val now = System.currentTimeMillis()
-            val before = ChatHistory().displayMessages("", AgentKind.CLAUDE, reader.state.value.sentRecord, now)
+            val before = ChatHistory().displayMessages(reader.state.value.sentRecord)
             assertEquals(listOf(text), before.map { it.text })
             assertTrue(before.single().pending)
-            reader.resyncChat()
-            assertTrue(reader.state.value.sentRecord.isEmpty())
-            assertTrue(reader.state.value.sentPrompts.isEmpty())
-            assertTrue(ChatHistory().displayMessages("", AgentKind.CLAUDE, reader.state.value.sentRecord, now).isEmpty())
+            assertFalse(reader.resyncChat())
+            assertEquals(listOf(text), reader.state.value.sentRecord.map { it.text })
+            assertEquals(listOf(text), reader.state.value.sentPrompts)
+            assertTrue(ChatHistory().displayMessages(reader.state.value.sentRecord).single().pending)
         }
+    }
+
+    @Test
+    fun resyncPreservesUnkeyedAndHeldMessagesUntilServerSettlesTheirIds() {
+        val native = QueuedMessages.SentPrompt("same", 1)
+        val first = native.copy(messageId = "first", delivery = QueuedMessages.Delivery.QUEUED)
+        val second = first.copy(messageId = "second")
+        val history = ChatHistory(rows = listOf(
+            ChatHistoryProtocol.Row("user", "same", "one", "2023-11-14T22:13:20Z", 1, 2),
+            ChatHistoryProtocol.Row("assistant", "Done", "two", "", 3, 4),
+        ), held = listOf(second), deliveries = mapOf(
+            "first" to QueuedMessages.Delivery.DELIVERED,
+            "second" to QueuedMessages.Delivery.CANCELLED,
+        ))
+        assertEquals(listOf(native), unconfirmedAfterResync(history, listOf(native, first, second)))
+        assertEquals(listOf(first), unconfirmedAfterResync(ChatHistory(), listOf(first)))
+        assertEquals(emptyList<QueuedMessages.SentPrompt>(), unconfirmedAfterResync(
+            ChatHistory(deliveries = mapOf("first" to QueuedMessages.Delivery.CANCELLED)), listOf(first)))
+    }
+
+    @Test
+    fun liveRequestsFollowThePaneWhileArchivesKeepTheirExactSession() {
+        val history = ChatHistory(sid = "cached", inode = 9, offset = 42)
+        val live = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "pane", "/cwd", "saved")
+        val request = org.json.JSONObject(ChatHistoryProtocol.request(1, live, history))
+        assertTrue(request.getBoolean("follow"))
+        assertEquals("saved", request.getString("sid"))
+        assertEquals("cached", request.getString("cached_sid"))
+        assertEquals(42L, request.getLong("offset"))
+        val archive = org.json.JSONObject(ChatHistoryProtocol.request(2, live.copy(tmux = ""), history))
+        assertFalse(archive.getBoolean("follow"))
+        assertEquals("saved", archive.getString("sid"))
+        assertEquals("cached", archive.getString("cached_sid"))
     }
 
     @Test
@@ -82,4 +114,40 @@ class ChatHistoryConnectionTest {
         assertEquals(0L, request.getLong("offset"))
         assertEquals(0L, request.getLong("start"))
     }
+    @Test
+    fun resetSeedRetainsOnlySameSessionTerminalFactsAcrossStalePages() {
+        val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd")
+        for (terminal in listOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)) {
+            val prompt = QueuedMessages.SentPrompt("text", 1, "id", QueuedMessages.Delivery.QUEUED, "sid", 9, 10)
+            val initial = ChatHistory(sid = "sid", inode = 9, offset = 30, start = 5, mtime = 7,
+                probe = "a".repeat(64), rows = listOf(ChatHistoryProtocol.Row("user", "old", "row", "", 5, 10)),
+                deliveries = mapOf("guess" to QueuedMessages.Delivery.QUEUED), held = listOf(prompt))
+            val observed = ChatHistoryProtocol.Page("sid", 0, 30, 9, false, 7, "a".repeat(64), "tail", 0,
+                emptyList(), deliveries = mapOf("id" to terminal))
+            val known = initial.apply(observed)
+            val seed = known.resetSeed()
+            assertEquals(mapOf("id" to terminal), seed.deliveries)
+            assertTrue(seed.rows.isEmpty())
+            assertTrue(seed.held.isEmpty())
+            val request = org.json.JSONObject(ChatHistoryProtocol.request(1, identity, seed.copy(sid = "")))
+            assertTrue(request.getBoolean("follow"))
+            assertEquals("", request.getString("cached_sid"))
+            for (field in listOf("inode", "offset", "start", "mtime", "before")) assertEquals(0L, request.getLong(field))
+            assertEquals("", request.getString("probe"))
+            val stale = observed.copy(deliveries = mapOf("id" to QueuedMessages.Delivery.QUEUED), held = listOf(prompt))
+            for (page in listOf(stale, stale.copy(inode = 10))) {
+                val recovered = seed.apply(page)
+                assertEquals(terminal, recovered.deliveries["id"])
+                assertFalse(recovered.displayMessages(listOf(prompt)).single().pending)
+                assertTrue(unconfirmedAfterResync(recovered, listOf(prompt)).isEmpty())
+            }
+            val rotated = known.apply(stale.copy(inode = 10))
+            assertEquals(terminal, rotated.deliveries["id"])
+            assertFalse(rotated.deliveries.containsKey("guess"))
+            val other = seed.apply(stale.copy(sid = "other", inode = 10))
+            assertEquals(QueuedMessages.Delivery.QUEUED, other.deliveries["id"])
+            assertEquals(listOf(prompt), unconfirmedAfterResync(other, listOf(prompt)))
+        }
+    }
+
 }
