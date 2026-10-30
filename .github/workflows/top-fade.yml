@@ -1,6 +1,8 @@
 name: Android scroll-under proof
 
 on:
+  schedule:
+    - cron: '23 3 * * *'
   pull_request:
     paths:
       - 'app/**'
@@ -8,12 +10,6 @@ on:
       - 'tools/top-fade-proof.sh'
       - '.github/workflows/top-fade.yml'
       - '.github/actions/android-proof/**'
-  push:
-    branches: [main, ceo/IGSH-1073]
-  workflow_run:
-    workflows: [Android release]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       baseline_ref:

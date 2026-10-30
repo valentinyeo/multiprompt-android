@@ -32,10 +32,7 @@ object QueuedMessages {
             if (text.isEmpty() || text.startsWith("/") || nowMillis - prompt.sentAtMillis > 15 * 60_000L) {
                 return@forEach
             }
-            val recorded = users.any { message ->
-                matches(text, normalize(message.text)) &&
-                    (timestampMillis(message.timestamp)?.let { it >= prompt.sentAtMillis - 5 * 60_000L } ?: true)
-            }
+            val recorded = users.any { message -> recorded(prompt, message) }
             if (!recorded && queued.none { matches(it, text) }) queued.add(text)
         }
         if (screenOutput.contains("Press up to edit queued messages", ignoreCase = true)) {
@@ -52,6 +49,10 @@ object QueuedMessages {
         }
         return queued
     }
+
+    internal fun recorded(prompt: SentPrompt, message: TranscriptMessage): Boolean =
+        message.role == "user" && matches(normalize(prompt.text), normalize(message.text)) &&
+            (timestampMillis(message.timestamp)?.let { it >= prompt.sentAtMillis - 5 * 60_000L } ?: true)
 
     internal fun accepted(text: String, sentAtMillis: Long?, rows: List<ChatHistoryProtocol.Row>, afterOffset: Long = 0): Boolean {
         val latest = rows.lastOrNull { row ->
