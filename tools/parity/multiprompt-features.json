@@ -1,0 +1,257 @@
+{
+  "reviewed": "2026-10-29",
+  "track_since": "2026-10-29T22:55:59Z",
+  "catch_up_tickets": [
+    "IGSH-1178"
+  ],
+  "features": [
+    {
+      "id": "claude-chat",
+      "name": "Claude chat",
+      "desktop": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt/blob/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/chat_history.zig"
+      },
+      "android": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt-android/blob/9e643f9c1aef04f0170a58d2f4eca3c03c6455ec/app/src/main/java/dev/multiprompt/companion/reader/ChatHistory.kt"
+      }
+    },
+    {
+      "id": "codex-chat",
+      "name": "Codex chat",
+      "desktop": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt/blob/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/chat_history.zig"
+      },
+      "android": {
+        "status": "partial",
+        "source": "https://github.com/valentinyeo/multiprompt-android/blob/9e643f9c1aef04f0170a58d2f4eca3c03c6455ec/app/src/main/java/dev/multiprompt/companion/reader/ChatHistoryProtocol.kt",
+        "ticket": "IGSH-1220"
+      }
+    },
+    {
+      "id": "message-queue",
+      "name": "Queued messages and delivery",
+      "desktop": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt/blob/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/main.zig"
+      },
+      "android": {
+        "status": "partial",
+        "source": "https://github.com/valentinyeo/multiprompt-android/blob/9e643f9c1aef04f0170a58d2f4eca3c03c6455ec/app/src/main/java/dev/multiprompt/companion/reader/QueuedMessages.kt",
+        "ticket": "IGSH-1223"
+      }
+    },
+    {
+      "id": "robot-faces",
+      "name": "Colourful robot faces",
+      "desktop": {
+        "status": "partial",
+        "source": "https://github.com/valentinyeo/multiprompt/blob/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/bot_avatar.zig",
+        "ticket": "IGSH-1221"
+      },
+      "android": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt-android/blob/9e643f9c1aef04f0170a58d2f4eca3c03c6455ec/app/src/main/java/dev/multiprompt/companion/ui/BotAvatar.kt"
+      }
+    },
+    {
+      "id": "workspaces",
+      "name": "Shared workspaces",
+      "desktop": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt/blob/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/account_layout.zig"
+      },
+      "android": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt-android/blob/9e643f9c1aef04f0170a58d2f4eca3c03c6455ec/app/src/main/java/dev/multiprompt/companion/account/AccountLayout.kt"
+      }
+    },
+    {
+      "id": "favorites",
+      "name": "Starred sessions",
+      "desktop": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt/blob/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/main.zig"
+      },
+      "android": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt-android/blob/9e643f9c1aef04f0170a58d2f4eca3c03c6455ec/app/src/main/java/dev/multiprompt/companion/account/FavoriteSplit.kt"
+      }
+    },
+    {
+      "id": "unread",
+      "name": "Unread sessions and inbox",
+      "desktop": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt/blob/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/main.zig"
+      },
+      "android": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt-android/blob/9e643f9c1aef04f0170a58d2f4eca3c03c6455ec/app/src/main/java/dev/multiprompt/companion/data/SessionReadStore.kt"
+      }
+    },
+    {
+      "id": "archive",
+      "name": "Archive and restore sessions",
+      "desktop": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt/blob/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/archive.zig"
+      },
+      "android": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt-android/blob/9e643f9c1aef04f0170a58d2f4eca3c03c6455ec/app/src/main/java/dev/multiprompt/companion/data/DissolvedSessionStore.kt"
+      }
+    },
+    {
+      "id": "dictation",
+      "name": "Voice dictation",
+      "desktop": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt/blob/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/dictation_audio.zig"
+      },
+      "android": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt-android/blob/9e643f9c1aef04f0170a58d2f4eca3c03c6455ec/app/src/main/java/dev/multiprompt/companion/dictation/DeepgramDictation.kt"
+      }
+    },
+    {
+      "id": "voice-replies",
+      "name": "Spoken replies and voice calls",
+      "desktop": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt/blob/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/voice.zig"
+      },
+      "android": {
+        "status": "missing",
+        "source": "https://github.com/valentinyeo/multiprompt-android/blob/9e643f9c1aef04f0170a58d2f4eca3c03c6455ec/app/src/main/java/dev/multiprompt/companion/dictation/DeepgramDictation.kt",
+        "ticket": "IGSH-1025"
+      }
+    },
+    {
+      "id": "skills",
+      "name": "Skills in the composer",
+      "desktop": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt/blob/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/skills.zig"
+      },
+      "android": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt-android/blob/9e643f9c1aef04f0170a58d2f4eca3c03c6455ec/app/src/main/java/dev/multiprompt/companion/skills/NativeSkills.kt"
+      }
+    },
+    {
+      "id": "terminal",
+      "name": "Terminal fallback",
+      "desktop": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt/blob/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/main.zig"
+      },
+      "android": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt-android/blob/9e643f9c1aef04f0170a58d2f4eca3c03c6455ec/app/src/main/java/dev/multiprompt/companion/terminal/TerminalConnection.kt"
+      }
+    },
+    {
+      "id": "account",
+      "name": "Account sign-in",
+      "desktop": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt/blob/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/account_client.zig"
+      },
+      "android": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt-android/blob/9e643f9c1aef04f0170a58d2f4eca3c03c6455ec/app/src/main/java/dev/multiprompt/companion/account/AccountAuth.kt"
+      }
+    },
+    {
+      "id": "updates",
+      "name": "In-app updates",
+      "desktop": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt/blob/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/main.zig"
+      },
+      "android": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt-android/blob/9e643f9c1aef04f0170a58d2f4eca3c03c6455ec/app/src/main/java/dev/multiprompt/companion/update/UpdateManager.kt"
+      }
+    },
+    {
+      "id": "app-name",
+      "name": "Multi Bot app name",
+      "desktop": {
+        "status": "planned",
+        "source": "https://github.com/valentinyeo/multiprompt/blob/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/main.zig",
+        "ticket": "IGSH-1193"
+      },
+      "android": {
+        "status": "planned",
+        "source": "https://github.com/valentinyeo/multiprompt-android/blob/9e643f9c1aef04f0170a58d2f4eca3c03c6455ec/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt",
+        "ticket": "IGSH-1193"
+      }
+    },
+    {
+      "id": "browser",
+      "name": "Web pages beside chat",
+      "desktop": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt/blob/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/browser_pane.zig"
+      },
+      "android": {
+        "status": "missing",
+        "source": "https://github.com/valentinyeo/multiprompt-android/blob/9e643f9c1aef04f0170a58d2f4eca3c03c6455ec/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt",
+        "ticket": "IGSH-1224"
+      }
+    },
+    {
+      "id": "hax-chat",
+      "name": "Saved Hax conversations",
+      "desktop": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt/blob/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/chat_history_reader.py"
+      },
+      "android": {
+        "status": "missing",
+        "source": "https://github.com/valentinyeo/multiprompt-android/blob/9e643f9c1aef04f0170a58d2f4eca3c03c6455ec/app/src/main/java/dev/multiprompt/companion/reader/ChatHistoryProtocol.kt",
+        "ticket": "IGSH-1046"
+      }
+    },
+    {
+      "id": "agent-questions",
+      "name": "Agent questions and permissions",
+      "desktop": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt/blob/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/chat_permission.zig"
+      },
+      "android": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt-android/blob/9e643f9c1aef04f0170a58d2f4eca3c03c6455ec/app/src/main/java/dev/multiprompt/companion/reader/PendingQuestion.kt"
+      }
+    },
+    {
+      "id": "image-messages",
+      "name": "Images in chat",
+      "desktop": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt/blob/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/chat_image.zig"
+      },
+      "android": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt-android/blob/9e643f9c1aef04f0170a58d2f4eca3c03c6455ec/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt"
+      }
+    },
+    {
+      "id": "session-names",
+      "name": "Session names",
+      "desktop": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt/blob/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/main.zig"
+      },
+      "android": {
+        "status": "shipped",
+        "source": "https://github.com/valentinyeo/multiprompt-android/blob/9e643f9c1aef04f0170a58d2f4eca3c03c6455ec/app/src/main/java/dev/multiprompt/companion/model/TmuxSession.kt"
+      }
+    }
+  ]
+}
