@@ -65,16 +65,11 @@ internal fun transcriptAfterUpdate(
     else -> null
 }
 
-internal fun unconfirmedAfterResync(history: ChatHistory, sent: List<QueuedMessages.SentPrompt>,
-    previous: ChatHistory = ChatHistory()): List<QueuedMessages.SentPrompt> =
+internal fun unconfirmedAfterResync(history: ChatHistory, sent: List<QueuedMessages.SentPrompt>): List<QueuedMessages.SentPrompt> =
     sent.filter { record ->
-        if (record.messageId.isEmpty()) {
-            val observed = history.messages + if (history.sid.isNotEmpty() && history.sid == previous.sid && history.inode == previous.inode) previous.messages else emptyList()
-            observed.none { !it.pending && QueuedMessages.recorded(record, it.transcript()) }
-        } else {
-            (history.deliveries[record.messageId] ?: record.delivery) !in
+        record.messageId.isEmpty() || history.held.any { it.messageId == record.messageId } ||
+            history.deliveries[record.messageId] !in
                 setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
-        }
     }
 
 class SessionReaderConnection(
@@ -120,7 +115,6 @@ class SessionReaderConnection(
 
     suspend fun resyncChat(): Boolean {
         val connection = historyConnection ?: return false
-        val previous = connection.state.value.history
         try {
             connection.resync().await()
         } catch (cancelled: CancellationException) {
@@ -131,11 +125,9 @@ class SessionReaderConnection(
         val history = connection.state.value.history
         var confirmed = false
         _state.update { current ->
-            val remaining = unconfirmedAfterResync(history, current.sentRecord, previous)
+            val remaining = unconfirmedAfterResync(history, current.sentRecord)
             confirmed = history.held.isEmpty() && remaining.isEmpty()
-            current.copy(sentPrompts = emptyList(), sentRecord = current.sentRecord.filter { record ->
-                record.messageId.isNotEmpty() || record in remaining
-            })
+            current
         }
         return confirmed
     }
@@ -165,8 +157,10 @@ class SessionReaderConnection(
     }
 
     fun sendPrompt(text: String): Boolean {
+        val origin = historyConnection?.state?.value?.takeIf { it.loaded }?.history
         val prompt = QueuedMessages.SentPrompt(text, System.currentTimeMillis(),
-            messageId = if (agent == AgentKind.CLAUDE) java.util.UUID.randomUUID().toString() else "")
+            messageId = if (agent == AgentKind.CLAUDE) java.util.UUID.randomUUID().toString() else "",
+            sid = origin?.sid.orEmpty(), inode = origin?.inode ?: 0, afterOffset = origin?.offset ?: 0)
         _state.update { it.copy(sentRecord = it.sentRecord + prompt) }
         val sent = requests.trySend(Request.Prompt(prompt)).isSuccess
         if (!sent) _state.update { it.copy(sentRecord = it.sentRecord.filterNot { record -> record === prompt }) }

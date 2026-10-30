@@ -59,7 +59,7 @@ class ChatHistoryConnectionTest {
 
     @Test
     fun resyncWithoutConnectionPreservesUnconfirmedMessages() = runBlocking {
-        SessionReaderConnection(repository(), host, "tmux", historyScript = byteArrayOf(),
+        SessionReaderConnection(repository(), host, "tmux", agent = AgentKind.CLAUDE, historyScript = byteArrayOf(),
             historyCache = ChatHistoryCache(temporary.newFolder())).use { reader ->
             val text = "Any idea when the visual update of the inbox is coming?"
             assertTrue(reader.sendPrompt(text))
@@ -75,24 +75,21 @@ class ChatHistoryConnectionTest {
     }
 
     @Test
-    fun resyncConfirmsOnlyObservedNativeAndSettledManagedMessages() {
-        val delivered = QueuedMessages.SentPrompt("delivered", 1_700_000_000_000)
-        val pending = delivered.copy(text = "pending")
-        val queued = delivered.copy(text = "queued")
-        val managed = delivered.copy(text = "managed", messageId = "id", delivery = QueuedMessages.Delivery.QUEUED)
+    fun resyncPreservesUnkeyedAndHeldMessagesUntilServerSettlesTheirIds() {
+        val native = QueuedMessages.SentPrompt("same", 1)
+        val first = native.copy(messageId = "first", delivery = QueuedMessages.Delivery.QUEUED)
+        val second = first.copy(messageId = "second")
         val history = ChatHistory(rows = listOf(
-            ChatHistoryProtocol.Row("user", "delivered", "one", "2023-11-14T22:13:20Z", 1, 2),
-            ChatHistoryProtocol.Row("user", "queued", "two", "2023-11-14T22:13:20Z", 3, 4, queued = true),
-        ), deliveries = mapOf("id" to QueuedMessages.Delivery.DELIVERED))
-        for (agent in listOf(AgentKind.CODEX, AgentKind.HAX)) {
-            val sent = listOf(delivered, pending, queued, managed)
-            assertEquals(listOf(pending, queued), unconfirmedAfterResync(history, sent))
-            assertTrue(history.displayMessages("", agent, sent, delivered.sentAtMillis).any { it.text == "pending" && it.pending })
-        }
-        assertEquals(listOf(pending), unconfirmedAfterResync(ChatHistory(), listOf(pending)))
-        val previous = history.copy(sid = "session", inode = 1)
-        assertTrue(unconfirmedAfterResync(ChatHistory(sid = "session", inode = 1), listOf(delivered), previous).isEmpty())
-        assertEquals(listOf(delivered), unconfirmedAfterResync(ChatHistory(sid = "other", inode = 1), listOf(delivered), previous))
+            ChatHistoryProtocol.Row("user", "same", "one", "2023-11-14T22:13:20Z", 1, 2),
+            ChatHistoryProtocol.Row("assistant", "Done", "two", "", 3, 4),
+        ), held = listOf(second), deliveries = mapOf(
+            "first" to QueuedMessages.Delivery.DELIVERED,
+            "second" to QueuedMessages.Delivery.CANCELLED,
+        ))
+        assertEquals(listOf(native, second), unconfirmedAfterResync(history, listOf(native, first, second)))
+        assertEquals(listOf(first), unconfirmedAfterResync(ChatHistory(), listOf(first)))
+        assertEquals(emptyList<QueuedMessages.SentPrompt>(), unconfirmedAfterResync(
+            ChatHistory(deliveries = mapOf("first" to QueuedMessages.Delivery.CANCELLED)), listOf(first)))
     }
 
     @Test
