@@ -1,3 +1,4 @@
+import importlib.util
 import os
 from pathlib import Path
 import subprocess
@@ -77,6 +78,66 @@ class SshReadinessTest(unittest.TestCase):
 
     def test_no_banner_is_not_ready(self):
         self.assertNotEqual(self.probe('').returncode, 0)
+
+
+class RecoveryUiTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        path = Path(__file__).resolve().parents[2] / '.claude/skills/verify-multiprompt-android/scripts/resync-console.py'
+        spec = importlib.util.spec_from_file_location('recovery_fixture', path)
+        cls.fixture = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.fixture)
+
+    def row(self, identity, label=''):
+        text = self.fixture.TEXTS[identity].rstrip(' ')
+        badge = f'<node text="{label}" />' if label else ''
+        return f'<node>{badge}<node text="{text}" /></node>'
+
+    def probe(self, rows, identity, phase):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'ui.xml'
+            path.write_text(f'<hierarchy><node scrollable="true">{rows}</node></hierarchy>')
+            return self.fixture.ui_row(path, identity, phase)
+
+    def test_submitted_head_has_sending_before_receipt(self):
+        result = self.probe(self.row('recovery-head', 'Sending'), 'recovery-head', 'before')
+        self.assertEqual(result['labels'], ['Sending'])
+        self.assertEqual(len(self.fixture.TEXTS['recovery-head']), 201)
+        self.assertTrue(self.fixture.TEXTS['recovery-head'].endswith(' '))
+
+    def test_settled_row_does_not_require_delivered_badge(self):
+        result = self.probe(self.row('accepted-fourth'), 'accepted-fourth', 'after')
+        self.assertEqual(result['labels'], [])
+
+    def test_pending_sibling_does_not_mark_receipt_row_pending(self):
+        rows = self.row('accepted-fourth') + self.row('pending-one', 'Queued')
+        self.assertEqual(self.probe(rows, 'accepted-fourth', 'after')['labels'], [])
+        self.assertEqual(self.probe(rows, 'pending-one', 'after')['labels'], ['Queued'])
+
+    def test_stale_receipt_pending_label_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, 'RESYNC_UI_RECEIPT_STILL_PENDING'):
+            self.probe(self.row('accepted-fourth', 'Queued'), 'accepted-fourth', 'after')
+
+    def test_lost_pending_badge_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, 'RESYNC_UI_PENDING_STATE_WRONG'):
+            self.probe(self.row('pending-two'), 'pending-two', 'after')
+
+    def test_duplicate_visible_receipt_body_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, 'RESYNC_UI_ROW_MISSING_OR_DUPLICATED'):
+            self.probe(self.row('accepted-fourth') * 2, 'accepted-fourth', 'after')
+
+    def test_one_lazy_viewport_can_prove_one_row(self):
+        result = self.probe(self.row('pending-two', 'Queued'), 'pending-two', 'repeat')
+        self.assertEqual(result['id'], 'pending-two')
+
+    def test_draft_readback_preserves_exact_bytes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'ui.xml'
+            path.write_text('<hierarchy><node class="android.widget.EditText" text="draft stays here" /></hierarchy>')
+            self.assertEqual(self.fixture.draft_bytes(path), b'draft stays here')
+            path.write_text('<hierarchy><node class="android.widget.EditText" text="draft stays here " /></hierarchy>')
+            with self.assertRaisesRegex(ValueError, 'RESYNC_DRAFT_CHANGED'):
+                self.fixture.draft_bytes(path)
 
 
 if __name__ == '__main__':

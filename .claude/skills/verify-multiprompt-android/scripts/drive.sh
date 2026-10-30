@@ -224,7 +224,7 @@ if [[ "$feature" == launcher-icon.md ]]; then
     exit 0
 fi
 if [[ "$package" == dev.multiprompt.companion ]]; then
-    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md ]]
+    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md || "$feature" == chat-resync.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -658,6 +658,8 @@ if [[ "$feature" == chat-codex.md ]]; then
 fi
 if [[ "$feature" == chat-queued.md ]]; then
     wait_for_text VERIFY_READY_1008
+elif [[ "$feature" == chat-resync.md ]]; then
+    wait_for_text ACCEPTED_FOURTH
 else
     wait_for_text VERIFY_READY_528
 fi
@@ -835,26 +837,48 @@ NATIVE
     exit 0
 fi
 if [[ "$feature" == chat-resync.md ]]; then
-    wait_for_text 'FIRST REPLY'
-    for message in SYNC_ONE SYNC_TWO; do
-        fill 'Message verify-session' "$message"
-        tap_desc 'Send prompt'
-        wait_receipt "VERIFY_RECEIVED:$message"
-        wait_for_text "Reply to $message"
-    done
-    wait_for_text Queued
-    shot out-of-sync
-    queued_before=$(grep -o 'text="Queued"' "$EVIDENCE/current.xml" | wc -l)
-    printf '%s\n' "$queued_before" > "$EVIDENCE/queued-before.txt"
-    [[ "$queued_before" == 2 ]]
+    resync_event() {
+        sudo -u verifyssh env GITHUB_ACTIONS=true python3 /home/verifyssh/resync-console.py event "$1"
+    }
+    resync_rows() {
+        local phase=$1 identity direction attempt found x1 y1 x2 y2
+        for identity in recovery-head pending-one pending-two accepted-fourth; do
+            found=false
+            for direction in older newer; do
+                for attempt in {1..10}; do
+                    shot "resync-$phase-$identity-$direction-$attempt"
+                    if python3 "$scripts/resync-console.py" ui-row "$EVIDENCE/current.xml" "$identity" "$phase" > "$EVIDENCE/resync-$phase-$identity.json" 2> "$EVIDENCE/resync-row-error.txt"; then
+                        found=true
+                        break
+                    fi
+                    read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
+                    if [[ "$direction" == older ]]; then
+                        adb shell input swipe "$x1" "$y1" "$x2" "$y2" 450
+                    else
+                        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 450
+                    fi
+                    sleep 1
+                done
+                if [[ "$found" == true ]]; then break; fi
+            done
+            if [[ "$found" != true ]]; then
+                cat "$EVIDENCE/resync-row-error.txt" >&2
+                printf 'RESYNC_UI_ROW_NOT_PROVEN:%s:%s\n' "$phase" "$identity" >&2
+                return 1
+            fi
+        done
+    }
+    unzip -p "$VERIFY_APK" assets/chat_history_reader.py | sha256sum > "$EVIDENCE/embedded-reader-sha256.txt"
+    cp tools/vendor/chat-reader/SHA256SUMS "$EVIDENCE/canonical-corpus-sha256.txt"
+    resync_event before > "$EVIDENCE/resync-server-before.json"
+    resync_rows before
     fill 'Message verify-session' 'draft%sstays%shere'
-    shot draft-before
+    shot resync-draft-before
+    python3 "$scripts/resync-console.py" draft "$EVIDENCE/current.xml" "$EVIDENCE/resync-draft-before.bin"
     tap_desc 'Session actions'
-    if ! wait_for_text 'Resync chat'; then
-        printf 'IGSH1011_RESYNC_MISSING\n' >&2
-        exit 1
-    fi
+    wait_for_text 'Resync chat'
     shot resync-menu
+    resync_event accept > "$EVIDENCE/resync-receipt-event.json"
     tap_text 'Resync chat'
     toast_shots=()
     for attempt in {1..8}; do
@@ -863,26 +887,33 @@ if [[ "$feature" == chat-resync.md ]]; then
     done
     sleep 5
     adb exec-out screencap -p > "$EVIDENCE/toast-settled.png"
+    settled=false
+    for attempt in {1..30}; do
+        if resync_event after > "$EVIDENCE/resync-server-after.json" 2> "$EVIDENCE/resync-server-error.txt"; then
+            settled=true
+            break
+        fi
+        sleep 1
+    done
+    if [[ "$settled" != true ]]; then
+        cat "$EVIDENCE/resync-server-after.json" "$EVIDENCE/resync-server-error.txt" >&2
+        exit 1
+    fi
     python3 "$scripts/toast.py" "$EVIDENCE/toast-settled.png" "${toast_shots[@]}" | tee "$EVIDENCE/toast-result.txt"
-    wait_for_absence Queued
-    shot synced
-    wait_for_text 'Reply to SYNC_ONE'
-    wait_for_text 'Reply to SYNC_TWO'
-    wait_for_text '[phone] SYNC_ONE'
-    wait_for_text '[phone] SYNC_TWO'
-    dump_ui
-    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field 'draft stays here'
-    shot resynced
-    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt"
-    python3 - "$EVIDENCE/receipts.txt" <<'RESYNC'
-import sys
-from pathlib import Path
-rows = Path(sys.argv[1]).read_text().splitlines()
-assert rows == ["VERIFY_RECEIVED:SYNC_ONE", "VERIFY_RECEIVED:SYNC_TWO"], rows
-print("RESYNC CLEARED STALE QUEUED; NOTHING RESENT")
-RESYNC
-    sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-resync-work/a1b2c3d4-1011-4000-8000-000000001011.jsonl > "$EVIDENCE/resync-transcript.jsonl"
-    printf 'ANDROID_CHAT_RESYNC_VERIFIED\n'
+    resync_rows after
+    shot resync-draft-after
+    python3 "$scripts/resync-console.py" draft "$EVIDENCE/current.xml" "$EVIDENCE/resync-draft-after.bin"
+    cmp "$EVIDENCE/resync-draft-before.bin" "$EVIDENCE/resync-draft-after.bin"
+    tap_desc 'Session actions'
+    wait_for_text 'Resync chat'
+    tap_text 'Resync chat'
+    sleep 5
+    resync_rows repeat
+    shot resync-draft-repeat
+    python3 "$scripts/resync-console.py" draft "$EVIDENCE/current.xml" "$EVIDENCE/resync-draft-repeat.bin"
+    cmp "$EVIDENCE/resync-draft-before.bin" "$EVIDENCE/resync-draft-repeat.bin"
+    resync_event repeat > "$EVIDENCE/resync-server-repeat.json"
+    printf 'ANDROID_RECOVERY_TWO_ACCEPTED_TWO_PENDING_NO_SENDS\n' | tee "$EVIDENCE/resync-result.txt"
     exit 0
 fi
 if [[ "$feature" == chat-reactions.md ]]; then
