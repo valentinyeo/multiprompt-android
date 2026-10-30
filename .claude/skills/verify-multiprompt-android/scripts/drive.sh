@@ -311,11 +311,22 @@ if [[ "$feature" == settings-navigation.md ]]; then
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'Sign out'
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains Update
     shot settings-preferences
-    read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
-    adb shell input swipe "$x2" "$y2" "$x1" "$y1" 500
+    for attempt in {1..5}; do
+        dump_ui
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text 'Default Reader font size' >/dev/null 2>&1 &&
+            python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Large >/dev/null 2>&1; then break; fi
+        read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
+        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 500
+    done
+    dump_ui
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text 'Default Reader font size'
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Large
     shot settings-preferences-bottom
-    read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
-    adb shell input swipe "$x1" "$y1" "$x2" "$y2" 500
+    for attempt in {1..5}; do
+        if select_node text Update >/dev/null 2>&1; then break; fi
+        read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
+        adb shell input swipe "$x1" "$y1" "$x2" "$y2" 500
+    done
     tap_text Update
     wait_for_text 'App updates'
     adb shell input keyevent KEYCODE_BACK

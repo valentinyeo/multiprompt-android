@@ -1257,7 +1257,7 @@ internal fun SessionsScreen(
             ) { padding ->
                 Column(
                     Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(Kit.ControlGap),
                 ) {
                     KitListGroup {
                         KitListRow(if (signedIn) "Switch / renew login" else "Sign in", onClick = onSignIn)
@@ -1266,7 +1266,7 @@ internal fun SessionsScreen(
                         KitListRow("Update", onClick = { settingsPage = SettingsPage.HIDDEN; onSelectSection(AppSection.UPDATE) })
                     }
                     state.accountError?.let { error ->
-                        KitListGroup { Text(error, Modifier.padding(16.dp), style = Kit.Body, color = Kit.Danger) }
+                        KitListGroup { Text(error, Modifier.padding(Kit.SideChange), style = Kit.Body, color = Kit.Danger) }
                     }
                     KitListGroup {
                         listOf(
@@ -1277,9 +1277,9 @@ internal fun SessionsScreen(
                         ).forEach { (key, label, checked) ->
                             val enabled = key != "frequent_first" || state.showFrequentSplit
                             Row(
-                                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                                Modifier.fillMaxWidth().heightIn(min = Kit.RowHeight).padding(horizontal = Kit.SideChange, vertical = Kit.ControlGap),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(Kit.ScreenEdge),
                             ) {
                                 Text(label, Modifier.weight(1f), style = Kit.Body, color = Kit.Text)
                                 KitToggle(
@@ -1297,31 +1297,31 @@ internal fun SessionsScreen(
                             }
                         }
                         Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                            Modifier.fillMaxWidth().heightIn(min = Kit.RowHeight).padding(horizontal = Kit.SideChange, vertical = Kit.ControlGap),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(Kit.ScreenEdge),
                         ) {
                             Text("Newest sessions at bottom", Modifier.weight(1f), style = Kit.Body, color = Kit.Text)
                             KitToggle(state.newestSessionsAtBottom, onSetNewestSessionsAtBottom)
                         }
                         Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                            Modifier.fillMaxWidth().heightIn(min = Kit.RowHeight).padding(horizontal = Kit.SideChange, vertical = Kit.ControlGap),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(Kit.ScreenEdge),
                         ) {
                             Text("All split on right", Modifier.weight(1f), style = Kit.Body, color = Kit.Text)
                             KitToggle(state.allSplitOnRight, onSetAllSplitOnRight)
                         }
                     }
                     KitListGroup {
-                        Column(Modifier.padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Theme", Modifier.padding(horizontal = 16.dp), style = Kit.Body, color = Kit.Text)
+                        Column(Modifier.padding(vertical = Kit.SideChange), verticalArrangement = Arrangement.spacedBy(Kit.ControlGap)) {
+                            Text("Theme", Modifier.padding(horizontal = Kit.SideChange), style = Kit.Body, color = Kit.Text)
                             KitSegmented(
                                 listOf(AppTheme.SYSTEM to "System", AppTheme.DARK to "Dark", AppTheme.SUNLIGHT to "Sunlight"),
                                 appTheme,
                                 onSetAppTheme,
                             )
-                            Text("Default Reader font size", Modifier.padding(horizontal = 16.dp), style = Kit.Body, color = Kit.Text)
+                            Text("Default Reader font size", Modifier.padding(horizontal = Kit.SideChange), style = Kit.Body, color = Kit.Text)
                             val fontOptions = listOf(0.9f to "Small", 1f to "Normal", 1.15f to "Large")
                             KitSegmented(
                                 fontOptions,
@@ -1333,13 +1333,13 @@ internal fun SessionsScreen(
                     }
                     crashReport?.let {
                         KitListGroup {
-                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(Modifier.padding(Kit.SideChange), verticalArrangement = Arrangement.spacedBy(Kit.ControlGap)) {
                                 Text(
                                     "A crash report from the previous launch is available.",
-                                    color = Kit.Danger,
-                                    style = Kit.Body,
+                                    color = Kit.TextMuted,
+                                    style = Kit.Hint,
                                 )
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Column(verticalArrangement = Arrangement.spacedBy(Kit.ControlGap)) {
                                     KitSecondaryButton("View report", onClick = { crashReportVisible = true })
                                     KitSecondaryButton("Dismiss", onClick = onClearCrashReport)
                                 }
@@ -1362,7 +1362,7 @@ internal fun SessionsScreen(
                         color = Kit.Text,
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(Kit.ControlGap)) {
                     KitSecondaryButton("Copy report", onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         clipboard.setPrimaryClip(ClipData.newPlainText("multiprompt crash report", report.asText()))
