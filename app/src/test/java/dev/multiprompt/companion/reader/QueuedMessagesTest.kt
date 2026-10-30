@@ -71,19 +71,52 @@ class QueuedMessagesTest {
         assertEquals(2, result.map { it.key }.toSet().size)
     }
 
-    @Test fun nativeEchoMatchingIsExactFreshBoundedAndOneToOne() {
+    @Test fun nativeIntentionsStayDistinctFromIdenticalTranscriptOccurrences() {
         val native = QueuedMessages.SentPrompt("same", 1, sid = "sid", inode = 9, afterOffset = 100)
         val another = QueuedMessages.SentPrompt("same", 2, sid = "sid", inode = 9, afterOffset = 100)
-        fun row(text: String, offset: Long) = ChatHistoryProtocol.Row("user", text, "id$offset", "", offset, offset + 1)
-        val history = ChatHistory(sid = "sid", inode = 9, rows = listOf(row("same", 50), row("same extra", 101), row("same", 102)))
-        val result = history.display(listOf(native, another))
-        assertEquals(4, result.size)
-        assertEquals(1, result.count { it.key.startsWith("@local:") })
-        assertTrue(result.all { !it.pending && it.delivery == null })
-        assertEquals(3, history.copy(sid = "other").display(listOf(native, another)).size)
-        assertEquals(5, history.copy(inode = 10).display(listOf(native, another)).size)
-        assertEquals(5, history.display(listOf(native.copy(sid = ""), another.copy(sid = ""))).size)
-        assertEquals(listOf(native, another), unconfirmedAfterResync(history, listOf(native, another)))
+        val sent = listOf(native, another)
+        fun row(offset: Long) = ChatHistoryProtocol.Row("user", "same", "id$offset", "2099-01-01T00:00:00Z", offset, offset + 1)
+        val history = ChatHistory(sid = "sid", inode = 9)
+        val keys = sent.map { "@local:${it.localId}" }
+        for (rows in listOf(emptyList(), listOf(row(101)), listOf(row(101), row(102)))) {
+            val snapshot = history.copy(rows = rows)
+            val result = snapshot.display(sent)
+            assertEquals(rows.size + 2, result.size)
+            assertEquals(keys, result.takeLast(2).map { it.key })
+            assertEquals(keys, snapshot.display(sent).takeLast(2).map { it.key })
+            assertTrue(result.take(rows.size).all { it.delivery == null })
+            assertTrue(result.takeLast(2).all { !it.pending && it.requestId.isEmpty() && it.delivery == "Local · unconfirmed" })
+            assertEquals(sent, unconfirmedAfterResync(snapshot, sent))
+        }
+        val threeRows = history.copy(rows = listOf(row(50), row(101), row(102)))
+        assertEquals(5, threeRows.display(sent).size)
+        assertEquals(3, threeRows.copy(sid = "other").display(sent).size)
+        assertEquals(keys, threeRows.copy(inode = 10).display(sent).takeLast(2).map { it.key })
+        assertEquals(keys, threeRows.display(sent.map { it.copy(sid = "") }).takeLast(2).map { it.key })
+    }
+
+    @Test fun nativeIntentionsSurviveHistoryRefreshAndDelayedOccurrences() {
+        val native = QueuedMessages.SentPrompt("same", 1, sid = "sid", inode = 9, afterOffset = 100)
+        val sent = listOf(native)
+        val occurrence = ChatHistoryProtocol.Row("user", "same", "other-client", "", 101, 102)
+        val reply = ChatHistoryProtocol.Row("assistant", "reply", "reply", "2099", 103, 104)
+        val initial = ChatHistory(sid = "sid", inode = 9, offset = 100, start = 0)
+        val delta = ChatHistoryProtocol.Page("sid", 100, 104, 9, false, 0, "", "delta", 0, listOf(occurrence, reply))
+        val loaded = initial.apply(delta)
+        val olderBase = ChatHistory(sid = "sid", inode = 9, offset = 104, start = 100, rows = listOf(occurrence, reply))
+        val older = olderBase.apply(ChatHistoryProtocol.Page("sid", 0, 100, 9, false, 0, "", "older", 0,
+            listOf(ChatHistoryProtocol.Row("user", "same", "delayed", "", 50, 51))))
+        val refreshed = loaded.apply(delta.copy(mode = "tail", base = 0, inode = 10))
+        val emptied = refreshed.apply(delta.copy(mode = "tail", base = 0, inode = 10, end = 0, rows = emptyList()))
+        for (history in listOf(initial, loaded, older, refreshed, emptied, refreshed.resetSeed())) {
+            val echo = history.display(sent).last()
+            assertEquals("@local:${native.localId}", echo.key)
+            assertEquals("Local · unconfirmed", echo.delivery)
+            assertEquals(sent, unconfirmedAfterResync(history, sent))
+        }
+        assertEquals(listOf("same", "same", "reply", "same"), older.display(sent).map { it.text })
+        assertEquals(listOf("same", "reply", "same"), loaded.display(sent).map { it.text })
+        assertEquals(listOf("same", "reply", "same"), refreshed.display(sent).map { it.text })
     }
     @Test fun deliveredDisplayMatchesOnlyTrailingAsciiSpacesOneToOne() {
         val text = "x".repeat(200)

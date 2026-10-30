@@ -68,7 +68,6 @@ data class ChatHistory(
         fun state(prompt: QueuedMessages.SentPrompt) = deliveryState(prompt)
         val matched = mutableSetOf<String>()
         val native = local.filter { it.messageId.isEmpty() }
-        val matchedNative = mutableSetOf<String>()
         val current = messages.map { message ->
             val record = own.firstOrNull { prompt ->
                 prompt.messageId !in matched && state(prompt) == QueuedMessages.Delivery.DELIVERED &&
@@ -78,18 +77,11 @@ data class ChatHistory(
             if (record != null) {
                 matched.add(record.messageId)
                 message.copy(delivery = "Delivered")
-            } else {
-                val echo = native.firstOrNull { prompt ->
-                    prompt.localId !in matchedNative && prompt.sid.isNotEmpty() && prompt.sid == sid &&
-                        prompt.inode == inode && message.role == "user" && message.offset >= prompt.afterOffset &&
-                        message.text == prompt.text
-                }
-                if (echo != null) matchedNative.add(echo.localId)
-                message
-            }
+            } else message
         }
-        val echoes = native.filter { it.localId !in matchedNative }.map { prompt ->
-            ChatHistoryMessage("@local:${prompt.localId}", "user", prompt.text, "", 0, 0)
+        val echoes = native.map { prompt ->
+            ChatHistoryMessage("@local:${prompt.localId}", "user", prompt.text, "", 0, 0,
+                delivery = "Local · unconfirmed")
         }
         val managed = own.filter { it.messageId !in matched }.map { prompt ->
             val delivery = state(prompt)

@@ -4,15 +4,20 @@ package dev.multiprompt.companion.ui
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import dev.multiprompt.companion.reader.ChatHistory
 import dev.multiprompt.companion.reader.ChatHistoryMessage
+import dev.multiprompt.companion.reader.QueuedMessages
 import dev.multiprompt.companion.reader.PendingQuestion
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestCoroutineScheduler
@@ -71,6 +76,26 @@ class ChatChoicesTest {
         renderList(readerStyle = true, marker = "A.")
         compose.onNodeWithText("A.").assertExists().assertHasNoClickAction()
         compose.onNodeWithText(first).assertExists().assertHasNoClickAction()
+    }
+
+    @Test fun localNoteAndReplyKeepUnconfirmedLabels() {
+        val sent = listOf(
+            QueuedMessages.SentPrompt("[from Runner] note body", 1, localId = "note"),
+            QueuedMessages.SentPrompt("> quoted text\n\nreply body", 2, localId = "reply"),
+            QueuedMessages.SentPrompt("ordinary body", 3, localId = "ordinary"),
+        )
+        val accepted = ChatHistoryMessage("accepted", "user", "[from Runner] accepted note", "", 0, 1)
+        compose.setContent {
+            MaterialTheme { ChatHistoryList(listOf(accepted) + ChatHistory().displayMessages(sent), sessionName = "Recipient") }
+        }
+        compose.onAllNodesWithText("Local · unconfirmed").assertCountEquals(3)
+        compose.onNodeWithTag("session-note-chip-accepted").assertExists()
+        compose.onNodeWithTag("session-note-chip-@local:note").assertDoesNotExist()
+        compose.onNodeWithText("[from Runner] note body").assertExists()
+        compose.onNodeWithText("reply body").assertExists()
+        listOf("Queued", "Delivered", "Cancelled", "Cancel").forEach {
+            compose.onNodeWithText(it).assertDoesNotExist()
+        }
     }
 
     @Test fun exactQuestionAndDescriptionsStaySeparateFromLabels() {

@@ -274,8 +274,8 @@ private fun HistoryBubble(
 ) {
     val fontSize = chatFontSize((14f * fontScale).sp, fontScale)
     val isUser = role == "user"
-    val note = remember(text, isUser, pending) { if (isUser && !pending) SessionNote.parse(text) else null }
-    val reply = remember(text, isUser) { if (isUser && note == null) ReplyQuote.parse(text) else null }
+    val note = remember(text, isUser, pending, key) { if (isUser && !pending && !key.startsWith("@local:")) SessionNote.parse(text) else null }
+    val reply = remember(text, isUser, note) { if (isUser && note == null) ReplyQuote.parse(text) else null }
     val start = remember { BringIntoViewRequester() }
     LaunchedEffect(highlighted) {
         if (highlighted) {
