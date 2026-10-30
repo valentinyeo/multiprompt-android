@@ -1,5 +1,10 @@
 # Resync chat
 
+Historical legacy held-queue journey only.
+For Claude and Codex, Resync chat resets shared waiting copies.
+This recipe cannot prove shared-store Reset.
+Use [shared chat store](chat-shared.md) instead.
+
 ## Sub-features
 
 - Open "Resync chat" through the chat menu.
