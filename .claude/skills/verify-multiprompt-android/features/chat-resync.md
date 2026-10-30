@@ -41,7 +41,9 @@ The fixture holds the canonical worker lock.
 Its terminal independently reports busy throughout.
 Neither gate gets released during this journey.
 Foreground recovery must work despite that lock.
-Busy prevents pending rows becoming new submissions.
+Busy alone no longer blocks Claude handoff.
+An explicit non-dim terminal draft blocks readiness.
+Each snapshot checks its exact text.
 
 ## Receipt event
 

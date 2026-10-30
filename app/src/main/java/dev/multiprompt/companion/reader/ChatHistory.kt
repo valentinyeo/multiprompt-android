@@ -105,6 +105,11 @@ data class ChatHistory(
         return current + echoes + managed
     }
 
+    internal fun resetSeed(): ChatHistory = ChatHistory(
+        sid = sid,
+        deliveries = deliveries.filterValues { it == QueuedMessages.Delivery.DELIVERED || it == QueuedMessages.Delivery.CANCELLED },
+    )
+
     fun apply(page: ChatHistoryProtocol.Page): ChatHistory {
         val sameSource = sid == page.sid && inode == page.inode
         when (page.mode) {
@@ -113,7 +118,11 @@ data class ChatHistory(
         }
         val retained = if (page.mode == "tail") emptyList() else rows
         val merged = (retained + page.rows).associateBy { Triple(it.offset, it.role, it.id) }.values.sortedBy { it.offset }
-        val previousDeliveries = if (sameSource) deliveries else emptyMap()
+        val previousDeliveries = when {
+            sameSource -> deliveries
+            sid == page.sid -> resetSeed().deliveries
+            else -> emptyMap()
+        }
         val terminal = setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
         val mergedDeliveries = previousDeliveries + page.deliveries + previousDeliveries.filterValues { it in terminal }
         return if (page.mode == "older") {

@@ -33,6 +33,26 @@ class PendingMessageReceiptTest {
             assertEquals(listOf(prompt, "A different prompt", prompt), receipts.map { it.getString("content") })
             assertEquals(listOf(prompt), reader.history.messages.map { it.text })
             assertFalse(reader.history.messages.single().pending)
+            val history = reader.history
+            assertEquals(reader.identity.sid, history.sid)
+            assertTrue(history.inode > 0)
+            val intention = QueuedMessages.SentPrompt(prompt, 1, "managed-id", QueuedMessages.Delivery.QUEUED,
+                history.sid, history.inode, 0)
+            fun assertUnresolved(value: ChatHistory) {
+                assertEquals(listOf(intention), unconfirmedAfterResync(value, listOf(intention)))
+                val managed = value.displayMessages(listOf(intention)).single { it.requestId == intention.messageId }
+                assertTrue(managed.pending)
+                assertEquals("Queued", managed.delivery)
+            }
+            assertUnresolved(history)
+            assertUnresolved(history.copy(deliveries = mapOf("unrelated" to QueuedMessages.Delivery.DELIVERED)))
+            for (terminal in listOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)) {
+                val offPage = history.copy(rows = emptyList(), deliveries = mapOf(intention.messageId to terminal))
+                assertTrue(unconfirmedAfterResync(offPage, listOf(intention)).isEmpty())
+                val managed = offPage.displayMessages(listOf(intention)).single()
+                assertFalse(managed.pending)
+                assertEquals(terminal.name.lowercase().replaceFirstChar { it.uppercase() }, managed.delivery)
+            }
             val cache = ChatHistoryCache(temporary.newFolder("cache"))
             cache.save("pending-proof", reader.history)
             assertEquals(reader.history, cache.restore("pending-proof"))

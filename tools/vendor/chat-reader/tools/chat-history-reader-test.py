@@ -3011,6 +3011,7 @@ class HeldQueueTest(unittest.TestCase):
         patch.object(reader, 'HOME', self.home).start()
         patch.object(reader, 'resolve_tmux_agent', return_value=('sid', self.path)).start()
         self.send = patch.object(reader, 'send_response', return_value='@mp\t1\tsend\tok\t-\t0\n@@MP_END@@\n').start()
+        self.real_ready = reader.held_queue_ready
         self.ready = patch.object(reader, 'held_queue_ready', return_value=False).start()
 
     def enqueue(self, text, stamp):
@@ -3018,6 +3019,72 @@ class HeldQueueTest(unittest.TestCase):
 
     def cancel(self, text, stamp):
         return reader.cancel_queued_response(dict(id=2, tmux='term-1', text=text, queued_at=stamp, message_id=f'message-{stamp}'))
+
+    def test_busy_empty_handoff_waits_for_receipt_and_never_replays(self):
+        self.path.write_text(json.dumps(dict(type='assistant', message=dict(stop_reason=None))) + '\n')
+        with patch.object(reader, 'start_held_worker'), \
+                patch.object(reader.subprocess, 'run', return_value=types.SimpleNamespace(stdout='esc to interrupt\n❯ \n────\n')):
+            self.enqueue('target', 1)
+            with reader.held_queue_db('term-1') as db:
+                self.assertEqual(db.execute('SELECT state FROM messages').fetchone(), ('queued',))
+            self.ready.side_effect = self.real_ready
+            self.send.side_effect = subprocess.TimeoutExpired(['tmux'], 5)
+            query = dict(id=7, tmux='term-1', offset=0, cached_sid='', inode=0)
+            reader.response(query, resolved=('claude', 'sid', self.path, None))
+            reader.drain_held_queue('term-1', 'sid', self.path)
+            self.enqueue('target', 1)
+            with reader.held_queue_db('term-1') as db:
+                self.assertEqual(db.execute('SELECT state FROM messages').fetchall(), [('submitted',)])
+            self.assertEqual(reader.held_queue_fields('term-1', 'sid')['sent'], [])
+            self.send.assert_called_once()
+            with self.path.open('a') as source:
+                source.write(json.dumps(dict(type='attachment', attachment=dict(type='queued_command', prompt='target'), timestamp='receipt')) + '\n')
+            reader.drain_held_queue('term-1', 'sid', self.path)
+            self.assertEqual(reader.held_queue_fields('term-1', 'sid')['sent'], ['target'])
+            self.send.assert_called_once()
+
+    def test_busy_guards_and_idle_completion_through_enqueue(self):
+        cases = [
+            ('esc to interrupt\n❯ unfinished text\n────\n', 'unfinished text'),
+            ('esc to interrupt\nedit queued messages\n❯ \n────\n', ''),
+            ('esc to interrupt\nselect a queued message\n❯ \n────\n', ''),
+            ('esc to interrupt\nenter to select\n❯ \n────\n', ''),
+            ('esc to interrupt\nesc to cancel\n❯ \n────\n', ''),
+            ('esc to interrupt\nDo you want to proceed?\n❯ Allow once\n  Allow always\nEnter to select · Esc to cancel\n────\n', 'Allow once\nAllow always\nEnter to select · Esc to cancel'),
+            ('esc to interrupt\nno prompt\n', None),
+            ('❯ \n────\n', ''),
+        ]
+        self.path.write_text(json.dumps(dict(type='assistant', message=dict(stop_reason=None))) + '\n')
+        self.ready.side_effect = self.real_ready
+        with patch.object(reader, 'start_held_worker'), patch.object(reader.subprocess, 'run') as capture:
+            for stamp, (shown, draft) in enumerate(cases, 1):
+                with self.subTest(shown=shown):
+                    capture.return_value = types.SimpleNamespace(stdout=shown)
+                    self.assertEqual(reader.box_draft_text(shown), draft)
+                    self.enqueue('target', stamp)
+                    reader.drain_held_queue('term-1', 'sid', self.path)
+                    self.assertEqual(reader.box_draft_text(capture.return_value.stdout), draft)
+                    self.send.assert_not_called()
+                    self.assertIn('\tcancel_queued\tok\t', self.cancel('target', stamp))
+
+    def test_busy_empty_hands_off_with_permission_words_in_conversation(self):
+        self.path.write_text(json.dumps(dict(type='assistant', message=dict(stop_reason=None))) + '\n')
+        self.ready.side_effect = self.real_ready
+        with patch.object(reader, 'start_held_worker'), \
+                patch.object(reader.subprocess, 'run', return_value=types.SimpleNamespace(stdout='The documentation says "do you want to proceed", "allow once", and "allow always".\nesc to interrupt\n❯ \n────\n')):
+            wire = self.enqueue('target', 1)
+        self.assertIn('"state":"submitted"', wire)
+        self.send.assert_called_once()
+
+    def test_ctrl_c_busy_empty_hands_off(self):
+        self.path.write_text(json.dumps(dict(type='user', message=dict(content='earlier'))) + '\n')
+        self.ready.side_effect = self.real_ready
+        with patch.object(reader, 'start_held_worker'), \
+                patch.object(reader.subprocess, 'run', return_value=types.SimpleNamespace(stdout='ctrl+c to interrupt\n❯ \n────\n')):
+            wire = self.enqueue('target', 1)
+        self.assertIn('"state":"submitted"', wire)
+        self.send.assert_called_once()
+        self.assertEqual(reader.held_queue_fields('term-1', 'sid')['sent'], [])
 
     def test_cancel_before_handoff_never_reaches_terminal(self):
         self.assertIn('\tsend\tok\t', self.enqueue('target', 1))

@@ -1858,9 +1858,12 @@ def held_queue_ready(tmux, path):
     draft = box_draft_text(shown)
     if draft is None or draft.strip() or "❯" not in plain:
         return False
-    if any(hint in plain.lower() for hint in ("esc to interrupt", "ctrl+c to interrupt", "edit queued messages",
-                                               "select a queued message", "enter to select", "esc to cancel")):
+    lower = plain.lower()
+    if any(hint in lower for hint in ("edit queued messages", "select a queued message", "enter to select",
+                                       "esc to cancel")):
         return False
+    if any(hint in lower for hint in ("esc to interrupt", "ctrl+c to interrupt")):
+        return True
     with path.open("rb") as source:
         size = os.fstat(source.fileno()).st_size
         start = max(0, size - TAIL_BYTES)
@@ -2424,7 +2427,7 @@ elif __name__ == "__main__":
         print("@mp\t0\thistory\terror\t-\t0\n" + END)
 
 '''
-RUNTIME_GENERATION = 2
+RUNTIME_GENERATION = 3
 
 if __name__ == '__main__':
     import fcntl

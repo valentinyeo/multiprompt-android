@@ -27,6 +27,7 @@ TEXTS = {
 }
 ACCEPTED = {"recovery-head", "accepted-fourth"}
 DRAFT = "draft stays here"
+TERMINAL_DRAFT = "unsent terminal draft"
 
 
 def require(condition, code):
@@ -127,7 +128,8 @@ def console():
             else:
                 held = False
                 fcntl.flock(probe, fcntl.LOCK_UN)
-        pane = subprocess.check_output(["tmux", "capture-pane", "-p", "-t", "=" + TMUX + ":"], text=True)
+        pane = subprocess.check_output(["tmux", "capture-pane", "-p", "-e", "-J", "-t", "=" + TMUX + ":"], text=True)
+        terminal_draft = reader.box_draft_text(pane)
         bound = reader.resolve_tmux_agent("claude", TMUX, require_bound=True)
         require(bound is not None and bound == (SID, TRANSCRIPT), "RESYNC_SOURCE_BINDING_CHANGED")
         info = TRANSCRIPT.stat()
@@ -136,7 +138,7 @@ def console():
                     held=[row["key"] for row in rows if row["state"] in ("queued", "submitted")],
                     provider_input_count=len(receipts.read_bytes().splitlines()),
                     provider_input_bytes=receipts.stat().st_size, worker_lock_held=held,
-                    provider_busy="esc to interrupt" in pane.lower(),
+                    provider_busy="esc to interrupt" in pane.lower(), terminal_draft=terminal_draft,
                     provider_ready=reader.held_queue_ready(TMUX, TRANSCRIPT),
                     schema_reader_sha256=hashlib.sha256((HOME / "recovery-reader.py").read_bytes()).hexdigest(),
                     fixture_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
@@ -145,6 +147,7 @@ def console():
         require(result["sid"] == SID and result["inode"] == initial.st_ino and result["tmux"] == TMUX,
                 "RESYNC_SOURCE_IDENTITY_CHANGED")
         require(result["worker_lock_held"] and result["provider_busy"] and not result["provider_ready"], "RESYNC_INDEPENDENT_GATES_LOST")
+        require(result["terminal_draft"] == TERMINAL_DRAFT, "RESYNC_TERMINAL_DRAFT_CHANGED")
         require(result["provider_input_count"] == 0 and result["provider_input_bytes"] == 0, "RESYNC_DUPLICATE_INPUT")
         require({row["key"] for row in result["rows"]} == set(TEXTS), "RESYNC_PENDING_ID_LOST")
         for row in result["rows"]:
@@ -204,7 +207,7 @@ def console():
     inputs = selectors.DefaultSelector()
     inputs.register(server, selectors.EVENT_READ)
     inputs.register(sys.stdin, selectors.EVENT_READ)
-    print("Claude Code\nVERIFY_READY_528\nFIRST REPLY\nWorking... (esc to interrupt)\n❯ ", flush=True)
+    print("Claude Code\nVERIFY_READY_528\nFIRST REPLY\nWorking... (esc to interrupt)\n❯ " + TERMINAL_DRAFT, end="", flush=True)
     while True:
         for key, _ in inputs.select():
             if key.fileobj is server:
@@ -222,7 +225,7 @@ def console():
                     return
                 with receipts.open("a", encoding="utf-8") as output:
                     output.write("VERIFY_RECEIVED:" + line.rstrip("\r\n") + "\n")
-                print("Working... (esc to interrupt)\n❯ ", flush=True)
+                print("Working... (esc to interrupt)\n❯ " + TERMINAL_DRAFT, end="", flush=True)
 
 
 def main():

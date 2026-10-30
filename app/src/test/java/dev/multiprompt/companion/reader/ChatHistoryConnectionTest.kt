@@ -114,4 +114,40 @@ class ChatHistoryConnectionTest {
         assertEquals(0L, request.getLong("offset"))
         assertEquals(0L, request.getLong("start"))
     }
+    @Test
+    fun resetSeedRetainsOnlySameSessionTerminalFactsAcrossStalePages() {
+        val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd")
+        for (terminal in listOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)) {
+            val prompt = QueuedMessages.SentPrompt("text", 1, "id", QueuedMessages.Delivery.QUEUED, "sid", 9, 10)
+            val initial = ChatHistory(sid = "sid", inode = 9, offset = 30, start = 5, mtime = 7,
+                probe = "a".repeat(64), rows = listOf(ChatHistoryProtocol.Row("user", "old", "row", "", 5, 10)),
+                deliveries = mapOf("guess" to QueuedMessages.Delivery.QUEUED), held = listOf(prompt))
+            val observed = ChatHistoryProtocol.Page("sid", 0, 30, 9, false, 7, "a".repeat(64), "tail", 0,
+                emptyList(), deliveries = mapOf("id" to terminal))
+            val known = initial.apply(observed)
+            val seed = known.resetSeed()
+            assertEquals(mapOf("id" to terminal), seed.deliveries)
+            assertTrue(seed.rows.isEmpty())
+            assertTrue(seed.held.isEmpty())
+            val request = org.json.JSONObject(ChatHistoryProtocol.request(1, identity, seed.copy(sid = "")))
+            assertTrue(request.getBoolean("follow"))
+            assertEquals("", request.getString("cached_sid"))
+            for (field in listOf("inode", "offset", "start", "mtime", "before")) assertEquals(0L, request.getLong(field))
+            assertEquals("", request.getString("probe"))
+            val stale = observed.copy(deliveries = mapOf("id" to QueuedMessages.Delivery.QUEUED), held = listOf(prompt))
+            for (page in listOf(stale, stale.copy(inode = 10))) {
+                val recovered = seed.apply(page)
+                assertEquals(terminal, recovered.deliveries["id"])
+                assertFalse(recovered.displayMessages(listOf(prompt)).single().pending)
+                assertTrue(unconfirmedAfterResync(recovered, listOf(prompt)).isEmpty())
+            }
+            val rotated = known.apply(stale.copy(inode = 10))
+            assertEquals(terminal, rotated.deliveries["id"])
+            assertFalse(rotated.deliveries.containsKey("guess"))
+            val other = seed.apply(stale.copy(sid = "other", inode = 10))
+            assertEquals(QueuedMessages.Delivery.QUEUED, other.deliveries["id"])
+            assertEquals(listOf(prompt), unconfirmedAfterResync(other, listOf(prompt)))
+        }
+    }
+
 }
