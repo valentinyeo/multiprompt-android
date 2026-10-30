@@ -3,11 +3,11 @@ set -euo pipefail
 [[ "${GITHUB_ACTIONS:-}" == true ]]
 [[ "$(adb get-serialno)" == emulator-* ]]
 [[ "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion || "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion.m3 ]]
-if [[ "$VERIFY_PACKAGE" == dev.multiprompt.companion.m3 ]]; then [[ "${VERIFY_FEATURE:-}" == chat-resync.md || "${VERIFY_FEATURE:-}" == session-favorites.md || "${VERIFY_FEATURE:-}" == chat-queued.md || "${VERIFY_FEATURE:-}" == session-routing.md ]]; fi
+if [[ "$VERIFY_PACKAGE" == dev.multiprompt.companion.m3 ]]; then [[ "${VERIFY_FEATURE:-}" == settings-navigation.md || "${VERIFY_FEATURE:-}" == chat-resync.md || "${VERIFY_FEATURE:-}" == session-favorites.md || "${VERIFY_FEATURE:-}" == chat-queued.md || "${VERIFY_FEATURE:-}" == session-routing.md ]]; fi
 python3 -m http.server 8788 > "$FIXTURE/offline-proxy.log" 2>&1 &
 echo "$!" > "$FIXTURE/offline-proxy.pid"
 adb shell settings put global http_proxy 10.0.2.2:8788
-if [[ "${VERIFY_FEATURE:-}" == session-favorites.md || "${VERIFY_FEATURE:-}" == session-routing.md ]]; then
+if [[ "${VERIFY_FEATURE:-}" == settings-navigation.md || "${VERIFY_FEATURE:-}" == session-favorites.md || "${VERIFY_FEATURE:-}" == session-routing.md ]]; then
     kill -0 "$(cat "$FIXTURE/offline-proxy.pid")"
     [[ "$(adb shell settings get global http_proxy | tr -d '\r')" == 10.0.2.2:8788 ]]
     python3 - <<'PYPROXY'
@@ -26,7 +26,7 @@ for attempt in range(20):
 PYPROXY
 fi
 adb install -r "$RUNNER_TEMP/release-choices/seed.apk"
-if [[ "${VERIFY_FEATURE:-}" == session-favorites.md || "${VERIFY_FEATURE:-}" == session-routing.md ]]; then
+if [[ "${VERIFY_FEATURE:-}" == settings-navigation.md || "${VERIFY_FEATURE:-}" == session-favorites.md || "${VERIFY_FEATURE:-}" == session-routing.md ]]; then
     adb shell am instrument -w -e mode favorites-account dev.multiprompt.verification/dev.multiprompt.verification.Seed | tee "$EVIDENCE/seed-result.txt"
 else
     adb shell am instrument -w dev.multiprompt.verification/dev.multiprompt.verification.Seed | tee "$EVIDENCE/seed-result.txt"

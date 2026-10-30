@@ -121,7 +121,7 @@ private fun InboxFixture(screen: FadeScreen, material3: Boolean, sunlight: Boole
         onSetReaderDefaultFontScale = {},
         crashReport = null,
         onClearCrashReport = {},
-        onAddHost = {},
+        onMapAccountHost = { _, _ -> },
         material3 = material3,
     )
 }

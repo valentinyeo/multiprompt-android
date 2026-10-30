@@ -72,7 +72,7 @@ class SessionRowsTest {
                 onStartNewSession = {}, onSetNewestSessionsAtBottom = {}, onSetAllSplitOnRight = {},
                 appTheme = AppTheme.DARK, onSetAppTheme = {}, onClearSessionActionError = {},
                 readerDefaultFontScale = 1f, onSetReaderDefaultFontScale = {}, crashReport = null,
-                onClearCrashReport = {}, onAddHost = {}, material3 = false, nowMillis = { 1_800_000_000_000 },
+                onClearCrashReport = {}, onMapAccountHost = { _, _ -> }, material3 = false, nowMillis = { 1_800_000_000_000 },
             )
             }
         }

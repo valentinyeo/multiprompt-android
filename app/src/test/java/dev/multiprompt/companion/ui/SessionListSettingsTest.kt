@@ -73,7 +73,7 @@ class SessionListSettingsTest {
                 appTheme = state.appTheme, onSetAppTheme = fixture.model::setAppTheme,
                 onClearSessionActionError = {}, readerDefaultFontScale = state.readerDefaultFontScale,
                 onSetReaderDefaultFontScale = fixture.model::setReaderDefaultFontScale,
-                crashReport = null, onClearCrashReport = {}, onAddHost = {},
+                crashReport = null, onClearCrashReport = {}, onMapAccountHost = { _, _ -> },
             )
         }
     }
@@ -83,6 +83,35 @@ class SessionListSettingsTest {
         compose.onNodeWithText("Settings").performClick()
         compose.onNodeWithText("Session list settings").assertIsDisplayed()
         compose.onNodeWithText("Inbox").assertDoesNotExist()
+    }
+
+    @Test fun settingsKeepsAccountAndUpdateActionsAfterRemovingConfigurationPages() {
+        render()
+        openSettings()
+        compose.onNodeWithText("Switch / renew login").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Sign out").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Host mapping").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Update").performScrollTo().assertIsDisplayed()
+        closeSettings()
+        compose.onNodeWithContentDescription("Session list actions").performClick()
+        compose.onNodeWithText("Hosts").assertDoesNotExist()
+        compose.onNodeWithText("Workspaces").assertDoesNotExist()
+    }
+
+    @Test fun signedInAccountErrorIsVisibleWithoutClearingCredentials() {
+        render()
+        compose.runOnIdle {
+            assertTrue(fixture.model.syncAuth.hasSession())
+            fixture.state.value = fixture.state.value.copy(signedIn = true, accountError = "Account unavailable; retry")
+        }
+        openSettings()
+        compose.onNodeWithText("Account unavailable; retry").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Switch / renew login").assertIsDisplayed()
+        compose.runOnIdle {
+            assertTrue(fixture.model.state.value.signedIn)
+            assertTrue(fixture.model.syncAuth.hasSession())
+            assertEquals("test-account", fixture.model.syncAuth.accountId())
+        }
     }
 
     private fun closeSettings() {

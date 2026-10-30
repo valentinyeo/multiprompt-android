@@ -12,6 +12,7 @@ import android.util.Base64;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
+import java.security.KeyStore;
 import org.json.JSONObject;
 import org.json.JSONArray;
 
@@ -36,7 +37,8 @@ public class Seed extends Instrumentation {
                 if (!(Build.HARDWARE.contains("ranchu") || Build.HARDWARE.contains("goldfish"))) {
                     throw new IllegalStateException("Emulator required");
                 }
-                if (mode.equals("favorites-seed")) seedFavorites(context, result);
+                if (mode.equals("host-seed")) seedHost(context, result);
+                else if (mode.equals("favorites-seed")) seedFavorites(context, result);
                 else if (mode.equals("favorites-snapshot")) snapshotFavorites(context, result);
                 else throw new IllegalStateException("Unknown fixture mode");
                 finish(Activity.RESULT_OK, result);
@@ -84,6 +86,34 @@ public class Seed extends Instrumentation {
             finish(Activity.RESULT_CANCELED, result);
         }
     }
+    private void seedHost(Context context, Bundle result) throws Exception {
+        SharedPreferences secrets = context.getSharedPreferences("encrypted_secrets", Context.MODE_PRIVATE);
+        if (!secrets.contains("account_device_v1")) throw new IllegalStateException("Fixture account required");
+        SharedPreferences hosts = context.getSharedPreferences("hosts", Context.MODE_PRIVATE);
+        if (!hosts.getAll().isEmpty()) throw new IllegalStateException("Empty host fixture required");
+        String label = arguments.getString("host_label");
+        String hostname = arguments.getString("ssh_host");
+        String username = arguments.getString("ssh_user");
+        int port = Integer.parseInt(arguments.getString("ssh_port"));
+        if (label == null || hostname == null || username == null || arguments.getString("ssh_private_key") == null) throw new IllegalStateException("Host fixture missing");
+        String id = "release-fixture-host";
+        String secretId = "host_key_" + id;
+        KeyStore store = KeyStore.getInstance("AndroidKeyStore");
+        store.load(null);
+        SecretKey key = (SecretKey) store.getKey("multiprompt_companion_secrets_v1", null);
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.ENCRYPT_MODE, key);
+        byte[] ciphertext = cipher.doFinal(Base64.decode(arguments.getString("ssh_private_key"), Base64.DEFAULT));
+        byte[] packed = new byte[cipher.getIV().length + ciphertext.length];
+        System.arraycopy(cipher.getIV(), 0, packed, 0, cipher.getIV().length);
+        System.arraycopy(ciphertext, 0, packed, cipher.getIV().length, ciphertext.length);
+        if (!secrets.edit().putString(secretId, Base64.encodeToString(packed, Base64.NO_WRAP)).commit()) throw new IllegalStateException("Host key not saved");
+        JSONObject profile = new JSONObject().put("id", id).put("label", label).put("hostname", hostname)
+            .put("port", port).put("username", username).put("keySecretId", secretId);
+        if (!hosts.edit().putString("profiles_json", new JSONArray().put(profile).toString()).commit()) throw new IllegalStateException("Host not saved");
+        result.putString("result", "ISOLATED_HOST_SEEDED");
+    }
+
     private void seedFavorites(Context context, Bundle result) throws Exception {
         SharedPreferences secrets = context.getSharedPreferences("encrypted_secrets", Context.MODE_PRIVATE);
         if (!secrets.contains("account_device_v1")) throw new IllegalStateException("Fixture account required");

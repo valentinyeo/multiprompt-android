@@ -142,7 +142,7 @@ class VersionLabelTest {
             onSetReaderDefaultFontScale = {},
             crashReport = null,
             onClearCrashReport = {},
-            onAddHost = {},
+            onMapAccountHost = { _, _ -> },
             signedIn = true,
             onSignIn = {},
             onSignOut = {},
@@ -236,23 +236,6 @@ class VersionLabelTest {
     }
 
     @Test
-    fun workspacesVersionStaysOutsideScrollingNavigationAndOpensReleaseNotes() {
-        lateinit var model: MainViewModel
-        compose.runOnIdle { model = viewModel() }
-        render { AccountWorkspacesScreen(model, onInbox = {}, onReleaseNotes = { clicks++ }) }
-        verifyThemes("workspaces", "Workspaces")
-        compose.onNodeWithText("All Sessions").performClick()
-        checkLayout("All Sessions").performClick()
-        compose.runOnIdle { assertEquals(3, clicks) }
-        val before = compose.onNodeWithTag("app-version").getUnclippedBoundsInRoot()
-        compose.onNodeWithText("Update").performScrollTo()
-        val version = compose.onNodeWithTag("app-version").assertIsDisplayed()
-        assertEquals(before, version.getUnclippedBoundsInRoot())
-        version.performClick()
-        compose.runOnIdle { assertEquals(4, clicks) }
-    }
-
-    @Test
     fun readerVersionDoesNotDisplaceTitleOrMenuAndOpensReleaseNotes() {
         render {
             ReaderTopBar(
@@ -338,14 +321,6 @@ class VersionLabelTest {
     }
 
     @Test
-    fun hostEditorVersionOpensReleaseNotesWithoutOverlappingTitle() {
-        render {
-            HostEditorScreen(null, null, {}, { _, _ -> }, onReleaseNotes = { clicks++ })
-        }
-        verifyThemes("host-editor", "Add VPS")
-    }
-
-    @Test
     fun versionContrastIsAtLeastThreeInDarkAndSunlightThemes() {
         listOf(MultipromptColors, SunlightColors).forEach { scheme ->
             val foreground = scheme.onSurfaceVariant.luminance()
@@ -369,7 +344,7 @@ class VersionLabelTest {
             )
             val state = ReflectionHelpers.getField<MutableStateFlow<AppUiState>>(model, "_state")
             state.value = AppUiState(
-                section = AppSection.HOSTS,
+                section = AppSection.SESSIONS,
                 terminal = terminal,
                 terminalSession = session,
                 terminalFromReader = true,

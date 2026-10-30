@@ -57,6 +57,7 @@ on:
         type: choice
         options:
           - sign-in.md
+          - settings-navigation.md
           - hosts.md
           - hosts-retired.md
           - host-changed-key.md
@@ -76,6 +77,10 @@ on:
           - terminal.md
           - launcher-icon.md
           - robot-faces.md
+      expect_settings_missing:
+        description: Require signed Android 301 to reject the settings navigation journey
+        type: boolean
+        default: false
       expect_shell_missing:
         description: Require the original app to reject upward shell scrolling
         type: boolean
@@ -136,8 +141,13 @@ jobs:
           case "$RELEASE_CHANNEL" in
             android-latest) ;;
             android-m3-latest)
-              [[ ( "$VERIFY_FEATURE" == chat-resync.md || "$VERIFY_FEATURE" == session-favorites.md || "$VERIFY_FEATURE" == chat-queued.md || "$VERIFY_FEATURE" == session-routing.md ) && "$RELEASED_CHAT" == true && -z "$APP_REF" && -z "$UPDATE_BASELINE_RUN" ]]
-              [[ "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true ]]
+              if [[ "$VERIFY_FEATURE" == settings-navigation.md ]]; then
+                [[ "$RELEASE_CHOICES" == true && "$RELEASED_CHAT" != true && -z "$APP_REF" && -z "$UPDATE_BASELINE_RUN" ]]
+                [[ "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true && "$EXPECT_SHELL_MISSING" != true && "$EXPECT_NATIVE_MISSING" != true ]]
+              else
+                [[ ( "$VERIFY_FEATURE" == chat-resync.md || "$VERIFY_FEATURE" == session-favorites.md || "$VERIFY_FEATURE" == chat-queued.md || "$VERIFY_FEATURE" == session-routing.md ) && "$RELEASED_CHAT" == true && -z "$APP_REF" && -z "$UPDATE_BASELINE_RUN" ]]
+                [[ "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true ]]
+              fi
               ;;
             *) exit 1 ;;
           esac
@@ -232,7 +242,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          [[ "$VERIFY_FEATURE" = chat-queued.md || "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md || "$VERIFY_FEATURE" = terminal.md || "$VERIFY_FEATURE" = robot-faces.md || "$VERIFY_FEATURE" = chat-cancel.md || "$VERIFY_FEATURE" = session-gestures.md || "$VERIFY_FEATURE" = session-summaries.md || "$VERIFY_FEATURE" = chat-resync.md || "$VERIFY_FEATURE" = session-favorites.md || "$VERIFY_FEATURE" = session-routing.md ]]
+          [[ "$VERIFY_FEATURE" = settings-navigation.md || "$VERIFY_FEATURE" = chat-queued.md || "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md || "$VERIFY_FEATURE" = terminal.md || "$VERIFY_FEATURE" = robot-faces.md || "$VERIFY_FEATURE" = chat-cancel.md || "$VERIFY_FEATURE" = session-gestures.md || "$VERIFY_FEATURE" = session-summaries.md || "$VERIFY_FEATURE" = chat-resync.md || "$VERIFY_FEATURE" = session-favorites.md || "$VERIFY_FEATURE" = session-routing.md ]]
           sdkmanager --install 'build-tools;35.0.0' 'platforms;android-35'
           bash tools/release-choices/prepare.sh
           echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
@@ -274,8 +284,8 @@ jobs:
           gradle -p "$app_source" --refresh-dependencies --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="0.1.2-verify.$GITHUB_RUN_NUMBER" assembleDebug 2>&1 | tee "$EVIDENCE/build.txt"
           echo "VERIFY_APK=$app_source/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
           sha256sum "$app_source/app/build/outputs/apk/debug/app-debug.apk" > "$EVIDENCE/app-apk-sha256.txt"
-      - name: Build routing instrumentation
-        if: inputs.feature == 'session-routing.md' && inputs.released_chat != true && inputs.release_choices != true && inputs.release_icon != true && inputs.released_reactions != true && inputs.released_terminal != true && inputs.released_robots != true
+      - name: Build fixture instrumentation
+        if: inputs.released_chat != true && inputs.release_choices != true && inputs.release_icon != true && inputs.released_reactions != true && inputs.released_terminal != true && inputs.released_robots != true
         run: gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g assembleDebugAndroidTest
       - name: Prepare shell and chat recording
         if: env.VERIFY_FEATURE == 'chat-queued.md'
@@ -286,14 +296,19 @@ jobs:
         run: .claude/skills/verify-multiprompt-android/scripts/fixture.sh
       - name: Install, doctor and drive the real app
         id: native-ui
-        continue-on-error: ${{ inputs.expect_native_missing == true || inputs.expect_shell_missing == true }}
+        continue-on-error: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.expect_native_missing == 'true' || github.event.inputs.expect_shell_missing == 'true' || github.event.inputs.expect_settings_missing == 'true') }}
         uses: ./.github/actions/android-proof
         with:
           stage: stage-1
           target: default
           script: |
             adb install -r -g "$VERIFY_APK"
-            if [[ "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion || "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion.m3 ]] && [ "$VERIFY_FEATURE" != launcher-icon.md ]; then bash tools/release-choices/run.sh; else .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; fi
+            if [[ "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion || "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion.m3 ]]; then
+              if [ "$VERIFY_FEATURE" = launcher-icon.md ]; then .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; else bash tools/release-choices/run.sh; fi
+            else
+              adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+              .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"
+            fi
             if [ -n "$UPDATE_BASELINE_RUN" ]; then .claude/skills/verify-multiprompt-android/scripts/update-reaction-release.sh; fi
       - name: Compare desktop and Android transcript posts
         if: inputs.feature == 'chat-codex.md'
@@ -304,8 +319,24 @@ jobs:
           sudo -u verifyssh python3 -B /tmp/codex-parity.py /tmp/desktop-codex-reader.py /tmp/android-codex-reader.py > "$EVIDENCE/desktop-android-parity.txt"
           cat "$EVIDENCE/desktop-android-parity.txt"
           grep -Fx DESKTOP_ANDROID_POSTS_IDENTICAL "$EVIDENCE/desktop-android-parity.txt"
+      - name: Require the Android 301 settings failure
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.expect_settings_missing == 'true'
+        env:
+          EMULATOR_OUTCOME: ${{ steps.native-ui.outcome }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          RELEASE_CHOICES: ${{ inputs.release_choices }}
+          CANDIDATE: ${{ inputs.candidate }}
+        run: |
+          test "$VERIFY_FEATURE" = settings-navigation.md
+          test "$RELEASE_CHOICES" = true
+          test "$CANDIDATE" != true
+          test "$EXPECTED_COMMIT" = 0d255e99f15656bca388feb4558399139e363e88
+          test "$(cat "$EVIDENCE/app-source-sha.txt")" = "$EXPECTED_COMMIT"
+          test "$EMULATOR_OUTCOME" = failure
+          grep -Ex 'SETTINGS_NAVIGATION_RETIRED_DESTINATION|SETTINGS_NAVIGATION_MISSING_HOST_MAPPING' "$EVIDENCE/settings-baseline.txt"
+          printf 'ANDROID_301_SETTINGS_REJECTED\n' > "$EVIDENCE/settings-baseline-result.txt"
       - name: Require the original native-skill failure
-        if: inputs.expect_native_missing == true
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.expect_native_missing == 'true'
         env:
           EMULATOR_OUTCOME: ${{ steps.native-ui.outcome }}
         run: |
@@ -316,7 +347,7 @@ jobs:
           grep -F 'NATIVE_SLASH_PICKER_MISSING' "$EVIDENCE/driver-transcript.txt"
           printf '%s\n' '{"status":"expected-red","error":"NATIVE_SLASH_PICKER_MISSING"}' > "$EVIDENCE/native-baseline-result.json"
       - name: Require the original shell swipe failure
-        if: always() && inputs.expect_shell_missing == true
+        if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.expect_shell_missing == 'true'
         env:
           EMULATOR_OUTCOME: ${{ steps.native-ui.outcome }}
         run: |

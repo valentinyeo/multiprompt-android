@@ -1,5 +1,17 @@
 package dev.multiprompt.companion.ui
 
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.outlined.Image as OutlinedImage
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import android.text.format.DateUtils
 import androidx.compose.foundation.lazy.rememberLazyListState
 import dev.multiprompt.companion.reader.TranscriptProtocol
 import android.Manifest
@@ -11,7 +23,6 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
-import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -52,13 +63,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -75,13 +84,11 @@ import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
@@ -89,9 +96,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.Image as OutlinedImage
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Badge
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -124,13 +129,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.key
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.Alignment
@@ -145,7 +148,6 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -164,10 +166,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -310,7 +310,6 @@ private fun AppScreens(viewModel: MainViewModel) {
     val state by viewModel.state.collectAsState()
     val updateState by viewModel.updates.state.collectAsState()
     val context = LocalContext.current
-    var inboxVisible by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(StartScreen.INBOX_ON_LAUNCH) }
     var useWithoutAccount by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val systemDark = isSystemInDarkTheme()
     val sunlight = when (state.appTheme) {
@@ -357,16 +356,10 @@ private fun AppScreens(viewModel: MainViewModel) {
     }
 
     BackHandler(
-        enabled = state.editorVisible,
-        onBack = viewModel::hideHostEditor,
-    )
-    BackHandler(
         enabled = state.terminal == null &&
             state.reader == null &&
-            !state.editorVisible &&
             state.section != AppSection.SESSIONS,
         onBack = {
-            inboxVisible = StartScreen.inboxAfterLeaving(state.section)
             viewModel.select(AppSection.SESSIONS)
         },
     )
@@ -438,17 +431,6 @@ private fun AppScreens(viewModel: MainViewModel) {
         return
     }
 
-    if (state.editorVisible) {
-        HostEditorScreen(
-            host = state.editorHost,
-            error = state.editorError,
-            onCancel = viewModel::hideHostEditor,
-            onSave = viewModel::saveHost,
-            onReleaseNotes = viewModel::openReleaseNotes,
-        )
-        return
-    }
-
     val newSession = state.newSession
     if (newSession != null && newSession.step == NewSessionStep.PATH) {
         NewSessionFolderScreen(
@@ -476,10 +458,10 @@ private fun AppScreens(viewModel: MainViewModel) {
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        contentWindowInsets = if (state.section == AppSection.SESSIONS && inboxVisible)
+        contentWindowInsets = if (state.section == AppSection.SESSIONS)
             WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
         topBar = {
-            Column(if (state.section == AppSection.SESSIONS && inboxVisible && updateState !is UpdateState.Available) Modifier else Modifier.statusBarsPadding()) {
+            Column(if (state.section == AppSection.SESSIONS && updateState !is UpdateState.Available) Modifier else Modifier.statusBarsPadding()) {
                 if (state.section != AppSection.SESSIONS) {
                     Header(
                         refreshing = state.refreshing,
@@ -495,19 +477,12 @@ private fun AppScreens(viewModel: MainViewModel) {
                 }
             }
         },
-        floatingActionButton = {
-            if (state.section == AppSection.HOSTS) {
-                FloatingActionButton(onClick = { viewModel.showHostEditor() }) {
-                    Icon(Icons.Default.Add, "Add host")
-                }
-            }
-        },
     ) { padding ->
         Box(Modifier.padding(padding)
-            .then(if (state.section == AppSection.SESSIONS && inboxVisible) Modifier.consumeWindowInsets(PaddingValues(top = padding.calculateTopPadding())) else Modifier)
+            .then(if (state.section == AppSection.SESSIONS) Modifier.consumeWindowInsets(PaddingValues(top = padding.calculateTopPadding())) else Modifier)
             .fillMaxSize()) {
             when (state.section) {
-                AppSection.SESSIONS -> if (!inboxVisible) AccountWorkspacesScreen(viewModel, onInbox = { inboxVisible = true }, onReleaseNotes = viewModel::openReleaseNotes) else SessionsScreen(
+                AppSection.SESSIONS -> SessionsScreen(
                     state = state,
                     signedIn = state.signedIn,
                     onSignIn = { viewModel.signInAccount { context.startActivity(it) } },
@@ -548,17 +523,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     crashReport = state.crashReport,
                     onClearCrashReport = viewModel::clearCrashReport,
                     material3 = BuildConfig.MATERIAL3,
-                    onAddHost = {
-                        viewModel.select(AppSection.HOSTS)
-                        viewModel.showHostEditor()
-                    },
-                )
-                AppSection.HOSTS -> HostsScreen(
-                    state = state,
-                    onEdit = viewModel::showHostEditor,
-                    onDelete = viewModel::deleteHost,
-                    onAddUser = viewModel::addUserOnHost,
-                    onTrust = viewModel::trustHostKey,
+                    onMapAccountHost = viewModel::mapAccountHost,
                 )
                 AppSection.UPDATE -> UpdateScreen(
                     state = updateState,
@@ -568,6 +533,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             }
         }
     }
+
 
     state.newSession?.let { picker ->
         when (picker.step) {
@@ -764,7 +730,6 @@ internal fun Header(
                 Text(
                     when (section) {
                         AppSection.SESSIONS -> "Sessions"
-                        AppSection.HOSTS -> "Hosts"
                         AppSection.UPDATE -> "Update"
                     },
                     fontWeight = FontWeight.Bold,
@@ -789,7 +754,6 @@ internal fun Header(
                 ) {
                     listOf(
                         AppSection.SESSIONS to "Sessions",
-                        AppSection.HOSTS to "Hosts",
                         AppSection.UPDATE to "Update",
                     ).forEach { (destination, label) ->
                         DropdownMenuItem(
@@ -1139,6 +1103,8 @@ private fun NewSessionFolderScreen(
     }
 }
 
+private enum class SettingsPage { HIDDEN, PREFERENCES, MAPPING }
+
 @Composable
 internal fun SessionsScreen(
     state: AppUiState,
@@ -1179,7 +1145,7 @@ internal fun SessionsScreen(
     onSetReaderDefaultFontScale: (Float) -> Unit,
     crashReport: CrashReport?,
     onClearCrashReport: () -> Unit,
-    onAddHost: () -> Unit,
+    onMapAccountHost: (Int, String?) -> Unit,
     nowMillis: () -> Long = System::currentTimeMillis,
     onSetSessionListSetting: (String, Boolean) -> Unit = { _, _ -> },
     material3: Boolean = LocalMaterial3.current,
@@ -1206,7 +1172,7 @@ internal fun SessionsScreen(
     var searchVisible by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var bucketMenuExpanded by remember { mutableStateOf(false) }
-    var settingsVisible by remember { mutableStateOf(false) }
+    var settingsPage by remember { mutableStateOf(SettingsPage.HIDDEN) }
     var crashReportVisible by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
@@ -1263,8 +1229,8 @@ internal fun SessionsScreen(
             },
         )
     }
-    if (settingsVisible) {
-        BackHandler { settingsVisible = false }
+    if (settingsPage != SettingsPage.HIDDEN) {
+        BackHandler { settingsPage = SettingsPage.HIDDEN }
         MultipromptTheme(sunlight = sunlight, material3 = false) {
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
@@ -1273,12 +1239,12 @@ internal fun SessionsScreen(
                         Modifier.fillMaxWidth().statusBarsPadding().padding(end = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        IconButton(onClick = { settingsVisible = false }) {
+                        IconButton(onClick = { settingsPage = SettingsPage.HIDDEN }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                         }
                         Text("Session list settings", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                         VersionLabel(onClick = {
-                            settingsVisible = false
+                            settingsPage = SettingsPage.HIDDEN
                             onReleaseNotes()
                         })
                     }
@@ -1288,6 +1254,13 @@ internal fun SessionsScreen(
                     Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    KitListGroup {
+                        KitListRow(if (signedIn) "Switch / renew login" else "Sign in", onClick = onSignIn)
+                        if (signedIn) KitListRow("Sign out", destructive = true, onClick = onSignOut)
+                        KitListRow("Host mapping", onClick = { settingsPage = SettingsPage.MAPPING })
+                        KitListRow("Update", onClick = { settingsPage = SettingsPage.HIDDEN; onSelectSection(AppSection.UPDATE) })
+                    }
+                    state.accountError?.let { Text(it, style = Kit.Body, color = Kit.Danger) }
                     listOf(
                         Triple("frequent", "Show Frequent split", state.showFrequentSplit),
                         Triple("frequent_first", "Frequent as first tab", state.frequentFirst),
@@ -1424,7 +1397,10 @@ internal fun SessionsScreen(
             }
         }
     }
-    if (settingsVisible) return@MultipromptTheme
+    if (settingsPage == SettingsPage.MAPPING && state.pendingHostKeys.isEmpty()) {
+        HostMappingDialog(state, onMapAccountHost, onDismiss = { settingsPage = SettingsPage.PREFERENCES })
+    }
+    if (settingsPage != SettingsPage.HIDDEN) return@MultipromptTheme
     reminderPromptSession?.let { session ->
         ReminderDialog(
             session = session,
@@ -1688,18 +1664,13 @@ internal fun SessionsScreen(
                             }
                         }
                         InboxOverflowMenu(
-                            signedIn = signedIn,
-                            onSignIn = onSignIn,
-                            onSignOut = onSignOut,
-                            onSettings = { settingsVisible = true },
+                            onSettings = { settingsPage = SettingsPage.PREFERENCES },
                             onArrangeSplits = { splitOrderDialogVisible = true },
                             onNewWorkspace = {
                                 workspaceError = null
                                 workspaceDialogVisible = true
                             },
                             onRefresh = onRefresh,
-                            onHosts = { onSelectSection(AppSection.HOSTS) },
-                            onUpdate = { onSelectSection(AppSection.UPDATE) },
                             onReleaseNotes = onReleaseNotes,
                         )
                     }
@@ -1862,7 +1833,7 @@ internal fun SessionsScreen(
     ) { padding ->
         if (state.hosts.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding)) {
-                EmptyState("Connect your first VPS", "Import an SSH key, then the app will discover tmux sessions.", onAddHost)
+                EmptyState("No sessions yet", "Configure servers through the CLI, then check Host mapping in Settings.") { settingsPage = SettingsPage.MAPPING }
             }
         } else LazyColumn(
             Modifier
@@ -3992,184 +3963,6 @@ private fun AnnotatedString.Builder.appendHighlightedCodeLine(line: String) {
 }
 
 @Composable
-private fun HostsScreen(
-    state: AppUiState,
-    onEdit: (HostProfile) -> Unit,
-    onDelete: (HostProfile) -> Unit,
-    onAddUser: (HostProfile, String) -> Unit,
-    onTrust: (String) -> Unit,
-) {
-    var deleting by remember { mutableStateOf<HostProfile?>(null) }
-    var addingUser by remember { mutableStateOf<HostProfile?>(null) }
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        items(state.hosts, key = { it.id }) { host ->
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(host.label, fontWeight = FontWeight.Bold)
-                            Text(
-                                "${host.username}@${host.hostname}:${host.port}",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                            )
-                        }
-                        IconButton(onClick = { addingUser = host }) { Icon(Icons.Default.PersonAdd, "Add another user on this server") }
-                        IconButton(onClick = { onEdit(host) }) { Icon(Icons.Default.Edit, "Edit") }
-                        IconButton(onClick = { deleting = host }) { Icon(Icons.Default.Delete, "Delete") }
-                    }
-                    host.hostKeyFingerprint?.let {
-                        Text("Pinned $it", style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace)
-                    }
-                    state.pendingHostKeys[host.id]?.let { key ->
-                        HorizontalDivider()
-                        Text(
-                            if (key.changed) "WARNING: the SSH host key changed" else "First connection: verify this SSH host key",
-                            color = if (key.changed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(key.fingerprint, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-                        Button(onClick = { onTrust(host.id) }) {
-                            Text(if (key.changed) "Replace trusted key" else "Trust this key")
-                        }
-                    }
-                    state.hostErrors[host.id]?.takeIf { state.pendingHostKeys[host.id] == null }?.let { InlineError(it) }
-                }
-            }
-        }
-    }
-    deleting?.let { host ->
-        AlertDialog(
-            onDismissRequest = { deleting = null },
-            title = { Text("Delete ${host.label}?") },
-            text = { Text("The encrypted private key stored for this host will also be removed.") },
-            confirmButton = {
-                TextButton(onClick = { onDelete(host); deleting = null }) { Text("Delete") }
-            },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
-        )
-    }
-    addingUser?.let { host ->
-        var username by remember(host.id) { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { addingUser = null },
-            title = { Text("Another user on ${host.hostname}") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Uses the same key as ${host.label}. That user must accept this key on the server.")
-                    OutlinedTextField(username, { username = it.trim() }, label = { Text("Username") }, singleLine = true)
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = { onAddUser(host, username); addingUser = null },
-                    enabled = username.isNotEmpty() && username != host.username,
-                ) { Text("Add and connect") }
-            },
-            dismissButton = { TextButton(onClick = { addingUser = null }) { Text("Cancel") } },
-        )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun HostEditorScreen(
-    host: HostProfile?,
-    error: String?,
-    onCancel: () -> Unit,
-    onSave: (HostDraft, ByteArray?) -> Unit,
-    onReleaseNotes: () -> Unit,
-) {
-    BackHandler(onBack = onCancel)
-    val context = LocalContext.current
-    var label by remember(host?.id) { mutableStateOf(host?.label.orEmpty()) }
-    var hostname by remember(host?.id) { mutableStateOf(host?.hostname.orEmpty()) }
-    var port by remember(host?.id) { mutableStateOf((host?.port ?: 22).toString()) }
-    var username by remember(host?.id) { mutableStateOf(host?.username.orEmpty()) }
-    var passphrase by remember(host?.id) { mutableStateOf("") }
-    var importedKey by remember(host?.id) { mutableStateOf<ByteArray?>(null) }
-    var importedName by remember(host?.id) { mutableStateOf<String?>(null) }
-    var importError by remember(host?.id) { mutableStateOf<String?>(null) }
-    val keyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri != null) {
-            runCatching { context.readSmallFile(uri, 256 * 1024) }
-                .onSuccess { bytes -> importedKey = bytes; importedName = uri.lastPathSegment; importError = null }
-                .onFailure { importError = it.message ?: "Could not read key" }
-        }
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                modifier = Modifier.statusBarsPadding(),
-                title = { Text(if (host == null) "Add VPS" else "Edit ${host.label}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                actions = { VersionLabel(onClick = onReleaseNotes) },
-            )
-        },
-    ) { padding ->
-        LazyColumn(
-            Modifier.padding(padding).fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item { OutlinedTextField(label, { label = it }, Modifier.fillMaxWidth(), label = { Text("Label") }, singleLine = true) }
-            item { OutlinedTextField(hostname, { hostname = it }, Modifier.fillMaxWidth(), label = { Text("Hostname or IP") }, singleLine = true) }
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(username, { username = it }, Modifier.weight(1f), label = { Text("Username") }, singleLine = true)
-                    OutlinedTextField(
-                        port,
-                        { port = it.filter(Char::isDigit) },
-                        Modifier.weight(0.55f),
-                        label = { Text("Port") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    )
-                }
-            }
-            item {
-                OutlinedButton(onClick = { keyPicker.launch(arrayOf("application/x-pem-file", "application/octet-stream", "text/plain", "*/*")) }) {
-                    Text(importedName?.let { "Key: $it" } ?: if (host == null) "Import private key" else "Replace private key")
-                }
-            }
-            item {
-                OutlinedTextField(
-                    passphrase,
-                    { passphrase = it },
-                    Modifier.fillMaxWidth(),
-                    label = { Text(if (host == null) "Key passphrase (optional)" else "New passphrase (leave blank to keep)") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                )
-            }
-            (error ?: importError)?.let { message -> item { InlineError(message) } }
-            item {
-                Button(
-                    onClick = {
-                        onSave(
-                            HostDraft(host?.id, label, hostname, port, username, passphrase),
-                            importedKey,
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Save and connect") }
-            }
-            item {
-                Text(
-                    "Private keys and passphrases are encrypted with a non-exportable Android Keystore key. The server fingerprint is pinned on first connection.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun UpdateScreen(
     state: UpdateState,
     onCheck: () -> Unit,
@@ -4455,7 +4248,7 @@ private fun EmptyState(title: String, body: String, action: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(20.dp))
-        Button(onClick = action) { Text("Add VPS") }
+        Button(onClick = action) { Text("Host mapping") }
     }
 }
 

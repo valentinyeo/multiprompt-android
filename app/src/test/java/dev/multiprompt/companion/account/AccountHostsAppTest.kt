@@ -3,6 +3,7 @@ package dev.multiprompt.companion.account
 import android.app.Application
 import android.content.Context
 import android.os.Looper
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -13,7 +14,7 @@ import dev.multiprompt.companion.MultipromptApplication
 import dev.multiprompt.companion.data.HostStore
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.ssh.PresentedHostKey
-import dev.multiprompt.companion.ui.MultipromptApp
+import dev.multiprompt.companion.ui.HostMappingDialog
 import dev.multiprompt.companion.ui.MultipromptTheme
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
@@ -172,11 +173,10 @@ class AccountHostsAppTest {
             assertEquals(profile, model.state.value.accountHosts[0])
             assertEquals(profile, AccountHostMap.resolve(HostStore(app).load(), AccountLayoutStore(app).hostOverrides())[0])
             assertNull(app.secretStore.get(profile.keySecretId))
-            model.select(AppSection.HOSTS)
+            model.select(AppSection.SESSIONS)
         }
-        compose.setContent { MultipromptTheme { MultipromptApp(model) } }
-        compose.onNodeWithText("Account server").assertIsDisplayed()
-        compose.onNodeWithText("valentin@example.com:2222").assertIsDisplayed()
+        compose.setContent { MultipromptTheme { HostMappingDialog(model.state.collectAsState().value, model::mapAccountHost, onDismiss = {}) } }
+        compose.onNodeWithText("0 · Account server: Account server (valentin)").assertIsDisplayed()
         sync()
         compose.runOnIdle { assertEquals(1, HostStore(app).load().size) }
     }

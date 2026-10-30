@@ -8,7 +8,9 @@ import tempfile
 import unittest
 
 sys.dont_write_bytecode = True
-SCRIPT = Path(__file__).resolve().parents[1] / "app/src/main/assets/native_skills.py"
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "app/src/main/assets/native_skills.py"
+DRIVER = ROOT / ".claude/skills/verify-multiprompt-android/scripts/drive.sh"
 spec = importlib.util.spec_from_file_location("native_skills", SCRIPT)
 skills = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(skills)
@@ -83,6 +85,27 @@ class NativeSkillsTest(unittest.TestCase):
         self.write(config / "skills/valid/SKILL.md", "---\nname: native\ndescription: café\n---\nbody")
         self.write(config / "skills/bad/SKILL.md", "---\nname: bad name\n---\nbody")
         self.assertEqual(skills.discover(self.home, self.cwd, config), [dict(name="native", description="café")])
+
+    def test_relaunch_waits_for_trust_dialog_or_default_inbox(self):
+        function = "relaunch_app() {" + DRIVER.read_text().split("relaunch_app() {", 1)[1].split("refresh_inbox() {", 1)[0]
+        for screen, arguments in (("Inbox", []), ("Trust Verify?", ["Trust Verify?"]), ("Inbox", ["Inbox"])):
+            with self.subTest(screen=screen, arguments=arguments):
+                self.write(self.home / "current.xml", f'<hierarchy><node text="{screen}" /></hierarchy>')
+                env = dict(os.environ, EVIDENCE=str(self.home), scripts=str(ROOT / ".claude/skills/verify-multiprompt-android/scripts"), expected_screen=screen)
+                harness = """set -euo pipefail
+package=dev.multiprompt.companion.debug
+adb() { :; }
+dump_ui() { :; }
+doctor() { :; }
+tap_text() { test "$1" = All; printf selected > "$EVIDENCE/selected"; }
+sleep() { return 1; }
+wait_for_text() { test "$1" = "$expected_screen"; }
+""" + function + '\nrelaunch_app "$@"\n'
+                result = subprocess.run(["bash", "-c", harness, "relaunch", *arguments], env=env, capture_output=True, text=True)
+                self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+                if screen == "Inbox":
+                    self.assertTrue((self.home / "selected").is_file())
+                (self.home / "selected").unlink(missing_ok=True)
 
     def test_native_fixture_accepts_held_messages_when_its_turn_finishes(self):
         from unittest.mock import patch

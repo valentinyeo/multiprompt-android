@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    chat-codex.md|session-gestures.md|session-favorites.md|chat-working.md|session-summaries.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
+    settings-navigation.md|chat-codex.md|session-gestures.md|session-favorites.md|chat-working.md|session-summaries.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -105,6 +105,23 @@ tap_node() {
 }
 tap_text() { tap_node text "$1"; }
 tap_desc() { tap_node desc "$1"; }
+browser_handoff() {
+    local action=$1 evidence=$2 resolved attempt
+    resolved=$(adb shell cmd package resolve-activity --brief --user 0 \
+        -a android.intent.action.VIEW -c android.intent.category.BROWSABLE \
+        -d https://account.multiprompt.dev/login | tr -d '\r' | tail -1)
+    [[ "$resolved" == */* && "$resolved" != android/* ]]
+    tap_text "$action"
+    for attempt in {1..30}; do
+        if adb shell dumpsys activity activities | python3 "$scripts/browser-handoff.py" "$resolved" "$package" > "$EVIDENCE/$evidence.txt"; then
+            shot "$evidence"
+            return
+        fi
+        sleep 1
+    done
+    printf 'Timed out waiting for the resolved authorization browser\n' >&2
+    return 1
+}
 dismiss_system_anr() {
     if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "isn't responding" >/dev/null 2>&1; then
         printf 'System ANR dialog dismissed with Wait\n' | tee -a "$EVIDENCE/system-anr.txt"
@@ -169,20 +186,22 @@ wait_for_absence() {
     return 1
 }
 relaunch_app() {
+    local expected=${1:-Inbox}
     adb shell am force-stop "$package"
     adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
     for attempt in {1..30}; do
         printf 'Relaunch navigation attempt %s/30\n' "$attempt"
         dump_ui
-        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains Inbox >/dev/null 2>&1; then break; fi
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "$expected" >/dev/null 2>&1; then break; fi
         if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text 'Use without account (debug)' >/dev/null 2>&1; then
             tap_text 'Use without account (debug)'
             break
         fi
         sleep 1
     done
-    wait_for_text Inbox
+    wait_for_text "$expected"
     doctor
+    if [[ "$expected" == Inbox ]]; then tap_text All; fi
 }
 refresh_inbox() {
     tap_desc 'Session list actions'
@@ -256,8 +275,8 @@ if [[ "$feature" == launcher-icon.md ]]; then
     exit 0
 fi
 if [[ "$package" == dev.multiprompt.companion || "$package" == dev.multiprompt.companion.m3 ]]; then
-    if [[ "$package" == dev.multiprompt.companion.m3 ]]; then [[ "$feature" == chat-resync.md || "$feature" == session-favorites.md || "$feature" == chat-queued.md || "$feature" == session-routing.md ]]; fi
-    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md || "$feature" == chat-resync.md || "$feature" == session-favorites.md || "$feature" == session-routing.md ]]
+    if [[ "$package" == dev.multiprompt.companion.m3 ]]; then [[ "$feature" == settings-navigation.md || "$feature" == chat-resync.md || "$feature" == session-favorites.md || "$feature" == chat-queued.md || "$feature" == session-routing.md ]]; fi
+    [[ "$feature" == settings-navigation.md || "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md || "$feature" == chat-resync.md || "$feature" == session-favorites.md || "$feature" == session-routing.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -268,51 +287,65 @@ else
     shot sign-in
 fi
 if [[ "$feature" == sign-in.md ]]; then
-    tap_text 'Sign in'
-    for attempt in {1..30}; do
-        adb shell dumpsys activity activities > "$EVIDENCE/browser-activity.txt"
-        if grep -E '(mResumedActivity|topResumedActivity).*com.android.chrome/' "$EVIDENCE/browser-activity.txt"; then break; fi
-        sleep 1
-    done
-    grep -E '(mResumedActivity|topResumedActivity).*com.android.chrome/' "$EVIDENCE/browser-activity.txt"
-    shot access-browser
+    browser_handoff 'Sign in' access-browser
     printf 'SIGN-IN HANDOFF VERIFIED; OTP completion is NOT verified\n'
     exit 0
 fi
 if [[ "$package" == dev.multiprompt.companion.debug ]]; then tap_text 'Use without account (debug)'; fi
 wait_for_text Inbox
+if [[ "$feature" == settings-navigation.md ]]; then
+    shot settings-home
+    tap_desc 'Session list actions'
+    dump_ui
+    if ! python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent Hosts || ! python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent Workspaces; then
+        echo SETTINGS_NAVIGATION_RETIRED_DESTINATION | tee "$EVIDENCE/settings-baseline.txt"
+        exit 1
+    fi
+    tap_text Settings
+    dump_ui
+    if ! python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'Host mapping'; then
+        echo SETTINGS_NAVIGATION_MISSING_HOST_MAPPING | tee "$EVIDENCE/settings-baseline.txt"
+        exit 1
+    fi
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'Switch / renew login'
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'Sign out'
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains Update
+    shot settings-preferences
+    tap_text Update
+    wait_for_text 'App updates'
+    adb shell input keyevent KEYCODE_BACK
+    wait_for_text Inbox
+fi
 tap_text All
-tap_desc 'Session list actions'
-tap_text Hosts
-tap_desc 'Add host'
-wait_for_text 'Save and connect'
+seed_host() {
+    adb shell am force-stop "$package"
+    set +x
+    if [[ "$package" == dev.multiprompt.companion.debug ]]; then
+        adb shell am instrument -w -e class dev.multiprompt.companion.account.SeedHostDeviceTest#importsCliHostFixture \
+            -e host_label "$1" -e ssh_host "$2" -e ssh_port "$3" -e ssh_user "$4" \
+            -e ssh_private_key "$(base64 -w0 "$FIXTURE/user-key")" \
+            "$package.test/androidx.test.runner.AndroidJUnitRunner" > "$EVIDENCE/host-seed.txt"
+        grep -F 'OK (1 test)' "$EVIDENCE/host-seed.txt"
+    else
+        adb shell am instrument -w -e mode host-seed \
+            -e host_label "$1" -e ssh_host "$2" -e ssh_port "$3" -e ssh_user "$4" \
+            -e ssh_private_key "$(base64 -w0 "$FIXTURE/user-key")" \
+            dev.multiprompt.verification/dev.multiprompt.verification.Seed > "$EVIDENCE/host-seed.txt"
+        grep -F 'ISOLATED_HOST_SEEDED' "$EVIDENCE/host-seed.txt"
+        grep -F 'INSTRUMENTATION_CODE: -1' "$EVIDENCE/host-seed.txt"
+    fi
+    set -x
+    if [[ "$feature" == hosts-retired.md ]]; then
+        grep -F 'OK (1 test)' "$EVIDENCE/host-seed.txt"
+        cp "$EVIDENCE/host-seed.txt" "$EVIDENCE/retired-profile-present.txt"
+    fi
+    relaunch_app "${5:-Trust $1?}"
+}
 if [[ "$feature" == hosts-retired.md ]]; then
     retired=45.151.123.11
     sudo iptables -I OUTPUT -d "$retired" -p tcp -j REJECT --reject-with tcp-reset
-    sudo iptables -S OUTPUT | tee "$EVIDENCE/retired-address-blocked.txt"
-    grep -F -- "-d $retired/32" "$EVIDENCE/retired-address-blocked.txt"
-    fill Label 'Inne%sCRO'
-    fill 'Hostname or IP' "$retired"
-    fill Username valentin
-    fill Port 22
-    adb push "$FIXTURE/user-key" /sdcard/Download/verify-key.pem
-    tap_text 'Import private key'
-    wait_for_text 'Recent'
-    tap_desc 'Show roots'
-    tap_text Downloads
-    wait_for_text verify-key.pem
-    tap_text verify-key.pem
-    wait_for_text 'Key:'
-    shot retired-form
-    tap_text 'Save and connect'
-    wait_for_text Inbox
-    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent 'Trust Inne CRO?'
-    tap_desc 'Session list actions'
-    tap_text Hosts
-    wait_for_text 'Inne CRO'
-    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "valentin@$retired:22"
-    shot retired-host-saved
-    relaunch_app
+    sudo iptables -S OUTPUT > "$EVIDENCE/retired-address-blocked.txt"
+    seed_host 'Inne CRO' "$retired" 22 valentin Inbox
     for attempt in {1..10}; do
         dump_ui
         python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains Inbox
@@ -320,37 +353,22 @@ if [[ "$feature" == hosts-retired.md ]]; then
         python3 "$scripts/ui.py" "$EVIDENCE/current.xml" lacks 'Inne CRO'
         sleep 1
     done
-    shot relaunched-inbox
+    adb shell am force-stop "$package"
+    adb shell am instrument -w -e class dev.multiprompt.companion.account.SeedHostDeviceTest#importsCliHostFixture \
+        -e verify_retired_absent true "$package.test/androidx.test.runner.AndroidJUnitRunner" > "$EVIDENCE/retired-profile-absent.txt"
+    grep -F 'OK (1 test)' "$EVIDENCE/retired-profile-absent.txt"
+    relaunch_app
     tap_desc 'Session list actions'
-    tap_text Hosts
-    for attempt in {1..30}; do
-        if select_node desc 'Add host' >/dev/null 2>&1; then break; fi
-        sleep 1
-    done
-    select_node desc 'Add host'
-    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" lacks 'Inne CRO'
+    tap_text Settings
+    tap_text 'Host mapping'
+    wait_for_text '2 · Inne CRO: Not mapped'
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" lacks "$retired"
-    shot relaunched-hosts
-    sudo iptables -L OUTPUT -v -n | tee "$EVIDENCE/retired-address-attempts.txt"
+    shot retired-host-removed
+    sudo iptables -L OUTPUT -v -n > "$EVIDENCE/retired-address-attempts.txt"
     printf 'RETIRED HOST REMOVED ON RELAUNCH VERIFIED\n'
     exit 0
 fi
-fill Label Verify
-fill 'Hostname or IP' 10.0.2.2
-fill Username verifyssh
-fill Port 2222
-adb push "$FIXTURE/user-key" /sdcard/Download/verify-key.pem
-tap_text 'Import private key'
-wait_for_text 'Recent'
-shot key-picker
-tap_desc 'Show roots'
-shot picker-roots
-tap_text Downloads
-wait_for_text verify-key.pem
-tap_text verify-key.pem
-wait_for_text 'Key:'
-shot key-imported
-tap_text 'Save and connect'
+seed_host Verify 10.0.2.2 2222 verifyssh
 wait_for_text 'Trust Verify?'
 shot compare-host-key
 fingerprint=$(cat "$EVIDENCE/host-fingerprint.txt")
@@ -360,12 +378,69 @@ if sudo grep -q 'Accepted publickey' "$FIXTURE/sshd.log"; then
     exit 1
 fi
 tap_text 'Trust and connect'
+wait_for_text Inbox
+tap_text All
 if ! wait_for_text verify-session; then
-    printf 'Trust tap 1 did not pin the host; the dialog was still shown\n' | tee -a "$EVIDENCE/trust-retries.txt"
+    printf 'Trusted host did not expose verify-session in All\n' | tee -a "$EVIDENCE/trust-retries.txt"
     shot trust-retry-1
     exit 1
 fi
 shot sessions
+
+if [[ "$feature" == settings-navigation.md ]]; then
+    tap_desc 'Session list actions'
+    tap_text Settings
+    tap_text 'Host mapping'
+    wait_for_text 'Desktop tmux hosts'
+    tap_text '1 · Contabo UK: Not mapped'
+    tap_text 'Verify · verifyssh@10.0.2.2'
+    wait_for_text '1 · Contabo UK: Verify (verifyssh)'
+    shot mapping-explicit
+    tap_text Done
+    adb shell input keyevent KEYCODE_BACK
+    relaunch_app
+    tap_desc 'Session list actions'
+    tap_text Settings
+    tap_text 'Host mapping'
+    wait_for_text '1 · Contabo UK: Verify (verifyssh)'
+    shot mapping-restarted
+    tap_text '1 · Contabo UK: Verify (verifyssh)'
+    tap_text Automatic
+    wait_for_text '1 · Contabo UK: Not mapped'
+    tap_text Done
+    adb shell input keyevent KEYCODE_BACK
+    relaunch_app
+    tap_desc 'Session list actions'
+    tap_text Settings
+    tap_text 'Host mapping'
+    wait_for_text '1 · Contabo UK: Not mapped'
+    shot mapping-automatic-restarted
+    tap_text Done
+    browser_handoff 'Switch / renew login' settings-browser-handoff
+    adb shell input keyevent KEYCODE_BACK
+    wait_for_text 'Session list settings'
+    tap_text 'Sign out'
+    wait_for_text 'Sign in'
+    shot settings-signed-out
+    browser_handoff 'Sign in' settings-sign-in-browser-handoff
+    renew_evidence="$EVIDENCE/settings-browser-handoff.txt"
+    signin_evidence="$EVIDENCE/settings-sign-in-browser-handoff.txt"
+    if [[ ! -s "$renew_evidence" || ! -s "$signin_evidence" ]]; then
+        printf 'Missing browser handoff evidence\n' >&2
+        exit 1
+    fi
+    mapfile -t renew_states < <(grep '^state_sha256=' "$renew_evidence")
+    mapfile -t signin_states < <(grep '^state_sha256=' "$signin_evidence")
+    if [[ ${#renew_states[@]} -ne 1 || ${#signin_states[@]} -ne 1 ]] ||
+        [[ ! "${renew_states[0]:-}" =~ ^state_sha256=[0-9a-f]{64}$ ]] ||
+        [[ ! "${signin_states[0]:-}" =~ ^state_sha256=[0-9a-f]{64}$ ]] ||
+        [[ "${renew_states[0]}" == "${signin_states[0]}" ]]; then
+        printf 'Invalid or reused browser authorization state\n' >&2
+        exit 1
+    fi
+    printf 'SETTINGS JOURNEY VERIFIED; OTP completion is NOT verified\n'
+    exit 0
+fi
 
 if [[ "$feature" == session-favorites.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true && "$(adb get-serialno)" == emulator-* ]]
@@ -490,7 +565,8 @@ fi
 sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
 if [[ "$feature" == hosts.md ]]; then
     tap_desc 'Session list actions'
-    tap_text Hosts
+    tap_text Settings
+    tap_text 'Host mapping'
     wait_for_text "Pinned $fingerprint"
     shot pinned-host
     exit 0
@@ -543,7 +619,8 @@ PYROTATE
     require_dismissed "$connections_before"
     shot changed-key-dismissed-relaunched
     tap_desc 'Session list actions'
-    tap_text Hosts
+    tap_text Settings
+    tap_text 'Host mapping'
     wait_for_text "Pinned $fingerprint"
     shot original-key-still-pinned
     accepted_after=$(sudo awk '/Accepted publickey/ {n++} END {print n+0}' "$FIXTURE/sshd.log")
