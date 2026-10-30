@@ -123,6 +123,26 @@ Existing manifest, APK and signer checks remain mandatory.
 Same-signer instrumentation seeds only the offline account.
 It never seeds the host's queue database.
 
+### M3 signed dispatch
+
+Use the pushed harness branch for both.
+Candidate builds the branch, not `app_ref`.
+
+```sh
+gh workflow run verify.yml --repo valentinyeo/multiprompt-android --ref ceo/IGSH-1226 -f feature=chat-resync.md -f released_chat=true -f candidate=true -f channel=android-m3-latest
+```
+
+Published proof requires the exact manifest commit.
+Replace `PUBLISHED_M3_COMMIT` with its full SHA.
+Run only after M3 publication.
+
+```sh
+gh workflow run verify.yml --repo valentinyeo/multiprompt-android --ref ceo/IGSH-1226 -f feature=chat-resync.md -f released_chat=true -f candidate=false -f channel=android-m3-latest -f expected_commit=PUBLISHED_M3_COMMIT
+```
+
+Both use the existing release signing key.
+M3 proof remains unverified until GitHub succeeds.
+
 ## Coverage limits
 
 This proves synthetic Android/SSH recovery behavior only.

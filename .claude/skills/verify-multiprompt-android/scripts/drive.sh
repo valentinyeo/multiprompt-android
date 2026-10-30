@@ -223,7 +223,8 @@ if [[ "$feature" == launcher-icon.md ]]; then
     launcher_icon
     exit 0
 fi
-if [[ "$package" == dev.multiprompt.companion ]]; then
+if [[ "$package" == dev.multiprompt.companion || "$package" == dev.multiprompt.companion.m3 ]]; then
+    if [[ "$package" == dev.multiprompt.companion.m3 ]]; then [[ "$feature" == chat-resync.md ]]; fi
     [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md || "$feature" == chat-resync.md ]]
     wait_for_text Inbox
     doctor

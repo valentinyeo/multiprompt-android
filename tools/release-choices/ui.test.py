@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -56,6 +57,62 @@ class SignedPackageAbsenceTest(unittest.TestCase):
 
     def test_visible_sheet_still_rejects_absence(self):
         self.assertNotEqual(self.probe('dev.multiprompt.companion', 'dev.multiprompt.companion', 'Report').returncode, 0)
+
+
+class SignedChannelTest(unittest.TestCase):
+    root = Path(__file__).resolve().parents[2]
+
+    def route(self, channel=None, feature='chat-resync.md', app_ref=''):
+        source = (self.root / 'tools/release-choices/prepare.sh').read_text()
+        routing = source.split('mkdir -p "$RUNNER_TEMP/release-choices/classes"', 1)[0]
+        routing += '\nprintf \'%s\\n\' "$package" "$task" "$apk" "$suffix" "$manifest_url" "$apk_url"\n'
+        env = {**os.environ, 'EVIDENCE': '/tmp/evidence', 'ANDROID_KEYSTORE_BASE64': 'fixture',
+               'ANDROID_KEYSTORE_PASSWORD': 'fixture', 'ANDROID_KEY_ALIAS': 'fixture',
+               'ANDROID_KEY_PASSWORD': 'fixture', 'VERIFY_FEATURE': feature, 'APP_REF': app_ref}
+        env.pop('RELEASE_CHANNEL', None)
+        if channel is not None:
+            env['RELEASE_CHANNEL'] = channel
+        return subprocess.run(['bash', '-c', routing], env=env, capture_output=True, text=True)
+
+    def test_default_channel_routes_to_legacy(self):
+        result = self.route()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines(), [
+            'dev.multiprompt.companion', 'assembleRelease', 'app/build/outputs/apk/release/app-release.apk', '',
+            'https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion-update.json',
+            'https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion.apk'])
+
+    def test_m3_channel_routes_to_m3(self):
+        result = self.route('android-m3-latest')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines(), [
+            'dev.multiprompt.companion.m3', 'assembleM3', 'app/build/outputs/apk/m3/app-m3.apk', '-m3',
+            'https://github.com/valentinyeo/multiprompt-android/releases/download/android-m3-latest/multiprompt-m3-update.json',
+            'https://github.com/valentinyeo/multiprompt-android/releases/download/android-m3-latest/multiprompt-m3.apk'])
+
+    def test_unknown_channel_and_m3_other_journey_rejected(self):
+        self.assertNotEqual(self.route('android-m3-latest; false').returncode, 0)
+        self.assertNotEqual(self.route('android-m3-latest', 'chat-choices.md').returncode, 0)
+        self.assertNotEqual(self.route('android-m3-latest', app_ref='old').returncode, 0)
+
+    def test_manifest_guard_rejects_cross_channel_and_wrong_commit(self):
+        source = (self.root / 'tools/release-choices/prepare.sh').read_text()
+        guard = source.split("--arg apk_url \"$apk_url\" '", 1)[1].split("' \"$EVIDENCE/manifest.json\"", 1)[0]
+        url = 'https://github.com/valentinyeo/multiprompt-android/releases/download/android-m3-latest/multiprompt-m3.apk'
+        commit = 'a' * 40
+        manifest = dict(schemaVersion=1, commit=commit, sizeBytes=1, sha256='b' * 64, apkUrl=url)
+        def check(data):
+            return subprocess.run(['jq', '-e', '--arg', 'commit', commit, '--arg', 'apk_url', url, guard],
+                                  input=json.dumps(data), capture_output=True, text=True).returncode
+        self.assertEqual(check(manifest), 0)
+        for change in (dict(commit='c' * 40), dict(apkUrl=url.replace('android-m3-latest', 'android-latest')),
+                       dict(sizeBytes=0), dict(sha256='short'), dict(schemaVersion=2)):
+            self.assertNotEqual(check({**manifest, **change}), 0)
+
+    def test_m3_package_can_prove_absence(self):
+        result = SignedPackageAbsenceTest().probe('dev.multiprompt.companion.m3', 'dev.multiprompt.companion.m3')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotEqual(SignedPackageAbsenceTest().probe('dev.multiprompt.companion', 'dev.multiprompt.companion.m3').returncode, 0)
 
 
 class SshReadinessTest(unittest.TestCase):

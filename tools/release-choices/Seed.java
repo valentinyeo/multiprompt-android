@@ -22,7 +22,8 @@ public class Seed extends Instrumentation {
         Bundle result = new Bundle();
         try {
             Context context = getTargetContext();
-            if (!context.getPackageName().equals("dev.multiprompt.companion")) {
+            if (!context.getPackageName().equals("dev.multiprompt.companion")
+                && !context.getPackageName().equals("dev.multiprompt.companion.m3")) {
                 throw new IllegalStateException("Published package required");
             }
             KeyGenerator generator = KeyGenerator.getInstance("AES", "AndroidKeyStore");

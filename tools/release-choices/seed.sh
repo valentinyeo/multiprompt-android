@@ -2,7 +2,8 @@
 set -euo pipefail
 [[ "${GITHUB_ACTIONS:-}" == true ]]
 [[ "$(adb get-serialno)" == emulator-* ]]
-[[ "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion ]]
+[[ "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion || "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion.m3 ]]
+if [[ "$VERIFY_PACKAGE" == dev.multiprompt.companion.m3 ]]; then [[ "${VERIFY_FEATURE:-}" == chat-resync.md ]]; fi
 python3 -m http.server 8788 > "$FIXTURE/offline-proxy.log" 2>&1 &
 echo "$!" > "$FIXTURE/offline-proxy.pid"
 adb shell settings put global http_proxy 10.0.2.2:8788
