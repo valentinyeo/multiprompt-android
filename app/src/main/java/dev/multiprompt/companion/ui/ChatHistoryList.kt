@@ -76,7 +76,7 @@ internal fun ChatHistoryView(
 ) {
     val history = remember(connection, agent, workingDirectory) { connection.chatHistory(agent, workingDirectory) }
     val state by history.state.collectAsState()
-    val messages = state.history.displayMessages(reader.screenOutput, agent, reader.sentRecord, System.currentTimeMillis())
+    val messages = state.history.displayMessages(reader.sentRecord)
     SideEffect {
         history.awaitingMessages(messages.any { it.pending })
         history.deliveryIds(reader.sentRecord.map { it.messageId }.filter { it.isNotEmpty() })

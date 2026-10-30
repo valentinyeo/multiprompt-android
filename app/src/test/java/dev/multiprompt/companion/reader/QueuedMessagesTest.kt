@@ -1,6 +1,5 @@
 package dev.multiprompt.companion.reader
 
-import dev.multiprompt.companion.model.AgentKind
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -8,7 +7,7 @@ class QueuedMessagesTest {
     private val first = QueuedMessages.SentPrompt("same", 1, "first", QueuedMessages.Delivery.QUEUED, "sid", 9, 100)
     private val second = first.copy(messageId = "second")
     private fun ChatHistory.display(sent: List<QueuedMessages.SentPrompt> = listOf(first, second)) =
-        displayMessages("Press up to edit queued messages\n> same", AgentKind.CLAUDE, sent, Long.MAX_VALUE)
+        displayMessages(sent)
 
     @Test fun onlyIdFactsSettleAndIdenticalIntentionsStaySeparate() {
         val row = ChatHistoryProtocol.Row("user", "same", "row", "2099-01-01T00:00:00Z", 100, 110, queued = true)
@@ -28,17 +27,39 @@ class QueuedMessagesTest {
         assertTrue(settled.none { it.pending })
     }
 
-    @Test fun heldSnapshotOverridesStaleLocalAndDeliveryFacts() {
-        val stale = first.copy(delivery = QueuedMessages.Delivery.CANCELLED)
-        val history = ChatHistory(held = listOf(first), deliveries = mapOf("first" to QueuedMessages.Delivery.DELIVERED))
-        val message = history.display(listOf(stale)).single()
-        assertEquals("Queued", message.delivery)
-        assertTrue(message.pending)
-        assertEquals(listOf(stale), unconfirmedAfterResync(history, listOf(stale)))
+    @Test fun terminalFactsOverrideOlderHeldSnapshots() {
+        for (terminal in listOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)) {
+            val history = ChatHistory(sid = "sid", inode = 9, held = listOf(first))
+            val localReceipt = first.copy(delivery = terminal)
+            val fromLocal = history.display(listOf(localReceipt)).single()
+            assertEquals(terminal.name.lowercase().replaceFirstChar { it.uppercase() }, fromLocal.delivery)
+            assertFalse(fromLocal.pending)
+            assertTrue(unconfirmedAfterResync(history, listOf(localReceipt)).isEmpty())
+            val fromMap = history.copy(deliveries = mapOf("first" to terminal))
+            assertEquals(fromLocal.delivery, fromMap.display(listOf(first)).single().delivery)
+            assertTrue(unconfirmedAfterResync(fromMap, listOf(first)).isEmpty())
+        }
+        val submitted = first.copy(delivery = QueuedMessages.Delivery.SUBMITTED)
+        val history = ChatHistory(sid = "sid", inode = 9, held = listOf(first))
+        assertEquals("Queued", history.display(listOf(submitted)).single().delivery)
+        assertEquals(listOf(submitted), unconfirmedAfterResync(history, listOf(submitted)))
+    }
+
+    @Test fun staleHistoryPageCannotOverwriteTerminalDelivery() {
+        for (terminal in listOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)) {
+            val history = ChatHistory(sid = "sid", inode = 9, deliveries = mapOf("first" to terminal))
+            val page = ChatHistoryProtocol.Page("sid", 0, 0, 9, false, 0, "", "tail", 0, emptyList(),
+                deliveries = mapOf("first" to QueuedMessages.Delivery.QUEUED), held = listOf(first))
+            val updated = history.apply(page)
+            assertEquals(terminal, updated.deliveries["first"])
+            assertFalse(updated.display(listOf(first)).single().pending)
+            assertTrue(unconfirmedAfterResync(updated, listOf(first)).isEmpty())
+            assertEquals(QueuedMessages.Delivery.QUEUED, history.apply(page.copy(sid = "other")).deliveries["first"])
+        }
     }
 
     @Test fun offPageDeliveryAndCancellationDoNotNeedTranscript() {
-        val history = ChatHistory(deliveries = mapOf("first" to QueuedMessages.Delivery.DELIVERED,
+        val history = ChatHistory(sid = "sid", deliveries = mapOf("first" to QueuedMessages.Delivery.DELIVERED,
             "second" to QueuedMessages.Delivery.CANCELLED))
         assertEquals(listOf("Delivered", "Cancelled"), history.display().map { it.delivery })
         assertTrue(unconfirmedAfterResync(history, listOf(first, second)).isEmpty())
@@ -59,9 +80,35 @@ class QueuedMessagesTest {
         assertEquals(4, result.size)
         assertEquals(1, result.count { it.key.startsWith("@local:") })
         assertTrue(result.all { !it.pending && it.delivery == null })
-        assertEquals(5, history.copy(sid = "other").display(listOf(native, another)).size)
+        assertEquals(3, history.copy(sid = "other").display(listOf(native, another)).size)
         assertEquals(5, history.copy(inode = 10).display(listOf(native, another)).size)
         assertEquals(5, history.display(listOf(native.copy(sid = ""), another.copy(sid = ""))).size)
         assertEquals(listOf(native, another), unconfirmedAfterResync(history, listOf(native, another)))
     }
+    @Test fun deliveredDisplayMatchesOnlyTrailingAsciiSpacesOneToOne() {
+        val text = "x".repeat(200)
+        val one = first.copy(text = "$text ", delivery = QueuedMessages.Delivery.DELIVERED)
+        val two = one.copy(messageId = "second", sentAtMillis = 2)
+        fun row(body: String, offset: Long) = ChatHistoryProtocol.Row("user", body, "row$offset", "", offset, offset + 1)
+        val history = ChatHistory(sid = "sid", inode = 9, rows = listOf(row(text, 100)))
+        assertEquals(1, history.display(listOf(one)).size)
+        assertEquals(2, history.display(listOf(one, two)).size)
+        assertEquals(2, history.copy(rows = listOf(row(text, 100), row(text, 101))).display(listOf(one, two)).size)
+        assertEquals(2, history.copy(rows = listOf(row("$text\t", 100))).display(listOf(one)).size)
+        assertEquals(2, history.copy(rows = listOf(row(text.dropLast(1), 100))).display(listOf(one)).size)
+        assertEquals(2, history.copy(inode = 10).display(listOf(one)).size)
+        assertEquals(2, history.copy(rows = listOf(row(text, 99))).display(listOf(one)).size)
+        assertEquals(2, history.display(listOf(one.copy(delivery = QueuedMessages.Delivery.QUEUED))).size)
+    }
+
+    @Test fun differentSessionRecordsStayUnresolvedAndInvisible() {
+        val native = QueuedMessages.SentPrompt("native old", 1, sid = "old", inode = 9)
+        val managed = first.copy(text = "managed old", sid = "old")
+        val blank = QueuedMessages.SentPrompt("pending", 3)
+        val history = ChatHistory(sid = "new", inode = 9, deliveries = mapOf("first" to QueuedMessages.Delivery.DELIVERED))
+        assertEquals(listOf("pending"), history.display(listOf(native, managed, blank)).map { it.text })
+        assertEquals(listOf(native, managed, blank), unconfirmedAfterResync(history, listOf(native, managed, blank)))
+        assertEquals(listOf(managed), unconfirmedAfterResync(history, listOf(managed.copy(delivery = QueuedMessages.Delivery.QUEUED))))
+    }
+
 }

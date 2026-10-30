@@ -1,7 +1,6 @@
 package dev.multiprompt.companion.reader
 
 import dev.multiprompt.companion.reader.ChatHistoryProtocol.Row
-import dev.multiprompt.companion.model.AgentKind
 
 data class ChatHistoryMessage(
     val key: String,
@@ -48,20 +47,33 @@ data class ChatHistory(
         grouped.values.toList()
     }
 
-    fun displayMessages(screenOutput: String, agent: AgentKind,
-        sent: List<QueuedMessages.SentPrompt>, nowMillis: Long): List<ChatHistoryMessage> {
-        val own = (held + sent.filter { it.messageId.isNotEmpty() }).distinctBy { it.messageId }.sortedBy { it.sentAtMillis }
-        val heldIds = held.map { it.messageId }.toSet()
-        fun state(prompt: QueuedMessages.SentPrompt): QueuedMessages.Delivery =
-            if (prompt.messageId in heldIds) prompt.delivery else deliveries[prompt.messageId] ?: prompt.delivery
+    internal fun deliveryState(prompt: QueuedMessages.SentPrompt): QueuedMessages.Delivery {
+        val terminal = setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
+        val sameSource = prompt.sid.isEmpty() || prompt.sid == sid
+        val mapped = deliveries[prompt.messageId].takeIf { sameSource }
+        val heldRecord = held.firstOrNull { it.messageId == prompt.messageId && sameSource }
+        return when {
+            mapped in terminal -> mapped!!
+            prompt.delivery in terminal -> prompt.delivery
+            heldRecord != null -> heldRecord.delivery
+            mapped != null -> mapped
+            else -> prompt.delivery
+        }
+    }
+
+    fun displayMessages(sent: List<QueuedMessages.SentPrompt>): List<ChatHistoryMessage> {
+        val local = sent.filter { it.sid.isEmpty() || sid.isEmpty() || it.sid == sid }
+        val own = (local.filter { it.messageId.isNotEmpty() && it.delivery in setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED) } +
+            held + local.filter { it.messageId.isNotEmpty() }).distinctBy { it.messageId }.sortedBy { it.sentAtMillis }
+        fun state(prompt: QueuedMessages.SentPrompt) = deliveryState(prompt)
         val matched = mutableSetOf<String>()
-        val native = sent.filter { it.messageId.isEmpty() }
+        val native = local.filter { it.messageId.isEmpty() }
         val matchedNative = mutableSetOf<String>()
         val current = messages.map { message ->
             val record = own.firstOrNull { prompt ->
                 prompt.messageId !in matched && state(prompt) == QueuedMessages.Delivery.DELIVERED &&
                     prompt.sid.isNotEmpty() && prompt.sid == sid && prompt.inode == inode &&
-                    message.role == "user" && message.offset >= prompt.afterOffset && message.text == prompt.text
+                    message.role == "user" && message.offset >= prompt.afterOffset && message.text.trimEnd(' ') == prompt.text.trimEnd(' ')
             }
             if (record != null) {
                 matched.add(record.messageId)
@@ -101,10 +113,13 @@ data class ChatHistory(
         }
         val retained = if (page.mode == "tail") emptyList() else rows
         val merged = (retained + page.rows).associateBy { Triple(it.offset, it.role, it.id) }.values.sortedBy { it.offset }
+        val previousDeliveries = if (sameSource) deliveries else emptyMap()
+        val terminal = setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
+        val mergedDeliveries = previousDeliveries + page.deliveries + previousDeliveries.filterValues { it in terminal }
         return if (page.mode == "older") {
-            copy(start = page.oldest, rows = merged, deliveries = deliveries + page.deliveries, held = page.held, pendingQuestions = page.pendingQuestions)
+            copy(start = page.oldest, rows = merged, deliveries = mergedDeliveries, held = page.held, pendingQuestions = page.pendingQuestions)
         } else {
-            ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged, (if (sameSource) deliveries else emptyMap()) + page.deliveries, page.held, page.pendingQuestions)
+            ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged, mergedDeliveries, page.held, page.pendingQuestions)
         }
     }
 }

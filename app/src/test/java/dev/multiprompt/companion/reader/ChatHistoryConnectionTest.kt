@@ -63,14 +63,13 @@ class ChatHistoryConnectionTest {
             historyCache = ChatHistoryCache(temporary.newFolder())).use { reader ->
             val text = "Any idea when the visual update of the inbox is coming?"
             assertTrue(reader.sendPrompt(text))
-            val now = System.currentTimeMillis()
-            val before = ChatHistory().displayMessages("", AgentKind.CLAUDE, reader.state.value.sentRecord, now)
+            val before = ChatHistory().displayMessages(reader.state.value.sentRecord)
             assertEquals(listOf(text), before.map { it.text })
             assertTrue(before.single().pending)
             assertFalse(reader.resyncChat())
             assertEquals(listOf(text), reader.state.value.sentRecord.map { it.text })
             assertEquals(listOf(text), reader.state.value.sentPrompts)
-            assertTrue(ChatHistory().displayMessages("", AgentKind.CLAUDE, reader.state.value.sentRecord, now).single().pending)
+            assertTrue(ChatHistory().displayMessages(reader.state.value.sentRecord).single().pending)
         }
     }
 
@@ -86,7 +85,7 @@ class ChatHistoryConnectionTest {
             "first" to QueuedMessages.Delivery.DELIVERED,
             "second" to QueuedMessages.Delivery.CANCELLED,
         ))
-        assertEquals(listOf(native, second), unconfirmedAfterResync(history, listOf(native, first, second)))
+        assertEquals(listOf(native), unconfirmedAfterResync(history, listOf(native, first, second)))
         assertEquals(listOf(first), unconfirmedAfterResync(ChatHistory(), listOf(first)))
         assertEquals(emptyList<QueuedMessages.SentPrompt>(), unconfirmedAfterResync(
             ChatHistory(deliveries = mapOf("first" to QueuedMessages.Delivery.CANCELLED)), listOf(first)))

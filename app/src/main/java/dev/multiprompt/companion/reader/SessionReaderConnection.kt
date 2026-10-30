@@ -67,9 +67,8 @@ internal fun transcriptAfterUpdate(
 
 internal fun unconfirmedAfterResync(history: ChatHistory, sent: List<QueuedMessages.SentPrompt>): List<QueuedMessages.SentPrompt> =
     sent.filter { record ->
-        record.messageId.isEmpty() || history.held.any { it.messageId == record.messageId } ||
-            history.deliveries[record.messageId] !in
-                setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
+        record.messageId.isEmpty() || (record.sid.isNotEmpty() && record.sid != history.sid) ||
+            history.deliveryState(record) !in setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
     }
 
 class SessionReaderConnection(
@@ -126,7 +125,10 @@ class SessionReaderConnection(
         var confirmed = false
         _state.update { current ->
             val remaining = unconfirmedAfterResync(history, current.sentRecord)
-            confirmed = history.held.isEmpty() && remaining.isEmpty()
+            confirmed = history.held.none { held ->
+                val record = current.sentRecord.firstOrNull { it.messageId == held.messageId && (it.sid.isEmpty() || it.sid == history.sid) }
+                history.deliveryState(record ?: held) !in setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
+            } && remaining.isEmpty()
             current
         }
         return confirmed

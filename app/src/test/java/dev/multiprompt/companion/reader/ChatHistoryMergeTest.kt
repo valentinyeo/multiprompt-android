@@ -181,13 +181,13 @@ class ChatHistoryMergeTest {
         val second = first.copy(messageId = "second", sentAtMillis = 2, delivery = QueuedMessages.Delivery.CANCELLED)
         val old = ChatHistoryProtocol.Row("user", "same", "old", "", 1, 20)
         val history = ChatHistory(sid = "sid", inode = 9, rows = listOf(old))
-        val waiting = history.displayMessages("", AgentKind.CLAUDE, listOf(first, second), 3)
+        val waiting = history.displayMessages(listOf(first, second))
         assertEquals(listOf("Queued", "Cancelled"), waiting.takeLast(2).map { it.delivery })
         assertEquals(listOf("first", "second"), waiting.takeLast(2).map { it.requestId })
         assertTrue(waiting[1].pending)
         assertFalse(waiting[2].pending)
         val receipt = ChatHistoryProtocol.Row("user", "same", "received", "", 100, 150)
-        val delivered = history.copy(rows = listOf(old, receipt), deliveries = mapOf("first" to QueuedMessages.Delivery.DELIVERED)).displayMessages("", AgentKind.CLAUDE, listOf(first, second), 3)
+        val delivered = history.copy(rows = listOf(old, receipt), deliveries = mapOf("first" to QueuedMessages.Delivery.DELIVERED)).displayMessages(listOf(first, second))
         assertEquals("Delivered", delivered[1].delivery)
         assertFalse(delivered[1].pending)
         assertEquals("Cancelled", delivered.last().delivery)
@@ -199,9 +199,9 @@ class ChatHistoryMergeTest {
         val prompt = QueuedMessages.SentPrompt("target", 1, "target-id", delivery = QueuedMessages.Delivery.QUEUED, sid = "sid", inode = 9, afterOffset = 100)
         val queue = ChatHistoryProtocol.Row("user", "target", "queued", "", 100, 150, queued = true)
         val history = ChatHistory(sid = "sid", inode = 9, rows = listOf(queue))
-        assertEquals("Queued", history.displayMessages("", AgentKind.CLAUDE, listOf(prompt), 2).last().delivery)
+        assertEquals("Queued", history.displayMessages(listOf(prompt)).last().delivery)
         val other = history.copy(sid = "different", rows = listOf(queue.copy(queued = false)))
-        assertEquals("Queued", other.displayMessages("", AgentKind.CLAUDE, listOf(prompt), 2).last().delivery)
+        assertEquals(listOf("target"), other.displayMessages(listOf(prompt)).map { it.text })
     }
 
 }
