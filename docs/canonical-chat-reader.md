@@ -1,41 +1,28 @@
 # Canonical chat reader
 
-Desktop owns the reader and test corpus.
-These files are unchanged from [multiprompt](https://github.com/valentinyeo/multiprompt) release `v0.28.1048`, commit `e62769a0862c8518a68a74ea6bfc6030b03dad3b`.
-The full reader SHA-256 is `3c5c2f1923f2a5346e65ed7fc235aab998b9e67054535541f3ea18b51466cdfd`.
-`tools/vendor/chat-reader/SHA256SUMS` lists vendored file hashes.
-Hosted checks run all three canonical harnesses.
-They cover 211 reader, 7 transcript, and 9 runtime tests.
-Vendored fixtures and tests match Desktop without edits.
+Desktop owns the reader and connectors.
+Desktop also owns the test files.
+Source: [Desktop v0.28.1075](https://github.com/valentinyeo/multiprompt/tree/0f1fb9ee3ab9cc427273099c7baf6dffe78d2916).
+Commit: `0f1fb9ee3ab9cc427273099c7baf6dffe78d2916`.
+The reader SHA-256 is `bbcc265ea2dc816b8d66024b9fc8c67236e53cde27e0712eeae39153153c7f4f`.
+The Claude module SHA-256 is `1c42945eec4dc66b5edb65f720dfc32a878609253ef3220d4b367eda56fec0ed`.
+The Codex module SHA-256 is `07e448dc7d5a849cbbf4b914ce375e147f9343906f213bcda00a7d7663757a31`.
+Android copies Desktop's ordered base64 prefix.
+Bundle length: 222844 bytes.
+Bundle SHA-256: `c93f6148e0437b2c9588ce0dc49277202ab25bf8a201db4f63bfe107a5e1dc06`.
 
-`tools/sync-chat-reader.sh --check` compares the bundled reader.
-Locally, set `MULTIPROMPT_DESKTOP_REPO` to the desktop repository.
-GitHub Actions can download the pinned file.
-Both paths verify its full-file hash.
-Without `--check`, the script restores that file.
+`tools/sync-chat-reader.sh --check` verifies all three assets against Desktop.
+Locally, set `MULTIPROMPT_DESKTOP_REPO` to the Desktop repository.
+GitHub Actions can download the pinned files.
+Without `--check`, the script restores those files.
+`tools/vendor/chat-reader/SHA256SUMS` lists the vendored test corpus hashes.
 
-The loader selects a runtime per Unix user.
-It selects generation 5 and stores generations under `~/.multiprompt-runtime`.
-Previously published Android 0.1.299-m3 bundles generation 3.
-Its loader can select an installed newer generation.
-Cooperating older clients cannot downgrade selection.
-Conflicting or corrupt selections fail closed.
-Imports do not install a runtime.
-The selected inner payload SHA-256 is `e0830af90a1673a45ab1d70340b4dd5acfd915e4449c7a8d4579b91c7a1a9035`.
-`engine_info` is optional diagnostic JSON.
-Protocol version remains 1.
-Existing history and serve transports remain unchanged.
-The submitted state is durable before terminal handoff.
-A SQLite writer lock spans the entire handoff.
-Competing writers cannot adopt delivery while keys remain.
-
-Preloader clients still run their embedded reader.
-Selection cannot fence those older clients.
-Running processes also keep their existing reader.
-Immediate universal cutover is not promised.
-Managed Claude delivery remains engine-owned.
-A busy Claude can accept handoff with empty native input.
-Draft, editor and selection checks still come first.
-Native Codex and Hax lack a supported managed queue.
-Raw terminal controls bypass that queue.
-Real-provider release proof remains outstanding.
+The bundled reader selects generation 17.
+A newer compatible host runtime takes precedence.
+Android checks runtime identity before sending messages.
+Claude and Codex use host message rules.
+HAX keeps its previous message path.
+The host owns message delivery, attempts and deadlines.
+Both apps need matching message and repair checks.
+Real agent sessions still need hosted checks.
+Native provider pickup needs separate proof.

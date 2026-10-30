@@ -26,8 +26,9 @@ object ChatHistoryProtocol {
         val settlement: Settlement? = null,
         val questions: List<PendingQuestion> = emptyList(),
         val questionResult: String = "",
+        val normalized: String = "",
     ) {
-        fun json(): JSONObject = JSONObject().put("role", role).put("text", text).put("id", id)
+        fun json(): JSONObject = (if (normalized.isEmpty()) JSONObject() else JSONObject(normalized)).put("role", role).put("text", text).put("id", id)
             .put("timestamp", timestamp).put("offset", offset).put("end", end).put("queued", queued)
             .also { row ->
                 if (questions.isNotEmpty()) row.put("question", JSONObject()
@@ -54,11 +55,11 @@ object ChatHistoryProtocol {
         val pendingQuestions: List<PendingQuestion> = emptyList(),
     )
 
-    fun request(id: Long, identity: Identity, history: ChatHistory, before: Long = 0, deliveryIds: List<String> = emptyList()): String {
+    fun request(id: Long, identity: Identity, history: ChatHistory, before: Long = 0, deliveryIds: List<String> = emptyList(), held: Boolean = true): String {
         require(id > 0 && TranscriptProtocol.supports(identity.agent))
         return JSONObject().put("id", id).put("codex", TranscriptProtocol.wireAgent(identity.agent) == "codex")
             .put("sid", identity.sid).put("tmux", identity.tmux).put("cwd", identity.cwd).put("follow", identity.tmux.isNotEmpty())
-            .put("questions", true).put("held", true).put("delivery_ids", org.json.JSONArray(deliveryIds)).put("source_offsets", true).put("no_jump", true).put("settlement", true)
+            .put("questions", true).put("held", held).put("delivery_ids", org.json.JSONArray(deliveryIds)).put("source_offsets", true).put("no_jump", true).put("settlement", true)
             .put("cached_sid", history.sid).put("inode", history.inode).put("offset", history.offset)
             .put("start", history.start).put("before", before).put("mtime", history.mtime)
             .put("probe", history.probe).toString() + "\n"
@@ -168,7 +169,9 @@ object ChatHistoryProtocol {
             (0 until questions.length()).map { index ->
                 PendingQuestion.parse(row.getString("id"), index, questions.getJSONObject(index), request.getString("provider"))
             }
-        }.orEmpty(), row.optString("questionResult"),
+        }.orEmpty(), row.optString("questionResult"), JSONObject(row.toString()).also { metadata ->
+            listOf("role", "text", "id", "timestamp", "offset", "end", "queued", "settlement", "question", "questionResult").forEach { metadata.remove(it) }
+        }.let { if (it.length() == 0) "" else it.toString() },
     ).also {
         require(it.role in setOf("user", "assistant") && it.offset >= 0 && it.end > it.offset)
         require(if (it.settlement == null && it.questions.isEmpty() && it.questionResult.isEmpty()) it.text.isNotBlank() else it.role == "assistant" && it.text.isEmpty())

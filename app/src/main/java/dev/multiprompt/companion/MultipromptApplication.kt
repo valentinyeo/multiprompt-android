@@ -43,7 +43,16 @@ class MultipromptApplication : Application() {
     val workspaceStore by lazy { WorkspaceStore(this) }
     val secretStore by lazy { SecretStore(this) }
     val chatHistoryCache by lazy { ChatHistoryCache(File(filesDir, "chat-history")) }
-    val chatHistoryScript by lazy { assets.open("chat_history_reader.py").use { it.readBytes() } }
+    val messageJournal by lazy { dev.multiprompt.companion.reader.MessageJournal(getSharedPreferences("shared-message-journal", MODE_PRIVATE)) }
+    val messageGate by lazy { dev.multiprompt.companion.reader.MessageGate() }
+    val chatHistoryScript by lazy {
+        val claude = assets.open("chat_connectors/claude.py").use { it.readBytes() }
+        val codex = assets.open("chat_connectors/codex.py").use { it.readBytes() }
+        val reader = assets.open("chat_history_reader.py").use { it.readBytes() }
+        val encoder = android.util.Base64.NO_WRAP
+        val prefix = "CONNECTOR_SOURCES = {'claude':'${android.util.Base64.encodeToString(claude, encoder)}','codex':'${android.util.Base64.encodeToString(codex, encoder)}'}\n"
+        prefix.toByteArray(Charsets.UTF_8) + reader
+    }
     val sshRepository by lazy { SshRepository(secretStore) }
     val deepgramDictation by lazy { DeepgramDictation(this, secretStore) }
     val updateManager by lazy { UpdateManager(this) }

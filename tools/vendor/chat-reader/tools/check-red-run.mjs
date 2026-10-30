@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { autoRevertBranch, classifyTrees } from './version-stamp.mjs';
+import { tokenize } from './strip-comments.mjs';
 
 const [baseRef, headRef] = process.argv.slice(2);
 if (!baseRef || !headRef || process.argv.length !== 4) {
@@ -33,6 +34,65 @@ function snapshot(dir) {
   return result;
 }
 
+function nativeTestParts(source) {
+  const parsed = spawnSync(process.env.ZIG || 'zig', ['fmt', '--stdin'], {
+    input: source, encoding: 'utf8', timeout: 300000, maxBuffer: 32 * 1024 * 1024,
+  });
+  if (parsed.error || parsed.status !== 0) throw new Error('Invalid Zig source');
+  const { tokens, comments } = tokenize(source, 'zig');
+  const positions = [];
+  let cursor = 0, comment = 0;
+  for (const [, value] of tokens) {
+    while (cursor < source.length) {
+      if (comments[comment]?.start === cursor) cursor = comments[comment++].end;
+      else if (/\s/.test(source[cursor])) cursor++;
+      else break;
+    }
+    if (!source.startsWith(value, cursor)) throw new Error('Ambiguous Zig token');
+    positions.push(cursor);
+    cursor += value.length;
+  }
+  const names = [], pieces = [];
+  let depth = 0, last = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    const [kind, value] = tokens[i];
+    if (depth === 0 && kind === 'word' && value === 'test') {
+      const start = positions[i];
+      if (tokens[i + 1]?.[0] !== 'string' || tokens[i + 2]?.[1] !== '{') throw new Error('Ambiguous Zig test');
+      const name = tokens[i + 1][1];
+      if (names.includes(name)) throw new Error('Duplicate Zig test');
+      names.push(name);
+      i += 2;
+      let testDepth = 1;
+      while (testDepth && ++i < tokens.length) {
+        if (tokens[i][0] === 'code' && tokens[i][1] === '{') testDepth++;
+        if (tokens[i][0] === 'code' && tokens[i][1] === '}') testDepth--;
+      }
+      if (testDepth) throw new Error('Unclosed Zig test');
+      pieces.push(source.slice(last, start));
+      last = positions[i] + tokens[i][1].length;
+    } else if (kind === 'code' && value === '{') depth++;
+    else if (kind === 'code' && value === '}') {
+      if (--depth < 0) throw new Error('Unbalanced Zig source');
+    }
+  }
+  if (depth) throw new Error('Unbalanced Zig source');
+  pieces.push(source.slice(last));
+  return { names, outside: pieces.join('') };
+}
+
+function nativeChatTestsOnly() {
+  const file = 'src/chat_render.zig';
+  if (!changed.includes(file) || !changed.every(name => name === file || docs.test(name))) return false;
+  try {
+    const before = nativeTestParts(fs.readFileSync(path.join(red, file), 'utf8'));
+    const after = nativeTestParts(fs.readFileSync(path.join(green, file), 'utf8'));
+    return before.names.length > 0 && JSON.stringify(before.names) === JSON.stringify(after.names) && before.outside === after.outside;
+  } catch {
+    return false;
+  }
+}
+
 function run(file, dir) {
   const python = file.endsWith('.py');
   const env = { ...process.env };
@@ -57,11 +117,13 @@ try {
     const stampPaths = /^(?:src\/(?:main|changelog)\.zig|changelog\.d\/[^/]+)$/;
     if (changed.length && changed.every(file => stampPaths.test(file)) && classifyTrees(snapshot(red), snapshot(green), changed) === 'STAMP') {
       console.log('RED_RUN_NOT_REQUIRED verified mechanical release stamp');
+    } else if (nativeChatTestsOnly()) {
+      console.log('RED_RUN_NOT_REQUIRED native chat test edits only; Windows tests still required');
     } else {
       if (!tests.length) throw new Error('No changed regression tests. Add a portable .test.js, .test.mjs, .test.cjs or Python regression that fails on merge-base source.');
       const inputs = changed.filter(file => /^(?:tools\/fixtures\/|tools\/[^/]*fixture[^/]*$|tests\/fixtures\/)/.test(file));
       execFileSync('git', ['-C', red, 'restore', `--source=${head}`, '--worktree', '--', ...tests, ...inputs], { stdio: 'pipe' });
-      const testOnly = changed.every(file => docs.test(file) || (file.startsWith('tools/') && testFile(file)));
+      const testOnly = changed.every(file => docs.test(file) || (file.startsWith('tools/') && testFile(file)) || (present.includes(file) && inputs.includes(file)));
       for (const file of tests) {
         const fixed = run(file, green);
         console.log(`HEAD ${file}\n${fixed.output}`);

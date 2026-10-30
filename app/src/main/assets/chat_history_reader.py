@@ -373,14 +373,16 @@ def claude_session_metadata(pid):
     return (sid if isinstance(sid, str) and SESSION_ID.fullmatch(sid) else None,
             cwd if isinstance(cwd, str) and cwd else None)
 
-def open_codex_transcript(pid, table):
+def open_codex_transcript(pid, table, codex_home=None):
     children = {}
     for child, (parent, _argv) in table.items():
         children.setdefault(parent, []).append(child)
     candidates = set()
     queue = [pid]
     seen = set()
-    root = (HOME / ".codex/sessions").resolve()
+    root = ((Path(codex_home) if codex_home is not None else HOME / '.codex') / 'sessions').resolve()
+    scanned = False
+    uncertain = False
     while queue:
         current = queue.pop(0)
         if current in seen:
@@ -393,13 +395,23 @@ def open_codex_transcript(pid, table):
                             process_basename(argv[1]) in ("codex", "codex.js")):
             continue
         try:
-            for fd in Path(f"/proc/{current}/fd").iterdir():
+            descriptors = list(Path(f"/proc/{current}/fd").iterdir())
+            if current == pid:
+                scanned = True
+            for fd in descriptors:
                 try:
                     path = Path(os.readlink(fd))
+                except FileNotFoundError:
+                    continue
+                except OSError:
+                    uncertain = True
+                    continue
+                try:
                     if not path.resolve().is_relative_to(root):
                         continue
                     with path.open("rb") as source:
                         if not os.path.samestat(fd.stat(), os.fstat(source.fileno())):
+                            uncertain = True
                             continue
                         meta = json.loads(source.readline())
                     payload = meta.get("payload") if isinstance(meta, dict) and meta.get("type") == "session_meta" else None
@@ -407,11 +419,228 @@ def open_codex_transcript(pid, table):
                     if (isinstance(sid, str) and SESSION_ID.fullmatch(sid) and
                             payload.get("session_id", sid) == sid and path.name.startswith("rollout-") and path.name.endswith("-" + sid + ".jsonl")):
                         candidates.add((sid, path.resolve()))
+                    else:
+                        uncertain = True
                 except (OSError, ValueError):
-                    pass
+                    uncertain = True
         except OSError:
-            pass
-    return next(iter(candidates)) if len(candidates) == 1 else None
+            uncertain = True
+    return candidates if scanned and not uncertain else None
+
+
+def codex_process_start(pid):
+    try:
+        return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[19]
+    except (OSError, IndexError):
+        return None
+
+
+def codex_socket_fds(pid):
+    try:
+        sockets = set()
+        for fd in Path(f"/proc/{pid}/fd").iterdir():
+            try:
+                link = os.readlink(fd)
+            except FileNotFoundError:
+                continue
+            match = re.fullmatch(r"socket:\[(\d+)\]", link)
+            if match:
+                sockets.add(match.group(1))
+        return sockets
+    except OSError:
+        return None
+
+
+def codex_unix_connections():
+    try:
+        result = subprocess.run(["ss", "-x", "-a", "-n", "-e"], capture_output=True, text=True, timeout=3, check=True)
+        connections = {}
+        for line in result.stdout.splitlines():
+            fields = line.split()
+            if len(fields) >= 5 and fields[0] == "u_str" and fields[1] == "ESTAB":
+                if len(fields) < 8 or not fields[5].isdigit() or not fields[7].isdigit():
+                    continue
+                inode, peer = fields[5], fields[7]
+                if inode in connections and connections[inode] != (peer, fields[4]):
+                    previous = connections[inode][1]
+                    daemon_prefix = '/tmp/codex-daemon-' + str(os.getuid()) + '/'
+                    path = previous if isinstance(previous, str) and previous.startswith(daemon_prefix) else fields[4]
+                    connections[inode] = (None, path)
+                else:
+                    connections[inode] = (peer, fields[4])
+        return connections
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def codex_daemon_transcript(pid, include_endpoint=False):
+    try:
+        if Path(f"/proc/{pid}").stat().st_uid != os.getuid() or Path(os.readlink(f"/proc/{pid}/exe")).name != "codex":
+            return None
+        start = codex_process_start(pid)
+        tui_sockets = codex_socket_fds(pid)
+        connections = codex_unix_connections()
+        if not start or tui_sockets is None or connections is None:
+            return None
+        table = process_table()
+        endpoint = re.compile(r"/tmp/codex-daemon-" + str(os.getuid()) + r"/[0-9a-f]{64}\Z")
+        backends = []
+        for backend, (_, argv) in table.items():
+            if backend == pid or not argv or process_basename(argv[0]) != "codex" or "app-server" not in argv or "--listen" not in argv:
+                continue
+            try:
+                if Path(f"/proc/{backend}").stat().st_uid != os.getuid() or Path(os.readlink(f"/proc/{backend}/exe")).name != "codex":
+                    continue
+                backend_start = codex_process_start(backend)
+                backend_sockets = codex_socket_fds(backend)
+                if not backend_start or backend_sockets is None:
+                    continue
+                links = {s for s in backend_sockets if s in connections and isinstance(connections[s][1], str) and endpoint.fullmatch(connections[s][1])}
+                if not any(connections[s][0] in tui_sockets for s in links):
+                    continue
+                if any(connections.get(connections[s][0], (None,))[0] != s for s in links):
+                    return None
+                peers = {connections[s][0] for s in links}
+                backends.append((backend, backend_start, links, peers, backend_sockets))
+            except OSError:
+                continue
+        if len(backends) != 1:
+            return None
+        backend, backend_start, links, peers, backend_sockets = backends[0]
+        if len(links) != 1 or len(peers) != 1 or not peers <= tui_sockets or peers & backend_sockets:
+            return None
+        candidates = open_codex_transcript(backend, {backend: table[backend]})
+        if candidates is None or len(candidates) != 1:
+            return None
+        latest = codex_unix_connections()
+        tui_after, backend_after = codex_socket_fds(pid), codex_socket_fds(backend)
+        if latest is None or tui_after is None or backend_after is None:
+            return None
+        latest_links = {s for s in backend_after if s in latest and isinstance(latest[s][1], str) and endpoint.fullmatch(latest[s][1])}
+        if (codex_process_start(pid) != start or codex_process_start(backend) != backend_start or
+                not peers <= tui_after or peers & backend_after or latest_links != links or
+                open_codex_transcript(backend, {backend: table[backend]}) != candidates or
+                any(latest.get(s) != connections.get(s) for s in links | peers)):
+            return None
+        resolved = next(iter(candidates))
+        return (resolved, 'unix://' + connections[next(iter(links))][1]) if include_endpoint else resolved
+    except (OSError, KeyError):
+        return None
+
+
+def codex_daemon_endpoint(tmux, sid, transcript):
+    try:
+        panes = subprocess.run(['tmux', 'list-panes', '-t', '=' + tmux, '-F', '#{pane_pid}'], capture_output=True, text=True, timeout=3, check=True)
+        pids = [int(line) for line in panes.stdout.split() if line.isdigit()]
+        table = process_table(pids=pids)
+        pid = agent_pid_for_panes(pids, table, 'codex')
+        result = codex_daemon_transcript(pid, include_endpoint=True) if pid else None
+        if result and result[0][0] == sid and Path(result[0][1]) == Path(transcript):
+            return result[1]
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return None
+
+
+def codex_queue_attachment(tmux, sid, transcript):
+    try:
+        panes = subprocess.run(['tmux', 'list-panes', '-t', '=' + tmux, '-F', '#{pane_pid}'], capture_output=True, text=True, timeout=3, check=True)
+        pids = [int(line) for line in panes.stdout.split() if line.isdigit()]
+        table = process_table(pids=pids)
+        pid = agent_pid_for_panes(pids, table, 'codex')
+        if not pid or pid not in table:
+            return None
+        daemon = codex_daemon_transcript(pid, include_endpoint=True)
+        if daemon:
+            if daemon[0][0] == sid and Path(daemon[0][1]).resolve() == Path(transcript).resolve():
+                return dict(attachment='daemon', daemon_endpoint=daemon[1])
+            return None
+        start = codex_process_start(pid)
+        proc = Path('/proc') / str(pid)
+        if not start or proc.stat().st_uid != os.getuid():
+            return None
+        binary = Path(os.readlink(proc / 'exe'))
+        if not binary.is_absolute() or not binary.name.startswith('codex') or not os.path.samestat((proc / 'exe').stat(), binary.stat()) or not os.access(binary, os.X_OK):
+            return None
+        argv = table[pid][1]
+        if any(arg in ('--remote', '--profile', '-p', '--listen') or arg.startswith(('--remote=', '--profile=', '--listen=')) for arg in argv[1:]):
+            return None
+        for index, arg in enumerate(argv[1:], 1):
+            if arg in ('-c', '--config'):
+                if index + 1 >= len(argv) or 'state_home' in argv[index + 1].lower():
+                    return None
+            elif (arg.startswith('--config=') or arg.startswith('-c')) and 'state_home' in arg.lower():
+                return None
+        def namespace():
+            allowed = {'HOME', 'CODEX_HOME', 'XDG_STATE_HOME', 'CODEX_STATE_HOME', 'CODEX_PROFILE', 'CODEX_CONFIG_PROFILE'}
+            entries = {}
+            for item in (proc / 'environ').read_bytes().split(b'\0'):
+                key, sep, value = item.partition(b'=')
+                if sep and key.decode('ascii', 'ignore') in allowed:
+                    name = key.decode('ascii')
+                    if name in entries:
+                        return None
+                    entries[name] = os.fsdecode(value)
+            return entries
+        env = namespace()
+        if not env or any(env.get(key) or os.environ.get(key) for key in ('XDG_STATE_HOME', 'CODEX_STATE_HOME', 'CODEX_PROFILE', 'CODEX_CONFIG_PROFILE')):
+            return None
+        home = Path(env.get('HOME', ''))
+        codex_home = Path(env.get('CODEX_HOME') or home / '.codex')
+        if not home.is_absolute() or not codex_home.is_absolute() or home.resolve() != HOME.resolve():
+            return None
+        if not home.is_dir() or not codex_home.is_dir() or home.stat().st_uid != os.getuid() or codex_home.stat().st_uid != os.getuid():
+            return None
+        config = codex_home / 'config.toml'
+        if config.exists():
+            import tomllib
+            with config.open('rb') as stream:
+                settings = tomllib.load(stream)
+            def has_state_override(value):
+                if isinstance(value, dict):
+                    return any(key == 'state_home' or has_state_override(child) for key, child in value.items())
+                return isinstance(value, list) and any(has_state_override(child) for child in value)
+            if has_state_override(settings):
+                return None
+        sockets = codex_socket_fds(pid)
+        connections = codex_unix_connections()
+        if sockets is None or connections is None:
+            return None
+        prefix = '/tmp/codex-daemon-' + str(os.getuid()) + '/'
+        observed = {sock: connections[sock] for sock in sockets if sock in connections}
+        for peer, path in observed.values():
+            if peer is None or (isinstance(path, str) and path.startswith(prefix)):
+                return None
+            peer_path = connections.get(peer, (None, None))[1]
+            if isinstance(peer_path, str) and peer_path.startswith(prefix):
+                return None
+        peers = {peer for peer, _ in observed.values()}
+        for backend, (_, args) in process_table().items():
+            if backend == pid or not args or process_basename(args[0]) != 'codex' or 'app-server' not in args:
+                continue
+            try:
+                if Path(f'/proc/{backend}').stat().st_uid != os.getuid():
+                    continue
+            except FileNotFoundError:
+                return None
+            backend_sockets = codex_socket_fds(backend)
+            if backend_sockets is None or peers & backend_sockets:
+                return None
+        own_table = {pid: table[pid]}
+        candidates = open_codex_transcript(pid, own_table, codex_home)
+        expected = (sid, Path(transcript).resolve())
+        if candidates != {expected}:
+            return None
+        latest = codex_unix_connections()
+        if (latest is None or codex_process_start(pid) != start or proc.stat().st_uid != os.getuid() or namespace() != env or
+                not os.path.samestat((proc / 'exe').stat(), binary.stat()) or
+                open_codex_transcript(pid, own_table, codex_home) != {expected} or codex_socket_fds(pid) != sockets or
+                {sock: latest[sock] for sock in sockets if sock in latest} != observed or
+                any(latest.get(item[0]) != connections.get(item[0]) for item in observed.values())):
+            return None
+        return dict(attachment='direct', codex_binary=str(binary), codex_home=str(codex_home.resolve()), native_user_home=str(home.resolve()))
+    except (OSError, ValueError, KeyError, TypeError, ImportError, subprocess.SubprocessError):
+        return None
 
 
 def resolve_tmux_agent(agent, name, pid=None, require_bound=False):
@@ -460,7 +689,12 @@ def resolve_tmux_agent(agent, name, pid=None, require_bound=False):
         return None
     if table is None:
         table = process_table(pids=[pid])
-    return open_codex_transcript(pid, table)
+    candidates = open_codex_transcript(pid, table)
+    if candidates is None or len(candidates) > 1:
+        return None
+    if candidates:
+        return next(iter(candidates))
+    return codex_daemon_transcript(pid)
 
 
 def conversation_event(event, agent):
@@ -1281,19 +1515,9 @@ def live_fields(source, size, tmux, shown=None, sid=None):
     queue, sent = queue_replay(source, size, with_receipts=True)
     fields = dict(queue=[queue_item(text) for text in queue[:QUEUE_SHOWN]])
     if sid is not None:
-        held = held_queue_fields(tmux, sid, with_receipts=True)
-        fields["queue"] = (held["queue"] + fields["queue"])[:QUEUE_SHOWN]
-        inode = os.fstat(source.fileno()).st_ino
-        identities = {identity for text, receipt in sent if receipt is not None
-                      if (identity := _consumed_identity(source, sid, inode, *receipt, text)) is not None}
-        for text, receipt in held["sent"]:
-            identity = _consumed_identity(source, sid, *receipt, text) if receipt is not None else None
-            if identity is None or identity not in identities:
-                sent.append((text, None))
-        if held_queue_path(tmux).exists():
-            from contextlib import closing
-            with closing(held_queue_db(tmux)) as db:
-                fields["received"] = [row[0] for row in db.execute("SELECT key FROM messages WHERE sid=? AND state='delivered' AND key LIKE 'desktop-%' ORDER BY created DESC LIMIT 20", (sid,))]
+        from contextlib import closing
+        with closing(message_store_db(tmux)) as db:
+            fields['received'] = [row[0] for row in db.execute("SELECT b.token FROM legacy_bindings b JOIN shared_messages m ON m.id=b.id WHERE b.sid=? AND m.state IN ('accepted','started') AND b.token LIKE 'desktop-%' ORDER BY m.position DESC", (sid,))]
     fields["sent"] = [queue_item(text) for text, _ in sent[-QUEUE_SHOWN:]]
     draft = box_draft_text(shown) if shown is not None else box_draft("=" + tmux + ":")
     if draft is not None:
@@ -1549,9 +1773,14 @@ def response(q, source=None, as_owner=False, resolved=None):
     if ISSUE_268_CHAT_FIND and "search" in q:
         return search_response(q, path, agent, sid)
     rid, tmux = q["id"], q["tmux"]
-    if agent == "claude" and tmux:
-        start_held_worker(tmux, sid, path, source)
-        q["_held_queue_progress"] = bool(drain_held_queue(tmux, sid, path))
+    legacy_status = None
+    if agent == 'claude' and tmux and (q.get('held') is True or q.get('delivery_ids')):
+        ids = q.get('delivery_ids') or []
+        if not isinstance(ids, list) or any(not isinstance(token, str) or re.fullmatch(r'[A-Za-z0-9_-]{1,80}', token) is None for token in ids):
+            raise ValueError('invalid message identities')
+        legacy_status = legacy_projection(tmux, sid, path, ids)
+        if legacy_status[0]:
+            start_message_worker(dict(tmux=tmux, provider='claude', sid=sid), source)
     rows, budget = [], 0
     queue_stamps = {}
     with path.open("rb") as source:
@@ -1614,7 +1843,7 @@ def response(q, source=None, as_owner=False, resolved=None):
             event = load_line(raw)
             messages = conversation_rows(event, agent, consumed)
             message = next((row for row in messages if row["role"] in ("user", "assistant")), None)
-            if ISSUE_349_QUEUED_STAMP_FROM_QUEUE and agent == "claude" and isinstance(event, dict):
+            if ISSUE_349_QUEUED_STAMP_FROM_QUEUE and q.get('message_protocol') != 1 and agent == "claude" and isinstance(event, dict):
                 attachment = event.get("attachment") or {}
                 queued = event.get("type") == "attachment" and isinstance(attachment, dict) and attachment.get("type") == "queued_command"
                 operation = event.get("operation") if event.get("type") == "queue-operation" else None
@@ -1662,23 +1891,11 @@ def response(q, source=None, as_owner=False, resolved=None):
         status = status_header(source, info.st_size, agent, captured)
         if q.get("live") is True and agent == "claude" and tmux and mode != "older":
             status = dict(status or dict(role="status"), **live_fields(source, info.st_size, tmux, q.get("watch_screen"), sid))
-        if q.get("held") is True and agent == "claude" and tmux and held_queue_path(tmux).exists():
-            from contextlib import closing
-            with closing(held_queue_db(tmux)) as db:
-                pending = db.execute("SELECT key,text,queued_at,state,origin,source_inode FROM messages WHERE sid=? AND state IN ('queued','submitted') ORDER BY created", (sid,)).fetchall()
-            status = dict(status or dict(role="status"), held=[dict(id=item[0], text=item[1], queued_at=item[2], state=item[3], offset=item[4], inode=item[5], sid=sid) for item in pending])
-        if q.get("delivery_ids") and agent == "claude" and tmux:
-            ids = q["delivery_ids"]
-            if not isinstance(ids, list) or any(not isinstance(token, str) or re.fullmatch(r"[A-Za-z0-9_-]{1,80}", token) is None for token in ids):
-                raise ValueError("invalid message identities")
-            from contextlib import closing
-            with closing(held_queue_db(tmux)) as db:
-                deliveries = []
-                for token in ids:
-                    held = db.execute("SELECT state FROM messages WHERE key=? AND sid=?", (token, sid)).fetchone()
-                    if held:
-                        deliveries.append(dict(id=token, state=held[0]))
-            status = dict(status or dict(role="status"), deliveries=deliveries)
+        if legacy_status is not None:
+            if q.get('held') is True:
+                status = dict(status or dict(role='status'), held=legacy_status[0])
+            if q.get('delivery_ids'):
+                status = dict(status or dict(role='status'), deliveries=legacy_status[1])
         more = scan_more or page_more
         source.seek(max(0, end - 64))
         probe = hashlib.sha256(source.read(min(end, 64))).hexdigest()
@@ -1775,8 +1992,558 @@ def held_queue_db(tmux):
         if db.execute("PRAGMA user_version").fetchone()[0] < 2:
             db.execute("PRAGMA user_version=2")
         db.execute("CREATE TABLE IF NOT EXISTS held_receipts (sid TEXT NOT NULL, inode INTEGER NOT NULL, offset INTEGER NOT NULL, key TEXT NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(sid,inode,offset))")
+        db.execute("CREATE TABLE IF NOT EXISTS v1_admission (sid TEXT PRIMARY KEY)")
+        trigger = db.execute("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='v1_no_legacy_insert'").fetchone()
+        if trigger and '@mp-shared-v1' not in trigger[0]:
+            db.execute('DROP TRIGGER IF EXISTS v1_no_legacy_insert')
+            db.execute('DROP TRIGGER IF EXISTS v1_no_legacy_requeue')
+        db.execute("CREATE TRIGGER IF NOT EXISTS v1_no_legacy_insert BEFORE INSERT ON messages WHEN EXISTS (SELECT 1 FROM v1_admission WHERE sid=NEW.sid) AND (NEW.state='queued' OR (NEW.state='submitted' AND NEW.receipt NOT LIKE '@mp-shared-v1:%')) BEGIN SELECT RAISE(ABORT,'shared queue active'); END")
+        db.execute("CREATE TRIGGER IF NOT EXISTS v1_no_legacy_requeue BEFORE UPDATE OF state ON messages WHEN EXISTS (SELECT 1 FROM v1_admission WHERE sid=NEW.sid) AND (NEW.state='queued' OR (NEW.state='submitted' AND NEW.receipt NOT LIKE '@mp-shared-v1:%')) BEGIN SELECT RAISE(ABORT,'shared queue active'); END")
+        db.execute("CREATE TRIGGER IF NOT EXISTS v1_preserve_mirror BEFORE UPDATE ON messages WHEN OLD.receipt LIKE '@mp-shared-v1:%' AND (NEW.receipt=OLD.receipt OR NEW.receipt NOT LIKE '@mp-shared-v1:%') BEGIN SELECT RAISE(IGNORE); END")
+        db.execute("CREATE TRIGGER IF NOT EXISTS v1_no_mirror_claim BEFORE INSERT ON held_receipts WHEN EXISTS (SELECT 1 FROM messages WHERE key=NEW.key AND sid=NEW.sid AND receipt LIKE '@mp-shared-v1:%') BEGIN SELECT RAISE(IGNORE); END")
         db.execute("CREATE INDEX IF NOT EXISTS held_receipts_key ON held_receipts(key,sid,inode,offset)")
     return db
+
+
+def message_store_path():
+    return HOME / '.local/state/multiprompt/shared-messages/store.sqlite3'
+
+
+def message_store_db(tmux):
+    import sqlite3
+    from contextlib import closing
+    with closing(held_queue_db(tmux)):
+        pass
+    path = message_store_path()
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    db = sqlite3.connect(path)
+    os.chmod(path, 0o600)
+    db.execute('ATTACH DATABASE ? AS legacy', (str(held_queue_path(tmux)),))
+    with db:
+        db.execute("CREATE TABLE IF NOT EXISTS message_chats (provider TEXT NOT NULL, sid TEXT NOT NULL, epoch INTEGER NOT NULL DEFAULT 0, seq INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(provider,sid))")
+        db.execute("CREATE TABLE IF NOT EXISTS shared_messages (id TEXT PRIMARY KEY, provider TEXT NOT NULL, sid TEXT NOT NULL, text TEXT NOT NULL, position INTEGER NOT NULL, attempt TEXT NOT NULL, state TEXT NOT NULL, deadline REAL, receipt TEXT, epoch INTEGER NOT NULL, created REAL NOT NULL)")
+        db.execute("CREATE INDEX IF NOT EXISTS shared_messages_chat ON shared_messages(provider,sid,position)")
+        db.execute("CREATE TABLE IF NOT EXISTS message_events (provider TEXT NOT NULL, sid TEXT NOT NULL, seq INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(provider,sid,seq))")
+        db.execute("CREATE TABLE IF NOT EXISTS message_attempts (provider TEXT NOT NULL, sid TEXT NOT NULL, id TEXT NOT NULL, attempt TEXT NOT NULL, epoch INTEGER NOT NULL, text_sha256 TEXT NOT NULL, outcome TEXT NOT NULL, binding TEXT NOT NULL DEFAULT '{}', PRIMARY KEY(provider,sid,id,attempt))")
+        if 'binding' not in {row[1] for row in db.execute('PRAGMA table_info(message_attempts)')}:
+            db.execute("ALTER TABLE message_attempts ADD COLUMN binding TEXT NOT NULL DEFAULT '{}'")
+        db.execute("CREATE TABLE IF NOT EXISTS connector_states (provider TEXT NOT NULL, sid TEXT NOT NULL, state TEXT NOT NULL, PRIMARY KEY(provider,sid))")
+        db.execute("CREATE TABLE IF NOT EXISTS connector_facts (provider TEXT NOT NULL, sid TEXT NOT NULL, event_id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(provider,sid,event_id))")
+        db.execute("CREATE TABLE IF NOT EXISTS message_retries (id TEXT NOT NULL, request TEXT NOT NULL, attempt TEXT NOT NULL, PRIMARY KEY(id,request))")
+        db.execute("CREATE TABLE IF NOT EXISTS message_attempt_history (id TEXT NOT NULL, attempt TEXT NOT NULL, epoch INTEGER NOT NULL, PRIMARY KEY(id,attempt))")
+        db.execute("CREATE TABLE IF NOT EXISTS message_resets (provider TEXT NOT NULL, sid TEXT NOT NULL, request TEXT NOT NULL, epoch INTEGER NOT NULL, seq INTEGER NOT NULL, PRIMARY KEY(provider,sid,request))")
+        db.execute("CREATE TABLE IF NOT EXISTS message_snapshots (id TEXT PRIMARY KEY, provider TEXT NOT NULL, sid TEXT NOT NULL, epoch INTEGER NOT NULL, seq INTEGER NOT NULL, created REAL NOT NULL, body TEXT NOT NULL)")
+        db.execute("CREATE TABLE IF NOT EXISTS legacy_bindings (token TEXT PRIMARY KEY, id TEXT NOT NULL UNIQUE, sid TEXT NOT NULL, queued_at INTEGER NOT NULL, origin INTEGER NOT NULL, inode INTEGER NOT NULL)")
+        db.execute("CREATE TABLE IF NOT EXISTS legacy_locations (token TEXT NOT NULL, path TEXT NOT NULL, PRIMARY KEY(token,path))")
+        db.execute("CREATE TABLE IF NOT EXISTS message_locators (provider TEXT NOT NULL, sid TEXT NOT NULL, tmux TEXT NOT NULL, PRIMARY KEY(provider,sid))")
+    return db
+
+
+def message_event(db, provider, sid, message, emit=True):
+    if provider == 'claude' and isinstance(message, dict) and message.get('id') and message.get('state'):
+        binding = db.execute('SELECT token,queued_at,origin,inode FROM legacy_bindings WHERE id=? AND sid=?', (message['id'], sid)).fetchone()
+        if binding:
+            token, stamp, origin, inode = binding
+            state = {'queued':'submitted', 'sent':'submitted', 'accepted':'delivered', 'started':'delivered', 'failed':'cancelled', 'cancelled':'cancelled'}[message['state']]
+            marker = '@mp-shared-v1:' + message['attempt'] + ':' + message['state'] + ':' + str(db.execute('SELECT seq+1 FROM message_chats WHERE provider=? AND sid=?', (provider, sid)).fetchone()[0])
+            databases = {path: name for _, name, path in db.execute('PRAGMA database_list')}
+            for (path,) in db.execute('SELECT path FROM legacy_locations WHERE token=?', (token,)).fetchall():
+                alias = databases.get(path)
+                if alias is None:
+                    alias = 'mirror' + str(len(databases))
+                    db.execute('ATTACH DATABASE ? AS ' + alias, (path,))
+                    databases[path] = alias
+                db.execute('INSERT OR IGNORE INTO ' + alias + '.v1_admission VALUES (?)', (sid,))
+                db.execute("INSERT INTO " + alias + ".messages(key,sid,text,queued_at,state,origin,source_inode,receipt,created) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET state=excluded.state,receipt=excluded.receipt WHERE sid=excluded.sid", (token, sid, message['text'], stamp, state, origin, inode, marker, int(message['created'] * 1000000000)))
+    if not emit:
+        return db.execute('SELECT seq FROM message_chats WHERE provider=? AND sid=?', (provider, sid)).fetchone()[0]
+    db.execute("UPDATE message_chats SET seq=seq+1 WHERE provider=? AND sid=?", (provider, sid))
+    seq = db.execute("SELECT seq FROM message_chats WHERE provider=? AND sid=?", (provider, sid)).fetchone()[0]
+    db.execute("INSERT INTO message_events VALUES (?,?,?,?)", (provider, sid, seq, json.dumps(message, separators=(',', ':'))))
+    return seq
+
+
+def message_row(row):
+    return dict(zip(('id', 'provider', 'sid', 'text', 'position', 'attempt', 'state', 'deadline', 'receipt', 'epoch', 'created'), row))
+
+
+def message_expire(db, provider, sid):
+    rows = db.execute("SELECT * FROM shared_messages WHERE provider=? AND sid=? AND state='sent' AND deadline<=? ORDER BY position", (provider, sid, time.time())).fetchall()
+    for row in rows:
+        db.execute("UPDATE shared_messages SET state='failed',deadline=NULL WHERE id=? AND state='sent'", (row[0],))
+        message_event(db, provider, sid, message_row(db.execute("SELECT * FROM shared_messages WHERE id=?", (row[0],)).fetchone()))
+
+
+def codex_attempt_claim(tmux, key):
+    from contextlib import closing
+    fields = (key.get('provider'), key.get('sid'), key.get('id'), key.get('attempt'), key.get('epoch'), key.get('text_sha256'))
+    provider, sid, token, attempt, epoch, digest = fields
+    if provider != 'codex' or not all(isinstance(v, str) and v for v in (sid, token, attempt, digest)) or type(epoch) is not int:
+        raise ValueError('invalid attempt')
+    with closing(message_store_db(tmux)) as db, db:
+        db.execute('BEGIN IMMEDIATE')
+        existing = db.execute('SELECT epoch,text_sha256,outcome FROM message_attempts WHERE provider=? AND sid=? AND id=? AND attempt=?', fields[:4]).fetchone()
+        if existing:
+            return dict(status=existing[2] if existing[:2] == (epoch, digest) and existing[2] == 'accepted' else 'unavailable')
+        row = db.execute('SELECT text,state,epoch,attempt FROM shared_messages WHERE provider=? AND sid=? AND id=?', (provider, sid, token)).fetchone()
+        current = db.execute('SELECT epoch FROM message_chats WHERE provider=? AND sid=?', (provider, sid)).fetchone()
+        if not row or not current or current[0] != epoch or row[1:] != ('sent', epoch, attempt) or hashlib.sha256(row[0].encode()).hexdigest() != digest:
+            return dict(status='unavailable')
+        db.execute("INSERT INTO message_attempts(provider,sid,id,attempt,epoch,text_sha256,outcome) VALUES (?,?,?,?,?,?,'claimed')", fields)
+        return dict(status='claimed')
+
+
+def codex_attempt_finish(tmux, key, outcome):
+    from contextlib import closing
+    if outcome not in ('accepted', 'uncertain', 'not_sent'):
+        raise ValueError('invalid outcome')
+    fields = (key.get('provider'), key.get('sid'), key.get('id'), key.get('attempt'), key.get('epoch'), key.get('text_sha256'))
+    with closing(message_store_db(tmux)) as db, db:
+        db.execute('BEGIN IMMEDIATE')
+        db.execute("UPDATE message_attempts SET outcome=? WHERE provider=? AND sid=? AND id=? AND attempt=? AND epoch=? AND text_sha256=? AND outcome='claimed'", (outcome, *fields))
+
+
+def attempt_prepare(tmux, provider, sid, key, binding):
+    from contextlib import closing
+    fields = tuple(key.get(k) for k in ('provider', 'sid', 'id', 'attempt', 'epoch', 'text_sha256'))
+    if fields[:2] != (provider, sid) or not all(isinstance(v, str) and v for v in (fields[2], fields[3], fields[5])) or type(fields[4]) is not int or not isinstance(binding, dict):
+        raise ValueError('invalid attempt')
+    encoded = json.dumps(binding, separators=(',', ':'), sort_keys=True)
+    with closing(message_store_db(tmux)) as db, db:
+        db.execute('BEGIN IMMEDIATE')
+        previous = db.execute('SELECT epoch,text_sha256,binding,outcome FROM message_attempts WHERE provider=? AND sid=? AND id=? AND attempt=?', fields[:4]).fetchone()
+        if previous:
+            if previous[:2] != (fields[4], fields[5]):
+                return dict(status='unavailable')
+            return dict(status='existing', binding=json.loads(previous[2]), outcome=previous[3])
+        row = db.execute('SELECT text,state,epoch,attempt FROM shared_messages WHERE provider=? AND sid=? AND id=?', fields[:3]).fetchone()
+        chat = db.execute('SELECT epoch FROM message_chats WHERE provider=? AND sid=?', fields[:2]).fetchone()
+        if not row or not chat or chat[0] != fields[4] or row[1:] != ('sent', fields[4], fields[3]) or hashlib.sha256(row[0].encode()).hexdigest() != fields[5]:
+            return dict(status='unavailable')
+        db.execute("INSERT INTO message_attempts VALUES (?,?,?,?,?,?,'claimed',?)", (*fields, encoded))
+        return dict(status='claimed', binding=binding, outcome='claimed')
+
+
+def attempt_finish(tmux, provider, sid, key, outcome):
+    from contextlib import closing
+    if outcome not in ('sent', 'uncertain', 'not_sent', 'accepted') or (key.get('provider'), key.get('sid')) != (provider, sid):
+        raise ValueError('invalid attempt outcome')
+    fields = tuple(key.get(k) for k in ('provider', 'sid', 'id', 'attempt', 'epoch', 'text_sha256'))
+    with closing(message_store_db(tmux)) as db, db:
+        db.execute('BEGIN IMMEDIATE')
+        db.execute("UPDATE message_attempts SET outcome=? WHERE provider=? AND sid=? AND id=? AND attempt=? AND epoch=? AND text_sha256=? AND outcome='claimed'", (outcome, *fields))
+
+
+def attempt_bindings(tmux, provider, sid):
+    from contextlib import closing
+    with closing(message_store_db(tmux)) as db:
+        rows = db.execute("SELECT a.provider,a.sid,a.id,a.attempt,a.epoch,a.text_sha256,a.binding,a.outcome FROM message_attempts a JOIN message_chats c ON c.provider=a.provider AND c.sid=a.sid LEFT JOIN shared_messages m ON m.id=a.id AND m.provider=a.provider AND m.sid=a.sid WHERE a.provider=? AND a.sid=? AND (a.epoch=c.epoch OR (m.state='accepted' AND m.attempt=a.attempt)) ORDER BY a.rowid", (provider, sid)).fetchall()
+        return [dict(key=dict(zip(('provider','sid','id','attempt','epoch','text_sha256'), row[:6])), binding=json.loads(row[6]), outcome=row[7]) for row in rows]
+
+
+def message_services(tmux, provider, sid):
+    return dict(resolve_tmux_agent=resolve_tmux_agent, send_response=send_response_preserve_draft,
+                send_response_preserve_draft=send_response_preserve_draft, box_draft=box_draft,
+                load_line=load_line, conversation_rows=conversation_rows,
+                attempt_prepare=lambda key, binding: attempt_prepare(tmux, provider, sid, key, binding),
+                attempt_finish=lambda key, outcome: attempt_finish(tmux, provider, sid, key, outcome),
+                attempt_bindings=lambda: attempt_bindings(tmux, provider, sid),
+                codex_attempt_claim=lambda key: codex_attempt_claim(tmux, key),
+                codex_attempt_finish=lambda key, outcome: codex_attempt_finish(tmux, key, outcome))
+
+
+def message_connector(provider):
+    sources = globals().get('CONNECTOR_SOURCES', {})
+    encoded = sources.get(provider) if isinstance(sources, dict) else None
+    if not isinstance(encoded, str):
+        return None
+    namespace = {'__name__': 'multiprompt_connector_' + provider}
+    exec(compile(base64.b64decode(encoded, validate=True), '<chat-connector>', 'exec'), namespace)
+    return namespace
+
+
+def message_apply_connector(db, provider, sid, epoch, result):
+    if not isinstance(result, dict) or not isinstance(result.get('state'), dict) or not isinstance(result.get('facts'), list):
+        raise ValueError('invalid connector result')
+    db.execute('INSERT OR REPLACE INTO connector_states VALUES (?,?,?)', (provider, sid, json.dumps(result['state'], separators=(',', ':'))))
+    for fact in result['facts']:
+        if not isinstance(fact, dict) or fact.get('sid') != sid or not isinstance(fact.get('event_id'), str) or fact.get('kind') not in ('accepted', 'started', 'message', 'not_sent'):
+            continue
+        if fact['kind'] == 'message' and isinstance(fact.get('row'), dict):
+            fact = dict(fact, row=dict(fact['row'], offset=fact.get('offset'), end=fact.get('end')))
+        body = json.dumps(fact, separators=(',', ':'))
+        if not db.execute('INSERT OR IGNORE INTO connector_facts VALUES (?,?,?,?)', (provider, sid, fact['event_id'], body)).rowcount:
+            continue
+        kind, token, attempt = fact['kind'], fact.get('id'), fact.get('attempt')
+        row = db.execute('SELECT * FROM shared_messages WHERE id=? AND provider=? AND sid=?', (token, provider, sid)).fetchone()
+        if kind == 'message':
+            message_event(db, provider, sid, dict(native_message=fact))
+        elif row and row[9] == epoch and kind == 'accepted' and row[6] == 'queued' and row[5] != attempt and db.execute('SELECT 1 FROM message_attempt_history WHERE id=? AND attempt=? AND epoch=?', (token, attempt, epoch)).fetchone():
+            db.execute("UPDATE shared_messages SET attempt=?,state='accepted',deadline=NULL,receipt=? WHERE id=? AND epoch=? AND state='queued'", (attempt, body, token, epoch))
+            message_event(db, provider, sid, message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', (token,)).fetchone()))
+        elif row and row[9] == epoch and kind == 'accepted' and row[5] != attempt and db.execute('SELECT 1 FROM message_attempt_history WHERE id=? AND attempt=? AND epoch=?', (token, attempt, epoch)).fetchone():
+            message_event(db, provider, sid, dict(attempt_receipt=fact))
+        elif row and row[9] == epoch and row[5] == attempt:
+            state = row[6]
+            target = ('accepted' if kind == 'accepted' and state in ('sent', 'failed') else
+                      'started' if kind == 'started' and state == 'accepted' else
+                      'failed' if kind == 'not_sent' and state == 'sent' else None)
+            if target:
+                db.execute('UPDATE shared_messages SET state=?,deadline=NULL,receipt=? WHERE id=? AND epoch=? AND attempt=?', (target, body, token, epoch, attempt))
+                message_event(db, provider, sid, message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', (token,)).fetchone()))
+
+
+def legacy_wire_state(state):
+    return {'queued': 'queued', 'sent': 'submitted', 'accepted': 'delivered', 'started': 'delivered', 'failed': 'cancelled', 'cancelled': 'cancelled'}[state]
+
+
+def legacy_message_id(token):
+    return 'legacy-' + hashlib.sha256(token.encode('utf-8')).hexdigest()
+
+
+def import_legacy_messages(db, sid, transcript, epoch):
+    import uuid
+    rows = db.execute("SELECT key,text,queued_at,state,origin,source_inode,created,receipt FROM legacy.messages WHERE sid=? AND receipt NOT LIKE '@mp-shared-v1:%' ORDER BY created", (sid,)).fetchall()
+    legacy_path = next(path for _, name, path in db.execute('PRAGMA database_list') if name == 'legacy')
+    for token, text, queued_at, state, origin, inode, created, receipt in rows:
+        identity = legacy_message_id(token)
+        existing = db.execute('SELECT sid,id FROM legacy_bindings WHERE token=?', (token,)).fetchone()
+        if existing and existing != (sid, identity):
+            continue
+        if not existing:
+            db.execute('INSERT INTO legacy_bindings VALUES (?,?,?,?,?,?)', (token, identity, sid, queued_at, origin, inode))
+        db.execute('INSERT OR IGNORE INTO legacy_locations VALUES (?,?)', (token, legacy_path))
+        if db.execute('SELECT 1 FROM shared_messages WHERE id=?', (identity,)).fetchone():
+            continue
+        verified = None
+        if state == 'delivered':
+            claims = db.execute('SELECT inode,offset,digest FROM legacy.held_receipts WHERE sid=? AND key=? LIMIT 2', (sid, token)).fetchall()
+            if len(claims) == 1:
+                try:
+                    with Path(transcript).open('rb') as source:
+                        verified = _consumed_identity(source, sid, *claims[0], text)
+                except OSError:
+                    pass
+        imported_state = 'accepted' if verified else 'cancelled' if state == 'cancelled' else 'failed'
+        detail = json.dumps(dict(kind='legacy_verified_claim', inode=verified[1], offset=verified[2], digest=verified[3])) if verified else 'legacy_delivery_unconfirmed'
+        position = db.execute('SELECT COALESCE(MAX(position),0)+1 FROM shared_messages WHERE provider=? AND sid=?', ('claude', sid)).fetchone()[0]
+        db.execute('INSERT INTO shared_messages VALUES (?,?,?,?,?,?,?,?,?,?,?)', (identity, 'claude', sid, text, position, uuid.uuid4().hex, imported_state, None, detail, epoch, created / 1000000000))
+        message_event(db, 'claude', sid, message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', (identity,)).fetchone()))
+    db.execute("UPDATE legacy.messages SET state='cancelled' WHERE sid=? AND state IN ('queued','submitted') AND receipt NOT LIKE '@mp-shared-v1:%'", (sid,))
+    db.execute('INSERT OR IGNORE INTO legacy.v1_admission VALUES (?)', (sid,))
+
+
+def message_store_request(q):
+    import fcntl
+    provider, sid, tmux = q.get('provider'), q.get('sid'), q.get('tmux')
+    if (type(q.get('message_protocol')) is not int or q['message_protocol'] != 1 or
+            provider not in ('claude', 'codex') or not isinstance(sid, str) or not SESSION_ID.fullmatch(sid) or
+            not isinstance(tmux, str) or not TMUX_NAME.fullmatch(tmux)):
+        raise ValueError('invalid message protocol or identity')
+    if q.get('op') not in ('message_dispatch', 'message_reset'):
+        return message_store_transaction(q)
+    path = message_store_path()
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    lock_path = path.with_suffix('.' + hashlib.sha256((provider + ':' + sid).encode()).hexdigest() + '.dispatch')
+    with lock_path.open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return message_store_transaction(q)
+
+
+def message_store_transaction(q):
+    from contextlib import closing
+    import uuid
+    provider, sid, tmux = q['provider'], q['sid'], q['tmux']
+    op = q.get('op')
+    with closing(message_store_db(tmux)) as db, db:
+        db.execute('BEGIN IMMEDIATE')
+        db.execute('INSERT OR IGNORE INTO message_chats(provider,sid) VALUES (?,?)', (provider, sid))
+        epoch, seq = db.execute('SELECT epoch,seq FROM message_chats WHERE provider=? AND sid=?', (provider, sid)).fetchone()
+        if provider == 'codex':
+            saved = db.execute('SELECT state FROM connector_states WHERE provider=? AND sid=?', (provider, sid)).fetchone()
+            state = json.loads(saved[0]) if saved else {}
+            claims = db.execute("SELECT id,attempt FROM message_attempts WHERE provider=? AND sid=? AND epoch=? AND outcome='accepted'", (provider, sid, epoch)).fetchall()
+            facts = [dict(kind='accepted', sid=sid, id=token, attempt=attempt, event_id='durable-queue-ack:' + hashlib.sha256((sid + ':' + token + ':' + attempt).encode()).hexdigest(), provenance='durable_native_queue_ack') for token, attempt in claims]
+            if facts:
+                message_apply_connector(db, provider, sid, epoch, dict(state=state, facts=facts))
+        message_expire(db, provider, sid)
+        epoch, seq = db.execute('SELECT epoch,seq FROM message_chats WHERE provider=? AND sid=?', (provider, sid)).fetchone()
+        if op in ('message_submit', 'message_snapshot', 'message_events', 'message_status', 'message_retry', 'message_reset'):
+            resolved = resolve_tmux_agent(provider, tmux, require_bound=True)
+            if resolved and resolved[0] == sid:
+                db.execute('INSERT OR REPLACE INTO message_locators VALUES (?,?,?)', (provider, sid, tmux))
+            if provider == 'claude' and resolved and resolved[0] == sid and op in ('message_submit', 'message_reset'):
+                import_legacy_messages(db, sid, resolved[1], epoch)
+                seq = db.execute('SELECT seq FROM message_chats WHERE provider=? AND sid=?', (provider, sid)).fetchone()[0]
+        if op == 'message_submit':
+            token, text = q.get('message_id'), q.get('text')
+            if not isinstance(token, str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,80}', token) or not isinstance(text, str) or not text.strip() or '\x00' in text:
+                raise ValueError('invalid message')
+            legacy_token = q.get('legacy_token')
+            if legacy_token is not None:
+                if provider != 'claude' or not isinstance(legacy_token, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,80}', legacy_token) or token != legacy_message_id(legacy_token) or not resolved or resolved[0] != sid:
+                    raise ValueError('invalid legacy identity')
+                binding = db.execute('SELECT sid,id FROM legacy_bindings WHERE token=?', (legacy_token,)).fetchone()
+                if binding and binding != (sid, token):
+                    raise ValueError('legacy identity conflict')
+                if not binding:
+                    info = Path(resolved[1]).stat()
+                    db.execute('INSERT INTO legacy_bindings VALUES (?,?,?,?,?,?)', (legacy_token, token, sid, q['queued_at'], info.st_size, info.st_ino))
+                legacy_path = next(path for _, name, path in db.execute('PRAGMA database_list') if name == 'legacy')
+                db.execute('INSERT OR IGNORE INTO legacy_locations VALUES (?,?)', (legacy_token, legacy_path))
+            existing = db.execute('SELECT * FROM shared_messages WHERE id=?', (token,)).fetchone()
+            if existing:
+                if existing[1:4] != (provider, sid, text):
+                    raise ValueError('message id conflict')
+                if legacy_token is not None:
+                    message_event(db, provider, sid, message_row(existing), emit=False)
+                return dict(message=message_row(existing), epoch=epoch, seq=seq)
+            position = db.execute('SELECT COALESCE(MAX(position),0)+1 FROM shared_messages WHERE provider=? AND sid=?', (provider, sid)).fetchone()[0]
+            db.execute("INSERT INTO shared_messages VALUES (?,?,?,?,?,?,'queued',NULL,NULL,?,?)", (token, provider, sid, text, position, uuid.uuid4().hex, epoch, time.time()))
+            row = message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', (token,)).fetchone())
+            seq = message_event(db, provider, sid, row)
+            return dict(message=row, epoch=epoch, seq=seq)
+        if op == 'message_dismiss':
+            token = q.get('message_id')
+            row = db.execute('SELECT * FROM shared_messages WHERE id=? AND provider=? AND sid=?', (token, provider, sid)).fetchone()
+            if not row or row[9] != epoch:
+                raise ValueError('message not found')
+            if row[6] in ('queued', 'failed'):
+                db.execute("UPDATE shared_messages SET state='cancelled',deadline=NULL WHERE id=? AND epoch=? AND state IN ('queued','failed')", (token, epoch))
+                row = db.execute('SELECT * FROM shared_messages WHERE id=?', (token,)).fetchone()
+                seq = message_event(db, provider, sid, message_row(row))
+            elif row[6] != 'cancelled':
+                raise ValueError('message already handed off')
+            return dict(message=message_row(row), epoch=epoch, seq=seq)
+        if op == 'message_retry':
+            token, request = q.get('message_id'), q.get('retry_id')
+            if not isinstance(token, str) or not isinstance(request, str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,80}', request):
+                raise ValueError('invalid retry')
+            row = db.execute('SELECT * FROM shared_messages WHERE id=? AND provider=? AND sid=?', (token, provider, sid)).fetchone()
+            if not row:
+                raise ValueError('message not found')
+            previous = db.execute('SELECT attempt FROM message_retries WHERE id=? AND request=?', (token, request)).fetchone()
+            if previous:
+                return dict(message=message_row(row), epoch=epoch, seq=seq)
+            if row[6] != 'failed' or row[9] != epoch:
+                raise ValueError('message is not retryable')
+            attempt = uuid.uuid4().hex
+            db.execute('INSERT INTO message_retries VALUES (?,?,?)', (token, request, attempt))
+            db.execute("UPDATE shared_messages SET attempt=?,state='queued',deadline=NULL,receipt=NULL WHERE id=? AND state='failed' AND epoch=?", (attempt, token, epoch))
+            row = message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', (token,)).fetchone())
+            seq = message_event(db, provider, sid, row)
+            return dict(message=row, epoch=epoch, seq=seq)
+        if op == 'message_dispatch':
+            row = db.execute("SELECT * FROM shared_messages WHERE provider=? AND sid=? AND state='queued' AND epoch=? ORDER BY position LIMIT 1", (provider, sid, epoch)).fetchone()
+            if not row:
+                return dict(epoch=epoch, seq=seq, message=None)
+            resolved = resolve_tmux_agent(provider, tmux, require_bound=True)
+            if not resolved or resolved[0] != sid:
+                db.execute("UPDATE shared_messages SET state='failed',receipt='session_unavailable' WHERE id=? AND state='queued'", (row[0],))
+                row = message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', (row[0],)).fetchone())
+                seq = message_event(db, provider, sid, row)
+                return dict(epoch=epoch, seq=seq, message=row)
+            connector = message_connector(provider)
+            if connector is None or not callable(connector.get('submit')) or not callable(connector.get('capabilities')):
+                db.execute("UPDATE shared_messages SET state='failed',receipt='connector_unavailable' WHERE id=? AND state='queued'", (row[0],))
+                row = message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', (row[0],)).fetchone())
+                seq = message_event(db, provider, sid, row)
+                return dict(epoch=epoch, seq=seq, message=row)
+            db.execute("UPDATE shared_messages SET state='sent',deadline=? WHERE id=? AND state='queued'", (time.time() + 15, row[0]))
+            db.execute('INSERT OR IGNORE INTO message_attempt_history VALUES (?,?,?)', (row[0], row[5], epoch))
+            row = message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', (row[0],)).fetchone())
+            seq = message_event(db, provider, sid, row)
+            db.commit()
+            db.execute('BEGIN IMMEDIATE')
+            current = db.execute("SELECT state,epoch FROM shared_messages WHERE id=?", (row['id'],)).fetchone()
+            bound = resolve_tmux_agent(provider, tmux, require_bound=True)
+            if current != ('sent', epoch) or not bound or bound[0] != sid or Path(bound[1]) != Path(resolved[1]):
+                return dict(epoch=epoch, seq=seq, message=None)
+            context = dict(provider=provider, sid=sid, tmux=tmux, chat_id=tmux, transcript_path=str(bound[1]))
+            if provider == 'codex':
+                context.update(codex_queue_attachment(tmux, sid, bound[1]) or {})
+            capabilities = connector['capabilities'](context)
+            if not isinstance(capabilities, dict) or capabilities.get('protocol') != 1 or capabilities.get('provider') != provider:
+                raise ValueError('incompatible connector')
+            saved = db.execute('SELECT state FROM connector_states WHERE provider=? AND sid=?', (provider, sid)).fetchone()
+            state = json.loads(saved[0]) if saved else {}
+            services = message_services(tmux, provider, sid)
+            db.commit()
+            try:
+                result = connector['submit'](context, row, state, services)
+            except Exception:
+                result = dict(handoff='uncertain', facts=[], state=state)
+            db.execute('BEGIN IMMEDIATE')
+            current_epoch = db.execute('SELECT epoch FROM message_chats WHERE provider=? AND sid=?', (provider, sid)).fetchone()[0]
+            if current_epoch == epoch:
+                message_apply_connector(db, provider, sid, epoch, result)
+                if result.get('handoff') == 'not_sent':
+                    changed = db.execute("UPDATE shared_messages SET state='failed',deadline=NULL,receipt='not_sent' WHERE id=? AND attempt=? AND epoch=? AND state='sent'", (row['id'], row['attempt'], epoch)).rowcount
+                    if changed:
+                        message_event(db, provider, sid, message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', (row['id'],)).fetchone()))
+            row = message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', (row['id'],)).fetchone())
+            seq = db.execute('SELECT seq FROM message_chats WHERE provider=? AND sid=?', (provider, sid)).fetchone()[0]
+            return dict(epoch=current_epoch, seq=seq, message=row, handoff=result.get('handoff', 'uncertain'))
+        if op == 'message_reset':
+            request = q.get('reset_id')
+            if not isinstance(request, str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,80}', request):
+                raise ValueError('invalid reset id')
+            previous = db.execute('SELECT epoch,seq FROM message_resets WHERE provider=? AND sid=? AND request=?', (provider, sid, request)).fetchone()
+            if previous:
+                return dict(epoch=previous[0], seq=previous[1])
+            db.execute('UPDATE message_chats SET epoch=epoch+1 WHERE provider=? AND sid=?', (provider, sid))
+            epoch += 1
+            db.execute("UPDATE shared_messages SET epoch=? WHERE provider=? AND sid=? AND state IN ('accepted','started')", (epoch, provider, sid))
+            rows = db.execute("SELECT id FROM shared_messages WHERE provider=? AND sid=? AND state IN ('queued','sent','failed') ORDER BY position", (provider, sid)).fetchall()
+            for (token,) in rows:
+                db.execute("UPDATE shared_messages SET state='cancelled',deadline=NULL WHERE id=?", (token,))
+                message_event(db, provider, sid, message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', (token,)).fetchone()))
+            seq = message_event(db, provider, sid, dict(reset_epoch=epoch))
+            db.execute('INSERT INTO message_resets VALUES (?,?,?,?,?)', (provider, sid, request, epoch, seq))
+            return dict(epoch=epoch, seq=seq)
+        if op == 'message_events':
+            after = q.get('after')
+            if type(after) is not int or after < 0:
+                raise ValueError('invalid event cursor')
+            events, size = [], 0
+            for n, body in db.execute('SELECT seq,body FROM message_events WHERE provider=? AND sid=? AND seq>? ORDER BY seq LIMIT 256', (provider, sid, after)):
+                if events and size + len(body.encode()) > 512 * 1024:
+                    break
+                events.append(dict(seq=n, event=json.loads(body)))
+                size += len(body.encode())
+            return dict(epoch=epoch, seq=seq, events=events, next_after=events[-1]['seq'] if events else after)
+        if op == 'message_snapshot':
+            snapshot = q.get('snapshot_id')
+            cursor = q.get('cursor', 0)
+            if type(cursor) is not int or cursor < 0:
+                raise ValueError('invalid snapshot cursor')
+            if snapshot is None:
+                db.execute('DELETE FROM message_snapshots WHERE created<?', (time.time() - 600,))
+                db.execute('DELETE FROM message_snapshots WHERE id IN (SELECT id FROM message_snapshots WHERE provider=? AND sid=? ORDER BY created DESC LIMIT -1 OFFSET 3)', (provider, sid))
+                snapshot = uuid.uuid4().hex
+                items = [dict(message=message_row(row)) for row in db.execute('SELECT * FROM shared_messages WHERE provider=? AND sid=? ORDER BY position', (provider, sid))]
+                items.extend(dict(native_message=json.loads(body)) for (body,) in db.execute("SELECT body FROM connector_facts WHERE provider=? AND sid=? AND json_extract(body,'$.kind')='message' ORDER BY rowid", (provider, sid)))
+                items.extend(dict(attempt_receipt=json.loads(body)) for (body,) in db.execute("SELECT body FROM connector_facts WHERE provider=? AND sid=? AND json_extract(body,'$.kind') IN ('accepted','started') ORDER BY rowid", (provider, sid)))
+                db.execute('INSERT INTO message_snapshots VALUES (?,?,?,?,?,?,?)', (snapshot, provider, sid, epoch, seq, time.time(), json.dumps(items, separators=(',', ':'))))
+            else:
+                saved = db.execute('SELECT epoch,seq,body FROM message_snapshots WHERE id=? AND provider=? AND sid=?', (snapshot, provider, sid)).fetchone()
+                if not saved or saved[0] != epoch:
+                    raise ValueError('snapshot expired or reset')
+                epoch, seq, body = saved
+                items = json.loads(body)
+            if cursor > len(items):
+                raise ValueError('invalid snapshot cursor')
+            end, size = cursor, 0
+            while end < len(items) and end - cursor < 128:
+                item_size = len(json.dumps(items[end], ensure_ascii=True, separators=(',', ':')).encode())
+                if end > cursor and size + item_size > 512 * 1024:
+                    break
+                size += item_size
+                end += 1
+            return dict(snapshot_id=snapshot, epoch=epoch, seq=seq, items=items[cursor:end], next_cursor=end if end < len(items) else None)
+        if op == 'message_status':
+            row = db.execute('SELECT * FROM shared_messages WHERE id=? AND provider=? AND sid=?', (q.get('message_id'), provider, sid)).fetchone()
+            return dict(epoch=epoch, seq=seq, message=message_row(row) if row else None)
+        raise ValueError('invalid message operation')
+
+
+def message_poll(tmux, provider, sid):
+    import fcntl
+    path = message_store_path()
+    lock_path = path.with_suffix('.' + hashlib.sha256((provider + ':' + sid).encode()).hexdigest() + '.dispatch')
+    with lock_path.open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        message_poll_locked(tmux, provider, sid)
+
+
+def message_poll_locked(tmux, provider, sid):
+    from contextlib import closing
+    connector = message_connector(provider)
+    if connector is None or not callable(connector.get('poll')):
+        return
+    resolved = resolve_tmux_agent(provider, tmux, require_bound=True)
+    if not resolved or resolved[0] != sid:
+        return
+    with closing(message_store_db(tmux)) as db:
+        chat = db.execute('SELECT epoch FROM message_chats WHERE provider=? AND sid=?', (provider, sid)).fetchone()
+        if not chat:
+            return
+        epoch = chat[0]
+        saved = db.execute('SELECT state FROM connector_states WHERE provider=? AND sid=?', (provider, sid)).fetchone()
+        state = json.loads(saved[0]) if saved else {}
+        pending = [message_row(row) for row in db.execute("SELECT * FROM shared_messages WHERE provider=? AND sid=? AND epoch=? AND state IN ('sent','failed','accepted') ORDER BY position", (provider, sid, epoch))]
+        context = dict(provider=provider, sid=sid, tmux=tmux, chat_id=tmux, transcript_path=str(resolved[1]))
+        if provider == 'codex':
+            context.update(codex_queue_attachment(tmux, sid, resolved[1]) or {})
+        services = message_services(tmux, provider, sid)
+        result = connector['poll'](context, state, pending, services)
+        with db:
+            db.execute('BEGIN IMMEDIATE')
+            current = db.execute('SELECT epoch FROM message_chats WHERE provider=? AND sid=?', (provider, sid)).fetchone()
+            if current and current[0] == epoch:
+                message_apply_connector(db, provider, sid, epoch, result)
+
+
+def start_message_worker(q, source, only_if_work=False):
+    if source is None:
+        return
+    if only_if_work:
+        from contextlib import closing
+        with closing(message_store_db(q['tmux'])) as db:
+            if not db.execute("SELECT 1 FROM shared_messages WHERE provider=? AND sid=? AND state IN ('queued','sent','failed','accepted','started') LIMIT 1", (q['provider'], q['sid'])).fetchone():
+                return
+    import fcntl
+    path = message_store_path()
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    lock_path = path.with_suffix('.' + hashlib.sha256((q['provider'] + ':' + q['sid']).encode()).hexdigest() + '.message-worker')
+    with lock_path.open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return
+    bootstrap = "import base64,sys;s=base64.b64decode(sys.stdin.buffer.readline()).decode();exec(compile(s,'<message-worker>','exec'),dict(__name__='__main__',READER_SOURCE=s))"
+    child = subprocess.Popen([sys.executable, '-u', '-c', bootstrap, '--message-worker', q['tmux'], q['provider'], q['sid']], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    try:
+        child.stdin.write(base64.b64encode(source.encode()) + b'\n')
+    finally:
+        child.stdin.close()
+
+
+def message_worker(tmux, provider, sid):
+    import fcntl
+    import selectors
+    from contextlib import closing
+    path = message_store_path()
+    lock_path = path.with_suffix('.' + hashlib.sha256((provider + ':' + sid).encode()).hexdigest() + '.message-worker')
+    with lock_path.open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return
+        request = dict(message_protocol=1, tmux=tmux, provider=provider, sid=sid)
+        with selectors.DefaultSelector() as selector:
+            while True:
+                try:
+                    with closing(message_store_db(tmux)) as db:
+                        locator = db.execute('SELECT tmux FROM message_locators WHERE provider=? AND sid=?', (provider, sid)).fetchone()
+                    if not locator:
+                        return
+                    tmux = locator[0]
+                    bound = resolve_tmux_agent(provider, tmux, require_bound=True)
+                    if not bound or bound[0] != sid:
+                        return
+                    request['tmux'] = tmux
+                    message_poll(tmux, provider, sid)
+                    message_store_request(dict(request, op='message_dispatch'))
+                    with closing(message_store_db(tmux)) as db:
+                        queued, deadline, observed = db.execute("SELECT SUM(state='queued'),MIN(CASE WHEN state='sent' THEN deadline END),SUM(state IN ('failed','accepted','started')) FROM shared_messages WHERE provider=? AND sid=?", (provider, sid)).fetchone()
+                    if not queued and deadline is None and (not observed or message_connector(provider) is None):
+                        return
+                    timeout = max(0.0, deadline - time.time()) if deadline is not None else 1.0
+                    timeout = min(timeout, 1.0)
+                    selector.select(timeout)
+                except (OSError, ValueError, subprocess.SubprocessError):
+                    return
 
 
 def held_message_key(q):
@@ -1871,6 +2638,26 @@ def held_queue_worker(tmux, sid, transcript):
                 control.communicate()
 
 
+def legacy_projection(tmux, sid, transcript, ids):
+    from contextlib import closing
+    with closing(message_store_db(tmux)) as db, db:
+        db.execute('BEGIN IMMEDIATE')
+        db.execute("INSERT OR IGNORE INTO message_chats(provider,sid) VALUES ('claude',?)", (sid,))
+        epoch = db.execute("SELECT epoch FROM message_chats WHERE provider='claude' AND sid=?", (sid,)).fetchone()[0]
+        import_legacy_messages(db, sid, transcript, epoch)
+        db.execute("INSERT OR REPLACE INTO message_locators VALUES ('claude',?,?)", (sid, tmux))
+        path = next(path for _, name, path in db.execute('PRAGMA database_list') if name == 'legacy')
+        for token in ids:
+            row = db.execute('SELECT m.* FROM legacy_bindings b JOIN shared_messages m ON m.id=b.id WHERE b.token=? AND b.sid=?', (token, sid)).fetchone()
+            if row:
+                db.execute('INSERT OR IGNORE INTO legacy_locations VALUES (?,?)', (token, path))
+                message_event(db, 'claude', sid, message_row(row), emit=False)
+        rows = db.execute("SELECT b.token,m.text,b.queued_at,m.state,b.origin,b.inode,m.receipt FROM legacy_bindings b JOIN shared_messages m ON m.id=b.id WHERE b.sid=? ORDER BY m.position", (sid,)).fetchall()
+        held = [dict(id=token, text=text, queued_at=stamp, state=legacy_wire_state(state), offset=origin, inode=inode, sid=sid) for token, text, stamp, state, origin, inode, detail in rows if state in ('queued', 'sent')]
+        deliveries = [dict(id=token, state=legacy_wire_state(state), detail=('Delivery unconfirmed; check the agent before sending again' if state == 'failed' else detail or '')) for token, text, stamp, state, origin, inode, detail in rows if token in ids]
+        return held, deliveries
+
+
 def enqueue_response(q, source=None):
     from contextlib import closing
     key = held_message_key(q)
@@ -1879,16 +2666,14 @@ def enqueue_response(q, source=None):
     if not resolved:
         return f"@mp\t{q['id']}\tsend\terror\tagent_unavailable\t0\n{END}\n"
     sid, transcript = resolved
-    info = transcript.stat()
-    with closing(held_queue_db(name)) as db, db:
-        db.execute("INSERT OR IGNORE INTO messages(key,sid,text,queued_at,state,created,origin,source_inode) VALUES (?,?,?,?,'queued',?,?,?)",
-                   (key, sid, q["text"], q["queued_at"], time.time_ns(), info.st_size, info.st_ino))
-        db.execute("UPDATE messages SET scan=origin WHERE key=? AND state='queued' AND scan=0", (key,))
-    start_held_worker(name, sid, transcript, source)
-    drain_held_queue(name, sid, transcript)
-    with closing(held_queue_db(name)) as db:
-        identity = db.execute("SELECT sid,source_inode,origin,state,receipt FROM messages WHERE key=?", (key,)).fetchone()
-    receipt = wire_row(dict(role="delivery", message_id=key, sid=identity[0], inode=identity[1], offset=identity[2], state=identity[3], detail=identity[4]))
+    request = dict(op='message_submit', message_protocol=1, provider='claude', sid=sid, tmux=name,
+                   message_id=legacy_message_id(key), legacy_token=key, text=q['text'], queued_at=q['queued_at'])
+    result = message_store_request(request)
+    start_message_worker(request, source)
+    with closing(message_store_db(name)) as db:
+        identity = db.execute('SELECT sid,inode,origin FROM legacy_bindings WHERE token=?', (key,)).fetchone()
+    message = result['message']
+    receipt = wire_row(dict(role='delivery', message_id=key, sid=identity[0], inode=identity[1], offset=identity[2], state=legacy_wire_state(message['state']), detail=message['receipt'] or ''))
     return f"@mp\t{q['id']}\tsend\tok\t-\t0\n{receipt}\n{END}\n"
 
 
@@ -1896,10 +2681,19 @@ def cancel_queued_response(q):
     from contextlib import closing
     key = held_message_key(q)
     reason = "not_queued"
-    with closing(held_queue_db(q["tmux"])) as db, db:
-        changed = db.execute("UPDATE messages SET state='cancelled' WHERE key=? AND state='queued'", (key,)).rowcount
-        if changed or db.execute("SELECT 1 FROM messages WHERE key=? AND state='cancelled'", (key,)).fetchone():
-            reason = None
+    resolved = resolve_tmux_agent('claude', q['tmux'], require_bound=True)
+    if not resolved:
+        return f"@mp\t{q['id']}\tcancel_queued\terror\tagent_unavailable\t0\n{END}\n"
+    sid = resolved[0]
+    with closing(message_store_db(q['tmux'])) as db, db:
+        db.execute('BEGIN IMMEDIATE')
+        binding = db.execute('SELECT id FROM legacy_bindings WHERE token=? AND sid=?', (key, sid)).fetchone()
+        if binding:
+            changed = db.execute("UPDATE shared_messages SET state='cancelled' WHERE id=? AND sid=? AND state='queued'", (binding[0], sid)).rowcount
+            if changed:
+                message_event(db, 'claude', sid, message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', (binding[0],)).fetchone()))
+            if changed or db.execute("SELECT 1 FROM shared_messages WHERE id=? AND sid=? AND state='cancelled'", (binding[0], sid)).fetchone():
+                reason = None
     return f"@mp\t{q['id']}\tcancel_queued\t{'error' if reason else 'ok'}\t{reason or '-'}\t0\n{END}\n"
 
 
@@ -2125,6 +2919,40 @@ def type_into_box(target, text, rid):
             subprocess.run(["tmux", "delete-buffer", "-b", buffer], capture_output=True, timeout=5)
     else:
         subprocess.run(["tmux", "send-keys", "-t", target, "-l", "--", text], check=True, capture_output=True, timeout=5)
+
+
+def send_response_preserve_draft(q):
+    import uuid
+    name, sid, text = q.get('tmux'), q.get('sid'), q.get('text')
+    if not isinstance(name, str) or not TMUX_NAME.fullmatch(name):
+        return dict(status='not_sent', reason='invalid_tmux_name')
+    if not isinstance(sid, str) or not SESSION_ID.fullmatch(sid) or not isinstance(text, str) or not text.strip() or '\x00' in text:
+        return dict(status='not_sent', reason='invalid_identity_or_text')
+    target = '=' + name + ':'
+    buffer = 'mp-send-' + uuid.uuid4().hex
+    try:
+        subprocess.run(['tmux', 'load-buffer', '-b', buffer, '-'], input=text.encode('utf-8'), check=True, capture_output=True, timeout=5)
+    except (OSError, subprocess.SubprocessError, UnicodeError):
+        return dict(status='not_sent', reason='buffer_unavailable')
+    try:
+        bound = resolve_tmux_agent('claude', name, require_bound=True)
+        if not bound or bound[0] != sid:
+            return dict(status='not_sent', reason='session_changed')
+        draft = box_draft(target)
+        if draft is None:
+            return dict(status='not_sent', reason='prompt_unavailable')
+        if draft:
+            return dict(status='not_sent', reason='draft_present')
+        try:
+            subprocess.run(['tmux', 'paste-buffer', '-p', '-d', '-b', buffer, '-t', target, ';', 'send-keys', '-t', target, 'Enter'], check=True, capture_output=True, timeout=5)
+        except (OSError, subprocess.SubprocessError):
+            return dict(status='uncertain', reason='handoff_interrupted')
+        return dict(status='sent', reason=None)
+    finally:
+        try:
+            subprocess.run(['tmux', 'delete-buffer', '-b', buffer], capture_output=True, timeout=5, check=False)
+        except (OSError, subprocess.SubprocessError):
+            pass
 
 
 def draft_response(q):
@@ -2452,7 +3280,15 @@ def serve(source):
                 rid = 0
                 raise ValueError("invalid request id")
             if query.get("op") == "engine_info":
-                print(json.dumps(dict(id=rid, engine_info=globals().get("ENGINE_INFO")), separators=(",", ":")), flush=True)
+                print(json.dumps(dict(id=rid, engine_info=globals().get("ENGINE_INFO"), message_protocols=[1]), separators=(",", ":")), flush=True)
+                continue
+            if query.get("op") in ("message_submit", "message_retry", "message_dismiss", "message_dispatch", "message_status", "message_snapshot", "message_events", "message_reset"):
+                result = message_store_request(query)
+                if query.get('op') in ('message_submit', 'message_retry', 'message_snapshot'):
+                    start_message_worker(query, source)
+                elif query.get('op') in ('message_events', 'message_status'):
+                    start_message_worker(query, source, only_if_work=True)
+                print(json.dumps(dict(id=rid, message_protocol=1, result=result), separators=(",", ":")), flush=True)
                 continue
             if query.get("op") in ("send", "question_text"):
                 wire = enqueue_response(query, source) if "message_id" in query else send_response(query)
@@ -2475,6 +3311,8 @@ if __name__ == "__main__" and "--watch" in sys.argv[1:]:
     watch(globals().get("READER_SOURCE"), "--owner" in sys.argv[1:])
 elif __name__ == "__main__" and sys.argv[1:2] == ["--held-worker"]:
     held_queue_worker(sys.argv[2], sys.argv[3], Path(sys.argv[4]))
+elif __name__ == "__main__" and sys.argv[1:2] == ["--message-worker"]:
+    message_worker(sys.argv[2], sys.argv[3], sys.argv[4])
 elif __name__ == "__main__" and sys.argv[1:] == ["--serve"]:
     serve(globals().get("READER_SOURCE"))
 elif __name__ == "__main__":
@@ -2492,7 +3330,8 @@ elif __name__ == "__main__":
         print("@mp\t0\thistory\terror\t-\t0\n" + END)
 
 '''
-RUNTIME_GENERATION = 5
+READER_SOURCE = 'CONNECTOR_SOURCES = ' + repr(globals().get('CONNECTOR_SOURCES', {})) + '\n' + READER_SOURCE
+RUNTIME_GENERATION = 17
 
 if __name__ == '__main__':
     import fcntl

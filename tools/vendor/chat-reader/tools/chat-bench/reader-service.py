@@ -14,6 +14,7 @@ for line in sys.stdin:
         if job["protocol"] == "history":
             query = json.loads(query)
             query["follow"] = False
+            query["tmux"] = ""
             wire = reader.response(query)
         else:
             wire = reader.request(query)

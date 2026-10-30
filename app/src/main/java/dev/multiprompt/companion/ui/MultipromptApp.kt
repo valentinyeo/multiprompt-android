@@ -2525,6 +2525,7 @@ internal fun ReaderScreen(
     var dictationPrefix by remember(connection) { mutableStateOf("") }
     val dictationSubmissionStarted = remember(connection) { AtomicBoolean(false) }
     var pendingPromptAction by remember(connection) { mutableStateOf<Long?>(null) }
+    var recordingPrompt by remember(connection) { mutableStateOf(false) }
     var sendMarkPending by remember(connection) { mutableStateOf(false) }
     var sentDraft by remember(connection) { mutableStateOf<SentDraft?>(null) }
     var menuExpanded by remember(connection) { mutableStateOf(false) }
@@ -2697,34 +2698,45 @@ internal fun ReaderScreen(
             connection.loadSkills(context.assets.open("native_skills.py").use { it.readBytes() })
         }
     }
-    val sendCurrentPrompt = {
-        val composedPrompt = PromptComposer.composeMessage(prompt, imageAttachments, replyTo, reader.nativeSkills)
+    val sendDraft: (String) -> Unit = { draftText ->
+        val composedPrompt = PromptComposer.composeMessage(draftText, imageAttachments, replyTo, reader.nativeSkills)
         if (composedPrompt.isNotBlank() &&
             !reader.sending &&
-            pendingPromptAction == null
+            pendingPromptAction == null && !recordingPrompt
         ) {
             val actionCount = reader.completedActions
-            val draft = SentDraft(prompt, imageAttachments, replyTo)
-            if (connection.sendPrompt(composedPrompt)) {
-                SendTiming.mark("message_added")
-                sentDraft = draft
-                setPrompt("")
-                imageAttachments = emptyList()
-                replyTo = null
-                sendMarkPending = true
-                onSessionInteraction()
-                onSessionInput()
-                pendingPromptAction = actionCount
+            val draft = SentDraft(draftText, imageAttachments, replyTo)
+            recordingPrompt = true
+            readerScope.launch {
+                when (val admission = connection.sendPrompt(composedPrompt)) {
+                    is dev.multiprompt.companion.reader.PromptAdmission.Rejected -> android.widget.Toast.makeText(context, admission.reason, android.widget.Toast.LENGTH_SHORT).show()
+                    else -> {
+                        SendTiming.mark("message_added")
+                        if (admission is dev.multiprompt.companion.reader.PromptAdmission.LegacyEnqueued) {
+                            sentDraft = draft
+                            pendingPromptAction = actionCount
+                        }
+                        if (promptField.text == draft.prompt && imageAttachments == draft.images && replyTo == draft.replyTo) {
+                            setPrompt("")
+                            imageAttachments = emptyList()
+                            replyTo = null
+                        }
+                        sendMarkPending = true
+                        onSessionInteraction()
+                        onSessionInput()
+                    }
+                }
+                recordingPrompt = false
             }
         }
     }
     val sendModelCommand: (String) -> Unit = { command ->
         if (!reader.sending && pendingPromptAction == null) {
-            val actionCount = reader.completedActions
-            if (connection.sendPrompt(command)) {
+            if (connection.sendRuntimeCommand(command)) {
                 onSessionInteraction()
                 onSessionInput()
-                pendingPromptAction = actionCount
+            } else {
+                android.widget.Toast.makeText(context, "Could not send command", android.widget.Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -2737,7 +2749,7 @@ internal fun ReaderScreen(
                     dictation.stop()
                 }
             } else {
-                sendCurrentPrompt()
+                sendDraft(prompt)
             }
         }
     }
@@ -2752,23 +2764,7 @@ internal fun ReaderScreen(
                 )
                 setPrompt(finalPrompt)
                 sendAfterDictation = false
-                val composedPrompt = PromptComposer.composeMessage(finalPrompt, imageAttachments, replyTo, reader.nativeSkills)
-                if (composedPrompt.isNotBlank() &&
-                    !reader.sending &&
-                    pendingPromptAction == null
-                ) {
-                    val actionCount = reader.completedActions
-                    val draft = SentDraft(finalPrompt, imageAttachments, replyTo)
-                    if (connection.sendPrompt(composedPrompt)) {
-                        sentDraft = draft
-                        setPrompt("")
-                        imageAttachments = emptyList()
-                        onSessionInteraction()
-                        onSessionInput()
-                        pendingPromptAction = actionCount
-                        replyTo = null
-                    }
-                }
+                sendDraft(finalPrompt)
             }
             DictationStatus.FAILED -> {
                 dictationSubmissionStarted.set(false)
@@ -3075,10 +3071,22 @@ internal fun ReaderScreen(
                                     text = { Text("Resync chat") },
                                     onClick = {
                                         menuExpanded = false
+                                        val reset = if (session.agent == AgentKind.CLAUDE || session.agent == AgentKind.CODEX) connection.resetConversation() else null
                                         readerScope.launch {
-                                            val confirmed = connection.resyncChat()
-                                            followRequest++
-                                            android.widget.Toast.makeText(context, if (confirmed) "Synced" else "Some messages could not be confirmed", android.widget.Toast.LENGTH_SHORT).show()
+                                            if (reset != null) {
+                                                val result = reset.await()
+                                                val message = when (result) {
+                                                    dev.multiprompt.companion.reader.MessageActionResult.Applied -> "Chat reset"
+                                                    dev.multiprompt.companion.reader.MessageActionResult.BlockedRecovery -> "Resolve unknown messages before reset"
+                                                    dev.multiprompt.companion.reader.MessageActionResult.Unknown -> "Reset confirmation unknown"
+                                                    is dev.multiprompt.companion.reader.MessageActionResult.Rejected -> result.reason
+                                                }
+                                                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                val confirmed = connection.resyncChat()
+                                                followRequest++
+                                                android.widget.Toast.makeText(context, if (confirmed) "Synced" else "Some messages could not be confirmed", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
                                         }
                                     },
                                 )
@@ -3267,7 +3275,7 @@ internal fun ReaderScreen(
                 if (dictationActive) {
                     DictationBar(
                         level = dictation.level,
-                        sending = reader.sending || sendAfterDictation || pendingPromptAction != null,
+                        sending = reader.sending || sendAfterDictation || pendingPromptAction != null || recordingPrompt,
                         onStop = { dictation.stop() },
                         onSend = submitPrompt,
                     )
@@ -3462,11 +3470,11 @@ internal fun ReaderScreen(
                 onReply = chooseReply,
                 onReaction = { message, emoji ->
                     val line = dev.multiprompt.companion.reader.ChatReactions.format(emoji, message.requestId, message.text)
-                    if (line != null && connection.sendPrompt(line)) {
-                        onSessionInteraction()
-                        onSessionInput()
-                    } else {
-                        android.widget.Toast.makeText(context, "Could not send the reaction", android.widget.Toast.LENGTH_SHORT).show()
+                    if (line != null) readerScope.launch {
+                        when (connection.sendPrompt(line)) {
+                            is dev.multiprompt.companion.reader.PromptAdmission.Rejected -> android.widget.Toast.makeText(context, "Could not send the reaction", android.widget.Toast.LENGTH_SHORT).show()
+                            else -> { onSessionInteraction(); onSessionInput() }
+                        }
                     }
                 },
                 sessionName = session.displayName,
