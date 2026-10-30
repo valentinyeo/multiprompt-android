@@ -158,7 +158,7 @@ data class AccountLayout(
             return layout
         }
 
-        fun rebase(base: AccountLayout, edited: AccountLayout, remote: AccountLayout): AccountLayout {
+        fun rebase(base: AccountLayout, edited: AccountLayout, remote: AccountLayout, renames: Map<String, String> = emptyMap()): AccountLayout {
             val old = base.tabs.associateBy { it.identity }
             val local = edited.tabs.associateBy { it.identity }
             val workspaces = remote.workspaces.filterNot { it in base.workspaces && it !in edited.workspaces }.toMutableList()
@@ -205,18 +205,63 @@ data class AccountLayout(
                     edited.workspaceColors[name]?.let { colors[name] = it } ?: colors.remove(name)
                 }
             }
+            renames.forEach { (old, name) ->
+                if (old in base.workspaces && old in remote.workspaces && name in edited.workspaces &&
+                    edited.workspaceColors[name] == base.workspaceColors[old]) {
+                    remote.workspaceColors[old]?.let { colors[name] = it } ?: colors.remove(name)
+                }
+            }
             return remote.copy(workspaces = orderedWorkspaces, tabs = orderedTabs, settings = settings,
                 workspaceColors = colors.filterKeys { it in orderedWorkspaces }).validate()
         }
     }
 }
 
-data class PendingLayout(val base: AccountLayout, val edited: AccountLayout = base) {
+data class PendingLayout(
+    val base: AccountLayout,
+    val edited: AccountLayout = base,
+    val workspaceRenames: Map<String, String> = emptyMap(),
+) {
     val dirty: Boolean get() = !base.sameContent(edited)
-    fun pull(remote: AccountLayout): PendingLayout = PendingLayout(remote, AccountLayout.rebase(base, edited, remote))
-    fun acknowledge(sent: AccountLayout, remote: AccountLayout): PendingLayout = PendingLayout(remote, AccountLayout.rebase(sent, edited, remote))
+
+    fun edit(layout: AccountLayout): PendingLayout = copy(
+        edited = layout,
+        workspaceRenames = workspaceRenames.filterValues { it in layout.workspaces },
+    )
+
+    fun renameWorkspace(old: String, name: String): PendingLayout {
+        val layout = edited.renameWorkspace(old, name)
+        if (old == name) return edit(layout)
+        val origin = workspaceRenames.entries.firstOrNull { it.value == old }?.key ?: old
+        val renames = workspaceRenames - origin
+        return copy(edited = layout, workspaceRenames = renames + (origin to name))
+    }
+
+    fun pull(remote: AccountLayout): PendingLayout {
+        val renames = workspaceRenames.filter { (old, name) -> old in remote.workspaces && name in edited.workspaces }
+        return PendingLayout(remote, AccountLayout.rebase(base, edited, remote, workspaceRenames), renames)
+    }
+
+    fun acknowledge(sent: AccountLayout, remote: AccountLayout): PendingLayout =
+        PendingLayout(remote, AccountLayout.rebase(sent, edited, remote))
+
+    fun acknowledge(sent: PendingLayout, remote: AccountLayout): PendingLayout {
+        val renames = workspaceRenames.mapNotNull { (origin, name) ->
+            val sentName = sent.workspaceRenames[origin] ?: origin
+            if (sentName in sent.edited.workspaces && sentName != name && name in edited.workspaces) sentName to name else null
+        }.toMap()
+        return PendingLayout(remote, AccountLayout.rebase(sent.edited, edited, remote, renames),
+            renames.filterKeys { it in remote.workspaces })
+    }
+
     fun json(): JSONObject = JSONObject().put("base", base.json()).put("edited", edited.json())
+        .apply { if (workspaceRenames.isNotEmpty()) put("workspaceRenames", JSONObject(workspaceRenames)) }
+
     companion object {
-        fun parse(json: JSONObject): PendingLayout = PendingLayout(AccountLayout.parse(json.getJSONObject("base")), AccountLayout.parse(json.getJSONObject("edited")))
+        fun parse(json: JSONObject): PendingLayout {
+            val renames = json.optJSONObject("workspaceRenames")
+            return PendingLayout(AccountLayout.parse(json.getJSONObject("base")), AccountLayout.parse(json.getJSONObject("edited")),
+                renames?.keys()?.asSequence()?.associateWith { renames.getString(it) }.orEmpty())
+        }
     }
 }

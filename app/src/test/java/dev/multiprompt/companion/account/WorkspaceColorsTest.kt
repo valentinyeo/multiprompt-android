@@ -43,6 +43,71 @@ class WorkspaceColorsTest {
         assertFalse(base.sameContent(edited))
     }
 
+    @Test fun renamedWorkspaceKeepsConcurrentRemoteColorAfterPersistenceAndSequentialRenames() {
+        val base = layout(1, 2)
+        val pending = PendingLayout(base).renameWorkspace("Cedar", "Lagoon")
+            .renameWorkspace("Lagoon", "Harbor")
+        val restored = PendingLayout.parse(JSONObject(pending.json().toString()))
+        assertEquals(pending, restored)
+        assertFalse(restored.edited.json().has("workspaceRenames"))
+        val remote = layout(6, 4).copy(revision = 2, settings = mapOf("all" to true))
+        val pulled = restored.pull(remote)
+        assertEquals(listOf("Harbor", "Orbit"), pulled.edited.workspaces)
+        assertEquals(mapOf("Harbor" to 6, "Orbit" to 4), pulled.edited.workspaceColors)
+        assertEquals(remote.settings, pulled.edited.settings)
+        assertTrue(pulled.dirty)
+        val again = PendingLayout.parse(JSONObject(pulled.json().toString()))
+            .pull(remote.copy(revision = 3, workspaceColors = mapOf("Cedar" to 5, "Orbit" to 3)))
+        assertEquals(mapOf("Harbor" to 5, "Orbit" to 3), again.edited.workspaceColors)
+    }
+
+    @Test fun explicitLocalColorWinsWhileOtherRemoteChangesSurvive() {
+        val base = layout(1, 2)
+        val renamed = PendingLayout(base).renameWorkspace("Cedar", "Lagoon")
+        val pending = renamed.edit(renamed.edited.copy(workspaceColors = mapOf("Lagoon" to 4, "Orbit" to 2)))
+        val result = pending.pull(layout(6, 5))
+        assertEquals(mapOf("Lagoon" to 4, "Orbit" to 5), result.edited.workspaceColors)
+        val reset = renamed.edit(renamed.edited.copy(workspaceColors = mapOf("Orbit" to 2)))
+        assertEquals(mapOf("Orbit" to 5), reset.pull(layout(6, 5)).edited.workspaceColors)
+    }
+
+    @Test fun renameDuringUploadRebasesFromSentName() {
+        val base = layout(1, 2)
+        val sent = PendingLayout(base).renameWorkspace("Cedar", "Lagoon")
+        val later = sent.renameWorkspace("Lagoon", "Harbor")
+        val remote = sent.edited.copy(revision = 2, workspaceColors = mapOf("Lagoon" to 6, "Orbit" to 5))
+        val acknowledged = later.acknowledge(sent, remote)
+        assertEquals(mapOf("Harbor" to 6, "Orbit" to 5), acknowledged.edited.workspaceColors)
+        assertEquals(mapOf("Lagoon" to "Harbor"), acknowledged.workspaceRenames)
+        assertTrue(acknowledged.dirty)
+        val done = acknowledged.acknowledge(acknowledged, acknowledged.edited.copy(revision = 3))
+        assertFalse(done.dirty)
+        assertTrue(done.workspaceRenames.isEmpty())
+    }
+
+    @Test fun renameBackDuringUploadKeepsDirtySemanticsAndRemoteColor() {
+        val base = layout(1, 2)
+        val sent = PendingLayout(base).renameWorkspace("Cedar", "Lagoon")
+        val later = sent.renameWorkspace("Lagoon", "Cedar")
+        assertFalse(later.dirty)
+        val restored = PendingLayout.parse(JSONObject(later.json().toString()))
+        val remote = sent.edited.copy(revision = 2, workspaceColors = mapOf("Lagoon" to 6, "Orbit" to 5))
+        val result = restored.acknowledge(sent, remote)
+        assertEquals(mapOf("Cedar" to 6, "Orbit" to 5), result.edited.workspaceColors)
+        assertTrue(result.dirty)
+    }
+
+    @Test fun legacyPendingWithoutRenameMetadataRemainsReadable() {
+        val base = layout(1, 2)
+        val legacy = JSONObject().put("base", base.json()).put("edited", base.setSetting("all", true).json())
+        val restored = PendingLayout.parse(legacy)
+        assertTrue(restored.workspaceRenames.isEmpty())
+        assertTrue(restored.dirty)
+        assertEquals(mapOf("Cedar" to 6, "Orbit" to 5), restored.pull(layout(6, 5)).edited.workspaceColors)
+        assertTrue(base.sameContent(base.copy(revision = 9)))
+        assertFalse(PendingLayout(base).dirty)
+    }
+
     @Test fun accountOrderAndOverridesReachExistingAndOfflineSessions() {
         val host = dev.multiprompt.companion.model.HostProfile("host", "VPS", "example.com", username = "user", keySecretId = "key")
         val tab = AccountTab("One", "one", 0, "Orbit")

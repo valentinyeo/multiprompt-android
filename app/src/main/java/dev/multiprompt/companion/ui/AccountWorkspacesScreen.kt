@@ -190,9 +190,10 @@ internal fun AccountWorkspacesScreen(
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         } },
         confirmButton = { TextButton(onClick = {
-            error = viewModel.editAccountLayout { current ->
+            error = if (renameTab == null && oldWorkspace != null) {
+                viewModel.renameAccountWorkspace(oldWorkspace!!, workspaceName.trim())
+            } else viewModel.editAccountLayout { current ->
                 renameTab?.let { current.renameTab(it.identity, tabName.trim()) }
-                    ?: oldWorkspace?.let { current.renameWorkspace(it, workspaceName.trim()) }
                     ?: current.copy(workspaces = current.workspaces + workspaceName.trim())
             }
             if (error == null) { workspaceEditor = false; renameTab = null }

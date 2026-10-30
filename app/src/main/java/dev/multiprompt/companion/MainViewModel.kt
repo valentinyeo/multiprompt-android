@@ -1618,7 +1618,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (!_state.value.signedIn) return "Sign in before editing account workspaces"
         val pending = pendingLayout ?: return "Pull the account layout before editing"
         return try {
-            saveAccountLayout(pending.copy(edited = edit(pending.edited).validate()))
+            saveAccountLayout(pending.edit(edit(pending.edited).validate()))
+            syncAccount()
+            null
+        } catch (e: Exception) { e.message ?: "Could not save account edit" }
+    }
+
+    fun renameAccountWorkspace(old: String, name: String): String? {
+        if (!_state.value.signedIn) return "Sign in before editing account workspaces"
+        val pending = pendingLayout ?: return "Pull the account layout before editing"
+        return try {
+            saveAccountLayout(pending.renameWorkspace(old, name))
             syncAccount()
             null
         } catch (e: Exception) { e.message ?: "Could not save account edit" }
@@ -1781,7 +1791,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 var retries = 0
                 var retryConflict = false
                 while (pendingLayout?.let { it.dirty && (retryConflict || usedStampThrottle.shouldPush(it)) } == true && retries++ < 4) {
-                    val sent = pendingLayout!!.edited
+                    val sentPending = pendingLayout!!
+                    val sent = sentPending.edited
                     val reply = syncAuth.request("PUT", "/v1/layout", JSONObject().put("base_revision", remote.revision).put("layout", sent.copy(hosts = if (syncAuth.supportsHosts) AccountHosts.publish(remote.hosts, _state.value.accountHosts) else null).json(includeWorkspaceColors = syncAuth.supportsWorkspaceColors)))
                     if (generation != accountGeneration) return@launch
                     retryConflict = reply.status == 409
@@ -1795,7 +1806,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         remote = AccountLayout.response(reply.json)
                         importAccountHosts(remote)
                         usedStampThrottle.observe(remote)
-                        saveAccountLayout(pendingLayout!!.acknowledge(sent, remote))
+                        saveAccountLayout(pendingLayout!!.acknowledge(sentPending, remote))
                     }
                 }
                 _state.update { it.copy(accountError = if (pendingLayout?.let { usedStampThrottle.shouldPush(it) } == true) "Account changed repeatedly; pending edits will retry" else null) }
