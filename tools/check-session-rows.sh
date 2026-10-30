@@ -43,7 +43,7 @@ for path in Path('app/build/outputs/androidTest-results/connected').rglob('*.xml
     for case in ET.parse(path).iter('testcase'):
         if case.get('name') == 'longPressRemovesAndAddsFavoriteWithoutOpeningOrDeletingSession':
             failures.extend(''.join(failure.itertext()) for failure in case.findall('failure'))
-assert any('Unfavorite' in failure and 'could not find' in failure.lower() for failure in failures), failures
+assert any('FAVORITE_DESKTOP_WORDS_MISSING' in failure and 'Unfavorite' in failure and 'Unstar' in failure for failure in failures), failures
 print('FAVORITE_ACTIONS_RED_OK')
 PYTHON
 echo SESSION_ROWS_RED_OK

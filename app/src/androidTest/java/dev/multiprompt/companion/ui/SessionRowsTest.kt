@@ -90,8 +90,12 @@ class SessionRowsTest {
         compose.onNodeWithText(sessions[0].name).assertIsDisplayed()
         capture("favorite-before")
         compose.onNodeWithText(sessions[0].name).performTouchInput { longClick() }
-        compose.onNodeWithText("Unfavorite").assertIsDisplayed()
         capture("favorite-menu")
+        if (compose.onAllNodesWithText("Unfavorite").fetchSemanticsNodes().isEmpty()) {
+            compose.onNodeWithText("Unstar").assertIsDisplayed()
+            throw AssertionError("FAVORITE_DESKTOP_WORDS_MISSING: expected Unfavorite, found Unstar")
+        }
+        compose.onNodeWithText("Unfavorite").assertIsDisplayed()
         compose.onNodeWithText("Unfavorite").performClick()
         compose.onNodeWithText(sessions[0].name).assertDoesNotExist()
         compose.onNodeWithText(sessions[1].name).assertIsDisplayed()
