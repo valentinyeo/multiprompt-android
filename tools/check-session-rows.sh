@@ -21,21 +21,20 @@ python3 - "$file" <<'PYTHON'
 from pathlib import Path
 import subprocess
 import sys
-import re
 path = Path(sys.argv[1])
 current = path.read_text()
 old = subprocess.check_output(['git', 'show', '5204eda:' + str(path)], text=True)
-matches = re.findall(r'if \(starred\) "Unstar" else "Star"', old)
-assert len(matches) == 1
-historical = matches[0]
-fixed = 'if (starred) "Unfavorite" else "Favorite"'
-assert current.count(fixed) == 1
-path.write_text(current.replace(fixed, historical, 1))
+start = 'private fun SessionCard('
+end = '@Composable\nprivate fun DissolvedSessionCard('
+original = old[old.index(start):old.index(end)]
+original = original.replace('workspaceName: String?,', 'workspaceName: String? = null,').replace('etaLabel: String?,', 'etaLabel: String? = null,')
+path.write_text(current[:current.index(start)] + original + current[current.index(end):])
 PYTHON
 if run_rows before; then
   echo 'Original rows unexpectedly passed' >&2
   exit 1
 fi
+grep -E 'yellow marker pixels=[1-9]' build/session-rows/before/rows.txt
 python3 - <<'PYTHON'
 from pathlib import Path
 import xml.etree.ElementTree as ET
