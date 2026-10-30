@@ -25,7 +25,7 @@ class TmuxExactTargetBehaviorTest {
         socket = dir.resolve("socket")
         bin = Files.createDirectory(dir.resolve("bin"))
         val adapter = bin.resolve("tmux")
-        Files.writeString(adapter, "#!/bin/sh\nexec /usr/bin/tmux -S '${socket}' \"\$@\"\n")
+        Files.write(adapter, "#!/bin/sh\nexec /usr/bin/tmux -S '${socket}' \"\$@\"\n".toByteArray(Charsets.UTF_8))
         assertTrue(adapter.toFile().setExecutable(true))
     }
 
@@ -66,7 +66,7 @@ class TmuxExactTargetBehaviorTest {
         val send = run(TmuxCommands.pastePrompt("verify-session"), "FORBIDDEN_1230")
         val capture = run(TmuxCommands.capture("verify-session"))
         assertTrue("Missing session must reject prompt", send.status != 0)
-        assertFalse("Neighbor must never receive input", Files.exists(receipt) && Files.readString(receipt).contains("FORBIDDEN_1230"))
+        assertFalse("Neighbor must never receive input", Files.exists(receipt) && String(Files.readAllBytes(receipt), Charsets.UTF_8).contains("FORBIDDEN_1230"))
         assertFalse("Neighbor screen must not appear", capture.output.contains("CANARY_SCREEN_1230"))
     }
 
@@ -82,7 +82,7 @@ class TmuxExactTargetBehaviorTest {
         val receipt = neighbor("glob-neighbor")
         val send = run(TmuxCommands.pastePrompt("glob-*"), "FORBIDDEN_GLOB_1230")
         assertTrue("Missing literal glob must reject prompt", send.status != 0)
-        assertFalse("Glob neighbor must never receive input", Files.exists(receipt) && Files.readString(receipt).contains("FORBIDDEN_GLOB_1230"))
+        assertFalse("Glob neighbor must never receive input", Files.exists(receipt) && String(Files.readAllBytes(receipt), Charsets.UTF_8).contains("FORBIDDEN_GLOB_1230"))
     }
 
     @Test
@@ -93,7 +93,7 @@ class TmuxExactTargetBehaviorTest {
         assertTrue(run(TmuxCommands.stream("verify-session")).status != 0)
         assertEquals(0, run(TmuxCommands.dissolveSession("verify-session")).status)
         assertEquals(0, run("tmux has-session -t '=verify-session-neighbor'").status)
-        assertFalse(Files.exists(receipt) && Files.readString(receipt).isNotEmpty())
+        assertFalse(Files.exists(receipt) && String(Files.readAllBytes(receipt), Charsets.UTF_8).isNotEmpty())
     }
 
     @Test
@@ -127,13 +127,13 @@ class TmuxExactTargetBehaviorTest {
             }
             assertTrue("Session must be ready: $name", screen.contains("SCREEN_1230"))
         }
-        Files.writeString(bin.resolve("tmux"),
-            "#!/bin/sh\n" +
+        Files.write(bin.resolve("tmux"),
+            ("#!/bin/sh\n" +
                 "if [ \"\$1\" = list-sessions ]; then\n" +
                 "  /usr/bin/tmux -S '$socket' \"\$@\" > '$dir/snapshot' || exit 1\n" +
                 "  /usr/bin/tmux -S '$socket' kill-session -t '=b-vanished' || exit 1\n" +
                 "  cat '$dir/snapshot'\n" +
-                "else exec /usr/bin/tmux -S '$socket' \"\$@\"; fi\n")
+                "else exec /usr/bin/tmux -S '$socket' \"\$@\"; fi\n").toByteArray(Charsets.UTF_8))
         val result = run(TmuxParser.command())
         assertEquals(result.output, 0, result.status)
         val rows = TmuxParser.parse("fixture", result.output)
