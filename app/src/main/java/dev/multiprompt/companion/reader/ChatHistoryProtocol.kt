@@ -51,6 +51,7 @@ object ChatHistoryProtocol {
         val rows: List<Row>,
         val deliveries: Map<String, QueuedMessages.Delivery> = emptyMap(),
         val held: List<QueuedMessages.SentPrompt> = emptyList(),
+        val pendingQuestions: List<PendingQuestion> = emptyList(),
     )
 
     fun request(id: Long, identity: Identity, history: ChatHistory, before: Long = 0, deliveryIds: List<String> = emptyList()): String {
@@ -84,8 +85,12 @@ object ChatHistoryProtocol {
         require(oldest in 0..base && end >= base && fields[7].toLong() > 0)
         val deliveries = mutableMapOf<String, QueuedMessages.Delivery>()
         val held = mutableListOf<QueuedMessages.SentPrompt>()
+        var pendingQuestions = emptyList<PendingQuestion>()
         val rows = lines.subList(1, lines.lastIndex).mapNotNull { line ->
             val row = JSONObject(line)
+            if (row.optString("role") == "status") {
+                pendingQuestions = parseQuestionSnapshot(row.optJSONObject("question"), fields[9])
+            }
             row.optJSONArray("held")?.let { values ->
                 for (index in 0 until values.length()) {
                     val value = values.getJSONObject(index)
@@ -106,8 +111,31 @@ object ChatHistoryProtocol {
         }
         require(rows.zipWithNext().all { (a, b) -> a.offset <= b.offset })
         return Page(fields[4], base, end, fields[7].toLong(), fields[8] == "1", fields[11].toLong(),
-            fields[12], fields[13], oldest, rows, deliveries, held)
+            fields[12], fields[13], oldest, rows, deliveries, held, pendingQuestions)
     }
+
+    private fun parseQuestionSnapshot(request: JSONObject?, agent: String): List<PendingQuestion> = runCatching {
+        if (request == null) return@runCatching emptyList()
+        val id = request.get("id") as? String ?: return@runCatching emptyList()
+        val provider = (if (request.has("provider")) request.get("provider") as? String else "claude") ?: return@runCatching emptyList()
+        if (id.isBlank() || provider != agent || provider !in setOf("claude", "codex")) return@runCatching emptyList()
+        val questions = request.get("questions") as? org.json.JSONArray ?: return@runCatching emptyList()
+        require(questions.length() > 0)
+        (0 until questions.length()).map { index ->
+            val value = questions.get(index) as? JSONObject ?: error("Invalid question")
+            require((value.opt("question") as? String)?.isNotBlank() == true)
+            require(!value.has("header") || value.opt("header") is String)
+            for (key in listOf("multiSelect", "other", "isOther")) require(!value.has(key) || value.opt(key) is Boolean)
+            val options = if (value.has("options")) value.get("options") as? org.json.JSONArray ?: error("Invalid options") else org.json.JSONArray()
+            require(provider != "claude" || options.length() > 0)
+            for (optionIndex in 0 until options.length()) {
+                val option = options.get(optionIndex) as? JSONObject ?: error("Invalid option")
+                require((option.opt("label") as? String)?.isNotBlank() == true)
+                require(!option.has("description") || option.opt("description") is String)
+            }
+            PendingQuestion.parse(id, index, value, provider)
+        }
+    }.getOrDefault(emptyList())
 
     class Framer {
         private val pending = java.io.ByteArrayOutputStream()

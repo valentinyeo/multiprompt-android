@@ -15,7 +15,7 @@ class PendingQuestionTest {
         }.orEmpty(), questionResult = result)
 
     @Test fun pendingPayloadIsExactAndHiddenFromOrdinaryMessages() {
-        val history = ChatHistory(rows = listOf(row(0, payload)))
+        val history = ChatHistory(rows = listOf(row(0, payload)), pendingQuestions = row(0, payload).questions)
         val question = history.pendingQuestions.single()
         assertEquals("Exact question?", question.title)
         assertEquals("Route", question.header)
@@ -23,22 +23,20 @@ class PendingQuestionTest {
         assertTrue(question.multiSelect)
         assertTrue(question.other)
         assertTrue(history.messages.isEmpty())
-        assertEquals(question, ChatHistory(rows = listOf(ChatHistoryProtocol.parseRow(history.rows.single().json()))).pendingQuestions.single())
+        assertEquals(question, ChatHistoryProtocol.parseRow(history.rows.single().json()).questions.single())
     }
 
-    @Test fun resultsSettleOnlyTheirOwnRequestAcrossHistoryPages() {
-        val pending = row(0, payload)
-        assertTrue(ChatHistory(rows = listOf(pending, row(2, result = "call"))).pendingQuestions.isEmpty())
-        assertEquals(1, ChatHistory(rows = listOf(pending, row(2, result = "another-call"))).pendingQuestions.size)
+    @Test fun historicalRowsNeverRevivePendingQuestions() {
+        assertTrue(ChatHistory(rows = listOf(row(0, payload), row(2, result = "another-call"))).pendingQuestions.isEmpty())
     }
 
     @Test fun matchingProseCannotEnableAQuestionWithoutTheLiveProviderPrompt() {
-        val question = ChatHistory(rows = listOf(row(0, payload))).pendingQuestions.single()
+        val question = row(0, payload).questions.single()
         assertFalse(question.isVisible("Exact question?\n1. First\n2. Second"))
         assertTrue(question.isVisible("Exact\n question?\n❯ 1. First\n2. Second\nSpace to toggle"))
     }
     @Test fun previousQuestionInScrollbackDoesNotEnableTheCurrentQuestion() {
-        val question = ChatHistory(rows = listOf(row(0, payload))).pendingQuestions.single()
+        val question = row(0, payload).questions.single()
         val screen = "Exact question?\n1. First\n2. Second\n────────────────\nA different question?\n❯ 1. First\n2. Second\n────────────────\nEnter to select"
         assertFalse(question.isVisible(screen))
     }
@@ -57,6 +55,7 @@ class PendingQuestionTest {
         try {
             val cache = ChatHistoryCache(directory)
             cache.save("host/session", ChatHistory(sid = "sid", inode = 1, offset = 1, rows = listOf(row(0, payload))))
+            assertTrue(cache.restore("host/session")!!.pendingQuestions.isEmpty())
             val file = directory.listFiles()!!.single()
             val lines = file.readLines()
             file.writeText(JSONObject(lines.first()).put("version", 3).toString() + "\n" + lines.drop(1).joinToString("\n", postfix = "\n"))

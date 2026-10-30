@@ -28,16 +28,8 @@ data class ChatHistory(
     val rows: List<Row> = emptyList(),
     val deliveries: Map<String, QueuedMessages.Delivery> = emptyMap(),
     val held: List<QueuedMessages.SentPrompt> = emptyList(),
+    val pendingQuestions: List<PendingQuestion> = emptyList(),
 ) {
-    val pendingQuestions: List<PendingQuestion> by lazy {
-        val pending = LinkedHashMap<String, List<PendingQuestion>>()
-        for (row in rows) {
-            if (row.questionResult.isNotEmpty()) pending.remove(row.questionResult)
-            if (row.questions.isNotEmpty()) pending[row.id] = row.questions
-        }
-        pending.values.flatten()
-    }
-
     val messages: List<ChatHistoryMessage> by lazy {
         val grouped = LinkedHashMap<String, ChatHistoryMessage>()
         for (row in rows) {
@@ -102,9 +94,9 @@ data class ChatHistory(
         val retained = if (page.mode == "tail") emptyList() else rows
         val merged = (retained + page.rows).associateBy { Triple(it.offset, it.role, it.id) }.values.sortedBy { it.offset }
         return if (page.mode == "older") {
-            copy(start = page.oldest, rows = merged, deliveries = deliveries + page.deliveries, held = page.held)
+            copy(start = page.oldest, rows = merged, deliveries = deliveries + page.deliveries, held = page.held, pendingQuestions = page.pendingQuestions)
         } else {
-            ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged, (if (sameSource) deliveries else emptyMap()) + page.deliveries, page.held)
+            ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged, (if (sameSource) deliveries else emptyMap()) + page.deliveries, page.held, page.pendingQuestions)
         }
     }
 }
