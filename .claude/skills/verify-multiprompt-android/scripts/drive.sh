@@ -787,7 +787,7 @@ if [[ "$feature" == chat-queued.md ]]; then
     wait_for_text 'Ready for queued messages.'
     shot queued-ready
     : > "$FIXTURE/recorder.pid"
-    adb shell 'screenrecord --time-limit 180 --bit-rate 2000000 /sdcard/chat-catchup.mp4 & echo $!; wait' > "$FIXTURE/recorder.pid" &
+    adb shell 'screenrecord --time-limit 0 --bit-rate 2000000 /sdcard/chat-catchup.mp4 & echo $!; wait' > "$FIXTURE/recorder.pid" &
     recorder_client=$!
     for attempt in {1..20}; do
         recorder_pid=$(head -1 "$FIXTURE/recorder.pid")
