@@ -423,7 +423,21 @@ if [[ "$feature" == settings-navigation.md ]]; then
     wait_for_text 'Sign in'
     shot settings-signed-out
     browser_handoff 'Sign in' settings-sign-in-browser-handoff
-    ! cmp -s "$EVIDENCE/settings-browser-handoff.txt" "$EVIDENCE/settings-sign-in-browser-handoff.txt"
+    renew_evidence="$EVIDENCE/settings-browser-handoff.txt"
+    signin_evidence="$EVIDENCE/settings-sign-in-browser-handoff.txt"
+    if [[ ! -s "$renew_evidence" || ! -s "$signin_evidence" ]]; then
+        printf 'Missing browser handoff evidence\n' >&2
+        exit 1
+    fi
+    mapfile -t renew_states < <(grep '^state_sha256=' "$renew_evidence")
+    mapfile -t signin_states < <(grep '^state_sha256=' "$signin_evidence")
+    if [[ ${#renew_states[@]} -ne 1 || ${#signin_states[@]} -ne 1 ]] ||
+        [[ ! "${renew_states[0]:-}" =~ ^state_sha256=[0-9a-f]{64}$ ]] ||
+        [[ ! "${signin_states[0]:-}" =~ ^state_sha256=[0-9a-f]{64}$ ]] ||
+        [[ "${renew_states[0]}" == "${signin_states[0]}" ]]; then
+        printf 'Invalid or reused browser authorization state\n' >&2
+        exit 1
+    fi
     printf 'SETTINGS JOURNEY VERIFIED; OTP completion is NOT verified\n'
     exit 0
 fi
