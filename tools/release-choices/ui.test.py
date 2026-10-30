@@ -90,6 +90,12 @@ class SignedChannelTest(unittest.TestCase):
             'https://github.com/valentinyeo/multiprompt-android/releases/download/android-m3-latest/multiprompt-m3-update.json',
             'https://github.com/valentinyeo/multiprompt-android/releases/download/android-m3-latest/multiprompt-m3.apk'])
 
+    def test_m3_favorites_uses_same_signed_channel(self):
+        self.assertEqual(self.route('android-m3-latest', 'session-favorites.md').stdout,
+                         self.route('android-m3-latest').stdout)
+        self.assertEqual(self.route('android-m3-latest', 'session-favorites.md').returncode, 0)
+        self.assertNotEqual(self.route('android-m3-latest', 'session-favorites.md', 'old').returncode, 0)
+
     def test_unknown_channel_and_m3_other_journey_rejected(self):
         self.assertNotEqual(self.route('android-m3-latest; false').returncode, 0)
         self.assertNotEqual(self.route('android-m3-latest', 'chat-choices.md').returncode, 0)

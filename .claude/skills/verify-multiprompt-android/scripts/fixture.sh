@@ -95,4 +95,15 @@ if [[ "${VERIFY_FEATURE:-}" == session-routing.md || "${VERIFY_FEATURE:-}" == se
     sudo -u verifyssh tmux set-window-option -t verify-other automatic-rename off
     sudo -u verifyssh tmux rename-window -t verify-other verify-other
 fi
+if [[ "${VERIFY_FEATURE:-}" == session-favorites.md ]]; then
+    [[ "${GITHUB_ACTIONS:-}" == true ]]
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh bash -c '
+        [[ "$GITHUB_ACTIONS" == true && "$HOME" == /home/verifyssh && "$(id -u)" -ne 0 && "$(id -un)" == verifyssh ]]
+        tmux has-session -t verify-session
+        tmux new-session -d -s verify-keep -x 100 -y 32 "python3 -u /home/verifyssh/console.py /home/verifyssh/keep-receipts.txt"
+        tmux set-window-option -t verify-keep automatic-rename off
+        tmux rename-window -t verify-keep verify-keep
+        tmux has-session -t verify-keep
+    '
+fi
 printf 'SSH FIXTURE READY\n'

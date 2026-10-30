@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    chat-codex.md|session-gestures.md|chat-working.md|session-summaries.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
+    chat-codex.md|session-gestures.md|session-favorites.md|chat-working.md|session-summaries.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -27,6 +27,20 @@ shot() {
     step=$((step + 1))
     cp "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-$1.xml"
     adb exec-out screencap -p > "$EVIDENCE/$(printf '%02d' "$step")-$1.png"
+    if [[ "$feature" == session-favorites.md ]]; then
+        python3 - "$EVIDENCE/$(printf '%02d' "$step")-$1.png" "$EVIDENCE/$(printf '%02d' "$step")-$1.xml" "$package" <<'PYCAPTURE'
+import struct
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+image = Path(sys.argv[1]).read_bytes()
+assert len(image) > 24 and image[:8] == b'\x89PNG\r\n\x1a\n'
+assert all(size >= 100 for size in struct.unpack('>II', image[16:24]))
+root = ET.parse(sys.argv[2]).getroot()
+if '-favorites-' in sys.argv[2]:
+    assert any(node.get('package') == sys.argv[3] for node in root.iter('node'))
+PYCAPTURE
+    fi
 }
 finish() {
     code=$?
@@ -224,8 +238,8 @@ if [[ "$feature" == launcher-icon.md ]]; then
     exit 0
 fi
 if [[ "$package" == dev.multiprompt.companion || "$package" == dev.multiprompt.companion.m3 ]]; then
-    if [[ "$package" == dev.multiprompt.companion.m3 ]]; then [[ "$feature" == chat-resync.md ]]; fi
-    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md || "$feature" == chat-resync.md ]]
+    if [[ "$package" == dev.multiprompt.companion.m3 ]]; then [[ "$feature" == chat-resync.md || "$feature" == session-favorites.md ]]; fi
+    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md || "$feature" == chat-resync.md || "$feature" == session-favorites.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -334,6 +348,99 @@ if ! wait_for_text verify-session; then
     exit 1
 fi
 shot sessions
+
+if [[ "$feature" == session-favorites.md ]]; then
+    [[ "${GITHUB_ACTIONS:-}" == true && "$(adb get-serialno)" == emulator-* ]]
+    [[ "$package" == dev.multiprompt.companion || "$package" == dev.multiprompt.companion.m3 ]]
+    [[ "$(adb shell settings get global http_proxy | tr -d '\r')" == 10.0.2.2:8788 ]]
+    wait_for_text verify-keep
+    sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh bash -c '
+        [[ "$GITHUB_ACTIONS" == true && "$HOME" == /home/verifyssh && "$(id -u)" -ne 0 && "$(id -un)" == verifyssh ]]
+        tmux has-session -t verify-session && tmux has-session -t verify-keep
+    '
+    adb shell am force-stop "$package"
+    adb shell am instrument -w -e mode favorites-seed dev.multiprompt.verification/dev.multiprompt.verification.Seed | tr -d '\r' > "$FIXTURE/favorites-seed.txt"
+    grep -Fx 'INSTRUMENTATION_RESULT: result=ISOLATED_FAVORITES_SEEDED' "$FIXTURE/favorites-seed.txt"
+    grep -Fx 'INSTRUMENTATION_CODE: -1' "$FIXTURE/favorites-seed.txt"
+    relaunch_app
+    tap_text Favorites
+    wait_for_text verify-session
+    wait_for_text verify-keep
+    dump_ui
+    python3 tools/account-journey/ui.py "$EVIDENCE/current.xml" selected Favorites
+    shot favorites-before
+    read -r row_x row_y <<< "$(select_node text verify-session)"
+    adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
+    wait_for_text 'End session'
+    shot favorites-remove-menu
+    if ! select_node text Unfavorite >/dev/null 2>&1; then
+        if select_node text Unstar >/dev/null 2>&1; then
+            printf 'FAVORITE_DESKTOP_WORDS_MISSING: expected Unfavorite, found Unstar\n' | tee "$EVIDENCE/favorite-failure.txt"
+        fi
+        exit 1
+    fi
+    tap_text Unfavorite
+    removal_started=$SECONDS
+    wait_for_absence verify-session
+    (( SECONDS - removal_started <= 10 ))
+    wait_for_text verify-keep
+    dump_ui
+    python3 tools/account-journey/ui.py "$EVIDENCE/current.xml" selected Favorites
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent verify-session
+    shot favorites-removed
+    favorites_snapshot() {
+        local expected=$1 output=$2
+        adb shell am instrument -w -e mode favorites-snapshot dev.multiprompt.verification/dev.multiprompt.verification.Seed | tr -d '\r' > "$FIXTURE/favorites-snapshot.txt"
+        python3 - "$FIXTURE/favorites-snapshot.txt" "$EVIDENCE/$output.json" "$expected" <<'PYFAVORITES'
+import json
+import re
+import sys
+from pathlib import Path
+raw = Path(sys.argv[1]).read_text()
+assert 'INSTRUMENTATION_RESULT: result=ISOLATED_FAVORITES_SNAPSHOT' in raw
+assert 'INSTRUMENTATION_CODE: -1' in raw
+matches = re.findall(r'^INSTRUMENTATION_RESULT: favorites=(.*)$', raw, re.M)
+assert len(matches) == 1
+states = json.loads(matches[0])
+assert states == {'verify-session': sys.argv[3] == 'true', 'verify-keep': True}, states
+Path(sys.argv[2]).write_text(json.dumps(states, sort_keys=True) + '\n')
+PYFAVORITES
+    }
+    favorites_snapshot false favorites-removed-state
+    relaunch_app
+    tap_text All
+    wait_for_text verify-session
+    read -r row_x row_y <<< "$(select_node text verify-session)"
+    adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
+    wait_for_text 'End session'
+    shot favorites-add-menu
+    if ! select_node text Favorite >/dev/null 2>&1; then
+        if select_node text Star >/dev/null 2>&1; then
+            printf 'FAVORITE_DESKTOP_WORDS_MISSING: expected Favorite, found Star\n' | tee "$EVIDENCE/favorite-failure.txt"
+        fi
+        exit 1
+    fi
+    tap_text Favorite
+    tap_text Favorites
+    wait_for_text verify-session
+    wait_for_text verify-keep
+    dump_ui
+    python3 tools/account-journey/ui.py "$EVIDENCE/current.xml" selected Favorites
+    shot favorites-restored
+    favorites_snapshot true favorites-restored-state
+    relaunch_app
+    tap_text Favorites
+    wait_for_text verify-session
+    wait_for_text verify-keep
+    shot favorites-after-restart
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh bash -c '
+        [[ "$GITHUB_ACTIONS" == true && "$HOME" == /home/verifyssh && "$(id -u)" -ne 0 && "$(id -un)" == verifyssh ]]
+        tmux has-session -t verify-session && tmux has-session -t verify-keep
+    '
+    printf 'SIGNED_OFFLINE_FAVORITES_OK\n' | tee "$EVIDENCE/favorites-result.txt"
+    exit 0
+fi
 
 if [[ "$feature" == session-summaries.md ]]; then
     wait_for_text 'Lauren Tan profile is done, checked and pushed.'

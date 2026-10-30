@@ -26,6 +26,7 @@ Numbered PNG/XML pairs show action and result. The transcript records commands a
 - [Retired hosts](hosts-retired.md): a saved host at a retired server address is gone after relaunch; account sync never adds it back.
 - [Changed host key](host-changed-key.md): compare a rotated identity, persist Not now and refuse authentication.
 - [Sessions](sessions.md): authenticated tmux discovery and search.
+- [Session favorites](session-favorites.md): signed APK, isolated SSH sessions and offline favorite cache; no production sync.
 - [Session settings](session-settings.md): full-screen split switches; saving is blocked without account OTP and a pulled layout.
 - [Session routing](session-routing.md): Inbox and swipe switching, typed and simulated dictated sends, independent SSH receipts.
 - [Chat choices](chat-choices.md): latest-reply option taps and live question number keys, with independent SSH/tmux receipts.
