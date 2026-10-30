@@ -140,7 +140,11 @@ class SessionRoutingTest(unittest.TestCase):
     def test_codex_launcher_uses_its_native_child_not_a_workspace_neighbour(self):
         own = self.transcript("codex", "session-a")
         self.transcript("codex", "session-b", newer=True)
-        self.assertEqual(("session-a", own), reader.resolve_tmux_agent("codex", "session-a", self.process(own, wrapper=True)))
+        pid = self.process(own, wrapper=True)
+        command = ["tmux", "list-panes", "-t", "=session-a", "-F", "#{pane_pid}"]
+        with patch.object(reader.subprocess, "run", return_value=subprocess.CompletedProcess(command, 0, str(pid) + "\n", "")) as run:
+            self.assertEqual(("session-a", own), reader.resolve_tmux_agent("codex", "session-a"))
+        run.assert_called_once_with(command, capture_output=True, text=True, encoding="utf-8", timeout=3, check=False)
 
     def test_duplicate_descriptors_do_not_make_a_single_codex_session_ambiguous(self):
         own = self.transcript("codex", "session-a")
