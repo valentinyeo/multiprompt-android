@@ -1,8 +1,6 @@
 name: Robot faces visual proof
 
 on:
-  push:
-    branches: [ceo/IGSH-1226]
   schedule:
     - cron: '23 3 * * *'
   workflow_dispatch:
