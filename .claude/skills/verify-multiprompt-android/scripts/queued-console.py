@@ -70,7 +70,7 @@ def redraw():
 def reply(text):
     append(dict(type='assistant', uuid=str(uuid.uuid4()), message=dict(role='assistant', id='msg_' + str(uuid.uuid4()), content=text)))
     with (HOME / 'shell-events.jsonl').open('a') as output:
-        output.write(json.dumps(dict(text=text, timestamp=time.time())) + '\n')
+        output.write(json.dumps(dict(text=text, timestamp=time.time(), monotonic=time.monotonic())) + '\n')
     lines.append(text)
     redraw()
 
