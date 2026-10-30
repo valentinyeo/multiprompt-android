@@ -54,7 +54,7 @@ class FrequentInboxTest {
                     onStartNewSession = {}, onSetNewestSessionsAtBottom = {}, onSetAllSplitOnRight = {},
                     appTheme = AppTheme.SYSTEM, onSetAppTheme = {}, onClearSessionActionError = {},
                     readerDefaultFontScale = 1f, onSetReaderDefaultFontScale = {}, crashReport = null,
-                    onClearCrashReport = {}, onHostMapping = {}, nowMillis = { fixture.getLong("now") },
+                    onClearCrashReport = {}, onMapAccountHost = { _, _ -> }, nowMillis = { fixture.getLong("now") },
                 )
             }
         }

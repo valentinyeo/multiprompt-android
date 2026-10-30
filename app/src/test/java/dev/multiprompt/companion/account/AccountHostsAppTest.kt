@@ -3,6 +3,7 @@ package dev.multiprompt.companion.account
 import android.app.Application
 import android.content.Context
 import android.os.Looper
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -174,7 +175,7 @@ class AccountHostsAppTest {
             assertNull(app.secretStore.get(profile.keySecretId))
             model.select(AppSection.SESSIONS)
         }
-        compose.setContent { MultipromptTheme { HostMappingDialog(model, onDismiss = {}) } }
+        compose.setContent { MultipromptTheme { HostMappingDialog(model.state.collectAsState().value, model::mapAccountHost, onDismiss = {}) } }
         compose.onNodeWithText("0 · Account server: Account server (valentin)").assertIsDisplayed()
         sync()
         compose.runOnIdle { assertEquals(1, HostStore(app).load().size) }

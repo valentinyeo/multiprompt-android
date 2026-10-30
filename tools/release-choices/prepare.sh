@@ -30,6 +30,9 @@ work="$RUNNER_TEMP/release-choices"
 tools="$ANDROID_HOME/build-tools/35.0.0"
 printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$work/signing.jks"
 if [[ "${CANDIDATE:-false}" == true ]]; then
+    if [[ "${VERIFY_FEATURE:-}" == settings-navigation.md ]]; then
+        [[ "${EXPECTED_COMMIT:-}" == "$GITHUB_SHA" && "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+    fi
     cat > keystore.properties <<EOF
 storeFile=$work/signing.jks
 storePassword=$ANDROID_KEYSTORE_PASSWORD
@@ -54,10 +57,12 @@ else
     jq -er '.versionName' "$EVIDENCE/manifest.json" > "$EVIDENCE/version.txt"
 fi
 sha256sum "$EVIDENCE/app.apk" > "$EVIDENCE/app-apk-sha256.txt"
+stat -c%s "$EVIDENCE/app.apk" > "$EVIDENCE/app-apk-size.txt"
+test "$(cat "$EVIDENCE/app-apk-size.txt")" -gt 0
 "$tools/apksigner" verify --print-certs "$EVIDENCE/app.apk" > "$EVIDENCE/apk-certificate.txt"
 "$tools/aapt" dump badging "$EVIDENCE/app.apk" > "$EVIDENCE/apk-package.txt"
 grep -F "package: name='$package'" "$EVIDENCE/apk-package.txt"
-if [[ "${VERIFY_FEATURE:-}" == session-routing.md ]]; then
+if [[ "${VERIFY_FEATURE:-}" == session-routing.md || "${VERIFY_FEATURE:-}" == settings-navigation.md ]]; then
     grep -F "versionName='$(cat "$EVIDENCE/version.txt")'" "$EVIDENCE/apk-package.txt"
 fi
 printf '%s\n' "$package" > "$EVIDENCE/package-name.txt"

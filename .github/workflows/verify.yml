@@ -57,6 +57,7 @@ on:
         type: choice
         options:
           - sign-in.md
+          - settings-navigation.md
           - hosts.md
           - hosts-retired.md
           - host-changed-key.md
@@ -76,6 +77,10 @@ on:
           - terminal.md
           - launcher-icon.md
           - robot-faces.md
+      expect_settings_missing:
+        description: Require signed Android 301 to reject the settings navigation journey
+        type: boolean
+        default: false
       expect_shell_missing:
         description: Require the original app to reject upward shell scrolling
         type: boolean
@@ -232,7 +237,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          [[ "$VERIFY_FEATURE" = chat-queued.md || "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md || "$VERIFY_FEATURE" = terminal.md || "$VERIFY_FEATURE" = robot-faces.md || "$VERIFY_FEATURE" = chat-cancel.md || "$VERIFY_FEATURE" = session-gestures.md || "$VERIFY_FEATURE" = session-summaries.md || "$VERIFY_FEATURE" = chat-resync.md || "$VERIFY_FEATURE" = session-favorites.md || "$VERIFY_FEATURE" = session-routing.md ]]
+          [[ "$VERIFY_FEATURE" = settings-navigation.md || "$VERIFY_FEATURE" = chat-queued.md || "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md || "$VERIFY_FEATURE" = terminal.md || "$VERIFY_FEATURE" = robot-faces.md || "$VERIFY_FEATURE" = chat-cancel.md || "$VERIFY_FEATURE" = session-gestures.md || "$VERIFY_FEATURE" = session-summaries.md || "$VERIFY_FEATURE" = chat-resync.md || "$VERIFY_FEATURE" = session-favorites.md || "$VERIFY_FEATURE" = session-routing.md ]]
           sdkmanager --install 'build-tools;35.0.0' 'platforms;android-35'
           bash tools/release-choices/prepare.sh
           echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
@@ -286,14 +291,19 @@ jobs:
         run: .claude/skills/verify-multiprompt-android/scripts/fixture.sh
       - name: Install, doctor and drive the real app
         id: native-ui
-        continue-on-error: ${{ inputs.expect_native_missing == true || inputs.expect_shell_missing == true }}
+        continue-on-error: ${{ inputs.expect_native_missing == true || inputs.expect_shell_missing == true || inputs.expect_settings_missing == true }}
         uses: ./.github/actions/android-proof
         with:
           stage: stage-1
           target: default
           script: |
             adb install -r -g "$VERIFY_APK"
-            if [[ "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion || "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion.m3 ]] && [ "$VERIFY_FEATURE" != launcher-icon.md ]; then bash tools/release-choices/run.sh; else adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk; .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; fi
+            if [[ "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion || "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion.m3 ]]; then
+              if [ "$VERIFY_FEATURE" = launcher-icon.md ]; then .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; else bash tools/release-choices/run.sh; fi
+            else
+              adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+              .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"
+            fi
             if [ -n "$UPDATE_BASELINE_RUN" ]; then .claude/skills/verify-multiprompt-android/scripts/update-reaction-release.sh; fi
       - name: Compare desktop and Android transcript posts
         if: inputs.feature == 'chat-codex.md'
@@ -304,6 +314,22 @@ jobs:
           sudo -u verifyssh python3 -B /tmp/codex-parity.py /tmp/desktop-codex-reader.py /tmp/android-codex-reader.py > "$EVIDENCE/desktop-android-parity.txt"
           cat "$EVIDENCE/desktop-android-parity.txt"
           grep -Fx DESKTOP_ANDROID_POSTS_IDENTICAL "$EVIDENCE/desktop-android-parity.txt"
+      - name: Require the Android 301 settings failure
+        if: inputs.expect_settings_missing == true
+        env:
+          EMULATOR_OUTCOME: ${{ steps.native-ui.outcome }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          RELEASE_CHOICES: ${{ inputs.release_choices }}
+          CANDIDATE: ${{ inputs.candidate }}
+        run: |
+          test "$VERIFY_FEATURE" = settings-navigation.md
+          test "$RELEASE_CHOICES" = true
+          test "$CANDIDATE" != true
+          test "$EXPECTED_COMMIT" = 0d255e99f15656bca388feb4558399139e363e88
+          test "$(cat "$EVIDENCE/app-source-sha.txt")" = "$EXPECTED_COMMIT"
+          test "$EMULATOR_OUTCOME" = failure
+          grep -Ex 'SETTINGS_NAVIGATION_RETIRED_DESTINATION|SETTINGS_NAVIGATION_MISSING_HOST_MAPPING' "$EVIDENCE/settings-baseline.txt"
+          printf 'ANDROID_301_SETTINGS_REJECTED\n' > "$EVIDENCE/settings-baseline-result.txt"
       - name: Require the original native-skill failure
         if: inputs.expect_native_missing == true
         env:

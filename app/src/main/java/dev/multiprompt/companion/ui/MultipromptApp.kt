@@ -310,7 +310,6 @@ private fun AppScreens(viewModel: MainViewModel) {
     val state by viewModel.state.collectAsState()
     val updateState by viewModel.updates.state.collectAsState()
     val context = LocalContext.current
-    var hostMappingVisible by remember { mutableStateOf(false) }
     var useWithoutAccount by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val systemDark = isSystemInDarkTheme()
     val sunlight = when (state.appTheme) {
@@ -357,13 +356,8 @@ private fun AppScreens(viewModel: MainViewModel) {
     }
 
     BackHandler(
-        enabled = state.editorVisible,
-        onBack = viewModel::hideHostEditor,
-    )
-    BackHandler(
         enabled = state.terminal == null &&
             state.reader == null &&
-            !state.editorVisible &&
             state.section != AppSection.SESSIONS,
         onBack = {
             viewModel.select(AppSection.SESSIONS)
@@ -437,17 +431,6 @@ private fun AppScreens(viewModel: MainViewModel) {
         return
     }
 
-    if (state.editorVisible) {
-        HostEditorScreen(
-            host = state.editorHost,
-            error = state.editorError,
-            onCancel = viewModel::hideHostEditor,
-            onSave = viewModel::saveHost,
-            onReleaseNotes = viewModel::openReleaseNotes,
-        )
-        return
-    }
-
     val newSession = state.newSession
     if (newSession != null && newSession.step == NewSessionStep.PATH) {
         NewSessionFolderScreen(
@@ -475,7 +458,7 @@ private fun AppScreens(viewModel: MainViewModel) {
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        contentWindowInsets = if (state.section == AppSection.SESSIONS && inboxVisible)
+        contentWindowInsets = if (state.section == AppSection.SESSIONS)
             WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
         topBar = {
             Column(if (state.section == AppSection.SESSIONS && updateState !is UpdateState.Available) Modifier else Modifier.statusBarsPadding()) {
@@ -540,7 +523,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     crashReport = state.crashReport,
                     onClearCrashReport = viewModel::clearCrashReport,
                     material3 = BuildConfig.MATERIAL3,
-                    onHostMapping = { hostMappingVisible = true },
+                    onMapAccountHost = viewModel::mapAccountHost,
                 )
                 AppSection.UPDATE -> UpdateScreen(
                     state = updateState,
@@ -551,7 +534,6 @@ private fun AppScreens(viewModel: MainViewModel) {
         }
     }
 
-    if (hostMappingVisible) HostMappingDialog(viewModel, onDismiss = { hostMappingVisible = false })
 
     state.newSession?.let { picker ->
         when (picker.step) {
@@ -1121,6 +1103,8 @@ private fun NewSessionFolderScreen(
     }
 }
 
+private enum class SettingsPage { HIDDEN, PREFERENCES, MAPPING }
+
 @Composable
 internal fun SessionsScreen(
     state: AppUiState,
@@ -1161,7 +1145,7 @@ internal fun SessionsScreen(
     onSetReaderDefaultFontScale: (Float) -> Unit,
     crashReport: CrashReport?,
     onClearCrashReport: () -> Unit,
-    onHostMapping: () -> Unit,
+    onMapAccountHost: (Int, String?) -> Unit,
     nowMillis: () -> Long = System::currentTimeMillis,
     onSetSessionListSetting: (String, Boolean) -> Unit = { _, _ -> },
     material3: Boolean = LocalMaterial3.current,
@@ -1188,7 +1172,7 @@ internal fun SessionsScreen(
     var searchVisible by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var bucketMenuExpanded by remember { mutableStateOf(false) }
-    var settingsVisible by remember { mutableStateOf(false) }
+    var settingsPage by remember { mutableStateOf(SettingsPage.HIDDEN) }
     var crashReportVisible by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
@@ -1245,8 +1229,8 @@ internal fun SessionsScreen(
             },
         )
     }
-    if (settingsVisible) {
-        BackHandler { settingsVisible = false }
+    if (settingsPage != SettingsPage.HIDDEN) {
+        BackHandler { settingsPage = SettingsPage.HIDDEN }
         MultipromptTheme(sunlight = sunlight, material3 = false) {
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
@@ -1255,12 +1239,12 @@ internal fun SessionsScreen(
                         Modifier.fillMaxWidth().statusBarsPadding().padding(end = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        IconButton(onClick = { settingsVisible = false }) {
+                        IconButton(onClick = { settingsPage = SettingsPage.HIDDEN }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                         }
                         Text("Session list settings", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                         VersionLabel(onClick = {
-                            settingsVisible = false
+                            settingsPage = SettingsPage.HIDDEN
                             onReleaseNotes()
                         })
                     }
@@ -1270,11 +1254,12 @@ internal fun SessionsScreen(
                     Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    TextButton(onClick = onSignIn) { Text(if (signedIn) "Switch / renew login" else "Sign in") }
-                    if (signedIn) TextButton(onClick = onSignOut) { Text("Sign out") }
-                    TextButton(onClick = onHostMapping) { Text("Host mapping") }
-                    TextButton(onClick = { onSelectSection(AppSection.UPDATE) }) { Text("Update") }
-                    HorizontalDivider()
+                    KitListGroup {
+                        KitListRow(if (signedIn) "Switch / renew login" else "Sign in", onClick = onSignIn)
+                        if (signedIn) KitListRow("Sign out", destructive = true, onClick = onSignOut)
+                        KitListRow("Host mapping", onClick = { settingsPage = SettingsPage.MAPPING })
+                        KitListRow("Update", onClick = { settingsPage = SettingsPage.HIDDEN; onSelectSection(AppSection.UPDATE) })
+                    }
                     listOf(
                         Triple("frequent", "Show Frequent split", state.showFrequentSplit),
                         Triple("frequent_first", "Frequent as first tab", state.frequentFirst),
@@ -1411,7 +1396,10 @@ internal fun SessionsScreen(
             }
         }
     }
-    if (settingsVisible) return@MultipromptTheme
+    if (settingsPage == SettingsPage.MAPPING && state.pendingHostKeys.isEmpty()) {
+        HostMappingDialog(state, onMapAccountHost, onDismiss = { settingsPage = SettingsPage.PREFERENCES })
+    }
+    if (settingsPage != SettingsPage.HIDDEN) return@MultipromptTheme
     reminderPromptSession?.let { session ->
         ReminderDialog(
             session = session,
@@ -1675,7 +1663,7 @@ internal fun SessionsScreen(
                             }
                         }
                         InboxOverflowMenu(
-                            onSettings = { settingsVisible = true },
+                            onSettings = { settingsPage = SettingsPage.PREFERENCES },
                             onArrangeSplits = { splitOrderDialogVisible = true },
                             onNewWorkspace = {
                                 workspaceError = null
@@ -1844,7 +1832,7 @@ internal fun SessionsScreen(
     ) { padding ->
         if (state.hosts.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding)) {
-                EmptyState("No sessions yet", "Configure servers through the CLI, then check Host mapping in Settings.", onHostMapping)
+                EmptyState("No sessions yet", "Configure servers through the CLI, then check Host mapping in Settings.") { settingsPage = SettingsPage.MAPPING }
             }
         } else LazyColumn(
             Modifier
@@ -3971,100 +3959,6 @@ private fun AnnotatedString.Builder.appendHighlightedCodeLine(line: String) {
         cursor = match.range.last + 1
     }
     append(line.substring(cursor))
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun HostEditorScreen(
-    host: HostProfile?,
-    error: String?,
-    onCancel: () -> Unit,
-    onSave: (HostDraft, ByteArray?) -> Unit,
-    onReleaseNotes: () -> Unit,
-) {
-    BackHandler(onBack = onCancel)
-    val context = LocalContext.current
-    var label by remember(host?.id) { mutableStateOf(host?.label.orEmpty()) }
-    var hostname by remember(host?.id) { mutableStateOf(host?.hostname.orEmpty()) }
-    var port by remember(host?.id) { mutableStateOf((host?.port ?: 22).toString()) }
-    var username by remember(host?.id) { mutableStateOf(host?.username.orEmpty()) }
-    var passphrase by remember(host?.id) { mutableStateOf("") }
-    var importedKey by remember(host?.id) { mutableStateOf<ByteArray?>(null) }
-    var importedName by remember(host?.id) { mutableStateOf<String?>(null) }
-    var importError by remember(host?.id) { mutableStateOf<String?>(null) }
-    val keyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri != null) {
-            runCatching { context.readSmallFile(uri, 256 * 1024) }
-                .onSuccess { bytes -> importedKey = bytes; importedName = uri.lastPathSegment; importError = null }
-                .onFailure { importError = it.message ?: "Could not read key" }
-        }
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                modifier = Modifier.statusBarsPadding(),
-                title = { Text(if (host == null) "Add VPS" else "Edit ${host.label}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                actions = { VersionLabel(onClick = onReleaseNotes) },
-            )
-        },
-    ) { padding ->
-        LazyColumn(
-            Modifier.padding(padding).fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item { OutlinedTextField(label, { label = it }, Modifier.fillMaxWidth(), label = { Text("Label") }, singleLine = true) }
-            item { OutlinedTextField(hostname, { hostname = it }, Modifier.fillMaxWidth(), label = { Text("Hostname or IP") }, singleLine = true) }
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(username, { username = it }, Modifier.weight(1f), label = { Text("Username") }, singleLine = true)
-                    OutlinedTextField(
-                        port,
-                        { port = it.filter(Char::isDigit) },
-                        Modifier.weight(0.55f),
-                        label = { Text("Port") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    )
-                }
-            }
-            item {
-                OutlinedButton(onClick = { keyPicker.launch(arrayOf("application/x-pem-file", "application/octet-stream", "text/plain", "*/*")) }) {
-                    Text(importedName?.let { "Key: $it" } ?: if (host == null) "Import private key" else "Replace private key")
-                }
-            }
-            item {
-                OutlinedTextField(
-                    passphrase,
-                    { passphrase = it },
-                    Modifier.fillMaxWidth(),
-                    label = { Text(if (host == null) "Key passphrase (optional)" else "New passphrase (leave blank to keep)") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                )
-            }
-            (error ?: importError)?.let { message -> item { InlineError(message) } }
-            item {
-                Button(
-                    onClick = {
-                        onSave(
-                            HostDraft(host?.id, label, hostname, port, username, passphrase),
-                            importedKey,
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Save and connect") }
-            }
-            item {
-                Text(
-                    "Private keys and passphrases are encrypted with a non-exportable Android Keystore key. The server fingerprint is pinned on first connection.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
 }
 
 @Composable

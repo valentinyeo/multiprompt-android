@@ -20,7 +20,22 @@ if [ -n "${TOP_FADE_BASE_REF:-}" ]; then
   mkdir -p build/top-fade-shots
   cp "$source_file" build/top-fade-shots/candidate.kt
   trap 'cp build/top-fade-shots/candidate.kt "$source_file"' EXIT
-  git show "$TOP_FADE_BASE_REF:$source_file" > "$source_file"
+  git show "$TOP_FADE_BASE_REF:$source_file" > build/top-fade-shots/baseline-source.kt
+  python3 - "$source_file" build/top-fade-shots/baseline-source.kt <<'PYBASE'
+from pathlib import Path
+import sys
+source = Path(sys.argv[1])
+text = source.read_text()
+baseline = Path(sys.argv[2]).read_text()
+old = '.padding(horizontal = 8.dp, vertical = if (LocalMaterial3.current) 0.dp else 2.dp),'
+new = '.padding(horizontal = 8.dp, vertical = if (LocalReaderStyle.current) ReaderScreenPadding else if (LocalMaterial3.current) 0.dp else 2.dp)\n                        .then(if (LocalReaderStyle.current) Modifier.offset(y = (-6).dp) else Modifier),'
+assert old in baseline and text.count(new) == 1
+text = text.replace(new, old, 1)
+insets = 'contentWindowInsets = if (state.section == AppSection.SESSIONS)\n            WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,'
+assert text.count(insets) == 1 and 'contentWindowInsets = if (state.section == AppSection.SESSIONS' not in baseline
+text = text.replace(insets, 'contentWindowInsets = ScaffoldDefaults.contentWindowInsets,', 1)
+source.write_text(text)
+PYBASE
   if "${GRADLE:-gradle}" --no-daemon testDebugUnitTest --tests '*InboxTopFadeTest' > build/top-fade-shots/before-unit.log 2>&1; then
     echo 'Original inbox unexpectedly passed unit regression' >&2
     exit 1

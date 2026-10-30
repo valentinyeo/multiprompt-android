@@ -142,7 +142,7 @@ class VersionLabelTest {
             onSetReaderDefaultFontScale = {},
             crashReport = null,
             onClearCrashReport = {},
-            onHostMapping = {},
+            onMapAccountHost = { _, _ -> },
             signedIn = true,
             onSignIn = {},
             onSignOut = {},
@@ -318,14 +318,6 @@ class VersionLabelTest {
             Header(false, {}, AppSection.UPDATE, {}, onReleaseNotes = { clicks++ })
         }
         verifyThemes("header", "Update", "Open navigation")
-    }
-
-    @Test
-    fun hostEditorVersionOpensReleaseNotesWithoutOverlappingTitle() {
-        render {
-            HostEditorScreen(null, null, {}, { _, _ -> }, onReleaseNotes = { clicks++ })
-        }
-        verifyThemes("host-editor", "Add VPS")
     }
 
     @Test

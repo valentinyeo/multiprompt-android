@@ -3,6 +3,7 @@ package dev.multiprompt.companion.account
 import android.app.Application
 import android.content.Context
 import android.os.Looper
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -148,7 +149,7 @@ class AccountHostNamesAppTest {
             assertEquals(expected, model.state.value.accountHosts.values.associateBy { it.id })
             model.select(AppSection.SESSIONS)
         }
-        compose.setContent { MultipromptTheme { HostMappingDialog(model, onDismiss = {}) } }
+        compose.setContent { MultipromptTheme { HostMappingDialog(model.state.collectAsState().value, model::mapAccountHost, onDismiss = {}) } }
         compose.onNodeWithText("0 · VPS Hetzner: VPS Hetzner (valentin)").assertIsDisplayed()
         compose.onNodeWithText("1 · VPS Contabo: VPS Contabo (valentin)").assertIsDisplayed()
         compose.onNodeWithText("1").assertDoesNotExist()

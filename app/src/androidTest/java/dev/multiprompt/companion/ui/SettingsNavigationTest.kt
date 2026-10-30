@@ -70,10 +70,18 @@ class SettingsNavigationTest {
         compose.onNodeWithText("Host mapping").performClick()
         compose.onNodeWithText("Desktop tmux hosts").assertIsDisplayed()
         compose.onNodeWithText("0 · Hetzner: Not mapped").performClick()
+        compose.onNodeWithText("Automatic").assertIsDisplayed()
+        shell("input keyevent 4")
+        compose.onNodeWithText("0 · Hetzner: Not mapped").assertIsDisplayed()
+        compose.onNodeWithText("0 · Hetzner: Not mapped").performClick()
         compose.onNodeWithText("Fixture server · valentin@example.invalid").performClick()
         compose.runOnIdle { assertEquals(host.id, AccountLayoutStore(app).hostOverrides()[0]) }
         compose.onNodeWithText("0 · Hetzner: Fixture server (valentin)").assertIsDisplayed()
         screenshot("$name-mapping")
+        compose.onNodeWithText("0 · Hetzner: Fixture server (valentin)").performClick()
+        compose.onNodeWithText("Automatic").performClick()
+        compose.runOnIdle { assertNull(AccountLayoutStore(app).hostOverrides()[0]) }
+        compose.onNodeWithText("0 · Hetzner: Not mapped").assertIsDisplayed()
         compose.onNodeWithText("Done").performClick()
         compose.onNodeWithText("Update").performClick()
         compose.onNodeWithText("Update", substring = false).assertIsDisplayed()

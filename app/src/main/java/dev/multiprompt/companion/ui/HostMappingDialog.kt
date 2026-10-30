@@ -1,59 +1,55 @@
 package dev.multiprompt.companion.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.Column
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import dev.multiprompt.companion.MainViewModel
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import dev.multiprompt.companion.AppUiState
 import dev.multiprompt.companion.account.AccountHostMap
 
 @Composable
-internal fun HostMappingDialog(viewModel: MainViewModel, onDismiss: () -> Unit) {
-    val state by viewModel.state.collectAsState()
-    val layout = state.accountLayout
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Desktop tmux hosts") },
-        text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-            Text("Host 0 must use valentin's outer tmux. Inne tabs attach there, not directly to inne. SSH keys stay local.")
-            AccountHostMap.labels.forEachIndexed { slot, label ->
-                var expanded by remember { mutableStateOf(false) }
-                val name = layout?.hosts?.firstOrNull { it.slot == slot }?.name ?: label
-                TextButton(onClick = { expanded = true }) { Text("$slot · $name: ${state.accountHosts[slot]?.let { "${it.label} (${it.username})" } ?: "Not mapped"}") }
-                DropdownMenu(expanded, { expanded = false }) {
-                    DropdownMenuItem(text = { Text("Automatic") }, onClick = { viewModel.mapAccountHost(slot, null); expanded = false })
-                    state.hosts.filter { slot != 0 || it.username == "valentin" }.forEach { host ->
-                        DropdownMenuItem(text = { Text("${host.label} · ${host.username}@${host.hostname}") }, onClick = { viewModel.mapAccountHost(slot, host.id); expanded = false })
+internal fun HostMappingDialog(state: AppUiState, onMap: (Int, String?) -> Unit, onDismiss: () -> Unit) {
+    var selectedSlot by remember { mutableStateOf<Int?>(null) }
+    val dismiss = { if (selectedSlot != null) selectedSlot = null else onDismiss() }
+    BackHandler { dismiss() }
+    KitSheet(onDismiss = dismiss) {
+        Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
+            Text("Desktop tmux hosts", style = Kit.BodyStrong, color = Kit.Text)
+            val slot = selectedSlot
+            if (slot == null) {
+                KitListGroup {
+                    AccountHostMap.labels.forEachIndexed { index, label ->
+                        val name = state.accountLayout?.hosts?.firstOrNull { it.slot == index }?.name ?: label
+                        val host = state.accountHosts[index]?.let { "${it.label} (${it.username})" } ?: "Not mapped"
+                        KitListRow("$index · $name: $host", onClick = { selectedSlot = index })
                     }
                 }
-            }
-            state.hosts.forEach { host ->
-                host.hostKeyFingerprint?.let { Text("Pinned $it", style = MaterialTheme.typography.labelSmall) }
-            }
-            state.pendingHostKeys.forEach { (id, key) ->
-                Text(if (key.changed) "WARNING: the SSH host key changed" else "First connection: verify this SSH host key",
-                    color = MaterialTheme.colorScheme.error)
-                Text(key.fingerprint)
-                TextButton(onClick = { viewModel.trustHostKey(id) }) {
-                    Text(if (key.changed) "Replace trusted key" else "Trust this key")
+                state.hosts.forEach { host ->
+                    host.hostKeyFingerprint?.let { Text("Pinned $it", style = Kit.Body, color = Kit.TextMuted) }
                 }
+                state.hostErrors.forEach { (id, message) ->
+                    Text("${state.hosts.firstOrNull { it.id == id }?.label}: $message", style = Kit.Body, color = Kit.Danger)
+                }
+                KitPrimaryButton("Done", onClick = onDismiss)
+            } else {
+                KitListGroup {
+                    KitListRow("Automatic", onClick = { onMap(slot, null); selectedSlot = null })
+                    state.hosts.filter { slot != 0 || it.username == "valentin" }.forEach { host ->
+                        KitListRow("${host.label} · ${host.username}@${host.hostname}", onClick = { onMap(slot, host.id); selectedSlot = null })
+                    }
+                }
+                KitSecondaryButton("Back", onClick = { selectedSlot = null })
             }
-            state.hostErrors.forEach { (id, message) ->
-                Text("${state.hosts.firstOrNull { it.id == id }?.label}: $message", color = MaterialTheme.colorScheme.error)
-            }
-        } },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
-    )
+        }
+    }
 }

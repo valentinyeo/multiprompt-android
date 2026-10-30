@@ -45,7 +45,7 @@ class UnreadCountBadgeTest {
                 onStartNewSession = {}, onSetNewestSessionsAtBottom = {}, onSetAllSplitOnRight = {},
                 appTheme = AppTheme.DARK, onSetAppTheme = {}, onClearSessionActionError = {},
                 readerDefaultFontScale = 1f, onSetReaderDefaultFontScale = {}, crashReport = null,
-                onClearCrashReport = {}, onHostMapping = {}, material3 = material3.value,
+                onClearCrashReport = {}, onMapAccountHost = { _, _ -> }, material3 = material3.value,
             )
         }
     }

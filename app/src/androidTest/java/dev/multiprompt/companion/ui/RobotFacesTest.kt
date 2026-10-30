@@ -62,7 +62,7 @@ class RobotFacesTest {
                     onRefresh = {}, onSelectSection = {}, onForgetSession = {}, onStartNewSession = {},
                     onSetNewestSessionsAtBottom = {}, onSetAllSplitOnRight = {}, appTheme = AppTheme.DARK,
                     onSetAppTheme = {}, onClearSessionActionError = {}, readerDefaultFontScale = 1f,
-                    onSetReaderDefaultFontScale = {}, crashReport = null, onClearCrashReport = {}, onAddHost = {}, material3 = false,
+                    onSetReaderDefaultFontScale = {}, crashReport = null, onClearCrashReport = {}, onMapAccountHost = { _, _ -> }, material3 = false,
                 )
             }
         }

@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    chat-codex.md|session-gestures.md|session-favorites.md|chat-working.md|session-summaries.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
+    settings-navigation.md|chat-codex.md|session-gestures.md|session-favorites.md|chat-working.md|session-summaries.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -283,16 +283,48 @@ if [[ "$feature" == sign-in.md ]]; then
 fi
 if [[ "$package" == dev.multiprompt.companion.debug ]]; then tap_text 'Use without account (debug)'; fi
 wait_for_text Inbox
+if [[ "$feature" == settings-navigation.md ]]; then
+    shot settings-home
+    tap_desc 'Session list actions'
+    dump_ui
+    if ! python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent Hosts || ! python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent Workspaces; then
+        echo SETTINGS_NAVIGATION_RETIRED_DESTINATION | tee "$EVIDENCE/settings-baseline.txt"
+        exit 1
+    fi
+    tap_text Settings
+    dump_ui
+    if ! python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'Host mapping'; then
+        echo SETTINGS_NAVIGATION_MISSING_HOST_MAPPING | tee "$EVIDENCE/settings-baseline.txt"
+        exit 1
+    fi
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'Switch / renew login'
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'Sign out'
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains Update
+    shot settings-preferences
+    tap_text Update
+    wait_for_text 'App updates'
+    adb shell input keyevent KEYCODE_BACK
+    wait_for_text Inbox
+fi
 tap_text All
 seed_host() {
     adb shell am force-stop "$package"
     set +x
-    adb shell am instrument -w -e class dev.multiprompt.companion.account.SeedHostDeviceTest \
-        -e host_label "$1" -e ssh_host "$2" -e ssh_port "$3" -e ssh_user "$4" \
-        -e ssh_private_key "$(base64 -w0 "$FIXTURE/user-key")" \
-        "$package.test/androidx.test.runner.AndroidJUnitRunner" > "$EVIDENCE/host-seed.txt"
+    if [[ "$package" == dev.multiprompt.companion.debug ]]; then
+        adb shell am instrument -w -e class dev.multiprompt.companion.account.SeedHostDeviceTest \
+            -e host_label "$1" -e ssh_host "$2" -e ssh_port "$3" -e ssh_user "$4" \
+            -e ssh_private_key "$(base64 -w0 "$FIXTURE/user-key")" \
+            "$package.test/androidx.test.runner.AndroidJUnitRunner" > "$EVIDENCE/host-seed.txt"
+        grep -F 'OK (1 test)' "$EVIDENCE/host-seed.txt"
+    else
+        adb shell am instrument -w -e mode host-seed \
+            -e host_label "$1" -e ssh_host "$2" -e ssh_port "$3" -e ssh_user "$4" \
+            -e ssh_private_key "$(base64 -w0 "$FIXTURE/user-key")" \
+            dev.multiprompt.verification/dev.multiprompt.verification.Seed > "$EVIDENCE/host-seed.txt"
+        grep -F 'ISOLATED_HOST_SEEDED' "$EVIDENCE/host-seed.txt"
+        grep -F 'INSTRUMENTATION_CODE: -1' "$EVIDENCE/host-seed.txt"
+    fi
     set -x
-    grep -F 'OK (1 test)' "$EVIDENCE/host-seed.txt"
     relaunch_app "${5:-Trust $1?}"
 }
 if [[ "$feature" == hosts-retired.md ]]; then
@@ -335,6 +367,52 @@ if ! wait_for_text verify-session; then
     exit 1
 fi
 shot sessions
+
+if [[ "$feature" == settings-navigation.md ]]; then
+    tap_desc 'Session list actions'
+    tap_text Settings
+    tap_text 'Host mapping'
+    wait_for_text 'Desktop tmux hosts'
+    tap_text '1 · Contabo UK: Not mapped'
+    tap_text 'Verify · verifyssh@10.0.2.2'
+    wait_for_text '1 · Contabo UK: Verify (verifyssh)'
+    shot mapping-explicit
+    tap_text Done
+    adb shell input keyevent KEYCODE_BACK
+    relaunch_app
+    tap_desc 'Session list actions'
+    tap_text Settings
+    tap_text 'Host mapping'
+    wait_for_text '1 · Contabo UK: Verify (verifyssh)'
+    shot mapping-restarted
+    tap_text '1 · Contabo UK: Verify (verifyssh)'
+    tap_text Automatic
+    wait_for_text '1 · Contabo UK: Not mapped'
+    tap_text Done
+    adb shell input keyevent KEYCODE_BACK
+    relaunch_app
+    tap_desc 'Session list actions'
+    tap_text Settings
+    tap_text 'Host mapping'
+    wait_for_text '1 · Contabo UK: Not mapped'
+    shot mapping-automatic-restarted
+    tap_text Done
+    tap_text 'Switch / renew login'
+    for attempt in {1..30}; do
+        adb shell dumpsys activity activities > "$EVIDENCE/settings-browser.txt"
+        if grep -E '(mResumedActivity|topResumedActivity).*com.android.chrome/' "$EVIDENCE/settings-browser.txt"; then break; fi
+        sleep 1
+    done
+    grep -E '(mResumedActivity|topResumedActivity).*com.android.chrome/' "$EVIDENCE/settings-browser.txt"
+    shot settings-browser-handoff
+    adb shell input keyevent KEYCODE_BACK
+    wait_for_text 'Session list settings'
+    tap_text 'Sign out'
+    wait_for_text 'Sign in'
+    shot settings-signed-out
+    printf 'SETTINGS JOURNEY VERIFIED; OTP completion is NOT verified\n'
+    exit 0
+fi
 
 if [[ "$feature" == session-favorites.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true && "$(adb get-serialno)" == emulator-* ]]

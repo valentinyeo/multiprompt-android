@@ -73,7 +73,7 @@ class SessionListSettingsTest {
                 appTheme = state.appTheme, onSetAppTheme = fixture.model::setAppTheme,
                 onClearSessionActionError = {}, readerDefaultFontScale = state.readerDefaultFontScale,
                 onSetReaderDefaultFontScale = fixture.model::setReaderDefaultFontScale,
-                crashReport = null, onClearCrashReport = {}, onHostMapping = {},
+                crashReport = null, onClearCrashReport = {}, onMapAccountHost = { _, _ -> },
             )
         }
     }

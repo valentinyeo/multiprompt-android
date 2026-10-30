@@ -8,7 +8,7 @@ This is the maintained map of the primary Compose mobile surface. Read SKILL.md 
 - Each invocation owns a fresh GitHub emulator, app data, runner SSH daemon and tmux fixture. Never double-drive an instance.
 - The APK is `dev.multiprompt.companion.debug`, expected version `0.1.2-verify.<run-number>-debug`.
 - Require `DOCTOR READY` before driving. Installation grants the app's declared runtime permissions so a notification prompt cannot obscure Sign in.
-- SSH journeys use runner address `10.0.2.2`, port `2222`, user `verifyssh`, host label `Verify`, session `verify-session`, and job-generated ed25519 keys. Import through the real document picker and compare the fingerprint; never preseed host preferences or Keystore.
+- SSH journeys use runner address `10.0.2.2`, port `2222`, user `verifyssh`, host label `Verify`, session `verify-session`, and job-generated ed25519 keys. Seed the disposable CLI host fixture, then compare the fingerprint and explicitly trust it. The signed journey uses a same-signer instrumentation fixture.
 - Debug-only **Use without account (debug)** does not create an account or authenticate any account service. Release and m3 have no offline route.
 
 ## Driving conventions
@@ -22,6 +22,7 @@ Numbered PNG/XML pairs show action and result. The transcript records commands a
 ## Features
 
 - [Sign in](sign-in.md): real account browser handoff; OTP remains manual.
+- [Settings navigation](settings-navigation.md): sessions-first settings, host mapping and account handoff on the signed APK.
 - [Hosts](hosts.md): add VPS, import encrypted-at-rest key, compare/trust and retain the host identity.
 - [Retired hosts](hosts-retired.md): a saved host at a retired server address is gone after relaunch; account sync never adds it back.
 - [Changed host key](host-changed-key.md): compare a rotated identity, persist Not now and refuse authentication.
