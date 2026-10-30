@@ -1,9 +1,9 @@
 name: Released Android working dots
 
 on:
+  schedule:
+    - cron: '23 3 * * *'
   workflow_dispatch:
-  push:
-    branches: [ceo/IGSH-1117]
 
 permissions:
   contents: read

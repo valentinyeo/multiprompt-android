@@ -1,9 +1,10 @@
 name: No paid AI APIs
 
 on:
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
   pull_request:
-  push:
-    branches: [main]
 
 permissions:
   contents: read

@@ -1,13 +1,9 @@
 name: Emulator stability series
 
 on:
+  schedule:
+    - cron: '23 3 * * *'
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - '.github/actions/android-proof/**'
-      - '.github/workflows/emulator-stability.yml'
-      - 'tools/emulator.test.py'
 
 permissions:
   contents: read
