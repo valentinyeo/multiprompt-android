@@ -1354,7 +1354,7 @@ internal fun SessionsScreen(
         crashReport?.let { report ->
             KitSheet(onDismiss = { crashReportVisible = false }) {
                 Text("Crash report", style = Kit.BodyStrong, color = Kit.Text)
-                SelectionContainer {
+                SelectionContainer(modifier = Modifier.weight(1f, fill = false)) {
                     Text(
                         report.asText(),
                         modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
