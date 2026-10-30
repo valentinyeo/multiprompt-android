@@ -93,6 +93,9 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      - name: Prepare launch evidence
+        run: mkdir -p build/release-launch-evidence
+
       - name: Launch signed M3 APK
         uses: reactivecircus/android-emulator-runner@v2.34.0
         timeout-minutes: 5
@@ -101,17 +104,16 @@ jobs:
           arch: x86_64
           target: default
           emulator-boot-timeout: 180
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: |
-            adb install -g app/build/outputs/apk/m3/app-m3.apk
-            adb shell am start -W -n dev.multiprompt.companion.m3/dev.multiprompt.companion.MainActivity
-            adb shell pidof dev.multiprompt.companion.m3
-            for attempt in $(seq 1 15); do
-              if adb shell dumpsys window | grep -E 'mCurrentFocus=.*dev\.multiprompt\.companion\.m3/.*MainActivity'; then exit 0; fi
-              sleep 1
-            done
-            echo 'Main window did not appear' >&2
-            exit 1
+          emulator-options: -no-window -gpu swangle_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -feature -Vulkan -verbose > /tmp/android-proof-emulator.log 2>&1
+          script: bash tools/release-launch.sh
+
+      - name: Upload launch evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-launch-evidence
+          path: build/release-launch-evidence/
+          if-no-files-found: warn
 
       - name: Reject older releases
         env:
