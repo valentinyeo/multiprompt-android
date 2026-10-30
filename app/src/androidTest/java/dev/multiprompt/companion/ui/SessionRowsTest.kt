@@ -90,9 +90,9 @@ class SessionRowsTest {
         compose.onNodeWithText(sessions[0].name).assertIsDisplayed()
         capture("favorite-before")
         compose.onNodeWithText(sessions[0].name).performTouchInput { longClick() }
-        compose.onNodeWithText("Remove from Favorites").assertIsDisplayed()
+        compose.onNodeWithText("Unfavorite").assertIsDisplayed()
         capture("favorite-menu")
-        compose.onNodeWithText("Remove from Favorites").performClick()
+        compose.onNodeWithText("Unfavorite").performClick()
         compose.onNodeWithText(sessions[0].name).assertDoesNotExist()
         compose.onNodeWithText(sessions[1].name).assertIsDisplayed()
         capture("favorite-after")
@@ -108,7 +108,7 @@ class SessionRowsTest {
         }
         compose.onNodeWithText(sessions[0].name).assertIsDisplayed()
         compose.onNodeWithText(sessions[0].name).performTouchInput { longClick() }
-        compose.onNodeWithText("Add to Favorites").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Favorite").assertIsDisplayed().performClick()
         compose.runOnIdle { state.value = state.value.copy(selectedWorkspaceId = FAVORITES_SPLIT_ID) }
         compose.onNodeWithText(sessions[0].name).assertIsDisplayed()
         compose.runOnIdle {

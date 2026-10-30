@@ -232,9 +232,9 @@ shot android-favorites-with-ghost
 dump_ui
 read -r x y <<< "$(python3 "$here/ui.py" "$EVIDENCE/current.xml" tap runner-1)"
 adb shell input swipe "$x" "$y" "$x" "$y" 1000
-wait_text 'Remove from Favorites' 10
+wait_text 'Unfavorite' 10
 shot android-favorite-remove-menu
-tap_text 'Remove from Favorites'
+tap_text 'Unfavorite'
 wait_gone runner-1 10 hasi
 wait_text ghost-fav 5 hasi
 shot android-favorites-after-unstar
@@ -244,8 +244,8 @@ wait_text runner-1 30 hasi
 dump_ui
 read -r x y <<< "$(python3 "$here/ui.py" "$EVIDENCE/current.xml" tap runner-1)"
 adb shell input swipe "$x" "$y" "$x" "$y" 1000
-wait_text 'Add to Favorites' 10
-tap_text 'Add to Favorites'
+wait_text 'Favorite' 10
+tap_text 'Favorite'
 tap_split Favorites
 wait_text runner-1 10 hasi
 shot android-favorite-added-back
