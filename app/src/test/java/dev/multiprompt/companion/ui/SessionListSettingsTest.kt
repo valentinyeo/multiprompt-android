@@ -6,6 +6,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Looper
+import androidx.activity.ComponentDialog
 import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.runtime.collectAsState
@@ -40,6 +41,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowDialog
 import org.robolectric.util.ReflectionHelpers
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.Config
@@ -188,7 +190,13 @@ class SessionListSettingsTest {
             assertEquals(report.asText(), clipboard.primaryClip!!.getItemAt(0).text.toString())
         }
         viewReport()
-        compose.runOnIdle { back.onBackPressed() }
+        compose.runOnIdle {
+            val dialog = ShadowDialog.getLatestDialog() as ComponentDialog
+            assertTrue(dialog.isShowing)
+            dialog.onBackPressed()
+        }
+        compose.onNodeWithText("Copy report").assertDoesNotExist()
+        compose.onNodeWithText("Session list settings").performScrollTo().assertIsDisplayed()
         viewReport()
         compose.onNodeWithText("Close").performClick()
         viewReport()
