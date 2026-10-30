@@ -37,10 +37,11 @@ class RobotFacesTest {
         TmuxSession("host", "bot-$index", 1, 0, System.currentTimeMillis() / 1000 - index * 120,
             accountName = name, preview = "${name}: latest reply\nshift+tab to cycle")
     }
-    private val workspaceNames = listOf("inne", "Software Factory", "Hypertask", "Software Factory", "Hypertask", "inne", "inne", "Hypertask")
-    private val layout = AccountLayout.parse(JSONObject("""{"schema":1,"revision":1,"workspaces":[{"name":"inne"},{"name":"Software Factory"},{"name":"Hypertask"}],"tabs":[${sessions.mapIndexed { index, session ->
+    private val workspaceNames = listOf("Cedar", "Orbit", "Lagoon", "Orbit", "Lagoon", "Cedar", "Cedar", "Lagoon")
+    private val layout = AccountLayout.parse(JSONObject("""{"schema":1,"revision":1,"workspaces":[{"name":"Cedar","color":1},{"name":"Orbit","color":3},{"name":"Lagoon","color":4}],"tabs":[${sessions.mapIndexed { index, session ->
         """{"kind":"tmux","name":"${session.displayName}","tmux_session":"${session.name}","tmux_host":0,"workspace":"${workspaceNames[index]}","favorite":${index < 2}}"""
     }.joinToString(",")}]}"""))
+    private val restoredLayout = AccountLayout.parse(JSONObject(layout.json().toString()))
     private var opened: TmuxSession? = null
     private var markedUnread: TmuxSession? = null
 
@@ -49,7 +50,7 @@ class RobotFacesTest {
             activity.setContent {
                 SessionsScreen(
                     state = AppUiState(hosts = listOf(host), sessions = sessions, signedIn = true,
-                        accountLayout = layout, accountHosts = mapOf(0 to host), newestSessionsAtBottom = false,
+                        accountLayout = restoredLayout, accountHosts = mapOf(0 to host), newestSessionsAtBottom = false,
                         unreadSessionKeys = setOf(SessionReadStore.key(host.id, sessions[0].name)),
                         unreadCounts = mapOf(SessionReadStore.key(host.id, sessions[0].name) to 1)),
                     signedIn = true, onSignIn = {}, onSignOut = {}, onOpen = { opened = it }, onOpenTerminal = {},
@@ -67,12 +68,12 @@ class RobotFacesTest {
         }
         compose.waitForIdle()
         screenshot("robot-inbox")
-        assertWorkspaceHue("bot-0", 2)
-        assertWorkspaceHue("bot-1", 4)
-        assertWorkspaceHue("bot-2", 5)
-        assertWorkspaceHue("bot-3", 4)
-        assertWorkspaceHue("bot-4", 5)
-        assertWorkspaceHue("bot-5", 2)
+        assertWorkspaceHue("bot-0", 1)
+        assertWorkspaceHue("bot-1", 3)
+        assertWorkspaceHue("bot-2", 4)
+        assertWorkspaceHue("bot-3", 3)
+        assertWorkspaceHue("bot-4", 4)
+        assertWorkspaceHue("bot-5", 1)
         val pin = compose.onNodeWithContentDescription("Robot bot-0", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val row = compose.onNodeWithContentDescription("Robot bot-2", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val density = compose.activity.resources.displayMetrics.density
@@ -88,18 +89,18 @@ class RobotFacesTest {
         avatar.recycle()
         screenshot("robot-inbox")
         compose.onNodeWithText(names[0]).performClick()
-        compose.runOnIdle { assertEquals(sessions[0].copy(workspaceName = workspaceNames[0]), opened) }
+        compose.runOnIdle { assertEquals(sessions[0].copy(workspaceName = workspaceNames[0], workspaceColor = 1), opened) }
         compose.onNodeWithText(names[2]).performTouchInput { longClick() }
         compose.onNodeWithText("Mark unread").assertIsDisplayed()
         compose.onNodeWithText("Mark unread").performClick()
-        compose.runOnIdle { assertEquals(sessions[2].copy(workspaceName = workspaceNames[2]), markedUnread) }
+        compose.runOnIdle { assertEquals(sessions[2].copy(workspaceName = workspaceNames[2], workspaceColor = 4), markedUnread) }
         compose.onNodeWithText(names[2]).performClick()
-        compose.runOnIdle { assertEquals(sessions[2].copy(workspaceName = workspaceNames[2]), opened) }
+        compose.runOnIdle { assertEquals(sessions[2].copy(workspaceName = workspaceNames[2], workspaceColor = 4), opened) }
         compose.activityRule.scenario.onActivity { activity ->
             activity.setContent {
                 MultipromptTheme(sunlight = false, material3 = false, readerStyle = true) {
                     Surface {
-                        ReaderTopBar(sessions[2].copy(workspaceName = "Hypertask"), null, onModelCommand = {}, onOpenTerminal = {},
+                        ReaderTopBar(sessions[2].copy(workspaceName = "Lagoon", workspaceColor = 4), null, onModelCommand = {}, onOpenTerminal = {},
                             onReleaseNotes = {}, onMenuClick = {}, menuContent = {})
                     }
                 }
@@ -110,7 +111,7 @@ class RobotFacesTest {
         assertEquals(28f, titleRobot.width / density, .5f)
         compose.onNodeWithText(names[2]).assertIsDisplayed()
         compose.onNodeWithContentDescription("Session actions").assertIsDisplayed()
-        assertWorkspaceHue("bot-2", 5)
+        assertWorkspaceHue("bot-2", 4)
         screenshot("robot-chat-title")
     }
 
@@ -123,9 +124,9 @@ class RobotFacesTest {
             val g = (it shr 8) and 255
             val b = it and 255
             when (color) {
-                2 -> r > g * 1.1 && g > b * 1.1
-                4 -> b > r * 1.1 && g > r * 1.05
-                5 -> b > g * 1.1 && r > g * 1.05
+                1 -> r > g * 1.1 && g > b * 1.1
+                3 -> b > r * 1.1 && g > r * 1.05
+                4 -> b > g * 1.1 && r > g * 1.05
                 else -> false
             }
         }

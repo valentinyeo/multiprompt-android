@@ -19,28 +19,15 @@ run_robots() {
     if [ -n "$result" ]; then cp "$result"/*.png "build/robot-faces/$phase/"; fi
     return "$status"
 }
-git show 0ed7a50:"$file" > "$file"
-if run_robots before; then echo 'Original inbox unexpectedly shows robots' >&2; exit 1; fi
-python3 - <<'PY'
-from pathlib import Path
-import xml.etree.ElementTree as ET
-cases = [c for f in Path('build/robot-faces/before').glob('TEST-*.xml') for c in ET.parse(f).iter('testcase')]
-assert len(cases) == 1
-failure = cases[0].find('failure')
-assert failure is not None and 'Robot bot-0' in failure.text, ET.tostring(cases[0])
-print('ORIGINAL_ROBOTS_REJECTED')
-PY
-restore
 python3 - "$avatar" <<'PYCONTROL'
 from pathlib import Path
 import sys
 path = Path(sys.argv[1])
 s = path.read_text()
-a = s.index('            val color = when')
-b = s.index('            return BotAppearance', a)
-path.write_text(s[:a] + '            val color = ((hash / 20u) % 8u).toInt()\n' + s[b:])
+s = s.replace('(hash % 20u).toInt(), workspaceColor', '(hash % 20u).toInt(), 0')
+path.write_text(s)
 PYCONTROL
-if run_robots workspace-before; then echo 'Session-derived colors unexpectedly match workspaces' >&2; exit 1; fi
+if run_robots workspace-before; then echo 'Unshared colors unexpectedly match desktop' >&2; exit 1; fi
 python3 - <<'PYCONTROL'
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -48,7 +35,7 @@ cases = [c for f in Path('build/robot-faces/workspace-before').glob('TEST-*.xml'
 assert len(cases) == 1
 failure = cases[0].find('failure')
 assert failure is not None and 'workspace hue' in failure.text, ET.tostring(cases[0])
-print('SESSION_HASH_WORKSPACE_COLORS_REJECTED')
+print('UNSHARED_WORKSPACE_COLORS_REJECTED')
 PYCONTROL
 restore
 trap - EXIT

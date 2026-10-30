@@ -6,14 +6,13 @@ import org.junit.Test
 
 class BotAppearanceTest {
     @Test fun workspaceOwnsColorButSessionStillOwnsFace() {
-        for ((workspace, color) in listOf("inne" to 2, "Hypertask" to 5, "Software Factory" to 4, "Other" to 0)) {
-            val first = BotAppearance.forSession("inne Chief of Staff", workspace)
-            val second = BotAppearance.forSession("inne-cro", workspace)
+        for (color in 0..6) {
+            val first = BotAppearance.forSession("inne Chief of Staff", color)
+            val second = BotAppearance.forSession("inne-cro", color)
             assertEquals(color, first.color)
             assertEquals(color, second.color)
             assertNotEquals(first.face, second.face)
         }
-        assertEquals(2, BotAppearance.forSession("HT Product Lead", " INNE ").color)
     }
 
     @Test fun desktopCompatibleUtf8AssignmentHasFixedVectors() {

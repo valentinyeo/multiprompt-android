@@ -197,7 +197,7 @@ class AccountHostsTest {
             http.request("PUT", "/v1/layout", "token", AccountLayout(hosts = listOf(host())).json())
             assertEquals(listOf("GET", "PUT"), requests.map { it.method })
             requests.forEach { request ->
-                assertEquals(setOf("favorite", "muted", "used", "visits", "input", "settings", "hosts"), request.header("X-Layout-Features")!!.split(',').toSet())
+                assertEquals(setOf("favorite", "muted", "used", "visits", "input", "settings", "hosts", "workspace_color"), request.header("X-Layout-Features")!!.split(',').toSet())
             }
         } finally {
             client.dispatcher.executorService.shutdown()

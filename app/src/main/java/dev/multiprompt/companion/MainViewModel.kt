@@ -764,12 +764,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             accountHosts = mapping,
             readerSession = current.readerSession?.let { open ->
                 val tab = current.accountLayout?.let { AccountHostMap.tabFor(open, it, mapping) }
-                tab?.let { AccountHostMap.sessionFor(it, sessions, mapping) }
+                tab?.let { AccountHostMap.sessionFor(it, sessions, mapping, current.accountLayout) }
                     ?: sessions.firstOrNull { it.hostId == open.hostId && it.name == open.name } ?: open
             },
             terminalSession = current.terminalSession?.let { open ->
                 val tab = current.accountLayout?.let { AccountHostMap.tabFor(open, it, mapping) }
-                tab?.let { AccountHostMap.sessionFor(it, sessions, mapping) }
+                tab?.let { AccountHostMap.sessionFor(it, sessions, mapping, current.accountLayout) }
                     ?: sessions.firstOrNull { it.hostId == open.hostId && it.name == open.name } ?: open
             },
             hostErrors = results.mapNotNull { result ->
@@ -1574,10 +1574,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             current.copy(accountLayout = layout, accountPending = pendingLayout?.dirty == true, accountHosts = mapping,
                 workspaces = workspaces, workspaceSplitIds = listOf(null) + workspaces.map { it.id }, sessionWorkspaceIds = assignments,
                 readerSession = current.readerSession?.let { open ->
-                    layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping) } ?: open
+                    layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping, layout) } ?: open
                 },
                 terminalSession = current.terminalSession?.let { open ->
-                    layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping) } ?: open
+                    layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping, layout) } ?: open
                 },
             ).let { next ->
                 next.copy(selectedWorkspaceId = if (current.selectedWorkspaceId in next.visibleWorkspaceSplitIds) current.selectedWorkspaceId else next.visibleWorkspaceSplitIds.first())
@@ -1782,7 +1782,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 var retryConflict = false
                 while (pendingLayout?.let { it.dirty && (retryConflict || usedStampThrottle.shouldPush(it)) } == true && retries++ < 4) {
                     val sent = pendingLayout!!.edited
-                    val reply = syncAuth.request("PUT", "/v1/layout", JSONObject().put("base_revision", remote.revision).put("layout", sent.copy(hosts = if (syncAuth.supportsHosts) AccountHosts.publish(remote.hosts, _state.value.accountHosts) else null).json()))
+                    val reply = syncAuth.request("PUT", "/v1/layout", JSONObject().put("base_revision", remote.revision).put("layout", sent.copy(hosts = if (syncAuth.supportsHosts) AccountHosts.publish(remote.hosts, _state.value.accountHosts) else null).json(includeWorkspaceColors = syncAuth.supportsWorkspaceColors)))
                     if (generation != accountGeneration) return@launch
                     retryConflict = reply.status == 409
                     if (retryConflict) {

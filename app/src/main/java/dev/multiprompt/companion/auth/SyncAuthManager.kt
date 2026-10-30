@@ -24,6 +24,8 @@ import java.io.IOException
 class SyncAuthManager(context: Context, private val http: AccountHttp = AccountHttpClient()) {
     private val secrets = SecretStore(context.applicationContext)
     private val mutex = Mutex()
+    var supportsWorkspaceColors = false
+        private set
     var supportsHosts = false
         private set
     private val auth = AccountAuth(
@@ -69,6 +71,7 @@ class SyncAuthManager(context: Context, private val http: AccountHttp = AccountH
                 auth.invalidateAccess()
                 reply = http.request(method, path, auth.accessToken(), body)
             }
+            supportsWorkspaceColors = reply.layoutFeatures?.split(',')?.any { it.trim() == "workspace_color" } == true
             supportsHosts = reply.layoutFeatures?.split(',')?.any { it.trim() == "hosts" } == true
             if (reply.status !in listOf(200, 409)) throw IOException("Account request failed (${reply.status}); retry when online")
             reply
