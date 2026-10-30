@@ -11,7 +11,7 @@ class TmuxCommandsTest {
     fun captureQuotesTheCompleteTarget() {
         val command = TmuxCommands.capture("a'; reboot")
 
-        val target = "'a'\"'\"'; reboot:'"
+        val target = "'=a'\"'\"'; reboot:'"
         assertTrue(command.contains("tmux capture-pane -p -J -S -5000 -t $target"))
         assertTrue(command.contains("#{alternate_on}"))
         assertTrue(command.contains("then tmux capture-pane -p -J -t $target"))
@@ -24,7 +24,7 @@ class TmuxCommandsTest {
 
         assertTrue(command.contains("tmux load-buffer"))
         assertTrue(command.contains("tmux paste-buffer -dpr"))
-        assertTrue(command.contains("-t 'codex-main:'"))
+        assertTrue(command.contains("-t '=codex-main:'"))
         assertTrue(command.indexOf("sleep") in (command.indexOf("paste-buffer") + 1) until command.indexOf("send-keys"))
         assertFalse(command.contains("prompt text"))
         assertFalse(command.contains(" -S"))
@@ -33,11 +33,11 @@ class TmuxCommandsTest {
     @Test
     fun focusedActionsContainOnlyAllowlistedKeys() {
         assertEquals(
-            "tmux send-keys -t 'work:' Enter",
+            "tmux send-keys -t '=work:' Enter",
             TmuxCommands.action("work", TmuxAction.ENTER),
         )
         assertEquals(
-            "tmux send-keys -t 'work:' C-c",
+            "tmux send-keys -t '=work:' C-c",
             TmuxCommands.action("work", TmuxAction.INTERRUPT),
         )
     }
@@ -45,7 +45,7 @@ class TmuxCommandsTest {
     @Test
     fun modelPickerSelectionUsesOnlyAValidatedNumberKey() {
         assertEquals(
-            "tmux send-keys -t 'work:' 3",
+            "tmux send-keys -t '=work:' 3",
             TmuxCommands.modelPickerOption("work", 3),
         )
         assertFalse(runCatching { TmuxCommands.modelPickerOption("work", 0) }.isSuccess)
@@ -56,8 +56,8 @@ class TmuxCommandsTest {
     fun streamUsesOneFixedFramedCaptureLoop() {
         val command = TmuxCommands.stream("work")
 
-        assertTrue(command.contains("while tmux has-session -t 'work:'"))
-        assertTrue(command.contains("tmux capture-pane -p -J -S -5000 -t 'work:'"))
+        assertTrue(command.contains("while tmux has-session -t '=work'"))
+        assertTrue(command.contains("tmux capture-pane -p -J -S -5000 -t '=work:'"))
         assertTrue(command.contains("tail -c 524288"))
         assertTrue(command.contains("mp_current=\$(cksum"))
         assertTrue(command.contains("mp_previous=\$mp_current"))
@@ -141,12 +141,20 @@ class TmuxCommandsTest {
     @Test
     fun renameChangesTheVisibleWindowButKeepsTheStableSessionId() {
         assertEquals(
-            "tmux rename-window -t 'work:' 'New name'",
+            "tmux rename-window -t '=work:' 'New name'",
             TmuxCommands.renameWindow("work", "New name"),
         )
         assertEquals(
-            "tmux rename-window -t 'a'\"'\"'; reboot:' 'It'\"'\"'s safe'",
+            "tmux rename-window -t '=a'\"'\"'; reboot:' 'It'\"'\"'s safe'",
             TmuxCommands.renameWindow("a'; reboot", "It's safe"),
+        )
+    }
+
+    @Test
+    fun attachTargetsTheExactQuotedSession() {
+        assertEquals(
+            "exec tmux attach-session -f ignore-size -t '=a'\"'\"'; reboot'",
+            TmuxCommands.attach("a'; reboot"),
         )
     }
 
@@ -187,12 +195,13 @@ class TmuxCommandsTest {
             resumeCommand = "claude --resume abc",
         )
 
+        assertTrue(command.contains("if tmux has-session -t '=hypertasks-r"))
         assertTrue(command.contains("tmux new-session -d -s 'hypertasks-r"))
         assertFalse(command.contains("-s 'hypertasks'"))
         assertTrue(command.contains("-c '/srv/a'\"'\"'; touch /bad'"))
-        assertTrue(command.contains("send-keys -t 'hypertasks-r"))
+        assertTrue(command.contains("send-keys -t '=hypertasks-r"))
         assertTrue(command.contains("'claude --resume abc'"))
-        assertTrue(command.contains("rename-window -t 'hypertasks-r"))
+        assertTrue(command.contains("rename-window -t '=hypertasks-r"))
     }
 
     @Test

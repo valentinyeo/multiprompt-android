@@ -62,11 +62,17 @@ finish() {
         sudo journalctl --no-pager -n 40 -g "qemu|coredump|apport"
     } > "$EVIDENCE/load-at-exit.txt" 2>&1
     sudo cat /home/verifyssh/commands.log > "$EVIDENCE/commands.txt" 2>/dev/null
+    if [[ "$feature" == session-routing.md ]]; then
+        sudo cat /home/verifyssh/canary-raw.bin > "$EVIDENCE/canary-raw-final.bin" 2>/dev/null
+        sudo cat /home/verifyssh/canary-receipts.txt > "$EVIDENCE/canary-receipts-final.txt" 2>/dev/null
+        sudo cat /home/verifyssh/other-receipts.txt > "$EVIDENCE/session-b-receipts-final.txt" 2>/dev/null
+    fi
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt" 2>/dev/null
     if [[ "$recorder_pid" =~ ^[0-9]+$ ]]; then
+        if [[ "$feature" == session-routing.md ]] && ! adb shell kill -0 "$recorder_pid"; then code=1; fi
         adb shell kill -INT "$recorder_pid"
         wait "$recorder_client" || true
-        adb pull /sdcard/chat-catchup.mp4 "$EVIDENCE/chat-catchup.mp4"
+        if ! adb pull /sdcard/chat-catchup.mp4 "$EVIDENCE/chat-catchup.mp4" || [[ ! -s "$EVIDENCE/chat-catchup.mp4" ]]; then code=1; fi
     fi
     shot "exit-$code"
     timeout 15s adb logcat -d > "$EVIDENCE/logcat.txt"
@@ -75,6 +81,18 @@ finish() {
     exit "$code"
 }
 trap finish EXIT
+if [[ "$feature" == session-routing.md && "$package" == dev.multiprompt.companion.debug ]]; then
+    [[ "${GITHUB_ACTIONS:-}" == true && "$(adb get-serialno)" == emulator-* ]]
+    : > "$FIXTURE/recorder.pid"
+    adb shell 'screenrecord --time-limit 0 --bit-rate 2000000 /sdcard/chat-catchup.mp4 & echo $!; wait' > "$FIXTURE/recorder.pid" &
+    recorder_client=$!
+    for attempt in {1..30}; do
+        recorder_pid=$(head -1 "$FIXTURE/recorder.pid" | tr -d '\r')
+        [[ "$recorder_pid" =~ ^[0-9]+$ ]] && break
+        sleep 1
+    done
+    [[ "$recorder_pid" =~ ^[0-9]+$ ]]
+fi
 select_node() {
     dump_ui || return
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "$1" "$2"
@@ -238,8 +256,8 @@ if [[ "$feature" == launcher-icon.md ]]; then
     exit 0
 fi
 if [[ "$package" == dev.multiprompt.companion || "$package" == dev.multiprompt.companion.m3 ]]; then
-    if [[ "$package" == dev.multiprompt.companion.m3 ]]; then [[ "$feature" == chat-resync.md || "$feature" == session-favorites.md || "$feature" == chat-queued.md ]]; fi
-    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md || "$feature" == chat-resync.md || "$feature" == session-favorites.md ]]
+    if [[ "$package" == dev.multiprompt.companion.m3 ]]; then [[ "$feature" == chat-resync.md || "$feature" == session-favorites.md || "$feature" == chat-queued.md || "$feature" == session-routing.md ]]; fi
+    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md || "$feature" == chat-resync.md || "$feature" == session-favorites.md || "$feature" == session-routing.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -539,9 +557,22 @@ if [[ "$feature" == sessions.md || "$feature" == session-reader.md ]]; then
     sleep 2
 fi
 if [[ "$feature" == session-routing.md ]]; then
+    wait_for_routing_destination() {
+        local name=$1 attempt
+        for attempt in {1..30}; do
+            dump_ui
+            if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text "$name" >/dev/null 2>&1 &&
+               python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field "Message $name" >/dev/null 2>&1; then
+                return
+            fi
+            sleep 1
+        done
+        printf 'Timed out waiting for exact routing destination: %s\n' "$name" >&2
+        return 1
+    }
     wait_for_text verify-other
     tap_text verify-session
-    wait_for_text 'Messaging verify-session'
+    wait_for_routing_destination verify-session
     fill 'Message verify-session' UI_ONLY_A
     tap_desc 'Send prompt'
     wait_receipt 'VERIFY_RECEIVED:UI_ONLY_A'
@@ -549,7 +580,7 @@ if [[ "$feature" == session-routing.md ]]; then
     tap_desc Back
     wait_for_text Inbox
     tap_text verify-other
-    wait_for_text 'Messaging verify-other'
+    wait_for_routing_destination verify-other
     fill 'Message verify-other' UI_ONLY_B
     tap_desc 'Send prompt'
     for attempt in {1..30}; do
@@ -558,23 +589,160 @@ if [[ "$feature" == session-routing.md ]]; then
     done
     sudo grep -Fx 'VERIFY_RECEIVED:UI_ONLY_B' /home/verifyssh/other-receipts.txt
     shot session-b-sent
-    adb install -r -g app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-    adb shell am instrument -w -r -e class dev.multiprompt.companion.ui.ReaderSessionRoutingTest \
-        dev.multiprompt.companion.debug.test/androidx.test.runner.AndroidJUnitRunner | tee "$EVIDENCE/routing-instrumentation.txt"
-    grep -F 'OK (1 test)' "$EVIDENCE/routing-instrumentation.txt"
+    if [[ "$package" == dev.multiprompt.companion.debug ]]; then
+        adb install -r -g app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+        adb shell am instrument -w -r -e class dev.multiprompt.companion.ui.ReaderSessionRoutingTest \
+            dev.multiprompt.companion.debug.test/androidx.test.runner.AndroidJUnitRunner | tee "$EVIDENCE/routing-instrumentation.txt"
+        grep -F 'OK (1 test)' "$EVIDENCE/routing-instrumentation.txt"
+    fi
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/session-a-receipts.txt"
     sudo cat /home/verifyssh/other-receipts.txt > "$EVIDENCE/session-b-receipts.txt"
-    python3 - "$EVIDENCE" <<'PYRECEIPTS'
+    python3 - "$EVIDENCE" "$package" <<'PYRECEIPTS'
 from pathlib import Path
 import sys
 root = Path(sys.argv[1])
 a = (root / 'session-a-receipts.txt').read_text().splitlines()
 b = (root / 'session-b-receipts.txt').read_text().splitlines()
-assert a == ['VERIFY_RECEIVED:' + text for text in ('UI_ONLY_A', 'TYPED_A', 'VOICE_A')], a
-assert b == ['VERIFY_RECEIVED:' + text for text in ('UI_ONLY_B', 'TYPED_B', 'VOICE_B', 'AFTER_SWITCH_B')], b
-print('EMULATOR_ROUTING_OK')
+if sys.argv[2] == 'dev.multiprompt.companion.debug':
+    assert a == ['VERIFY_RECEIVED:' + text for text in ('UI_ONLY_A', 'TYPED_A', 'VOICE_A')], a
+    assert b == ['VERIFY_RECEIVED:' + text for text in ('UI_ONLY_B', 'TYPED_B', 'VOICE_B', 'AFTER_SWITCH_B')], b
+    print('EMULATOR_ROUTING_OK')
+else:
+    assert a == ['VERIFY_RECEIVED:UI_ONLY_A'], a
+    assert b == ['VERIFY_RECEIVED:UI_ONLY_B'], b
+    print('SIGNED_ROUTING_UI_ONLY_POSITIVES_OK')
 PYRECEIPTS
-    adb pull /sdcard/Android/data/dev.multiprompt.companion.debug/files/routing-b.png "$EVIDENCE/routing-b.png"
+    if [[ "$package" == dev.multiprompt.companion.debug ]]; then
+        adb pull /sdcard/Android/data/dev.multiprompt.companion.debug/files/routing-b.png "$EVIDENCE/routing-b.png"
+    fi
+    stale_routing_probe() {
+        [[ "${GITHUB_ACTIONS:-}" == true && "$FIXTURE" == "$RUNNER_TEMP/verify-ssh" && "$(adb get-serialno)" == emulator-* ]]
+        printf '%s\n' 'UNCLASSIFIED' > "$EVIDENCE/routing-classifier.txt"
+        printf '%s\n' 'IGSH1230_STALE_A_FORBIDDEN_7291' > "$EVIDENCE/routing-marker.txt"
+        [[ "$(sudo -u verifyssh tmux display-message -p '#{pid}')" == "$(cat "$FIXTURE/tmux.pid")" ]]
+        [[ "$(ps -o uid= -p "$(cat "$FIXTURE/tmux.pid")" | tr -d ' ')" == "$(id -u verifyssh)" ]]
+        relaunch_app
+        wait_for_text verify-session
+        tap_text verify-session
+        wait_for_routing_destination verify-session
+        fill 'Message verify-session' IGSH1230_STALE_A_FORBIDDEN_7291
+        shot routing-stale-a-before
+        python3 - "$EVIDENCE/current.xml" <<'PYDRAFT'
+import sys
+import xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+assert any(n.get('class') == 'android.widget.EditText' and n.get('text') == 'IGSH1230_STALE_A_FORBIDDEN_7291' for n in root.iter('node'))
+PYDRAFT
+        sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh bash -c '
+            set -euo pipefail
+            [[ "$GITHUB_ACTIONS" == true && "$HOME" == /home/verifyssh && "$(id -un)" == verifyssh ]]
+            a=$(tmux display-message -p -t "=verify-session:" "#{session_id} #{session_name}")
+            b=$(tmux display-message -p -t "=verify-other:" "#{session_id} #{session_name}")
+            [[ "$a" =~ ^\$[0-9]+\ verify-session$ && "$b" =~ ^\$[0-9]+\ verify-other$ ]]
+            printf "%s\n" "$a" > /home/verifyssh/routing-a-id
+            printf "%s\n" "$b" > /home/verifyssh/routing-b-id
+            tmux new-session -d -s verify-session-neighbor -x 100 -y 32 "env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 -u /home/verifyssh/routing-canary.py"
+            tmux set-window-option -t "=verify-session-neighbor:" automatic-rename off
+            tmux rename-window -t "=verify-session-neighbor:" verify-session-neighbor
+            tmux display-message -p -t "=verify-session-neighbor:" "#{session_id} #{session_name}" > /home/verifyssh/routing-c-id
+        '
+        for attempt in {1..30}; do
+            if sudo test -f /home/verifyssh/canary-ready; then break; fi
+            sleep 1
+        done
+        sudo test -f /home/verifyssh/canary-ready
+        for attempt in {1..30}; do
+            sudo -u verifyssh tmux capture-pane -p -t '=verify-session-neighbor:' > "$EVIDENCE/canary-screen-before.txt"
+            if grep -Fx CANARY_SCREEN_IGSH1230 "$EVIDENCE/canary-screen-before.txt"; then break; fi
+            sleep 1
+        done
+        grep -Fx CANARY_SCREEN_IGSH1230 "$EVIDENCE/canary-screen-before.txt"
+        sudo -u verifyssh tmux send-keys -t '=verify-session-neighbor:' -l 'CANARY_CONTROL_7291'
+        sudo -u verifyssh tmux send-keys -t '=verify-session-neighbor:' Enter
+        for attempt in {1..30}; do
+            if sudo grep -Fx 'CANARY_RECEIVED:CANARY_CONTROL_7291' /home/verifyssh/canary-receipts.txt; then break; fi
+            sleep 1
+        done
+        sudo grep -Fx 'CANARY_RECEIVED:CANARY_CONTROL_7291' /home/verifyssh/canary-receipts.txt
+        sudo cat /home/verifyssh/canary-raw.bin > "$EVIDENCE/canary-raw-before.bin"
+        sudo cat /home/verifyssh/canary-receipts.txt > "$EVIDENCE/canary-receipts-before.txt"
+        grep -aF CANARY_CONTROL_7291 "$EVIDENCE/canary-raw-before.bin"
+        sudo -u verifyssh tmux capture-pane -p -t '=verify-other:' > "$EVIDENCE/session-b-screen-before.txt"
+        sudo cp /home/verifyssh/routing-{a,b,c}-id "$EVIDENCE/"
+        sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh bash -c '
+            set -euo pipefail
+            [[ "$GITHUB_ACTIONS" == true && "$HOME" == /home/verifyssh && "$(id -un)" == verifyssh ]]
+            read -r id name < /home/verifyssh/routing-a-id
+            [[ "$name" == verify-session && "$id" =~ ^\$[0-9]+$ ]]
+            [[ "$(tmux display-message -p -t "$id" "#{session_id} #{session_name}")" == "$id $name" ]]
+            tmux kill-session -t "$id"
+            if tmux has-session -t "=verify-session" 2>/dev/null; then exit 1; fi
+            for label in b c; do
+                read -r id name < "/home/verifyssh/routing-$label-id"
+                [[ "$(tmux display-message -p -t "$id" "#{session_id} #{session_name}")" == "$id $name" ]]
+            done
+        '
+        printf '%s\n' 'A_ABSENT_B_C_ALIVE' > "$EVIDENCE/routing-preconditions.txt"
+        dump_ui
+        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text verify-session
+        python3 - "$EVIDENCE/current.xml" <<'PYPREMOUNT'
+import sys
+import xml.etree.ElementTree as ET
+nodes = list(ET.parse(sys.argv[1]).getroot().iter('node'))
+assert any(n.get('class') == 'android.widget.EditText' and n.get('text') == 'IGSH1230_STALE_A_FORBIDDEN_7291' for n in nodes)
+PYPREMOUNT
+        shot routing-a-ended-before-send
+        sudo cat /home/verifyssh/commands.log > "$EVIDENCE/commands-before-probe.txt"
+        tap_desc 'Send prompt'
+        for attempt in {1..30}; do
+            sudo cat /home/verifyssh/canary-raw.bin > "$EVIDENCE/canary-raw-after.bin"
+            sudo cat /home/verifyssh/canary-receipts.txt > "$EVIDENCE/canary-receipts-after.txt"
+            dump_ui
+            if grep -aFq IGSH1230_STALE_A_FORBIDDEN_7291 "$EVIDENCE/canary-raw-after.bin" && grep -Fxq 'CANARY_RECEIVED:IGSH1230_STALE_A_FORBIDDEN_7291' "$EVIDENCE/canary-receipts-after.txt"; then break; fi
+            if python3 - "$EVIDENCE/current.xml" <<'PYRESULT'
+import sys
+import xml.etree.ElementTree as ET
+nodes = list(ET.parse(sys.argv[1]).getroot().iter('node'))
+assert any(n.get('class') == 'android.widget.EditText' and n.get('text') == 'IGSH1230_STALE_A_FORBIDDEN_7291' for n in nodes)
+assert any('Could not send the prompt' in n.get('text', '') for n in nodes)
+PYRESULT
+            then break; fi
+            sleep 1
+        done
+        sleep 3
+        sudo cat /home/verifyssh/canary-raw.bin > "$EVIDENCE/canary-raw-after.bin"
+        sudo cat /home/verifyssh/canary-receipts.txt > "$EVIDENCE/canary-receipts-after.txt"
+        shot routing-after-send
+        sudo cat /home/verifyssh/commands.log > "$EVIDENCE/commands-after-probe.txt"
+        tail -c +$(( $(wc -c < "$EVIDENCE/commands-before-probe.txt") + 1 )) "$EVIDENCE/commands-after-probe.txt" > "$EVIDENCE/commands-probe.txt"
+        grep -F 'tmux paste-buffer' "$EVIDENCE/commands-probe.txt" | grep -F 'verify-session:'
+        sudo -u verifyssh tmux capture-pane -p -t '=verify-session-neighbor:' > "$EVIDENCE/canary-screen-after.txt"
+        sudo -u verifyssh tmux capture-pane -p -t '=verify-other:' > "$EVIDENCE/session-b-screen-after.txt"
+        sudo cat /home/verifyssh/other-receipts.txt > "$EVIDENCE/session-b-receipts-after.txt"
+        cmp "$EVIDENCE/session-b-receipts.txt" "$EVIDENCE/session-b-receipts-after.txt"
+        cmp "$EVIDENCE/session-b-screen-before.txt" "$EVIDENCE/session-b-screen-after.txt"
+        if grep -aFq IGSH1230_STALE_A_FORBIDDEN_7291 "$EVIDENCE/canary-raw-after.bin" && grep -Fxq 'CANARY_RECEIVED:IGSH1230_STALE_A_FORBIDDEN_7291' "$EVIDENCE/canary-receipts-after.txt"; then
+            printf '%s\n' 'SELECTED_SESSION_FELL_BACK_TO_NEIGHBOR' | tee "$EVIDENCE/routing-classifier.txt"
+            return 1
+        fi
+        cmp "$EVIDENCE/canary-raw-before.bin" "$EVIDENCE/canary-raw-after.bin"
+        cmp "$EVIDENCE/canary-receipts-before.txt" "$EVIDENCE/canary-receipts-after.txt"
+        python3 - "$EVIDENCE/current.xml" <<'PYORACLE'
+import sys
+import xml.etree.ElementTree as ET
+nodes = list(ET.parse(sys.argv[1]).getroot().iter('node'))
+assert any(n.get('text') == 'verify-session' for n in nodes)
+assert any(n.get('class') == 'android.widget.EditText' and n.get('text') == 'IGSH1230_STALE_A_FORBIDDEN_7291' for n in nodes)
+assert any('Could not send the prompt' in n.get('text', '') for n in nodes)
+assert not any('CANARY_SCREEN_IGSH1230' in n.get('text', '') for n in nodes)
+PYORACLE
+        if [[ "$package" == dev.multiprompt.companion.debug ]]; then
+            printf '%s\n' 'EXACT_TARGET_STALE_SEND_REJECTED' | tee "$EVIDENCE/routing-classifier.txt"
+        else
+            printf '%s\n' 'EXACT_TARGET_STALE_SEND_REJECTED_UI_ONLY' | tee "$EVIDENCE/routing-classifier.txt"
+        fi
+    }
+    stale_routing_probe
     exit 0
 fi
 if [[ "$feature" == sessions.md ]]; then

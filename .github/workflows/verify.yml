@@ -115,20 +115,28 @@ jobs:
       - name: Validate signed recovery channel
         env:
           RELEASED_CHAT: ${{ inputs.released_chat }}
+          CANDIDATE: ${{ inputs.candidate }}
+          EXPECT_SHELL_MISSING: ${{ inputs.expect_shell_missing }}
+          EXPECT_NATIVE_MISSING: ${{ inputs.expect_native_missing }}
           RELEASE_CHOICES: ${{ inputs.release_choices }}
           RELEASE_ICON: ${{ inputs.release_icon }}
           RELEASED_REACTIONS: ${{ inputs.released_reactions }}
           RELEASED_TERMINAL: ${{ inputs.released_terminal }}
           RELEASED_ROBOTS: ${{ inputs.released_robots }}
         run: |
-          if [[ "$VERIFY_FEATURE" == session-favorites.md ]]; then
+          if [[ "$VERIFY_FEATURE" == session-routing.md ]]; then
+            [[ "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true ]]
+            [[ "$EXPECT_SHELL_MISSING" != true && "$EXPECT_NATIVE_MISSING" != true ]]
+            if [[ "$CANDIDATE" == true ]]; then [[ "$RELEASED_CHAT" == true ]]; fi
+          fi
+          if [[ "$VERIFY_FEATURE" == session-favorites.md || ( "$VERIFY_FEATURE" == session-routing.md && ( "$RELEASED_CHAT" == true || "$RELEASE_CHANNEL" == android-m3-latest ) ) ]]; then
             [[ "$RELEASED_CHAT" == true && -z "$APP_REF" && -z "$UPDATE_BASELINE_RUN" ]]
             [[ "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true ]]
           fi
           case "$RELEASE_CHANNEL" in
             android-latest) ;;
             android-m3-latest)
-              [[ ( "$VERIFY_FEATURE" == chat-resync.md || "$VERIFY_FEATURE" == session-favorites.md || "$VERIFY_FEATURE" == chat-queued.md ) && "$RELEASED_CHAT" == true && -z "$APP_REF" && -z "$UPDATE_BASELINE_RUN" ]]
+              [[ ( "$VERIFY_FEATURE" == chat-resync.md || "$VERIFY_FEATURE" == session-favorites.md || "$VERIFY_FEATURE" == chat-queued.md || "$VERIFY_FEATURE" == session-routing.md ) && "$RELEASED_CHAT" == true && -z "$APP_REF" && -z "$UPDATE_BASELINE_RUN" ]]
               [[ "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true ]]
               ;;
             *) exit 1 ;;
@@ -224,7 +232,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          [[ "$VERIFY_FEATURE" = chat-queued.md || "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md || "$VERIFY_FEATURE" = terminal.md || "$VERIFY_FEATURE" = robot-faces.md || "$VERIFY_FEATURE" = chat-cancel.md || "$VERIFY_FEATURE" = session-gestures.md || "$VERIFY_FEATURE" = session-summaries.md || "$VERIFY_FEATURE" = chat-resync.md || "$VERIFY_FEATURE" = session-favorites.md ]]
+          [[ "$VERIFY_FEATURE" = chat-queued.md || "$VERIFY_FEATURE" = chat-choices.md || "$VERIFY_FEATURE" = chat-reactions.md || "$VERIFY_FEATURE" = terminal.md || "$VERIFY_FEATURE" = robot-faces.md || "$VERIFY_FEATURE" = chat-cancel.md || "$VERIFY_FEATURE" = session-gestures.md || "$VERIFY_FEATURE" = session-summaries.md || "$VERIFY_FEATURE" = chat-resync.md || "$VERIFY_FEATURE" = session-favorites.md || "$VERIFY_FEATURE" = session-routing.md ]]
           sdkmanager --install 'build-tools;35.0.0' 'platforms;android-35'
           bash tools/release-choices/prepare.sh
           echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
@@ -267,7 +275,7 @@ jobs:
           echo "VERIFY_APK=$app_source/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
           sha256sum "$app_source/app/build/outputs/apk/debug/app-debug.apk" > "$EVIDENCE/app-apk-sha256.txt"
       - name: Build routing instrumentation
-        if: inputs.feature == 'session-routing.md'
+        if: inputs.feature == 'session-routing.md' && inputs.released_chat != true && inputs.release_choices != true && inputs.release_icon != true && inputs.released_reactions != true && inputs.released_terminal != true && inputs.released_robots != true
         run: gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g assembleDebugAndroidTest
       - name: Prepare shell and chat recording
         if: env.VERIFY_FEATURE == 'chat-queued.md'

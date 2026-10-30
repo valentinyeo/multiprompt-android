@@ -25,12 +25,7 @@ object TmuxParser {
         ).joinToString(FIELD_SEPARATOR)
         return "printf '${START_MARKER}\\n'; " +
             "if command -v tmux >/dev/null 2>&1; then " +
-            "tmux list-sessions -F '#{session_name}' | while IFS= read -r mp_session; do " +
-            "tmux display-message -p -t \"\$mp_session:\" -F ${shellQuote(format)}; " +
-            "printf '${PREVIEW_PREFIX}'; " +
-            "tmux capture-pane -p -J -S -12 -t \"\$mp_session:\" 2>/dev/null | " +
-            "tail -c 4096 | od -An -v -tx1 | tr -d ' \\n'; " +
-            "printf '\\n'; done; " +
+            TmuxCommands.sessionRows(format) +
             "printf '${TmuxCommands.ETA_PREFIX}'; " +
             "{ ${TmuxCommands.etaRowsCommand()} ; } | od -An -v -tx1 | tr -d ' \\n'; " +
             "printf '\\n'; " +

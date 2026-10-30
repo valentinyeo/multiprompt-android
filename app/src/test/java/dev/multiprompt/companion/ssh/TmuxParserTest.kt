@@ -31,7 +31,7 @@ class TmuxParserTest {
 
     @Test
     fun commandAsksForAgentCommandAndTitleInTheOrderTheParserExpects() {
-        val format = TmuxParser.command().substringAfter("display-message -p -t \"\$mp_session:\" -F '").substringBefore("'")
+        val format = TmuxParser.command().substringAfter("display-message -p -t \"=\$mp_session:\" -F '").substringBefore("'")
 
         assertEquals(
             listOf("#{session_name}", "#{session_windows}", "#{session_attached}",

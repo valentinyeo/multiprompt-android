@@ -178,7 +178,7 @@ object TmuxCommands {
             "done"
 
     fun dissolveSession(sessionName: String): String {
-        val target = TmuxParser.shellQuote("=$sessionName")
+        val target = sessionTarget(sessionName)
         return "if tmux has-session -t $target 2>/dev/null; then tmux kill-session -t $target; fi"
     }
 
@@ -190,7 +190,7 @@ object TmuxCommands {
     ): String {
         val fresh = freshSessionName(sessionName)
         val session = TmuxParser.shellQuote(fresh)
-        val target = TmuxParser.shellQuote("$fresh:")
+        val target = target(fresh)
         val directory = TmuxParser.shellQuote(workingDirectory)
         val command = TmuxParser.shellQuote(resumeCommand)
         val label = TmuxParser.shellQuote(displayName)
@@ -200,7 +200,7 @@ object TmuxCommands {
             "tmux new-session -d -s $session -c $directory"
         }
         val rename = if (displayName.isBlank()) "" else " && tmux rename-window -t $target $label"
-        return "if tmux has-session -t $session 2>/dev/null; then " +
+        return "if tmux has-session -t ${sessionTarget(fresh)} 2>/dev/null; then " +
             "printf 'session_exists\\n' >&2; exit 2; fi; " +
             "$create && tmux send-keys -t $target -l -- $command && " +
             "tmux send-keys -t $target Enter$rename"
@@ -222,14 +222,32 @@ object TmuxCommands {
     fun renameWindow(sessionName: String, displayName: String): String =
         "tmux rename-window -t ${target(sessionName)} ${TmuxParser.shellQuote(displayName)}"
 
+    fun attach(sessionName: String): String =
+        "exec tmux attach-session -f ignore-size -t ${sessionTarget(sessionName)}"
+
+    internal fun sessionRows(format: String): String {
+        val destination = "\"${exactName("\$mp_session")}:\""
+        return "tmux list-sessions -F '#{session_name}' | while IFS= read -r mp_session; do " +
+            "mp_row=\$(tmux display-message -p -t $destination -F ${TmuxParser.shellQuote(format)}) || continue; " +
+            "case \"\$mp_row\" in *'${TmuxParser.FIELD_SEPARATOR}'*) ;; *) continue;; esac; " +
+            "mp_name=\${mp_row%%${TmuxParser.FIELD_SEPARATOR}*}; " +
+            "[ \"\$mp_name\" = \"\$mp_session\" ] || continue; " +
+            "printf '%s\\n' \"\$mp_row\"; " +
+            "printf '${TmuxParser.PREVIEW_PREFIX}'; " +
+            "tmux capture-pane -p -J -S -12 -t $destination 2>/dev/null | " +
+            "tail -c 4096 | od -An -v -tx1 | tr -d ' \\n'; " +
+            "printf '\\n'; done; "
+    }
+
     fun stream(sessionName: String): String {
         val target = target(sessionName)
-        return "if ! tmux has-session -t $target 2>/dev/null; then " +
+        val session = sessionTarget(sessionName)
+        return "if ! tmux has-session -t $session 2>/dev/null; then " +
             "printf 'tmux session is no longer available\\n' >&2; exit 1; fi; " +
             "mp_snapshot=\$(mktemp) || exit 2; " +
             "trap 'rm -f \"\$mp_snapshot\"' EXIT HUP INT TERM; " +
             "mp_previous=''; " +
-            "while tmux has-session -t $target 2>/dev/null; do " +
+            "while tmux has-session -t $session 2>/dev/null; do " +
             "printf '${ALT_PREFIX}%s\\n' \"\$(tmux display-message -p -t $target '#{alternate_on}' 2>/dev/null)\"; " +
             "if [ \"\$(tmux display-message -p -t $target '#{pane_in_mode}' 2>/dev/null)\" = 1 ]; " +
             "then sleep 1; continue; fi; " +
@@ -246,5 +264,9 @@ object TmuxCommands {
             "printf 'tmux session ended\\n' >&2; exit 1"
     }
 
-    private fun target(sessionName: String): String = TmuxParser.shellQuote("$sessionName:")
+    private fun exactName(sessionName: String): String = "=$sessionName"
+
+    private fun sessionTarget(sessionName: String): String = TmuxParser.shellQuote(exactName(sessionName))
+
+    private fun target(sessionName: String): String = TmuxParser.shellQuote("${exactName(sessionName)}:")
 }

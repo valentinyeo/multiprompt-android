@@ -2,6 +2,9 @@
 set -euo pipefail
 : "${FIXTURE:?Set fixture directory outside evidence}"
 : "${EVIDENCE:?Set evidence directory}"
+if [[ "${VERIFY_FEATURE:-}" == session-routing.md ]]; then
+    [[ "${GITHUB_ACTIONS:-}" == true && "$FIXTURE" == "$RUNNER_TEMP/verify-ssh" && ! -e /home/verifyssh ]]
+fi
 mkdir -p "$FIXTURE" "$EVIDENCE"
 sudo apt-get update -qq
 sudo apt-get install -y openssh-server tmux
@@ -12,6 +15,18 @@ ssh-keygen -q -t ed25519 -N '' -C verify-ephemeral -f "$FIXTURE/host-key"
 ssh-keygen -lf "$FIXTURE/host-key.pub" -E sha256 | awk '{print $2}' > "$EVIDENCE/host-fingerprint.txt"
 sudo install -d -m 700 -o verifyssh -g verifyssh /home/verifyssh/.ssh
 sudo install -m 600 -o verifyssh -g verifyssh "$FIXTURE/user-key.pub" /home/verifyssh/.ssh/authorized_keys
+if [[ "${VERIFY_FEATURE:-}" == session-routing.md ]]; then
+    sudo install -m 755 "$(dirname "$0")/routing-canary.py" /home/verifyssh/routing-canary.py
+    cat > "$FIXTURE/ssh-command" <<'COMMAND'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "${SSH_ORIGINAL_COMMAND:-}" >> /home/verifyssh/commands.log
+if [[ -n "${SSH_ORIGINAL_COMMAND:-}" ]]; then exec /bin/bash -c "$SSH_ORIGINAL_COMMAND"; fi
+exec /bin/bash
+COMMAND
+    sudo install -m 755 "$FIXTURE/ssh-command" /home/verifyssh/ssh-command
+    { printf 'command="/home/verifyssh/ssh-command" '; cat "$FIXTURE/user-key.pub"; } | sudo tee /home/verifyssh/.ssh/authorized_keys >/dev/null
+fi
 sudo install -d -m 755 /run/sshd
 cat > "$FIXTURE/sshd_config" <<CONFIG
 Port 2222
