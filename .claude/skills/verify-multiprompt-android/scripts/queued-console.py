@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""A deterministic Claude-shaped provider, not a queue engine."""
 import datetime
 import json
 import os
@@ -11,7 +10,10 @@ import termios
 import time
 import uuid
 
-HOME = Path.home()
+if os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('HOME') != '/home/verifyssh' or os.geteuid() == 0:
+    raise SystemExit('queued console requires the hosted fixture')
+
+HOME = Path('/home/verifyssh')
 CWD = HOME / 'queued-work'
 SID = 'a1b2c3d4-1008-4000-8000-000000001008'
 TRANSCRIPT = HOME / '.claude/projects' / str(CWD).replace('/', '-') / (SID + '.jsonl')
@@ -48,7 +50,6 @@ meta.write_text(json.dumps(dict(sessionId=SID, cwd=str(CWD), pid=os.getpid())), 
 append(dict(type='user', uuid=str(uuid.uuid4()), message=dict(role='user', content='VERIFY_READY_1008')))
 append(dict(type='assistant', uuid=str(uuid.uuid4()), message=dict(role='assistant', id='msg_ready', content='Ready for queued messages.')))
 
-# Keep the real tty input buffer independent from the fixture-owned visible draft.
 attrs = termios.tcgetattr(sys.stdin)
 attrs[3] &= ~termios.ECHO
 termios.tcsetattr(sys.stdin, termios.TCSANOW, attrs)

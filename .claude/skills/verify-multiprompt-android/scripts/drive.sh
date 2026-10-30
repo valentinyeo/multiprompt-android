@@ -658,6 +658,7 @@ if [[ "$feature" == chat-codex.md ]]; then
     exit 0
 fi
 if [[ "$feature" == chat-queued.md ]]; then
+    [[ "${GITHUB_ACTIONS:-}" == true ]]
     wait_for_text VERIFY_READY_1008
 elif [[ "$feature" == chat-resync.md ]]; then
     wait_for_text ACCEPTED_FOURTH
@@ -687,13 +688,13 @@ if [[ "$feature" == chat-queued.md ]]; then
     queue_states() {
         local attempt
         for attempt in {1..60}; do
-            if sudo python3 "$scripts/queue-evidence.py" "$@" > "$EVIDENCE/queue-state.tmp" 2>/dev/null; then
+            if sudo env GITHUB_ACTIONS="$GITHUB_ACTIONS" python3 "$scripts/queue-evidence.py" "$@" > "$EVIDENCE/queue-state.tmp" 2>/dev/null; then
                 cat "$EVIDENCE/queue-state.tmp"
                 return
             fi
             sleep 1
         done
-        sudo python3 "$scripts/queue-evidence.py" "$@"
+        sudo env GITHUB_ACTIONS="$GITHUB_ACTIONS" python3 "$scripts/queue-evidence.py" "$@"
         return 1
     }
     queue_ui() {
@@ -705,7 +706,7 @@ if [[ "$feature" == chat-queued.md ]]; then
         done
         python3 "$scripts/queued.py" "$EVIDENCE/current.xml" "$expected" "$name"
     }
-    provider_event() { sudo -u verifyssh python3 /home/verifyssh/queued-console.py "$1"; }
+    provider_event() { sudo -u verifyssh env GITHUB_ACTIONS="$GITHUB_ACTIONS" HOME=/home/verifyssh python3 /home/verifyssh/queued-console.py "$1"; }
     fill 'Message verify-session' WAITING_ONE
     tap_desc 'Send prompt'
     wait_for_text WAITING_ONE
@@ -717,7 +718,8 @@ if [[ "$feature" == chat-queued.md ]]; then
     shot queued-waiting
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/draft-before.txt"
     grep -F '❯ FIXTURE_OWNED_DRAFT' "$EVIDENCE/draft-before.txt"
-    test ! -s /home/verifyssh/receipts.txt
+    sudo test -f /home/verifyssh/receipts.txt
+    sudo test ! -s /home/verifyssh/receipts.txt
     provider_event clear-draft
     wait_receipt 'VERIFY_RECEIVED:WAITING_ONE'
     queue_states delivered queued | tee "$EVIDENCE/queue-first-delivered.json"
@@ -727,7 +729,7 @@ if [[ "$feature" == chat-queued.md ]]; then
     shot queued-first-delivered
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/native-queue-blocked.txt"
     grep -F 'edit queued messages' "$EVIDENCE/native-queue-blocked.txt"
-    [[ $(sudo wc -l < /home/verifyssh/receipts.txt) -eq 1 ]]
+    [[ $(sudo awk 'END {print NR}' /home/verifyssh/receipts.txt) -eq 1 ]]
     provider_event consume:WAITING_ONE
     wait_receipt 'VERIFY_RECEIVED:WAITING_TWO'
     queue_states delivered delivered | tee "$EVIDENCE/queue-both-delivered.json"
@@ -748,7 +750,6 @@ if [[ "$feature" == chat-queued.md ]]; then
     wait "$recorder_client" || true
     adb pull /sdcard/chat-catchup.mp4 "$EVIDENCE/chat-catchup.mp4"
     recorder_pid=
-    # The monitor starts before the image and answer are published.
     python3 "$scripts/catchup.py" &
     catchup_pid=$!
     for attempt in {1..30}; do

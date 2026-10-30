@@ -72,9 +72,10 @@ elif [[ "${VERIFY_FEATURE:-}" == chat-cancel.md ]]; then
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/cancel-console.py /home/verifyssh/receipts.txt'
 elif [[ "${VERIFY_FEATURE:-}" == chat-queued.md ]]; then
+    [[ "${GITHUB_ACTIONS:-}" == true ]]
     sudo install -m 755 "$(dirname "$0")/queued-console.py" /home/verifyssh/queued-console.py
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
-    sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/queued-console.py'
+    sudo -u verifyssh env GITHUB_ACTIONS="$GITHUB_ACTIONS" tmux new-session -d -s verify-session -x 100 -y 32 'env GITHUB_ACTIONS=true HOME=/home/verifyssh /home/verifyssh/claude -u /home/verifyssh/queued-console.py'
 elif [[ "${VERIFY_FEATURE:-}" == chat-resync.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true ]]
     sudo install -m 644 app/src/main/assets/chat_history_reader.py /home/verifyssh/recovery-reader.py
