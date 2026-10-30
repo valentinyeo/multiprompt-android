@@ -59,11 +59,12 @@ server.bind(str(SOCKET))
 server.listen()
 draft = DRAFT
 native = []
+hint_visible = False
 lines = ['VERIFY_READY_1008', 'Ready for queued messages.']
 
 
 def redraw():
-    hint = 'press up to edit queued messages\n' if native else ''
+    hint = 'press up to edit queued messages\n' if hint_visible else ''
     print('\x1b[2J\x1b[HClaude Code\n' + '\n'.join(lines) + '\n\nWorking... (esc to interrupt)\n' + hint + '❯ ' + draft + '\n' + '─' * 50, flush=True)
 
 
@@ -83,8 +84,8 @@ while True:
         with RECEIPTS.open('a', encoding='utf-8') as output:
             output.write('VERIFY_RECEIVED:' + text + '\n')
         native.append(text)
+        hint_visible = True
         redraw()
-        append(dict(type='attachment', uuid=str(uuid.uuid4()), attachment=dict(type='queued_command', prompt=text)))
     if server in ready:
         conn, _ = server.accept()
         with conn:
@@ -93,9 +94,16 @@ while True:
             if event == 'clear-draft' and draft == DRAFT and not native:
                 draft = ''
                 redraw()
-            elif event.startswith('consume:') and native and native[0] == event.partition(':')[2]:
-                native.pop(0)
+            elif event == 'clear-hint' and native:
+                hint_visible = False
                 redraw()
+            elif event.startswith('consume:') and native and native[0] == event.partition(':')[2] and native[0] in ('WAITING_ONE', 'WAITING_TWO', 'FOLLOWUP'):
+                text = native.pop(0)
+                append(dict(type='attachment', uuid=str(uuid.uuid4()), attachment=dict(type='queued_command', prompt=text)))
+                hint_visible = bool(native)
+                redraw()
+            elif event in ('marker:BEFORE_CONSUMPTION_MARKER', 'marker:UNCERTAIN_MARKER_1', 'marker:UNCERTAIN_MARKER_2'):
+                reply(event.partition(':')[2])
             elif event == 'reply' and not native:
                 reply('Both messages received.')
             elif event == 'followup' and not native:
