@@ -170,7 +170,7 @@ class ReaderActionsMenuTest {
         ).forEach { compose.onNodeWithText(it).assertDoesNotExist() }
     }
 
-    @Test fun resyncChatEntryDropsEverySentMessageRecordAndClosesTheMenu() {
+    @Test fun resyncChatEntryPreservesUnconfirmedMessagesAndClosesTheMenu() {
         render(material3 = true)
         f.field<MutableStateFlow<ReaderState>>(connection, "_state").value = ReaderState(
             status = ReaderStatus.Live, sentPrompts = listOf("hello there"),
@@ -179,8 +179,8 @@ class ReaderActionsMenuTest {
         openMenu()
         compose.onNodeWithText("Resync chat").assertIsDisplayed().performClick()
         compose.runOnIdle {
-            assertTrue(connection.state.value.sentRecord.isEmpty())
-            assertTrue(connection.state.value.sentPrompts.isEmpty())
+            assertEquals(listOf("hello there"), connection.state.value.sentRecord.map { it.text })
+            assertEquals(listOf("hello there"), connection.state.value.sentPrompts)
         }
         compose.onNodeWithText("Resync chat").assertDoesNotExist()
     }

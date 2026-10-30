@@ -22,12 +22,14 @@ object TranscriptProtocol {
         val messages: List<TranscriptMessage>,
     )
 
-    fun supports(agent: AgentKind): Boolean = agent == AgentKind.CLAUDE || agent == AgentKind.CODEX
+    fun supports(agent: AgentKind): Boolean = agent == AgentKind.CLAUDE || agent == AgentKind.CODEX || agent == AgentKind.HAX
+
+    fun wireAgent(agent: AgentKind): String = if (agent == AgentKind.HAX) "codex" else agent.name.lowercase()
 
     fun request(id: Long, identity: Identity, token: String? = null): String {
         require(id > 0 && supports(identity.agent))
         val fields = listOf(
-            id.toString(), "transcript", identity.agent.name.lowercase(),
+            id.toString(), "transcript", wireAgent(identity.agent),
             if (identity.sid == null) "tmux:${identity.tmuxName}" else token ?: "-",
             identity.cwd.ifBlank { "-" }, identity.sid ?: "-",
         )
@@ -47,7 +49,7 @@ object TranscriptProtocol {
         val sid = fields[4].takeUnless { it == "-" }
         if (sid != null && !SESSION_ID.matches(sid)) return null
         if (tmuxRequest) {
-            if (fields[7] != identity.agent.name.lowercase() || fields[8] != identity.tmuxName) return null
+            if (fields[7] != wireAgent(identity.agent) || fields[8] != identity.tmuxName) return null
         } else if (sid != identity.sid) return null
         val count = fields[5].toIntOrNull() ?: return null
         if (count !in 0..MAX_MESSAGES || (status == "ok" && (count == 0 || sid == null))) return null

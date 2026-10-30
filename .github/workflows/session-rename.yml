@@ -1,11 +1,8 @@
 name: Released session rename proof
 
 on:
-  push:
-    branches: [ceo/IGSH-1177]
-    paths:
-      - '.github/workflows/session-rename.yml'
-      - 'tools/session-rename/**'
+  schedule:
+    - cron: '23 3 * * *'
   workflow_dispatch:
     inputs:
       android_run:
