@@ -258,8 +258,8 @@ if [[ "$feature" == launcher-icon.md ]]; then
     exit 0
 fi
 if [[ "$package" == dev.multiprompt.companion || "$package" == dev.multiprompt.companion.m3 ]]; then
-    if [[ "$package" == dev.multiprompt.companion.m3 ]]; then [[ "$feature" == chat-resync.md || "$feature" == session-favorites.md || "$feature" == chat-queued.md || "$feature" == session-routing.md ]]; fi
-    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md || "$feature" == chat-resync.md || "$feature" == session-favorites.md || "$feature" == session-routing.md ]]
+    if [[ "$package" == dev.multiprompt.companion.m3 ]]; then [[ "$feature" == settings-navigation.md || "$feature" == chat-resync.md || "$feature" == session-favorites.md || "$feature" == chat-queued.md || "$feature" == session-routing.md ]]; fi
+    [[ "$feature" == settings-navigation.md || "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md || "$feature" == chat-resync.md || "$feature" == session-favorites.md || "$feature" == session-routing.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -311,7 +311,7 @@ seed_host() {
     adb shell am force-stop "$package"
     set +x
     if [[ "$package" == dev.multiprompt.companion.debug ]]; then
-        adb shell am instrument -w -e class dev.multiprompt.companion.account.SeedHostDeviceTest \
+        adb shell am instrument -w -e class dev.multiprompt.companion.account.SeedHostDeviceTest#importsCliHostFixture \
             -e host_label "$1" -e ssh_host "$2" -e ssh_port "$3" -e ssh_user "$4" \
             -e ssh_private_key "$(base64 -w0 "$FIXTURE/user-key")" \
             "$package.test/androidx.test.runner.AndroidJUnitRunner" > "$EVIDENCE/host-seed.txt"
@@ -325,6 +325,10 @@ seed_host() {
         grep -F 'INSTRUMENTATION_CODE: -1' "$EVIDENCE/host-seed.txt"
     fi
     set -x
+    if [[ "$feature" == hosts-retired.md ]]; then
+        grep -F 'OK (1 test)' "$EVIDENCE/host-seed.txt"
+        cp "$EVIDENCE/host-seed.txt" "$EVIDENCE/retired-profile-present.txt"
+    fi
     relaunch_app "${5:-Trust $1?}"
 }
 if [[ "$feature" == hosts-retired.md ]]; then
@@ -339,11 +343,16 @@ if [[ "$feature" == hosts-retired.md ]]; then
         python3 "$scripts/ui.py" "$EVIDENCE/current.xml" lacks 'Inne CRO'
         sleep 1
     done
+    adb shell am force-stop "$package"
+    adb shell am instrument -w -e class dev.multiprompt.companion.account.SeedHostDeviceTest#importsCliHostFixture \
+        -e verify_retired_absent true "$package.test/androidx.test.runner.AndroidJUnitRunner" > "$EVIDENCE/retired-profile-absent.txt"
+    grep -F 'OK (1 test)' "$EVIDENCE/retired-profile-absent.txt"
+    relaunch_app
     tap_desc 'Session list actions'
     tap_text Settings
     tap_text 'Host mapping'
+    wait_for_text '2 · Inne CRO: Not mapped'
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" lacks "$retired"
-    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" lacks 'Inne CRO:'
     shot retired-host-removed
     sudo iptables -L OUTPUT -v -n > "$EVIDENCE/retired-address-attempts.txt"
     printf 'RETIRED HOST REMOVED ON RELAUNCH VERIFIED\n'
@@ -410,6 +419,14 @@ if [[ "$feature" == settings-navigation.md ]]; then
     tap_text 'Sign out'
     wait_for_text 'Sign in'
     shot settings-signed-out
+    tap_text 'Sign in'
+    for attempt in {1..30}; do
+        adb shell dumpsys activity activities > "$EVIDENCE/settings-sign-in-browser.txt"
+        if grep -E '(mResumedActivity|topResumedActivity).*com.android.chrome/' "$EVIDENCE/settings-sign-in-browser.txt"; then break; fi
+        sleep 1
+    done
+    grep -E '(mResumedActivity|topResumedActivity).*com.android.chrome/' "$EVIDENCE/settings-sign-in-browser.txt"
+    shot settings-sign-in-browser-handoff
     printf 'SETTINGS JOURNEY VERIFIED; OTP completion is NOT verified\n'
     exit 0
 fi

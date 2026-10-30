@@ -98,6 +98,22 @@ class SessionListSettingsTest {
         compose.onNodeWithText("Workspaces").assertDoesNotExist()
     }
 
+    @Test fun signedInAccountErrorIsVisibleWithoutClearingCredentials() {
+        render()
+        compose.runOnIdle {
+            assertTrue(fixture.model.syncAuth.hasSession())
+            fixture.state.value = fixture.state.value.copy(signedIn = true, accountError = "Account unavailable; retry")
+        }
+        openSettings()
+        compose.onNodeWithText("Account unavailable; retry").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Switch / renew login").assertIsDisplayed()
+        compose.runOnIdle {
+            assertTrue(fixture.model.state.value.signedIn)
+            assertTrue(fixture.model.syncAuth.hasSession())
+            assertEquals("test-account", fixture.model.syncAuth.accountId())
+        }
+    }
+
     private fun closeSettings() {
         compose.runOnIdle { back.onBackPressed() }
         compose.onNodeWithText("Session list settings").assertDoesNotExist()

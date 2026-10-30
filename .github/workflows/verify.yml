@@ -141,8 +141,13 @@ jobs:
           case "$RELEASE_CHANNEL" in
             android-latest) ;;
             android-m3-latest)
-              [[ ( "$VERIFY_FEATURE" == chat-resync.md || "$VERIFY_FEATURE" == session-favorites.md || "$VERIFY_FEATURE" == chat-queued.md || "$VERIFY_FEATURE" == session-routing.md ) && "$RELEASED_CHAT" == true && -z "$APP_REF" && -z "$UPDATE_BASELINE_RUN" ]]
-              [[ "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true ]]
+              if [[ "$VERIFY_FEATURE" == settings-navigation.md ]]; then
+                [[ "$RELEASE_CHOICES" == true && "$RELEASED_CHAT" != true && -z "$APP_REF" && -z "$UPDATE_BASELINE_RUN" ]]
+                [[ "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true && "$EXPECT_SHELL_MISSING" != true && "$EXPECT_NATIVE_MISSING" != true ]]
+              else
+                [[ ( "$VERIFY_FEATURE" == chat-resync.md || "$VERIFY_FEATURE" == session-favorites.md || "$VERIFY_FEATURE" == chat-queued.md || "$VERIFY_FEATURE" == session-routing.md ) && "$RELEASED_CHAT" == true && -z "$APP_REF" && -z "$UPDATE_BASELINE_RUN" ]]
+                [[ "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true ]]
+              fi
               ;;
             *) exit 1 ;;
           esac

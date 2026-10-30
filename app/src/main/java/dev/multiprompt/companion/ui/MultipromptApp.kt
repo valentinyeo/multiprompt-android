@@ -1260,6 +1260,7 @@ internal fun SessionsScreen(
                         KitListRow("Host mapping", onClick = { settingsPage = SettingsPage.MAPPING })
                         KitListRow("Update", onClick = { settingsPage = SettingsPage.HIDDEN; onSelectSection(AppSection.UPDATE) })
                     }
+                    state.accountError?.let { Text(it, style = Kit.Body, color = Kit.Danger) }
                     listOf(
                         Triple("frequent", "Show Frequent split", state.showFrequentSplit),
                         Triple("frequent_first", "Frequent as first tab", state.frequentFirst),

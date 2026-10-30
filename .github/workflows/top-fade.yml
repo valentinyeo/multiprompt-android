@@ -23,7 +23,6 @@ on:
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
   group: top-fade-${{ github.ref }}
