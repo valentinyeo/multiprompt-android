@@ -33,6 +33,7 @@ recorder_pid = recorder.stdout.readline().strip()
 assert recorder_pid.isdigit()
 thread = threading.Thread(target=record_shell)
 thread.start()
+(root / 'catchup-monitor-ready').write_text('ready\n')
 started = time.monotonic()
 seen = None
 samples = []

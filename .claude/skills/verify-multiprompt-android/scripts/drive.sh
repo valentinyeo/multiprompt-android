@@ -684,62 +684,106 @@ if [[ "$feature" == chat-queued.md ]]; then
         sleep 0.1
     done
     [[ "$recorder_pid" =~ ^[0-9]+$ ]]
+    queue_states() {
+        local attempt
+        for attempt in {1..60}; do
+            if sudo python3 "$scripts/queue-evidence.py" "$@" > "$EVIDENCE/queue-state.tmp" 2>/dev/null; then
+                cat "$EVIDENCE/queue-state.tmp"
+                return
+            fi
+            sleep 1
+        done
+        sudo python3 "$scripts/queue-evidence.py" "$@"
+        return 1
+    }
+    queue_ui() {
+        local expected=$1 name=$2 attempt
+        for attempt in {1..30}; do
+            dump_ui
+            if python3 "$scripts/queued.py" "$EVIDENCE/current.xml" "$expected" "$name" >/dev/null 2>&1; then return; fi
+            sleep 1
+        done
+        python3 "$scripts/queued.py" "$EVIDENCE/current.xml" "$expected" "$name"
+    }
+    provider_event() { sudo -u verifyssh python3 /home/verifyssh/queued-console.py "$1"; }
     fill 'Message verify-session' WAITING_ONE
     tap_desc 'Send prompt'
-    wait_receipt 'VERIFY_RECEIVED:WAITING_ONE'
     wait_for_text WAITING_ONE
     fill 'Message verify-session' WAITING_TWO
     tap_desc 'Send prompt'
-    wait_receipt 'VERIFY_RECEIVED:WAITING_TWO'
     wait_for_text WAITING_TWO
+    queue_states queued queued | tee "$EVIDENCE/queue-pending.json"
+    queue_ui 2 WAITING
     shot queued-waiting
-    python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 2 WAITING
-    sudo -u verifyssh python3 /home/verifyssh/queued-console.py take-in
-    sleep 8
-    shot queued-taken-in
-    python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 2 TAKEN_IN_NO_REPLY
-    sudo -u verifyssh python3 /home/verifyssh/queued-console.py reply
-    wait_for_text 'Both messages received.'
-    sudo cat /home/verifyssh/shell-events.jsonl > "$EVIDENCE/shell-events.jsonl"
-    python3 - "$EVIDENCE/shell-events.jsonl" "$EVIDENCE/first-reply-latency.json" <<'LATENCY'
-import json
-from pathlib import Path
-import sys
-import time
-reply = next(json.loads(line) for line in reversed(Path(sys.argv[1]).read_text().splitlines()) if json.loads(line)['text'] == 'Both messages received.')
-latency = time.time() - reply['timestamp']
-assert latency <= 3, f'FIRST_REPLY_LATE: {latency:.3f}s'
-Path(sys.argv[2]).write_text(json.dumps(dict(replyLatencySeconds=latency)))
-LATENCY
-    for attempt in {1..30}; do
-        dump_ui
-        if python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 0 REPLIED >/dev/null 2>&1; then break; fi
-        sleep 1
-    done
-    shot queued-replied
-    if ! python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 0 REPLIED; then
-        printf 'IGSH1008_QUEUED_STUCK\n' >&2
-        exit 1
-    fi
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/draft-before.txt"
+    grep -F '❯ FIXTURE_OWNED_DRAFT' "$EVIDENCE/draft-before.txt"
+    test ! -s /home/verifyssh/receipts.txt
+    provider_event clear-draft
+    wait_receipt 'VERIFY_RECEIVED:WAITING_ONE'
+    queue_states delivered queued | tee "$EVIDENCE/queue-first-delivered.json"
+    queue_ui 1 FIRST_DELIVERED
     wait_for_text WAITING_ONE
     wait_for_text WAITING_TWO
-    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/queued-receipts.txt"
-    sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-queued-work/a1b2c3d4-1008-4000-8000-000000001008.jsonl > "$EVIDENCE/queued-transcript.jsonl"
+    shot queued-first-delivered
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/native-queue-blocked.txt"
+    grep -F 'edit queued messages' "$EVIDENCE/native-queue-blocked.txt"
+    [[ $(sudo wc -l < /home/verifyssh/receipts.txt) -eq 1 ]]
+    provider_event consume:WAITING_ONE
+    wait_receipt 'VERIFY_RECEIVED:WAITING_TWO'
+    queue_states delivered delivered | tee "$EVIDENCE/queue-both-delivered.json"
+    queue_ui 0 BOTH_DELIVERED
+    wait_for_text WAITING_ONE
+    wait_for_text WAITING_TWO
+    shot queued-both-delivered
+    provider_event consume:WAITING_TWO
+    provider_event reply
+    wait_for_text 'Both messages received.'
     fill 'Message verify-session' FOLLOWUP
     tap_desc 'Send prompt'
     wait_receipt 'VERIFY_RECEIVED:FOLLOWUP'
+    wait_for_text FOLLOWUP
+    queue_ui 0 FOLLOWUP_DELIVERED
+    provider_event consume:FOLLOWUP
     adb shell kill -INT "$recorder_pid"
     wait "$recorder_client" || true
     adb pull /sdcard/chat-catchup.mp4 "$EVIDENCE/chat-catchup.mp4"
     recorder_pid=
-    sudo -u verifyssh python3 /home/verifyssh/queued-console.py followup &
-    followup_pid=$!
-    python3 "$scripts/catchup.py"
-    wait "$followup_pid"
+    # The monitor starts before the image and answer are published.
+    python3 "$scripts/catchup.py" &
+    catchup_pid=$!
+    for attempt in {1..30}; do
+        [[ -f "$EVIDENCE/catchup-monitor-ready" ]] && break
+        kill -0 "$catchup_pid"
+        sleep 1
+    done
+    [[ -f "$EVIDENCE/catchup-monitor-ready" ]]
+    provider_event followup
+    wait "$catchup_pid"
     shot catchup-finished
-    sudo cat /home/verifyssh/shell-events.jsonl > "$EVIDENCE/shell-events.jsonl"
+    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/queued-receipts.txt"
     sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-queued-work/a1b2c3d4-1008-4000-8000-000000001008.jsonl > "$EVIDENCE/queued-transcript.jsonl"
-    printf 'ANDROID_QUEUED_CLEARS_AFTER_REPLY\n'
+    sudo cat /home/verifyssh/shell-events.jsonl > "$EVIDENCE/shell-events.jsonl"
+    python3 - "$EVIDENCE" <<'QUEUE_RESULT'
+import json
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+expected = ['WAITING_ONE', 'WAITING_TWO', 'FOLLOWUP']
+inputs = root.joinpath('queued-receipts.txt').read_text().splitlines()
+assert inputs == ['VERIFY_RECEIVED:' + text for text in expected], inputs
+rows = [json.loads(line) for line in root.joinpath('queued-transcript.jsonl').read_text().splitlines()]
+receipts = [r['attachment']['prompt'] for r in rows if r.get('type') == 'attachment' and r.get('attachment', {}).get('type') == 'queued_command' and not r.get('isSidechain')]
+assert receipts == expected, receipts
+states = [json.loads(root.joinpath(name).read_text()) for name in ('queue-pending.json', 'queue-first-delivered.json', 'queue-both-delivered.json')]
+assert [[r['id'] for r in state] for state in states] == [[r['id'] for r in states[0]]] * 3
+result = dict(inputs=inputs, provider_receipts=receipts, count=len(receipts), states=states,
+              harness_revision=__import__('os').environ['GITHUB_SHA'],
+              app_source=root.joinpath('app-source-sha.txt').read_text().strip(),
+              apk_sha256=root.joinpath('app-apk-sha256.txt').read_text().strip(),
+              provider='simulated Claude; real SSH, tmux, client and embedded engine')
+root.joinpath('queue-result.json').write_text(json.dumps(result, indent=2) + '\n')
+print('QUEUE_JOURNEY_RESULT', json.dumps(result))
+QUEUE_RESULT
     exit 0
 fi
 if [[ "$feature" == native-skills.md ]]; then
