@@ -3130,9 +3130,9 @@ internal fun ReaderScreen(
                                     onClick = {
                                         menuExpanded = false
                                         readerScope.launch {
-                                            connection.resyncChat()
+                                            val confirmed = connection.resyncChat()
                                             followRequest++
-                                            android.widget.Toast.makeText(context, "Synced", android.widget.Toast.LENGTH_SHORT).show()
+                                            android.widget.Toast.makeText(context, if (confirmed) "Synced" else "Some messages could not be confirmed", android.widget.Toast.LENGTH_SHORT).show()
                                         }
                                     },
                                 )

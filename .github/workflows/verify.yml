@@ -1,8 +1,8 @@
 name: Verify real Android UI
 
 on:
-  push:
-    branches: [ceo/IGSH-1012, ceo/IGSH-1069, ceo/IGSH-1075]
+  schedule:
+    - cron: '23 3 * * *'
   pull_request:
     paths:
       - 'app/**'
@@ -62,6 +62,7 @@ on:
           - chat-cancel.md
           - native-skills.md
           - chat-resync.md
+          - chat-codex.md
           - session-routing.md
           - session-gestures.md
           - terminal.md
@@ -208,6 +209,18 @@ jobs:
           echo "VERIFY_APK=$EVIDENCE/app.apk" >> "$GITHUB_ENV"
           echo "VERIFY_PACKAGE=dev.multiprompt.companion" >> "$GITHUB_ENV"
           echo "EXPECTED_VERSION=$(jq -er '.versionName' "$EVIDENCE/manifest.json")" >> "$GITHUB_ENV"
+      - name: Reject original Codex reader
+        if: inputs.feature == 'chat-codex.md'
+        run: |
+          git fetch origin 099a8e73b6857ff901d1166854dbbda0884122f1
+          git show 099a8e73b6857ff901d1166854dbbda0884122f1:app/src/main/assets/chat_history_reader.py > "$RUNNER_TEMP/original-reader.py"
+          if CODEX_READER="$RUNNER_TEMP/original-reader.py" python3 -B tools/codex-sync.test.py > "$EVIDENCE/codex-original.txt" 2>&1; then
+            cat "$EVIDENCE/codex-original.txt"
+            exit 1
+          fi
+          grep -F 'AssertionError' "$EVIDENCE/codex-original.txt"
+          python3 -B tools/codex-sync.test.py 2>&1 | tee "$EVIDENCE/codex-fixed.txt"
+          echo ORIGINAL_CODEX_REJECTED
       - name: Build debug APK
         if: inputs.release_choices != true && inputs.release_icon != true && inputs.released_reactions != true && inputs.released_terminal != true && inputs.released_robots != true && inputs.released_chat != true
         run: |
@@ -241,6 +254,15 @@ jobs:
             adb install -r -g "$VERIFY_APK"
             if [ "${VERIFY_PACKAGE:-}" = dev.multiprompt.companion ] && [ "$VERIFY_FEATURE" != launcher-icon.md ]; then bash tools/release-choices/run.sh; else .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; fi
             if [ -n "$UPDATE_BASELINE_RUN" ]; then .claude/skills/verify-multiprompt-android/scripts/update-reaction-release.sh; fi
+      - name: Compare desktop and Android transcript posts
+        if: inputs.feature == 'chat-codex.md'
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/valentinyeo/multiprompt/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/chat_history_reader.py -o /tmp/desktop-codex-reader.py
+          install -m 644 .claude/skills/verify-multiprompt-android/scripts/codex-parity.py /tmp/codex-parity.py
+          install -m 644 app/src/main/assets/chat_history_reader.py /tmp/android-codex-reader.py
+          sudo -u verifyssh python3 -B /tmp/codex-parity.py /tmp/desktop-codex-reader.py /tmp/android-codex-reader.py > "$EVIDENCE/desktop-android-parity.txt"
+          cat "$EVIDENCE/desktop-android-parity.txt"
+          grep -Fx DESKTOP_ANDROID_POSTS_IDENTICAL "$EVIDENCE/desktop-android-parity.txt"
       - name: Require the original native-skill failure
         if: inputs.expect_native_missing == true
         env:

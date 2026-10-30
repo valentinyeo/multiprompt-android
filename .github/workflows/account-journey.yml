@@ -1,6 +1,8 @@
 name: Account layout journey
 
 on:
+  schedule:
+    - cron: '23 3 * * *'
   pull_request:
     paths:
       - 'app/**'

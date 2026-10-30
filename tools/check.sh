@@ -8,6 +8,7 @@ python3 -B tools/working-dots/check.test.py
 python3 -B tools/history-continuity.test.py
 python3 tools/terminal-console.test.py
 python3 tools/session-routing.test.py
+python3 -B tools/codex-sync.test.py
 python3 -B tools/structured-questions.test.py
 python3 -B tools/native-skills.test.py
 python3 -B tools/release-choices/ui.test.py
