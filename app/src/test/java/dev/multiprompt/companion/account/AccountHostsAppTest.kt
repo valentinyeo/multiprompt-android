@@ -39,6 +39,7 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.util.ReflectionHelpers
 import java.util.Base64
 import java.util.Collections
+import java.util.concurrent.atomic.AtomicReference
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class, qualifiers = "w390dp-h844dp-mdpi")
@@ -54,6 +55,7 @@ class AccountHostsAppTest {
     private val key = "ssh-ed25519 " + Base64.getEncoder().encodeToString("public-host-key".toByteArray())
     private val remoteHost = AccountHost(0, "Account server", "example.com", 2222, "valentin", listOf(key))
     private var remote = AccountLayout(1, hosts = listOf(remoteHost))
+    private val beforeNextLayoutGet = AtomicReference<((AccountLayout) -> AccountLayout)?>(null)
     private var conflict = false
     private var features: String? = "favorite,used,visits,input,settings,hosts"
     private var featureHeader = "X-Layout-Features"
@@ -99,7 +101,12 @@ class AccountHostsAppTest {
                             hosts = if (incoming.hosts == null) remote.hosts else
                                 (remote.hosts.orEmpty().associateBy { it.slot } + incoming.hosts.associateBy { it.slot }).values.sortedBy { it.slot })
                     }
-                } else assertEquals("GET", request.method)
+                } else {
+                    assertEquals("GET", request.method)
+                    if (request.url.encodedPath == "/v1/layout") {
+                        beforeNextLayoutGet.getAndSet(null)?.let { remote = it(remote) }
+                    }
+                }
                 Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(status).message("OK")
                     .apply { features?.let { header(featureHeader, it) } }
                     .body(JSONObject().put("revision", remote.revision).put("layout", remote.json()).toString().toResponseBody()).build()
@@ -117,7 +124,7 @@ class AccountHostsAppTest {
         compose.runOnIdle { model.syncAccount() }
         compose.waitUntil(15_000) {
             shadowOf(Looper.getMainLooper()).idle()
-            model.state.value.accountLayout != null && !model.state.value.accountSyncing
+            model.state.value.accountLayout != null && !model.state.value.accountSyncing && !model.state.value.accountPending
         }
         compose.runOnIdle {
             assertTrue(model.state.value.signedIn)
@@ -136,11 +143,12 @@ class AccountHostsAppTest {
             assertTrue(model.syncAuth.supportsWorkspaceColors)
             assertEquals(4, model.state.value.inboxSessions.single().workspaceColor)
             assertEquals(4, AccountLayoutStore(app).load("test-account")!!.edited.workspaceColor("Cedar"))
+            beforeNextLayoutGet.set { it.copy(revision = it.revision + 1, workspaceColors = mapOf("Cedar" to 6)) }
             assertNull(model.editAccountLayout { it.setSetting("frequent", true) })
-            remote = remote.copy(revision = remote.revision + 1, workspaceColors = mapOf("Cedar" to 6))
         }
         sync()
         compose.runOnIdle {
+            assertNull(beforeNextLayoutGet.get())
             assertEquals(6, remote.workspaceColor("Cedar"))
             assertEquals(true, remote.settings?.get("frequent"))
             assertEquals(6, model.state.value.inboxSessions.single().workspaceColor)

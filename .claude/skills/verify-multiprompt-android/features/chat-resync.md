@@ -59,7 +59,7 @@ It sets `recovery_scan=NULL` and `user_version=1`.
 It preserves every row's original origin and inode.
 That legacy snapshot enters the evidence.
 
-Next, it appends two genuine main-chain user receipts.
+Next, it appends two synthetic main-chain user receipt rows.
 The head receipt drops only trailing ASCII space.
 System padding separates the two receipts.
 Padding exceeds the canonical recovery scan slice.

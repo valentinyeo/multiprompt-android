@@ -1040,17 +1040,18 @@ def queue_apply(state, event):
         sent.clear()
 
 
-def queue_replay(source, size):
+def queue_replay(source, size, with_receipts=False):
     key = (str(Path(source.name).resolve()), os.fstat(source.fileno()).st_ino)
     previous = QUEUE_CACHE.get(key)
     start, state = 0, ([], [])
-    queued, receipts = [], []
+    queued, receipts, sent_occurrences, consumed = [], [], [], {}
     resumed = False
-    if previous is not None and previous[0] <= size:
+    if previous is not None and len(previous) == 7 and previous[0] <= size:
         source.seek(max(0, previous[0] - 64))
         if hashlib.sha256(source.read(min(previous[0], 64))).hexdigest() == previous[2]:
             start, state, resumed = previous[0], (list(previous[1][0]), list(previous[1][1])), True
             queued, receipts = list(previous[3]), list(previous[4])
+            sent_occurrences, consumed = list(previous[5]), dict(previous[6])
     trim = not resumed and size > QUEUE_SCAN_BYTES
     if trim:
         start = size - QUEUE_SCAN_BYTES
@@ -1078,6 +1079,8 @@ def queue_replay(source, size):
             previous_sent = list(state[1])
             removed = queue_apply(state, event)
             if len(state[0]) > count:
+                if count == 0:
+                    sent_occurrences.clear()
                 receipt = (state[0][-1], stamp, position)
                 queued.append(receipt)
                 receipts.append(receipt)
@@ -1085,8 +1088,13 @@ def queue_replay(source, size):
                 receipt = queued.pop(removed)
                 if receipt not in receipts:
                     state[1][:] = previous_sent
+                else:
+                    sent_occurrences.append(receipt)
+                    del sent_occurrences[:-QUEUE_SHOWN]
             elif event.get("operation") == "popAll":
                 queued.clear()
+                sent_occurrences.clear()
+            consumed = {item: consumed[item] for item in sent_occurrences + queued if item in consumed}
             continue
         message = conversation_event(event, "claude")
         if message is None or message["role"] != "user" or stamp is None:
@@ -1095,18 +1103,27 @@ def queue_replay(source, size):
             text, queued_stamp, _ = receipt
             if queued_stamp is None or stamp < queued_stamp or message["text"] != text:
                 continue
+            matches = [candidate for candidate in receipts if candidate[1] is not None and stamp >= candidate[1] and message["text"] == candidate[0]]
             receipts.pop(i)
+            if (len(matches) == 1 and receipt not in consumed and
+                    event.get("type") in ("user", "attachment")):
+                consumed[receipt] = (position - len(raw), hashlib.sha256(raw).hexdigest())
             if receipt in queued:
                 state[1].append(text)
+                sent_occurrences.append(receipt)
                 del state[1][:-QUEUE_SHOWN]
+                del sent_occurrences[:-QUEUE_SHOWN]
+            consumed = {item: consumed[item] for item in sent_occurrences + queued if item in consumed}
             break
     scanned = start + end
     source.seek(max(0, scanned - 64))
     probe = hashlib.sha256(source.read(min(scanned, 64))).hexdigest()
-    QUEUE_CACHE[key] = (scanned, state, probe, queued, receipts)
+    consumed = {occurrence: consumed[occurrence] for occurrence in sent_occurrences if occurrence in consumed}
+    QUEUE_CACHE[key] = (scanned, state, probe, queued, receipts, sent_occurrences, consumed)
     if len(QUEUE_CACHE) > 256:
         del QUEUE_CACHE[next(iter(QUEUE_CACHE))]
-    return [receipt[0] for receipt in queued if receipt in receipts], state[1]
+    sent = list(zip(state[1], (consumed.get(item) for item in sent_occurrences))) if with_receipts else state[1][-QUEUE_SHOWN:]
+    return [receipt[0] for receipt in queued if receipt in receipts], sent
 
 
 def grey_code(params):
@@ -1233,17 +1250,51 @@ def queue_item(text):
     return dict(text=html.unescape(body)[:QUEUE_TEXT], sender='Task' if kind == 'task-notification' else html.unescape(sender or 'another session'), injected=True)
 
 
+def _consumed_identity(source, sid, inode, offset, digest, text):
+    try:
+        info = os.fstat(source.fileno())
+        path_info = os.stat(source.name)
+        if ((info.st_dev, info.st_ino) != (path_info.st_dev, path_info.st_ino) or
+                info.st_ino != inode or offset < 0 or offset >= info.st_size):
+            return None
+        if offset:
+            source.seek(offset - 1)
+            if source.read(1) != b"\n":
+                return None
+        source.seek(offset)
+        raw = source.readline()
+        if not raw.endswith(b"\n") or hashlib.sha256(raw).hexdigest() != digest:
+            return None
+        event = load_line(raw)
+        if (not isinstance(event, dict) or event.get("sessionId", sid) != sid or
+                event.get("type") not in ("user", "attachment") or event.get("isSidechain")):
+            return None
+        if not any(row["role"] == "user" and row["text"].replace("\r", "").rstrip(" ") == text.replace("\r", "").rstrip(" ")
+                   for row in conversation_rows(event, "claude", offset)):
+            return None
+        return sid, inode, offset, digest
+    except (OSError, ValueError, TypeError):
+        return None
+
+
 def live_fields(source, size, tmux, shown=None, sid=None):
-    queue, sent = queue_replay(source, size)
-    fields = dict(queue=[queue_item(text) for text in queue[:QUEUE_SHOWN]], sent=[queue_item(text) for text in sent[-QUEUE_SHOWN:]])
+    queue, sent = queue_replay(source, size, with_receipts=True)
+    fields = dict(queue=[queue_item(text) for text in queue[:QUEUE_SHOWN]])
     if sid is not None:
-        held = held_queue_fields(tmux, sid)
+        held = held_queue_fields(tmux, sid, with_receipts=True)
         fields["queue"] = (held["queue"] + fields["queue"])[:QUEUE_SHOWN]
-        fields["sent"] = (fields["sent"] + held["sent"])[-QUEUE_SHOWN:]
+        inode = os.fstat(source.fileno()).st_ino
+        identities = {identity for text, receipt in sent if receipt is not None
+                      if (identity := _consumed_identity(source, sid, inode, *receipt, text)) is not None}
+        for text, receipt in held["sent"]:
+            identity = _consumed_identity(source, sid, *receipt, text) if receipt is not None else None
+            if identity is None or identity not in identities:
+                sent.append((text, None))
         if held_queue_path(tmux).exists():
             from contextlib import closing
             with closing(held_queue_db(tmux)) as db:
                 fields["received"] = [row[0] for row in db.execute("SELECT key FROM messages WHERE sid=? AND state='delivered' AND key LIKE 'desktop-%' ORDER BY created DESC LIMIT 20", (sid,))]
+    fields["sent"] = [queue_item(text) for text, _ in sent[-QUEUE_SHOWN:]]
     draft = box_draft_text(shown) if shown is not None else box_draft("=" + tmux + ":")
     if draft is not None:
         fields["draft"] = draft[:DRAFT_TEXT]
@@ -1724,6 +1775,7 @@ def held_queue_db(tmux):
         if db.execute("PRAGMA user_version").fetchone()[0] < 2:
             db.execute("PRAGMA user_version=2")
         db.execute("CREATE TABLE IF NOT EXISTS held_receipts (sid TEXT NOT NULL, inode INTEGER NOT NULL, offset INTEGER NOT NULL, key TEXT NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(sid,inode,offset))")
+        db.execute("CREATE INDEX IF NOT EXISTS held_receipts_key ON held_receipts(key,sid,inode,offset)")
     return db
 
 
@@ -1984,7 +2036,15 @@ def drain_held_queue(tmux, sid, transcript):
                 return
             db.execute("UPDATE messages SET state='submitted',scan=?1,recovery_scan=?1 WHERE key=?2 AND state='queued'", (info.st_size, key))
         try:
-            result = send_response(dict(id=0, tmux=tmux, text=text))
+            with db:
+                db.execute("BEGIN IMMEDIATE")
+                current = resolve_tmux_agent("claude", tmux, require_bound=True)
+                if current is None or current[0] != sid or Path(current[1]) != Path(transcript):
+                    return
+                info = transcript.stat()
+                if info.st_ino != inode or not db.execute("SELECT 1 FROM messages WHERE key=? AND sid=? AND state='submitted' AND source_inode=? AND origin<=? AND recovery_scan<=?", (key, sid, info.st_ino, info.st_size, info.st_size)).fetchone():
+                    return
+                result = send_response(dict(id=0, tmux=tmux, text=text))
             failure = "Terminal handoff failed; receipt not confirmed" if "\tsend\terror\t" in result else ""
         except (OSError, subprocess.SubprocessError, UnicodeError):
             failure = "Terminal handoff interrupted; receipt not confirmed"
@@ -1993,14 +2053,19 @@ def drain_held_queue(tmux, sid, transcript):
                 db.execute("UPDATE messages SET receipt=? WHERE key=? AND state='submitted'", (failure, key))
 
 
-def held_queue_fields(tmux, sid):
+def held_queue_fields(tmux, sid, with_receipts=False):
     from contextlib import closing
     if not held_queue_path(tmux).exists():
         return dict(queue=[], sent=[])
     with closing(held_queue_db(tmux)) as db:
         queued = db.execute("SELECT text FROM messages WHERE sid=? AND state='queued' ORDER BY created LIMIT ?", (sid, QUEUE_SHOWN)).fetchall()
-        sent = db.execute("SELECT text FROM messages WHERE sid=? AND state='delivered' ORDER BY created DESC LIMIT ?", (sid, QUEUE_SHOWN)).fetchall()
-    return dict(queue=[row[0] for row in queued], sent=[row[0] for row in reversed(sent)])
+        sql = "SELECT key,text,source_inode,origin FROM messages WHERE sid=? AND state='delivered' ORDER BY created DESC LIMIT ?"
+        sent = db.execute(sql, (sid, QUEUE_SHOWN)).fetchall()
+        result = []
+        for key, text, inode, origin in reversed(sent):
+            claims = db.execute("SELECT inode,offset,digest FROM held_receipts WHERE key=? AND sid=? AND inode=? AND offset>=? LIMIT 2", (key, sid, inode, origin)).fetchall() if with_receipts else []
+            result.append((text, claims[0] if len(claims) == 1 else None) if with_receipts else text)
+    return dict(queue=[row[0] for row in queued], sent=result)
 
 
 def send_response(q):
@@ -2427,7 +2492,7 @@ elif __name__ == "__main__":
         print("@mp\t0\thistory\terror\t-\t0\n" + END)
 
 '''
-RUNTIME_GENERATION = 3
+RUNTIME_GENERATION = 5
 
 if __name__ == '__main__':
     import fcntl

@@ -15,7 +15,7 @@ case "${RELEASE_CHANNEL:-android-latest}" in
         apk_url=https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion.apk
         ;;
     android-m3-latest)
-        [[ "${VERIFY_FEATURE:-}" == chat-resync.md && -z "${APP_REF:-}" ]]
+        [[ ( "${VERIFY_FEATURE:-}" == chat-resync.md || "${VERIFY_FEATURE:-}" == session-favorites.md || "${VERIFY_FEATURE:-}" == chat-queued.md ) && -z "${APP_REF:-}" ]]
         package=dev.multiprompt.companion.m3
         task=assembleM3
         apk=app/build/outputs/apk/m3/app-m3.apk

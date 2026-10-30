@@ -1,10 +1,12 @@
 import base64
 import importlib.util
+import hashlib
 import json
 import io
 import os
 import selectors
 import shutil
+import sqlite3
 from pathlib import Path
 import subprocess
 import sys
@@ -2639,6 +2641,205 @@ class SharedQueueDraftTest(unittest.TestCase):
         status = [row for row in rows if row['role'] == 'status']
         return status[0] if status else None
 
+    def receipt_event(self, text, sid='sid'):
+        return dict(type='attachment', timestamp='2026-10-23T10:00:01.000Z', sessionId=sid,
+                    attachment=dict(type='queued_command', prompt=text))
+
+    def delivered(self, key, text, event_index=None, inode=None, digest=None, sid='sid'):
+        lines = self.path.read_bytes().splitlines(keepends=True)
+        inode = self.path.stat().st_ino if inode is None else inode
+        with reader.held_queue_db('term-1') as db:
+            db.execute("INSERT INTO messages(key,sid,text,queued_at,state,origin,source_inode,created) VALUES(?,?,?,1,'delivered',0,?,?)",
+                       (key, 'sid', text, inode, int(key.split('-')[-1])))
+            if event_index is not None:
+                raw = lines[event_index]
+                offset = sum(map(len, lines[:event_index]))
+                db.execute('INSERT INTO held_receipts(sid,inode,offset,key,digest) VALUES(?,?,?,?,?)',
+                           (sid, inode, offset, key, digest or hashlib.sha256(raw).hexdigest()))
+
+    def projected_sent(self):
+        with self.path.open('rb') as source, patch.object(reader, 'box_draft', return_value=None):
+            return reader.live_fields(source, self.path.stat().st_size, 'term-1', sid='sid')['sent']
+
+    def test_consumed_receipt_recorded_queue_stays_ambiguous_on_refresh(self):
+        alpha, beta = 'shell queued alpha edited', 'chat queued beta'
+        self.write(self.op('enqueue', 'shell queued alpha'), self.op('enqueue', beta),
+                   self.op('popAll'), self.op('enqueue', alpha), self.op('enqueue', beta),
+                   self.op('remove', alpha), self.receipt_event(alpha),
+                   self.op('dequeue'), self.receipt_event(beta))
+        self.delivered('desktop-1', beta, 8)
+        for _ in range(3):
+            self.assertEqual(self.projected_sent(), [alpha, beta, beta])
+        reader.QUEUE_CACHE.clear()
+        self.assertEqual(self.projected_sent(), [alpha, beta, beta])
+
+    def test_unique_native_and_held_receipt_merge(self):
+        self.write(self.op('enqueue', 'beta'), self.op('dequeue'), self.receipt_event('beta'))
+        self.delivered('desktop-1', 'beta', 2)
+        self.assertEqual(self.projected_sent(), ['beta'])
+        reader.QUEUE_CACHE.clear()
+        self.assertEqual(self.projected_sent(), ['beta'])
+
+    def test_orphan_receipt_never_claims_new_occurrence(self):
+        for eviction in (False, True):
+            for resume in (False, True):
+                for claim in ('first', 'second'):
+                    with self.subTest(eviction=eviction, resume=resume, claim=claim):
+                        reader.QUEUE_CACHE.clear()
+                        with reader.held_queue_db('term-1') as db:
+                            db.execute('DELETE FROM held_receipts')
+                            db.execute('DELETE FROM messages')
+                        if eviction:
+                            prefix = [self.op('enqueue', 'same')]
+                            prefix += [self.op('enqueue', f'filler-{i}') for i in range(reader.QUEUE_SHOWN)]
+                            prefix += [self.op('dequeue', 'same')]
+                            prefix += [self.op('dequeue', f'filler-{i}') for i in range(reader.QUEUE_SHOWN)]
+                        else:
+                            prefix = [self.op('enqueue', 'same'), self.op('popAll')]
+                        prefix += [self.op('enqueue', 'same'), self.receipt_event('same')]
+                        suffix = [self.op('dequeue', 'same'), self.receipt_event('same'),
+                                  self.event('tail ' + 'x' * 128)]
+                        events = prefix + suffix
+                        for i, event in enumerate(events):
+                            event['timestamp'] = f'2026-10-23T10:{i // 60:02d}:{i % 60:02d}.000Z'
+                        self.write(*(prefix if resume else events))
+                        if resume:
+                            self.projected_sent()
+                            with self.path.open('a') as output:
+                                output.write(''.join(json.dumps(event) + '\n' for event in suffix))
+                        self.delivered('desktop-1', 'same', len(prefix) - 1 if claim == 'first' else len(prefix) + 1)
+                        expected_count = 2 if claim == 'first' else 1
+                        self.assertEqual(self.projected_sent().count('same'), expected_count)
+                        self.assertEqual(self.projected_sent().count('same'), expected_count)
+                        reader.QUEUE_CACHE.clear()
+                        self.assertEqual(self.projected_sent().count('same'), expected_count)
+                        if claim == 'second':
+                            data = self.path.read_bytes()
+                            self.path.write_bytes(data.replace(b'"prompt": "same"', b'"prompt": "else"', 2))
+                            self.assertEqual(self.projected_sent().count('same'), 2)
+
+    def test_consumed_receipt_keeps_idle_and_different_occurrences(self):
+        self.write(self.op('enqueue', 'same'), self.op('enqueue', 'other'),
+                   self.op('dequeue'), self.receipt_event('same'), self.op('enqueue', 'same'),
+                   self.op('dequeue'), self.receipt_event('other'),
+                   self.op('dequeue'), self.receipt_event('same'), self.receipt_event('idle'))
+        self.delivered('desktop-1', 'same', 8)
+        self.delivered('desktop-2', 'idle', 9)
+        self.assertEqual(self.projected_sent(), ['same', 'other', 'same', 'idle'])
+        reader.QUEUE_CACHE.clear()
+        self.assertEqual(self.projected_sent(), ['same', 'other', 'same', 'idle'])
+
+    def test_removed_without_consumption_does_not_merge(self):
+        self.write(self.op('enqueue', 'same'), self.op('remove', 'same'),
+                   dict(self.receipt_event('same'), timestamp='2026-10-23T09:59:59.000Z'))
+        self.delivered('desktop-1', 'same', 2)
+        self.assertEqual(self.projected_sent(), ['same', 'same'])
+
+    def test_invalid_receipts_never_collapse(self):
+        for invalid in ('digest', 'inode', 'receipt-sid', 'event-sid', 'partial', 'legacy'):
+            with self.subTest(invalid=invalid):
+                reader.QUEUE_CACHE.clear()
+                self.write(self.op('enqueue', 'same'), self.op('dequeue'),
+                           self.receipt_event('same', 'wrong' if invalid == 'event-sid' else 'sid'))
+                if invalid == 'partial':
+                    data = self.path.read_bytes()
+                    self.path.write_bytes(data[:-1])
+                self.delivered('desktop-1', 'same', None if invalid == 'legacy' else 2,
+                               inode=self.path.stat().st_ino + 1 if invalid == 'inode' else None,
+                               digest='0' * 64 if invalid == 'digest' else None,
+                               sid='wrong' if invalid == 'receipt-sid' else 'sid')
+                self.assertEqual(self.projected_sent(), ['same', 'same'])
+                with reader.held_queue_db('term-1') as db:
+                    db.execute('DELETE FROM held_receipts')
+                    db.execute('DELETE FROM messages')
+
+    def test_cached_receipt_is_revalidated_even_when_tail_unchanged(self):
+        self.write(self.op('enqueue', 'same'), self.op('dequeue'), self.receipt_event('same'),
+                   self.event('tail ' + 'x' * 128))
+        self.delivered('desktop-1', 'same', 2)
+        self.assertEqual(self.projected_sent(), ['same'])
+        data = self.path.read_bytes().replace(b'"prompt": "same"', b'"prompt": "else"')
+        self.path.write_bytes(data)
+        self.assertEqual(self.projected_sent(), ['same', 'same'])
+
+    def test_old_cache_shape_rebuilds_before_merging(self):
+        self.write(self.op('enqueue', 'same'), self.op('dequeue'), self.receipt_event('same'))
+        self.delivered('desktop-1', 'same', 2)
+        self.assertEqual(self.projected_sent(), ['same'])
+        key = (str(self.path.resolve()), self.path.stat().st_ino)
+        reader.QUEUE_CACHE[key] = reader.QUEUE_CACHE[key][:5]
+        self.assertEqual(self.projected_sent(), ['same'])
+
+    def test_replaced_or_truncated_source_never_collapses(self):
+        self.write(self.op('enqueue', 'same'), self.op('dequeue'), self.receipt_event('same'))
+        self.delivered('desktop-1', 'same', 2)
+        with self.path.open('rb') as source, patch.object(reader, 'box_draft', return_value=None):
+            size = self.path.stat().st_size
+            self.assertEqual(reader.live_fields(source, size, 'term-1', sid='sid')['sent'], ['same'])
+            replacement = self.path.with_suffix('.new')
+            replacement.write_bytes(self.path.read_bytes())
+            os.replace(replacement, self.path)
+            self.assertEqual(reader.live_fields(source, size, 'term-1', sid='sid')['sent'], ['same', 'same'])
+        self.path.write_bytes(self.path.read_bytes().splitlines(keepends=True)[0] +
+                              self.path.read_bytes().splitlines(keepends=True)[1])
+        self.assertEqual(self.projected_sent(), ['same', 'same'])
+
+    def test_many_deliveries_keep_recent_bounded_candidates(self):
+        count = reader.QUEUE_SHOWN * 2
+        events = [self.op('enqueue', f'native-{i}') for i in range(count)]
+        events.append(self.op('enqueue', 'still queued'))
+        offsets = {}
+        for i in range(count):
+            events.append(self.op('dequeue', f'native-{i}'))
+            offsets[i] = len(events)
+            events.append(self.receipt_event(f'native-{i}'))
+        self.write(*events)
+        with reader.held_queue_db('term-1') as db:
+            db.executemany("INSERT INTO messages(key,sid,text,queued_at,state,origin,source_inode,created) VALUES(?,?,?,1,'delivered',0,?,?)",
+                           [(f'old-{i}', 'sid', f'old-{i}', self.path.stat().st_ino, i)
+                            for i in range(2000)])
+            db.executemany('INSERT INTO held_receipts(sid,inode,offset,key,digest) VALUES(?,?,?,?,?)',
+                           [('sid', self.path.stat().st_ino, 1000000 + i, f'old-{i}', 'old')
+                            for i in range(2000)])
+        for i in range(count - 4, count):
+            self.delivered(f'desktop-{3000 + i}', f'native-{i}', offsets[i])
+        for i in range(4):
+            self.delivered(f'desktop-{4000 + i}', f'idle-{i}')
+
+        original_db = reader.held_queue_db
+        steps = []
+        def measured_db(tmux):
+            db = original_db(tmux)
+            db.set_progress_handler(lambda: steps.append(1) or 0, 100)
+            return db
+
+        expected = ([f'native-{i}' for i in range(count - 4, count)] +
+                    [f'idle-{i}' for i in range(4)])
+        with patch.object(reader, 'held_queue_db', side_effect=measured_db):
+            self.assertEqual(self.projected_sent(), expected)
+        self.assertLess(len(steps), 200)
+        cache = reader.QUEUE_CACHE[(str(self.path.resolve()), self.path.stat().st_ino)]
+        self.assertLessEqual(len(cache[1][1]), reader.QUEUE_SHOWN)
+        self.assertLessEqual(len(cache[5]), reader.QUEUE_SHOWN)
+        self.assertLessEqual(len(cache[6]), reader.QUEUE_SHOWN)
+        with self.path.open('ab') as source:
+            source.write((json.dumps(self.event('new tail')) + '\n').encode())
+        self.assertEqual(self.projected_sent(), expected)
+        reader.QUEUE_CACHE.clear()
+        self.assertEqual(self.projected_sent(), expected)
+
+    def test_simultaneous_identical_candidates_remain_distinct(self):
+        self.write(self.op('enqueue', 'same'), self.op('enqueue', 'same'),
+                   self.op('dequeue'), self.receipt_event('same'))
+        self.delivered('desktop-1', 'same', 3)
+        self.assertEqual(self.projected_sent(), ['same', 'same'])
+
+    def test_held_same_text_at_another_offset_remains_distinct(self):
+        self.write(self.op('enqueue', 'same'), self.op('dequeue'), self.receipt_event('same'),
+                   self.receipt_event('same'))
+        self.delivered('desktop-1', 'same', 3)
+        self.assertEqual(self.projected_sent(), ['same', 'same'])
+
     def test_IGSH_835_recorded_transcript_clears_queue_on_next_refresh(self):
         fixture = ROOT / 'tools/fixtures/IGSH-835/recorded-transcript.jsonl'
         events = [json.loads(line) for line in fixture.read_text(encoding='utf-8').splitlines()]
@@ -3020,6 +3221,56 @@ class HeldQueueTest(unittest.TestCase):
     def cancel(self, text, stamp):
         return reader.cancel_queued_response(dict(id=2, tmux='term-1', text=text, queued_at=stamp, message_id=f'message-{stamp}'))
 
+    def test_handoff_holds_writer_lock_after_durable_submission(self):
+        self.enqueue('first', 1)
+        self.enqueue('next', 2)
+        self.ready.return_value = True
+        db_path = reader.held_queue_path('term-1')
+
+        def handoff(_query):
+            with sqlite3.connect(db_path, timeout=0) as other:
+                self.assertEqual(other.execute('SELECT state FROM messages ORDER BY created').fetchall(),
+                                 [('submitted',), ('queued',)])
+                with self.assertRaisesRegex(sqlite3.OperationalError, 'locked'):
+                    other.execute('BEGIN IMMEDIATE')
+            return '@mp\t1\tsend\tok\t-\t0\n@@MP_END@@\n'
+
+        self.send.side_effect = handoff
+        reader.drain_held_queue('term-1', 'sid', self.path)
+        with sqlite3.connect(db_path, timeout=0) as other:
+            other.execute('BEGIN IMMEDIATE')
+            self.assertEqual(other.execute('SELECT state FROM messages ORDER BY created').fetchall(),
+                             [('submitted',), ('queued',)])
+        self.send.assert_called_once()
+
+    def test_handoff_subprocess_failure_keeps_submission_and_blocks_next(self):
+        self.enqueue('first', 1)
+        self.enqueue('next', 2)
+        self.ready.return_value = True
+        self.send.side_effect = subprocess.TimeoutExpired(['tmux'], 5)
+        reader.drain_held_queue('term-1', 'sid', self.path)
+        with sqlite3.connect(reader.held_queue_path('term-1'), timeout=0) as other:
+            other.execute('BEGIN IMMEDIATE')
+            self.assertEqual(other.execute('SELECT state,receipt FROM messages ORDER BY created').fetchall(),
+                             [('submitted', 'Terminal handoff interrupted; receipt not confirmed'),
+                              ('queued', '')])
+        reader.drain_held_queue('term-1', 'sid', self.path)
+        self.send.assert_called_once()
+
+    def test_handoff_rollback_keeps_submission_and_blocks_next(self):
+        self.enqueue('first', 1)
+        self.enqueue('next', 2)
+        self.ready.return_value = True
+        self.send.side_effect = RuntimeError('handoff interrupted')
+        with self.assertRaisesRegex(RuntimeError, 'handoff interrupted'):
+            reader.drain_held_queue('term-1', 'sid', self.path)
+        with sqlite3.connect(reader.held_queue_path('term-1'), timeout=0) as other:
+            other.execute('BEGIN IMMEDIATE')
+            self.assertEqual(other.execute('SELECT state FROM messages ORDER BY created').fetchall(),
+                             [('submitted',), ('queued',)])
+        reader.drain_held_queue('term-1', 'sid', self.path)
+        self.send.assert_called_once()
+
     def test_busy_empty_handoff_waits_for_receipt_and_never_replays(self):
         self.path.write_text(json.dumps(dict(type='assistant', message=dict(stop_reason=None))) + '\n')
         with patch.object(reader, 'start_held_worker'), \
@@ -3231,16 +3482,31 @@ class HeldQueueTest(unittest.TestCase):
                 self.enqueue('target', 1)
             except BaseException as error:
                 errors.append(error)
+        cancel_started = threading.Event()
+        cancel_results = []
+        def cancel():
+            try:
+                cancel_started.set()
+                cancel_results.append(self.cancel('target', 1))
+            except BaseException as error:
+                errors.append(error)
         worker = threading.Thread(target=enqueue)
+        canceller = threading.Thread(target=cancel)
         worker.start()
         try:
             self.assertTrue(entered.wait(5))
-            self.assertIn('\tcancel_queued\terror\tnot_queued\t', self.cancel('target', 1))
+            canceller.start()
+            self.assertTrue(cancel_started.wait(5))
         finally:
             release.set()
             worker.join(5)
+            if canceller.ident is not None:
+                canceller.join(5)
         self.assertFalse(worker.is_alive())
+        self.assertFalse(canceller.is_alive())
         self.assertEqual(errors, [])
+        self.assertEqual(len(cancel_results), 1)
+        self.assertIn('\tcancel_queued\terror\tnot_queued\t', cancel_results[0])
         self.send.assert_called_once()
 
 
@@ -3449,8 +3715,11 @@ class HeldQueueTest(unittest.TestCase):
         self.ready.return_value = True
 
         def verify_before_send(request):
-            with reader.held_queue_db('term-1') as db:
+            db = sqlite3.connect(reader.held_queue_path('term-1').as_uri() + '?mode=ro', uri=True, timeout=0)
+            try:
                 states = dict(db.execute('SELECT key,state FROM messages'))
+            finally:
+                db.close()
             self.assertEqual(states['message-1'], 'delivered')
             self.assertEqual(states['message-4'], 'delivered')
             self.assertEqual(states['message-3'], 'queued')

@@ -229,10 +229,27 @@ if ! wait_text ghost-fav 30 hasi; then
     exit 1
 fi
 shot android-favorites-with-ghost
-stars unstar runner-1 | tee "$EVIDENCE/favorites-unset.json"
-wait_gone runner-1 60 hasi
+dump_ui
+read -r x y <<< "$(python3 "$here/ui.py" "$EVIDENCE/current.xml" tap runner-1)"
+adb shell input swipe "$x" "$y" "$x" "$y" 1000
+wait_text 'Unfavorite' 10
+shot android-favorite-remove-menu
+tap_text 'Unfavorite'
+wait_gone runner-1 10 hasi
 wait_text ghost-fav 5 hasi
 shot android-favorites-after-unstar
+node "$here/favorites.mjs" http://127.0.0.1:8787 "$admin" read runner-1 false "$EVIDENCE/favorites-set.json" ghost-fav | tee "$EVIDENCE/favorites-unset.json"
+tap_split All
+wait_text runner-1 30 hasi
+dump_ui
+read -r x y <<< "$(python3 "$here/ui.py" "$EVIDENCE/current.xml" tap runner-1)"
+adb shell input swipe "$x" "$y" "$x" "$y" 1000
+wait_text 'Favorite' 10
+tap_text 'Favorite'
+tap_split Favorites
+wait_text runner-1 10 hasi
+shot android-favorite-added-back
+node "$here/favorites.mjs" http://127.0.0.1:8787 "$admin" read runner-1 true "$EVIDENCE/favorites-set.json" ghost-fav | tee "$EVIDENCE/favorites-added-back.json"
 printf 'favorites-parity ok\n'
 
 printf '{"section_seconds": %s, "open_seconds": %s}\n' "$section_seconds" "$open_seconds" | tee "$EVIDENCE/result.json"

@@ -2,7 +2,7 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 case "$feature" in
-    chat-codex.md|session-gestures.md|chat-working.md|session-summaries.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
+    chat-codex.md|session-gestures.md|session-favorites.md|chat-working.md|session-summaries.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
     *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
 esac
 : "${EVIDENCE:?Set evidence directory}"
@@ -27,6 +27,20 @@ shot() {
     step=$((step + 1))
     cp "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-$1.xml"
     adb exec-out screencap -p > "$EVIDENCE/$(printf '%02d' "$step")-$1.png"
+    if [[ "$feature" == session-favorites.md ]]; then
+        python3 - "$EVIDENCE/$(printf '%02d' "$step")-$1.png" "$EVIDENCE/$(printf '%02d' "$step")-$1.xml" "$package" <<'PYCAPTURE'
+import struct
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+image = Path(sys.argv[1]).read_bytes()
+assert len(image) > 24 and image[:8] == b'\x89PNG\r\n\x1a\n'
+assert all(size >= 100 for size in struct.unpack('>II', image[16:24]))
+root = ET.parse(sys.argv[2]).getroot()
+if '-favorites-' in sys.argv[2]:
+    assert any(node.get('package') == sys.argv[3] for node in root.iter('node'))
+PYCAPTURE
+    fi
 }
 finish() {
     code=$?
@@ -224,8 +238,8 @@ if [[ "$feature" == launcher-icon.md ]]; then
     exit 0
 fi
 if [[ "$package" == dev.multiprompt.companion || "$package" == dev.multiprompt.companion.m3 ]]; then
-    if [[ "$package" == dev.multiprompt.companion.m3 ]]; then [[ "$feature" == chat-resync.md ]]; fi
-    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md || "$feature" == chat-resync.md ]]
+    if [[ "$package" == dev.multiprompt.companion.m3 ]]; then [[ "$feature" == chat-resync.md || "$feature" == session-favorites.md || "$feature" == chat-queued.md ]]; fi
+    [[ "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md || "$feature" == chat-resync.md || "$feature" == session-favorites.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -334,6 +348,99 @@ if ! wait_for_text verify-session; then
     exit 1
 fi
 shot sessions
+
+if [[ "$feature" == session-favorites.md ]]; then
+    [[ "${GITHUB_ACTIONS:-}" == true && "$(adb get-serialno)" == emulator-* ]]
+    [[ "$package" == dev.multiprompt.companion || "$package" == dev.multiprompt.companion.m3 ]]
+    [[ "$(adb shell settings get global http_proxy | tr -d '\r')" == 10.0.2.2:8788 ]]
+    wait_for_text verify-keep
+    sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh bash -c '
+        [[ "$GITHUB_ACTIONS" == true && "$HOME" == /home/verifyssh && "$(id -u)" -ne 0 && "$(id -un)" == verifyssh ]]
+        tmux has-session -t verify-session && tmux has-session -t verify-keep
+    '
+    adb shell am force-stop "$package"
+    adb shell am instrument -w -e mode favorites-seed dev.multiprompt.verification/dev.multiprompt.verification.Seed | tr -d '\r' > "$FIXTURE/favorites-seed.txt"
+    grep -Fx 'INSTRUMENTATION_RESULT: result=ISOLATED_FAVORITES_SEEDED' "$FIXTURE/favorites-seed.txt"
+    grep -Fx 'INSTRUMENTATION_CODE: -1' "$FIXTURE/favorites-seed.txt"
+    relaunch_app
+    tap_text Favorites
+    wait_for_text verify-session
+    wait_for_text verify-keep
+    dump_ui
+    python3 tools/account-journey/ui.py "$EVIDENCE/current.xml" selected Favorites
+    shot favorites-before
+    read -r row_x row_y <<< "$(select_node text verify-session)"
+    adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
+    wait_for_text 'End session'
+    shot favorites-remove-menu
+    if ! select_node text Unfavorite >/dev/null 2>&1; then
+        if select_node text Unstar >/dev/null 2>&1; then
+            printf 'FAVORITE_DESKTOP_WORDS_MISSING: expected Unfavorite, found Unstar\n' | tee "$EVIDENCE/favorite-failure.txt"
+        fi
+        exit 1
+    fi
+    tap_text Unfavorite
+    removal_started=$SECONDS
+    wait_for_absence verify-session
+    (( SECONDS - removal_started <= 10 ))
+    wait_for_text verify-keep
+    dump_ui
+    python3 tools/account-journey/ui.py "$EVIDENCE/current.xml" selected Favorites
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent verify-session
+    shot favorites-removed
+    favorites_snapshot() {
+        local expected=$1 output=$2
+        adb shell am instrument -w -e mode favorites-snapshot dev.multiprompt.verification/dev.multiprompt.verification.Seed | tr -d '\r' > "$FIXTURE/favorites-snapshot.txt"
+        python3 - "$FIXTURE/favorites-snapshot.txt" "$EVIDENCE/$output.json" "$expected" <<'PYFAVORITES'
+import json
+import re
+import sys
+from pathlib import Path
+raw = Path(sys.argv[1]).read_text()
+assert 'INSTRUMENTATION_RESULT: result=ISOLATED_FAVORITES_SNAPSHOT' in raw
+assert 'INSTRUMENTATION_CODE: -1' in raw
+matches = re.findall(r'^INSTRUMENTATION_RESULT: favorites=(.*)$', raw, re.M)
+assert len(matches) == 1
+states = json.loads(matches[0])
+assert states == {'verify-session': sys.argv[3] == 'true', 'verify-keep': True}, states
+Path(sys.argv[2]).write_text(json.dumps(states, sort_keys=True) + '\n')
+PYFAVORITES
+    }
+    favorites_snapshot false favorites-removed-state
+    relaunch_app
+    tap_text All
+    wait_for_text verify-session
+    read -r row_x row_y <<< "$(select_node text verify-session)"
+    adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
+    wait_for_text 'End session'
+    shot favorites-add-menu
+    if ! select_node text Favorite >/dev/null 2>&1; then
+        if select_node text Star >/dev/null 2>&1; then
+            printf 'FAVORITE_DESKTOP_WORDS_MISSING: expected Favorite, found Star\n' | tee "$EVIDENCE/favorite-failure.txt"
+        fi
+        exit 1
+    fi
+    tap_text Favorite
+    tap_text Favorites
+    wait_for_text verify-session
+    wait_for_text verify-keep
+    dump_ui
+    python3 tools/account-journey/ui.py "$EVIDENCE/current.xml" selected Favorites
+    shot favorites-restored
+    favorites_snapshot true favorites-restored-state
+    relaunch_app
+    tap_text Favorites
+    wait_for_text verify-session
+    wait_for_text verify-keep
+    shot favorites-after-restart
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh bash -c '
+        [[ "$GITHUB_ACTIONS" == true && "$HOME" == /home/verifyssh && "$(id -u)" -ne 0 && "$(id -un)" == verifyssh ]]
+        tmux has-session -t verify-session && tmux has-session -t verify-keep
+    '
+    printf 'SIGNED_OFFLINE_FAVORITES_OK\n' | tee "$EVIDENCE/favorites-result.txt"
+    exit 0
+fi
 
 if [[ "$feature" == session-summaries.md ]]; then
     wait_for_text 'Lauren Tan profile is done, checked and pushed.'
@@ -641,7 +748,12 @@ if [[ "$feature" == chat-codex.md ]]; then
         [[ "$elapsed" -ge 0 && "$elapsed" -le 5000 ]]
         shot "codex-$mode-phone-reply"
         sudo -u verifyssh tmux capture-pane -pt "$destination" > "$EVIDENCE/$mode-terminal.txt"
-        ! grep -F "CODEX_REPLY_${mode}_PHONE_CODEX" "$EVIDENCE/$mode-terminal.txt"
+        test -s "$EVIDENCE/$mode-terminal.txt"
+        if grep -F "CODEX_REPLY_${mode}_PHONE_CODEX" "$EVIDENCE/$mode-terminal.txt"; then
+            exit 1
+        else
+            [[ $? -eq 1 ]]
+        fi
     done
     adb shell input keyevent KEYCODE_BACK
     wait_for_text Inbox
@@ -680,7 +792,7 @@ if [[ "$feature" == chat-queued.md ]]; then
     wait_for_text 'Ready for queued messages.'
     shot queued-ready
     : > "$FIXTURE/recorder.pid"
-    adb shell 'screenrecord --time-limit 180 --bit-rate 2000000 /sdcard/chat-catchup.mp4 & echo $!; wait' > "$FIXTURE/recorder.pid" &
+    adb shell 'screenrecord --time-limit 0 --bit-rate 2000000 /sdcard/chat-catchup.mp4 & echo $!; wait' > "$FIXTURE/recorder.pid" &
     recorder_client=$!
     for attempt in {1..20}; do
         recorder_pid=$(head -1 "$FIXTURE/recorder.pid")
@@ -710,45 +822,85 @@ if [[ "$feature" == chat-queued.md ]]; then
         python3 "$scripts/queued.py" "$EVIDENCE/current.xml" "$expected" "$name"
     }
     provider_event() { sudo -u verifyssh env GITHUB_ACTIONS="$GITHUB_ACTIONS" HOME=/home/verifyssh python3 /home/verifyssh/queued-console.py "$1"; }
+    fixture_counts() {
+        python3 - "$1" "$2" <<'QUEUE_COUNTS'
+import json
+import subprocess
+import sys
+expected_inputs = [] if sys.argv[1] == '-' else sys.argv[1].split(',')
+expected_receipts = [] if sys.argv[2] == '-' else sys.argv[2].split(',')
+inputs = subprocess.check_output(['sudo', 'cat', '/home/verifyssh/receipts.txt'], text=True).splitlines()
+assert inputs == ['VERIFY_RECEIVED:' + text for text in expected_inputs], inputs
+raw = subprocess.check_output(['sudo', 'cat', '/home/verifyssh/.claude/projects/-home-verifyssh-queued-work/a1b2c3d4-1008-4000-8000-000000001008.jsonl'], text=True)
+rows = [json.loads(line) for line in raw.splitlines()]
+receipts = [row['attachment']['prompt'] for row in rows if row.get('type') == 'attachment' and row.get('attachment', {}).get('type') == 'queued_command' and not row.get('isSidechain')]
+assert receipts == expected_receipts, receipts
+QUEUE_COUNTS
+    }
+    resync_marker() {
+        tap_desc 'Session actions'
+        wait_for_text 'Resync chat'
+        tap_text 'Resync chat'
+        provider_event "marker:$1"
+        wait_for_text "$1"
+    }
     fill 'Message verify-session' WAITING_ONE
     tap_desc 'Send prompt'
     wait_for_text WAITING_ONE
     fill 'Message verify-session' WAITING_TWO
     tap_desc 'Send prompt'
     wait_for_text WAITING_TWO
-    queue_states queued queued | tee "$EVIDENCE/queue-pending.json"
+    queue_states waiting queued queued | tee "$EVIDENCE/queue-pending.json"
     queue_ui 2 QUEUE_WAITING
     shot queued-waiting
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/draft-before.txt"
     grep -F '❯ FIXTURE_OWNED_DRAFT' "$EVIDENCE/draft-before.txt"
-    sudo test -f /home/verifyssh/receipts.txt
-    sudo test ! -s /home/verifyssh/receipts.txt
+    fixture_counts - -
     provider_event clear-draft
     wait_receipt 'VERIFY_RECEIVED:WAITING_ONE'
-    queue_states delivered queued | tee "$EVIDENCE/queue-first-delivered.json"
-    queue_ui 1 QUEUE_FIRST_DELIVERED
-    wait_for_text WAITING_ONE
-    wait_for_text WAITING_TWO
-    shot queued-first-delivered
+    queue_states waiting submitted queued | tee "$EVIDENCE/queue-submitted.json"
+    queue_ui 1 QUEUE_SUBMITTED
+    shot queued-submitted
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/native-queue-blocked.txt"
     grep -F 'edit queued messages' "$EVIDENCE/native-queue-blocked.txt"
-    [[ $(sudo awk 'END {print NR}' /home/verifyssh/receipts.txt) -eq 1 ]]
+    fixture_counts WAITING_ONE -
+    provider_event clear-hint
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/native-hint-cleared.txt"
+    grep -E '^❯[[:space:]]*$' "$EVIDENCE/native-hint-cleared.txt"
+    if grep -F 'edit queued messages' "$EVIDENCE/native-hint-cleared.txt"; then
+        exit 1
+    else
+        [[ $? -eq 1 ]]
+    fi
+    resync_marker BEFORE_CONSUMPTION_MARKER
+    queue_states waiting submitted queued | tee "$EVIDENCE/queue-after-resync.json"
+    queue_ui 1 QUEUE_SUBMITTED
+    fixture_counts WAITING_ONE -
+    shot queued-after-resync
     provider_event consume:WAITING_ONE
     wait_receipt 'VERIFY_RECEIVED:WAITING_TWO'
-    queue_states delivered delivered | tee "$EVIDENCE/queue-both-delivered.json"
-    queue_ui 0 QUEUE_BOTH_DELIVERED
-    wait_for_text WAITING_ONE
-    wait_for_text WAITING_TWO
-    shot queued-both-delivered
+    queue_states waiting delivered submitted | tee "$EVIDENCE/queue-first-delivered.json"
+    queue_ui 0 QUEUE_FIRST_DELIVERED
+    fixture_counts WAITING_ONE,WAITING_TWO WAITING_ONE
+    shot queued-first-delivered
     provider_event consume:WAITING_TWO
+    queue_states waiting delivered delivered | tee "$EVIDENCE/queue-both-delivered.json"
+    queue_ui 0 QUEUE_BOTH_DELIVERED
+    fixture_counts WAITING_ONE,WAITING_TWO WAITING_ONE,WAITING_TWO
+    shot queued-both-delivered
     provider_event reply
     wait_for_text 'Both messages received.'
     fill 'Message verify-session' FOLLOWUP
     tap_desc 'Send prompt'
     wait_receipt 'VERIFY_RECEIVED:FOLLOWUP'
+    queue_states followup submitted | tee "$EVIDENCE/queue-followup-submitted.json"
+    queue_ui 0 FOLLOWUP_SUBMITTED
+    fixture_counts WAITING_ONE,WAITING_TWO,FOLLOWUP WAITING_ONE,WAITING_TWO
+    provider_event consume:FOLLOWUP
+    queue_states followup delivered | tee "$EVIDENCE/queue-followup-delivered.json"
     wait_for_text FOLLOWUP
     queue_ui 0 FOLLOWUP_DELIVERED
-    provider_event consume:FOLLOWUP
+    fixture_counts WAITING_ONE,WAITING_TWO,FOLLOWUP WAITING_ONE,WAITING_TWO,FOLLOWUP
     adb shell kill -INT "$recorder_pid"
     wait "$recorder_client" || true
     adb pull /sdcard/chat-catchup.mp4 "$EVIDENCE/chat-catchup.mp4"
@@ -764,6 +916,52 @@ if [[ "$feature" == chat-queued.md ]]; then
     provider_event followup
     wait "$catchup_pid"
     shot catchup-finished
+    fill 'Message verify-session' UNCERTAIN_ONE
+    tap_desc 'Send prompt'
+    wait_for_text UNCERTAIN_ONE
+    fill 'Message verify-session' UNCERTAIN_TWO
+    tap_desc 'Send prompt'
+    wait_receipt 'VERIFY_RECEIVED:UNCERTAIN_ONE'
+    queue_states uncertain submitted queued | tee "$EVIDENCE/queue-uncertain.json"
+    queue_ui 1 UNCERTAIN_SUBMITTED
+    fixture_counts WAITING_ONE,WAITING_TWO,FOLLOWUP,UNCERTAIN_ONE WAITING_ONE,WAITING_TWO,FOLLOWUP
+    provider_event clear-hint
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/uncertain-hint-cleared.txt"
+    grep -E '^❯[[:space:]]*$' "$EVIDENCE/uncertain-hint-cleared.txt"
+    if grep -F 'edit queued messages' "$EVIDENCE/uncertain-hint-cleared.txt"; then
+        exit 1
+    else
+        [[ $? -eq 1 ]]
+    fi
+    resync_marker UNCERTAIN_MARKER_1
+    queue_states uncertain submitted queued | tee "$EVIDENCE/queue-uncertain-resync-1.json"
+    queue_ui 1 UNCERTAIN_SUBMITTED
+    fixture_counts WAITING_ONE,WAITING_TWO,FOLLOWUP,UNCERTAIN_ONE WAITING_ONE,WAITING_TWO,FOLLOWUP
+    shot queued-uncertain-resync-1
+    fill 'Message verify-session' PHONE_DRAFT_UNCERTAIN
+    resync_marker UNCERTAIN_MARKER_2
+    queue_states uncertain submitted queued | tee "$EVIDENCE/queue-uncertain-resync-2.json"
+    queue_ui 1 UNCERTAIN_SUBMITTED
+    dump_ui
+    python3 - "$EVIDENCE/current.xml" "$package" <<'QUEUE_DRAFT'
+import sys
+import xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+assert any(node.get('package') == sys.argv[2] and node.get('class') == 'android.widget.EditText' and node.get('text') == 'PHONE_DRAFT_UNCERTAIN' for node in root.iter('node'))
+QUEUE_DRAFT
+    fixture_counts WAITING_ONE,WAITING_TWO,FOLLOWUP,UNCERTAIN_ONE WAITING_ONE,WAITING_TWO,FOLLOWUP
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/uncertain-draft-after.txt"
+    grep -E '^❯[[:space:]]*$' "$EVIDENCE/uncertain-draft-after.txt"
+    if grep -F 'edit queued messages' "$EVIDENCE/uncertain-draft-after.txt"; then
+        exit 1
+    else
+        [[ $? -eq 1 ]]
+    fi
+    shot queued-uncertain-resync-2
+    queue_states waiting delivered delivered | tee "$EVIDENCE/queue-waiting-final.json"
+    queue_states followup delivered | tee "$EVIDENCE/queue-followup-final.json"
+    queue_states uncertain submitted queued | tee "$EVIDENCE/queue-uncertain-final.json"
+    queue_states all delivered delivered delivered submitted queued | tee "$EVIDENCE/queue-all-final.json"
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/queued-receipts.txt"
     sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-queued-work/a1b2c3d4-1008-4000-8000-000000001008.jsonl > "$EVIDENCE/queued-transcript.jsonl"
     sudo cat /home/verifyssh/shell-events.jsonl > "$EVIDENCE/shell-events.jsonl"
@@ -772,15 +970,29 @@ import json
 from pathlib import Path
 import sys
 root = Path(sys.argv[1])
-expected = ['WAITING_ONE', 'WAITING_TWO', 'FOLLOWUP']
+consumed = ['WAITING_ONE', 'WAITING_TWO', 'FOLLOWUP']
 inputs = root.joinpath('queued-receipts.txt').read_text().splitlines()
-assert inputs == ['VERIFY_RECEIVED:' + text for text in expected], inputs
+assert inputs == ['VERIFY_RECEIVED:' + text for text in consumed + ['UNCERTAIN_ONE']], inputs
 rows = [json.loads(line) for line in root.joinpath('queued-transcript.jsonl').read_text().splitlines()]
 receipts = [r['attachment']['prompt'] for r in rows if r.get('type') == 'attachment' and r.get('attachment', {}).get('type') == 'queued_command' and not r.get('isSidechain')]
-assert receipts == expected, receipts
-states = [json.loads(root.joinpath(name).read_text()) for name in ('queue-pending.json', 'queue-first-delivered.json', 'queue-both-delivered.json')]
-assert [[r['id'] for r in state] for state in states] == [[r['id'] for r in states[0]]] * 3
-result = dict(inputs=inputs, provider_receipts=receipts, count=len(receipts), states=states,
+assert receipts == consumed, receipts
+waiting_names = ('queue-pending.json', 'queue-submitted.json', 'queue-after-resync.json', 'queue-first-delivered.json', 'queue-both-delivered.json', 'queue-waiting-final.json')
+waiting = [json.loads(root.joinpath(name).read_text()) for name in waiting_names]
+assert all([r['id'] for r in state] == [r['id'] for r in waiting[0]] for state in waiting)
+assert [r['receipt_claims'] for r in waiting[-1]] == [r['receipt_claims'] for r in waiting[-2]]
+uncertain_names = ('queue-uncertain.json', 'queue-uncertain-resync-1.json', 'queue-uncertain-resync-2.json', 'queue-uncertain-final.json')
+uncertain = [json.loads(root.joinpath(name).read_text()) for name in uncertain_names]
+assert all([r['id'] for r in state] == [r['id'] for r in uncertain[0]] for state in uncertain)
+followup = [json.loads(root.joinpath(name).read_text()) for name in ('queue-followup-submitted.json', 'queue-followup-delivered.json', 'queue-followup-final.json')]
+assert all(state[0]['id'] == followup[0][0]['id'] for state in followup)
+assert followup[-1][0]['receipt_claims'] == followup[-2][0]['receipt_claims']
+ids = [r['id'] for r in waiting[-1] + followup[-1] + uncertain[-1]]
+assert len(ids) == len(set(ids)) == 5
+all_final = json.loads(root.joinpath('queue-all-final.json').read_text())
+assert [r['id'] for r in all_final] == ids
+result = dict(consumed_positive=dict(inputs=consumed, synthetic_receipts=receipts, waiting=waiting, followup=followup),
+              unresolved_tail=dict(inputs=['UNCERTAIN_ONE'], synthetic_receipts=[], states=uncertain),
+              total_inputs=len(inputs), total_synthetic_receipts=len(receipts),
               harness_revision=__import__('os').environ['GITHUB_SHA'],
               app_source=root.joinpath('app-source-sha.txt').read_text().strip(),
               apk_sha256=root.joinpath('app-apk-sha256.txt').read_text().strip(),
