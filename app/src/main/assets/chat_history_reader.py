@@ -2036,7 +2036,15 @@ def drain_held_queue(tmux, sid, transcript):
                 return
             db.execute("UPDATE messages SET state='submitted',scan=?1,recovery_scan=?1 WHERE key=?2 AND state='queued'", (info.st_size, key))
         try:
-            result = send_response(dict(id=0, tmux=tmux, text=text))
+            with db:
+                db.execute("BEGIN IMMEDIATE")
+                current = resolve_tmux_agent("claude", tmux, require_bound=True)
+                if current is None or current[0] != sid or Path(current[1]) != Path(transcript):
+                    return
+                info = transcript.stat()
+                if info.st_ino != inode or not db.execute("SELECT 1 FROM messages WHERE key=? AND sid=? AND state='submitted' AND source_inode=? AND origin<=? AND recovery_scan<=?", (key, sid, info.st_ino, info.st_size, info.st_size)).fetchone():
+                    return
+                result = send_response(dict(id=0, tmux=tmux, text=text))
             failure = "Terminal handoff failed; receipt not confirmed" if "\tsend\terror\t" in result else ""
         except (OSError, subprocess.SubprocessError, UnicodeError):
             failure = "Terminal handoff interrupted; receipt not confirmed"
@@ -2484,7 +2492,7 @@ elif __name__ == "__main__":
         print("@mp\t0\thistory\terror\t-\t0\n" + END)
 
 '''
-RUNTIME_GENERATION = 4
+RUNTIME_GENERATION = 5
 
 if __name__ == '__main__':
     import fcntl
