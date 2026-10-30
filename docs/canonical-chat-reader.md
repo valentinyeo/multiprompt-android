@@ -1,11 +1,11 @@
 # Canonical chat reader
 
 Desktop owns the reader and test corpus.
-These files are unchanged from [multiprompt](https://github.com/valentinyeo/multiprompt) commit `c490189d5d85ebf4c1c65ad801feac634994d5b3`.
-The full reader SHA-256 is `cd4fbb1bacc93ff9bcb47fcceab5a5f2feae5de2ae992eccc70c17651bd6e296`.
+These files are unchanged from [multiprompt](https://github.com/valentinyeo/multiprompt) commit `3d9dc2d44eaa91e47098c69054c0b02b4edd2c5f`.
+The full reader SHA-256 is `597bb55db858377d411c63443fb1833ae828a9a8f3ceff77315c84b05efca171`.
 `tools/vendor/chat-reader/SHA256SUMS` lists vendored file hashes.
 Hosted checks run all three canonical harnesses.
-They cover 191 reader, 7 transcript, and 8 runtime tests.
+They cover 192 reader, 7 transcript, and 9 runtime tests.
 Fixtures and test expectations remain unchanged.
 
 `tools/sync-chat-reader.sh --check` compares the bundled reader.

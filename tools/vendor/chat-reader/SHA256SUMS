@@ -1,6 +1,6 @@
 23b65081f20f217d0f92c7dc5751df6a008ad8ce130a28b417449958a8d3bfa4  tools/chat-bench/reader-service.py
-da5f35a7cc02db2a4f8eff7679771bb0dc0946e6b84c68fe5fe2b9b948d79997  tools/chat-history-reader-test.py
-3501858c2ac4af384cc46b3e4bfdf779fb9a1bcae14993b33a264ac2d144fc51  tools/chat-shared-runtime.test.py
+3feae9b8da3c1c3d3abb89cd79c9d4b1838f151124f014f20371a85dbaeaffc5  tools/chat-history-reader-test.py
+aae1a19639c9ea7f046e2d40559c53dda46aa8c93b412b179abc5e16ad9b16ef  tools/chat-shared-runtime.test.py
 a5f56fdb1a6f44b9d83b2477d37ea1fbcd059af515175f70b935c857efc4ad47  tools/chat-transcript-reconcile.test.py
 3c1e88d1808da30f209b8d6197b4bc7719c9c064e42bcffdb845608aa76b644c  tools/check-red-run.mjs
 34f1178503b88bada0bcd42329818b7c1a304d6ae5120274e454b7a0c9ade3ac  tools/fixtures/IGSH-722/queue-ops.jsonl

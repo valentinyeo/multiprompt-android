@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-revision=c490189d5d85ebf4c1c65ad801feac634994d5b3
-sha256=cd4fbb1bacc93ff9bcb47fcceab5a5f2feae5de2ae992eccc70c17651bd6e296
+revision=3d9dc2d44eaa91e47098c69054c0b02b4edd2c5f
+sha256=597bb55db858377d411c63443fb1833ae828a9a8f3ceff77315c84b05efca171
 asset=app/src/main/assets/chat_history_reader.py
 [[ "$(cat app/src/main/assets/chat_history_reader.sha)" == "$revision" ]]
 [[ $# -le 1 && ( "${1:-}" == "" || "${1:-}" == --check ) ]]

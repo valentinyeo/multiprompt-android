@@ -96,6 +96,21 @@ class ChatHistoryConnectionTest {
     }
 
     @Test
+    fun liveRequestsFollowThePaneWhileArchivesKeepTheirExactSession() {
+        val history = ChatHistory(sid = "cached", inode = 9, offset = 42)
+        val live = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "pane", "/cwd", "saved")
+        val request = org.json.JSONObject(ChatHistoryProtocol.request(1, live, history))
+        assertTrue(request.getBoolean("follow"))
+        assertEquals("saved", request.getString("sid"))
+        assertEquals("cached", request.getString("cached_sid"))
+        assertEquals(42L, request.getLong("offset"))
+        val archive = org.json.JSONObject(ChatHistoryProtocol.request(2, live.copy(tmux = ""), history))
+        assertFalse(archive.getBoolean("follow"))
+        assertEquals("saved", archive.getString("sid"))
+        assertEquals("cached", archive.getString("cached_sid"))
+    }
+
+    @Test
     fun resyncRequestsTheWholeTailFromTheSession() {
         val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd")
         val request = org.json.JSONObject(ChatHistoryProtocol.request(7, identity, ChatHistory()))

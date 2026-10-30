@@ -1613,6 +1613,22 @@ class HistoryReaderTest(unittest.TestCase):
                 patch.object(reader, 'read_process_cwd', return_value='/wrong'):
             self.assertEqual(reader.resolve_tmux_agent('claude', 'term-1'), ('sid', self.path))
 
+    def test_unknown_claude_identity_never_shows_same_folder_neighbour(self):
+        self.write(self.event('neighbour reply'))
+        self.query['follow'] = True
+        with patch.object(reader.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, '10\n', '')), \
+                patch.object(reader, 'process_table', return_value={10: (1, ['bash']), 99: (10, ['claude'])}), \
+                patch.object(reader, 'read_process_cwd', return_value='/work/demo'), \
+                patch.object(reader, 'open_hax_transcript', return_value=None), \
+                patch.object(reader, 'open_claude_transcript', return_value=None), \
+                patch.object(reader, 'claude_session_metadata', return_value=(None, None)), \
+                patch.object(reader, 'tmux_owner_process', return_value=None):
+            self.assertIsNone(reader.resolve_tmux_agent('claude', 'term-1'))
+            self.assertIsNone(reader.resolve_tmux_agent('claude', 'term-1', require_bound=True))
+            wire = reader.response(self.query)
+        self.assertIn('history\tmissing', wire)
+        self.assertNotIn('neighbour reply', wire)
+
     def test_new_session_without_transcript_never_shows_a_neighbours_chat(self):
         self.write(self.event())
         metadata = self.home / '.claude/sessions/99.json'

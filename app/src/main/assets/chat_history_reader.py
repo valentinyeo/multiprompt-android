@@ -373,12 +373,6 @@ def claude_session_metadata(pid):
     return (sid if isinstance(sid, str) and SESSION_ID.fullmatch(sid) else None,
             cwd if isinstance(cwd, str) and cwd else None)
 
-def claude_transcript_for_cwd(cwd):
-    folder = HOME / ".claude/projects" / claude_project_folder(cwd)
-    if not folder.is_dir():
-        return None
-    return newest_jsonl(folder.glob("*.jsonl"))
-
 def open_codex_transcript(pid, table):
     children = {}
     for child, (parent, _argv) in table.items():
@@ -463,14 +457,7 @@ def resolve_tmux_agent(agent, name, pid=None, require_bound=False):
                 resumed = argv[index + 1]
                 path = conversation_path("claude", resumed, cwd or "")
                 return (resumed, path) if path is not None else None
-        if sid:
-            return None
-        if require_bound:
-            return None
-        fallback = claude_transcript_for_cwd(cwd) if cwd else None
-        if fallback is None:
-            return None
-        return fallback.stem, fallback
+        return None
     if table is None:
         table = process_table(pids=[pid])
     return open_codex_transcript(pid, table)
@@ -2437,7 +2424,7 @@ elif __name__ == "__main__":
         print("@mp\t0\thistory\terror\t-\t0\n" + END)
 
 '''
-RUNTIME_GENERATION = 1
+RUNTIME_GENERATION = 2
 
 if __name__ == '__main__':
     import fcntl
@@ -2496,11 +2483,12 @@ if __name__ == '__main__':
                     finally:
                         if _os.path.exists(path):
                             _os.unlink(path)
+                missing = object()
                 try:
                     active = _json.loads(read('active.json', 4096))
                 except FileNotFoundError:
-                    active = None
-                if active is not None:
+                    active = missing
+                if active is not missing:
                     if (not isinstance(active, dict) or set(active) != {'protocol', 'generation', 'sha256'} or
                             type(active['protocol']) is not int or active['protocol'] != 1 or
                             type(active['generation']) is not int or active['generation'] < 1 or
