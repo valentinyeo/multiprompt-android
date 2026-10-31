@@ -2600,6 +2600,21 @@ internal fun ReaderScreen(
     val density = LocalDensity.current
     val context = LocalContext.current
     val readerScope = rememberCoroutineScope()
+    var speakableReplies by remember { mutableStateOf<List<String>>(emptyList()) }
+    var replyCursor by remember { mutableStateOf(0) }
+    var reading by remember { mutableStateOf(false) }
+    val speech = remember { android.speech.tts.TextToSpeech(context.applicationContext) { } }
+    LaunchedEffect(session.hostId, session.name) {
+        speech.stop()
+        reading = false
+        replyCursor = 0
+    }
+    DisposableEffect(speech) {
+        onDispose {
+            speech.stop()
+            speech.shutdown()
+        }
+    }
     var loadingOlder by remember(connection) { mutableStateOf(false) }
     var noOlderHistory by remember(connection) { mutableStateOf(false) }
     val loadOlder: () -> Unit = {
@@ -2978,6 +2993,25 @@ internal fun ReaderScreen(
                                     label = listOfNotNull(runtimeDetails.label, statusLabel).joinToString(" · ").ifEmpty { "Model / effort" },
                                     enabled = false,
                                     onClick = {},
+                                )
+                                KitMenuRow(
+                                    label = if (reading) "Stop reading" else "Read reply",
+                                    onClick = {
+                                        menuExpanded = false
+                                        if (reading) {
+                                            speech.stop()
+                                            reading = false
+                                        } else {
+                                            val next = dev.multiprompt.companion.reader.ReadAloud.next(speakableReplies, replyCursor)
+                                            if (next != null) {
+                                                speech.speak(next.first, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "reply")
+                                                replyCursor = next.second
+                                                reading = true
+                                            } else {
+                                                android.widget.Toast.makeText(context, "No reply to read yet", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    },
                                 )
                                 KitMenuRow(
                                     label = "Enter / approve",
@@ -3460,6 +3494,7 @@ internal fun ReaderScreen(
                 sunlight = sunlightMode,
                 replyGate = replyGate,
                 onReply = chooseReply,
+                onSpeakableReplies = { speakableReplies = it; if (it.isEmpty()) { reading = false; replyCursor = 0 } },
                 onReaction = { message, emoji ->
                     val line = dev.multiprompt.companion.reader.ChatReactions.format(emoji, message.requestId, message.text)
                     if (line != null) readerScope.launch {
