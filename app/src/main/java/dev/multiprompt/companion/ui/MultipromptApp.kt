@@ -1553,10 +1553,41 @@ internal fun SessionsScreen(
     } else {
         emptyList()
     }
+    val pinnedStrip: @Composable () -> Unit = {
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            pinnedSessions.forEach { session ->
+                val key = SessionReadStore.key(session.hostId, session.name)
+                Column(
+                    Modifier.width(80.dp).height(90.dp).clickable { onOpen(session) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Box {
+                        BotAvatar(session.name, 56.dp, workspaceColor = session.workspaceColor)
+                        if (key in state.unreadSessionKeys) {
+                            Badge(
+                                Modifier.align(Alignment.TopEnd).semantics {
+                                    contentDescription = "${(state.unreadCounts[key] ?: 1).coerceAtLeast(1)} unread messages"
+                                },
+                                containerColor = Color(0xFF89B4F8),
+                                contentColor = Color(0xFF121212),
+                            ) { Text(UnreadCount.label(state.unreadCounts[key] ?: 1)) }
+                        }
+                    }
+                    Text(session.displayName, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+    val reversedSessions = normalizedQuery.isBlank() && state.newestSessionsAtBottom
     Scaffold(
         modifier = Modifier.fillMaxSize().imePadding(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
+            Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
             TopFade {
                 Row(
                     Modifier.fillMaxWidth()
@@ -1731,35 +1762,6 @@ internal fun SessionsScreen(
                         }
                     }
                 }
-                if (pinnedSessions.isNotEmpty()) {
-                    Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        pinnedSessions.forEach { session ->
-                            val key = SessionReadStore.key(session.hostId, session.name)
-                            Column(
-                                Modifier.width(80.dp).height(90.dp).clickable { onOpen(session) },
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                Box {
-                                    BotAvatar(session.name, 56.dp, workspaceColor = session.workspaceColor)
-                                    if (key in state.unreadSessionKeys) {
-                                        Badge(
-                                            Modifier.align(Alignment.TopEnd).semantics {
-                                                contentDescription = "${(state.unreadCounts[key] ?: 1).coerceAtLeast(1)} unread messages"
-                                            },
-                                            containerColor = Color(0xFF89B4F8),
-                                            contentColor = Color(0xFF121212),
-                                        ) { Text(UnreadCount.label(state.unreadCounts[key] ?: 1)) }
-                                    }
-                                }
-                                Text(session.displayName, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                    }
-                }
                 if (state.updatingHostIds.isNotEmpty()) {
                     UpdatingSessionsNotice(hostLabels = state.updatingHostIds.mapNotNull { hostLabels[it] })
                 }
@@ -1773,6 +1775,7 @@ internal fun SessionsScreen(
                 state.sessionActionError?.let { error ->
                     DismissibleError(message = error, onDismiss = onClearSessionActionError)
                 }
+            }
             }
         },
         bottomBar = {
@@ -1816,8 +1819,11 @@ internal fun SessionsScreen(
                 .fillMaxSize()
                 .horizontalSwipe(onSwitchWorkspace, PointerEventPass.Final),
             contentPadding = PaddingValues(top = padding.calculateTopPadding() + 4.dp, bottom = padding.calculateBottomPadding() + 4.dp),
-            reverseLayout = normalizedQuery.isBlank() && state.newestSessionsAtBottom,
+            reverseLayout = reversedSessions,
         ) {
+            if (!reversedSessions && pinnedSessions.isNotEmpty()) {
+                item(key = "pinned-sessions") { pinnedStrip() }
+            }
             state.hostErrors.forEach { (hostId, error) ->
                 if (hostId !in state.cachedHostIds) {
                     item(key = "error-$hostId") { InlineError(error) }
@@ -1877,6 +1883,9 @@ internal fun SessionsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
+            if (reversedSessions && pinnedSessions.isNotEmpty()) {
+                item(key = "pinned-sessions") { pinnedStrip() }
             }
         }
     }

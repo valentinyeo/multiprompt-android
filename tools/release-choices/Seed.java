@@ -40,6 +40,8 @@ public class Seed extends Instrumentation {
                 if (mode.equals("host-seed")) seedHost(context, result);
                 else if (mode.equals("favorites-seed")) seedFavorites(context, result);
                 else if (mode.equals("favorites-snapshot")) snapshotFavorites(context, result);
+                else if (mode.equals("pins-seed")) seedPins(context, result);
+                else if (mode.equals("pins-order")) orderPins(context, result);
                 else throw new IllegalStateException("Unknown fixture mode");
                 finish(Activity.RESULT_OK, result);
                 return;
@@ -166,6 +168,86 @@ public class Seed extends Instrumentation {
         if (!states.has("verify-session") || !states.has("verify-keep")) throw new IllegalStateException("Fixture tabs missing");
         result.putString("favorites", states.toString());
         result.putString("result", "ISOLATED_FAVORITES_SNAPSHOT");
+    }
+
+    private JSONObject pinsHost(Context context) throws Exception {
+        if (!context.getSharedPreferences("encrypted_secrets", Context.MODE_PRIVATE)
+            .contains("account_device_v1")) throw new IllegalStateException("Fixture account required");
+        JSONArray hosts = new JSONArray(context.getSharedPreferences("hosts", Context.MODE_PRIVATE)
+            .getString("profiles_json", "[]"));
+        if (hosts.length() != 1) throw new IllegalStateException("Exactly one fixture host required");
+        JSONObject host = hosts.getJSONObject(0);
+        if (!host.getString("label").equals("Verify") || !host.getString("hostname").equals("10.0.2.2")
+            || host.getInt("port") != 2222 || !host.getString("username").equals("verifyssh")
+            || host.getString("id").isEmpty() || host.getString("keySecretId").isEmpty()
+            || !host.getString("hostKeyType").equals("ssh-ed25519")
+            || !host.getString("hostKeyFingerprint").startsWith("SHA256:")) {
+            throw new IllegalStateException("Unexpected fixture host");
+        }
+        return host;
+    }
+
+    private String pinsName(int i) {
+        return i < 12 ? String.format(java.util.Locale.US, "pin-%02d", i)
+            : String.format(java.util.Locale.US, "row-%02d", i - 12);
+    }
+
+    private void seedPins(Context context, Bundle result) throws Exception {
+        JSONObject host = pinsHost(context);
+        SharedPreferences preferences = context.getSharedPreferences("account_layout", Context.MODE_PRIVATE);
+        if (!preferences.getAll().isEmpty()) throw new IllegalStateException("Layout store must be empty");
+        JSONArray tabs = new JSONArray();
+        for (int i = 0; i < 40; i++) {
+            String name = pinsName(i);
+            tabs.put(new JSONObject().put("kind", "tmux").put("name", name).put("tmux_session", name)
+                .put("tmux_host", 1).put("workspace", "Fixture").put("manual", false)
+                .put("favorite", i < 12));
+        }
+        JSONObject layout = new JSONObject().put("schema", 1).put("revision", 0)
+            .put("workspaces", new JSONArray().put(new JSONObject().put("name", "Fixture")))
+            .put("tabs", tabs).put("settings", new JSONObject().put("favorites", true).put("all", true));
+        JSONObject pending = new JSONObject().put("base", layout).put("edited", layout);
+        if (!preferences.edit().putString("host::1", host.getString("id"))
+            .putString("layout::isolated-release-fixture", pending.toString()).commit()) {
+            throw new IllegalStateException("Fixture layout was not persisted");
+        }
+        result.putString("result", "ISOLATED_PINS_SEEDED");
+    }
+
+    private void orderPins(Context context, Bundle result) throws Exception {
+        JSONObject host = pinsHost(context);
+        SharedPreferences layoutPreferences = context.getSharedPreferences("account_layout", Context.MODE_PRIVATE);
+        if (!host.getString("id").equals(layoutPreferences.getString("host::1", null))) {
+            throw new IllegalStateException("Fixture host mapping required");
+        }
+        String raw = layoutPreferences.getString("layout::isolated-release-fixture", null);
+        if (raw == null) throw new IllegalStateException("Fixture layout missing");
+        JSONArray tabs = new JSONObject(raw).getJSONObject("edited").getJSONArray("tabs");
+        if (tabs.length() != 40) throw new IllegalStateException("Expected 40 fixture tabs");
+        java.util.Set<String> names = new java.util.HashSet<>();
+        for (int i = 0; i < tabs.length(); i++) {
+            JSONObject tab = tabs.getJSONObject(i);
+            String name = tab.getString("tmux_session");
+            int expected = -1;
+            for (int j = 0; j < 40; j++) if (pinsName(j).equals(name)) expected = j;
+            if (expected < 0 || !names.add(name) || !tab.getString("name").equals(name)
+                || !tab.getString("kind").equals("tmux") || tab.getInt("tmux_host") != 1
+                || !tab.getString("workspace").equals("Fixture")
+                || !(tab.get("favorite") instanceof Boolean)
+                || tab.getBoolean("favorite") != (expected < 12)) {
+                throw new IllegalStateException("Invalid fixture tab");
+            }
+        }
+        String reverse = arguments.getString("reverse");
+        if (!"true".equals(reverse) && !"false".equals(reverse)) {
+            throw new IllegalStateException("Strict reverse boolean required");
+        }
+        if (!context.getSharedPreferences("session_read_state", Context.MODE_PRIVATE).edit()
+            .putBoolean("newest_sessions_at_bottom", Boolean.parseBoolean(reverse)).commit()) {
+            throw new IllegalStateException("Order was not persisted");
+        }
+        result.putString("result", "ISOLATED_PINS_ORDER_SET");
+        result.putString("reverse", reverse);
     }
 
 }

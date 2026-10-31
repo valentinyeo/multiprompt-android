@@ -53,3 +53,4 @@ run_rows after
 test "$(find build/session-rows/after -name '*.png' | wc -l)" -eq 9
 grep -F 'FAVORITE_ACTIONS_OK:' build/session-rows/after/favorite-actions.txt
 echo SESSION_ROWS_EMULATOR_OK
+bash tools/check-session-pins.sh

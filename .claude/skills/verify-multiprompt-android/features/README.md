@@ -28,6 +28,7 @@ Numbered PNG/XML pairs show action and result. The transcript records commands a
 - [Changed host key](host-changed-key.md): compare a rotated identity, persist Not now and refuse authentication.
 - [Sessions](sessions.md): authenticated tmux discovery and search.
 - [Session favorites](session-favorites.md): signed APK, isolated SSH sessions and offline favorite cache; no production sync.
+- [Pinned sessions](session-pins.md): signed scrolling in both list orders. Use `session-favorites.md` with `pins_scroll=true`.
 - [Session settings](session-settings.md): full-screen split switches; saving is blocked without account OTP and a pulled layout.
 - [Session routing](session-routing.md): Inbox and swipe switching, typed and simulated dictated sends, independent SSH receipts.
 - [Chat choices](chat-choices.md): latest-reply option taps and live question number keys, with independent SSH/tmux receipts.

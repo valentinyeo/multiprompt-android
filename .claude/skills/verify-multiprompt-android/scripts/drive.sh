@@ -458,6 +458,11 @@ if [[ "$feature" == settings-navigation.md ]]; then
     exit 0
 fi
 
+if [[ "$feature" == session-favorites.md && "${PIN_SCROLL_PROOF:-}" == true ]]; then
+    source "$scripts/pins-drive.sh"
+    exit 0
+fi
+
 if [[ "$feature" == session-favorites.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true && "$(adb get-serialno)" == emulator-* ]]
     [[ "$package" == dev.multiprompt.companion || "$package" == dev.multiprompt.companion.m3 ]]
