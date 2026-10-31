@@ -1,0 +1,90 @@
+name: Android name and in-app update
+
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'tools/app-name/**'
+      - 'tools/release-choices/**'
+      - '.github/workflows/app-name.yml'
+      - '.claude/skills/verify-multiprompt-android/features/**'
+  schedule:
+    - cron: '43 4 * * *'
+  workflow_dispatch:
+    inputs:
+      baseline_run:
+        description: Optional successful main release run containing the baseline APK
+        required: false
+        type: string
+      expected_commit:
+        description: Optional published target source commit
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: app-name-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  published-name-update:
+    name: ${{ github.event_name == 'pull_request' && 'published-update-control' || 'published-name-update' }}
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      EVIDENCE: ${{ github.workspace }}/app-name-evidence
+      GH_TOKEN: ${{ github.token }}
+      PROOF_MODE: ${{ github.event_name == 'pull_request' && 'control' || 'release' }}
+      EXPECTED_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'schedule' && github.sha || inputs.expected_commit || '' }}
+      BASELINE_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.baseline_run || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare evidence paths
+        run: |
+          echo "FIXTURE=$RUNNER_TEMP/app-name-fixture" >> "$GITHUB_ENV"
+          mkdir -p "$EVIDENCE" "$RUNNER_TEMP/app-name-fixture"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install proof prerequisites
+        run: |
+          sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          ffprobe -version
+
+      - name: Prepare published APKs and same-signer fixture
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: bash tools/app-name/prepare.sh
+
+      - name: Prove the in-app update
+        uses: ./.github/actions/android-proof
+        with:
+          target: default
+          stage: app-name
+          script: bash tools/app-name/run.sh
+
+      - name: Retain proof evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-name-${{ github.run_id }}
+          path: app-name-evidence/
+          if-no-files-found: error
+          retention-days: 7

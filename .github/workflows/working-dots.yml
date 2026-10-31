@@ -1,0 +1,72 @@
+name: Released Android working dots
+
+on:
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recording:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      EVIDENCE: ${{ github.workspace }}/verification-evidence
+      VERIFY_FEATURE: chat-working.md
+      VERIFY_PACKAGE: dev.multiprompt.companion
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install screenshot reader
+        run: python3 -m pip install Pillow
+      - name: Reject the actual first-run readiness failure
+        run: |
+          git fetch --depth=1 origin cb29ac1f03bfe05f21efc7728a002011065578ec
+          git show FETCH_HEAD:tools/working-dots/console.py > "$RUNNER_TEMP/original-working-console.py"
+          if WORKING_CONSOLE="$RUNNER_TEMP/original-working-console.py" python3 -B tools/working-dots/check.test.py WorkingEvidenceTest.test_fixture_ready_has_receipts_and_real_done_state; then
+            echo 'Original fixture falsely passed readiness' >&2
+            exit 1
+          fi
+          echo REAL_READINESS_RED_CONTROL_PROVEN
+      - name: Reject missing dots and late transitions
+        run: python3 -B tools/working-dots/check.test.py
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Prepare published APK and same-signer observer
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          mkdir -p "$EVIDENCE"
+          echo "FIXTURE=$RUNNER_TEMP/working-ssh" >> "$GITHUB_ENV"
+          sdkmanager --install 'build-tools;35.0.0' 'platforms;android-35'
+          export EXPECTED_COMMIT="$(curl -fsSL https://github.com/valentinyeo/multiprompt-android/releases/download/android-latest/multiprompt-companion-update.json | jq -er .commit)"
+          bash tools/release-choices/prepare.sh
+          echo "EXPECTED_VERSION=$(cat "$EVIDENCE/version.txt")" >> "$GITHUB_ENV"
+      - name: Start isolated SSH and actual quiet shell tools
+        run: bash .claude/skills/verify-multiprompt-android/scripts/fixture.sh
+      - uses: ./.github/actions/android-proof
+        with:
+          stage: stage-1
+          target: google_apis
+          script: |
+            adb install -r -g "$EVIDENCE/app.apk"
+            bash tools/working-dots/run.sh
+      - name: Retain logs and remove ephemeral keys
+        if: always()
+        run: bash .claude/skills/verify-multiprompt-android/scripts/cleanup.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: released-working-dots-${{ github.run_id }}
+          path: verification-evidence/
+          retention-days: 7
+          if-no-files-found: error
