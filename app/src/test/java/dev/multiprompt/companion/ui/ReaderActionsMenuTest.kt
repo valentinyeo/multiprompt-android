@@ -49,6 +49,7 @@ class ReaderActionsMenuTest {
     private lateinit var f: SessionActivityFixture
     private lateinit var connection: SessionReaderConnection
     private var archives = 0
+    private var ends = 0
     private var waits = 0
     private val reminders = mutableListOf<Long?>()
     private val archived = mutableStateOf(false)
@@ -77,7 +78,7 @@ class ReaderActionsMenuTest {
                 unread = false, archived = archived.value, initialFontScale = 1f,
                 onBack = {}, onMarkRead = {}, onArchiveToggle = { waits++; archived.value = !archived.value },
                 onRemind = { reminders.add(it) }, onOpenTerminal = {},
-                onFontScaleChanged = {}, onRename = { null }, onDissolve = { archives++ }, onEnd = {},
+                onFontScaleChanged = {}, onRename = { null }, onDissolve = { archives++ }, onEnd = { ends++ },
                 onSessionInteraction = {}, onSessionInput = {}, technicalMode = false,
                 onTechnicalModeChanged = {}, sunlightMode = false, onSetAppTheme = {},
                 onResetFontScale = { 1f }, sessionActionError = null, onClearSessionActionError = {},
@@ -94,6 +95,26 @@ class ReaderActionsMenuTest {
         compose.onNodeWithText("Archive session").performScrollTo().assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(1, archives); assertEquals(0, waits); assertTrue(reminders.isEmpty()) }
         compose.onNodeWithText("Archive session").assertDoesNotExist()
+    }
+
+    @Test fun endConfirmationCancelsAndConfirms() {
+        render()
+        val title = "End ${f.session.displayName} completely?"
+        val warning = "This kills the coding agent and tmux session without saving a restore record."
+        openMenu()
+        compose.onNodeWithText("End session").performScrollTo().performClick()
+        compose.onNodeWithText(title).assertIsDisplayed()
+        compose.onNodeWithText(warning).assertIsDisplayed()
+        compose.onNodeWithText("End session").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Cancel").performScrollTo().assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals(0, ends) }
+        compose.onNodeWithText(title).assertDoesNotExist()
+        openMenu()
+        compose.onNodeWithText("End session").performScrollTo().performClick()
+        compose.onNodeWithText(title).assertIsDisplayed()
+        compose.onNodeWithText("End session").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(1, ends) }
+        compose.onNodeWithText(title).assertDoesNotExist()
     }
 
     @Test fun remindFromOverflowOpensTheExistingPickerAndDispatchesItsDueTime() {
