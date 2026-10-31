@@ -71,12 +71,31 @@ try:
         print(json.dumps(header(), sort_keys=True))
     elif mode == "top":
         controls = header()
-        pins = [n for name in pin_names for n in named(name)]
-        if not pins:
-            raise ValueError("no visible pins")
-        if not any(raw_bounds(pin)[1] >= max(rect[3] for rect in controls.values())
-                   for pin in pins):
-            raise ValueError("no pin below header controls")
+        top = max(rect[3] for rect in controls.values())
+        bottom = screen[3]
+        for name in ("Frequent", "All", "Favorites"):
+            try:
+                tab = raw_bounds(clickable(name))
+            except ValueError as error:
+                raise ValueError("invalid fixed tab " + name + ": " + str(error))
+            if tab[1] + tab[3] < screen[1] + screen[3]:
+                top = max(top, tab[3])
+            else:
+                bottom = min(bottom, tab[1])
+        if top >= bottom:
+            raise ValueError("invalid content viewport after fixed tabs")
+        complete = False
+        for name in pin_names:
+            if named(name):
+                try:
+                    pin = raw_bounds(clickable(name))
+                except ValueError:
+                    continue
+                if top <= pin[1] and pin[3] <= bottom:
+                    complete = True
+                    break
+        if not complete:
+            raise ValueError("no visible clickable pin fully inside content viewport")
         print("PINS_TOP_OK")
     elif mode == "pin-bounds":
         if len(args) != 1 or (args[0] != "any" and args[0] not in pin_names):
