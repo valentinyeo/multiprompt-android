@@ -130,7 +130,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
@@ -169,6 +171,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -1824,34 +1827,38 @@ internal fun SessionsScreen(
                 val key = SessionReadStore.key(session.hostId, session.name)
                 val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
                 val starred = tab?.favorite == true
-                SessionCard(
-                    session = session,
-                    workspaces = state.workspaces,
-                    unread = key in state.unreadSessionKeys,
-                    unreadCount = state.unreadCounts[key] ?: 1,
-                    archived = key in state.archivedSessionKeys,
-                    starred = starred,
-                    onToggleFavorite = if (tab != null && state.signedIn) {
-                        { onSetFavorite(tab, !starred) }
-                    } else null,
-                    onClick = { onOpen(session) },
-                    onOpenTerminal = { onOpenTerminal(session) },
-                    onArchive = { onArchive(session) },
-                    onRemind = { reminderPromptSession = session },
-                    onArchiveToggle = {
-                        if (key in state.archivedSessionKeys) onRestore(session) else onArchive(session)
-                    },
-                    onMarkUnread = { onMarkUnread(session) },
-                    onMove = { workspace -> onMoveSession(session, workspace) },
-                    onRename = {
-                        renameDraft = session.displayName
-                        renameError = null
-                        renamePromptSession = session
-                    },
-                    onDissolve = { dissolvePromptSession = session },
-                    onEnd = { endPromptSession = session },
-                    onForget = { onForgetSession(session) },
-                )
+                CompositionLocalProvider(
+                    LocalOpenSession provides state.readerSession?.let { SessionReadStore.key(it.hostId, it.name) },
+                ) {
+                    SessionCard(
+                        session = session,
+                        workspaces = state.workspaces,
+                        unread = key in state.unreadSessionKeys,
+                        unreadCount = state.unreadCounts[key] ?: 1,
+                        archived = key in state.archivedSessionKeys,
+                        starred = starred,
+                        onToggleFavorite = if (tab != null && state.signedIn) {
+                            { onSetFavorite(tab, !starred) }
+                        } else null,
+                        onClick = { onOpen(session) },
+                        onOpenTerminal = { onOpenTerminal(session) },
+                        onArchive = { onArchive(session) },
+                        onRemind = { reminderPromptSession = session },
+                        onArchiveToggle = {
+                            if (key in state.archivedSessionKeys) onRestore(session) else onArchive(session)
+                        },
+                        onMarkUnread = { onMarkUnread(session) },
+                        onMove = { workspace -> onMoveSession(session, workspace) },
+                        onRename = {
+                            renameDraft = session.displayName
+                            renameError = null
+                            renamePromptSession = session
+                        },
+                        onDissolve = { dissolvePromptSession = session },
+                        onEnd = { endPromptSession = session },
+                        onForget = { onForgetSession(session) },
+                    )
+                }
             }
             items(visibleDissolvedSessions, key = { "dissolved:${it.key}" }) { session ->
                 DissolvedSessionCard(
@@ -2039,6 +2046,8 @@ private fun AgentBadge(agent: AgentKind) {
     }
 }
 
+private val LocalOpenSession = staticCompositionLocalOf<String?> { null }
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SessionCard(
@@ -2102,7 +2111,15 @@ private fun SessionCard(
             }
         },
     ) {
-        Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+        Box(
+            Modifier.fillMaxWidth().background(
+                if (LocalOpenSession.current == SessionReadStore.key(session.hostId, session.name)) {
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                } else {
+                    MaterialTheme.colorScheme.surface
+                },
+            ),
+        ) {
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -3982,9 +3999,9 @@ private fun UpdateScreen(
                     )
                     entry.notes.lineSequence().map(String::trim).filter(String::isNotBlank)
                         .forEach { line ->
-                            Text(
+                            NoteLine(
                                 line,
-                                style = MaterialTheme.typography.bodySmall,
+                                MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -4000,13 +4017,36 @@ private fun UpdateScreen(
     }
 }
 
+private val noteLink = Regex("(https?://\\S+)|\\b(IGSH-\\d+)\\b")
+
+private fun ticketUrl(number: String) = "https://app.hypertask.ai/detail/project-2060/$number"
+
+@Composable
+private fun NoteLine(line: String, style: TextStyle, color: Color = Color.Unspecified) {
+    val annotated = remember(line) {
+        buildAnnotatedString {
+            var last = 0
+            noteLink.findAll(line).forEach { match ->
+                append(line.substring(last, match.range.first))
+                val url = match.groupValues[1].ifBlank { ticketUrl(match.groupValues[2].removePrefix("IGSH-")) }
+                withLink(LinkAnnotation.Url(url, TextLinkStyles(SpanStyle(color = Kit.AccentUnread, textDecoration = TextDecoration.Underline)))) {
+                    append(match.value)
+                }
+                last = match.range.last + 1
+            }
+            append(line.substring(last))
+        }
+    }
+    Text(annotated, style = style, color = color)
+}
+
 @Composable
 private fun ChangelogNotes(notes: String) {
     if (notes.isBlank()) return
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("What's new", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
         notes.lineSequence().map(String::trim).filter(String::isNotBlank).forEach { line ->
-            Text(line, style = MaterialTheme.typography.bodySmall)
+            NoteLine(line, MaterialTheme.typography.bodySmall)
         }
     }
 }
