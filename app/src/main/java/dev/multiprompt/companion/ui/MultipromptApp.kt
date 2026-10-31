@@ -2321,12 +2321,6 @@ internal enum class ReaderMenuPage(val title: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-@Composable
-private fun topBarLooks(session: TmuxSession): Pair<Int?, Int?>? {
-    val store = remember { SessionReadStore(LocalContext.current.applicationContext) }
-    return store.botFace(session) to store.botColor(session)
-}
-
 internal fun ReaderTopBar(
     session: TmuxSession,
     modelLabel: String?,
@@ -2337,6 +2331,8 @@ internal fun ReaderTopBar(
     onMenuClick: () -> Unit,
     menuContent: @Composable () -> Unit,
     onBack: () -> Unit = {},
+    botFace: Int? = null,
+    botColor: Int? = null,
 ) {
     var modelMenuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     if (LocalReaderStyle.current) {
@@ -2358,7 +2354,7 @@ internal fun ReaderTopBar(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        BotAvatar(session.name, 28.dp, workspaceColor = session.workspaceColor, face = topBarLooks(session)?.first, color = topBarLooks(session)?.second)
+                        BotAvatar(session.name, 28.dp, workspaceColor = session.workspaceColor, face = botFace, color = botColor)
                         Text(
                             session.displayName,
                             modifier = Modifier.weight(1f, fill = false),
@@ -2396,7 +2392,7 @@ internal fun ReaderTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                BotAvatar(session.name, 28.dp, workspaceColor = session.workspaceColor, face = topBarLooks(session)?.first, color = topBarLooks(session)?.second)
+                BotAvatar(session.name, 28.dp, workspaceColor = session.workspaceColor, face = botFace, color = botColor)
                 Box(Modifier.weight(1f)) {
                     Column(
                         Modifier
@@ -3043,6 +3039,8 @@ internal fun ReaderScreen(
         topBar = {
             ReaderTopBar(
                 onBack = onBack,
+                botFace = draftStore.botFace(session),
+                botColor = draftStore.botColor(session),
                 session = session,
                 modelLabel = runtimeDetails.label,
                 statusLabel = statusLabel,
