@@ -206,7 +206,16 @@ class TmuxExactTargetBehaviorTest {
             "  exit 5\n" +
             "fi\n" +
             "exec /usr/bin/tmux -S '$socket' \"\$@\"\n").toByteArray(Charsets.UTF_8))
-        val process = ProcessBuilder("bash", "-c", TmuxCommands.stream("stream-test")).redirectErrorStream(true).apply {
+        val groupFile = dir.resolve("stream-group")
+        val gate = dir.resolve("stream-start")
+        val process = ProcessBuilder("setsid", "bash", "-c", """
+            pgid=${'$'}(/bin/ps -o pgid= -p ${'$'}${'$'} | tr -d ' ')
+            parent_pgid=${'$'}(/bin/ps -o pgid= -p ${'$'}PPID | tr -d ' ')
+            [ "${'$'}${'$'}" -gt 1 ] && [ "${'$'}pgid" = "${'$'}${'$'}" ] && [ -n "${'$'}parent_pgid" ] && [ "${'$'}pgid" != "${'$'}parent_pgid" ] || exit 1
+            printf '%s\n' "${'$'}pgid" > '${groupFile}.tmp' && mv '${groupFile}.tmp' '$groupFile' || exit 1
+            while [ ! -e '$gate' ]; do sleep 0.02; done
+            exec bash -c "${'$'}1"
+        """.trimIndent(), "stream", TmuxCommands.stream("stream-test")).redirectErrorStream(true).apply {
             environment()["PATH"] = "$bin:/usr/bin:/bin"
             environment()["MULTIPROMPT_STATE_DIR"] = state.toString()
             environment()["TMPDIR"] = dir.toString()
@@ -219,6 +228,12 @@ class TmuxExactTargetBehaviorTest {
         }
         val transcript = mutableListOf<String>()
         try {
+            val groupDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (!Files.exists(groupFile) && process.isAlive && System.nanoTime() < groupDeadline) Thread.sleep(20)
+            assertTrue("Stream process group must be ready", Files.exists(groupFile))
+            val group = String(Files.readAllBytes(groupFile), Charsets.UTF_8).trim().toLongOrNull()
+            assertTrue("Stream process group must be valid", group != null && group > 1)
+            Files.write(gate, byteArrayOf())
             val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(12)
             while (transcript.count { it == "${TmuxCommands.ALT_PREFIX}1" } < 4) {
                 val remaining = deadline - System.nanoTime()
@@ -258,12 +273,16 @@ class TmuxExactTargetBehaviorTest {
                     }
                 })
         } finally {
-            val descendants = process.toHandle().descendants().use { it.toList() }
-            descendants.asReversed().forEach { it.destroyForcibly() }
-            process.destroyForcibly()
-            assertTrue("Stream must terminate", process.waitFor(5, TimeUnit.SECONDS))
-            descendants.forEach { it.onExit().get(5, TimeUnit.SECONDS) }
+            val group = if (Files.exists(groupFile)) String(Files.readAllBytes(groupFile), Charsets.UTF_8).trim().toLongOrNull() else null
+            val killer = if (group != null && group > 1) ProcessBuilder("/bin/kill", "-KILL", "--", "-$group").start() else null
+            val killerFinished = killer?.waitFor(5, TimeUnit.SECONDS) ?: true
+            if (killer != null && !killerFinished) killer.destroyForcibly()
+            if (process.isAlive) process.destroyForcibly()
+            val terminated = process.waitFor(5, TimeUnit.SECONDS)
             reader.join(5000)
+            assertTrue("Group signal must terminate", killerFinished)
+            if (killer != null && killerFinished) assertEquals("Group signal must succeed", 0, killer.exitValue())
+            assertTrue("Stream must terminate", terminated)
             assertFalse("Stream reader must terminate", reader.isAlive)
         }
     }
