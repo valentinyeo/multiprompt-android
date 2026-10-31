@@ -248,13 +248,14 @@ object TmuxCommands {
             "trap 'rm -f \"\$mp_snapshot\"' EXIT HUP INT TERM; " +
             "mp_previous=''; " +
             "while tmux has-session -t $session 2>/dev/null; do " +
-            "printf '${ALT_PREFIX}%s\\n' \"\$(tmux display-message -p -t $target '#{alternate_on}' 2>/dev/null)\"; " +
+            "mp_alternate=\$(tmux display-message -p -t $target '#{alternate_on}' 2>/dev/null); " +
+            "printf '${ALT_PREFIX}%s\\n' \"\$mp_alternate\"; " +
             "if [ \"\$(tmux display-message -p -t $target '#{pane_in_mode}' 2>/dev/null)\" = 1 ]; " +
             "then sleep 1; continue; fi; " +
             "{ ${captureCommand(target)} ; } 2>/dev/null | " +
             "tail -c 524288 > \"\$mp_snapshot\"; " +
             "mp_eta=\$(${etaRowsCommand(sessionName)}); " +
-            "mp_current=\$(cksum < \"\$mp_snapshot\")-\$(printf '%s' \"\$mp_eta\" | cksum); " +
+            "mp_current=\$(cksum < \"\$mp_snapshot\")-\$(printf '%s' \"\$mp_eta\" | cksum)-\$mp_alternate; " +
             "if [ \"\$mp_current\" != \"\$mp_previous\" ]; then " +
             "printf '$ETA_PREFIX'; printf '%s' \"\$mp_eta\" | od -An -v -tx1 | tr -d ' \\n'; printf '\\n'; " +
             "printf '$SNAPSHOT_PREFIX'; " +
