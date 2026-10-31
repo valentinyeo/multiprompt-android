@@ -1391,33 +1391,27 @@ internal fun SessionsScreen(
         )
     }
     dissolvePromptSession?.let { session ->
-        AlertDialog(
-            onDismissRequest = { dissolvePromptSession = null },
-            title = { Text("Archive ${session.displayName}?") },
-            text = { Text("This ends its tmux session but saves the name and resume command so it can be restored later.") },
-            confirmButton = {
-                Button(onClick = {
-                    dissolvePromptSession = null
-                    onDissolve(session)
-                }) { Text("Archive") }
-            },
-            dismissButton = {
-                TextButton(onClick = { dissolvePromptSession = null }) { Text("Cancel") }
+        DestructiveConfirmationSheet(
+            title = "Archive ${session.displayName}?",
+            warning = "This ends its tmux session but saves the name and resume command so it can be restored later.",
+            confirmLabel = "Archive",
+            onDismiss = { dissolvePromptSession = null },
+            onConfirm = {
+                dissolvePromptSession = null
+                onDissolve(session)
             },
         )
     }
     endPromptSession?.let { session ->
-        AlertDialog(
-            onDismissRequest = { endPromptSession = null },
-            title = { Text("End ${session.displayName} completely?") },
-            text = { Text("This kills the coding agent and tmux session without saving a restore record.") },
-            confirmButton = {
-                Button(onClick = {
-                    endPromptSession = null
-                    onEnd(session)
-                }) { Text("End session") }
+        DestructiveConfirmationSheet(
+            title = "End ${session.displayName} completely?",
+            warning = "This kills the coding agent and tmux session without saving a restore record.",
+            confirmLabel = "End session",
+            onDismiss = { endPromptSession = null },
+            onConfirm = {
+                endPromptSession = null
+                onEnd(session)
             },
-            dismissButton = { TextButton(onClick = { endPromptSession = null }) { Text("Cancel") } },
         )
     }
     if (splitOrderDialogVisible) {
@@ -1890,6 +1884,27 @@ internal fun SessionsScreen(
             if (reversedSessions && pinnedSessions.isNotEmpty()) {
                 item(key = "pinned-sessions") { pinnedStrip() }
             }
+        }
+    }
+}
+
+@Composable
+private fun DestructiveConfirmationSheet(
+    title: String,
+    warning: String,
+    confirmLabel: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    KitSheet(onDismiss = onDismiss) {
+        Column(
+            Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(Kit.ControlGap),
+        ) {
+            Text(title, style = Kit.Heading, color = Kit.Text)
+            Text(warning, style = Kit.Body, color = Kit.Text)
+            KitSecondaryButton("Cancel", onDismiss, modifier = Modifier.fillMaxWidth())
+            KitPrimaryButton(confirmLabel, onConfirm, modifier = Modifier.fillMaxWidth(), destructive = true)
         }
     }
 }
@@ -2829,17 +2844,15 @@ internal fun ReaderScreen(
         )
     }
     if (endDialogVisible) {
-        AlertDialog(
-            onDismissRequest = { endDialogVisible = false },
-            title = { Text("End ${session.displayName} completely?") },
-            text = { Text("This kills the coding agent and tmux session without saving a restore record.") },
-            confirmButton = {
-                Button(onClick = {
-                    endDialogVisible = false
-                    onEnd()
-                }) { Text("End session") }
+        DestructiveConfirmationSheet(
+            title = "End ${session.displayName} completely?",
+            warning = "This kills the coding agent and tmux session without saving a restore record.",
+            confirmLabel = "End session",
+            onDismiss = { endDialogVisible = false },
+            onConfirm = {
+                endDialogVisible = false
+                onEnd()
             },
-            dismissButton = { TextButton(onClick = { endDialogVisible = false }) { Text("Cancel") } },
         )
     }
     if (reminderDialogVisible) {
