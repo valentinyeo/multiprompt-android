@@ -11,7 +11,9 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -102,10 +104,20 @@ class DayThemeTest {
         }
         compose.onNodeWithText(anchor, substring = name.endsWith("-chat")).assertIsDisplayed().captureToImage()
         automation.waitForIdle(100, 5_000)
+        val modalOpen = compose.onAllNodes(isDialog(), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         val screen = automation.takeScreenshot()
         screen.let { bitmap ->
-            if (sunlight && Color(bitmap.getPixel(bitmap.width / 2, 1)).luminance() < 0.9f) {
-                problems += "$name status surface stays dark"
+            if (sunlight) {
+                val statusLuminance = Color(bitmap.getPixel(bitmap.width / 2, 1)).luminance()
+                if (modalOpen) {
+                    val blackLuminance = Color.Black.luminance()
+                    val contrast = (max(statusLuminance, blackLuminance) + 0.05f) / (min(statusLuminance, blackLuminance) + 0.05f)
+                    report += "$name modal status luminance=$statusLuminance blackIconContrast=$contrast"
+                    if (statusLuminance >= 0.9f) problems += "$name modal status surface is not dimmed"
+                    if (contrast < 4.5f) problems += "$name modal status black icon contrast=$contrast"
+                } else if (statusLuminance < 0.9f) {
+                    problems += "$name status surface stays dark"
+                }
             }
             File(output, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
@@ -113,7 +125,9 @@ class DayThemeTest {
             screen.recycle()
             return
         }
-        val textNodes = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsActions.GetTextLayoutResult), useUnmergedTree = true)
+        val textMatcher = SemanticsMatcher.keyIsDefined(SemanticsActions.GetTextLayoutResult)
+        val scopedMatcher = if (modalOpen) textMatcher and hasAnyAncestor(isDialog()) else textMatcher
+        val textNodes = compose.onAllNodes(scopedMatcher, useUnmergedTree = true)
         var checked = 0
         textNodes.fetchSemanticsNodes().forEachIndexed { index, node ->
             val layouts = mutableListOf<TextLayoutResult>()
@@ -142,6 +156,7 @@ class DayThemeTest {
             }
         }
         screen.recycle()
+        if (modalOpen) report += "$name modalTextCount=$checked"
         assertTrue("$name must measure rendered text", checked > 0)
         report += "$name checked=$checked"
     }

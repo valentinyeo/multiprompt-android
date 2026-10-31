@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -52,13 +53,14 @@ class KitMenuInteractionTest {
         compose.onNodeWithText("B row 39").assertIsNotDisplayed()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val output = File(checkNotNull(InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")), "approved-style").apply { mkdirs() }
+        instrumentation.waitForIdleSync()
+        compose.onNodeWithText("B row 0").assertIsDisplayed().captureToImage()
         instrumentation.uiAutomation.waitForIdle(100, 5_000)
         File(output, "menu-page.png").outputStream().use {
             assertTrue(instrumentation.uiAutomation.takeScreenshot().compress(Bitmap.CompressFormat.PNG, 100, it))
         }
         compose.onNodeWithText("B row 39").performScrollTo().assertIsDisplayed()
-        assertTrue(instrumentation.uiAutomation.injectInputEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK), true))
-        assertTrue(instrumentation.uiAutomation.injectInputEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK), true))
+        instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
         compose.waitForIdle()
         compose.onNodeWithText("B row 39").assertDoesNotExist()
         compose.onNodeWithText("Open menu").performClick()
