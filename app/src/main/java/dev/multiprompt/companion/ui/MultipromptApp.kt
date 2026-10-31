@@ -1832,7 +1832,7 @@ internal fun SessionsScreen(
                     unreadCount = state.unreadCounts[key] ?: 1,
                     archived = key in state.archivedSessionKeys,
                     starred = starred,
-                    open = key == state.readerSession?.let { SessionReadStore.key(it.hostId, it.name) },
+                    highlighted = key == state.readerSession?.let { SessionReadStore.key(it.hostId, it.name) },
                     onToggleFavorite = if (tab != null && state.signedIn) {
                         { onSetFavorite(tab, !starred) }
                     } else null,
@@ -2050,7 +2050,7 @@ private fun SessionCard(
     unreadCount: Int,
     archived: Boolean,
     starred: Boolean,
-    open: Boolean,
+    highlighted: Boolean,
     onToggleFavorite: (() -> Unit)?,
     onClick: () -> Unit,
     onOpenTerminal: () -> Unit,
@@ -2107,7 +2107,7 @@ private fun SessionCard(
     ) {
         Box(
             Modifier.fillMaxWidth().background(
-                if (open) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface,
+                if (highlighted) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface,
             ),
         ) {
             Row(
