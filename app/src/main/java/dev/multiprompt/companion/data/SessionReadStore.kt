@@ -185,6 +185,16 @@ class SessionReadStore(context: Context) {
         preferences.edit().putBoolean(ALL_SPLIT_ON_RIGHT, enabled).apply()
     }
 
+    fun composerDraft(session: TmuxSession): String =
+        preferences.getString(DRAFT_PREFIX + key(session.hostId, session.name), null).orEmpty()
+
+    fun setComposerDraft(session: TmuxSession, text: String) {
+        val prefKey = DRAFT_PREFIX + key(session.hostId, session.name)
+        val editor = preferences.edit()
+        if (text.isBlank()) editor.remove(prefKey) else editor.putString(prefKey, text)
+        editor.apply()
+    }
+
     fun sessionBucket(): String? = preferences.getString(SESSION_BUCKET, null)
 
     fun setSessionBucket(bucket: String) {
@@ -235,6 +245,7 @@ class SessionReadStore(context: Context) {
         private const val NEWEST_SESSIONS_AT_BOTTOM = "newest_sessions_at_bottom"
         private const val ALL_SPLIT_ON_RIGHT = "all_split_on_right"
         private const val SESSION_BUCKET = "session_bucket"
+        private const val DRAFT_PREFIX = "composer_draft::"
         private const val DISPLAY_NAME_PREFIX = "display_name::"
         private const val INTERACTION_PREFIX = "interaction::"
         private const val DEFAULT_FONT_SCALE = 1f

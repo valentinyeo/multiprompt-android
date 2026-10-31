@@ -2536,7 +2536,14 @@ internal fun ReaderScreen(
     val sharedDictationState by dictation.state.collectAsState()
     val dictationState = sharedDictationState.takeIf { it.sessionKey == sessionKey }
         ?: DictationState(configured = sharedDictationState.configured)
-    var promptField by remember(connection) { mutableStateOf(TextFieldValue("")) }
+    val draftContext = LocalContext.current.applicationContext
+    val draftStore = remember(draftContext) { SessionReadStore(draftContext) }
+    var promptField by remember(connection) {
+        mutableStateOf(TextFieldValue(draftStore.composerDraft(session)))
+    }
+    LaunchedEffect(connection, session.hostId, session.name, promptField.text) {
+        draftStore.setComposerDraft(session, promptField.text)
+    }
     var replyTo by remember(connection, session.hostId, session.name) { mutableStateOf<String?>(null) }
     var replyAuthor by remember(connection, session.hostId, session.name) { mutableStateOf("") }
     val replyGate = remember(connection, session.hostId, session.name) { ReplySwipeGate() }
