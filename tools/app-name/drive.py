@@ -22,6 +22,27 @@ def require(condition, message):
         raise RuntimeError(message)
 
 
+def frozen_packages(output: str) -> set[str]:
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    require(len(lines) >= 2 and lines[0] == "Frozen packages:", "Invalid frozen packages table")
+    if lines[1:] == ["(none)"]:
+        return set()
+    packages = set()
+    for line in lines[1:]:
+        row = re.fullmatch(
+            r"package=([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*),\s*refCounts=([0-9]+)",
+            line,
+        )
+        require(row is not None, "Invalid frozen packages row")
+        package, count = row.groups()
+        require(
+            int(count) > 0 and package not in packages,
+            "Invalid frozen packages entry",
+        )
+        packages.add(package)
+    return packages
+
+
 def command(args, timeout=30, check=True):
     return subprocess.run(
         args,
@@ -389,7 +410,13 @@ class Proof:
                     info["versionName"] == self.plan.target["versionName"],
                     "Installed target version name mismatch",
                 )
-                return info
+                snapshot = adb("shell", "dumpsys", "package", "frozen")
+                (self.evidence / "package-freeze.txt").write_bytes(snapshot.stdout)
+                if self.plan.package not in frozen_packages(text(snapshot)):
+                    return info
+                self.event("target-frozen")
+                time.sleep(1)
+                continue
             require(
                 info["versionCode"] == self.plan.baseline["versionCode"]
                 and info["versionName"] == self.plan.baseline["versionName"],
