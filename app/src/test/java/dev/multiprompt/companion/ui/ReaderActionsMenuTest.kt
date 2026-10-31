@@ -91,7 +91,7 @@ class ReaderActionsMenuTest {
     @Test fun archiveFromOverflowKeepsTheExistingDirectArchiveBehaviour() {
         render()
         openMenu()
-        compose.onNodeWithText("Archive session").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Archive session").performScrollTo().assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(1, archives); assertEquals(0, waits); assertTrue(reminders.isEmpty()) }
         compose.onNodeWithText("Archive session").assertDoesNotExist()
     }
@@ -99,7 +99,7 @@ class ReaderActionsMenuTest {
     @Test fun remindFromOverflowOpensTheExistingPickerAndDispatchesItsDueTime() {
         render(material3 = true)
         openMenu()
-        val remind = compose.onNodeWithText("Remind me").assertIsDisplayed()
+        val remind = compose.onNodeWithText("Remind me").performScrollTo().assertIsDisplayed()
         compose.mainClock.autoAdvance = false
         remind.performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.runOnUiThread { Snapshot.sendApplyNotifications() }
@@ -125,11 +125,11 @@ class ReaderActionsMenuTest {
     @Test fun waitingFromOverflowTogglesBackToOpenEvenWhileSending() {
         render(sending = true)
         openMenu()
-        compose.onNodeWithText("Waiting").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Waiting").performScrollTo().assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(1, waits); assertTrue(archived.value) }
         compose.onNodeWithText("Return to open").assertDoesNotExist()
         openMenu()
-        compose.onNodeWithText("Return to open").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Return to open").performScrollTo().assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(2, waits); assertTrue(!archived.value); assertEquals(0, archives) }
     }
 
@@ -152,7 +152,7 @@ class ReaderActionsMenuTest {
         }
         openMenu()
         listOf("Archive session", "Remind me", "Waiting").forEach {
-            compose.onNodeWithText(it).assertIsDisplayed()
+            compose.onNodeWithText(it).performScrollTo().assertIsDisplayed()
         }
     }
 
@@ -162,7 +162,7 @@ class ReaderActionsMenuTest {
         listOf(
             "Enter / approve", "Interrupt session", "Open live terminal", "Rename", "Remind me", "Waiting",
             "Archive session", "Model and effort ›", "Display ›", "More ›", "Resync chat", "End session", "Remove from list",
-        ).forEach { compose.onNodeWithText(it).assertIsDisplayed() }
+        ).forEach { compose.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
         listOf(
             "Set effort: low", "Set effort: max", "Use Claude Opus", "Open model picker (/model)", "Sunlight mode on",
             "Show terminal details", "Use default font size", "Release notes", "Estimate accuracy", "Dictation API key",
@@ -177,7 +177,7 @@ class ReaderActionsMenuTest {
             sentRecord = listOf(QueuedMessages.SentPrompt("hello there", System.currentTimeMillis())),
         )
         openMenu()
-        compose.onNodeWithText("Resync chat").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Resync chat").performScrollTo().assertIsDisplayed().performClick()
         compose.runOnIdle {
             assertEquals(listOf("hello there"), connection.state.value.sentRecord.map { it.text })
             assertEquals(listOf("hello there"), connection.state.value.sentPrompts)
@@ -188,34 +188,34 @@ class ReaderActionsMenuTest {
     @Test fun modelAndEffortSubPageHoldsModelChoicesAndBackReturnsToTheMainMenu() {
         render(material3 = true)
         openMenu()
-        compose.onNodeWithText("Model and effort ›").performClick()
+        compose.onNodeWithText("Model and effort ›").performScrollTo().performClick()
         listOf("Open model picker (/model)", "Use Claude Opus", "Use Claude Sonnet", "Use Claude Fable", "Set effort: low", "Set effort: max")
-            .forEach { compose.onNodeWithText(it).assertIsDisplayed() }
+            .forEach { compose.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
         compose.onNodeWithText("Enter / approve").assertDoesNotExist()
-        compose.onNodeWithText("‹ Back").performClick()
-        compose.onNodeWithText("Enter / approve").assertIsDisplayed()
+        compose.onNodeWithText("‹ Back").performScrollTo().performClick()
+        compose.onNodeWithText("Enter / approve").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Set effort: low").assertDoesNotExist()
     }
 
     @Test fun displayAndMoreSubPagesHoldTheRemainingOptions() {
         render(material3 = true)
         openMenu()
-        compose.onNodeWithText("Display ›").performClick()
-        listOf("Show terminal details", "Sunlight mode on", "Use default font size").forEach { compose.onNodeWithText(it).assertIsDisplayed() }
-        compose.onNodeWithText("‹ Back").performClick()
-        compose.onNodeWithText("More ›").performClick()
+        compose.onNodeWithText("Display ›").performScrollTo().performClick()
+        listOf("Show terminal details", "Sunlight mode on", "Use default font size").forEach { compose.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
+        compose.onNodeWithText("‹ Back").performScrollTo().performClick()
+        compose.onNodeWithText("More ›").performScrollTo().performClick()
         listOf("Release notes", "Estimate accuracy", "Dictation API key", "Screencast2 upload key")
-            .forEach { compose.onNodeWithText(it).assertIsDisplayed() }
-        compose.onNodeWithText("Copy raw transcript", substring = true).assertIsDisplayed()
+            .forEach { compose.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
+        compose.onNodeWithText("Copy raw transcript", substring = true).performScrollTo().assertIsDisplayed()
     }
 
     @Test fun reopeningTheMenuAlwaysStartsOnTheMainPage() {
         render(material3 = true)
         openMenu()
-        compose.onNodeWithText("Display ›").performClick()
-        compose.onNodeWithText("Sunlight mode on").performClick()
+        compose.onNodeWithText("Display ›").performScrollTo().performClick()
+        compose.onNodeWithText("Sunlight mode on").performScrollTo().performClick()
         openMenu()
-        compose.onNodeWithText("Enter / approve").assertIsDisplayed()
+        compose.onNodeWithText("Enter / approve").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Sunlight mode on").assertDoesNotExist()
     }
 }

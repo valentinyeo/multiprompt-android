@@ -132,8 +132,8 @@ class ReaderChromeTest {
         assertTrue("First message must start within 24dp below the bar, gap=${gap}dp", gap in 0f..24f)
         screenshot()
         compose.onNodeWithContentDescription("Session actions").performClick()
-        compose.onNodeWithText("Model and effort ›").performClick()
-        compose.onNodeWithText("Current: $modelLabel").assertIsDisplayed()
+        compose.onNodeWithText("Model and effort ›").performScrollTo().performClick()
+        compose.onNodeWithText("Current: $modelLabel").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Current: $modelLabel · waiting for input").assertDoesNotExist()
     }
 
@@ -207,13 +207,13 @@ class ReaderChromeTest {
         compose.runOnIdle {
             reader.value = reader.value.copy(eta = TmuxText.SessionEta(System.currentTimeMillis() + 200_000, 240_000, ""))
         }
-        compose.onNodeWithText("$modelLabel · ETA 3m · waiting for input", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("$modelLabel · ETA 3m · waiting for input", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         compose.runOnIdle { reader.value = reader.value.copy(eta = null, waitingForInput = false) }
-        compose.onNodeWithText(modelLabel, useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText(modelLabel, useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         compose.runOnIdle { reader.value = reader.value.copy(runtimeDetails = TmuxText.RuntimeDetails()) }
-        compose.onNodeWithText("Model / effort", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("Model / effort", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         compose.runOnIdle { reader.value = reader.value.copy(waitingForInput = true) }
-        compose.onNodeWithText("waiting for input", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("waiting for input", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
     }
 
     @Test fun disconnectSignalIsOnlyShownWhileRetrying() {

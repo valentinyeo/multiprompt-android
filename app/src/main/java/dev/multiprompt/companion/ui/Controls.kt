@@ -1,17 +1,13 @@
 package dev.multiprompt.companion.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.TextField as M3TextField
-import androidx.compose.material3.DropdownMenu as M3DropdownMenu
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField as M3OutlinedTextField
 import androidx.compose.material3.Button as M3Button
@@ -19,7 +15,6 @@ import androidx.compose.material3.FilledTonalButton as M3FilledTonalButton
 import androidx.compose.material3.OutlinedButton as M3OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
@@ -185,23 +180,4 @@ fun OutlinedTextField(
     maxLines = maxLines,
     minLines = minLines,
     shape = shape,
-)
-
-@Composable
-fun DropdownMenu(
-    expanded: Boolean,
-    onDismissRequest: () -> Unit,
-    modifier: Modifier = Modifier,
-    shape: Shape? = null,
-    containerColor: Color? = null,
-    border: BorderStroke? = null,
-    content: @Composable ColumnScope.() -> Unit,
-) = M3DropdownMenu(
-    expanded = expanded,
-    onDismissRequest = onDismissRequest,
-    modifier = modifier,
-    shape = shape ?: if (LocalMaterial3.current) RoundedCornerShape(8.dp) else MenuDefaults.shape,
-    containerColor = containerColor ?: if (LocalMaterial3.current) MaterialTheme.colorScheme.surfaceContainer else MenuDefaults.containerColor,
-    border = border,
-    content = content,
 )

@@ -754,7 +754,7 @@ internal fun Header(
                 IconButton(onClick = { menuExpanded = true }) {
                     Icon(Icons.Default.MoreVert, "Open navigation")
                 }
-                DropdownMenu(
+                KitMenu(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
                 ) {
@@ -762,8 +762,8 @@ internal fun Header(
                         AppSection.SESSIONS to "Sessions",
                         AppSection.UPDATE to "Update",
                     ).forEach { (destination, label) ->
-                        DropdownMenuItem(
-                            text = { Text(if (section == destination) "✓ $label" else label) },
+                        KitMenuRow(
+                            label = if (section == destination) "✓ $label" else label,
                             onClick = {
                                 menuExpanded = false
                                 onSelect(destination)
@@ -1620,7 +1620,7 @@ internal fun SessionsScreen(
                             )
                             Icon(Icons.Default.ExpandMore, "Switch session bucket", tint = MaterialTheme.colorScheme.onSurface)
                         }
-                        DropdownMenu(
+                        KitMenu(
                             expanded = bucketMenuExpanded,
                             onDismissRequest = { bucketMenuExpanded = false },
                         ) {
@@ -1629,8 +1629,8 @@ internal fun SessionsScreen(
                                 SessionBucket.WAITING to "Waiting",
                                 SessionBucket.ARCHIVE to "Archive",
                             ).forEach { (bucket, label) ->
-                                DropdownMenuItem(
-                                    text = { Text(label) },
+                                KitMenuRow(
+                                    label = label,
                                     onClick = {
                                         bucketMenuExpanded = false
                                         onSelectSessionBucket(bucket)
@@ -2159,52 +2159,53 @@ private fun SessionCard(
                 }
             }
             Box(Modifier.align(Alignment.TopEnd)) {
-                DropdownMenu(
+                KitMenu(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
                 ) {
                     onToggleFavorite?.let { toggle ->
-                        DropdownMenuItem(
-                            text = { Text(if (starred) "Unfavorite" else "Favorite") },
+                        KitMenuRow(
+                            label = if (starred) "Unfavorite" else "Favorite",
                             onClick = {
                                 menuExpanded = false
                                 toggle()
                             },
                         )
                     }
-                    DropdownMenuItem(
-                        text = { Text(if (archived) "Return to open" else "Waiting") },
+                    KitMenuRow(
+                        label = if (archived) "Return to open" else "Waiting",
                         onClick = {
                             menuExpanded = false
                             onArchiveToggle()
                         },
                     )
                     if (!archived) {
-                        DropdownMenuItem(
-                            text = { Text("Remind me") },
+                        KitMenuRow(
+                            label = "Remind me",
                             onClick = {
                                 menuExpanded = false
                                 onRemind()
                             },
                         )
                     }
-                    DropdownMenuItem(
-                        text = { Text("End session", color = MaterialTheme.colorScheme.error) },
+                    KitMenuRow(
+                        label = "End session",
+                        destructive = true,
                         onClick = {
                             menuExpanded = false
                             onEnd()
                         },
                     )
-                    DropdownMenuItem(
-                        text = { Text("Remove from list") },
+                    KitMenuRow(
+                        label = "Remove from list",
                         onClick = {
                             menuExpanded = false
                             onForget()
                         },
                     )
                     if (!unread && !archived) {
-                        DropdownMenuItem(
-                            text = { Text("Mark unread") },
+                        KitMenuRow(
+                            label = "Mark unread",
                             onClick = {
                                 menuExpanded = false
                                 onMarkUnread()
@@ -2212,8 +2213,8 @@ private fun SessionCard(
                         )
                     }
                     if (!archived && session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {
-                        DropdownMenuItem(
-                            text = { Text("Rename") },
+                        KitMenuRow(
+                            label = "Rename",
                             onClick = {
                                 menuExpanded = false
                                 onRename()
@@ -2222,8 +2223,8 @@ private fun SessionCard(
                     }
                     if (!archived) {
                         workspaces.forEach { workspace ->
-                            DropdownMenuItem(
-                                text = { Text("Move to ${workspace.name}") },
+                            KitMenuRow(
+                                label = "Move to ${workspace.name}",
                                 onClick = {
                                     menuExpanded = false
                                     onMove(workspace)
@@ -2231,16 +2232,17 @@ private fun SessionCard(
                             )
                         }
                     }
-                    DropdownMenuItem(
-                        text = { Text("Pure terminal output") },
+                    KitMenuRow(
+                        label = "Pure terminal output",
                         onClick = {
                             menuExpanded = false
                             onOpenTerminal()
                         },
                     )
-                    HorizontalDivider()
-                    DropdownMenuItem(
-                        text = { Text("Archive session", color = MaterialTheme.colorScheme.error) },
+                    KitDivider()
+                    KitMenuRow(
+                        label = "Archive session",
+                        destructive = true,
                         onClick = {
                             menuExpanded = false
                             onDissolve()
@@ -2394,47 +2396,47 @@ internal fun ReaderTopBar(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    DropdownMenu(
+                    KitMenu(
                         expanded = modelMenuExpanded,
                         onDismissRequest = { modelMenuExpanded = false },
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("Current: ${modelLabel ?: "Unknown"}") },
+                        KitMenuRow(
+                            label = "Current: ${modelLabel ?: "Unknown"}",
                             enabled = false,
                             onClick = {},
                         )
-                        DropdownMenuItem(
-                            text = { Text("Open model picker (/model)") },
+                        KitMenuRow(
+                            label = "Open model picker (/model)",
                             onClick = {
                                 modelMenuExpanded = false
                                 onModelCommand("/model")
                             },
                         )
                         if (session.agent == AgentKind.CLAUDE) {
-                            DropdownMenuItem(
-                                text = { Text("Use Claude Opus") },
+                            KitMenuRow(
+                                label = "Use Claude Opus",
                                 onClick = {
                                     modelMenuExpanded = false
                                     onModelCommand("/model opus")
                                 },
                             )
-                            DropdownMenuItem(
-                                text = { Text("Use Claude Sonnet") },
+                            KitMenuRow(
+                                label = "Use Claude Sonnet",
                                 onClick = {
                                     modelMenuExpanded = false
                                     onModelCommand("/model sonnet")
                                 },
                             )
-                            DropdownMenuItem(
-                                text = { Text("Use Claude Fable") },
+                            KitMenuRow(
+                                label = "Use Claude Fable",
                                 onClick = {
                                     modelMenuExpanded = false
                                     onModelCommand("/model fable")
                                 },
                             )
                             listOf("low", "medium", "high", "xhigh", "max").forEach { level ->
-                                DropdownMenuItem(
-                                    text = { Text("Set effort: $level") },
+                                KitMenuRow(
+                                    label = "Set effort: $level",
                                     onClick = {
                                         modelMenuExpanded = false
                                         onModelCommand("/effort $level")
@@ -2977,26 +2979,27 @@ internal fun ReaderScreen(
                 onReleaseNotes = onReleaseNotes,
                 onMenuClick = { menuPage = ReaderMenuPage.MAIN; menuExpanded = true },
                 menuContent = {
-                    DropdownMenu(
+                    KitMenu(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false },
+                        contentResetKey = menuPage.name,
                     ) {
                         if (menuPage != ReaderMenuPage.MAIN) {
-                            DropdownMenuItem(
-                                text = { Text("‹ Back") },
+                            KitMenuRow(
+                                label = "‹ Back",
                                 onClick = { menuPage = ReaderMenuPage.MAIN },
                             )
-                            HorizontalDivider()
+                            KitDivider()
                         }
                         when (menuPage) {
                             ReaderMenuPage.MAIN -> {
-                                DropdownMenuItem(
-                                    text = { Text(listOfNotNull(runtimeDetails.label, statusLabel).joinToString(" · ").ifEmpty { "Model / effort" }) },
+                                KitMenuRow(
+                                    label = listOfNotNull(runtimeDetails.label, statusLabel).joinToString(" · ").ifEmpty { "Model / effort" },
                                     enabled = false,
                                     onClick = {},
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("Enter / approve") },
+                                KitMenuRow(
+                                    label = "Enter / approve",
                                     enabled = !reader.sending,
                                     onClick = {
                                         menuExpanded = false
@@ -3005,8 +3008,8 @@ internal fun ReaderScreen(
                                         connection.sendEnter()
                                     },
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("Interrupt session") },
+                                KitMenuRow(
+                                    label = "Interrupt session",
                                     enabled = !reader.sending,
                                     onClick = {
                                         menuExpanded = false
@@ -3015,8 +3018,8 @@ internal fun ReaderScreen(
                                     },
                                 )
                                 if (reader.alternateOn) {
-                                    DropdownMenuItem(
-                                        text = { Text("Session history") },
+                                    KitMenuRow(
+                                        label = "Session history",
                                         onClick = {
                                             menuExpanded = false
                                             onSessionInteraction()
@@ -3027,17 +3030,17 @@ internal fun ReaderScreen(
                                         },
                                     )
                                 }
-                                DropdownMenuItem(
-                                    text = { Text("Open live terminal") },
+                                KitMenuRow(
+                                    label = "Open live terminal",
                                     onClick = {
                                         menuExpanded = false
                                         onOpenTerminal()
                                     },
                                 )
-                                HorizontalDivider()
+                                KitDivider()
                                 if (unread) {
-                                    DropdownMenuItem(
-                                        text = { Text("Mark read") },
+                                    KitMenuRow(
+                                        label = "Mark read",
                                         onClick = {
                                             menuExpanded = false
                                             onMarkRead()
@@ -3045,8 +3048,8 @@ internal fun ReaderScreen(
                                     )
                                 }
                                 if (session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {
-                                    DropdownMenuItem(
-                                        text = { Text("Rename") },
+                                    KitMenuRow(
+                                        label = "Rename",
                                         onClick = {
                                             menuExpanded = false
                                             renameDraft = session.displayName
@@ -3055,33 +3058,33 @@ internal fun ReaderScreen(
                                         },
                                     )
                                 }
-                                DropdownMenuItem(
-                                    text = { Text("Remind me") },
+                                KitMenuRow(
+                                    label = "Remind me",
                                     onClick = { menuExpanded = false; reminderDialogVisible = true },
                                 )
-                                DropdownMenuItem(
-                                    text = { Text(if (archived) "Return to open" else "Waiting") },
+                                KitMenuRow(
+                                    label = if (archived) "Return to open" else "Waiting",
                                     onClick = { menuExpanded = false; onArchiveToggle() },
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("Archive session") },
+                                KitMenuRow(
+                                    label = "Archive session",
                                     onClick = { menuExpanded = false; onDissolve() },
                                 )
-                                HorizontalDivider()
-                                DropdownMenuItem(
-                                    text = { Text("Model and effort ›") },
+                                KitDivider()
+                                KitMenuRow(
+                                    label = "Model and effort ›",
                                     onClick = { menuPage = ReaderMenuPage.MODEL },
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("Display ›") },
+                                KitMenuRow(
+                                    label = "Display ›",
                                     onClick = { menuPage = ReaderMenuPage.DISPLAY },
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("More ›") },
+                                KitMenuRow(
+                                    label = "More ›",
                                     onClick = { menuPage = ReaderMenuPage.MORE },
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("Resync chat") },
+                                KitMenuRow(
+                                    label = "Resync chat",
                                     onClick = {
                                         menuExpanded = false
                                         val reset = if (session.agent == AgentKind.CLAUDE || session.agent == AgentKind.CODEX) connection.resetConversation() else null
@@ -3103,16 +3106,17 @@ internal fun ReaderScreen(
                                         }
                                     },
                                 )
-                                HorizontalDivider()
-                                DropdownMenuItem(
-                                    text = { Text("End session", color = MaterialTheme.colorScheme.error) },
+                                KitDivider()
+                                KitMenuRow(
+                                    label = "End session",
+                                    destructive = true,
                                     onClick = {
                                         menuExpanded = false
                                         endDialogVisible = true
                                     },
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("Remove from list") },
+                                KitMenuRow(
+                                    label = "Remove from list",
                                     onClick = {
                                         menuExpanded = false
                                         onForget()
@@ -3120,48 +3124,48 @@ internal fun ReaderScreen(
                                 )
                             }
                             ReaderMenuPage.MODEL -> {
-                                DropdownMenuItem(
-                                    text = { Text("Current: ${runtimeDetails.label ?: "Unknown"}") },
+                                KitMenuRow(
+                                    label = "Current: ${runtimeDetails.label ?: "Unknown"}",
                                     enabled = false,
                                     onClick = {},
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("Open model picker (/model)") },
+                                KitMenuRow(
+                                    label = "Open model picker (/model)",
                                     onClick = { menuExpanded = false; sendModelCommand("/model") },
                                 )
                                 if (session.agent == AgentKind.CLAUDE) {
                                     listOf("Opus", "Sonnet", "Fable").forEach { model ->
-                                        DropdownMenuItem(
-                                            text = { Text("Use Claude $model") },
+                                        KitMenuRow(
+                                            label = "Use Claude $model",
                                             onClick = { menuExpanded = false; sendModelCommand("/model ${model.lowercase()}") },
                                         )
                                     }
-                                    HorizontalDivider()
+                                    KitDivider()
                                     listOf("low", "medium", "high", "xhigh", "max").forEach { level ->
-                                        DropdownMenuItem(
-                                            text = { Text("Set effort: $level") },
+                                        KitMenuRow(
+                                            label = "Set effort: $level",
                                             onClick = { menuExpanded = false; sendModelCommand("/effort $level") },
                                         )
                                     }
                                 }
                             }
                             ReaderMenuPage.DISPLAY -> {
-                                DropdownMenuItem(
-                                    text = { Text(if (technicalMode) "Hide terminal details" else "Show terminal details") },
+                                KitMenuRow(
+                                    label = if (technicalMode) "Hide terminal details" else "Show terminal details",
                                     onClick = {
                                         menuExpanded = false
                                         onTechnicalModeChanged(!technicalMode)
                                     },
                                 )
-                                DropdownMenuItem(
-                                    text = { Text(if (sunlightMode) "Sunlight mode off" else "Sunlight mode on") },
+                                KitMenuRow(
+                                    label = if (sunlightMode) "Sunlight mode off" else "Sunlight mode on",
                                     onClick = {
                                         menuExpanded = false
                                         onSetAppTheme(if (sunlightMode) AppTheme.DARK else AppTheme.SUNLIGHT)
                                     },
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("Use default font size") },
+                                KitMenuRow(
+                                    label = "Use default font size",
                                     onClick = {
                                         menuExpanded = false
                                         transcriptZoom = onResetFontScale()
@@ -3169,25 +3173,21 @@ internal fun ReaderScreen(
                                 )
                             }
                             ReaderMenuPage.MORE -> {
-                                DropdownMenuItem(
-                                    text = { Text("Release notes") },
+                                KitMenuRow(
+                                    label = "Release notes",
                                     onClick = { menuExpanded = false; onReleaseNotes() },
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("Estimate accuracy") },
+                                KitMenuRow(
+                                    label = "Estimate accuracy",
                                     onClick = {
                                         menuExpanded = false
                                         onShowEtaAccuracy()
                                     },
                                 )
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "Copy raw transcript (${reader.output.count { it == '\n' } + 1} lines · " +
-                                                "alt ${if (reader.alternateOn) 1 else 0} · " +
-                                                "view ${scrollState.value}/${scrollState.maxValue})",
-                                        )
-                                    },
+                                KitMenuRow(
+                                    label = "Copy raw transcript (${reader.output.count { it == '\n' } + 1} lines · " +
+                                        "alt ${if (reader.alternateOn) 1 else 0} · " +
+                                        "view ${scrollState.value}/${scrollState.maxValue})",
                                     onClick = {
                                         menuExpanded = false
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
@@ -3197,15 +3197,15 @@ internal fun ReaderScreen(
                                         )
                                     },
                                 )
-                                HorizontalDivider()
+                                KitDivider()
                                 AppMenuItems(
                                     signedIn = signedIn,
                                     onSignIn = onSignIn,
                                     onSignOut = onSignOut,
                                     onDismiss = { menuExpanded = false },
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("Dictation API key") },
+                                KitMenuRow(
+                                    label = "Dictation API key",
                                     onClick = {
                                         menuExpanded = false
                                         apiKeyDraft = ""
@@ -3213,8 +3213,8 @@ internal fun ReaderScreen(
                                         apiKeyDialogVisible = true
                                     },
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("Screencast2 upload key") },
+                                KitMenuRow(
+                                    label = "Screencast2 upload key",
                                     onClick = {
                                         menuExpanded = false
                                         imageKeyDraft = ""
@@ -3309,18 +3309,16 @@ internal fun ReaderScreen(
                                 if (imageUploading) CircularProgressIndicator(Modifier.size(ReaderBadgeSize), strokeWidth = 2.dp)
                                 else Icon(Icons.Default.Add, "Attach")
                             }
-                            DropdownMenu(
+                            KitMenu(
                                 expanded = attachMenuExpanded,
                                 onDismissRequest = { attachMenuExpanded = false },
-                                shape = ReaderMenuShape,
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                border = BorderStroke(ReaderOutlineWidth, ReaderOutline),
+                                contentResetKey = attachMenuPage.name,
                             ) {
                                 when (attachMenuPage) {
                                     ComposerMenuPage.MAIN -> {
-                                        DropdownMenuItem(
-                                            text = { Text("Add image") },
-                                            leadingIcon = { Icon(Icons.Outlined.OutlinedImage, null) },
+                                        KitMenuRow(
+                                            label = "Add image",
+                                            icon = Icons.Outlined.OutlinedImage,
                                             onClick = {
                                                 attachMenuExpanded = false
                                                 if (screencast.configured) imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
@@ -3328,43 +3326,43 @@ internal fun ReaderScreen(
                                             },
                                         )
                                         if (session.agent == AgentKind.CLAUDE) {
-                                            DropdownMenuItem(
-                                                text = { Text("Skill") },
-                                                leadingIcon = { Icon(Icons.Outlined.AutoAwesome, null) },
+                                            KitMenuRow(
+                                                label = "Skill",
+                                                icon = Icons.Outlined.AutoAwesome,
                                                 onClick = {
                                                     attachMenuExpanded = false
                                                     promptField = TextFieldValue(NativeSkills.open(prompt), selection = TextRange(1))
                                                     promptFocusRequester.requestFocus()
                                                 },
                                             )
-                                            DropdownMenuItem(
-                                                text = { Text("Model") },
-                                                trailingIcon = { Text(runtimeDetails.model ?: "Unknown") },
+                                            KitMenuRow(
+                                                label = "Model",
+                                                trailingText = runtimeDetails.model ?: "Unknown",
                                                 onClick = { attachMenuPage = ComposerMenuPage.MODEL },
                                             )
-                                            DropdownMenuItem(
-                                                text = { Text("Effort") },
-                                                trailingIcon = { Text(runtimeDetails.effort ?: "Unknown") },
+                                            KitMenuRow(
+                                                label = "Effort",
+                                                trailingText = runtimeDetails.effort ?: "Unknown",
                                                 onClick = { attachMenuPage = ComposerMenuPage.EFFORT },
                                             )
                                         }
                                     }
                                     ComposerMenuPage.MODEL -> {
-                                        DropdownMenuItem(text = { Text("‹ Back") }, onClick = { attachMenuPage = ComposerMenuPage.MAIN })
-                                        DropdownMenuItem(text = { Text("Current: ${runtimeDetails.model ?: "Unknown"}") }, enabled = false, onClick = {})
+                                        KitMenuRow(label = "‹ Back", onClick = { attachMenuPage = ComposerMenuPage.MAIN })
+                                        KitMenuRow(label = "Current: ${runtimeDetails.model ?: "Unknown"}", enabled = false, onClick = {})
                                         listOf("Opus", "Sonnet", "Fable").forEach { model ->
-                                            DropdownMenuItem(
-                                                text = { Text("Use Claude $model") },
+                                            KitMenuRow(
+                                                label = "Use Claude $model",
                                                 onClick = { attachMenuExpanded = false; sendModelCommand("/model ${model.lowercase()}") },
                                             )
                                         }
                                     }
                                     ComposerMenuPage.EFFORT -> {
-                                        DropdownMenuItem(text = { Text("‹ Back") }, onClick = { attachMenuPage = ComposerMenuPage.MAIN })
-                                        DropdownMenuItem(text = { Text("Current: ${runtimeDetails.effort ?: "Unknown"}") }, enabled = false, onClick = {})
+                                        KitMenuRow(label = "‹ Back", onClick = { attachMenuPage = ComposerMenuPage.MAIN })
+                                        KitMenuRow(label = "Current: ${runtimeDetails.effort ?: "Unknown"}", enabled = false, onClick = {})
                                         listOf("low", "medium", "high", "xhigh", "max").forEach { level ->
-                                            DropdownMenuItem(
-                                                text = { Text("Set effort: $level") },
+                                            KitMenuRow(
+                                                label = "Set effort: $level",
                                                 onClick = { attachMenuExpanded = false; sendModelCommand("/effort $level") },
                                             )
                                         }

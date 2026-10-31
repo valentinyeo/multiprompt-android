@@ -214,7 +214,7 @@ class VersionLabelTest {
             compose.runOnIdle { sunlight.value = light }
             compose.onNodeWithTag("app-version").assertDoesNotExist()
             compose.onNodeWithContentDescription("Session list actions").performClick()
-            compose.onNodeWithTag("app-version").assertIsDisplayed().performClick()
+            compose.onNodeWithTag("app-version").performScrollTo().assertIsDisplayed().performClick()
             compose.runOnIdle { assertEquals(index + 1, clicks) }
         }
     }
@@ -303,7 +303,7 @@ class VersionLabelTest {
         listOf(false, true).forEachIndexed { index, light ->
             compose.runOnIdle { sunlight.value = light }
             compose.onNodeWithContentDescription("Session list actions").performClick()
-            compose.onNodeWithText("Settings").performClick()
+            compose.onNodeWithText("Settings").performScrollTo().performClick()
             val version = checkLayout("Session list settings")
             screenshot(if (light) "settings-sunlight" else "settings")
             version.performClick()

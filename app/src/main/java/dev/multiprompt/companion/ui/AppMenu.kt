@@ -2,24 +2,22 @@ package dev.multiprompt.companion.ui
 
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import dev.multiprompt.companion.BuildConfig
 
 @Composable
 internal fun ColumnScope.AppMenuItems(
@@ -29,24 +27,17 @@ internal fun ColumnScope.AppMenuItems(
     onDismiss: () -> Unit,
     onUpdate: (() -> Unit)? = null,
 ) {
-    DropdownMenuItem(
-        text = { Text(if (signedIn) "Sync: signed in — sign out" else "Sign in to sync") },
-        leadingIcon = {
-            Icon(
-                Icons.Default.Cloud,
-                null,
-                Modifier.size(18.dp),
-                tint = if (signedIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        },
+    KitMenuRow(
+        label = if (signedIn) "Sync: signed in — sign out" else "Sign in to sync",
+        icon = Icons.Default.Cloud,
         onClick = {
             onDismiss()
             if (signedIn) onSignOut() else onSignIn()
         },
     )
     if (onUpdate != null) {
-        DropdownMenuItem(
-            text = { Text("Update") },
+        KitMenuRow(
+            label = "Update",
             onClick = {
                 onDismiss()
                 onUpdate()
@@ -68,41 +59,44 @@ internal fun InboxOverflowMenu(
         IconButton(onClick = { expanded = true }, modifier = Modifier.roundOutlined()) {
             Icon(Icons.Default.MoreVert, "Session list actions")
         }
-        DropdownMenu(
+        KitMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
         ) {
-            DropdownMenuItem(
-                text = { Text("Settings") },
+            KitMenuRow(
+                label = "Settings",
                 onClick = {
                     expanded = false
                     onSettings()
                 },
             )
-            DropdownMenuItem(
-                text = { Text("Arrange splits") },
+            KitMenuRow(
+                label = "Arrange splits",
                 onClick = {
                     expanded = false
                     onArrangeSplits()
                 },
             )
-            DropdownMenuItem(
-                text = { Text("New workspace") },
+            KitMenuRow(
+                label = "New workspace",
                 onClick = {
                     expanded = false
                     onNewWorkspace()
                 },
             )
-            DropdownMenuItem(
-                text = { Text("Refresh") },
-                leadingIcon = { Icon(Icons.Default.Refresh, null) },
+            KitMenuRow(
+                label = "Refresh",
+                icon = Icons.Default.Refresh,
                 onClick = {
                     expanded = false
                     onRefresh()
                 },
             )
-            DropdownMenuItem(
-                text = { VersionLabel(onClick = { expanded = false; onReleaseNotes() }) },
+            KitMenuRow(
+                label = BuildConfig.VERSION_NAME,
+                modifier = Modifier.testTag("app-version").semantics {
+                    contentDescription = "Version ${BuildConfig.VERSION_NAME}, open release notes"
+                },
                 onClick = { expanded = false; onReleaseNotes() },
             )
         }
