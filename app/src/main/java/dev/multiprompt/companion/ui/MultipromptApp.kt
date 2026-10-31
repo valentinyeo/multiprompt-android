@@ -169,6 +169,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -1831,7 +1832,7 @@ internal fun SessionsScreen(
                     unreadCount = state.unreadCounts[key] ?: 1,
                     archived = key in state.archivedSessionKeys,
                     starred = starred,
-                    open = key in state.openSessionKeys,
+                    open = key == state.readerSession?.let { SessionReadStore.key(it.hostId, it.name) },
                     onToggleFavorite = if (tab != null && state.signedIn) {
                         { onSetFavorite(tab, !starred) }
                     } else null,
