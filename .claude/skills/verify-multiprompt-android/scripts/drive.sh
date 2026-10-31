@@ -605,14 +605,6 @@ PYFAVORITES
     grep -Fx 'ETA_LOG_ABSENT' "$EVIDENCE/information-eta-path.txt"
     tap_text verify-session
     wait_for_text VERIFY_READY_528
-    tap_desc 'Session actions'
-    tap_text 'More ›'
-    tap_text 'Estimate accuracy'
-    wait_for_text 'No finished estimates yet. A finished turn counts when it ran two minutes or more, and an agent needs three of them.'
-    shot information-accuracy-empty
-    tap_text Close
-    wait_for_absence 'No finished estimates yet. A finished turn counts when it ran two minutes or more, and an agent needs three of them.'
-    select_node desc 'Session actions' >/dev/null
     sudo -u verifyssh tmux send-keys -t verify-session:0.0 -l 'VERIFY_INFORMATION_1015'
     sudo -u verifyssh tmux send-keys -t verify-session:0.0 Enter
     for attempt in {1..30}; do
@@ -698,6 +690,16 @@ PYINFO
     grep -Fx 'VERIFY_1015_LIVE' "$EVIDENCE/information-live-after-back.txt"
     wait_for_text VERIFY_1015_LIVE
     shot information-system-back
+    select_node desc 'Session actions' >/dev/null
+    tap_desc 'Session actions'
+    tap_text 'More ›'
+    tap_text 'Estimate accuracy'
+    shot information-accuracy-opening
+    wait_for_text 'No finished estimates yet. A finished turn counts when it ran two minutes or more, and an agent needs three of them.'
+    shot information-accuracy-empty
+    tap_text Close
+    wait_for_absence 'No finished estimates yet. A finished turn counts when it ran two minutes or more, and an agent needs three of them.'
+    select_node desc 'Session actions' >/dev/null
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/information-receipts.txt"
     grep -E '^VERIFY_1015_SETUP height=[0-9]+ pages=3 pane=%[0-9]+$' "$EVIDENCE/information-receipts.txt"
     [[ $(grep -c '^VERIFY_1015_PAGEUP page=1 ' "$EVIDENCE/information-receipts.txt") -ge 2 ]]

@@ -433,6 +433,11 @@ private fun AppScreens(viewModel: MainViewModel) {
             onShowEtaAccuracy = { viewModel.showEtaAccuracy(readerSession) },
             material3 = BuildConfig.MATERIAL3,
         )
+        state.etaAccuracy?.let { rows ->
+            EstimateAccuracySheet(
+                rows, state.etaAccuracyLoading, state.etaAccuracyError, viewModel::dismissEtaAccuracy,
+            )
+        }
         return
     }
 
@@ -606,12 +611,6 @@ private fun AppScreens(viewModel: MainViewModel) {
                 },
             )
         }
-    }
-
-    state.etaAccuracy?.let { rows ->
-        EstimateAccuracySheet(
-            rows, state.etaAccuracyLoading, state.etaAccuracyError, viewModel::dismissEtaAccuracy,
-        )
     }
 
     state.pendingHostKeys.entries.firstOrNull()?.let { (hostId, key) ->
