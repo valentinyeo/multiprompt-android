@@ -1166,44 +1166,37 @@ internal fun SessionsScreen(
         }
     }
     renamePromptSession?.let { session ->
-        AlertDialog(
-            onDismissRequest = {
-                renamePromptSession = null
-                renameError = null
-            },
-            title = { Text("Rename session") },
-            text = {
-                OutlinedTextField(
-                    value = renameDraft,
-                    onValueChange = {
-                        renameDraft = it
-                        renameError = null
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Name") },
-                    supportingText = renameError?.let { message -> { Text(message) } },
-                    isError = renameError != null,
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = {
-                        renameError = onRenameSession(session, renameDraft)
-                        if (renameError == null) renamePromptSession = null
-                    }),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
+        KitSheet(onDismiss = {
+            renamePromptSession = null
+            renameError = null
+        }) {
+            Text("Rename session", style = Kit.Heading, color = Kit.Text)
+            OutlinedTextField(
+                value = renameDraft,
+                onValueChange = {
+                    renameDraft = it
+                    renameError = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Name") },
+                supportingText = renameError?.let { message -> { Text(message) } },
+                isError = renameError != null,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = {
                     renameError = onRenameSession(session, renameDraft)
                     if (renameError == null) renamePromptSession = null
-                }) { Text("Rename") }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    renamePromptSession = null
-                    renameError = null
-                }) { Text("Cancel") }
-            },
-        )
+                }),
+            )
+            KitSecondaryButton("Cancel", onClick = {
+                renamePromptSession = null
+                renameError = null
+            }, modifier = Modifier.fillMaxWidth())
+            KitPrimaryButton("Rename", onClick = {
+                renameError = onRenameSession(session, renameDraft)
+                if (renameError == null) renamePromptSession = null
+            }, modifier = Modifier.fillMaxWidth())
+        }
     }
     if (settingsPage != SettingsPage.HIDDEN) {
         BackHandler { settingsPage = SettingsPage.HIDDEN }
@@ -1385,92 +1378,80 @@ internal fun SessionsScreen(
         )
     }
     if (splitOrderDialogVisible) {
-        AlertDialog(
-            onDismissRequest = { splitOrderDialogVisible = false },
-            title = { Text("Arrange splits") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        if (state.allSplitOnRight) {
-                            "Automatic order keeps All on the right, beside the most recently active splits."
-                        } else {
-                            "Automatic order keeps All on the left, then the most recently active splits."
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    arrangedWorkspaceSplitIds.forEachIndexed { index, splitId ->
-                        val workspace = splitId?.let { id ->
-                            state.workspaces.firstOrNull { it.id == id }
-                        }
-                        val splitName = workspace?.name ?: "All"
-                        val sessionCount = if (splitId == null) {
-                            state.inboxSessions.count { !isMutedSession(it, state.accountLayout, state.accountHosts) }
-                        } else {
-                            state.inboxSessions.count { !isMutedSession(it, state.accountLayout, state.accountHosts) && state.sessionWorkspaceIds[SessionReadStore.key(it.hostId, it.name)] == splitId }
-                        }
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(splitName, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(
-                                "$sessionCount",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            IconButton(
-                                onClick = {
-                                    onMoveWorkspaceSplit(splitId, if (state.allSplitOnRight) 1 else -1)
-                                },
-                                enabled = index > 0,
-                            ) { Text("↑") }
-                            IconButton(
-                                onClick = {
-                                    onMoveWorkspaceSplit(splitId, if (state.allSplitOnRight) -1 else 1)
-                                },
-                                enabled = index < arrangedWorkspaceSplitIds.lastIndex,
-                            ) { Text("↓") }
-                        }
+        KitSheet(onDismiss = { splitOrderDialogVisible = false }) {
+            Text("Arrange splits", style = Kit.Heading, color = Kit.Text)
+            Column(
+                Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    if (state.allSplitOnRight) {
+                        "Automatic order keeps All on the right, beside the most recently active splits."
+                    } else {
+                        "Automatic order keeps All on the left, then the most recently active splits."
+                    },
+                    style = Kit.Hint,
+                    color = Kit.TextMuted,
+                )
+                arrangedWorkspaceSplitIds.forEachIndexed { index, splitId ->
+                    val workspace = splitId?.let { id ->
+                        state.workspaces.firstOrNull { it.id == id }
+                    }
+                    val splitName = workspace?.name ?: "All"
+                    val sessionCount = if (splitId == null) {
+                        state.inboxSessions.count { !isMutedSession(it, state.accountLayout, state.accountHosts) }
+                    } else {
+                        state.inboxSessions.count { !isMutedSession(it, state.accountLayout, state.accountHosts) && state.sessionWorkspaceIds[SessionReadStore.key(it.hostId, it.name)] == splitId }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(splitName, style = Kit.Body, color = Kit.Text, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            "$sessionCount",
+                            style = Kit.Label,
+                            color = Kit.TextMuted,
+                        )
+                        IconButton(
+                            onClick = {
+                                onMoveWorkspaceSplit(splitId, if (state.allSplitOnRight) 1 else -1)
+                            },
+                            enabled = index > 0,
+                        ) { Text("↑", color = Kit.Text) }
+                        IconButton(
+                            onClick = {
+                                onMoveWorkspaceSplit(splitId, if (state.allSplitOnRight) -1 else 1)
+                            },
+                            enabled = index < arrangedWorkspaceSplitIds.lastIndex,
+                        ) { Text("↓", color = Kit.Text) }
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { splitOrderDialogVisible = false }) { Text("Done") }
-            },
-            dismissButton = {
-                TextButton(onClick = onResetWorkspaceSplitOrder) { Text("Automatic order") }
-            },
-        )
+            }
+            KitSecondaryButton("Automatic order", onClick = onResetWorkspaceSplitOrder, modifier = Modifier.fillMaxWidth())
+            KitPrimaryButton("Done", onClick = { splitOrderDialogVisible = false }, modifier = Modifier.fillMaxWidth())
+        }
     }
     if (workspaceDialogVisible) {
-        AlertDialog(
-            onDismissRequest = { workspaceDialogVisible = false },
-            title = { Text("New workspace") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        workspaceName,
-                        { workspaceName = it; workspaceError = null },
-                        label = { Text("Name") },
-                        singleLine = true,
-                    )
-                    workspaceError?.let { InlineError(it) }
+        KitSheet(onDismiss = { workspaceDialogVisible = false }) {
+            Text("New workspace", style = Kit.Heading, color = Kit.Text)
+            OutlinedTextField(
+                workspaceName,
+                { workspaceName = it; workspaceError = null },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Name") },
+                singleLine = true,
+            )
+            workspaceError?.let { InlineError(it) }
+            KitSecondaryButton("Cancel", onClick = { workspaceDialogVisible = false }, modifier = Modifier.fillMaxWidth())
+            KitPrimaryButton("Create", onClick = {
+                workspaceError = onCreateWorkspace(workspaceName)
+                if (workspaceError == null) {
+                    workspaceDialogVisible = false
+                    workspaceName = ""
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    workspaceError = onCreateWorkspace(workspaceName)
-                    if (workspaceError == null) {
-                        workspaceDialogVisible = false
-                        workspaceName = ""
-                    }
-                }) { Text("Create") }
-            },
-            dismissButton = {
-                TextButton(onClick = { workspaceDialogVisible = false }) { Text("Cancel") }
-            },
-        )
+            }, modifier = Modifier.fillMaxWidth())
+        }
     }
     val anyEta = state.sessionEtas.isNotEmpty() || state.selectedWorkspaceId == FREQUENT_SPLIT_ID
     var etaNowMillis by remember { mutableStateOf(nowMillis()) }
@@ -1909,53 +1890,43 @@ private fun ReminderDialog(
         }
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Remind me") },
-        text = {
-            Column(
-                Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    session.displayName,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 4.dp),
-                )
+    KitSheet(onDismiss = onDismiss) {
+        Text("Remind me", style = Kit.Heading, color = Kit.Text)
+        Text(
+            session.displayName,
+            style = Kit.Hint,
+            color = Kit.TextMuted,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Column(
+            Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            KitListGroup {
                 presets.forEach { (label, dueAt) ->
-                    TextButton(
-                        onClick = { onRemind(dueAt.toEpochSecond()) },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(label, Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
-                    }
+                    KitListRow(label, onClick = { onRemind(dueAt.toEpochSecond()) })
                 }
-                OutlinedTextField(
-                    value = customTime,
-                    onValueChange = {
-                        customTime = it
-                        customError = null
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    label = { Text("Custom time") },
-                    placeholder = { Text("tomorrow at 3pm") },
-                    supportingText = customError?.let { message -> { Text(message) } },
-                    isError = customError != null,
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { submitCustom() }),
-                )
             }
-        },
-        confirmButton = {
-            TextButton(onClick = submitCustom, enabled = customTime.isNotBlank()) {
-                Text("Set reminder")
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
+            OutlinedTextField(
+                value = customTime,
+                onValueChange = {
+                    customTime = it
+                    customError = null
+                },
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                label = { Text("Custom time") },
+                placeholder = { Text("tomorrow at 3pm") },
+                supportingText = customError?.let { message -> { Text(message) } },
+                isError = customError != null,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { submitCustom() }),
+            )
+        }
+        KitSecondaryButton("Cancel", onClick = onDismiss, modifier = Modifier.fillMaxWidth())
+        KitPrimaryButton("Set reminder", onClick = submitCustom, modifier = Modifier.fillMaxWidth(), enabled = customTime.isNotBlank())
+    }
 }
 
 @Composable
@@ -2774,44 +2745,37 @@ internal fun ReaderScreen(
         }
     }
     if (renameDialogVisible) {
-        AlertDialog(
-            onDismissRequest = {
-                renameDialogVisible = false
-                renameError = null
-            },
-            title = { Text("Rename session") },
-            text = {
-                OutlinedTextField(
-                    value = renameDraft,
-                    onValueChange = {
-                        renameDraft = it
-                        renameError = null
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Name") },
-                    supportingText = renameError?.let { message -> { Text(message) } },
-                    isError = renameError != null,
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = {
-                        renameError = onRename(renameDraft)
-                        if (renameError == null) renameDialogVisible = false
-                    }),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
+        KitSheet(onDismiss = {
+            renameDialogVisible = false
+            renameError = null
+        }) {
+            Text("Rename session", style = Kit.Heading, color = Kit.Text)
+            OutlinedTextField(
+                value = renameDraft,
+                onValueChange = {
+                    renameDraft = it
+                    renameError = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Name") },
+                supportingText = renameError?.let { message -> { Text(message) } },
+                isError = renameError != null,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = {
                     renameError = onRename(renameDraft)
                     if (renameError == null) renameDialogVisible = false
-                }) { Text("Rename") }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    renameDialogVisible = false
-                    renameError = null
-                }) { Text("Cancel") }
-            },
-        )
+                }),
+            )
+            KitSecondaryButton("Cancel", onClick = {
+                renameDialogVisible = false
+                renameError = null
+            }, modifier = Modifier.fillMaxWidth())
+            KitPrimaryButton("Rename", onClick = {
+                renameError = onRename(renameDraft)
+                if (renameError == null) renameDialogVisible = false
+            }, modifier = Modifier.fillMaxWidth())
+        }
     }
     if (endDialogVisible) {
         DestructiveConfirmationSheet(
@@ -2836,100 +2800,74 @@ internal fun ReaderScreen(
         )
     }
     if (apiKeyDialogVisible) {
-        AlertDialog(
-            onDismissRequest = {
+        KitSheet(onDismiss = {
+            apiKeyDialogVisible = false
+            apiKeyDraft = ""
+            apiKeyError = null
+        }) {
+            Text("Deepgram dictation", style = Kit.Heading, color = Kit.Text)
+            Text("The key is encrypted with Android Keystore and stays on this device.", style = Kit.Body, color = Kit.TextMuted)
+            OutlinedTextField(
+                value = apiKeyDraft,
+                onValueChange = {
+                    apiKeyDraft = it
+                    apiKeyError = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(if (dictationState.configured) "Replacement API key" else "API key") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                visualTransformation = PasswordVisualTransformation(),
+                isError = apiKeyError != null,
+                supportingText = apiKeyError?.let { message -> { Text(message) } },
+            )
+            KitSecondaryButton("Cancel", onClick = {
                 apiKeyDialogVisible = false
                 apiKeyDraft = ""
                 apiKeyError = null
-            },
-            title = { Text("Deepgram dictation") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("The key is encrypted with Android Keystore and stays on this device.")
-                    OutlinedTextField(
-                        value = apiKeyDraft,
-                        onValueChange = {
-                            apiKeyDraft = it
-                            apiKeyError = null
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(if (dictationState.configured) "Replacement API key" else "API key") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        visualTransformation = PasswordVisualTransformation(),
-                        isError = apiKeyError != null,
-                        supportingText = apiKeyError?.let { message -> { Text(message) } },
-                    )
+            }, modifier = Modifier.fillMaxWidth())
+            KitPrimaryButton("Save and dictate", onClick = {
+                if (dictation.saveApiKey(apiKeyDraft)) {
+                    apiKeyDialogVisible = false
+                    apiKeyDraft = ""
+                    apiKeyError = null
+                    startDictation()
+                } else {
+                    apiKeyError = "Enter a valid API key"
                 }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = apiKeyDraft.isNotBlank(),
-                    onClick = {
-                        if (dictation.saveApiKey(apiKeyDraft)) {
-                            apiKeyDialogVisible = false
-                            apiKeyDraft = ""
-                            apiKeyError = null
-                            startDictation()
-                        } else {
-                            apiKeyError = "Enter a valid API key"
-                        }
-                    },
-                ) { Text("Save and dictate") }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        apiKeyDialogVisible = false
-                        apiKeyDraft = ""
-                        apiKeyError = null
-                    },
-                ) { Text("Cancel") }
-            },
-        )
+            }, modifier = Modifier.fillMaxWidth(), enabled = apiKeyDraft.isNotBlank())
+        }
     }
     if (imageKeyDialogVisible) {
-        AlertDialog(
-            onDismissRequest = { imageKeyDialogVisible = false },
-            title = { Text("Screencast2 uploads") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("The upload key is encrypted with Android Keystore and stays on this device.")
-                    OutlinedTextField(
-                        value = imageKeyDraft,
-                        onValueChange = {
-                            imageKeyDraft = it
-                            imageKeyError = null
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Screencast2 upload key") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        isError = imageKeyError != null,
-                        supportingText = imageKeyError?.let { message -> { Text(message) } },
+        KitSheet(onDismiss = { imageKeyDialogVisible = false }) {
+            Text("Screencast2 uploads", style = Kit.Heading, color = Kit.Text)
+            Text("The upload key is encrypted with Android Keystore and stays on this device.", style = Kit.Body, color = Kit.TextMuted)
+            OutlinedTextField(
+                value = imageKeyDraft,
+                onValueChange = {
+                    imageKeyDraft = it
+                    imageKeyError = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Screencast2 upload key") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                isError = imageKeyError != null,
+                supportingText = imageKeyError?.let { message -> { Text(message) } },
+            )
+            KitSecondaryButton("Cancel", onClick = { imageKeyDialogVisible = false }, modifier = Modifier.fillMaxWidth())
+            KitPrimaryButton("Save and choose image", onClick = {
+                if (screencast.saveSecret(imageKeyDraft)) {
+                    imageKeyDialogVisible = false
+                    imageKeyDraft = ""
+                    imagePicker.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                     )
+                } else {
+                    imageKeyError = "Enter a valid upload key"
                 }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = imageKeyDraft.isNotBlank(),
-                    onClick = {
-                        if (screencast.saveSecret(imageKeyDraft)) {
-                            imageKeyDialogVisible = false
-                            imageKeyDraft = ""
-                            imagePicker.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                            )
-                        } else {
-                            imageKeyError = "Enter a valid upload key"
-                        }
-                    },
-                ) { Text("Save and choose image") }
-            },
-            dismissButton = {
-                TextButton(onClick = { imageKeyDialogVisible = false }) { Text("Cancel") }
-            },
-        )
+            }, modifier = Modifier.fillMaxWidth(), enabled = imageKeyDraft.isNotBlank())
+        }
     }
     if (historyDialogOpen) {
         SessionHistorySheet(connection.historyPages, connection::loadOlderHistoryPage) {
