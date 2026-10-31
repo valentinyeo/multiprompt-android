@@ -1,0 +1,24 @@
+name: No paid AI APIs
+
+on:
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  no-paid-ai:
+    name: no-paid-ai
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Fail on OpenRouter or Z.ai API use
+        run: |
+          pattern='openrouter\.ai|OPENROUTER_API_KEY|api\.z\.ai'
+          if git grep -n -I -i -E "$pattern" -- . ':!.github/workflows/no-paid-ai.yml'; then
+            echo "Helpers run on the Codex or Claude subscriptions: use hax --provider=codex, not OpenRouter or Z.ai." >&2
+            exit 1
+          fi

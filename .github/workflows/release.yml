@@ -19,11 +19,17 @@ concurrency:
 
 jobs:
   build-and-publish:
-    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 200
+          fetch-depth: 0
+
+      - name: Scan release history for secrets
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz | tar -xz -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" detect --no-banner --source . --redact --log-opts "$GITHUB_SHA"
 
       - uses: actions/setup-java@v4
         with:
@@ -36,8 +42,10 @@ jobs:
 
       - name: Resolve version
         shell: bash
+        env:
+          REQUESTED: ${{ inputs.version_name }}
         run: |
-          requested='${{ inputs.version_name }}'
+          requested="$REQUESTED"
           if [[ -n "$requested" ]]; then
             version_name="$requested"
           else
@@ -73,13 +81,57 @@ jobs:
           keyPassword=$KEY_PASSWORD
           EOF
 
-      - name: Test and build signed APK
+      - name: Build signed APKs
         run: >-
-          gradle --no-daemon lintDebug test assembleRelease
+          gradle --no-daemon assembleRelease assembleM3
           -PversionCode="$VERSION_CODE"
           -PversionName="$VERSION_NAME"
 
-      - name: Build verified update manifest
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Prepare launch evidence
+        run: mkdir -p build/release-launch-evidence
+
+      - name: Launch signed M3 APK
+        uses: reactivecircus/android-emulator-runner@v2.34.0
+        timeout-minutes: 5
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          emulator-boot-timeout: 180
+          emulator-options: -no-window -gpu swangle_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -feature -Vulkan -verbose > /tmp/android-proof-emulator.log 2>&1
+          script: bash tools/release-launch.sh
+
+      - name: Upload launch evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-launch-evidence
+          path: build/release-launch-evidence/
+          if-no-files-found: warn
+
+      - name: Reject older releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for channel in android-latest android-m3-latest; do
+            case "$channel" in
+              android-latest) manifest=multiprompt-companion-update.json ;;
+              *) manifest=multiprompt-m3-update.json ;;
+            esac
+            gh release view "$channel" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' > "$RUNNER_TEMP/assets"
+            grep -Fx "$manifest" "$RUNNER_TEMP/assets"
+            curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/download/${channel}/${manifest}" -o "$RUNNER_TEMP/$manifest"
+            previous_code=$(jq -er '.versionCode | select(type == "number" and . >= 0 and floor == .)' "$RUNNER_TEMP/$manifest")
+            test "$VERSION_CODE" -gt "$previous_code"
+          done
+
+      - name: Build verified update manifest and carry forward its changelog history
         shell: bash
         run: |
           source_apk=app/build/outputs/apk/release/app-release.apk
@@ -89,8 +141,6 @@ jobs:
           sha256=$(sha256sum "$release_dir/multiprompt-companion.apk" | cut -d' ' -f1)
           size=$(stat -c%s "$release_dir/multiprompt-companion.apk")
 
-          # The published manifest is the only changelog store. Read the last one, list the
-          # commits since the build it shipped, and carry its history forward.
           previous=$(curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/download/android-latest/multiprompt-companion-update.json" || echo '{}')
           previous_commit=$(jq -r '.commit // ""' <<<"$previous")
           if [[ -n "$previous_commit" ]] && git cat-file -e "${previous_commit}^{commit}" 2>/dev/null; then
@@ -143,8 +193,73 @@ jobs:
               --repo "$GITHUB_REPOSITORY"
           fi
 
+      - name: Build M3 update manifest and carry forward its changelog history
+        shell: bash
+        run: |
+          source_apk=app/build/outputs/apk/m3/app-m3.apk
+          release_dir=build/android-m3
+          mkdir -p "$release_dir"
+          cp "$source_apk" "$release_dir/multiprompt-m3.apk"
+          sha256=$(sha256sum "$release_dir/multiprompt-m3.apk" | cut -d' ' -f1)
+          size=$(stat -c%s "$release_dir/multiprompt-m3.apk")
+
+          previous=$(curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/download/android-m3-latest/multiprompt-m3-update.json" || echo '{}')
+          previous_commit=$(jq -r '.commit // ""' <<<"$previous")
+          if [[ -n "$previous_commit" ]] && git cat-file -e "${previous_commit}^{commit}" 2>/dev/null; then
+            notes=$(git log --no-merges --pretty=format:'- %s' "${previous_commit}..HEAD")
+          else
+            notes=$(git log -10 --no-merges --pretty=format:'- %s')
+          fi
+          [[ -n "$notes" ]] || notes="- No source changes"
+          history=$(jq -c \
+            --arg versionName "$VERSION_NAME-m3" \
+            --argjson versionCode "$VERSION_CODE" \
+            --arg date "$(date -u +%Y-%m-%d)" \
+            --arg notes "$notes" \
+            '[{versionName:$versionName, versionCode:$versionCode, date:$date, notes:$notes}] + (.history // []) | .[0:20]' \
+            <<<"$previous")
+
+          jq -n \
+            --arg versionName "$VERSION_NAME-m3" \
+            --argjson versionCode "$VERSION_CODE" \
+            --arg apkUrl "https://github.com/${GITHUB_REPOSITORY}/releases/download/android-m3-latest/multiprompt-m3.apk" \
+            --arg sha256 "$sha256" \
+            --argjson sizeBytes "$size" \
+            --arg notes "$notes" \
+            --arg commit "$GITHUB_SHA" \
+            --argjson history "$history" \
+            '{schemaVersion:1, versionCode:$versionCode, versionName:$versionName, apkUrl:$apkUrl, sha256:$sha256, sizeBytes:$sizeBytes, notes:$notes, commit:$commit, history:$history}' \
+            > "$release_dir/multiprompt-m3-update.json"
+
+      - name: Publish fixed android-m3-latest channel
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          assets=(
+            build/android-m3/multiprompt-m3.apk
+            build/android-m3/multiprompt-m3-update.json
+          )
+          if gh release view android-m3-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload android-m3-latest "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit android-m3-latest \
+              --latest=false \
+              --title "Multiprompt M3 test app $VERSION_NAME" \
+              --notes "Self-updating Android companion. Version code $VERSION_CODE." \
+              --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create android-m3-latest "${assets[@]}" \
+              --target "$GITHUB_SHA" \
+              --title "Multiprompt M3 test app $VERSION_NAME" \
+              --notes "Self-updating Android companion. Version code $VERSION_CODE." \
+              --latest=false \
+              --repo "$GITHUB_REPOSITORY"
+          fi
+
       - uses: actions/upload-artifact@v4
         with:
           name: multiprompt-companion-${{ env.VERSION_NAME }}
-          path: build/android-release/*
+          path: |
+            build/android-release/*
+            build/android-m3/*
           if-no-files-found: error

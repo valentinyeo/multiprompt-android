@@ -1,0 +1,64 @@
+name: Android scroll-under proof
+
+on:
+  schedule:
+    - cron: '23 3 * * *'
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'gradle/**'
+      - 'tools/top-fade-proof.sh'
+      - '.github/workflows/top-fade.yml'
+      - '.github/actions/android-proof/**'
+  workflow_dispatch:
+    inputs:
+      baseline_ref:
+        description: Original commit for native before and after proof
+        type: string
+        required: false
+      release_smoke:
+        description: Install and verify the published signed APK after screen tests
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: top-fade-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  emulator:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.1'
+      - uses: ./.github/actions/android-proof
+        env:
+          RELEASE_SMOKE: ${{ inputs.release_smoke || github.event_name == 'workflow_run' }}
+          TOP_FADE_BASE_REF: ${{ inputs.baseline_ref || (github.ref == 'refs/heads/ceo/IGSH-1073' && '41f3847') || '' }}
+        with:
+          stage: stage-1
+          script: |
+            mkdir -p build/top-fade-diagnostics
+            tools/top-fade-proof.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: top-fade-emulator-proof
+          path: |
+            build/top-fade-shots/**
+            build/top-fade-diagnostics/**
+            app/build/reports/androidTests/connected/debug/**
+            app/build/outputs/androidTest-results/connected/debug/**
