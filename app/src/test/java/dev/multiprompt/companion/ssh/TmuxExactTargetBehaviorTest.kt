@@ -2,8 +2,11 @@ package dev.multiprompt.companion.ssh
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -157,6 +160,130 @@ class TmuxExactTargetBehaviorTest {
         for (case in cases) {
             assertEquals(case.stored, 0, run(TmuxCommands.action(case.stored, TmuxAction.ENTER)).status)
             assertEquals(case.stored, 0, run(TmuxCommands.capture(case.stored)).status)
+        }
+    }
+
+    @Test
+    fun streamRepublishesUnchangedSnapshotWhenAlternateChanges() {
+        val state = Files.createDirectory(dir.resolve("state"))
+        val producer = dir.resolve("producer.py")
+        Files.write(producer, ("import pathlib, sys, time\n" +
+            "d = pathlib.Path(sys.argv[1])\n" +
+            "(d / 'ready').touch()\n" +
+            "deadline = time.monotonic() + 20\n" +
+            "while not (d / 'enter').exists() and time.monotonic() < deadline:\n" +
+            "    time.sleep(0.02)\n" +
+            "if (d / 'enter').exists():\n" +
+            "    sys.stdout.write('\\x1b[?1049h\\x1b[2J\\x1b[HLIVE_1230')\n" +
+            "    sys.stdout.flush()\n" +
+            "    time.sleep(20)\n").toByteArray(Charsets.UTF_8))
+        val creation = ProcessBuilder("/usr/bin/tmux", "-S", socket.toString(), "new-session", "-d", "-s", "stream-test",
+            "python3 $producer $dir").redirectErrorStream(true).start()
+        try {
+            assertTrue("Session creation timed out", creation.waitFor(5, TimeUnit.SECONDS))
+            assertEquals(0, creation.exitValue())
+        } finally {
+            if (creation.isAlive) creation.destroyForcibly()
+            assertTrue("Session creation must terminate", creation.waitFor(5, TimeUnit.SECONDS))
+        }
+        val readyDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (!Files.exists(dir.resolve("ready")) && System.nanoTime() < readyDeadline) Thread.sleep(20)
+        assertTrue("Pane producer must be ready", Files.exists(dir.resolve("ready")))
+        Files.write(bin.resolve("tmux"), ("#!/bin/sh\n" +
+            "if [ \"\$1\" = display-message ] && [ \"\$5\" = '#{alternate_on}' ] && [ ! -e '$dir/intercepted' ]; then\n" +
+            "  value=\$(/usr/bin/tmux -S '$socket' \"\$@\") || exit 1\n" +
+            "  [ \"\$value\" = 0 ] || exit 2\n" +
+            "  : > '$dir/intercepted'; : > '$dir/enter'\n" +
+            "  n=0\n" +
+            "  while [ \"\$n\" -lt 100 ]; do\n" +
+            "    alt=\$(/usr/bin/tmux -S '$socket' display-message -p -t '=stream-test:' '#{alternate_on}') || exit 3\n" +
+            "    screen=\$(/usr/bin/tmux -S '$socket' capture-pane -p -J -t '=stream-test:') || exit 4\n" +
+            "    if [ \"\$alt\" = 1 ] && printf '%s' \"\$screen\" | /bin/grep -q LIVE_1230; then\n" +
+            "      printf '%s\\n' \"\$value\"; exit 0\n" +
+            "    fi\n" +
+            "    n=\$((n + 1)); sleep 0.05\n" +
+            "  done\n" +
+            "  exit 5\n" +
+            "fi\n" +
+            "exec /usr/bin/tmux -S '$socket' \"\$@\"\n").toByteArray(Charsets.UTF_8))
+        val groupFile = dir.resolve("stream-group")
+        val gate = dir.resolve("stream-start")
+        val process = ProcessBuilder("setsid", "bash", "-c", """
+            pgid=${'$'}(/bin/ps -o pgid= -p ${'$'}${'$'} | tr -d ' ')
+            parent_pgid=${'$'}(/bin/ps -o pgid= -p ${'$'}PPID | tr -d ' ')
+            [ "${'$'}${'$'}" -gt 1 ] && [ "${'$'}pgid" = "${'$'}${'$'}" ] && [ -n "${'$'}parent_pgid" ] && [ "${'$'}pgid" != "${'$'}parent_pgid" ] || exit 1
+            printf '%s\n' "${'$'}pgid" > '${groupFile}.tmp' && mv '${groupFile}.tmp' '$groupFile' || exit 1
+            while [ ! -e '$gate' ]; do sleep 0.02; done
+            exec bash -c "${'$'}1"
+        """.trimIndent(), "stream", TmuxCommands.stream("stream-test")).redirectErrorStream(true).apply {
+            environment()["PATH"] = "$bin:/usr/bin:/bin"
+            environment()["MULTIPROMPT_STATE_DIR"] = state.toString()
+            environment()["TMPDIR"] = dir.toString()
+        }.start()
+        val lines = LinkedBlockingQueue<String>()
+        val reader = thread(isDaemon = true) {
+            process.inputStream.bufferedReader().use { input ->
+                while (true) lines.put(input.readLine() ?: break)
+            }
+        }
+        val transcript = mutableListOf<String>()
+        try {
+            val groupDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (!Files.exists(groupFile) && process.isAlive && System.nanoTime() < groupDeadline) Thread.sleep(20)
+            assertTrue("Stream process group must be ready", Files.exists(groupFile))
+            val group = String(Files.readAllBytes(groupFile), Charsets.UTF_8).trim().toLongOrNull()
+            assertTrue("Stream process group must be valid", group != null && group > 1)
+            Files.write(gate, byteArrayOf())
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(12)
+            while (transcript.count { it == "${TmuxCommands.ALT_PREFIX}1" } < 4) {
+                val remaining = deadline - System.nanoTime()
+                if (remaining <= 0) break
+                val line = lines.poll(remaining, TimeUnit.NANOSECONDS) ?: break
+                transcript.add(line)
+            }
+            val details = "stream transcript: $transcript"
+            assertEquals(details, 1, transcript.count { it == "${TmuxCommands.ALT_PREFIX}0" })
+            assertEquals(details, 4, transcript.count { it == "${TmuxCommands.ALT_PREFIX}1" })
+            val frames = mutableListOf<Pair<String, String>>()
+            var alternate = ""
+            for (line in transcript) {
+                when {
+                    line.startsWith(TmuxCommands.ALT_PREFIX) -> alternate = line.removePrefix(TmuxCommands.ALT_PREFIX)
+                    line.startsWith(TmuxCommands.ETA_PREFIX) -> assertEquals(details, "", line.removePrefix(TmuxCommands.ETA_PREFIX))
+                    line.startsWith(TmuxCommands.SNAPSHOT_PREFIX) -> frames.add(alternate to line.removePrefix(TmuxCommands.SNAPSHOT_PREFIX))
+                    else -> throw AssertionError(details)
+                }
+            }
+            assertEquals(details, listOf("0", "1"), frames.map { it.first })
+            fun decode(hex: String): ByteArray {
+                assertEquals(details, 0, hex.length % 2)
+                return hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+            }
+            val first = decode(frames[0].second)
+            val second = decode(frames[1].second)
+            assertTrue(details, String(first, Charsets.UTF_8).contains("LIVE_1230"))
+            assertArrayEquals(details, first, second)
+            assertEquals(details, listOf("alt0", "eta", "snapshot", "alt1", "eta", "snapshot", "alt1", "alt1", "alt1"),
+                transcript.map { line ->
+                    when {
+                        line == "${TmuxCommands.ALT_PREFIX}0" -> "alt0"
+                        line == "${TmuxCommands.ALT_PREFIX}1" -> "alt1"
+                        line.startsWith(TmuxCommands.ETA_PREFIX) -> "eta"
+                        else -> "snapshot"
+                    }
+                })
+        } finally {
+            val group = if (Files.exists(groupFile)) String(Files.readAllBytes(groupFile), Charsets.UTF_8).trim().toLongOrNull() else null
+            val killer = if (group != null && group > 1) ProcessBuilder("/bin/kill", "-KILL", "--", "-$group").start() else null
+            val killerFinished = killer?.waitFor(5, TimeUnit.SECONDS) ?: true
+            if (killer != null && !killerFinished) killer.destroyForcibly()
+            if (process.isAlive) process.destroyForcibly()
+            val terminated = process.waitFor(5, TimeUnit.SECONDS)
+            reader.join(5000)
+            assertTrue("Group signal must terminate", killerFinished)
+            if (killer != null && killerFinished) assertEquals("Group signal must succeed", 0, killer.exitValue())
+            assertTrue("Stream must terminate", terminated)
+            assertFalse("Stream reader must terminate", reader.isAlive)
         }
     }
 

@@ -70,7 +70,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -434,6 +433,11 @@ private fun AppScreens(viewModel: MainViewModel) {
             onShowEtaAccuracy = { viewModel.showEtaAccuracy(readerSession) },
             material3 = BuildConfig.MATERIAL3,
         )
+        state.etaAccuracy?.let { rows ->
+            EstimateAccuracySheet(
+                rows, state.etaAccuracyLoading, state.etaAccuracyError, viewModel::dismissEtaAccuracy,
+            )
+        }
         return
     }
 
@@ -607,40 +611,6 @@ private fun AppScreens(viewModel: MainViewModel) {
                 },
             )
         }
-    }
-
-    state.etaAccuracy?.let { rows ->
-        val accuracyError = state.etaAccuracyError
-        val accuracyLoading = state.etaAccuracyLoading
-        AlertDialog(
-            onDismissRequest = viewModel::dismissEtaAccuracy,
-            title = { Text("Estimate accuracy") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    when {
-                        accuracyLoading -> Text("Reading the estimate log…")
-                        accuracyError != null -> Text(
-                            accuracyError,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                        rows.isEmpty() -> Text(
-                            "No finished estimates yet. A finished turn counts when it ran " +
-                                "two minutes or more, and an agent needs three of them.",
-                        )
-                        else -> rows.forEach { row ->
-                            Text(
-                                "${row.agent}: tasks take " +
-                                    String.format(java.util.Locale.US, "%.1f", row.ratio) +
-                                    "x the estimate (last ${row.samples})",
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = viewModel::dismissEtaAccuracy) { Text("Close") }
-            },
-        )
     }
 
     state.pendingHostKeys.entries.firstOrNull()?.let { (hostId, key) ->
@@ -2962,7 +2932,7 @@ internal fun ReaderScreen(
         )
     }
     if (historyDialogOpen) {
-        AgentHistoryDialog(connection) {
+        SessionHistorySheet(connection.historyPages, connection::loadOlderHistoryPage) {
             historyDialogOpen = false
             readerScope.launch { connection.exitHistory() }
         }
@@ -4515,63 +4485,4 @@ private fun NativeSkillPicker(
             }
         }
     }
-}
-
-@Composable
-private fun AgentHistoryDialog(connection: SessionReaderConnection, onDismiss: () -> Unit) {
-    val pages by connection.historyPages.collectAsState()
-    var loading by remember { mutableStateOf(false) }
-    var exhausted by remember { mutableStateOf(false) }
-    val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
-
-    fun loadOlder() {
-        if (loading || exhausted) return
-        loading = true
-        scope.launch {
-            val got = connection.loadOlderHistoryPage()
-            if (!got) exhausted = true
-            loading = false
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Session history") },
-        text = {
-            Column {
-                if (pages.isEmpty()) {
-                    Text("Capturing…", style = MaterialTheme.typography.bodySmall)
-                } else if (exhausted) {
-                    Text("No older history available.", style = MaterialTheme.typography.bodySmall)
-                }
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 420.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    itemsIndexed(pages.asReversed()) { _, page ->
-                        SelectionContainer {
-                            Text(
-                                page,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
-                            )
-                        }
-                    }
-                    item {
-                        TextButton(onClick = ::loadOlder, enabled = !loading && !exhausted) {
-                            Text(if (loading) "Loading…" else "Load older")
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Back to live") }
-        },
-    )
 }
