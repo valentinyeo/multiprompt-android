@@ -47,6 +47,7 @@ runs:
         profile: pixel_2
         cores: 2
         ram-size: 2048M
+        disk-size: 2G
         disable-animations: true
         emulator-options: -no-window -gpu swangle_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -feature -Vulkan -verbose > /tmp/android-proof-emulator.log 2>&1
         pre-emulator-launch-script: bash "$ANDROID_PROOF_ACTION/emulator.sh"
