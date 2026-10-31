@@ -120,9 +120,11 @@ class Proof:
     def installed(self):
         result = adb("shell", "dumpsys", "package", self.plan.package)
         output = text(result)
+        (self.evidence / "current-package.txt").write_bytes(result.stdout)
+        require(text(adb("shell", "am", "get-current-user")).strip() == "0", "Current user is not 0")
         codes = re.findall(r"\bversionCode=(\d+)", output)
         names = re.findall(r"^\s*versionName=(.*?)\s*$", output, re.MULTILINE)
-        uids = re.findall(r"\buserId=(\d+)", output)
+        uids = re.findall(r"^[ \t]*appId=(\d+)[ \t]*$", output, re.MULTILINE)
         require(len(set(codes)) == 1, "Cannot uniquely determine installed version code")
         require(len(set(names)) == 1, "Cannot uniquely determine installed version name")
         require(len(set(uids)) == 1, "Cannot uniquely determine installed UID")
@@ -275,6 +277,7 @@ class Proof:
 
     def foreground(self):
         output = text(adb("shell", "dumpsys", "window", "windows"))
+        (self.evidence / "current-window.txt").write_text(output, encoding="utf-8")
         focused = re.findall(r"^\s*mCurrentFocus=([^\r\n]+)", output, re.MULTILINE)
         require(len(focused) == 1, "Cannot uniquely determine focused window")
         match = re.search(r"\s([A-Za-z0-9_.]+)/[^\s}]+", focused[0])
