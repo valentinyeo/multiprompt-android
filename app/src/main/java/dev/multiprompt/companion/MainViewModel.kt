@@ -1636,6 +1636,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } catch (e: Exception) { e.message ?: "Could not save account edit" }
     }
 
+    fun setAccountWorkspaceColor(name: String, color: Int?) {
+        editAccountLayout { it.setWorkspaceColor(name, color) }?.let { error -> _state.update { it.copy(accountError = error) } }
+    }
+
     fun renameAccountWorkspace(old: String, name: String): String? {
         if (!_state.value.signedIn) return "Sign in before editing account workspaces"
         val pending = pendingLayout ?: return "Pull the account layout before editing"

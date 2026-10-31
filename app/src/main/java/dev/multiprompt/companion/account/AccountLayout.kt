@@ -81,6 +81,10 @@ data class AccountLayout(
             if (it.identity == identity) it.copy(visits = mergeVisits(it.visits, listOf(startedAt))) else it
         }).validate()
     }
+    fun setWorkspaceColor(name: String, color: Int?): AccountLayout = copy(
+        workspaceColors = if (color == null) workspaceColors - name else workspaceColors + (name to color),
+    ).validate()
+
     fun renameWorkspace(old: String, name: String): AccountLayout = copy(
         workspaces = workspaces.map { if (it == old) name else it },
         workspaceColors = workspaceColors.mapKeys { (key, _) -> if (key == old) name else key },

@@ -52,6 +52,13 @@ class AccountLayoutTest {
         assertEquals("One", base.tabs[0].name)
     }
 
+    @Test fun pickedWorkspaceColorWinsAndAutoRestoresThePaletteOrder() {
+        val picked = base.setWorkspaceColor("Product", 5)
+        assertEquals(5, picked.workspaceColor("Product"))
+        assertEquals(0, picked.workspaceColor("Other"))
+        assertEquals(1, picked.setWorkspaceColor("Product", null).workspaceColor("Product"))
+    }
+
     @Test fun applyUsesServerNamesOrderAndMembershipWithoutWritingUnchangedCache() {
         val remote = base.copy(revision = 8, workspaces = base.workspaces.reversed(), tabs = listOf(two, one.copy(name = "Remote", workspace = "Product")))
         val applied = PendingLayout(base).pull(remote)
