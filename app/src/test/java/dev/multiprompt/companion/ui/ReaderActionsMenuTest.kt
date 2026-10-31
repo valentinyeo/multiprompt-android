@@ -182,7 +182,7 @@ class ReaderActionsMenuTest {
         openMenu()
         listOf(
             "Enter / approve", "Interrupt session", "Open live terminal", "Rename", "Remind me", "Waiting",
-            "Archive session", "Model and effort ›", "Display ›", "More ›", "Resync chat", "End session", "Remove from list",
+            "Archive session", "Model and effort ›", "Display ›", "More ›", "Reset this chat", "End session", "Remove from list",
         ).forEach { compose.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
         listOf(
             "Set effort: low", "Set effort: max", "Use Claude Opus", "Open model picker (/model)", "Sunlight mode on",
@@ -198,12 +198,12 @@ class ReaderActionsMenuTest {
             sentRecord = listOf(QueuedMessages.SentPrompt("hello there", System.currentTimeMillis())),
         )
         openMenu()
-        compose.onNodeWithText("Resync chat").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithText("Reset this chat").performScrollTo().assertIsDisplayed().performClick()
         compose.runOnIdle {
             assertEquals(listOf("hello there"), connection.state.value.sentRecord.map { it.text })
             assertEquals(listOf("hello there"), connection.state.value.sentPrompts)
         }
-        compose.onNodeWithText("Resync chat").assertDoesNotExist()
+        compose.onNodeWithText("Reset this chat").assertDoesNotExist()
     }
 
     @Test fun modelAndEffortSubPageHoldsModelChoicesAndBackReturnsToTheMainMenu() {
