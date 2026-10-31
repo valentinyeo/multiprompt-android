@@ -18,7 +18,10 @@ source = Path(sys.argv[1]).read_bytes()
 old = b"report.asText()"
 new = b"report.asText(context.getString(dev.multiprompt.companion.R.string.app_name))"
 assert source.count(old) == 2, "Expected exactly two original formatter callsites"
-Path(sys.argv[2]).write_bytes(source.replace(old, new))
+popup = b"DropdownMenu("
+assert source.count(popup) == 6, "Expected exactly six original popup calls"
+source = source.replace(old, new).replace(popup, b"androidx.compose.material3.DropdownMenu(")
+Path(sys.argv[2]).write_bytes(source)
 PYTHON
 echo SESSION_PINS_FORMATTER_CALLSITES_ADAPTED
 
