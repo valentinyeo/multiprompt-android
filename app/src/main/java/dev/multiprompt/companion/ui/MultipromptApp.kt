@@ -2498,6 +2498,7 @@ internal fun ReaderScreen(
 ) = key(connection) {
     MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
     val reader by connection.state.collectAsState()
+    val displayName = stringResource(R.string.app_name)
     val working = reader.isWorking(session.agent)
     LaunchedEffect(connection, working) {
         android.util.Log.i("SessionWorking", "session=${session.name} visible=$working hook=${reader.hookState?.active} status=${reader.status} sending=${reader.sending}")
@@ -3192,7 +3193,7 @@ internal fun ReaderScreen(
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
                                             as ClipboardManager
                                         clipboard.setPrimaryClip(
-                                            ClipData.newPlainText("${context.getString(R.string.app_name)} transcript", reader.output),
+                                            ClipData.newPlainText("$displayName transcript", reader.output),
                                         )
                                     },
                                 )
