@@ -37,7 +37,6 @@ jobs:
     timeout-minutes: 35
     env:
       EVIDENCE: ${{ github.workspace }}/app-name-evidence
-      FIXTURE: ${{ runner.temp }}/app-name-fixture
       GH_TOKEN: ${{ github.token }}
       PROOF_MODE: ${{ github.event_name == 'pull_request' && 'control' || 'release' }}
       EXPECTED_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'schedule' && github.sha || inputs.expected_commit || '' }}
@@ -46,7 +45,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Prepare evidence paths
-        run: mkdir -p "$EVIDENCE" "$FIXTURE"
+        run: |
+          echo "FIXTURE=$RUNNER_TEMP/app-name-fixture" >> "$GITHUB_ENV"
+          mkdir -p "$EVIDENCE" "$RUNNER_TEMP/app-name-fixture"
 
       - uses: actions/setup-java@v4
         with:
