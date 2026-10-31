@@ -3080,7 +3080,7 @@ internal fun ReaderScreen(
                                     onClick = { menuPage = ReaderMenuPage.MORE },
                                 )
                                 KitMenuRow(
-                                    label = "Resync chat",
+                                    label = "Reset this chat",
                                     onClick = {
                                         menuExpanded = false
                                         val reset = if (session.agent == AgentKind.CLAUDE || session.agent == AgentKind.CODEX) connection.resetConversation() else null
