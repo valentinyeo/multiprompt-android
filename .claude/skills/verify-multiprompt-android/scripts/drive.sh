@@ -715,6 +715,12 @@ PYINFO
     python3 tools/account-journey/ui.py "$EVIDENCE/current.xml" selected Favorites
     favorites_snapshot true information-final-state
     cmp "$EVIDENCE/favorites-restored-state.json" "$EVIDENCE/information-final-state.json"
+    relaunch_app
+    tap_text Favorites
+    wait_for_text verify-session
+    wait_for_text verify-keep
+    dump_ui
+    python3 tools/account-journey/ui.py "$EVIDENCE/current.xml" selected Favorites
     sudo -u verifyssh tmux has-session -t verify-session
     sudo -u verifyssh tmux has-session -t verify-keep
     sudo -u verifyssh tmux capture-pane -p -J -S -5000 -t verify-keep:0.0 > "$EVIDENCE/information-neighbor-after.txt"
