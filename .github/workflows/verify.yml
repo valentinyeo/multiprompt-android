@@ -29,6 +29,10 @@ on:
         description: Verify chat catchup on the signed published APK
         type: boolean
         default: false
+      pins_scroll:
+        description: Verify pinned sessions scroll with the list on the signed APK
+        type: boolean
+        default: false
       released_robots:
         description: Verify robot inbox and chat title on the signed APK
         type: boolean
@@ -121,6 +125,7 @@ jobs:
       APP_REF: ${{ inputs.app_ref }}
       EXPECT_SHARED_MISSING: ${{ inputs.expect_shared_missing }}
       RELEASE_CHANNEL: ${{ inputs.channel || 'android-latest' }}
+      PIN_SCROLL_PROOF: ${{ inputs.pins_scroll }}
     steps:
       - uses: actions/checkout@v4
       - name: Validate signed recovery channel
@@ -136,6 +141,11 @@ jobs:
           RELEASED_TERMINAL: ${{ inputs.released_terminal }}
           RELEASED_ROBOTS: ${{ inputs.released_robots }}
         run: |
+          if [[ "$PIN_SCROLL_PROOF" == true ]]; then
+            [[ "$VERIFY_FEATURE" == session-favorites.md && "$RELEASED_CHAT" == true && -z "$APP_REF" && -z "$UPDATE_BASELINE_RUN" ]]
+            [[ "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true ]]
+            [[ "$EXPECT_SHARED_MISSING" != true && "$EXPECT_SHELL_MISSING" != true && "$EXPECT_NATIVE_MISSING" != true && "$EXPECT_SETTINGS_MISSING" != true ]]
+          fi
           if [[ "$EXPECT_SHARED_MISSING" == true ]]; then
             [[ "$VERIFY_FEATURE" == chat-shared.md && "$APP_REF" == 9198aad3721905b09931cdd85628988fe0bd3292 && "$RELEASE_CHANNEL" == android-latest && -z "$UPDATE_BASELINE_RUN" ]]
             [[ "$CANDIDATE" != true && "$RELEASED_CHAT" != true && "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true && "$EXPECT_SHELL_MISSING" != true && "$EXPECT_NATIVE_MISSING" != true && "$EXPECT_SETTINGS_MISSING" != true ]]
