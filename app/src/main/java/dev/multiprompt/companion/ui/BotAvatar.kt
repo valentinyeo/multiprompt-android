@@ -32,7 +32,7 @@ internal data class BotAppearance(val face: Int, val color: Int) {
     }
 }
 
-private val botColors = listOf(0xFFA9C29A, 0xFFC98F72, 0xFFD4BE94, 0xFF93A9C4, 0xFFB7A6D6, 0xFFD9A0A8, 0xFF9DD3C4).map { Color(it) }
+private val botColors = listOf(0xFF95DE69, 0xFFFF6F28, 0xFFFFC455, 0xFF5A9AE9, 0xFF9F6CFC, 0xFFFF667B, 0xFF5EFED1).map { Color(it) }
 
 @Composable
 internal fun BotAvatar(sessionName: String, diameter: Dp = 48.dp, modifier: Modifier = Modifier, workspaceColor: Int = 0) {
