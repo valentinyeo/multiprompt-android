@@ -98,7 +98,7 @@ class SignInGateTest {
     @Test
     fun signedOutShowsOnlySignIn() {
         render()
-        compose.onNodeWithText("multiprompt").assertIsDisplayed()
+        compose.onNodeWithText("Multi Bot").assertIsDisplayed()
         compose.onNodeWithText("Sign in to see your servers, workspaces and sessions.").assertIsDisplayed()
         compose.onNodeWithText("Sign in").assertIsDisplayed().assertHasClickAction()
         compose.onNodeWithTag("app-version").assertIsDisplayed()

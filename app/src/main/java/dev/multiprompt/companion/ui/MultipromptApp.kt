@@ -159,6 +159,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -700,7 +701,7 @@ private fun SignInScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Text("multiprompt", style = MaterialTheme.typography.headlineLarge)
+                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineLarge)
                 Text(
                     "Sign in to see your servers, workspaces and sessions.",
                     style = MaterialTheme.typography.bodyLarge,
@@ -739,7 +740,7 @@ internal fun Header(
                     },
                     fontWeight = FontWeight.Bold,
                 )
-                Text("multiprompt", style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.labelSmall)
             }
         },
         actions = {
@@ -1352,11 +1353,12 @@ internal fun SessionsScreen(
     }
     if (crashReportVisible) {
         crashReport?.let { report ->
+            val reportText = report.asText(stringResource(R.string.app_name))
             KitSheet(onDismiss = { crashReportVisible = false }) {
                 Text("Crash report", style = Kit.BodyStrong, color = Kit.Text)
                 SelectionContainer(modifier = Modifier.weight(1f, fill = false)) {
                     Text(
-                        report.asText(),
+                        reportText,
                         modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
                         style = Kit.Body.copy(fontSize = 11.sp),
                         color = Kit.Text,
@@ -1365,7 +1367,7 @@ internal fun SessionsScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(Kit.ControlGap)) {
                     KitSecondaryButton("Copy report", onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setPrimaryClip(ClipData.newPlainText("multiprompt crash report", report.asText()))
+                        clipboard.setPrimaryClip(ClipData.newPlainText("multiprompt crash report", reportText))
                         crashReportVisible = false
                     })
                     KitSecondaryButton("Close", onClick = { crashReportVisible = false })

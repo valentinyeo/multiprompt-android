@@ -22,8 +22,8 @@ data class CrashReport(
     val uploaded: Boolean = false,
     val uploadStackTrace: String = "",
 ) {
-    fun asText(): String = buildString {
-        appendLine("multiprompt crash report")
+    fun asText(displayName: String): String = buildString {
+        appendLine("$displayName crash report")
         appendLine("App $appVersion")
         appendLine("Android $androidVersion")
         appendLine("Time: $capturedAtEpochSeconds")

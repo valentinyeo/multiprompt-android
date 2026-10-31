@@ -53,7 +53,7 @@ object UpdateNotifier {
         )
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("multiprompt ${release.versionName} is ready")
+            .setContentTitle("${context.getString(R.string.app_name)} ${release.versionName} is ready")
             .setContentText("Tap to update the Android app")
             .setContentIntent(pending)
             .setAutoCancel(true)
