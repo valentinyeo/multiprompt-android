@@ -1,19 +1,19 @@
-# Resync chat
+# Reset this chat
 
 Historical legacy held-queue journey only.
-For Claude and Codex, Resync chat resets shared waiting copies.
+For Claude and Codex, Reset this chat resets shared waiting copies.
 This recipe cannot prove shared-store Reset.
 Use [shared chat store](chat-shared.md) instead.
 
 ## Sub-features
 
-- Open "Resync chat" through the chat menu.
+- Open "Reset this chat" through the chat menu.
 - Reload chat without changing source identity.
 - Settle two receipt-backed host queue IDs.
 - Keep two genuine pending IDs queued.
 - Preserve the draft's exact UTF-8 bytes.
 - Show feedback without promising everything settled.
-- Repeat Resync without extra claims or sends.
+- Repeat Reset this chat without extra claims or sends.
 
 ## How to get to it
 

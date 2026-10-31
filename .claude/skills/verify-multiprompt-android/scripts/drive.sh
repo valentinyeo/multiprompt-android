@@ -1079,7 +1079,7 @@ if [[ "$feature" == chat-shared.md ]]; then
     shot shared-before-reset
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read codex > "$EVIDENCE/shared-codex-before-claude-reset.json"
     tap_desc 'Session actions'
-    tap_text 'Resync chat'
+    tap_text 'Reset this chat'
     for attempt in {1..30}; do
         sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read > "$EVIDENCE/shared-after-reset.json"
         if jq -e '[.rows[] | select(.state == "cancelled")] | length == 2' "$EVIDENCE/shared-after-reset.json" >/dev/null; then break; fi
@@ -1141,7 +1141,7 @@ PYSHARED
     cmp "$EVIDENCE/shared-codex-before-restart.json" "$EVIDENCE/shared-codex-after-restart.json"
     shot shared-codex-before-reset
     tap_desc 'Session actions'
-    tap_text 'Resync chat'
+    tap_text 'Reset this chat'
     for attempt in {1..30}; do
         sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read codex > "$EVIDENCE/shared-codex-after-reset.json"
         if jq -e '[.rows[] | select(.state == "cancelled")] | length == 2' "$EVIDENCE/shared-codex-after-reset.json" >/dev/null; then break; fi
@@ -1347,8 +1347,8 @@ if [[ "$feature" == chat-codex.md ]]; then
     wait_for_text 'CODEX_REPLY_claude_CLAUDE_CONTROL'
     wait_for_absence Queued
     tap_desc 'Session actions'
-    wait_for_text 'Resync chat'
-    tap_text 'Resync chat'
+    wait_for_text 'Reset this chat'
+    tap_text 'Reset this chat'
     wait_for_text 'CODEX_REPLY_claude_CLAUDE_CONTROL'
     sudo grep -Fx 'VERIFY_RECEIVED:CLAUDE_CONTROL' /home/verifyssh/claude-receipts.txt > "$EVIDENCE/claude-receipt.txt"
     shot claude-compatible
@@ -1422,8 +1422,8 @@ QUEUE_COUNTS
     }
     resync_marker() {
         tap_desc 'Session actions'
-        wait_for_text 'Resync chat'
-        tap_text 'Resync chat'
+        wait_for_text 'Reset this chat'
+        tap_text 'Reset this chat'
         provider_event "marker:$1"
         wait_for_text "$1"
     }
@@ -1720,10 +1720,10 @@ if [[ "$feature" == chat-resync.md ]]; then
     shot resync-draft-before
     python3 "$scripts/resync-console.py" draft "$EVIDENCE/current.xml" "$EVIDENCE/resync-draft-before.bin"
     tap_desc 'Session actions'
-    wait_for_text 'Resync chat'
+    wait_for_text 'Reset this chat'
     shot resync-menu
     resync_event accept > "$EVIDENCE/resync-receipt-event.json"
-    tap_text 'Resync chat'
+    tap_text 'Reset this chat'
     toast_shots=()
     for attempt in {1..8}; do
         adb exec-out screencap -p > "$EVIDENCE/toast-$attempt.png"
@@ -1749,8 +1749,8 @@ if [[ "$feature" == chat-resync.md ]]; then
     python3 "$scripts/resync-console.py" draft "$EVIDENCE/current.xml" "$EVIDENCE/resync-draft-after.bin"
     cmp "$EVIDENCE/resync-draft-before.bin" "$EVIDENCE/resync-draft-after.bin"
     tap_desc 'Session actions'
-    wait_for_text 'Resync chat'
-    tap_text 'Resync chat'
+    wait_for_text 'Reset this chat'
+    tap_text 'Reset this chat'
     sleep 5
     resync_rows repeat
     shot resync-draft-repeat
