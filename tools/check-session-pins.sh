@@ -74,9 +74,9 @@ PYTHON
 
 cp "$base/original.kt" "$file"
 run_pins before
-verify_pins before
-echo SESSION_PINS_ORIGINAL_REJECTED
 restore
 run_pins after
+verify_pins before
+echo SESSION_PINS_ORIGINAL_REJECTED
 verify_pins after
 echo SESSION_PINS_SCROLL_OK

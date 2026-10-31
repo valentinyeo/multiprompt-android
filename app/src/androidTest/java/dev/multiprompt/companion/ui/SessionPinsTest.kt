@@ -47,7 +47,7 @@ class SessionPinsTest {
     @get:Rule(order = 1)
     val compose = createAndroidComposeRule<MainActivity>()
 
-    private var opened: TmuxSession? = null
+    private var opened: String? = null
     private val host = HostProfile("host", "VPS", "example.com", username = "user", keySecretId = "key")
     private val workspace = Workspace("work", "Android", "host", "/home/user/android")
     private val sessions = List(40) { index ->
@@ -98,7 +98,7 @@ class SessionPinsTest {
             activity.setContent {
                 SessionsScreen(
                     state = state.value, signedIn = true, onSignIn = {}, onSignOut = {},
-                    onOpen = { opened = it }, onOpenTerminal = {}, onArchive = {}, onArchiveUntil = { _, _ -> },
+                    onOpen = { opened = SessionReadStore.key(it.hostId, it.name) }, onOpenTerminal = {}, onArchive = {}, onArchiveUntil = { _, _ -> },
                     onRestore = {}, onDissolve = {}, onEnd = {}, onRestoreDissolved = {}, onForgetDissolved = {},
                     onMarkUnread = {}, onToggleArchived = {}, onSelectSessionBucket = {}, onSelectWorkspace = {},
                     onSwitchWorkspace = {}, onMoveWorkspaceSplit = { _, _ -> }, onResetWorkspaceSplitOrder = {},
@@ -188,7 +188,7 @@ class SessionPinsTest {
         }
         assertTrue("pin-11 must be reachable horizontally", displayed("pin-11"))
         compose.onNodeWithText("pin-11", useUnmergedTree = true).performClick()
-        compose.runOnIdle { assertEquals(sessions[11], opened) }
+        compose.runOnIdle { assertEquals(SessionReadStore.key(sessions[11].hostId, sessions[11].name), opened) }
 
         repeat(12) {
             if (!displayed("pin-00")) stripNode().performTouchInput { swipeRight() }
