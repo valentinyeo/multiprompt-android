@@ -1280,8 +1280,13 @@ internal fun SessionsScreen(
                         }
                     }
                     if (state.workspaces.isNotEmpty()) {
-                        KitSectionLabel("Workspace colors")
                         KitListGroup {
+                            Text(
+                                "Workspace colors",
+                                Modifier.padding(horizontal = Kit.SideChange, vertical = 8.dp),
+                                style = Kit.Label,
+                                color = Kit.TextMuted,
+                            )
                             state.workspaces.forEach { workspace ->
                                 val picked = state.accountLayout?.workspaceColors?.get(workspace.name)
                                 val shown = state.accountLayout?.workspaceColor(workspace.name) ?: 0
