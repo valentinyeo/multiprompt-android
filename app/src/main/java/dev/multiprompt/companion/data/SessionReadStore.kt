@@ -185,6 +185,26 @@ class SessionReadStore(context: Context) {
         preferences.edit().putBoolean(ALL_SPLIT_ON_RIGHT, enabled).apply()
     }
 
+    fun botFace(session: TmuxSession): Int? =
+        preferences.getInt(BOT_FACE_PREFIX + key(session.hostId, session.name), -1).takeIf { it in 0..19 }
+
+    fun setBotFace(session: TmuxSession, face: Int?) {
+        val prefKey = BOT_FACE_PREFIX + key(session.hostId, session.name)
+        val editor = preferences.edit()
+        if (face == null) editor.remove(prefKey) else editor.putInt(prefKey, face)
+        editor.apply()
+    }
+
+    fun botColor(session: TmuxSession): Int? =
+        preferences.getInt(BOT_COLOR_PREFIX + key(session.hostId, session.name), -1).takeIf { it in 0..6 }
+
+    fun setBotColor(session: TmuxSession, color: Int?) {
+        val prefKey = BOT_COLOR_PREFIX + key(session.hostId, session.name)
+        val editor = preferences.edit()
+        if (color == null) editor.remove(prefKey) else editor.putInt(prefKey, color)
+        editor.apply()
+    }
+
     fun composerDraft(session: TmuxSession): String =
         preferences.getString(DRAFT_PREFIX + key(session.hostId, session.name), null).orEmpty()
 
@@ -246,6 +266,8 @@ class SessionReadStore(context: Context) {
         private const val ALL_SPLIT_ON_RIGHT = "all_split_on_right"
         private const val SESSION_BUCKET = "session_bucket"
         private const val DRAFT_PREFIX = "composer_draft::"
+        private const val BOT_FACE_PREFIX = "bot_face::"
+        private const val BOT_COLOR_PREFIX = "bot_color::"
         private const val DISPLAY_NAME_PREFIX = "display_name::"
         private const val INTERACTION_PREFIX = "interaction::"
         private const val DEFAULT_FONT_SCALE = 1f
