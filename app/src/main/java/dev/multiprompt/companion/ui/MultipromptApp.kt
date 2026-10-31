@@ -130,7 +130,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
@@ -1825,35 +1827,38 @@ internal fun SessionsScreen(
                 val key = SessionReadStore.key(session.hostId, session.name)
                 val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
                 val starred = tab?.favorite == true
-                SessionCard(
-                    session = session,
-                    workspaces = state.workspaces,
-                    unread = key in state.unreadSessionKeys,
-                    unreadCount = state.unreadCounts[key] ?: 1,
-                    archived = key in state.archivedSessionKeys,
-                    starred = starred,
-                    highlighted = key == state.readerSession?.let { SessionReadStore.key(it.hostId, it.name) },
-                    onToggleFavorite = if (tab != null && state.signedIn) {
-                        { onSetFavorite(tab, !starred) }
-                    } else null,
-                    onClick = { onOpen(session) },
-                    onOpenTerminal = { onOpenTerminal(session) },
-                    onArchive = { onArchive(session) },
-                    onRemind = { reminderPromptSession = session },
-                    onArchiveToggle = {
-                        if (key in state.archivedSessionKeys) onRestore(session) else onArchive(session)
-                    },
-                    onMarkUnread = { onMarkUnread(session) },
-                    onMove = { workspace -> onMoveSession(session, workspace) },
-                    onRename = {
-                        renameDraft = session.displayName
-                        renameError = null
-                        renamePromptSession = session
-                    },
-                    onDissolve = { dissolvePromptSession = session },
-                    onEnd = { endPromptSession = session },
-                    onForget = { onForgetSession(session) },
-                )
+                CompositionLocalProvider(
+                    LocalOpenSession provides state.readerSession?.let { SessionReadStore.key(it.hostId, it.name) },
+                ) {
+                    SessionCard(
+                        session = session,
+                        workspaces = state.workspaces,
+                        unread = key in state.unreadSessionKeys,
+                        unreadCount = state.unreadCounts[key] ?: 1,
+                        archived = key in state.archivedSessionKeys,
+                        starred = starred,
+                        onToggleFavorite = if (tab != null && state.signedIn) {
+                            { onSetFavorite(tab, !starred) }
+                        } else null,
+                        onClick = { onOpen(session) },
+                        onOpenTerminal = { onOpenTerminal(session) },
+                        onArchive = { onArchive(session) },
+                        onRemind = { reminderPromptSession = session },
+                        onArchiveToggle = {
+                            if (key in state.archivedSessionKeys) onRestore(session) else onArchive(session)
+                        },
+                        onMarkUnread = { onMarkUnread(session) },
+                        onMove = { workspace -> onMoveSession(session, workspace) },
+                        onRename = {
+                            renameDraft = session.displayName
+                            renameError = null
+                            renamePromptSession = session
+                        },
+                        onDissolve = { dissolvePromptSession = session },
+                        onEnd = { endPromptSession = session },
+                        onForget = { onForgetSession(session) },
+                    )
+                }
             }
             items(visibleDissolvedSessions, key = { "dissolved:${it.key}" }) { session ->
                 DissolvedSessionCard(
@@ -2041,6 +2046,8 @@ private fun AgentBadge(agent: AgentKind) {
     }
 }
 
+private val LocalOpenSession = staticCompositionLocalOf<String?> { null }
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SessionCard(
@@ -2050,7 +2057,6 @@ private fun SessionCard(
     unreadCount: Int,
     archived: Boolean,
     starred: Boolean,
-    highlighted: Boolean,
     onToggleFavorite: (() -> Unit)?,
     onClick: () -> Unit,
     onOpenTerminal: () -> Unit,
@@ -2107,7 +2113,11 @@ private fun SessionCard(
     ) {
         Box(
             Modifier.fillMaxWidth().background(
-                if (highlighted) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface,
+                if (LocalOpenSession.current == SessionReadStore.key(session.hostId, session.name)) {
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                } else {
+                    MaterialTheme.colorScheme.surface
+                },
             ),
         ) {
             Row(
