@@ -1353,7 +1353,8 @@ internal fun SessionsScreen(
     }
     if (crashReportVisible) {
         crashReport?.let { report ->
-            val reportText = report.asText(stringResource(R.string.app_name))
+            val displayName = stringResource(R.string.app_name)
+            val reportText = report.asText(displayName)
             KitSheet(onDismiss = { crashReportVisible = false }) {
                 Text("Crash report", style = Kit.BodyStrong, color = Kit.Text)
                 SelectionContainer(modifier = Modifier.weight(1f, fill = false)) {
@@ -1367,7 +1368,7 @@ internal fun SessionsScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(Kit.ControlGap)) {
                     KitSecondaryButton("Copy report", onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setPrimaryClip(ClipData.newPlainText("multiprompt crash report", reportText))
+                        clipboard.setPrimaryClip(ClipData.newPlainText("$displayName crash report", reportText))
                         crashReportVisible = false
                     })
                     KitSecondaryButton("Close", onClick = { crashReportVisible = false })
@@ -3191,7 +3192,7 @@ internal fun ReaderScreen(
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
                                             as ClipboardManager
                                         clipboard.setPrimaryClip(
-                                            ClipData.newPlainText("multiprompt transcript", reader.output),
+                                            ClipData.newPlainText("${context.getString(R.string.app_name)} transcript", reader.output),
                                         )
                                     },
                                 )

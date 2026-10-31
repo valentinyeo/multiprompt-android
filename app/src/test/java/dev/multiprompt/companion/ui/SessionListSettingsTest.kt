@@ -187,6 +187,7 @@ class SessionListSettingsTest {
         compose.onNodeWithText("Copy report").performClick()
         compose.runOnIdle {
             val clipboard = fixture.app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            assertEquals("Multi Bot crash report", clipboard.primaryClipDescription!!.label.toString())
             assertEquals(report.asText("Multi Bot"), clipboard.primaryClip!!.getItemAt(0).text.toString())
             assertTrue(clipboard.primaryClip!!.getItemAt(0).text.toString().startsWith("Multi Bot crash report\n"))
         }
