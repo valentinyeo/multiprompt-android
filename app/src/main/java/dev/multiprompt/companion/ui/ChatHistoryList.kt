@@ -75,6 +75,7 @@ internal fun ChatHistoryView(
     unreadMessageKey: String?,
     onMarkUnread: (String) -> Unit,
     onReaction: ((ChatHistoryMessage, ChatReactions.Emoji) -> Unit)? = null,
+    onSpeakableReplies: (List<String>) -> Unit = {},
     bottomPadding: Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
@@ -82,6 +83,8 @@ internal fun ChatHistoryView(
     val state by history.state.collectAsState()
     val managed = agent == AgentKind.CLAUDE || agent == AgentKind.CODEX
     val messages = if (managed) state.history.managedMessages(state.replica, state.unresolved) else state.history.displayMessages(reader.sentRecord)
+    val speakable = remember(messages) { dev.multiprompt.companion.reader.ReadAloud.replies(messages) }
+    LaunchedEffect(speakable) { onSpeakableReplies(speakable) }
     val actionScope = rememberCoroutineScope()
     val context = LocalContext.current
     var retryRow by remember { mutableStateOf<Pair<dev.multiprompt.companion.reader.MessageProtocol.Row, Long>?>(null) }
