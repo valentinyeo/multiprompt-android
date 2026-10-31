@@ -2536,7 +2536,8 @@ internal fun ReaderScreen(
     val sharedDictationState by dictation.state.collectAsState()
     val dictationState = sharedDictationState.takeIf { it.sessionKey == sessionKey }
         ?: DictationState(configured = sharedDictationState.configured)
-    val draftStore = remember(context.applicationContext) { SessionReadStore(context.applicationContext) }
+    val draftContext = LocalContext.current.applicationContext
+    val draftStore = remember(draftContext) { SessionReadStore(draftContext) }
     var promptField by remember(connection) {
         mutableStateOf(TextFieldValue(draftStore.composerDraft(session)))
     }
