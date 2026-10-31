@@ -15,7 +15,6 @@ import androidx.compose.material.icons.filled.MarkChatUnread
 import androidx.compose.material.icons.filled.Reply
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Tag
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.TextButton
@@ -251,12 +250,13 @@ internal fun ReplyableBubble(
         }
     }
     if (selectable) {
-        AlertDialog(
-            onDismissRequest = { selectable = false },
-            title = { Text("Select Text") },
-            text = { SelectionContainer { Text(text, Modifier.verticalScroll(rememberScrollState())) } },
-            confirmButton = { TextButton(onClick = { selectable = false }) { Text("Done") } },
-        )
+        KitSheet(onDismiss = { selectable = false }) {
+            Text("Select Text", style = Kit.Heading, color = Kit.Text)
+            SelectionContainer(modifier = Modifier.weight(1f, fill = false)) {
+                Text(text, Modifier.verticalScroll(rememberScrollState()), style = Kit.Body, color = Kit.Text)
+            }
+            KitPrimaryButton("Done", onClick = { selectable = false })
+        }
     }
 }
 
