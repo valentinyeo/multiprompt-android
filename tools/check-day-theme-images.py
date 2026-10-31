@@ -2,12 +2,13 @@ import re
 import subprocess
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 from PIL import Image
 from pathlib import Path
 
 
 SCREENS = {
-    "sign-in": ("multiprompt", "sign in"),
+    "sign-in": ("sign in",),
     "inbox": ("inbox", "session 0", "session 1"),
     "menu": ("settings", "arrange splits"),
     "settings": ("session list settings", "default reader font size"),
@@ -15,12 +16,31 @@ SCREENS = {
 }
 
 
-def verify_image(path, screen):
+def current_display_name():
+    resource = Path(__file__).resolve().parent.parent / "app/src/main/res/values/strings.xml"
+    root = ET.parse(resource).getroot()
+    names = root.findall("./string[@name='app_name']")
+    if len(names) != 1:
+        raise ValueError("Expected exactly one app_name string")
+    name = "".join(names[0].itertext()).strip()
+    if not name:
+        raise ValueError("app_name must not be blank")
+    return name
+
+
+def verify_image(path, screen, display_name=None):
+    labels = SCREENS[screen]
+    if screen == "sign-in":
+        name = current_display_name() if display_name is None else display_name
+        normalized_name = " ".join(re.findall(r"[a-z0-9]+", name.lower()))
+        if not normalized_name:
+            raise ValueError("Display name must contain OCR-compatible text")
+        labels = (normalized_name,) + labels
     result = subprocess.run(
         ["tesseract", str(path), "stdout"], check=True, capture_output=True, text=True
     )
     text = " ".join(re.findall(r"[a-z0-9]+", result.stdout.lower()))
-    missing = [label for label in SCREENS[screen] if label not in text]
+    missing = [label for label in labels if label not in text]
     if missing:
         with Image.open(path) as image:
             for width_fraction in (.4, .8):
@@ -30,7 +50,7 @@ def verify_image(path, screen):
                         ["tesseract", header.name, "stdout", "--psm", "6"], check=True, capture_output=True, text=True
                     )
                     text += " " + " ".join(re.findall(r"[a-z0-9]+", result.stdout.lower()))
-                missing = [label for label in SCREENS[screen] if label not in text]
+                missing = [label for label in labels if label not in text]
                 if not missing:
                     break
     if missing and screen == "menu":
@@ -40,16 +60,16 @@ def verify_image(path, screen):
                 ["tesseract", menu.name, "stdout", "--psm", "6"], check=True, capture_output=True, text=True
             )
             text += " " + " ".join(re.findall(r"[a-z0-9]+", result.stdout.lower()))
-            missing = [label for label in SCREENS[screen] if label not in text]
+            missing = [label for label in labels if label not in text]
     if missing:
         raise ValueError(f"{path}: missing expected {screen} text: {missing}; OCR: {text}")
     print(f"NAMED_SCREEN_OK {path.name} {screen}")
 
 
-def verify_directory(directory):
+def verify_directory(directory, display_name=None):
     for theme in ("dark", "light"):
         for screen in SCREENS:
-            verify_image(directory / f"{theme}-{screen}.png", screen)
+            verify_image(directory / f"{theme}-{screen}.png", screen, display_name)
     print("DAY_THEME_SCREEN_IDENTITY_OK")
 
 

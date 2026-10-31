@@ -10,6 +10,18 @@ restore() { cp "$base/current.kt" "$file"; }
 trap restore EXIT
 git show "bebcb708b7ae9338230c2c5b04fa769484f46ccd:$file" > "$base/original.kt"
 
+python3 - "$base/original.kt" "$base/original-compatible.kt" <<'PYTHON'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_bytes()
+old = b"report.asText()"
+new = b"report.asText(context.getString(dev.multiprompt.companion.R.string.app_name))"
+assert source.count(old) == 2, "Expected exactly two original formatter callsites"
+Path(sys.argv[2]).write_bytes(source.replace(old, new))
+PYTHON
+echo SESSION_PINS_FORMATTER_CALLSITES_ADAPTED
+
 run_pins() {
   local phase=$1 status=0 dir
   rm -rf "$base/$phase" \
@@ -72,7 +84,7 @@ if phase == "after":
 PYTHON
 }
 
-cp "$base/original.kt" "$file"
+cp "$base/original-compatible.kt" "$file"
 run_pins before
 restore
 run_pins after
