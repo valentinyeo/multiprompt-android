@@ -60,7 +60,7 @@ object ReplyNotifier {
             .build()
         val summary = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Multiprompt")
+            .setContentTitle(context.getString(R.string.app_name))
             .setContentText("New replies")
             .setGroup(GROUP_KEY)
             .setGroupSummary(true)

@@ -96,7 +96,7 @@ class CrashReportStoreTest {
             assertTrue(sent.contains("CrashReportStoreTest.kt"))
             assertTrue(sent.contains("Caused by: java.io.IOException"))
             secrets.forEach {
-                assertTrue("positive control: $it", captured.asText().contains(it))
+                assertTrue("positive control: $it", captured.asText("Multi Bot").contains(it))
                 assertFalse(it, sent.contains(it))
             }
             assertFalse(sent.contains("secret cause message"))
@@ -108,7 +108,8 @@ class CrashReportStoreTest {
 
     @Test fun displayUsesCapturedVersionsRatherThanCurrentDevice() {
         store.save(report)
-        val text = store.load()!!.asText()
+        val text = store.load()!!.asText("Multi Bot")
+        assertTrue(text.startsWith("Multi Bot crash report\n"))
         assertTrue(text.contains("App ${report.appVersion}"))
         assertTrue(text.contains("Android ${report.androidVersion}"))
         assertTrue(text.contains(report.stackTrace))

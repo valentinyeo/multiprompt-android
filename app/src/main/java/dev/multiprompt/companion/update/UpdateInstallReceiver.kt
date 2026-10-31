@@ -28,7 +28,7 @@ class UpdateInstallReceiver : BroadcastReceiver() {
                 }
             }
 
-            PackageInstaller.STATUS_SUCCESS -> show(context, "multiprompt updated")
+            PackageInstaller.STATUS_SUCCESS -> show(context, "${context.getString(dev.multiprompt.companion.R.string.app_name)} updated")
             else -> {
                 val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
                     ?: "Installer status $status"
