@@ -22,6 +22,7 @@ Numbered PNG/XML pairs show action and result. The transcript records commands a
 ## Features
 
 - [Sign in](sign-in.md): real account browser handoff; OTP remains manual.
+- [App name and update](app-name.md): published signed Android in-app update proof.
 - [Settings navigation](settings-navigation.md): sessions-first settings, host mapping and account handoff on the signed APK.
 - [Hosts](hosts.md): add VPS, import encrypted-at-rest key, compare/trust and retain the host identity.
 - [Retired hosts](hosts-retired.md): a saved host at a retired server address is gone after relaunch; account sync never adds it back.
