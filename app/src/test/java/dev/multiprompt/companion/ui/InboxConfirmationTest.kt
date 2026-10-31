@@ -4,6 +4,9 @@ import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -72,12 +75,12 @@ class InboxConfirmationTest {
             compose.onNodeWithText(menu).performScrollTo().assertIsDisplayed().performClick()
             compose.onNodeWithText(title).assertIsDisplayed()
             compose.onNodeWithText(warning).assertIsDisplayed()
-            compose.onNodeWithText(confirm).performScrollTo().assertIsDisplayed()
+            compose.onNode(hasText(confirm) and hasAnyAncestor(isDialog())).performScrollTo().assertIsDisplayed()
             if (attempt == 0) {
                 compose.onNodeWithText("Cancel").performScrollTo().assertIsDisplayed().performClick()
                 compose.runOnIdle { assertTrue(dissolved.isEmpty()); assertTrue(ended.isEmpty()) }
             } else {
-                compose.onNodeWithText(confirm).performScrollTo().performClick()
+                compose.onNode(hasText(confirm) and hasAnyAncestor(isDialog())).performScrollTo().performClick()
                 compose.runOnIdle {
                     val expected = state.value.inboxSessions.single { it.name == "gamma" }
                     assertEquals(if (archive) listOf(expected) else emptyList<TmuxSession>(), dissolved)
