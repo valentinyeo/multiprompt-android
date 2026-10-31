@@ -21,6 +21,8 @@ The signed APK is unchanged. Published mode checks its manifest commit, URL, siz
 11. Open **Estimate accuracy**. Capture `information-accuracy-opening` immediately. Capture its empty explanation. Close it and return to Reader.
 12. Return to **Favorites**. Require both sessions and persisted favorites. Compare neighbor pane and receipts byte-for-byte. Require both tmux sessions alive.
 
+Run the old baseline from a pinned ref. Keep that ref separate from the candidate. Its expected failure is comparison evidence.
+
 Version 0.1.310-m3 cannot display accuracy. Its Reader branch returns before rendering. The old baseline must fail there. Confirm manifest `55489f01be380c996a83f1e3f8b8fe3a8ea522c3` and the trace. The opening capture shows the old Reader. Candidate and published journeys must pass completely.
 
 Run the signed candidate first. Run published proof after release. Inspect the uninterrupted `release-choices.mp4`, numbered PNG/XML pairs, `favorites-removed-state.json`, `favorites-restored-state.json`, `favorites-result.txt`, SSH authentication, APK identity, certificate, hash, manifest and source commit. Inspect `information-eta-path.txt` and `information-receipts.txt`. Inspect the named information tmux captures. Missing capture, invalid fixture, missing menu or unexpected state fails the journey.
