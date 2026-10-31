@@ -525,6 +525,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onSetNewestSessionsAtBottom = viewModel::setNewestSessionsAtBottom,
                     onSetAllSplitOnRight = viewModel::setAllSplitOnRight,
                     onSetSessionListSetting = viewModel::setSessionListSetting,
+                    onSetWorkspaceColor = viewModel::setAccountWorkspaceColor,
                     appTheme = state.appTheme,
                     onSetAppTheme = viewModel::setAppTheme,
                     onClearSessionActionError = viewModel::clearSessionActionError,
@@ -1124,6 +1125,7 @@ internal fun SessionsScreen(
     onMapAccountHost: (Int, String?) -> Unit,
     nowMillis: () -> Long = System::currentTimeMillis,
     onSetSessionListSetting: (String, Boolean) -> Unit = { _, _ -> },
+    onSetWorkspaceColor: (String, Int?) -> Unit = { _, _ -> },
     material3: Boolean = LocalMaterial3.current,
 ) = MultipromptTheme(
     sunlight = when (appTheme) {
@@ -1275,6 +1277,47 @@ internal fun SessionsScreen(
                         ) {
                             Text("All split on right", Modifier.weight(1f), style = Kit.Body, color = Kit.Text)
                             KitToggle(state.allSplitOnRight, onSetAllSplitOnRight)
+                        }
+                    }
+                    if (state.workspaces.isNotEmpty()) {
+                        KitListGroup {
+                            Text(
+                                "Workspace colors",
+                                Modifier.padding(horizontal = Kit.SideChange, vertical = 8.dp),
+                                style = Kit.Label,
+                                color = Kit.TextMuted,
+                            )
+                            state.workspaces.forEach { workspace ->
+                                val picked = state.accountLayout?.workspaceColors?.get(workspace.name)
+                                val shown = state.accountLayout?.workspaceColor(workspace.name) ?: 0
+                                Column(
+                                    Modifier.fillMaxWidth().padding(horizontal = Kit.SideChange, vertical = 6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Text(workspace.name, style = Kit.Body, color = Kit.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        (0..6).forEach { index ->
+                                            val chosen = if (picked == null) shown == index else picked == index
+                                            Box(
+                                                Modifier
+                                                    .size(28.dp)
+                                                    .background(botColor(index), CircleShape)
+                                                    .border(if (chosen) 3.dp else 1.dp, if (chosen) Kit.Text else Kit.Outline, CircleShape)
+                                                    .clickable { onSetWorkspaceColor(workspace.name, index) },
+                                            )
+                                        }
+                                        Text(
+                                            "Auto",
+                                            modifier = Modifier.clickable { onSetWorkspaceColor(workspace.name, null) }.padding(start = 4.dp),
+                                            style = Kit.Label,
+                                            color = if (picked == null) Kit.Text else Kit.TextMuted,
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                     KitListGroup {
