@@ -75,7 +75,15 @@ try:
         bottom = screen[3]
         for name in ("Frequent", "All", "Favorites"):
             try:
-                tab = raw_bounds(clickable(name))
+                tab = one(name)
+                while tab is not None and tab is not root:
+                    if visible(tab) and (tab.get("clickable") == "true"
+                                         or tab.get("selected") == "true"):
+                        break
+                    tab = parents.get(tab)
+                if tab is None or tab is root:
+                    raise ValueError("no visible clickable or selected ancestor for " + name)
+                tab = raw_bounds(tab)
             except ValueError as error:
                 raise ValueError("invalid fixed tab " + name + ": " + str(error))
             if tab[1] + tab[3] < screen[1] + screen[3]:
