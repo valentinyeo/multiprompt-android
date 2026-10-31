@@ -2995,25 +2995,6 @@ internal fun ReaderScreen(
                                     onClick = {},
                                 )
                                 KitMenuRow(
-                                    label = if (reading) "Stop reading" else "Read reply",
-                                    onClick = {
-                                        menuExpanded = false
-                                        if (reading) {
-                                            speech.stop()
-                                            reading = false
-                                        } else {
-                                            val next = dev.multiprompt.companion.reader.ReadAloud.next(speakableReplies, replyCursor)
-                                            if (next != null) {
-                                                speech.speak(next.first, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "reply")
-                                                replyCursor = next.second
-                                                reading = true
-                                            } else {
-                                                android.widget.Toast.makeText(context, "No reply to read yet", android.widget.Toast.LENGTH_SHORT).show()
-                                            }
-                                        }
-                                    },
-                                )
-                                KitMenuRow(
                                     label = "Enter / approve",
                                     enabled = !reader.sending,
                                     onClick = {
@@ -3117,6 +3098,25 @@ internal fun ReaderScreen(
                                                 val confirmed = connection.resyncChat()
                                                 followRequest++
                                                 android.widget.Toast.makeText(context, if (confirmed) "Synced" else "Some messages could not be confirmed", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    },
+                                )
+                                KitMenuRow(
+                                    label = if (reading) "Stop reading" else "Read reply",
+                                    onClick = {
+                                        menuExpanded = false
+                                        if (reading) {
+                                            speech.stop()
+                                            reading = false
+                                        } else {
+                                            val next = dev.multiprompt.companion.reader.ReadAloud.next(speakableReplies, replyCursor)
+                                            if (next != null) {
+                                                speech.speak(next.first, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "reply")
+                                                replyCursor = next.second
+                                                reading = true
+                                            } else {
+                                                android.widget.Toast.makeText(context, "No reply to read yet", android.widget.Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     },
