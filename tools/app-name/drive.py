@@ -276,7 +276,7 @@ class Proof:
         return width, height
 
     def foreground(self):
-        output = text(adb("shell", "dumpsys", "window", "windows"))
+        output = text(adb("shell", "dumpsys", "window"))
         (self.evidence / "current-window.txt").write_text(output, encoding="utf-8")
         focused = re.findall(r"^\s*mCurrentFocus=([^\r\n]+)", output, re.MULTILINE)
         require(len(focused) == 1, "Cannot uniquely determine focused window")
