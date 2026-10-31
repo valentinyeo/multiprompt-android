@@ -6,7 +6,9 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -34,8 +36,24 @@ class SignInMenuTest {
         compose.onNodeWithText("Hosts").assertDoesNotExist()
         compose.onNodeWithText("Workspaces").assertDoesNotExist()
         compose.onNodeWithText("Update").assertDoesNotExist()
-        compose.onNodeWithText("Settings").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Settings").performScrollTo().assertIsDisplayed().performClick()
         compose.onNodeWithText("Settings").assertDoesNotExist()
         compose.runOnIdle { assertEquals(1, settingsCalls) }
+    }
+
+    @Test fun versionOpensReleaseNotesOnce() {
+        var calls = 0
+        compose.setContent {
+            MaterialTheme {
+                InboxOverflowMenu(
+                    onSettings = {}, onArrangeSplits = {}, onNewWorkspace = {}, onRefresh = {},
+                    onReleaseNotes = { calls++ },
+                )
+            }
+        }
+        compose.onNodeWithContentDescription("Session list actions").performClick()
+        compose.onNodeWithTag("app-version").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithTag("app-version").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(1, calls) }
     }
 }

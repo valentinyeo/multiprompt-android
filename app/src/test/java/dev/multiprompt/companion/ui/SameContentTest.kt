@@ -93,7 +93,9 @@ class SameContentTest(private val screen: M3Screen, private val sunlight: Boolea
             val text = subtree(clickable).flatMap { tokens(it) }
             return text.size == 1 && text.single() in splitNames
         }
-        fun isMenu(node: SemanticsNode) = ancestors(node).any { SemanticsProperties.IsPopup in it.config }
+        fun isMenu(node: SemanticsNode) = ancestors(node).any {
+            SemanticsProperties.IsDialog in it.config || SemanticsProperties.IsPopup in it.config
+        }
         fun isMessage(node: SemanticsNode) = ancestors(node).any { ReplySelectable in it.config }
         val splits = nodes.filter { isSplit(it) }.flatMap { tokens(it) }
         val remainder = nodes.filterNot { isSplit(it) }.flatMap { tokens(it) }

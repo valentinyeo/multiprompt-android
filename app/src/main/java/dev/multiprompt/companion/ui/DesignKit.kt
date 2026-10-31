@@ -20,6 +20,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,6 +30,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -198,11 +201,13 @@ internal fun KitListRow(
     destructive: Boolean = false,
     trailing: (@Composable RowScope.() -> Unit)? = null,
     onClick: (() -> Unit)? = null,
+    enabled: Boolean = true,
 ) {
     val color = if (destructive) Kit.Danger else Kit.Text
     Row(
         modifier.fillMaxWidth().heightIn(min = Kit.RowHeight)
-            .let { if (onClick != null) it.clickable(role = Role.Button, onClick = onClick) else it }
+            .alpha(if (enabled) 1f else 0.45f)
+            .let { if (onClick != null) it.clickable(enabled = enabled, role = Role.Button, onClick = onClick) else it }
             .padding(horizontal = Kit.SideChange),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -256,6 +261,48 @@ internal fun KitSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.()
     ) {
         KitSheetSurface(content = content)
     }
+}
+
+@Composable
+internal fun KitMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    contentResetKey: String = "",
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    if (expanded) {
+        KitSheet(onDismiss = onDismissRequest) {
+            key(contentResetKey) {
+                val scrollState = rememberScrollState()
+                Column(Modifier.weight(1f, fill = false).verticalScroll(scrollState)) {
+                    KitListGroup(content = content)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun KitMenuRow(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    icon: ImageVector? = null,
+    trailingText: String? = null,
+    destructive: Boolean = false,
+) {
+    KitListRow(
+        label = label,
+        modifier = modifier,
+        icon = icon,
+        destructive = destructive,
+        trailing = if (trailingText != null) {
+            { Text(trailingText, style = Kit.Hint, color = if (destructive) Kit.Danger else Kit.TextMuted) }
+        } else null,
+        onClick = onClick,
+        enabled = enabled,
+    )
 }
 
 @Composable

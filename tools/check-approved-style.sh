@@ -32,7 +32,11 @@ if [ "$mode" = prepare ]; then
   exit 0
 fi
 status=0
-"${GRADLE:-gradle}" --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2g connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.multiprompt.companion.ui.ApprovedStyleTest > "build/approved-style/$phase/emulator.log" 2>&1 || status=$?
+classes=dev.multiprompt.companion.ui.ApprovedStyleTest
+if [ "$phase" != before ]; then
+  classes="$classes,dev.multiprompt.companion.ui.KitMenuInteractionTest"
+fi
+"${GRADLE:-gradle}" --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2g connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class="$classes" > "build/approved-style/$phase/emulator.log" 2>&1 || status=$?
 cat "build/approved-style/$phase/emulator.log"
 result=$(find app/build/outputs -type d -name approved-style -print -quit)
 test -n "$result"

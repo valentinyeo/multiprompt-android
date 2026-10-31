@@ -10,7 +10,9 @@ import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.SemanticsNodeInteraction
-import androidx.compose.ui.test.isPopup
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -166,7 +168,7 @@ class ReaderAttachOutlineTest {
         compose.onNodeWithContentDescription("Attach").performClick()
         compose.onNodeWithText("Add image").assertIsDisplayed()
         compose.onNodeWithText("Skill").assertIsDisplayed()
-        val menu = compose.onNode(isPopup())
+        val menu = compose.onNode(hasScrollAction() and hasAnyAncestor(isDialog()))
         val bitmap = capture(menu, "attach-menu")
         assertTrue(hasOutlineAlongRow(bitmap, bitmap.height / 2, 8))
         compose.onNodeWithText("Add image").performClick()
