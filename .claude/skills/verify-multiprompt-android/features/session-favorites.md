@@ -16,8 +16,15 @@ The signed APK is unchanged. Published mode checks its manifest commit, URL, siz
 7. Long-press `verify-session`. Open **Archive session**. Check the exact title, warning, and buttons. Capture `confirmation-archive`. Tap **Cancel**. Require both sessions visible. Require both tmux sessions alive.
 8. Long-press `verify-session` again. Open **End session**. Check the exact title, warning, and buttons. Capture `confirmation-end`. Press system Back. Require Favorites selected. Require both sessions visible. Require both tmux sessions alive.
 
-Inspect the uninterrupted `release-choices.mp4`, numbered PNG/XML pairs, `favorites-removed-state.json`, `favorites-restored-state.json`, `favorites-result.txt`, SSH authentication, APK identity, certificate, hash, manifest and source commit. Missing capture, invalid fixture, missing menu or unexpected state fails the journey.
+9. Verify the resolved ETA log is absent. Open **Estimate accuracy**. Capture its empty explanation. Close it and return to Reader.
+10. Enable the guarded generic-console history fixture. Confirm its actual alternate-screen live marker. Open **Session history**. Capture the first numbered page. Load older and capture another page.
+11. Tap **Back to live**. Confirm the live marker returns. Reopen history and press system Back. Confirm the live marker returns again. Check `pane_in_mode=0` after each close. This guard does not prove a transition.
+12. Return to **Favorites**. Require both sessions and persisted favorites. Compare neighbor pane and receipts byte-for-byte. Require both tmux sessions alive.
+
+Run the signed candidate first. Run published proof after release. Inspect the uninterrupted `release-choices.mp4`, numbered PNG/XML pairs, `favorites-removed-state.json`, `favorites-restored-state.json`, `favorites-result.txt`, SSH authentication, APK identity, certificate, hash, manifest and source commit. Inspect `information-eta-path.txt` and `information-receipts.txt`. Inspect the named information tmux captures. Missing capture, invalid fixture, missing menu or unexpected state fails the journey.
 
 This proves the signed app frontend and isolated offline cache only. It does not prove production sign-in, production sync, a physical phone, or a matching Desktop screenshot. The separate `account-journey.yml` builds a debug APK against an isolated real account service and independently reads its layout; it is not signed-release proof. A candidate is not published-release proof.
 
 These cancellation checks cover Inbox only. Reader confirmation and production accounts remain unproven.
+
+History proof uses the generic console only. Native Claude and Codex remain unproven. Physical phones and day-scale stability remain unproven. Clipboard contents are not verified.

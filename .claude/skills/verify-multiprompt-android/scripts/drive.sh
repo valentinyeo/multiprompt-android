@@ -595,6 +595,131 @@ PYFAVORITES
         [[ "$GITHUB_ACTIONS" == true && "$HOME" == /home/verifyssh && "$(id -u)" -ne 0 && "$(id -un)" == verifyssh ]]
         tmux has-session -t verify-session && tmux has-session -t verify-keep
     '
+    [[ "$FIXTURE" == "$RUNNER_TEMP/verify-ssh" ]]
+    sudo -u verifyssh tmux capture-pane -p -J -S -5000 -t verify-keep:0.0 > "$EVIDENCE/information-neighbor-before.txt"
+    sudo cat /home/verifyssh/keep-receipts.txt > "$EVIDENCE/information-neighbor-receipts-before.txt"
+    { printf '[127.0.0.1]:2222 '; cat "$FIXTURE/host-key.pub"; } > "$FIXTURE/information-known-hosts"
+    ssh -F /dev/null -i "$FIXTURE/user-key" -p 2222 -o BatchMode=yes \
+        -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$FIXTURE/information-known-hosts" \
+        verifyssh@127.0.0.1 'mp_dir="${MULTIPROMPT_STATE_DIR:-$HOME/.local/state/multiprompt}"; case "$mp_dir" in /home/verifyssh/*) ;; *) exit 1;; esac; printf "resolved=%s/eta-log.jsonl\n" "$mp_dir"; test ! -e "$mp_dir/eta-log.jsonl" && test ! -L "$mp_dir/eta-log.jsonl" && echo ETA_LOG_ABSENT' > "$EVIDENCE/information-eta-path.txt"
+    grep -Fx 'ETA_LOG_ABSENT' "$EVIDENCE/information-eta-path.txt"
+    tap_text verify-session
+    wait_for_text VERIFY_READY_528
+    tap_desc 'Session actions'
+    tap_text 'More ›'
+    tap_text 'Estimate accuracy'
+    wait_for_text 'No finished estimates yet. A finished turn counts when it ran two minutes or more, and an agent needs three of them.'
+    shot information-accuracy-empty
+    tap_text Close
+    wait_for_absence 'No finished estimates yet. A finished turn counts when it ran two minutes or more, and an agent needs three of them.'
+    select_node desc 'Session actions' >/dev/null
+    sudo -u verifyssh tmux send-keys -t verify-session:0.0 -l 'VERIFY_INFORMATION_1015'
+    sudo -u verifyssh tmux send-keys -t verify-session:0.0 Enter
+    for attempt in {1..30}; do
+        if [[ "$(sudo -u verifyssh tmux display-message -p -t verify-session:0.0 '#{alternate_on} #{pane_in_mode}')" == '1 0' ]] &&
+           sudo -u verifyssh tmux capture-pane -p -t verify-session:0.0 | grep -Fx 'VERIFY_1015_LIVE'; then break; fi
+        sleep 1
+    done
+    [[ "$(sudo -u verifyssh tmux display-message -p -t verify-session:0.0 '#{alternate_on} #{pane_in_mode}')" == '1 0' ]]
+    sudo -u verifyssh tmux capture-pane -p -t verify-session:0.0 > "$EVIDENCE/information-live-before.txt"
+    grep -Fx 'VERIFY_1015_LIVE' "$EVIDENCE/information-live-before.txt"
+    wait_for_text VERIFY_1015_LIVE
+    shot information-live
+    tap_desc 'Session actions'
+    wait_for_text 'Session history'
+    tap_text 'Session history'
+    wait_for_text 'VERIFY_1015_PAGE_1_LINE_'
+    shot information-history-first
+    sudo -u verifyssh tmux capture-pane -p -t verify-session:0.0 > "$EVIDENCE/information-page-one.txt"
+    grep -F 'VERIFY_1015_PAGE_1_LINE_' "$EVIDENCE/information-page-one.txt"
+    information_scroll() {
+        local direction=$1 bounds
+        dump_ui
+        bounds=$(python3 - "$EVIDENCE/current.xml" "$direction" <<'PYINFO'
+import re
+import sys
+import xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+parents = {child: parent for parent in root.iter() for child in parent}
+pages = [n for n in root.iter('node') if 'VERIFY_1015_PAGE_' in n.get('text', '')]
+assert pages, 'history page missing'
+node = pages[0]
+while node in parents and node.get('scrollable') != 'true':
+    node = parents[node]
+assert node.get('scrollable') == 'true', 'history list missing'
+x1, y1, x2, y2 = map(int, re.findall(r'\d+', node.get('bounds', '')))
+assert x2 > x1 and y2 - y1 >= 40
+x = (x1 + x2) // 2
+low, high = y1 + (y2 - y1) // 5, y2 - (y2 - y1) // 5
+print(x, high if sys.argv[2] == 'older' else low, x, low if sys.argv[2] == 'older' else high)
+PYINFO
+)
+        adb shell input swipe $bounds 500
+    }
+    for attempt in {1..12}; do
+        if select_node text 'Load older' >/dev/null 2>&1; then break; fi
+        information_scroll older
+    done
+    tap_text 'Load older'
+    for attempt in {1..20}; do
+        if select_node contains 'VERIFY_1015_PAGE_2_LINE_' >/dev/null 2>&1; then break; fi
+        information_scroll newer
+        sleep 1
+    done
+    wait_for_text 'VERIFY_1015_PAGE_2_LINE_'
+    shot information-history-older
+    sudo -u verifyssh tmux capture-pane -p -t verify-session:0.0 > "$EVIDENCE/information-page-two.txt"
+    grep -F 'VERIFY_1015_PAGE_2_LINE_' "$EVIDENCE/information-page-two.txt"
+    ! cmp -s "$EVIDENCE/information-page-one.txt" "$EVIDENCE/information-page-two.txt"
+    tap_text 'Back to live'
+    wait_for_absence 'Back to live'
+    for attempt in {1..30}; do
+        if sudo -u verifyssh tmux capture-pane -p -t verify-session:0.0 | grep -Fx 'VERIFY_1015_LIVE'; then break; fi
+        sleep 1
+    done
+    [[ "$(sudo -u verifyssh tmux display-message -p -t verify-session:0.0 '#{alternate_on} #{pane_in_mode}')" == '1 0' ]]
+    sudo -u verifyssh tmux capture-pane -p -t verify-session:0.0 > "$EVIDENCE/information-live-after-button.txt"
+    grep -Fx 'VERIFY_1015_LIVE' "$EVIDENCE/information-live-after-button.txt"
+    wait_for_text VERIFY_1015_LIVE
+    shot information-back-to-live
+    tap_desc 'Session actions'
+    wait_for_text 'Session history'
+    tap_text 'Session history'
+    wait_for_text 'VERIFY_1015_PAGE_1_LINE_'
+    shot information-history-reopened
+    adb shell input keyevent KEYCODE_BACK
+    wait_for_absence 'Back to live'
+    for attempt in {1..30}; do
+        if sudo -u verifyssh tmux capture-pane -p -t verify-session:0.0 | grep -Fx 'VERIFY_1015_LIVE'; then break; fi
+        sleep 1
+    done
+    [[ "$(sudo -u verifyssh tmux display-message -p -t verify-session:0.0 '#{alternate_on} #{pane_in_mode}')" == '1 0' ]]
+    sudo -u verifyssh tmux capture-pane -p -t verify-session:0.0 > "$EVIDENCE/information-live-after-back.txt"
+    grep -Fx 'VERIFY_1015_LIVE' "$EVIDENCE/information-live-after-back.txt"
+    wait_for_text VERIFY_1015_LIVE
+    shot information-system-back
+    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/information-receipts.txt"
+    grep -E '^VERIFY_1015_SETUP height=[0-9]+ pages=3 pane=%[0-9]+$' "$EVIDENCE/information-receipts.txt"
+    [[ $(grep -c '^VERIFY_1015_PAGEUP page=1 ' "$EVIDENCE/information-receipts.txt") -ge 2 ]]
+    grep -E '^VERIFY_1015_PAGEUP page=2 key=' "$EVIDENCE/information-receipts.txt"
+    [[ $(grep -c '^VERIFY_1015_END key=' "$EVIDENCE/information-receipts.txt") -ge 2 ]]
+    ! grep -F 'VERIFY_1015_UNKNOWN' "$EVIDENCE/information-receipts.txt"
+    tap_desc Back
+    wait_for_text Inbox
+    tap_text Favorites
+    wait_for_text verify-session
+    wait_for_text verify-keep
+    dump_ui
+    python3 tools/account-journey/ui.py "$EVIDENCE/current.xml" selected Favorites
+    favorites_snapshot true information-final-state
+    cmp "$EVIDENCE/favorites-restored-state.json" "$EVIDENCE/information-final-state.json"
+    sudo -u verifyssh tmux has-session -t verify-session
+    sudo -u verifyssh tmux has-session -t verify-keep
+    sudo -u verifyssh tmux capture-pane -p -J -S -5000 -t verify-keep:0.0 > "$EVIDENCE/information-neighbor-after.txt"
+    sudo cat /home/verifyssh/keep-receipts.txt > "$EVIDENCE/information-neighbor-receipts-after.txt"
+    cmp "$EVIDENCE/information-neighbor-before.txt" "$EVIDENCE/information-neighbor-after.txt"
+    cmp "$EVIDENCE/information-neighbor-receipts-before.txt" "$EVIDENCE/information-neighbor-receipts-after.txt"
+    shot information-favorites-final
     printf 'SIGNED_OFFLINE_FAVORITES_OK\n' | tee "$EVIDENCE/favorites-result.txt"
     exit 0
 fi

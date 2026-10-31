@@ -124,6 +124,9 @@ elif [[ "${VERIFY_FEATURE:-}" == chat-queued.md || "${VERIFY_FEATURE:-}" == chat
         jq -e '.rows[0].id == "sentinelclaude000000000000000001"' "$EVIDENCE/shared-neighbor-before.json" >/dev/null
         jq -e '.rows[0].id == "sentinelcodex0000000000000000002"' "$EVIDENCE/shared-codex-neighbor-before.json" >/dev/null
     fi
+elif [[ "${VERIFY_FEATURE:-}" == session-favorites.md ]]; then
+    [[ "${GITHUB_ACTIONS:-}" == true && "$FIXTURE" == "$RUNNER_TEMP/verify-ssh" ]]
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'exec env GITHUB_ACTIONS=true HOME=/home/verifyssh VERIFY_INFORMATION_1015=true python3 -u /home/verifyssh/console.py /home/verifyssh/receipts.txt'
 elif [[ "${VERIFY_FEATURE:-}" == chat-resync.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true ]]
     sudo install -m 644 app/src/main/assets/chat_history_reader.py /home/verifyssh/recovery-reader.py
@@ -147,6 +150,7 @@ if [[ "${VERIFY_FEATURE:-}" == session-favorites.md ]]; then
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh bash -c '
         [[ "$GITHUB_ACTIONS" == true && "$HOME" == /home/verifyssh && "$(id -u)" -ne 0 && "$(id -un)" == verifyssh ]]
         tmux has-session -t verify-session
+        : > /home/verifyssh/keep-receipts.txt
         tmux new-session -d -s verify-keep -x 100 -y 32 "python3 -u /home/verifyssh/console.py /home/verifyssh/keep-receipts.txt"
         tmux set-window-option -t verify-keep automatic-rename off
         tmux rename-window -t verify-keep verify-keep
