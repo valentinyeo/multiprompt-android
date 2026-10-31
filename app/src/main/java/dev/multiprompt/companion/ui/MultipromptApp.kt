@@ -2331,6 +2331,8 @@ internal fun ReaderTopBar(
     onMenuClick: () -> Unit,
     menuContent: @Composable () -> Unit,
     onBack: () -> Unit = {},
+    botFace: Int? = null,
+    botColor: Int? = null,
 ) {
     var modelMenuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     if (LocalReaderStyle.current) {
@@ -2352,7 +2354,7 @@ internal fun ReaderTopBar(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        BotAvatar(session.name, 28.dp, workspaceColor = session.workspaceColor)
+                        BotAvatar(session.name, 28.dp, workspaceColor = session.workspaceColor, face = botFace, color = botColor)
                         Text(
                             session.displayName,
                             modifier = Modifier.weight(1f, fill = false),
@@ -2390,7 +2392,7 @@ internal fun ReaderTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                BotAvatar(session.name, 28.dp, workspaceColor = session.workspaceColor)
+                BotAvatar(session.name, 28.dp, workspaceColor = session.workspaceColor, face = botFace, color = botColor)
                 Box(Modifier.weight(1f)) {
                     Column(
                         Modifier
@@ -2538,6 +2540,7 @@ internal fun ReaderScreen(
         ?: DictationState(configured = sharedDictationState.configured)
     val draftContext = LocalContext.current.applicationContext
     val draftStore = remember(draftContext) { SessionReadStore(draftContext) }
+    var botLookOpen by remember(session.hostId, session.name) { mutableStateOf(false) }
     var promptField by remember(connection) {
         mutableStateOf(TextFieldValue(draftStore.composerDraft(session)))
     }
@@ -2951,6 +2954,68 @@ internal fun ReaderScreen(
             }, modifier = Modifier.fillMaxWidth(), enabled = imageKeyDraft.isNotBlank())
         }
     }
+    if (botLookOpen) {
+        KitSheet(onDismiss = { botLookOpen = false }) {
+            var pickedFace by remember(session.hostId, session.name) { mutableStateOf(draftStore.botFace(session)) }
+            var pickedColor by remember(session.hostId, session.name) { mutableStateOf(draftStore.botColor(session)) }
+            Text("Bot look", style = Kit.Heading, color = Kit.Text)
+            Column(
+                Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("Face", style = Kit.Label, color = Kit.TextMuted)
+                (0 until 20).chunked(5).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { index ->
+                            Box(
+                                Modifier
+                                    .size(48.dp)
+                                    .clickable {
+                                        pickedFace = index
+                                        draftStore.setBotFace(session, index)
+                                    }
+                                    .border(if (pickedFace == index) 3.dp else 1.dp, if (pickedFace == index) Kit.Text else Kit.Outline, CircleShape),
+                            ) {
+                                BotAvatar(
+                                    session.name,
+                                    44.dp,
+                                    Modifier.align(Alignment.Center),
+                                    workspaceColor = session.workspaceColor,
+                                    face = index,
+                                    color = pickedColor,
+                                )
+                            }
+                        }
+                    }
+                }
+                Text("Colour", style = Kit.Label, color = Kit.TextMuted)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    (0..6).forEach { index ->
+                        Box(
+                            Modifier
+                                .size(28.dp)
+                                .background(botColor(index), CircleShape)
+                                .border(if (pickedColor == index) 3.dp else 1.dp, if (pickedColor == index) Kit.Text else Kit.Outline, CircleShape)
+                                .clickable {
+                                    pickedColor = index
+                                    draftStore.setBotColor(session, index)
+                                },
+                        )
+                    }
+                    Text(
+                        "Auto",
+                        modifier = Modifier.clickable {
+                            pickedColor = null
+                            draftStore.setBotColor(session, null)
+                        }.padding(start = 4.dp),
+                        style = Kit.Label,
+                        color = if (pickedColor == null) Kit.Text else Kit.TextMuted,
+                    )
+                }
+            }
+            KitPrimaryButton("Done", onClick = { botLookOpen = false }, modifier = Modifier.fillMaxWidth())
+        }
+    }
     if (historyDialogOpen) {
         SessionHistorySheet(connection.historyPages, connection::loadOlderHistoryPage) {
             historyDialogOpen = false
@@ -2974,6 +3039,8 @@ internal fun ReaderScreen(
         topBar = {
             ReaderTopBar(
                 onBack = onBack,
+                botFace = draftStore.botFace(session),
+                botColor = draftStore.botColor(session),
                 session = session,
                 modelLabel = runtimeDetails.label,
                 statusLabel = statusLabel,
@@ -3126,6 +3193,13 @@ internal fun ReaderScreen(
                                                 android.widget.Toast.makeText(context, "No reply to read yet", android.widget.Toast.LENGTH_SHORT).show()
                                             }
                                         }
+                                    },
+                                )
+                                KitMenuRow(
+                                    label = "Bot look",
+                                    onClick = {
+                                        menuExpanded = false
+                                        botLookOpen = true
                                     },
                                 )
                                 KitDivider()

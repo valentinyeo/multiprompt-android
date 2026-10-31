@@ -24,10 +24,10 @@ import androidx.compose.ui.unit.dp
 
 internal data class BotAppearance(val face: Int, val color: Int) {
     companion object {
-        fun forSession(name: String, workspaceColor: Int = 0): BotAppearance {
+        fun forSession(name: String, workspaceColor: Int = 0, face: Int? = null, color: Int? = null): BotAppearance {
             var hash = 2166136261u
             for (byte in name.toByteArray(Charsets.UTF_8)) hash = (hash xor byte.toUByte().toUInt()) * 16777619u
-            return BotAppearance((hash % 20u).toInt(), workspaceColor)
+            return BotAppearance(face?.mod(20) ?: (hash % 20u).toInt(), color?.mod(7) ?: workspaceColor)
         }
     }
 }
@@ -37,8 +37,15 @@ private val botColors = listOf(0xFF95DE69, 0xFFFF6F28, 0xFFFFC455, 0xFF5A9AE9, 0
 internal fun botColor(index: Int): Color = botColors[index.mod(botColors.size)]
 
 @Composable
-internal fun BotAvatar(sessionName: String, diameter: Dp = 48.dp, modifier: Modifier = Modifier, workspaceColor: Int = 0) {
-    val appearance = remember(sessionName, workspaceColor) { BotAppearance.forSession(sessionName, workspaceColor) }
+internal fun BotAvatar(
+    sessionName: String,
+    diameter: Dp = 48.dp,
+    modifier: Modifier = Modifier,
+    workspaceColor: Int = 0,
+    face: Int? = null,
+    color: Int? = null,
+) {
+    val appearance = remember(sessionName, workspaceColor, face, color) { BotAppearance.forSession(sessionName, workspaceColor, face, color) }
     Canvas(modifier.size(diameter).clip(CircleShape).semantics { contentDescription = "Robot $sessionName" }) {
         drawCircle(Color(0xFF1E1E1E))
         scale(size.width / 256f, size.height / 256f, Offset.Zero) {
