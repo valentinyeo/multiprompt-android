@@ -6,7 +6,7 @@ Both platforms must use the raw tmux session name, not the editable display name
 
 Face order: Classic, Happy, Square eyes, Calm, Cyclops, Wink, Curious, Dome, Peek left, Peek left square eyes, Rise from bottom, Square head, Tilted, Close-up, TV, Headphones, Profile, Corner peek, Grill mouth, Hang from top.
 
-Colour order: White `#FFFFFF`, Sage `#A9C29A`, Clay `#C98F72`, Sand `#D4BE94`, Mist `#93A9C4`, Lilac `#B7A6D6`, Rose `#D9A0A8`, Mint `#9DD3C4`.
+Colour order: White `#FFFFFF`, Sage `#95DE69`, Clay `#FF6F28`, Sand `#FFC455`, Mist `#5A9AE9`, Lilac `#9F6CFC`, Rose `#FF667B`, Mint `#5EFED1`.
 
 Cross-platform vectors: `HT Product Lead` → face 0, colour 3; `SF Design Lead` → face 8, colour 3; `机器人` → face 9, colour 4. Renaming the displayed title does not change the robot.
 
