@@ -221,6 +221,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             readerTechnicalMode = sessionReads.readerTechnicalMode(),
             shellFontSize = sessionReads.shellFontSize(),
             appTheme = sessionReads.appTheme(),
+            sessionBucket = SessionBucket.entries.firstOrNull { it.name == sessionReads.sessionBucket() } ?: SessionBucket.OPEN,
             dissolvedSessions = dissolvedStore.load(),
             crashReport = crashReportStore.loadForDisplay(),
         ).let { initial ->
@@ -967,6 +968,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectSessionBucket(bucket: SessionBucket) {
+        sessionReads.setSessionBucket(bucket.name)
         _state.update { it.copy(sessionBucket = bucket) }
     }
 

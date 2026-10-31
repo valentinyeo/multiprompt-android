@@ -185,6 +185,12 @@ class SessionReadStore(context: Context) {
         preferences.edit().putBoolean(ALL_SPLIT_ON_RIGHT, enabled).apply()
     }
 
+    fun sessionBucket(): String? = preferences.getString(SESSION_BUCKET, null)
+
+    fun setSessionBucket(bucket: String) {
+        preferences.edit().putString(SESSION_BUCKET, bucket).apply()
+    }
+
     fun displayName(session: TmuxSession): String? =
         preferences.getString(displayNameKey(session.hostId, session.name), null)
             ?.takeIf(String::isNotBlank)
@@ -228,6 +234,7 @@ class SessionReadStore(context: Context) {
         private const val SUNLIGHT_MODE = "sunlight_mode"
         private const val NEWEST_SESSIONS_AT_BOTTOM = "newest_sessions_at_bottom"
         private const val ALL_SPLIT_ON_RIGHT = "all_split_on_right"
+        private const val SESSION_BUCKET = "session_bucket"
         private const val DISPLAY_NAME_PREFIX = "display_name::"
         private const val INTERACTION_PREFIX = "interaction::"
         private const val DEFAULT_FONT_SCALE = 1f
