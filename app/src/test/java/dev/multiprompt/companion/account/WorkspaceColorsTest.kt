@@ -121,8 +121,8 @@ class WorkspaceColorsTest {
     }
 
     @Test fun onlyDesktopPaletteIndicesAreAccepted() {
-        for (color in 0..6) assertEquals(color, layout(color).json().getJSONArray("workspaces").getJSONObject(0).getInt("color"))
-        for (color in listOf(-1, 7, 1.5, "1", true, JSONObject.NULL)) {
+        for (color in 0..10) assertEquals(color, layout(color).json().getJSONArray("workspaces").getJSONObject(0).getInt("color"))
+        for (color in listOf(-1, 11, 1.5, "1", true, JSONObject.NULL)) {
             val json = layout().json().apply { getJSONArray("workspaces").getJSONObject(0).put("color", color) }
             assertThrows(Exception::class.java) { AccountLayout.parse(json) }
         }
