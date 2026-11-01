@@ -75,8 +75,9 @@ internal fun ChatHistoryView(
     unreadMessageKey: String?,
     onMarkUnread: (String) -> Unit,
     onReaction: ((ChatHistoryMessage, ChatReactions.Emoji) -> Unit)? = null,
-    onSpeakableReplies: (List<String>) -> Unit = {},
+    onSpeakableReplies: (List<dev.multiprompt.companion.reader.ReadAloud.Spoken>) -> Unit = {},
     onChatReady: (Boolean) -> Unit = {},
+    focusKey: String? = null,
     bottomPadding: Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
@@ -87,6 +88,7 @@ internal fun ChatHistoryView(
     val speakable = remember(messages) { dev.multiprompt.companion.reader.ReadAloud.replies(messages) }
     LaunchedEffect(speakable) { onSpeakableReplies(speakable) }
     LaunchedEffect(state.loaded, state.history.sid) { onChatReady(state.loaded && state.history.sid.isNotEmpty()) }
+    LaunchedEffect(focusKey) { if (focusKey != null) highlightedKey = focusKey }
     val actionScope = rememberCoroutineScope()
     val context = LocalContext.current
     var retryRow by remember { mutableStateOf<Pair<dev.multiprompt.companion.reader.MessageProtocol.Row, Long>?>(null) }
