@@ -1155,6 +1155,7 @@ internal fun SessionsScreen(
     var bucketMenuExpanded by remember { mutableStateOf(false) }
     var settingsPage by remember { mutableStateOf(SettingsPage.HIDDEN) }
     var crashReportVisible by remember { mutableStateOf(false) }
+    var openRoom by remember { mutableStateOf<RoomSummary?>(null) }
     val searchFocusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
@@ -1553,7 +1554,6 @@ internal fun SessionsScreen(
     val roomsContext = LocalContext.current.applicationContext
     val roomStore = remember(roomsContext) { roomsContext.getSharedPreferences("rooms", android.content.Context.MODE_PRIVATE) }
     val rooms = remember(roomStore) { parseRooms(roomStore.getString("rooms", null)) }
-    var openRoom by remember { mutableStateOf<RoomSummary?>(null) }
     val roomStrip: @Composable () -> Unit = {
         rooms.forEach { room ->
             RoomRow(room) { openRoom = room }
