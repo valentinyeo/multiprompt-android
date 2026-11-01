@@ -227,7 +227,7 @@ internal fun ReplyableBubble(
                 group {
                     action("Copy", Icons.Default.ContentCopy) { clipboard.setText(AnnotatedString(text)); confirm("Copied") }
                     action("Select Text", Icons.Default.SelectAll) { selectable = true; confirm("Select text to copy") }
-                    action("Copy Request ID", Icons.Default.Tag) {
+                    action("Copy request ID", Icons.Default.Tag) {
                         if (messageId.isNotBlank()) {
                             clipboard.setText(AnnotatedString(messageId)); confirm("Request ID copied")
                         } else {
