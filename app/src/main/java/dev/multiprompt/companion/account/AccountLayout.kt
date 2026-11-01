@@ -14,11 +14,13 @@ data class AccountTab(
     val visits: List<Long>? = null,
     val input: Long? = null,
     val muted: Boolean? = null,
+    val face: Int? = null,
+    val color: Int? = null,
 ) {
     val identity: String get() = "$host:${session.lowercase(java.util.Locale.ROOT)}"
     fun json(): JSONObject = JSONObject().put("kind", "tmux").put("name", name)
         .put("tmux_session", session).put("tmux_host", host).put("workspace", workspace).put("manual", manual)
-        .apply { favorite?.let { put("favorite", it) }; muted?.let { put("muted", it) }; used?.let { put("used", it) }; input?.let { put("input", it) }; visits?.let { put("visits", JSONArray(it)) } }
+        .apply { favorite?.let { put("favorite", it) }; muted?.let { put("muted", it) }; used?.let { put("used", it) }; input?.let { put("input", it) }; visits?.let { put("visits", JSONArray(it)) }; face?.let { put("face", it) }; color?.let { put("color", it) } }
 }
 
 data class AccountLayout(
@@ -81,6 +83,10 @@ data class AccountLayout(
             if (it.identity == identity) it.copy(visits = mergeVisits(it.visits, listOf(startedAt))) else it
         }).validate()
     }
+    fun setAppearance(identity: String, face: Int?, color: Int?): AccountLayout = copy(tabs = tabs.map {
+        if (it.identity == identity) it.copy(face = face, color = color) else it
+    }).validate()
+
     fun setWorkspaceColor(name: String, color: Int?): AccountLayout = copy(
         workspaceColors = if (color == null) workspaceColors - name else workspaceColors + (name to color),
     ).validate()
@@ -125,7 +131,7 @@ data class AccountLayout(
                 val t = tabs.getJSONObject(it)
                 val required = setOf("kind", "name", "tmux_session", "tmux_host", "workspace")
                 val keys = t.keys().asSequence().toSet()
-                require(keys.containsAll(required) && (keys - required).all { it in setOf("manual", "favorite", "muted", "used", "visits", "input") } && t.get("kind") == "tmux")
+                require(keys.containsAll(required) && (keys - required).all { it in setOf("manual", "favorite", "muted", "used", "visits", "input", "face", "color") } && t.get("kind") == "tmux")
                 require(listOf("name", "tmux_session", "workspace").all { key -> t.get(key) is String })
                 val host = t.get("tmux_host")
                 require(host is Number && host.toDouble() == host.toInt().toDouble())
@@ -148,9 +154,13 @@ data class AccountLayout(
                         value.toLong()
                     }
                 } else null
+                val face = if (t.has("face")) t.getInt("face") else null
+                require(face == null || face in 0..19)
+                val color = if (t.has("color")) t.getInt("color") else null
+                require(color == null || color in 0..6)
                 AccountTab(t.getString("name"), t.getString("tmux_session"), host.toInt(), t.getString("workspace"),
                     t.optBoolean("manual", false), if (t.has("favorite")) t.getBoolean("favorite") else null, (used as? Number)?.toLong(), visits, (input as? Number)?.toLong(),
-                    if (t.has("muted")) t.getBoolean("muted") else null)
+                    if (t.has("muted")) t.getBoolean("muted") else null, face, color)
             }, settings, if (json.has("hosts")) AccountHosts.parse(json.opt("hosts")) else null,
                 (0 until ws.length()).map { ws.getJSONObject(it) }.filter { it.has("color") }
                     .associate { it.getString("name") to it.getInt("color") }).validate()
@@ -180,6 +190,8 @@ data class AccountLayout(
                     workspace = if (e.workspace != b.workspace) e.workspace else r.workspace,
                     favorite = if (e.favorite != b.favorite) e.favorite else r.favorite,
                     muted = if (e.muted != b.muted) e.muted else r.muted,
+                    face = if (e.face != b.face) e.face else r.face,
+                    color = if (e.color != b.color) e.color else r.color,
                     used = listOfNotNull(b.used, e.used, r.used).maxOrNull(),
                     input = listOfNotNull(b.input, e.input, r.input).maxOrNull(),
                     visits = mergeVisits(b.visits, e.visits, r.visits),

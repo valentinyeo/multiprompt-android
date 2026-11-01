@@ -423,6 +423,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             onRename = { name -> viewModel.renameSession(readerSession, name) },
             onDissolve = { viewModel.dissolveSession(readerSession) },
             onEnd = { viewModel.endSession(readerSession) },
+            onBotAppearance = viewModel::setAccountBotAppearance,
             onSessionInteraction = { viewModel.noteSessionInteraction(readerSession) },
             onSessionInput = { viewModel.stampSessionInput(readerSession) },
             technicalMode = state.readerTechnicalMode,
@@ -2515,6 +2516,7 @@ internal fun ReaderScreen(
     onRename: (String) -> String?,
     onDissolve: () -> Unit,
     onEnd: () -> Unit,
+    onBotAppearance: (String, Int?, Int?) -> Unit = { _, _, _ -> },
     onSessionInteraction: () -> Unit,
     onSessionInput: () -> Unit,
     technicalMode: Boolean,
@@ -2990,8 +2992,14 @@ internal fun ReaderScreen(
             session = session,
             face = draftStore.botFace(session),
             color = draftStore.botColor(session),
-            onPickFace = { draftStore.setBotFace(session, it) },
-            onPickColor = { draftStore.setBotColor(session, it) },
+            onPickFace = { face ->
+                draftStore.setBotFace(session, face)
+                onBotAppearance(session.hostId + ":" + session.name.lowercase(), face, draftStore.botColor(session))
+            },
+            onPickColor = { color ->
+                draftStore.setBotColor(session, color)
+                onBotAppearance(session.hostId + ":" + session.name.lowercase(), draftStore.botFace(session), color)
+            },
             onDismiss = { botLookOpen = false },
         )
     }

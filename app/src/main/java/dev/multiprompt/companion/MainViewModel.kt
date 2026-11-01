@@ -1638,6 +1638,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } catch (e: Exception) { e.message ?: "Could not save account edit" }
     }
 
+    fun setAccountBotAppearance(identity: String, face: Int?, color: Int?) {
+        editAccountLayout { it.setAppearance(identity, face, color) }?.let { error -> _state.update { it.copy(accountError = error) } }
+    }
+
     fun setAccountWorkspaceColor(name: String, color: Int?) {
         editAccountLayout { it.setWorkspaceColor(name, color) }?.let { error -> _state.update { it.copy(accountError = error) } }
     }
