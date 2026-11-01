@@ -16,7 +16,7 @@ class ReadAloudTest {
                 message("assistant", "second answer"),
             ),
         )
-        assertEquals(listOf("second answer", "first answer"), replies)
+        assertEquals(listOf("second answer", "first answer"), replies.map { it.text })
     }
 
     @Test fun emptyToolOnlyAndPendingRepliesStaySilent() {
@@ -28,14 +28,14 @@ class ReadAloudTest {
                 message("assistant", "real answer"),
             ),
         )
-        assertEquals(listOf("real answer"), replies)
+        assertEquals(listOf("real answer"), replies.map { it.text })
     }
 
     @Test fun eachPressReadsTheNextOlderReplyThenWraps() {
-        val replies = listOf("newest", "older")
-        assertEquals("newest" to 1, ReadAloud.next(replies, 0))
-        assertEquals("older" to 2, ReadAloud.next(replies, 1))
-        assertEquals("newest" to 1, ReadAloud.next(replies, 2))
+        val replies = listOf(ReadAloud.Spoken("a", "newest"), ReadAloud.Spoken("b", "older"))
+        assertEquals(ReadAloud.Spoken("a", "newest") to 1, ReadAloud.next(replies, 0))
+        assertEquals(ReadAloud.Spoken("b", "older") to 2, ReadAloud.next(replies, 1))
+        assertEquals(ReadAloud.Spoken("a", "newest") to 1, ReadAloud.next(replies, 2))
         assertEquals(null, ReadAloud.next(emptyList(), 0))
     }
 }

@@ -2717,11 +2717,12 @@ internal fun ReaderScreen(
     val density = LocalDensity.current
     val context = LocalContext.current
     val readerScope = rememberCoroutineScope()
-    var speakableReplies by remember { mutableStateOf<List<String>>(emptyList()) }
+    var speakableReplies by remember { mutableStateOf<List<dev.multiprompt.companion.reader.ReadAloud.Spoken>>(emptyList()) }
     var chatReady by remember(session.hostId, session.name) { mutableStateOf(false) }
     var waitingSend by remember(session.hostId, session.name) { mutableStateOf<String?>(null) }
     var replyCursor by remember { mutableStateOf(0) }
     var reading by remember { mutableStateOf(false) }
+    var speakingKey by remember { mutableStateOf<String?>(null) }
     val speech = remember { android.speech.tts.TextToSpeech(context.applicationContext) { } }
     LaunchedEffect(session.hostId, session.name) {
         speech.stop()
@@ -3285,10 +3286,12 @@ internal fun ReaderScreen(
                                         if (reading) {
                                             speech.stop()
                                             reading = false
+                                            speakingKey = null
                                         } else {
                                             val next = dev.multiprompt.companion.reader.ReadAloud.next(speakableReplies, replyCursor)
                                             if (next != null) {
-                                                speech.speak(next.first, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "reply")
+                                                speech.speak(next.first.text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "reply")
+                                                speakingKey = next.first.key
                                                 replyCursor = next.second
                                                 reading = true
                                             } else {
@@ -3679,6 +3682,7 @@ internal fun ReaderScreen(
                 onReply = chooseReply,
                 onSpeakableReplies = { speakableReplies = it; if (it.isEmpty()) { reading = false; replyCursor = 0 } },
                 onChatReady = { chatReady = it },
+                focusKey = speakingKey,
                 onReaction = { message, emoji ->
                     val line = dev.multiprompt.companion.reader.ChatReactions.format(emoji, message.requestId, message.text)
                     if (line != null) readerScope.launch {

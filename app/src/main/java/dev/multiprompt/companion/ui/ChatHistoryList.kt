@@ -75,8 +75,9 @@ internal fun ChatHistoryView(
     unreadMessageKey: String?,
     onMarkUnread: (String) -> Unit,
     onReaction: ((ChatHistoryMessage, ChatReactions.Emoji) -> Unit)? = null,
-    onSpeakableReplies: (List<String>) -> Unit = {},
+    onSpeakableReplies: (List<dev.multiprompt.companion.reader.ReadAloud.Spoken>) -> Unit = {},
     onChatReady: (Boolean) -> Unit = {},
+    focusKey: String? = null,
     bottomPadding: Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
@@ -158,6 +159,7 @@ internal fun ChatHistoryView(
         }
         ChatHistoryList(
             messages = messages,
+            focusKey = focusKey,
             loaded = state.loaded,
             hasOlder = !state.loaded || state.history.start > 0 || state.history.more,
             agent = agent,
@@ -206,6 +208,7 @@ internal fun ChatHistoryView(
 internal fun ChatHistoryList(
     messages: List<ChatHistoryMessage>,
     modifier: Modifier = Modifier,
+    focusKey: String? = null,
     loaded: Boolean = true,
     agent: AgentKind = AgentKind.CLAUDE,
     fontScale: Float = 1f,
@@ -239,6 +242,7 @@ internal fun ChatHistoryList(
     val nearTop by rememberUpdatedState(onNearTop)
     var pendingJump by remember { mutableStateOf<ReplyJump?>(null) }
     var highlightedKey by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(focusKey) { if (focusKey != null) highlightedKey = focusKey }
     val context = LocalContext.current
     LaunchedEffect(pendingJump, presentation.messages, hasOlder, loaded, questions, working) {
         val request = pendingJump ?: return@LaunchedEffect
