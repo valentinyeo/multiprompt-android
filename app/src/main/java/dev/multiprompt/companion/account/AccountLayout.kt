@@ -33,7 +33,7 @@ data class AccountLayout(
     val workspaceColors: Map<String, Int> = emptyMap(),
 ) {
     fun validate(): AccountLayout {
-        require(workspaceColors.all { (name, color) -> name in workspaces && color in 0..6 }) { "Invalid workspace color" }
+        require(workspaceColors.all { (name, color) -> name in workspaces && color in 0..10 }) { "Invalid workspace color" }
         require(hosts == null || AccountHosts.parse(JSONArray(hosts.map { it.json() })) == hosts) { "Invalid layout hosts" }
         require(removedHosts.size <= 3 && removedHosts.distinct().size == removedHosts.size && removedHosts.all { it in 0..2 }) { "Invalid removed hosts" }
         require(settings == null || settings.keys.all { it in setOf("frequent", "favorites", "all", "frequent_first") }) { "Invalid layout settings" }
@@ -130,7 +130,7 @@ data class AccountLayout(
                 require(w.keys().asSequence().toSet() in setOf(setOf("name"), setOf("name", "color")) && w.get("name") is String)
                 if (w.has("color")) {
                     val color = w.get("color")
-                    require(color is Number && color.toDouble() in 0.0..6.0 && color.toDouble() == color.toInt().toDouble())
+                    require(color is Number && color.toDouble() in 0.0..10.0 && color.toDouble() == color.toInt().toDouble())
                 }
                 w.getString("name")
             }, (0 until tabs.length()).map {
@@ -163,7 +163,7 @@ data class AccountLayout(
                 val face = if (t.has("face")) t.getInt("face") else null
                 require(face == null || face in 0..19)
                 val color = if (t.has("color")) t.getInt("color") else null
-                require(color == null || color in 0..6)
+                require(color == null || color in 0..10)
                 AccountTab(t.getString("name"), t.getString("tmux_session"), host.toInt(), t.getString("workspace"),
                     t.optBoolean("manual", false), if (t.has("favorite")) t.getBoolean("favorite") else null, (used as? Number)?.toLong(), visits, (input as? Number)?.toLong(),
                     if (t.has("muted")) t.getBoolean("muted") else null, face, color)
