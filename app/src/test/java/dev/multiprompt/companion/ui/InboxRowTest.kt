@@ -35,7 +35,7 @@ class InboxRowTest {
 
     @Test
     fun botNamesKeepEmojiAndAccents() {
-        compose.setContent { M3TestScreen(M3Screen.INBOX_NAMES, material3 = false, sunlight = false) }
+        compose.setContent { EmojiNamesInbox() }
         compose.onNodeWithText("Rocket 🤖 Chief").assertIsDisplayed()
         compose.onNodeWithText("Kraków 🚀 Lead").assertIsDisplayed()
         compose.onNodeWithContentDescription("Robot Rocket 🤖 Chief", useUnmergedTree = true).assertIsDisplayed()
