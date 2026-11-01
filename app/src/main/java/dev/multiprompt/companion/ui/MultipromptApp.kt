@@ -1547,6 +1547,14 @@ internal fun SessionsScreen(
     } else {
         emptyList()
     }
+    val roomsContext = LocalContext.current.applicationContext
+    val roomStore = remember(roomsContext) { roomsContext.getSharedPreferences("rooms", android.content.Context.MODE_PRIVATE) }
+    val rooms = remember(roomStore) { parseRooms(roomStore.getString("rooms", null)) }
+    val roomStrip: @Composable () -> Unit = {
+        rooms.forEach { room ->
+            RoomRow(room) { }
+        }
+    }
     val pinnedStrip: @Composable () -> Unit = {
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
@@ -1815,6 +1823,9 @@ internal fun SessionsScreen(
             contentPadding = PaddingValues(top = padding.calculateTopPadding() + 4.dp, bottom = padding.calculateBottomPadding() + 4.dp),
             reverseLayout = reversedSessions,
         ) {
+            if (rooms.isNotEmpty()) {
+                item(key = "rooms") { roomStrip() }
+            }
             if (!reversedSessions && pinnedSessions.isNotEmpty()) {
                 item(key = "pinned-sessions") { pinnedStrip() }
             }
