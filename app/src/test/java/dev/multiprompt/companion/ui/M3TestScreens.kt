@@ -46,7 +46,6 @@ internal fun M3TestScreen(screen: M3Screen, material3: Boolean, sunlight: Boolea
 }
 
 @Composable
-@Composable
 internal fun EmojiNamesInbox() {
     MultipromptTheme(sunlight = false, material3 = false) {
         Surface {
