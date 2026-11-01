@@ -137,7 +137,7 @@ class RobotFacesTest {
         compose.onNodeWithText("Face").assertIsDisplayed()
         compose.onNodeWithText("Colour").assertIsDisplayed()
         compose.onNodeWithText("Auto").assertIsDisplayed()
-        screenshot("bot-look-sheet")
+        deviceScreenshot("bot-look-sheet")
     }
 
     private fun assertWorkspaceHue(session: String, color: Int) {
@@ -156,6 +156,13 @@ class RobotFacesTest {
             }
         }
         assertTrue("workspace hue $color missing for $session", tinted > pixels.size * .08)
+        bitmap.recycle()
+    }
+
+    private fun deviceScreenshot(name: String) {
+        val directory = File(checkNotNull(InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")), "robot-faces").apply { mkdirs() }
+        val bitmap = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+        File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
     }
 
