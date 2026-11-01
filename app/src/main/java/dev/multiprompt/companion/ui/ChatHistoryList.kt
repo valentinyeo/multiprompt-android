@@ -159,6 +159,7 @@ internal fun ChatHistoryView(
         }
         ChatHistoryList(
             messages = messages,
+            focusKey = focusKey,
             loaded = state.loaded,
             hasOlder = !state.loaded || state.history.start > 0 || state.history.more,
             agent = agent,
@@ -207,6 +208,7 @@ internal fun ChatHistoryView(
 internal fun ChatHistoryList(
     messages: List<ChatHistoryMessage>,
     modifier: Modifier = Modifier,
+    focusKey: String? = null,
     loaded: Boolean = true,
     agent: AgentKind = AgentKind.CLAUDE,
     fontScale: Float = 1f,
