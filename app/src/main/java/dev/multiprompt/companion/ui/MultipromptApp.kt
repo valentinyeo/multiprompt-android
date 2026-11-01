@@ -1597,6 +1597,15 @@ internal fun SessionsScreen(
     val roomStore = remember(roomsContext) { roomsContext.getSharedPreferences("rooms", android.content.Context.MODE_PRIVATE) }
     val drafts = remember(roomsContext) { SessionReadStore(roomsContext) }
     val rooms = remember(roomStore) { parseRooms(roomStore.getString("rooms", null)) }
+    val botLooks = remember(state.inboxSessions, state.readerSession) {
+        state.inboxSessions.associate { session ->
+            SessionReadStore.key(session.hostId, session.name) to BotLook(
+                picture = drafts.botPicture(session),
+                face = drafts.botFace(session),
+                color = drafts.botColor(session),
+            )
+        }
+    }
     val roomStrip: @Composable () -> Unit = {
         rooms.forEach { room ->
             RoomRow(room) { openRoom = room }
@@ -1891,11 +1900,7 @@ internal fun SessionsScreen(
                         val key = SessionReadStore.key(session.hostId, session.name)
                         if (key in chosenBots) chosenBots.remove(key) else chosenBots.add(key)
                     } else null,
-                    LocalBotLook provides BotLook(
-                        picture = drafts.botPicture(session),
-                        face = drafts.botFace(session),
-                        color = drafts.botColor(session),
-                    ),
+                    LocalBotLook provides botLooks[key],
                     LocalStartSelection provides { session ->
                         selectingBots = true
                         chosenBots.clear()
