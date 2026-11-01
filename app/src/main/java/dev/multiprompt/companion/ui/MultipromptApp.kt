@@ -1595,6 +1595,7 @@ internal fun SessionsScreen(
     }
     val roomsContext = LocalContext.current.applicationContext
     val roomStore = remember(roomsContext) { roomsContext.getSharedPreferences("rooms", android.content.Context.MODE_PRIVATE) }
+    val drafts = remember(roomsContext) { SessionReadStore(roomsContext) }
     val rooms = remember(roomStore) { parseRooms(roomStore.getString("rooms", null)) }
     val roomStrip: @Composable () -> Unit = {
         rooms.forEach { room ->
@@ -1890,6 +1891,11 @@ internal fun SessionsScreen(
                         val key = SessionReadStore.key(session.hostId, session.name)
                         if (key in chosenBots) chosenBots.remove(key) else chosenBots.add(key)
                     } else null,
+                    LocalBotLook provides BotLook(
+                        picture = drafts.botPicture(session),
+                        face = drafts.botFace(session),
+                        color = drafts.botColor(session),
+                    ),
                     LocalStartSelection provides { session ->
                         selectingBots = true
                         chosenBots.clear()
@@ -2116,6 +2122,10 @@ private val LocalOpenSession = staticCompositionLocalOf<String?> { null }
 
 private class BotSelection(val keys: Set<String>, val onToggle: (TmuxSession) -> Unit)
 
+private class BotLook(val picture: String?, val face: Int?, val color: Int?)
+
+private val LocalBotLook = staticCompositionLocalOf<BotLook?> { null }
+
 private val LocalBotSelection = staticCompositionLocalOf<BotSelection?> { null }
 
 private val LocalStartSelection = staticCompositionLocalOf<((TmuxSession) -> Unit)?> { null }
@@ -2208,7 +2218,13 @@ private fun SessionCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                BotAvatar(session.name, workspaceColor = session.workspaceColor)
+                BotAvatar(
+                    session.name,
+                    workspaceColor = session.workspaceColor,
+                    face = LocalBotLook.current?.face,
+                    color = LocalBotLook.current?.color,
+                    picture = LocalBotLook.current?.picture,
+                )
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         session.displayName,
