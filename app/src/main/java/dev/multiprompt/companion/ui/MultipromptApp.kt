@@ -1155,6 +1155,7 @@ internal fun SessionsScreen(
     var bucketMenuExpanded by remember { mutableStateOf(false) }
     var settingsPage by remember { mutableStateOf(SettingsPage.HIDDEN) }
     var crashReportVisible by remember { mutableStateOf(false) }
+    var openRoom by remember { mutableStateOf<RoomSummary?>(null) }
     val searchFocusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
@@ -1360,6 +1361,9 @@ internal fun SessionsScreen(
             }
         }
     }
+    openRoom?.let { room ->
+        RoomScreen(room) { openRoom = null }
+    }
     if (crashReportVisible) {
         crashReport?.let { report ->
             val displayName = stringResource(R.string.app_name)
@@ -1552,7 +1556,7 @@ internal fun SessionsScreen(
     val rooms = remember(roomStore) { parseRooms(roomStore.getString("rooms", null)) }
     val roomStrip: @Composable () -> Unit = {
         rooms.forEach { room ->
-            RoomRow(room) { }
+            RoomRow(room) { openRoom = room }
         }
     }
     val pinnedStrip: @Composable () -> Unit = {
