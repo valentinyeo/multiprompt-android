@@ -36,6 +36,19 @@ internal fun BotLookSheet(
     var pickedFace by remember(session.hostId, session.name, face) { mutableStateOf(face) }
     var pickedColor by remember(session.hostId, session.name, color) { mutableStateOf(color) }
     KitSheet(onDismiss = onDismiss) {
+        BotLookContent(session, pickedFace, pickedColor, onPickFace = { pickedFace = it; onPickFace(it) }, onPickColor = { pickedColor = it; onPickColor(it) })
+    }
+}
+
+@Composable
+internal fun BotLookContent(
+    session: TmuxSession,
+    pickedFace: Int?,
+    pickedColor: Int?,
+    onPickFace: (Int) -> Unit,
+    onPickColor: (Int?) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Bot look", style = Kit.Heading, color = Kit.Text)
         Column(
             Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
@@ -48,10 +61,7 @@ internal fun BotLookSheet(
                         Box(
                             Modifier
                                 .size(48.dp)
-                                .clickable {
-                                    pickedFace = index
-                                    onPickFace(index)
-                                }
+                                .clickable { onPickFace(index) }
                                 .border(
                                     if (pickedFace == index) 3.dp else 1.dp,
                                     if (pickedFace == index) Kit.Text else Kit.Outline,
@@ -82,25 +92,18 @@ internal fun BotLookSheet(
                                 if (pickedColor == index) Kit.Text else Kit.Outline,
                                 CircleShape,
                             )
-                            .clickable {
-                                pickedColor = index
-                                onPickColor(index)
-                            },
+                            .clickable { onPickColor(index) },
                     )
                 }
                 Text(
                     "Auto",
                     modifier = Modifier
-                        .clickable {
-                            pickedColor = null
-                            onPickColor(null)
-                        }
+                        .clickable { onPickColor(null) }
                         .padding(start = 4.dp),
                     style = Kit.Label,
                     color = if (pickedColor == null) Kit.Text else Kit.TextMuted,
                 )
             }
         }
-        KitPrimaryButton("Done", onClick = onDismiss, modifier = Modifier.fillMaxWidth())
     }
 }
