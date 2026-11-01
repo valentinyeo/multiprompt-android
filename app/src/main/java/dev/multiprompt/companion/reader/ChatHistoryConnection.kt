@@ -66,7 +66,7 @@ class ChatHistoryConnection(
     private val account = listOf(host.id, host.hostname, host.port.toString(), host.username, host.hostKeyType.orEmpty(), host.hostKeyFingerprint.orEmpty(), host.hostKeys.joinToString(",")).joinToString("\u0000")
     private val cacheKey = listOf(host.id, host.hostname, host.port.toString(), host.username,
         identity.agent.name, identity.tmux, identity.cwd).joinToString("\u0000")
-    private val provider = when (identity.agent) { AgentKind.CLAUDE -> "claude"; AgentKind.CODEX -> "codex"; else -> null }
+    private val provider = when (identity.agent) { AgentKind.CLAUDE -> "claude"; AgentKind.CODEX -> "codex"; AgentKind.PI -> "pi"; else -> null }
     @Volatile private var selected = false
     @Volatile private var freshSid: String? = null
     @Volatile private var generation = 0L

@@ -180,7 +180,7 @@ class SessionReaderConnection(
     }
 
     suspend fun sendPrompt(text: String): PromptAdmission {
-        if (agent == AgentKind.CLAUDE || agent == AgentKind.CODEX) {
+        if (agent == AgentKind.CLAUDE || agent == AgentKind.CODEX || agent == AgentKind.PI) {
             return historyConnection?.submit(text) ?: PromptAdmission.Rejected("Chat is not ready")
         }
         val origin = historyConnection?.state?.value?.takeIf { it.loaded }?.history

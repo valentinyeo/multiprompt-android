@@ -3157,7 +3157,7 @@ internal fun ReaderScreen(
                                     label = "Reset this chat",
                                     onClick = {
                                         menuExpanded = false
-                                        val reset = if (session.agent == AgentKind.CLAUDE || session.agent == AgentKind.CODEX) connection.resetConversation() else null
+                                        val reset = if (session.agent == AgentKind.CLAUDE || session.agent == AgentKind.CODEX || session.agent == AgentKind.PI) connection.resetConversation() else null
                                         readerScope.launch {
                                             if (reset != null) {
                                                 val result = reset.await()

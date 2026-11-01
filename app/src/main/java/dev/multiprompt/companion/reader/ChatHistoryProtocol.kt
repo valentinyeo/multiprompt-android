@@ -119,7 +119,7 @@ object ChatHistoryProtocol {
         if (request == null) return@runCatching emptyList()
         val id = request.get("id") as? String ?: return@runCatching emptyList()
         val provider = (if (request.has("provider")) request.get("provider") as? String else "claude") ?: return@runCatching emptyList()
-        if (id.isBlank() || provider != agent || provider !in setOf("claude", "codex")) return@runCatching emptyList()
+        if (id.isBlank() || provider != agent || provider !in setOf("claude", "codex", "pi")) return@runCatching emptyList()
         val questions = request.get("questions") as? org.json.JSONArray ?: return@runCatching emptyList()
         require(questions.length() > 0)
         (0 until questions.length()).map { index ->
