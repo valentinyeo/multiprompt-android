@@ -1,5 +1,6 @@
 package dev.multiprompt.companion.ui
 
+import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Looper
@@ -40,10 +41,10 @@ import org.robolectric.util.ReflectionHelpers
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34], qualifiers = "w411dp-h891dp-xhdpi")
+@Config(sdk = [35], application = Application::class, qualifiers = "w390dp-h844dp-mdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class BotLookSheetTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createComposeRule(effectContext = UnconfinedTestDispatcher(scheduler))
     private val scheduler = TestCoroutineScheduler()
     private val session = TmuxSession("host", "bot-0", 1, 0, 0, accountName = "HT Product Lead")
 
