@@ -24,7 +24,14 @@ from pathlib import Path
 import sys
 path = Path(sys.argv[1])
 s = path.read_text()
-s = s.replace('color?.mod(7) ?: workspaceColor', 'color?.mod(7) ?: 0')
+anchor = 'color?.mod(7) ?: workspaceColor'
+if anchor in s:
+    s = s.replace(anchor, 'color?.mod(7) ?: 0')
+else:
+    legacy = '(hash % 20u).toInt(), workspaceColor'
+    if legacy not in s:
+        raise SystemExit('robot control cannot patch the workspace colour expression; update tools/robot-faces/proof.sh')
+    s = s.replace(legacy, '(hash % 20u).toInt(), 0')
 path.write_text(s)
 PYCONTROL
 if run_robots workspace-before; then echo 'Unshared colors unexpectedly match desktop' >&2; exit 1; fi
