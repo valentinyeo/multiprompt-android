@@ -24,7 +24,7 @@ from pathlib import Path
 import sys
 path = Path(sys.argv[1])
 s = path.read_text()
-s = s.replace('(hash % 20u).toInt(), workspaceColor', '(hash % 20u).toInt(), 0')
+s = s.replace('color?.mod(7) ?: workspaceColor', 'color?.mod(7) ?: 0')
 path.write_text(s)
 PYCONTROL
 if run_robots workspace-before; then echo 'Unshared colors unexpectedly match desktop' >&2; exit 1; fi
