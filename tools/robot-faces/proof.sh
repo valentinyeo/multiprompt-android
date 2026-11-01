@@ -49,4 +49,16 @@ trap - EXIT
 run_robots after
 test -s build/robot-faces/after/robot-inbox.png
 test -s build/robot-faces/after/robot-chat-title.png
+run_read_aloud() {
+    local status=0
+    rm -rf app/build/outputs/connected_android_test_additional_output app/build/outputs/androidTest-results/connected
+    "${GRADLE:-gradle}" --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2g connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.multiprompt.companion.ui.ReadAloudSoundTest > build/robot-faces/read-aloud.log 2>&1 || status=$?
+    cat build/robot-faces/read-aloud.log
+    local result
+    result=$(find app/build/outputs -type d -name robot-faces -print -quit)
+    if [ -n "$result" ]; then mkdir -p build/robot-faces/read-aloud && cp "$result"/* build/robot-faces/read-aloud/ 2>/dev/null || true; fi
+    return "$status"
+}
+run_read_aloud
+test -s build/robot-faces/read-aloud/read-aloud.wav
 echo ROBOT_FACES_EMULATOR_VERIFIED
