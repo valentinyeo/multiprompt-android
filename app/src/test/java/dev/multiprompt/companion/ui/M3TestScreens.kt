@@ -46,11 +46,27 @@ internal fun M3TestScreen(screen: M3Screen, material3: Boolean, sunlight: Boolea
 }
 
 @Composable
-private fun InboxFixture(screen: M3Screen, material3: Boolean, sunlight: Boolean) {
+internal fun EmojiNamesInbox() {
+    MultipromptTheme(sunlight = false, material3 = false) {
+        Surface {
+            InboxFixture(M3Screen.INBOX_LIST, material3 = false, sunlight = false, emojiNames = true)
+        }
+    }
+}
+
+@Composable
+private fun InboxFixture(screen: M3Screen, material3: Boolean, sunlight: Boolean, emojiNames: Boolean = false) {
     SessionsScreen(
         state = AppUiState(
             hosts = listOf(testHost),
-            sessions = listOf(testSession, testSession.copy(name = "codex-tests", lastActivityEpochSeconds = testSession.lastActivityEpochSeconds - 600)),
+            sessions = if (emojiNames) {
+                listOf(
+                    testSession.copy(name = "Rocket 🤖 Chief", accountName = "Rocket 🤖 Chief"),
+                    testSession.copy(name = "Kraków 🚀 Lead", accountName = "Kraków 🚀 Lead", lastActivityEpochSeconds = testSession.lastActivityEpochSeconds - 600),
+                )
+            } else {
+                listOf(testSession, testSession.copy(name = "codex-tests", lastActivityEpochSeconds = testSession.lastActivityEpochSeconds - 600))
+            },
             workspaces = listOf(testWorkspace),
             workspaceSplitIds = listOf(null, testWorkspace.id),
             sessionWorkspaceIds = mapOf(SessionReadStore.key("host", testSession.name) to testWorkspace.id),
