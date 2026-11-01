@@ -26,7 +26,7 @@ import dev.multiprompt.companion.upload.ScreencastUploader
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.robolectric.util.ReflectionHelpers
 
-enum class M3Screen { INBOX_SPLITS, INBOX_SEARCH, INBOX_LIST, SESSION, INBOX_MENU, SESSION_MENU }
+enum class M3Screen { INBOX_SPLITS, INBOX_SEARCH, INBOX_LIST, INBOX_NAMES, SESSION, INBOX_MENU, SESSION_MENU }
 
 private val testHost = HostProfile("host", "VPS", "example.com", username = "user", keySecretId = "key")
 private val testSession = TmuxSession("host", "claude-reader", 1, 0, System.currentTimeMillis() / 1000 - 120, preview = "Ready for your next prompt")
@@ -50,7 +50,14 @@ private fun InboxFixture(screen: M3Screen, material3: Boolean, sunlight: Boolean
     SessionsScreen(
         state = AppUiState(
             hosts = listOf(testHost),
-            sessions = listOf(testSession, testSession.copy(name = "codex-tests", lastActivityEpochSeconds = testSession.lastActivityEpochSeconds - 600)),
+            sessions = if (screen == M3Screen.INBOX_NAMES) {
+                listOf(
+                    testSession.copy(name = "Rocket 🤖 Chief", accountName = "Rocket 🤖 Chief"),
+                    testSession.copy(name = "Kraków 🚀 Lead", accountName = "Kraków 🚀 Lead", lastActivityEpochSeconds = testSession.lastActivityEpochSeconds - 600),
+                )
+            } else {
+                listOf(testSession, testSession.copy(name = "codex-tests", lastActivityEpochSeconds = testSession.lastActivityEpochSeconds - 600))
+            },
             workspaces = listOf(testWorkspace),
             workspaceSplitIds = listOf(null, testWorkspace.id),
             sessionWorkspaceIds = mapOf(SessionReadStore.key("host", testSession.name) to testWorkspace.id),
