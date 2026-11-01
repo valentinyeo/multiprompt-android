@@ -2349,6 +2349,7 @@ internal fun ReaderTopBar(
     onBack: () -> Unit = {},
     botFace: Int? = null,
     botColor: Int? = null,
+    botPicture: String? = null,
 ) {
     var modelMenuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     if (LocalReaderStyle.current) {
@@ -2370,7 +2371,7 @@ internal fun ReaderTopBar(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        BotAvatar(session.name, 28.dp, workspaceColor = session.workspaceColor, face = botFace, color = botColor)
+                        BotAvatar(session.name, 28.dp, workspaceColor = session.workspaceColor, face = botFace, color = botColor, picture = botPicture)
                         Text(
                             session.displayName,
                             modifier = Modifier.weight(1f, fill = false),
@@ -2676,6 +2677,20 @@ internal fun ReaderScreen(
                     pulledPx = 0f
                 }
                 return Offset.Zero
+            }
+        }
+    }
+    val botPicturePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                val folder = java.io.File(draftContext.filesDir, "bot-pictures").apply { mkdirs() }
+                val target = java.io.File(folder, SessionReadStore.key(session.hostId, session.name).replace(Regex("[^A-Za-z0-9._-]"), "_"))
+                draftContext.contentResolver.openInputStream(uri)?.use { input -> target.outputStream().use(input::copyTo) }
+                draftStore.setBotPicture(session, target.absolutePath)
+            }.onFailure {
+                android.widget.Toast.makeText(context, "Could not save that picture", android.widget.Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -2992,6 +3007,15 @@ internal fun ReaderScreen(
             session = session,
             face = draftStore.botFace(session),
             color = draftStore.botColor(session),
+            hasPicture = draftStore.botPicture(session) != null,
+            onPickPicture = {
+                botLookOpen = false
+                botPicturePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            },
+            onClearPicture = {
+                draftStore.botPicture(session)?.let { path -> runCatching { java.io.File(path).delete() } }
+                draftStore.setBotPicture(session, null)
+            },
             onPickFace = { face ->
                 draftStore.setBotFace(session, face)
                 onBotAppearance(session.hostId + ":" + session.name.lowercase(), face, draftStore.botColor(session))
@@ -3029,6 +3053,7 @@ internal fun ReaderScreen(
                 onBack = onBack,
                 botFace = draftStore.botFace(session),
                 botColor = draftStore.botColor(session),
+                botPicture = draftStore.botPicture(session),
                 session = session,
                 modelLabel = runtimeDetails.label,
                 statusLabel = statusLabel,

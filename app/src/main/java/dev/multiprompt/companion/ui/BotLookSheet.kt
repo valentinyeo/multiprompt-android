@@ -31,12 +31,24 @@ internal fun BotLookSheet(
     color: Int?,
     onPickFace: (Int) -> Unit,
     onPickColor: (Int?) -> Unit,
+    onPickPicture: () -> Unit = {},
+    onClearPicture: () -> Unit = {},
+    hasPicture: Boolean = false,
     onDismiss: () -> Unit,
 ) {
     var pickedFace by remember(session.hostId, session.name, face) { mutableStateOf(face) }
     var pickedColor by remember(session.hostId, session.name, color) { mutableStateOf(color) }
     KitSheet(onDismiss = onDismiss) {
-        BotLookContent(session, pickedFace, pickedColor, onPickFace = { pickedFace = it; onPickFace(it) }, onPickColor = { pickedColor = it; onPickColor(it) })
+        BotLookContent(
+            session = session,
+            pickedFace = pickedFace,
+            pickedColor = pickedColor,
+            onPickFace = { pickedFace = it; onPickFace(it) },
+            onPickColor = { pickedColor = it; onPickColor(it) },
+            onPickPicture = onPickPicture,
+            onClearPicture = onClearPicture,
+            hasPicture = hasPicture,
+        )
     }
 }
 
@@ -47,9 +59,14 @@ internal fun BotLookContent(
     pickedColor: Int?,
     onPickFace: (Int) -> Unit,
     onPickColor: (Int?) -> Unit,
+    onPickPicture: () -> Unit = {},
+    onClearPicture: () -> Unit = {},
+    hasPicture: Boolean = false,
 ) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Bot look", style = Kit.Heading, color = Kit.Text)
+        KitSecondaryButton(if (hasPicture) "Change picture" else "Use picture", onClick = onPickPicture, modifier = Modifier.fillMaxWidth())
+        if (hasPicture) KitSecondaryButton("Remove picture", onClick = onClearPicture, modifier = Modifier.fillMaxWidth(), destructive = true)
         Column(
             Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(8.dp),
