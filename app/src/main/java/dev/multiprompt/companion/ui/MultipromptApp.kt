@@ -1360,6 +1360,9 @@ internal fun SessionsScreen(
             }
         }
     }
+    openRoom?.let { room ->
+        RoomScreen(room) { openRoom = null }
+    }
     if (crashReportVisible) {
         crashReport?.let { report ->
             val displayName = stringResource(R.string.app_name)
@@ -1550,9 +1553,10 @@ internal fun SessionsScreen(
     val roomsContext = LocalContext.current.applicationContext
     val roomStore = remember(roomsContext) { roomsContext.getSharedPreferences("rooms", android.content.Context.MODE_PRIVATE) }
     val rooms = remember(roomStore) { parseRooms(roomStore.getString("rooms", null)) }
+    var openRoom by remember { mutableStateOf<RoomSummary?>(null) }
     val roomStrip: @Composable () -> Unit = {
         rooms.forEach { room ->
-            RoomRow(room) { }
+            RoomRow(room) { openRoom = room }
         }
     }
     val pinnedStrip: @Composable () -> Unit = {
