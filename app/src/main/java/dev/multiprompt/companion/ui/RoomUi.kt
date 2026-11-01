@@ -1,7 +1,5 @@
 package dev.multiprompt.companion.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -88,41 +85,6 @@ internal fun RoomRow(room: RoomSummary, onClick: () -> Unit) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
-    }
-}
-
-@Composable
-internal fun RoomMemberName(member: RoomMember) {
-    Text(
-        member.name,
-        style = MaterialTheme.typography.labelMedium,
-        color = botColor(member.color),
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-    )
-}
-
-@Composable
-internal fun RoomMentionOverlay(members: List<RoomMember>, onPick: (RoomMember) -> Unit) {
-    if (members.isEmpty()) return
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        members.forEach { member ->
-            Row(
-                Modifier
-                    .background(Kit.Surface, CircleShape)
-                    .border(1.dp, Kit.Outline, CircleShape)
-                    .clickable { onPick(member) }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                BotAvatar(member.name, 20.dp, workspaceColor = member.color, color = member.color)
-                RoomMemberName(member)
-            }
         }
     }
 }
