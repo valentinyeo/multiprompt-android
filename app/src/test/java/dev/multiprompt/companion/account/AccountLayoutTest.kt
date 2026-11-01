@@ -52,6 +52,17 @@ class AccountLayoutTest {
         assertEquals("One", base.tabs[0].name)
     }
 
+    @Test fun botAppearanceRoundTripsAndReplaysOnlyItsOwnChange() {
+        val picked = base.setAppearance(one.identity, 7, 2)
+        val parsed = AccountLayout.parse(org.json.JSONObject(picked.json().toString()))
+        assertEquals(7, parsed.tabs.first { it.identity == one.identity }.face)
+        assertEquals(2, parsed.tabs.first { it.identity == one.identity }.color)
+        val remote = picked.copy(revision = 4).setAppearance(two.identity, 3, 5)
+        val rebased = AccountLayout.rebase(picked, picked, remote)
+        assertEquals(7, rebased.tabs.first { it.identity == one.identity }.face)
+        assertEquals(3, rebased.tabs.first { it.identity == two.identity }.face)
+    }
+
     @Test fun pickedWorkspaceColorWinsAndAutoRestoresThePaletteOrder() {
         val picked = base.setWorkspaceColor("Product", 5)
         assertEquals(5, picked.workspaceColor("Product"))
