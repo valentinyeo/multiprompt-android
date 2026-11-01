@@ -185,6 +185,16 @@ class SessionReadStore(context: Context) {
         preferences.edit().putBoolean(ALL_SPLIT_ON_RIGHT, enabled).apply()
     }
 
+    fun botPicture(session: TmuxSession): String? =
+        preferences.getString(BOT_PICTURE_PREFIX + key(session.hostId, session.name), null)
+
+    fun setBotPicture(session: TmuxSession, path: String?) {
+        val prefKey = BOT_PICTURE_PREFIX + key(session.hostId, session.name)
+        val editor = preferences.edit()
+        if (path == null) editor.remove(prefKey) else editor.putString(prefKey, path)
+        editor.apply()
+    }
+
     fun botFace(session: TmuxSession): Int? =
         preferences.getInt(BOT_FACE_PREFIX + key(session.hostId, session.name), -1).takeIf { it in 0..19 }
 
@@ -268,6 +278,7 @@ class SessionReadStore(context: Context) {
         private const val DRAFT_PREFIX = "composer_draft::"
         private const val BOT_FACE_PREFIX = "bot_face::"
         private const val BOT_COLOR_PREFIX = "bot_color::"
+        private const val BOT_PICTURE_PREFIX = "bot_picture::"
         private const val DISPLAY_NAME_PREFIX = "display_name::"
         private const val INTERACTION_PREFIX = "interaction::"
         private const val DEFAULT_FONT_SCALE = 1f

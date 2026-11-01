@@ -1,6 +1,10 @@
 package dev.multiprompt.companion.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
@@ -63,8 +67,20 @@ internal fun BotAvatar(
     workspaceColor: Int = 0,
     face: Int? = null,
     color: Int? = null,
+    picture: String? = null,
 ) {
     val appearance = remember(sessionName, workspaceColor, face, color) { BotAppearance.forSession(sessionName, workspaceColor, face, color) }
+    if (picture != null) {
+        Box(modifier.size(diameter).clip(CircleShape).semantics { contentDescription = "Robot $sessionName" }) {
+            AsyncImage(
+                model = picture,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        return
+    }
     Canvas(modifier.size(diameter).clip(CircleShape).semantics { contentDescription = "Robot $sessionName" }) {
         drawBotHead(appearance.face, botColor(appearance.color))
     }
