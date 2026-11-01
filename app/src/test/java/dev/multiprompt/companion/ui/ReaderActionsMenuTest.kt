@@ -105,14 +105,14 @@ class ReaderActionsMenuTest {
         compose.onNodeWithText("End tmux session").performScrollTo().performClick()
         compose.onNodeWithText(title).assertIsDisplayed()
         compose.onNodeWithText(warning).assertIsDisplayed()
-        compose.onNodeWithText("End tmux session").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("End session").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Cancel").performScrollTo().assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(0, ends) }
         compose.onNodeWithText(title).assertDoesNotExist()
         openMenu()
         compose.onNodeWithText("End tmux session").performScrollTo().performClick()
         compose.onNodeWithText(title).assertIsDisplayed()
-        compose.onNodeWithText("End tmux session").performScrollTo().performClick()
+        compose.onNodeWithText("End session").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(1, ends) }
         compose.onNodeWithText(title).assertDoesNotExist()
     }
