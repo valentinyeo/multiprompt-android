@@ -30,7 +30,9 @@ class UiWordsTest {
     }
 
     @Test fun phoneMenusUseThoseLabels() {
-        val source = File("src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt").readText()
+        val source = File("src/main/java/dev/multiprompt/companion/ui").listFiles().orEmpty()
+            .filter { it.extension == "kt" }
+            .joinToString("\n") { it.readText() }
         phoneLabels.forEach { label ->
             assertTrue("phone menus lost the shared label $label", source.contains("\"$label\"") || source.contains(label))
         }
