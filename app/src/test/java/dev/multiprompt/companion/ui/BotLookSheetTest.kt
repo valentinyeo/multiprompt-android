@@ -44,8 +44,8 @@ import org.robolectric.util.ReflectionHelpers
 @Config(sdk = [35], application = Application::class, qualifiers = "w390dp-h844dp-mdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class BotLookSheetTest {
-    @get:Rule val compose = createComposeRule(effectContext = UnconfinedTestDispatcher(scheduler))
     private val scheduler = TestCoroutineScheduler()
+    @get:Rule val compose = createComposeRule(effectContext = UnconfinedTestDispatcher(scheduler))
     private val session = TmuxSession("host", "bot-0", 1, 0, 0, accountName = "HT Product Lead")
 
     @Test fun botLookSheetShowsFacesColoursAndAuto() {
