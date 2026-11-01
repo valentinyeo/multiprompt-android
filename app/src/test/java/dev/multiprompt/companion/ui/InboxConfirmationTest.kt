@@ -93,7 +93,7 @@ class InboxConfirmationTest {
 
     @Test fun archiveConfirmationTargetsGamma() {
         checkConfirmation(
-            "Archive session", "Archive gamma?",
+            "Archive Session", "Archive gamma?",
             "This ends its tmux session but saves the name and resume command so it can be restored later.",
             "Archive", true,
         )
@@ -101,7 +101,7 @@ class InboxConfirmationTest {
 
     @Test fun endConfirmationTargetsGamma() {
         checkConfirmation(
-            "End session", "End gamma completely?",
+            "End tmux session", "End gamma completely?",
             "This kills the coding agent and tmux session without saving a restore record.",
             "End session", false,
         )

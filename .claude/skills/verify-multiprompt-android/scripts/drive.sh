@@ -560,7 +560,7 @@ PYFAVORITES
         read -r x1 y1 x2 y2 <<< "$(select_node scroll-back '')"
         adb shell input swipe "$x2" "$y2" "$x1" "$y1" 500
     done
-    tap_text 'Archive session'
+    tap_text 'Archive Session'
     wait_for_text 'Archive verify-session?'
     select_node text 'Archive verify-session?' >/dev/null
     select_node text 'This ends its tmux session but saves the name and resume command so it can be restored later.' >/dev/null
@@ -578,7 +578,7 @@ PYFAVORITES
     read -r row_x row_y <<< "$(select_node text verify-session)"
     adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
     wait_for_text 'End session'
-    tap_text 'End session'
+    tap_text 'End tmux session'
     wait_for_text 'End verify-session completely?'
     select_node text 'End verify-session completely?' >/dev/null
     select_node text 'This kills the coding agent and tmux session without saving a restore record.' >/dev/null

@@ -39,6 +39,6 @@ class InboxRowTest {
         compose.onNodeWithText("Waiting").assertDoesNotExist()
         compose.onNodeWithText("claude-reader").performTouchInput { longClick() }
         compose.onNodeWithText("Waiting").assertIsDisplayed()
-        compose.onNodeWithText("End session").assertIsDisplayed()
+        compose.onNodeWithText("End tmux session").assertIsDisplayed()
     }
 }

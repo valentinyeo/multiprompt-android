@@ -2208,7 +2208,7 @@ private fun SessionCard(
                     )
                     if (!archived) {
                         KitMenuRow(
-                            label = "Remind me",
+                            label = "Remind Me…",
                             onClick = {
                                 menuExpanded = false
                                 onRemind()
@@ -2216,7 +2216,7 @@ private fun SessionCard(
                         )
                     }
                     KitMenuRow(
-                        label = "End session",
+                        label = "End tmux session",
                         destructive = true,
                         onClick = {
                             menuExpanded = false
@@ -2241,7 +2241,7 @@ private fun SessionCard(
                     }
                     if (!archived && session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {
                         KitMenuRow(
-                            label = "Rename",
+                            label = "Rename Session",
                             onClick = {
                                 menuExpanded = false
                                 onRename()
@@ -2268,7 +2268,7 @@ private fun SessionCard(
                     )
                     KitDivider()
                     KitMenuRow(
-                        label = "Archive session",
+                        label = "Archive Session",
                         destructive = true,
                         onClick = {
                             menuExpanded = false
@@ -3095,7 +3095,7 @@ internal fun ReaderScreen(
                                 }
                                 if (session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {
                                     KitMenuRow(
-                                        label = "Rename",
+                                        label = "Rename Session",
                                         onClick = {
                                             menuExpanded = false
                                             renameDraft = session.displayName
@@ -3105,7 +3105,7 @@ internal fun ReaderScreen(
                                     )
                                 }
                                 KitMenuRow(
-                                    label = "Remind me",
+                                    label = "Remind Me…",
                                     onClick = { menuExpanded = false; reminderDialogVisible = true },
                                 )
                                 KitMenuRow(
@@ -3113,7 +3113,7 @@ internal fun ReaderScreen(
                                     onClick = { menuExpanded = false; onArchiveToggle() },
                                 )
                                 KitMenuRow(
-                                    label = "Archive session",
+                                    label = "Archive Session",
                                     onClick = { menuExpanded = false; onDissolve() },
                                 )
                                 KitDivider()
@@ -3180,7 +3180,7 @@ internal fun ReaderScreen(
                                 )
                                 KitDivider()
                                 KitMenuRow(
-                                    label = "End session",
+                                    label = "End tmux session",
                                     destructive = true,
                                     onClick = {
                                         menuExpanded = false
