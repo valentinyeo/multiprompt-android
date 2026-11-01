@@ -2622,6 +2622,8 @@ internal fun ReaderScreen(
     val context = LocalContext.current
     val readerScope = rememberCoroutineScope()
     var speakableReplies by remember { mutableStateOf<List<String>>(emptyList()) }
+    var chatReady by remember(session.hostId, session.name) { mutableStateOf(false) }
+    var waitingSend by remember(session.hostId, session.name) { mutableStateOf<String?>(null) }
     var replyCursor by remember { mutableStateOf(0) }
     var reading by remember { mutableStateOf(false) }
     val speech = remember { android.speech.tts.TextToSpeech(context.applicationContext) { } }
@@ -2776,7 +2778,15 @@ internal fun ReaderScreen(
             recordingPrompt = true
             readerScope.launch {
                 when (val admission = connection.sendPrompt(composedPrompt)) {
-                    is dev.multiprompt.companion.reader.PromptAdmission.Rejected -> android.widget.Toast.makeText(context, admission.reason, android.widget.Toast.LENGTH_SHORT).show()
+                    is dev.multiprompt.companion.reader.PromptAdmission.Rejected -> {
+                        val reason = admission.reason
+                        if (reason == "Chat is not ready" && !chatReady) {
+                            waitingSend = draftText
+                            android.widget.Toast.makeText(context, "Will send when the chat is ready", android.widget.Toast.LENGTH_SHORT).show()
+                        } else {
+                            android.widget.Toast.makeText(context, reason, android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
                     else -> {
                         SendTiming.mark("message_added")
                         if (admission is dev.multiprompt.companion.reader.PromptAdmission.LegacyEnqueued) {
@@ -2796,6 +2806,12 @@ internal fun ReaderScreen(
                 recordingPrompt = false
             }
         }
+    }
+    LaunchedEffect(chatReady, waitingSend) {
+        val text = waitingSend ?: return@LaunchedEffect
+        if (!chatReady) return@LaunchedEffect
+        waitingSend = null
+        sendDraft(text)
     }
     val sendModelCommand: (String) -> Unit = { command ->
         if (!reader.sending && pendingPromptAction == null) {
@@ -3536,6 +3552,7 @@ internal fun ReaderScreen(
                 replyGate = replyGate,
                 onReply = chooseReply,
                 onSpeakableReplies = { speakableReplies = it; if (it.isEmpty()) { reading = false; replyCursor = 0 } },
+                onChatReady = { chatReady = it },
                 onReaction = { message, emoji ->
                     val line = dev.multiprompt.companion.reader.ChatReactions.format(emoji, message.requestId, message.text)
                     if (line != null) readerScope.launch {
