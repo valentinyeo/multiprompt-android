@@ -129,6 +129,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
@@ -1157,6 +1158,9 @@ internal fun SessionsScreen(
     var settingsPage by remember { mutableStateOf(SettingsPage.HIDDEN) }
     var crashReportVisible by remember { mutableStateOf(false) }
     var openRoom by remember { mutableStateOf<RoomSummary?>(null) }
+    var selectingBots by remember { mutableStateOf(false) }
+    val chosenBots = remember { mutableStateListOf<String>() }
+    var moveSelectionOpen by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
@@ -1360,6 +1364,43 @@ internal fun SessionsScreen(
                     }
                 }
             }
+        }
+    }
+    if (selectingBots) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "${chosenBots.size} selected",
+                modifier = Modifier.weight(1f),
+                style = Kit.BodyStrong,
+                color = Kit.Text,
+            )
+            KitSecondaryButton("Cancel", onClick = {
+                selectingBots = false
+                chosenBots.clear()
+            })
+            KitPrimaryButton("Move to…", onClick = { moveSelectionOpen = true }, enabled = chosenBots.isNotEmpty())
+        }
+    }
+    if (moveSelectionOpen) {
+        KitSheet(onDismiss = { moveSelectionOpen = false }) {
+            Text("Move to", style = Kit.Heading, color = Kit.Text)
+            state.workspaces.forEach { workspace ->
+                KitMenuRow(
+                    label = workspace.name,
+                    onClick = {
+                        val moving = state.inboxSessions.filter { SessionReadStore.key(it.hostId, it.name) in chosenBots }
+                        moving.forEach { onMoveSession(it, workspace) }
+                        moveSelectionOpen = false
+                        selectingBots = false
+                        chosenBots.clear()
+                    },
+                )
+            }
+            KitSecondaryButton("Cancel", onClick = { moveSelectionOpen = false }, modifier = Modifier.fillMaxWidth())
         }
     }
     openRoom?.let { room ->
@@ -1845,6 +1886,15 @@ internal fun SessionsScreen(
                 val starred = tab?.favorite == true
                 CompositionLocalProvider(
                     LocalOpenSession provides state.readerSession?.let { SessionReadStore.key(it.hostId, it.name) },
+                    LocalBotSelection provides if (selectingBots) BotSelection(chosenBots.toSet()) { session ->
+                        val key = SessionReadStore.key(session.hostId, session.name)
+                        if (key in chosenBots) chosenBots.remove(key) else chosenBots.add(key)
+                    } else null,
+                    LocalStartSelection provides { session ->
+                        selectingBots = true
+                        chosenBots.clear()
+                        chosenBots.add(SessionReadStore.key(session.hostId, session.name))
+                    },
                 ) {
                     SessionCard(
                         session = session,
@@ -2064,6 +2114,12 @@ private fun AgentBadge(agent: AgentKind) {
 
 private val LocalOpenSession = staticCompositionLocalOf<String?> { null }
 
+private class BotSelection(val keys: Set<String>, val onToggle: (TmuxSession) -> Unit)
+
+private val LocalBotSelection = staticCompositionLocalOf<BotSelection?> { null }
+
+private val LocalStartSelection = staticCompositionLocalOf<((TmuxSession) -> Unit)?> { null }
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SessionCard(
@@ -2127,12 +2183,15 @@ private fun SessionCard(
             }
         },
     ) {
+        val selection = LocalBotSelection.current
+        val rowKey = SessionReadStore.key(session.hostId, session.name)
+        val chosen = selection?.keys?.contains(rowKey) == true
         Box(
             Modifier.fillMaxWidth().background(
-                if (LocalOpenSession.current == SessionReadStore.key(session.hostId, session.name)) {
-                    MaterialTheme.colorScheme.surfaceContainerHigh
-                } else {
-                    MaterialTheme.colorScheme.surface
+                when {
+                    chosen -> MaterialTheme.colorScheme.surfaceContainerHighest
+                    LocalOpenSession.current == rowKey -> MaterialTheme.colorScheme.surfaceContainerHigh
+                    else -> MaterialTheme.colorScheme.surface
                 },
             ),
         ) {
@@ -2140,7 +2199,7 @@ private fun SessionCard(
                 Modifier
                     .fillMaxWidth()
                     .combinedClickable(
-                        onClick = onClick,
+                        onClick = if (selection != null) ({ selection.onToggle(session) }) else onClick,
                         onLongClickLabel = "Session actions",
                         onLongClick = { menuExpanded = true },
                     )
@@ -2241,6 +2300,15 @@ private fun SessionCard(
                             onClick = {
                                 menuExpanded = false
                                 onMarkUnread()
+                            },
+                        )
+                    }
+                    LocalStartSelection.current?.let { start ->
+                        KitMenuRow(
+                            label = "Select bots",
+                            onClick = {
+                                menuExpanded = false
+                                start(session)
                             },
                         )
                     }
