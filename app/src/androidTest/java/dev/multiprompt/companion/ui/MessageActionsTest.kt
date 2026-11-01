@@ -174,7 +174,7 @@ class MessageActionsTest {
     fun longPressShowsAllSixActions() {
         harness()
         open()
-        listOf("Reply", "Mark as unread", "Copy", "Select Text", "Copy Request ID", "Report").forEach {
+        listOf("Reply", "Mark as unread", "Copy", "Select Text", "Copy request ID", "Report").forEach {
             compose.onNodeWithText(it).assertIsDisplayed()
         }
         screenshot("sheet")
@@ -183,7 +183,7 @@ class MessageActionsTest {
             assertEquals("My question", context.getSystemService(ClipboardManager::class.java).primaryClip?.getItemAt(0)?.text?.toString())
         }
         open("First line\nSecond line")
-        compose.onNodeWithText("Copy Request ID").performClick()
+        compose.onNodeWithText("Copy request ID").performClick()
         compose.runOnIdle {
             assertEquals("assistant-request", context.getSystemService(ClipboardManager::class.java).primaryClip?.getItemAt(0)?.text?.toString())
         }
