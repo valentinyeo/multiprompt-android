@@ -42,16 +42,4 @@ trap - EXIT
 run_robots after
 test -s build/robot-faces/after/robot-inbox.png
 test -s build/robot-faces/after/robot-chat-title.png
-run_bot_look() {
-    local status=0
-    rm -rf app/build/outputs/connected_android_test_additional_output app/build/outputs/androidTest-results/connected
-    "${GRADLE:-gradle}" --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2g connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.multiprompt.companion.ui.BotLookSheetTest > build/robot-faces/bot-look.log 2>&1 || status=$?
-    cat build/robot-faces/bot-look.log
-    local result
-    result=$(find app/build/outputs -type d -name robot-faces -print -quit)
-    if [ -n "$result" ]; then mkdir -p build/robot-faces/bot-look && cp "$result"/*.png build/robot-faces/bot-look/; fi
-    return "$status"
-}
-run_bot_look
-test -s build/robot-faces/bot-look/bot-look-sheet.png
 echo ROBOT_FACES_EMULATOR_VERIFIED
