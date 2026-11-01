@@ -23,7 +23,7 @@ internal data class BotAppearance(val face: Int, val color: Int) {
         fun forSession(name: String, workspaceColor: Int = 0, face: Int? = null, color: Int? = null): BotAppearance {
             var hash = 2166136261u
             for (byte in name.toByteArray(Charsets.UTF_8)) hash = (hash xor byte.toUByte().toUInt()) * 16777619u
-            return BotAppearance(face?.mod(20) ?: (hash % 20u).toInt(), color?.mod(7) ?: workspaceColor)
+            return BotAppearance(face?.mod(20) ?: (hash % 20u).toInt(), color?.mod(11) ?: workspaceColor)
         }
     }
 }

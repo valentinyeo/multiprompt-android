@@ -52,6 +52,14 @@ class AccountLayoutTest {
         assertEquals("One", base.tabs[0].name)
     }
 
+    @Test fun newerColourNumbersAreReadWithoutBreakingThePhone() {
+        val json = org.json.JSONObject("""{"schema":1,"revision":5,"workspaces":[{"name":"Other","color":9}],"tabs":[{"kind":"tmux","name":"One","tmux_session":"one","tmux_host":0,"workspace":"Other","color":10}]}""")
+        val pulled = AccountLayout.parse(json)
+        assertEquals(9, pulled.workspaceColor("Other"))
+        assertEquals(10, pulled.tabs.first { it.identity == one.identity }.color)
+        assertEquals(9, AccountLayout.parse(org.json.JSONObject(pulled.json().toString())).workspaceColor("Other"))
+    }
+
     @Test fun desktopHostRemovalsAreReadAndSurviveAPhoneEdit() {
         val json = org.json.JSONObject("""{"schema":1,"revision":3,"workspaces":[{"name":"Other"}],"tabs":[{"kind":"tmux","name":"One","tmux_session":"one","tmux_host":0,"workspace":"Other"}],"removed_hosts":[2]}""")
         val pulled = AccountLayout.parse(json)
