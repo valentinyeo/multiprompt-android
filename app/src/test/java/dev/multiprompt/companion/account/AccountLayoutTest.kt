@@ -52,6 +52,18 @@ class AccountLayoutTest {
         assertEquals("One", base.tabs[0].name)
     }
 
+    @Test fun desktopHostRemovalsAreReadAndSurviveAPhoneEdit() {
+        val json = org.json.JSONObject("""{"schema":1,"revision":3,"workspaces":[{"name":"Other"}],"tabs":[{"kind":"tmux","name":"One","tmux_session":"one","tmux_host":0,"workspace":"Other"}],"removed_hosts":[2]}""")
+        val pulled = AccountLayout.parse(json)
+        assertEquals(listOf(2), pulled.removedHosts)
+        val edited = pulled.setWorkspaceColor("Other", 3)
+        assertEquals(listOf(2), edited.removedHosts)
+        val written = edited.json()
+        assertEquals(1, written.getJSONArray("removed_hosts").length())
+        val rebased = AccountLayout.rebase(pulled, edited, pulled.copy(revision = 4))
+        assertEquals(listOf(2), rebased.removedHosts)
+    }
+
     @Test fun botAppearanceRoundTripsAndReplaysOnlyItsOwnChange() {
         val picked = base.setAppearance(one.identity, 7, 2)
         val parsed = AccountLayout.parse(org.json.JSONObject(picked.json().toString()))

@@ -29,11 +29,13 @@ data class AccountLayout(
     val tabs: List<AccountTab> = emptyList(),
     val settings: Map<String, Boolean>? = null,
     val hosts: List<AccountHost>? = null,
+    val removedHosts: List<Int> = emptyList(),
     val workspaceColors: Map<String, Int> = emptyMap(),
 ) {
     fun validate(): AccountLayout {
         require(workspaceColors.all { (name, color) -> name in workspaces && color in 0..6 }) { "Invalid workspace color" }
         require(hosts == null || AccountHosts.parse(JSONArray(hosts.map { it.json() })) == hosts) { "Invalid layout hosts" }
+        require(removedHosts.size <= 3 && removedHosts.distinct().size == removedHosts.size && removedHosts.all { it in 0..2 }) { "Invalid removed hosts" }
         require(settings == null || settings.keys.all { it in setOf("frequent", "favorites", "all", "frequent_first") }) { "Invalid layout settings" }
         require(revision >= 0 && workspaces.size <= 9 && tabs.size <= 256) { "Invalid layout capacity or revision" }
         require(workspaces.distinct().size == workspaces.size && workspaces.all {
@@ -52,9 +54,13 @@ data class AccountLayout(
     fun json(includeWorkspaceColors: Boolean = true): JSONObject = JSONObject().put("schema", 1).put("revision", revision)
         .put("workspaces", JSONArray(workspaces.map { JSONObject().put("name", it).apply { if (includeWorkspaceColors) workspaceColors[it]?.let { color -> put("color", color) } } }))
         .put("tabs", JSONArray(tabs.map { it.json() }))
-        .apply { settings?.let { put("settings", JSONObject(it)) }; hosts?.let { put("hosts", JSONArray(it.map { host -> host.json() })) } }
+        .apply {
+            settings?.let { put("settings", JSONObject(it)) }
+            hosts?.let { put("hosts", JSONArray(it.map { host -> host.json() })) }
+            if (removedHosts.isNotEmpty()) put("removed_hosts", JSONArray(removedHosts))
+        }
 
-    fun sameContent(other: AccountLayout): Boolean = workspaces == other.workspaces && workspaceColors == other.workspaceColors && tabs == other.tabs && settings == other.settings && hosts.orEmpty() == other.hosts.orEmpty()
+    fun sameContent(other: AccountLayout): Boolean = workspaces == other.workspaces && workspaceColors == other.workspaceColors && tabs == other.tabs && settings == other.settings && hosts.orEmpty() == other.hosts.orEmpty() && removedHosts == other.removedHosts
 
     fun workspaceColor(name: String): Int = workspaceColors[name] ?: workspaces.indexOf(name).coerceAtLeast(0) % 7
 
@@ -105,7 +111,7 @@ data class AccountLayout(
         fun parse(json: JSONObject): AccountLayout {
             val required = setOf("schema", "revision", "workspaces", "tabs")
             val keys = json.keys().asSequence().toSet()
-            require(keys.containsAll(required) && (keys - required).all { it in setOf("settings", "hosts") } && json.get("schema") == 1)
+            require(keys.containsAll(required) && (keys - required).all { it in setOf("settings", "hosts", "removed_hosts") } && json.get("schema") == 1)
             val settings = if (json.has("settings")) {
                 val value = json.get("settings")
                 require(value is JSONObject)
@@ -162,6 +168,14 @@ data class AccountLayout(
                     t.optBoolean("manual", false), if (t.has("favorite")) t.getBoolean("favorite") else null, (used as? Number)?.toLong(), visits, (input as? Number)?.toLong(),
                     if (t.has("muted")) t.getBoolean("muted") else null, face, color)
             }, settings, if (json.has("hosts")) AccountHosts.parse(json.opt("hosts")) else null,
+                if (json.has("removed_hosts")) {
+                    val values = json.getJSONArray("removed_hosts")
+                    (0 until values.length()).map { index ->
+                        val slot = values.get(index)
+                        require(slot is Number && slot.toInt() in 0..2)
+                        slot.toInt()
+                    }
+                } else emptyList(),
                 (0 until ws.length()).map { ws.getJSONObject(it) }.filter { it.has("color") }
                     .associate { it.getString("name") to it.getInt("color") }).validate()
         }
