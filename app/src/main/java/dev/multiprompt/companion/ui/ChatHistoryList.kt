@@ -88,7 +88,6 @@ internal fun ChatHistoryView(
     val speakable = remember(messages) { dev.multiprompt.companion.reader.ReadAloud.replies(messages) }
     LaunchedEffect(speakable) { onSpeakableReplies(speakable) }
     LaunchedEffect(state.loaded, state.history.sid) { onChatReady(state.loaded && state.history.sid.isNotEmpty()) }
-    LaunchedEffect(focusKey) { if (focusKey != null) highlightedKey = focusKey }
     val actionScope = rememberCoroutineScope()
     val context = LocalContext.current
     var retryRow by remember { mutableStateOf<Pair<dev.multiprompt.companion.reader.MessageProtocol.Row, Long>?>(null) }
@@ -241,6 +240,7 @@ internal fun ChatHistoryList(
     val nearTop by rememberUpdatedState(onNearTop)
     var pendingJump by remember { mutableStateOf<ReplyJump?>(null) }
     var highlightedKey by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(focusKey) { if (focusKey != null) highlightedKey = focusKey }
     val context = LocalContext.current
     LaunchedEffect(pendingJump, presentation.messages, hasOlder, loaded, questions, working) {
         val request = pendingJump ?: return@LaunchedEffect
