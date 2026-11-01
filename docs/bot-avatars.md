@@ -4,7 +4,7 @@ The approved family has 20 looks and eight colours. Android draws the shapes fro
 
 Both platforms must use the raw tmux session name, not the editable display name, host UUID or provider. Hash its exact UTF-8 bytes using unsigned 32-bit FNV-1a: initial value `2166136261`, XOR each unsigned byte, multiply by `16777619`, wrapping at 32 bits. Face is `hash % 20`; colour is `floor(hash / 20) % 8`.
 
-Face order: Classic, Happy, Square eyes, Calm, Cyclops, Wink, Curious, Dome, Peek left, Peek left square eyes, Rise from bottom, Square head, Tilted, Close-up, TV, Headphones, Profile, Corner peek, Grill mouth, Hang from top.
+Face order: twenty identities map onto twelve approved pairs of head shape and eye style. Shapes are circle, square, squircle, wide and tall; eyes are dots, squares, happy, dashes, one and wink. No antennas, ears or headphones; every head is whole.
 
 Colour order: White `#FFFFFF`, Sage `#95DE69`, Clay `#FF6F28`, Sand `#FFC455`, Mist `#5A9AE9`, Lilac `#9F6CFC`, Rose `#FF667B`, Mint `#5EFED1`.
 
