@@ -23,7 +23,7 @@ class BotLookSheetTest {
                 MultipromptTheme(sunlight = false, material3 = false, readerStyle = true) {
                     Surface {
                         BotLookSheet(
-                            session = sessions[0],
+                            session = session,
                             face = null,
                             color = null,
                             onPickFace = {},
