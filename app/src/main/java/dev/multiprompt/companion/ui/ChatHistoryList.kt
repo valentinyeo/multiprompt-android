@@ -81,7 +81,7 @@ internal fun ChatHistoryView(
 ) {
     val history = remember(connection, agent, workingDirectory) { connection.chatHistory(agent, workingDirectory) }
     val state by history.state.collectAsState()
-    val managed = agent == AgentKind.CLAUDE || agent == AgentKind.CODEX
+    val managed = agent == AgentKind.CLAUDE || agent == AgentKind.CODEX || agent == AgentKind.PI
     val messages = if (managed) state.history.managedMessages(state.replica, state.unresolved) else state.history.displayMessages(reader.sentRecord)
     val speakable = remember(messages) { dev.multiprompt.companion.reader.ReadAloud.replies(messages) }
     LaunchedEffect(speakable) { onSpeakableReplies(speakable) }

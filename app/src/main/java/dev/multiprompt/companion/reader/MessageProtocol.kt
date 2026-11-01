@@ -6,7 +6,7 @@ import org.json.JSONObject
 object MessageProtocol {
     data class Scope(val provider: String, val sid: String, val tmux: String) {
         init {
-            require(provider in setOf("claude", "codex"))
+            require(provider in setOf("claude", "codex", "pi"))
             require(sid.matches(Regex("[A-Za-z0-9_-]{1,80}")))
             require(tmux.matches(Regex("[A-Za-z0-9_.:-]{1,80}")))
         }
