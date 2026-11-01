@@ -115,6 +115,31 @@ class RobotFacesTest {
         screenshot("robot-chat-title")
     }
 
+    @Test fun botLookSheetShowsFacesAndColours() {
+        compose.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MultipromptTheme(sunlight = false, material3 = false, readerStyle = true) {
+                    Surface {
+                        BotLookSheet(
+                            session = sessions[0],
+                            face = null,
+                            color = null,
+                            onPickFace = {},
+                            onPickColor = {},
+                            onDismiss = {},
+                        )
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithText("Bot look").assertIsDisplayed()
+        compose.onNodeWithText("Face").assertIsDisplayed()
+        compose.onNodeWithText("Colour").assertIsDisplayed()
+        compose.onNodeWithText("Auto").assertIsDisplayed()
+        screenshot("bot-look-sheet")
+    }
+
     private fun assertWorkspaceHue(session: String, color: Int) {
         val bitmap = compose.onNodeWithContentDescription("Robot $session", useUnmergedTree = true).captureToImage().asAndroidBitmap()
         val pixels = IntArray(bitmap.width * bitmap.height)
