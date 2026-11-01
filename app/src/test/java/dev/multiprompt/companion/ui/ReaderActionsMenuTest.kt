@@ -182,7 +182,7 @@ class ReaderActionsMenuTest {
         openMenu()
         listOf(
             "Enter / approve", "Interrupt session", "Open live terminal", "Rename Session", "Remind Me…", "Waiting",
-            "Archive session", "Model and effort ›", "Display ›", "More ›", "Reset this chat", "End session", "Remove from list",
+            "Archive Session", "Model and effort ›", "Display ›", "More ›", "Reset this chat", "End tmux session", "Remove from list",
         ).forEach { compose.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
         listOf(
             "Set effort: low", "Set effort: max", "Use Claude Opus", "Open model picker (/model)", "Sunlight mode on",
