@@ -258,7 +258,12 @@ private fun statusColor(status: ComputerStatus): Color = when (status) {
 }
 
 @Composable
-internal fun ComputerScreen(url: String, onPicture: (Bitmap) -> Unit, modifier: Modifier = Modifier) {
+internal fun ComputerScreen(
+    url: String,
+    onPicture: (Bitmap) -> Unit,
+    modifier: Modifier = Modifier,
+    onUnreachable: () -> Unit = {},
+) {
     AndroidView(
         modifier = modifier,
         factory = { context ->
@@ -266,7 +271,11 @@ internal fun ComputerScreen(url: String, onPicture: (Bitmap) -> Unit, modifier: 
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 settings.mediaPlaybackRequiresUserGesture = false
-                webViewClient = WebViewClient()
+                webViewClient = object : WebViewClient() {
+                    override fun onReceivedError(view: WebView, request: android.webkit.WebResourceRequest, error: android.webkit.WebResourceError) {
+                        if (request.isForMainFrame) onUnreachable()
+                    }
+                }
                 loadUrl(url)
             }
         },

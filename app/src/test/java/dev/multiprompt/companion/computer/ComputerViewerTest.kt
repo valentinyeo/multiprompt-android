@@ -73,6 +73,18 @@ class ComputerViewerTest {
         assertEquals(42001, viewer.current.localPort)
     }
 
+    @Test fun aViewerThatAnswersNothingEndsLostAndGivesTheTunnelBack() = runBlocking {
+        val tunnel = FakeTunnel(43000)
+        val viewer = ComputerViewer(opener = { tunnel }, publish = { published += it }, retries = 0)
+        viewer.wake(ComputerTarget.Default)
+        assertEquals(ComputerStatus.Live, viewer.current.status)
+        viewer.fail("Cannot reach the VPS")
+        assertTrue(tunnel.closed)
+        assertEquals(ComputerStatus.Lost, viewer.current.status)
+        assertEquals("Cannot reach the VPS", viewer.current.failure)
+        assertNull(viewer.current.localPort)
+    }
+
     @Test fun wakingASecondTimeAfterALossReconnectsInsteadOfConnecting() = runBlocking {
         var fail = true
         val viewer = ComputerViewer(

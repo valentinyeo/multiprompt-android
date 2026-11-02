@@ -3843,6 +3843,7 @@ internal fun ReaderScreen(
                             url = "http://${ComputerTarget.DEFAULT_HOST}:$port/",
                             onPicture = { computerStore.saveLastPicture(session, it) },
                             modifier = modifier,
+                            onUnreachable = { computerViewer.fail("Cannot reach the VPS") },
                         )
                     }
                 },
