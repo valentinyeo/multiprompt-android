@@ -131,7 +131,7 @@ class TmuxParserTest {
     @Test
     fun keepsSeparatorsInsidePaneTitle() {
         val s = TmuxParser.FIELD_SEPARATOR
-        val output = row("cl-1", "1", "0", "200", "98", "51", "/tmp", "box", "claude", "named", "fix a${s}b")
+        val output = row("cl-1", "1", "0", "200", "98", "51", "/tmp", "box", "claude", "named", "", "fix a${s}b")
 
         assertEquals("fix a${s}b", TmuxParser.parse("de", output).single().title)
     }
@@ -150,7 +150,7 @@ class TmuxParserTest {
     fun keepsTheHostSessionIdOfALiveChat() {
         val sid = "721fb507-2781-4e48-8b6d-debd6e2da3f3"
         val live = row("live-matt", "1", "0", "200", "98", "51", "/tmp", "box", "sleep", "sleep", sid, "Matt Live Stream")
-        val plain = row("cl-1", "1", "0", "200", "98", "51", "/tmp", "box", "claude", "named", "fix", "")
+        val plain = row("cl-1", "1", "0", "200", "98", "51", "/tmp", "box", "claude", "named", "", "fix")
 
         val sessions = TmuxParser.parse("de", live + plain)
 
@@ -170,7 +170,10 @@ class TmuxParserTest {
     fun readsSessionsFromAServerWithoutTheHostSessionColumn() {
         val output = row("cl-1", "1", "0", "200", "98", "51", "/tmp", "box", "claude", "named", "fix")
 
-        assertEquals("", TmuxParser.parse("de", output).single().hostSessionId)
+        val session = TmuxParser.parse("de", output).single()
+
+        assertEquals("", session.hostSessionId)
+        assertEquals("fix", session.title)
     }
 
     @Test
