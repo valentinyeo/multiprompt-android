@@ -19,9 +19,11 @@ import android.content.ClipboardManager
 import android.content.ClipData
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
+import android.view.inputmethod.InputMethodManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -138,6 +140,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.Alignment
@@ -4535,6 +4538,11 @@ private fun UpdateAvailableCard(release: UpdateRelease, onInstall: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+private fun imeRunning(manager: InputMethodManager?): Boolean {
+    val running = manager ?: return false
+    return runCatching { running.isAcceptingText }.getOrDefault(false)
+}
+
 internal fun TerminalTopBar(
     title: String,
     subtitle: String,
@@ -4612,6 +4620,19 @@ private fun TerminalScreen(
     var historyVisible by remember(connection) { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    val hostView = LocalView.current
+    val ime = remember(hostView) { hostView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager }
+    val imeScope = rememberCoroutineScope()
+    val openKeyboard: () -> Unit = {
+        runCatching { focusRequester.requestFocus() }
+        keyboard?.show()
+        imeScope.launch {
+            withFrameNanos { }
+            ime?.showSoftInput(hostView, InputMethodManager.SHOW_IMPLICIT)
+            delay(120)
+            if (!imeRunning(ime)) ime?.showSoftInput(hostView, InputMethodManager.SHOW_FORCED)
+        }
+    }
     val sharedDictation by dictation.state.collectAsState()
     val dictationState = sharedDictation.takeIf { it.sessionKey == dictationKey } ?: DictationState(configured = sharedDictation.configured)
     val dictating = dictationState.status in setOf(DictationStatus.CONNECTING, DictationStatus.LISTENING, DictationStatus.FINISHING)
@@ -4649,7 +4670,7 @@ private fun TerminalScreen(
                 onReleaseNotes = onReleaseNotes,
                 onOpenHistory = { historyVisible = true },
                 onLiveView = { historyVisible = false },
-                onShowKeyboard = { focusRequester.requestFocus(); keyboard?.show() },
+                onShowKeyboard = openKeyboard,
                 onDictate = toggleDictation,
                 dictating = dictating,
             )
@@ -4659,10 +4680,25 @@ private fun TerminalScreen(
             Modifier
                 .padding(padding)
                 .fillMaxSize()
+                .imePadding()
                 .background(TerminalBackground)
                 .clipToBounds()
                 .pointerInput(onBack) { detectPassiveDoubleTap(onBack) },
         ) {
+            val shellMetrics = remember(fontSize, terminalTypeface, density) {
+                val paint = Paint().apply {
+                    typeface = terminalTypeface
+                    textSize = with(density) { fontSize.toPx() }
+                }
+                val lineHeight = (paint.fontMetrics.descent - paint.fontMetrics.ascent).coerceAtLeast(1f)
+                paint.measureText("M").coerceAtLeast(1f) to lineHeight
+            }
+            val grid = shellGrid(
+                widthPx = with(density) { maxWidth.toPx() },
+                heightPx = with(density) { maxHeight.toPx() },
+                charWidthPx = shellMetrics.first,
+                lineHeightPx = shellMetrics.second,
+            )
             ShellContent(
                 historyVisible = historyVisible,
                 onOpenHistory = { historyVisible = true },
@@ -4671,10 +4707,7 @@ private fun TerminalScreen(
                 fontSize = fontSize,
                 onFontSizeChange = onFontSizeChange,
                 contentWidth = maxWidth,
-                onLiveTap = {
-                    focusRequester.requestFocus()
-                    keyboard?.show()
-                },
+                onLiveTap = openKeyboard,
             ) { liveModifier ->
                 Terminal(
                     terminalEmulator = connection.emulator,
@@ -4682,12 +4715,9 @@ private fun TerminalScreen(
                     initialFontSize = fontSize,
                     minFontSize = fontSize,
                     maxFontSize = fontSize,
-                    forcedSize = null,
+                    forcedSize = grid.rows to grid.columns,
                     focusRequester = focusRequester,
-                    onTerminalTap = {
-                        focusRequester.requestFocus()
-                        keyboard?.show()
-                    },
+                    onTerminalTap = openKeyboard,
                     typeface = terminalTypeface,
                     backgroundColor = TerminalBackground,
                     foregroundColor = TerminalForeground,

@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -56,6 +54,23 @@ internal fun defaultShellFontSize(bodyFontSize: TextUnit): TextUnit = bodyFontSi
 internal fun zoomShellFontSize(size: Float, zoom: Float): Float =
     (size * zoom).coerceIn(8f, 28f)
 
+internal data class ShellGrid(val rows: Int, val columns: Int)
+
+internal fun shellGrid(
+    widthPx: Float,
+    heightPx: Float,
+    charWidthPx: Float,
+    lineHeightPx: Float,
+): ShellGrid {
+    if (widthPx <= 0f || heightPx <= 0f || charWidthPx <= 0f || lineHeightPx <= 0f) {
+        return ShellGrid(rows = 24, columns = 80)
+    }
+    return ShellGrid(
+        rows = (heightPx / lineHeightPx).toInt().coerceIn(4, 200),
+        columns = (widthPx / charWidthPx).toInt().coerceIn(10, 400),
+    )
+}
+
 @Composable
 internal fun ShellContent(
     historyVisible: Boolean,
@@ -96,7 +111,6 @@ internal fun ShellContent(
     BoxWithConstraints(modifier.fillMaxSize().clipToBounds().background(TerminalBackground)) {
         val density = LocalDensity.current
         val maxPan by rememberUpdatedState(with(density) { (contentWidth - maxWidth).toPx().coerceAtLeast(0f) })
-        val liveWidth = contentWidth.coerceAtLeast(1.dp)
         Box(
             Modifier.fillMaxSize()
                 .testTag("Shell content")
@@ -142,14 +156,8 @@ internal fun ShellContent(
                 },
         ) {
             liveContent(
-                Modifier.wrapContentWidth(Alignment.Start, unbounded = true).requiredWidth(liveWidth)
-                    .offset { IntOffset(-pan.coerceIn(0f, maxPan).roundToInt(), 0) },
+                Modifier.fillMaxSize().offset { IntOffset(-pan.coerceIn(0f, maxPan).roundToInt(), 0) },
             )
-            Box(Modifier.fillMaxSize().pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) awaitPointerEvent()
-                }
-            })
         }
         if (historyVisible) {
             Box(Modifier.fillMaxSize().imePadding().background(TerminalBackground)) {
