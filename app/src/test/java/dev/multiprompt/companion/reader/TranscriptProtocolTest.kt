@@ -31,6 +31,18 @@ class TranscriptProtocolTest {
         assertEquals("Codex reply", TranscriptProtocol.parse(reply, 7, identity)!!.messages.single().text)
     }
 
+    @Test fun haxRunnersSharingAFolderKeepTheirOwnReplies() {
+        val ten = TranscriptProtocol.Identity(AgentKind.HAX, "hax-runner-10", "/projects")
+        val eleven = TranscriptProtocol.Identity(AgentKind.HAX, "hax-runner-11", "/projects")
+        assertTrue(TranscriptProtocol.request(9, ten) != TranscriptProtocol.request(9, eleven))
+        assertTrue(TranscriptProtocol.request(9, ten).contains("tmux:hax-runner-10"))
+        val forTen = wire(listOf(row("assistant", "Runner ten reply")), ten).replace("\thax\t", "\tcodex\t")
+        assertEquals("Runner ten reply", TranscriptProtocol.parse(forTen, 7, ten)!!.messages.single().text)
+        assertNull(TranscriptProtocol.parse(forTen, 7, eleven))
+        val forEleven = wire(listOf(row("assistant", "Runner eleven reply")), eleven).replace("\thax\t", "\tcodex\t")
+        assertNull(TranscriptProtocol.parse(forEleven, 7, ten))
+    }
+
     @Test fun requestsHaveSixFieldsAndUseResolvedSidAndToken() {
         assertEquals("7\ttranscript\tclaude\ttmux:claude-project\t/home/me/project\t-\n", TranscriptProtocol.request(7, tmux))
         assertEquals("8\ttranscript\tclaude\t123.456\t/home/me/project\tsession-id\n", TranscriptProtocol.request(8, sid, "123.456"))
