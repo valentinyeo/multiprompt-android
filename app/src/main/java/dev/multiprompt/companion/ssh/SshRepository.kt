@@ -240,7 +240,7 @@ class SshRepository(private val secrets: SecretStorage) {
     suspend fun readChatHistory(host: HostProfile, session: TmuxSession, script: ByteArray): ChatHistory? =
         withContext(Dispatchers.IO) {
             withAuthenticatedClient(host) { client ->
-                val identity = ChatHistoryProtocol.Identity(session.agent, session.name, session.workingDirectory)
+                val identity = ChatHistoryProtocol.Identity(session.agent, session.name, session.workingDirectory, session.hostSessionId)
                 var history: ChatHistory? = null
                 streamChatHistory(client, script) { exchange ->
                     val page = ChatHistoryProtocol.parse(exchange(ChatHistoryProtocol.request(1, identity, ChatHistory())), 1, identity)

@@ -83,7 +83,7 @@ object ChatHistoryProtocol {
         val base = fields[5].toLong()
         val end = fields[6].toLong()
         val oldest = fields[14].toLong()
-        require(oldest in 0..base && end >= base && fields[7].toLong() > 0)
+        require(oldest in 0..base && end >= base && (fields[7].toLong() > 0 || base == 0L && end == 0L))
         val deliveries = mutableMapOf<String, QueuedMessages.Delivery>()
         val held = mutableListOf<QueuedMessages.SentPrompt>()
         var pendingQuestions = emptyList<PendingQuestion>()
