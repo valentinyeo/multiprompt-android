@@ -19,7 +19,6 @@ import android.content.ClipboardManager
 import android.content.ClipData
 import android.content.Context
 import android.content.pm.PackageManager
-import android.graphics.Paint
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
@@ -4611,14 +4610,6 @@ private fun TerminalScreen(
     }
     val fontSize = savedFontSize?.sp ?: defaultShellFontSize(MaterialTheme.typography.bodyMedium.fontSize)
     var historyVisible by remember(connection) { mutableStateOf(false) }
-    val lineHeightPx = remember(fontSize, terminalTypeface, density) {
-        val paint = Paint().apply {
-            typeface = terminalTypeface
-            textSize = with(density) { fontSize.toPx() }
-        }
-        val metrics = paint.fontMetrics
-        kotlin.math.ceil((metrics.descent - metrics.ascent).toDouble()).toFloat()
-    }
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val sharedDictation by dictation.state.collectAsState()
@@ -4672,12 +4663,6 @@ private fun TerminalScreen(
                 .clipToBounds()
                 .pointerInput(onBack) { detectPassiveDoubleTap(onBack) },
         ) {
-            val charWidthPx = remember(fontSize, terminalTypeface, density) {
-                Paint().apply {
-                    typeface = terminalTypeface
-                    textSize = with(density) { fontSize.toPx() }
-                }.measureText("M")
-            }
             ShellContent(
                 historyVisible = historyVisible,
                 onOpenHistory = { historyVisible = true },
@@ -4685,7 +4670,7 @@ private fun TerminalScreen(
                 loadHistory = connection::history,
                 fontSize = fontSize,
                 onFontSizeChange = onFontSizeChange,
-                contentWidth = with(density) { (connection.emulator.screen.columns * charWidthPx).toDp() },
+                contentWidth = maxWidth,
                 onLiveTap = {
                     focusRequester.requestFocus()
                     keyboard?.show()
