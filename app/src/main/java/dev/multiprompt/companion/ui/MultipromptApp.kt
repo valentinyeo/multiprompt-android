@@ -425,6 +425,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             onDissolve = { viewModel.dissolveSession(readerSession) },
             onEnd = { viewModel.endSession(readerSession) },
             onBotAppearance = viewModel::setAccountBotAppearance,
+            onReattach = { viewModel.reattachReader(readerSession) },
             onSessionInteraction = { viewModel.noteSessionInteraction(readerSession) },
             onSessionInput = { viewModel.stampSessionInput(readerSession) },
             technicalMode = state.readerTechnicalMode,
@@ -2607,6 +2608,7 @@ internal fun ReaderScreen(
     onDissolve: () -> Unit,
     onEnd: () -> Unit,
     onBotAppearance: (String, Int?, Int?) -> Unit = { _, _, _ -> },
+    onReattach: () -> Unit = {},
     onSessionInteraction: () -> Unit,
     onSessionInput: () -> Unit,
     technicalMode: Boolean,
@@ -3313,6 +3315,15 @@ internal fun ReaderScreen(
                                         }
                                     },
                                 )
+                                if (reader.status != dev.multiprompt.companion.reader.ReaderStatus.Live) {
+                                    KitMenuRow(
+                                        label = "Reattach session",
+                                        onClick = {
+                                            menuExpanded = false
+                                            onReattach()
+                                        },
+                                    )
+                                }
                                 KitMenuRow(
                                     label = if (reading) "Stop reading" else "Read reply",
                                     onClick = {
