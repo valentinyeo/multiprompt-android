@@ -3,6 +3,7 @@ package dev.multiprompt.companion.ui
 import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.heightIn
@@ -19,6 +20,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -68,6 +70,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
@@ -250,12 +253,33 @@ internal fun ReplyableBubble(
         }
     }
     if (selectable) {
+        var selection by remember(text) { mutableStateOf(TextFieldValue(text)) }
+        val chosen = selection.selection.takeUnless { it.collapsed }?.let { range ->
+            text.substring(
+                minOf(range.start, range.end).coerceIn(0, text.length),
+                maxOf(range.start, range.end).coerceIn(0, text.length),
+            )
+        }.orEmpty()
         KitSheet(onDismiss = { selectable = false }) {
             Text("Select Text", style = Kit.Heading, color = Kit.Text)
-            SelectionContainer(modifier = Modifier.weight(1f, fill = false)) {
-                Text(text, Modifier.verticalScroll(rememberScrollState()), style = Kit.Body, color = Kit.Text)
-            }
-            KitPrimaryButton("Done", onClick = { selectable = false })
+            BasicTextField(
+                value = selection,
+                onValueChange = { selection = it.copy(text = text) },
+                readOnly = true,
+                modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                textStyle = Kit.Body.copy(color = Kit.Text),
+                cursorBrush = SolidColor(Kit.Text),
+            )
+            KitSecondaryButton("Done", onClick = { selectable = false }, modifier = Modifier.fillMaxWidth())
+            KitPrimaryButton(
+                "Add to chat",
+                onClick = {
+                    onReply(chosen)
+                    selectable = false
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = chosen.isNotBlank(),
+            )
         }
     }
 }
