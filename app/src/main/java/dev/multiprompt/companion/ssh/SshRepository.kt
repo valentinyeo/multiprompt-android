@@ -104,6 +104,12 @@ class SshRepository(private val secrets: SecretStorage) {
         }
     }
 
+    internal fun deviceLoginKey(): ByteArray? {
+        secrets.get(DeviceKeyStore.SECRET_ID)?.let { return it }
+        runCatching { DeviceKeyStore(secrets).ensure() }
+        return secrets.get(DeviceKeyStore.SECRET_ID)
+    }
+
     suspend fun connect(host: HostProfile): SshClient = withContext(Dispatchers.IO) {
         val probe = PinningHostKeyVerifier(host.hostKeyType, host.hostKeyFingerprint, host.hostKeys)
         val client = SshClient(
@@ -122,10 +128,10 @@ class SshRepository(private val secrets: SecretStorage) {
         }
 
         val hostPrivateKey = secrets.get(host.keySecretId)
-        val privateKey = hostPrivateKey ?: secrets.get(DeviceKeyStore.SECRET_ID)
+        val privateKey = hostPrivateKey ?: deviceLoginKey()
             ?: run {
                 client.disconnect()
-                throw SshProblem.Authentication("The imported private key is missing")
+                throw SshProblem.Authentication("This device has no login key. Sign in again to register it.")
             }
         val passphrase = (if (hostPrivateKey != null) host.passphraseSecretId else null)
             ?.let(secrets::get)
