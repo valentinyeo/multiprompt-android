@@ -2483,7 +2483,7 @@ internal fun ReaderTopBar(
                 onComputerClick?.let { openComputer ->
                     Box(
                         Modifier
-                            .heightIn(min = 40.dp)
+                            .heightIn(min = 48.dp)
                             .clip(CircleShape)
                             .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
                             .clickable(role = Role.Button, onClick = openComputer)

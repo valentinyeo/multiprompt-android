@@ -35,10 +35,11 @@ class ComputerViewer(
         if (current.status == ComputerStatus.Live) return@withLock
         var attempt = 0
         while (true) {
+            val reconnecting = everConnected || attempt > 0
             emit(
                 ComputerState(
-                    if (everConnected) ComputerStatus.Reconnecting else ComputerStatus.Connecting,
-                    localPort = if (everConnected) current.localPort else null,
+                    if (reconnecting) ComputerStatus.Reconnecting else ComputerStatus.Connecting,
+                    localPort = if (reconnecting) current.localPort else null,
                 ),
             )
             val opened = runCatching { opener.open(target) }.getOrNull()
