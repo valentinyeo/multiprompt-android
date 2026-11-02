@@ -2,6 +2,7 @@ package dev.multiprompt.companion.reader
 
 object ReadAloud {
     private val fenced = Regex("```[\\s\\S]*?```")
+    private val toolLine = Regex("^\\s*(?:[●⏺]\\s*)?(?:Bash|Read|Write|Edit|MultiEdit|Grep|Glob|Task|TodoWrite|WebFetch|WebSearch|NotebookEdit)\\(.*\\)\\s*$")
 
     data class Spoken(val key: String, val text: String)
 
@@ -18,5 +19,9 @@ object ReadAloud {
     }
 
     private fun speakable(text: String): Boolean =
-        fenced.replace(text, " ").any(Char::isLetterOrDigit)
+        fenced.replace(text, " ")
+            .lineSequence()
+            .filterNot { toolLine.matches(it.trim()) }
+            .joinToString(" ")
+            .any(Char::isLetterOrDigit)
 }

@@ -31,6 +31,25 @@ class ReadAloudTest {
         assertEquals(listOf("real answer"), replies.map { it.text })
     }
 
+    @Test fun toolOnlyRepliesStaySilent() {
+        val replies = ReadAloud.replies(
+            listOf(
+                message("assistant", "Bash(ls -la)"),
+                message("assistant", "● Read(app/src/main.kt)"),
+                message("assistant", "Task(general-purpose)"),
+                message("assistant", "Here is what I found."),
+            ),
+        )
+        assertEquals(listOf("Here is what I found."), replies.map { it.text })
+    }
+
+    @Test fun aReplyWithWordsAfterAToolLineIsStillSpoken() {
+        val replies = ReadAloud.replies(
+            listOf(message("assistant", "● Bash(ls -la)\nI listed the folder. Two files.")),
+        )
+        assertEquals(listOf("● Bash(ls -la)\nI listed the folder. Two files."), replies.map { it.text })
+    }
+
     @Test fun eachPressReadsTheNextOlderReplyThenWraps() {
         val replies = listOf(ReadAloud.Spoken("a", "newest"), ReadAloud.Spoken("b", "older"))
         assertEquals(ReadAloud.Spoken("a", "newest") to 1, ReadAloud.next(replies, 0))
