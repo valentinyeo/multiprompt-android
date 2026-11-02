@@ -533,6 +533,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onRenameSession = viewModel::renameSession,
                     onSetFavorite = { tab, value -> viewModel.editAccountLayout { it.setFavorite(tab.identity, value) } },
                     onRefresh = viewModel::refresh,
+                    onRefreshRooms = viewModel::refreshRooms,
                     onSelectSection = viewModel::select,
                     onReleaseNotes = viewModel::openReleaseNotes,
                     onForgetSession = viewModel::forgetSession,
@@ -1103,6 +1104,7 @@ internal fun SessionsScreen(
     signedIn: Boolean,
     onSignIn: () -> Unit,
     onSignOut: () -> Unit,
+    onRefreshRooms: () -> Unit = {},
     onOpen: (TmuxSession) -> Unit,
     onOpenTerminal: (TmuxSession) -> Unit,
     onArchive: (TmuxSession) -> Unit,
@@ -1181,6 +1183,7 @@ internal fun SessionsScreen(
     LaunchedEffect(searchVisible) {
         if (searchVisible) searchFocusRequester.requestFocus()
     }
+    LaunchedEffect(Unit) { onRefreshRooms() }
     LaunchedEffect(state.allSplitOnRight, state.workspaceSplitIds) {
         snapshotFlow { splitScrollState.maxValue }.collect { maximum ->
             splitScrollState.scrollTo(if (state.allSplitOnRight) maximum else 0)
@@ -1604,9 +1607,16 @@ internal fun SessionsScreen(
         emptyList()
     }
     val roomsContext = LocalContext.current.applicationContext
-    val roomStore = remember(roomsContext) { roomsContext.getSharedPreferences("rooms", android.content.Context.MODE_PRIVATE) }
     val drafts = remember(roomsContext) { SessionReadStore(roomsContext) }
-    val rooms = remember(roomStore) { parseRooms(roomStore.getString("rooms", null)) }
+    val rooms = remember(state.rooms) {
+        state.rooms.map { room ->
+            RoomSummary(
+                room.id,
+                room.name,
+                room.members.mapIndexed { index, member -> RoomMember(member.displayName, index) },
+            )
+        }
+    }
     val botLooks = remember(state.inboxSessions, state.readerSession) {
         state.inboxSessions.associate { session ->
             SessionReadStore.key(session.hostId, session.name) to BotLook(
