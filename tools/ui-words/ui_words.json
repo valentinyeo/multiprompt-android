@@ -227,5 +227,9 @@
   "bot_color_lilac": "Lilac",
   "bot_color_rose": "Rose",
   "bot_color_mint": "Mint",
-  "bot_look_save_error": "Could not save bot look"
+  "bot_look_save_error": "Could not save bot look",
+  "bot_color_white": "White",
+  "bot_color_brown": "Brown",
+  "bot_color_red": "Red",
+  "bot_color_grey": "Grey"
 }

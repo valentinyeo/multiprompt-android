@@ -15,6 +15,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
@@ -32,7 +33,12 @@ internal data class BotAppearance(val face: Int, val color: Int) {
     }
 }
 
-private val botColors = listOf(0xFF95DE69, 0xFFFF6F28, 0xFFFFC455, 0xFF5A9AE9, 0xFF9F6CFC, 0xFFFF667B, 0xFF5EFED1).map { Color(it) }
+private val botColors = listOf(
+    0xFF95DE69, 0xFFFF6F28, 0xFFFFC455, 0xFF5A9AE9, 0xFF9F6CFC, 0xFFFF667B, 0xFF5EFED1,
+    0xFFF4F4F4, 0xFF9A6B4F, 0xFFE0453C, 0xFF9AA0A6,
+).map { Color(it) }
+
+private val botHeadOutline = Color(0xFF6E7276)
 
 internal fun botColor(index: Int): Color = botColors[index.mod(botColors.size)]
 
@@ -109,6 +115,15 @@ private fun DrawScope.drawBotHead(face: Int, headColor: Color) {
         Size(headWidth, headHeight),
         CornerRadius(headRadius),
     )
+    if (headColor.luminance() > 0.7f) {
+        drawRoundRect(
+            botHeadOutline,
+            Offset(headLeft, headTop),
+            Size(headWidth, headHeight),
+            CornerRadius(headRadius),
+            style = Stroke(width = space * 0.05f),
+        )
+    }
     val visorWidth = headWidth * 0.72f
     val visorHeight = headHeight * 0.36f
     val visorLeft = headLeft + headWidth * 0.14f
