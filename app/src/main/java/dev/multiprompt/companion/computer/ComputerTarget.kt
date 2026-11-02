@@ -1,9 +1,5 @@
 package dev.multiprompt.companion.computer
 
-/**
- * Where the VPS screen viewer listens on the far side of the session's own SSH
- * connection. The phone only ever reaches it through that connection.
- */
 data class ComputerTarget(val host: String = DEFAULT_HOST, val port: Int = DEFAULT_PORT) {
     val value: String get() = "$host:$port"
 

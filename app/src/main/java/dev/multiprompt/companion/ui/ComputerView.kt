@@ -49,10 +49,6 @@ import dev.multiprompt.companion.computer.ComputerStatus
 import dev.multiprompt.companion.computer.ComputerTarget
 import java.io.File
 
-/**
- * The Computer view from the approved design: the VPS screen beside the chat,
- * view only, with the five connection states.
- */
 @Composable
 internal fun ComputerPane(
     hostLabel: String,
@@ -261,7 +257,6 @@ private fun statusColor(status: ComputerStatus): Color = when (status) {
     ComputerStatus.Lost -> MaterialTheme.colorScheme.error
 }
 
-/** The live screen: the VPS viewer reached through the session's own SSH tunnel. */
 @Composable
 internal fun ComputerScreen(url: String, onPicture: (Bitmap) -> Unit, modifier: Modifier = Modifier) {
     AndroidView(

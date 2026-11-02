@@ -3,7 +3,6 @@ package dev.multiprompt.companion.computer
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/** What the Computer view shows. Mirrors the approved states frame. */
 enum class ComputerStatus { Sleeping, Connecting, Live, Reconnecting, Lost }
 
 data class ComputerState(
@@ -12,7 +11,6 @@ data class ComputerState(
     val failure: String? = null,
 )
 
-/** The local end of one tunnel, reached through the session's SSH connection. */
 interface ComputerTunnel : AutoCloseable {
     val localPort: Int
 }
@@ -21,10 +19,6 @@ fun interface ComputerTunnelOpener {
     suspend fun open(target: ComputerTarget): ComputerTunnel?
 }
 
-/**
- * Owns the tunnel behind the Computer view. Only a visible pane holds one, so a
- * hidden chat costs nothing: sleep closes the tunnel and keeps the last picture.
- */
 class ComputerViewer(
     private val opener: ComputerTunnelOpener,
     private val publish: (ComputerState) -> Unit,

@@ -113,11 +113,6 @@ class SessionReaderConnection(
 
     fun matches(host: HostProfile, agent: AgentKind): Boolean = this.host == host && this.agent == agent
 
-    /**
-     * Opens a loopback-only tunnel to the VPS screen viewer on this session's own
-     * SSH connection. Nothing listens on the network, so the viewer never leaves
-     * the VPS.
-     */
     suspend fun openComputerTunnel(target: ComputerTarget): ComputerTunnel? {
         val client = streamClient ?: return null
         val forwarder = client.localPortForward(0, target.host, target.port) ?: return null

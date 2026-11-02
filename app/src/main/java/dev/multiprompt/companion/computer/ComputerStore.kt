@@ -6,7 +6,6 @@ import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.model.TmuxSession
 import java.io.File
 
-/** Per-host viewer address, the last picture, and which view a chat was left on. */
 class ComputerStore(context: Context) {
     private val preferences = context.getSharedPreferences("computer_view", Context.MODE_PRIVATE)
     private val pictures = File(context.filesDir, "computer")
