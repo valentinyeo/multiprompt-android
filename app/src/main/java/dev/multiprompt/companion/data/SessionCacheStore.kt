@@ -29,6 +29,7 @@ class SessionCacheStore(context: Context) {
                             windowName = item.optString("windowName"),
                             preview = item.optString("preview"),
                             paneCommand = item.optString("paneCommand"),
+                            hostSessionId = item.optString("hostSessionId"),
                         ),
                     )
                 }
@@ -51,7 +52,8 @@ class SessionCacheStore(context: Context) {
                     .put("title", session.title)
                     .put("windowName", session.windowName)
                     .put("preview", session.preview)
-                    .put("paneCommand", session.paneCommand),
+                    .put("paneCommand", session.paneCommand)
+                    .put("hostSessionId", session.hostSessionId),
             )
         }
         preferences.edit().putString(key(hostId), array.toString()).apply()

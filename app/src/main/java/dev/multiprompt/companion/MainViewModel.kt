@@ -887,6 +887,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 historyCache = app.chatHistoryCache,
                 messageJournal = app.messageJournal,
                 messageGate = app.messageGate,
+                hostSessionId = session.hostSessionId,
             ).also { connection ->
                 if (TranscriptProtocol.supports(session.agent)) {
                     connection.chatHistory(session.agent, session.workingDirectory)
