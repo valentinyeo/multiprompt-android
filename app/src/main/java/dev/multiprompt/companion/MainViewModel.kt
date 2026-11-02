@@ -625,6 +625,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             openPendingNotificationSession()
             pendingNotificationKey = null
             syncReplyNotifications()
+            refreshRooms()
             if (trustRefreshQueued) {
                 trustRefreshQueued = false
                 refresh()
