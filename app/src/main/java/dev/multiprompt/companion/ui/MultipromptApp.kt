@@ -4536,13 +4536,13 @@ private fun UpdateAvailableCard(release: UpdateRelease, onInstall: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
 private fun imeRunning(manager: InputMethodManager?): Boolean {
     val running = manager ?: return false
     return runCatching { running.isAcceptingText }.getOrDefault(false)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 internal fun TerminalTopBar(
     title: String,
     subtitle: String,
