@@ -1,5 +1,6 @@
 package dev.multiprompt.companion.ssh
 
+import dev.multiprompt.companion.model.AgentKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -144,6 +145,33 @@ class TmuxParserTest {
     }
 
     private fun row(vararg fields: String) = fields.joinToString(TmuxParser.FIELD_SEPARATOR) + "\n"
+
+    @Test
+    fun keepsTheHostSessionIdOfALiveChat() {
+        val sid = "721fb507-2781-4e48-8b6d-debd6e2da3f3"
+        val live = row("live-matt", "1", "0", "200", "98", "51", "/tmp", "box", "sleep", "sleep", "Matt Live Stream", sid)
+        val plain = row("cl-1", "1", "0", "200", "98", "51", "/tmp", "box", "claude", "named", "fix", "")
+
+        val sessions = TmuxParser.parse("de", live + plain)
+
+        assertEquals(sid, sessions.first { it.name == "live-matt" }.hostSessionId)
+        assertEquals(AgentKind.CLAUDE, sessions.first { it.name == "live-matt" }.agent)
+        assertEquals("", sessions.first { it.name == "cl-1" }.hostSessionId)
+    }
+
+    @Test
+    fun ignoresAHostSessionIdThatIsNotASessionId() {
+        val junk = row("live-x", "1", "0", "200", "98", "51", "/tmp", "box", "sleep", "sleep", "x", "not a session id")
+
+        assertEquals("", TmuxParser.parse("de", junk).single().hostSessionId)
+    }
+
+    @Test
+    fun readsSessionsFromAServerWithoutTheHostSessionColumn() {
+        val output = row("cl-1", "1", "0", "200", "98", "51", "/tmp", "box", "claude", "named", "fix")
+
+        assertEquals("", TmuxParser.parse("de", output).single().hostSessionId)
+    }
 
     @Test
     fun shellQuoteCannotInjectCommands() {

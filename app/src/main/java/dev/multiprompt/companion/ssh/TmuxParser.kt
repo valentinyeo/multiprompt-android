@@ -8,6 +8,7 @@ object TmuxParser {
     const val END_MARKER: String = "__MP_TMUX_END__"
     const val ERROR_PREFIX: String = "__MP_TMUX_ERROR__"
     const val PREVIEW_PREFIX: String = "__MP_TMUX_PREVIEW__"
+    private val SESSION_ID = Regex("[A-Za-z0-9_-]{1,80}")
 
     fun command(): String {
         val format = listOf(
@@ -22,6 +23,7 @@ object TmuxParser {
             "#{pane_current_command}",
             "#{window_name}",
             "#{pane_title}",
+            "#{@mp_host_sid}",
         ).joinToString(FIELD_SEPARATOR)
         return "printf '${START_MARKER}\\n'; " +
             "if command -v tmux >/dev/null 2>&1; then " +
@@ -58,7 +60,7 @@ object TmuxParser {
             if (line.isBlank() || line == START_MARKER || line == END_MARKER || line.startsWith(ERROR_PREFIX)) {
                 return@forEach
             }
-            val fields = line.split(FIELD_SEPARATOR, limit = 11)
+            val fields = line.split(FIELD_SEPARATOR, limit = 12)
             if (fields.size < 4 || fields[0].isBlank()) return@forEach
             val serverHost = fields.getOrNull(7).orEmpty()
             val hasPaneCommand = fields.size >= 10
@@ -84,6 +86,7 @@ object TmuxParser {
                 title = if (title == serverHost) "" else title,
                 windowName = windowName,
                 paneCommand = paneCommand,
+                hostSessionId = fields.getOrNull(11)?.trim()?.takeIf { SESSION_ID.matches(it) }.orEmpty(),
             )
         }
         return sessions.sortedWith(

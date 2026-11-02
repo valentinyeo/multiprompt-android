@@ -88,6 +88,7 @@ class SessionReaderConnection(
     private val historyCache: ChatHistoryCache,
     private val messageJournal: MessageJournal? = null,
     private val messageGate: MessageGate? = null,
+    private val hostSessionId: String = "",
 ) : AutoCloseable {
     private sealed interface Request {
         data class Prompt(val record: QueuedMessages.SentPrompt) : Request
@@ -131,7 +132,7 @@ class SessionReaderConnection(
 
     fun chatHistory(agent: AgentKind, cwd: String): ChatHistoryConnection {
         require(TranscriptProtocol.supports(agent))
-        val identity = ChatHistoryProtocol.Identity(agent, tmuxSessionName, cwd)
+        val identity = ChatHistoryProtocol.Identity(agent, tmuxSessionName, cwd, hostSessionId)
         if (historyIdentity == identity) return requireNotNull(historyConnection)
         historyConnection?.close()
         return ChatHistoryConnection(repository, host, identity, historyScript, historyCache, messageJournal, messageGate)

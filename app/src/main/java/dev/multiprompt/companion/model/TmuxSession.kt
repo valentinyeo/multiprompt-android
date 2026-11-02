@@ -13,6 +13,7 @@ data class TmuxSession(
     val windowName: String = "",
     val preview: String = "",
     val paneCommand: String = "",
+    val hostSessionId: String = "",
     val accountName: String? = null,
     val workspaceName: String = "",
     val workspaceColor: Int = 0,

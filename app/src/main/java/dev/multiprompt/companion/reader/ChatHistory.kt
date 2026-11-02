@@ -149,12 +149,14 @@ data class ChatHistory(
     )
 
     fun apply(page: ChatHistoryProtocol.Page): ChatHistory {
+        val fresh = page.inode == 0L && page.end == 0L && page.rows.isEmpty()
+        val mode = if (fresh) "tail" else page.mode
         val sameSource = sid == page.sid && inode == page.inode
-        when (page.mode) {
+        when (mode) {
             "delta" -> require(sameSource && page.base == offset && page.oldest == start)
             "older" -> require(sameSource && page.end == start && page.oldest == page.base)
         }
-        val retained = if (page.mode == "tail") emptyList() else rows
+        val retained = if (mode == "tail") emptyList() else rows
         val merged = (retained + page.rows).associateBy { listOf(it.offset, it.end, it.role, it.id, it.normalized) }.values.sortedBy { it.offset }
         val previousDeliveries = when {
             sameSource -> deliveries
@@ -163,7 +165,7 @@ data class ChatHistory(
         }
         val terminal = setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
         val mergedDeliveries = previousDeliveries + page.deliveries + previousDeliveries.filterValues { it in terminal }
-        return if (page.mode == "older") {
+        return if (mode == "older") {
             copy(start = page.oldest, rows = merged, deliveries = mergedDeliveries, held = page.held, pendingQuestions = page.pendingQuestions)
         } else {
             ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged, mergedDeliveries, page.held, page.pendingQuestions)
