@@ -9,6 +9,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
@@ -73,14 +75,15 @@ class ComputerPaneTest {
 
     @Test fun sleepingKeepsTheLastPictureAndWakesInOneTap() {
         show(ComputerState(ComputerStatus.Sleeping))
-        compose.onNodeWithText("Sleeping").assertIsDisplayed()
+        compose.onAllNodesWithText("Sleeping").assertCountEquals(2)
+        compose.onNodeWithText("Tap to wake.").assertIsDisplayed()
         compose.onNodeWithText("Wake up").performClick()
         assertEquals(1, woken)
     }
 
     @Test fun aLostViewerOffersOneRetryAndSaysAgentsStillWork() {
         show(ComputerState(ComputerStatus.Lost, failure = "Cannot reach the VPS"))
-        compose.onNodeWithText("Connection lost").assertIsDisplayed()
+        compose.onAllNodesWithText("Connection lost").assertCountEquals(2)
         compose.onNodeWithText("Cannot reach the VPS").assertIsDisplayed()
         compose.onNodeWithText("Agents keep working. Only the picture is gone.").assertIsDisplayed()
         compose.onNodeWithText("Retry").performClick()

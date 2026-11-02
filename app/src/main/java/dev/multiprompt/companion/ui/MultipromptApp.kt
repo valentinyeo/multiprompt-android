@@ -3326,13 +3326,6 @@ internal fun ReaderScreen(
                                         onOpenTerminal()
                                     },
                                 )
-                                KitMenuRow(
-                                    label = "Computer view",
-                                    onClick = {
-                                        menuExpanded = false
-                                        setComputerOpen(true)
-                                    },
-                                )
                                 KitDivider()
                                 if (unread) {
                                     KitMenuRow(
