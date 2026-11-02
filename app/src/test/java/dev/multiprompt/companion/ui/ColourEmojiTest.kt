@@ -90,6 +90,19 @@ class ColourEmojiTest {
         assertTrue("composer emoji drew as grey glyphs", chromaticPixels(capture("composer")) > 20)
     }
 
+    @Test fun replyPreviewKeepsEmojiColourful() {
+        compose.setContent {
+            MultipromptTheme(sunlight = false, material3 = false) {
+                Surface {
+                    Column(Modifier.padding(8.dp).testTag("preview")) {
+                        ReplyQuoteBar(message = "Ship it 👍🚀", author = "HT Product Lead", onCancel = {})
+                    }
+                }
+            }
+        }
+        assertTrue("reply preview emoji drew as grey glyphs", chromaticPixels(capture("preview")) > 20)
+    }
+
     private fun chromaticPixels(bitmap: Bitmap): Int {
         val pixels = IntArray(bitmap.width * bitmap.height)
         bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
