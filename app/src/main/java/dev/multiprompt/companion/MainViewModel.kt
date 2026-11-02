@@ -1515,8 +1515,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             repository = ssh,
             host = host,
             tmuxSessionName = session.name,
-            windowColumns = session.columns,
-            windowRows = session.rows,
         ).also { it.start() }
         _state.update {
             it.copy(
