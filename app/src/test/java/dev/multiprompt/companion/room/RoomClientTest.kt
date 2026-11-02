@@ -1,18 +1,24 @@
 package dev.multiprompt.companion.room
 
+import android.app.Application
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35], application = Application::class)
 class RoomClientTest {
     private class FakeWire(private val answers: MutableList<JSONObject>) : RoomWire {
         val requests = mutableListOf<JSONObject>()
         var closed = false
         override suspend fun call(request: JSONObject): JSONObject {
             requests += request
-            return answers.removeFirst()
+            return answers.removeAt(0)
         }
         override fun close() {
             closed = true
