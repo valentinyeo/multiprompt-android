@@ -17,6 +17,7 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.unit.dp
 import dev.multiprompt.companion.model.TmuxSession
@@ -29,6 +30,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -71,6 +73,32 @@ class BotLookSheetTest {
         compose.onNodeWithText("Auto").assertIsDisplayed()
         val bitmap = capture("bot-look")
         assertTrue(bitmap.width > 200 && bitmap.height > 200)
+    }
+
+    @Test fun pickingAFaceOrColourReportsIt() {
+        val faces = mutableListOf<Int>()
+        val colours = mutableListOf<Int?>()
+        compose.setContent {
+            MultipromptTheme(sunlight = false, material3 = false) {
+                Surface {
+                    Column(Modifier.padding(16.dp)) {
+                        BotLookContent(
+                            session = session,
+                            pickedFace = null,
+                            pickedColor = null,
+                            onPickFace = { faces.add(it) },
+                            onPickColor = { colours.add(it) },
+                        )
+                    }
+                }
+            }
+        }
+        compose.onNodeWithText("Bot look").assertIsDisplayed()
+        compose.onNodeWithText("Auto").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf<Int?>(null), colours)
+        compose.onNodeWithText("Face").assertIsDisplayed()
+        assertTrue(faces.isEmpty())
     }
 
     private fun capture(tag: String): Bitmap {
