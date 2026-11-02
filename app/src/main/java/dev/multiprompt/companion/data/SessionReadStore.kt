@@ -185,6 +185,16 @@ class SessionReadStore(context: Context) {
         preferences.edit().putBoolean(ALL_SPLIT_ON_RIGHT, enabled).apply()
     }
 
+    fun pinnedPage(session: TmuxSession): String? =
+        preferences.getString(PINNED_PAGE_PREFIX + key(session.hostId, session.name), null)
+
+    fun setPinnedPage(session: TmuxSession, url: String?) {
+        val prefKey = PINNED_PAGE_PREFIX + key(session.hostId, session.name)
+        val editor = preferences.edit()
+        if (url == null) editor.remove(prefKey) else editor.putString(prefKey, url)
+        editor.apply()
+    }
+
     fun botPicture(session: TmuxSession): String? =
         preferences.getString(BOT_PICTURE_PREFIX + key(session.hostId, session.name), null)
 
@@ -279,6 +289,7 @@ class SessionReadStore(context: Context) {
         private const val BOT_FACE_PREFIX = "bot_face::"
         private const val BOT_COLOR_PREFIX = "bot_color::"
         private const val BOT_PICTURE_PREFIX = "bot_picture::"
+        private const val PINNED_PAGE_PREFIX = "pinned_page::"
         private const val DISPLAY_NAME_PREFIX = "display_name::"
         private const val INTERACTION_PREFIX = "interaction::"
         private const val DEFAULT_FONT_SCALE = 1f
