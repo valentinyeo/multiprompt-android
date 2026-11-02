@@ -125,6 +125,8 @@ import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.key
@@ -2739,6 +2741,21 @@ internal fun ReaderScreen(
         if (!computerOpen) return@LaunchedEffect
         if (reader.status == ReaderStatus.Live) computerViewer.wake(computerTarget) else computerViewer.invalidate()
     }
+    val computerHostContext = LocalContext.current
+    val computerLifecycle = remember(computerHostContext) { computerHostContext.findLifecycle() }
+    val computerScope = rememberCoroutineScope()
+    DisposableEffect(computerLifecycle, computerOpen, computerTarget) {
+        if (computerLifecycle == null) return@DisposableEffect onDispose {}
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> computerViewer.sleep()
+                Lifecycle.Event.ON_START -> if (computerOpen) computerScope.launch { computerViewer.wake(computerTarget) }
+                else -> Unit
+            }
+        }
+        computerLifecycle.lifecycle.addObserver(observer)
+        onDispose { computerLifecycle.lifecycle.removeObserver(observer) }
+    }
     val setComputerOpen: (Boolean) -> Unit = { value ->
         computerOpen = value
         computerStore.setShowsComputer(session, value)
@@ -4430,6 +4447,15 @@ private fun UpdateScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+private fun android.content.Context.findLifecycle(): androidx.lifecycle.LifecycleOwner? {
+    var context: android.content.Context? = this
+    while (context != null) {
+        if (context is androidx.lifecycle.LifecycleOwner) return context
+        context = (context as? android.content.ContextWrapper)?.baseContext
+    }
+    return null
 }
 
 private fun pinnablePage(value: String): Boolean =
