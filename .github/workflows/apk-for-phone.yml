@@ -1,6 +1,5 @@
 name: Debug APK for a phone proof
-on:
-  workflow_dispatch:
+on: push
 jobs:
   apk:
     runs-on: ubuntu-latest
