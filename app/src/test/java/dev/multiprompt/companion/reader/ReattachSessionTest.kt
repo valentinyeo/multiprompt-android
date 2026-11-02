@@ -1,11 +1,14 @@
 package dev.multiprompt.companion.reader
 
 import android.content.Context
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import dev.multiprompt.companion.MainActivity
 import dev.multiprompt.companion.MainViewModel
 import dev.multiprompt.companion.MultipromptApplication
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
 import org.junit.After
+import org.junit.Rule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNotNull
@@ -19,6 +22,7 @@ import org.robolectric.util.ReflectionHelpers
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = MultipromptApplication::class)
 class ReattachSessionTest {
+    @get:Rule(order = 0) val compose = createAndroidComposeRule<MainActivity>()
     private lateinit var app: MultipromptApplication
     private var model: MainViewModel? = null
 
@@ -28,6 +32,7 @@ class ReattachSessionTest {
     }
 
     @Test fun reattachReplacesTheConnectionAndKeepsTheSession() {
+        compose.runOnIdle {
         app = ReflectionHelpers.newInstance(MultipromptApplication::class.java)
         ReflectionHelpers.callInstanceMethod<Unit>(app, "attach",
             ReflectionHelpers.ClassParameter.from(Context::class.java, RuntimeEnvironment.getApplication()))
@@ -44,5 +49,6 @@ class ReattachSessionTest {
         assertNotNull("reattach leaves a reader open", second)
         assertNotSame("reattach builds a fresh connection", first, second)
         assertEquals(session.name, model.state.value.readerSession?.name)
+        }
     }
 }
