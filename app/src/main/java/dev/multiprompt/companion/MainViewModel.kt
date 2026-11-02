@@ -1260,6 +1260,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(dissolvedSessions = it.dissolvedSessions.filterNot { item -> item.key == session.key }) }
     }
 
+    fun reattachReader(session: TmuxSession) {
+        val key = SessionReadStore.key(session.hostId, session.name)
+        warmReaders.remove(key)?.close()
+        warmReaderTouchedAt.remove(key)
+        _state.update { it.copy(reader = null, readerSession = null) }
+        openReader(session, userInitiated = true)
+    }
+
     fun closeReader() {
         _state.value.reader?.select(false)
         _state.update { it.copy(reader = null, readerSession = null, readerSwipeOrder = emptyList()) }
