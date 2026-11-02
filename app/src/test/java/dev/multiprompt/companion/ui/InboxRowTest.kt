@@ -43,6 +43,14 @@ class InboxRowTest {
     }
 
     @Test
+    fun previewsAndFolderNamesKeepEmojiAndAccents() {
+        compose.setContent { EmojiNamesInbox() }
+        compose.onNodeWithText("Rocket 🤖 Chief").assertIsDisplayed()
+        compose.onNodeWithText("Reply with 🚀 next").assertIsDisplayed()
+        compose.onNodeWithText("Zürich · Opéra").assertIsDisplayed()
+    }
+
+    @Test
     fun longPressOpensRowActions() {
         compose.setContent { M3TestScreen(M3Screen.INBOX_LIST, material3 = false, sunlight = false) }
         compose.onNodeWithText("Waiting").assertDoesNotExist()
