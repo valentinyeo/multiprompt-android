@@ -16,7 +16,7 @@ class LiveChatHistoryTest {
     private val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "live-1517b1", "/tmp", sid)
 
     private fun reply(id: Long, header: String, body: String = "") = JSONObject().put("id", id)
-        .put("wire", "$header\n$body${TranscriptProtocol.END}\n").toString()
+        .put("wire", header + "\n" + (if (body.isEmpty()) "" else body + "\n") + TranscriptProtocol.END + "\n").toString()
 
     private fun emptyHeader(id: Long) = "@mp\t$id\thistory\tok\t$sid\t0\t0\t0\t0\tclaude\tlive-1517b1\t0\t$probe\tdelta\t0"
 
