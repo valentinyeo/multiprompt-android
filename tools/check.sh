@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-node --test tools/root-files.test.js tools/strip-comments.test.js tools/release-status.test.js tools/workflow-inputs.test.js tools/pr-checks.test.js
+node --test tools/root-files.test.js tools/strip-comments.test.js tools/release-status.test.js tools/verify-published.test.mjs tools/workflow-inputs.test.js tools/pr-checks.test.js
 python3 -B tools/session-gestures/scroll.test.py
 python3 -B tools/send-frame.test.py
 python3 -B tools/working-dots/check.test.py
