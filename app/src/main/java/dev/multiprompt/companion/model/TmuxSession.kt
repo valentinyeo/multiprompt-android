@@ -55,6 +55,7 @@ enum class AgentKind(val label: String) {
     companion object {
         fun detect(name: String, title: String = "", preview: String = "", paneCommand: String = ""): AgentKind {
             val command = paneCommand.lowercase().substringAfterLast('/').substringAfterLast('\\')
+            if (command == "sleep" && name.lowercase().startsWith(LIVE_CHAT_PREFIX)) return CLAUDE
             when {
                 command == "codex" || command.startsWith("codex-") -> return CODEX
                 command == "claude" || command.startsWith("claude-") -> return CLAUDE
@@ -88,6 +89,7 @@ enum class AgentKind(val label: String) {
             }
         }
 
+        private const val LIVE_CHAT_PREFIX = "live-"
         private val PI_NAME = Regex("(^|[-_])pi($|[-_])")
         private val HAX_NAME = Regex("(^|[-_])hax($|[-_])")
     }
