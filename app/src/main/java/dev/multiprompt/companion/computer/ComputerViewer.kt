@@ -73,6 +73,13 @@ class ComputerViewer(
         }
     }
 
+    fun fail(reason: String) {
+        val old = tunnel
+        tunnel = null
+        runCatching { old?.close() }
+        emit(ComputerState(ComputerStatus.Lost, failure = reason))
+    }
+
     fun close() = sleep()
 
     private fun emit(next: ComputerState) {
