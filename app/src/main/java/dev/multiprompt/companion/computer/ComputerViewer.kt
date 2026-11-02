@@ -64,6 +64,15 @@ class ComputerViewer(
         emit(ComputerState(ComputerStatus.Sleeping))
     }
 
+    fun invalidate() {
+        val old = tunnel
+        tunnel = null
+        runCatching { old?.close() }
+        if (current.status == ComputerStatus.Live) {
+            emit(ComputerState(ComputerStatus.Reconnecting, localPort = current.localPort))
+        }
+    }
+
     fun close() = sleep()
 
     private fun emit(next: ComputerState) {

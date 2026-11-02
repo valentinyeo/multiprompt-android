@@ -53,6 +53,26 @@ class ComputerViewerTest {
         assertEquals("Cannot reach the VPS", viewer.current.failure)
     }
 
+    @Test fun aChatThatDropsItsConnectionNeverLeavesADeadPictureOnScreen() = runBlocking {
+        val lost = FakeTunnel(42000)
+        var reopen = false
+        val viewer = ComputerViewer(
+            opener = { if (reopen) FakeTunnel(42001) else lost },
+            publish = { published += it },
+            retries = 0,
+        )
+        viewer.wake(ComputerTarget.Default)
+        assertEquals(ComputerStatus.Live, viewer.current.status)
+        viewer.invalidate()
+        assertTrue(lost.closed)
+        assertEquals(ComputerStatus.Reconnecting, viewer.current.status)
+        assertEquals(42000, viewer.current.localPort)
+        reopen = true
+        viewer.wake(ComputerTarget.Default)
+        assertEquals(ComputerStatus.Live, viewer.current.status)
+        assertEquals(42001, viewer.current.localPort)
+    }
+
     @Test fun wakingASecondTimeAfterALossReconnectsInsteadOfConnecting() = runBlocking {
         var fail = true
         val viewer = ComputerViewer(

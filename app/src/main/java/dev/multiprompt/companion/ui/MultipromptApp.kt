@@ -2734,6 +2734,10 @@ internal fun ReaderScreen(
     LaunchedEffect(computerOpen, computerTarget) {
         if (computerOpen) computerViewer.wake(computerTarget) else computerViewer.sleep()
     }
+    LaunchedEffect(reader.status, computerOpen) {
+        if (!computerOpen) return@LaunchedEffect
+        if (reader.status == ReaderStatus.Live) computerViewer.wake(computerTarget) else computerViewer.invalidate()
+    }
     val setComputerOpen: (Boolean) -> Unit = { value ->
         computerOpen = value
         computerStore.setShowsComputer(session, value)
