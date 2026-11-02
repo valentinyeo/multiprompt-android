@@ -292,3 +292,66 @@ private fun WebView.snapshot(): Bitmap? {
         Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { draw(Canvas(it)) }
     }.getOrNull()
 }
+
+@Composable
+internal fun PagePane(
+    title: String,
+    onBack: () -> Unit,
+    onOpenInBrowser: () -> Unit,
+    modifier: Modifier = Modifier,
+    screen: @Composable (Modifier) -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Column(
+        modifier.fillMaxSize().statusBarsPadding().padding(horizontal = ReaderScreenPadding).padding(top = ReaderControlSpacing),
+        verticalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
+    ) {
+        Row(Modifier.fillMaxWidth().testTag("page-header"), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to chat")
+            }
+            Text("Page", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                " · $title",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            Box {
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(Icons.Default.MoreVert, "Page actions")
+                }
+                KitMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    KitMenuRow(label = "Open in browser", onClick = { menuOpen = false; onOpenInBrowser() })
+                    KitMenuRow(label = "Close page", onClick = { menuOpen = false; onBack() })
+                }
+            }
+        }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .clip(chromeShape(RoundedCornerShape(12.dp)))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .testTag("page-screen"),
+        ) {
+            screen(Modifier.fillMaxSize())
+        }
+    }
+}
+
+@Composable
+internal fun PageScreen(url: String, modifier: Modifier = Modifier) {
+    AndroidView(
+        modifier = modifier,
+        factory = { context ->
+            WebView(context).apply {
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                webViewClient = WebViewClient()
+                loadUrl(url)
+            }
+        },
+        onRelease = { view -> runCatching { view.destroy() } },
+    )
+}

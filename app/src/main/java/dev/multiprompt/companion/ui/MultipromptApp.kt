@@ -2674,6 +2674,7 @@ internal fun ReaderScreen(
     var botLookOpen by remember(session.hostId, session.name) { mutableStateOf(false) }
     var pinnedPage by remember(session.hostId, session.name) { mutableStateOf(draftStore.pinnedPage(session)) }
     var pinPageOpen by remember(session.hostId, session.name) { mutableStateOf(false) }
+    var pageOpen by remember(session.hostId, session.name) { mutableStateOf(false) }
     var promptField by remember(connection) {
         mutableStateOf(TextFieldValue(draftStore.composerDraft(session)))
     }
@@ -3636,7 +3637,7 @@ internal fun ReaderScreen(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        KitSecondaryButton("Open", onClick = { openPage(context, page) })
+                        KitSecondaryButton("Open", onClick = { pageOpen = true })
                         KitSecondaryButton("Remove", onClick = {
                             draftStore.setPinnedPage(session, null)
                             pinnedPage = null
@@ -3827,7 +3828,14 @@ internal fun ReaderScreen(
             }
         },
     ) { padding ->
-        if (computerOpen) {
+        if (pageOpen && pinnedPage != null) {
+            PagePane(
+                title = pinnedPageLabel(pinnedPage!!),
+                onBack = { pageOpen = false },
+                onOpenInBrowser = { openPage(context, pinnedPage!!) },
+                screen = { modifier -> PageScreen(pinnedPage!!, modifier) },
+            )
+        } else if (computerOpen) {
             ComputerPane(
                 hostLabel = hostLabel,
                 state = computerState,
