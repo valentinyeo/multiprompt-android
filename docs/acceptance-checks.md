@@ -49,6 +49,16 @@ One line per behaviour Valentin asked for, the check that proves it, and the rel
 | Room row shows two stacked heads and its members | `RoomScreenTest.roomRowShowsTheRoomAndItsMembers` | 0.1.350 |
 | Room screen shows members, chips and the waiting line | `RoomScreenTest.roomShowsNameMembersAndTheWaitingLine` | 0.1.350 |
 
+## The VPS screen
+
+| Behaviour | Check | Shipped |
+|---|---|---|
+| A chat opens the VPS screen and comes back in one tap | `ComputerPaneTest.theBackArrowReturnsToTheChatInOneTap` | next |
+| Only the visible chat holds a viewer connection | `ComputerViewerTest.wakeRetriesOnceThenGoesLiveAndSleepClosesTheTunnel` | next |
+| A viewer that cannot be reached offers one retry | `ComputerViewerTest.aViewerThatNeverAnswersEndsLostWithAReason` | next |
+| The screen is read through the chat's own connection, never the internet | `SessionReaderConnection.openComputerTunnel` plus the loopback-only cleartext rule | next |
+| Each server keeps its own viewer address | `ComputerStoreTest.eachServerKeepsItsOwnViewerAddress` | next |
+
 ## Releases
 
 | Behaviour | Check | Shipped |

@@ -199,6 +199,11 @@ import dev.multiprompt.companion.account.isFavoriteSession
 import dev.multiprompt.companion.account.isHiddenAsMuted
 import dev.multiprompt.companion.account.isMutedSession
 import dev.multiprompt.companion.AppSection
+import dev.multiprompt.companion.computer.ComputerState
+import dev.multiprompt.companion.computer.ComputerStatus
+import dev.multiprompt.companion.computer.ComputerStore
+import dev.multiprompt.companion.computer.ComputerTarget
+import dev.multiprompt.companion.computer.ComputerViewer
 import dev.multiprompt.companion.AppUiState
 import dev.multiprompt.companion.SessionBucket
 import dev.multiprompt.companion.BuildConfig
@@ -401,6 +406,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             onSignIn = { viewModel.signInAccount { context.startActivity(it) } },
             onSignOut = viewModel::signOutAccount,
             session = readerSession,
+            hostLabel = state.hosts.firstOrNull { it.id == readerSession.hostId }?.label ?: readerSession.hostId,
             unread = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.unreadSessionKeys,
             archived = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.archivedSessionKeys,
             initialFontScale = viewModel.readerFontScale(readerSession),
@@ -2440,6 +2446,7 @@ internal fun ReaderTopBar(
     botFace: Int? = null,
     botColor: Int? = null,
     botPicture: String? = null,
+    onComputerClick: (() -> Unit)? = null,
 ) {
     var modelMenuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     if (LocalReaderStyle.current) {
@@ -2470,6 +2477,19 @@ internal fun ReaderTopBar(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                    }
+                }
+                onComputerClick?.let { openComputer ->
+                    Box(
+                        Modifier
+                            .heightIn(min = 40.dp)
+                            .clip(CircleShape)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                            .clickable(role = Role.Button, onClick = openComputer)
+                            .padding(horizontal = 14.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("Computer", style = MaterialTheme.typography.labelLarge)
                     }
                 }
                 Box {
@@ -2595,6 +2615,7 @@ internal fun ReaderScreen(
     onSignIn: () -> Unit,
     onSignOut: () -> Unit,
     session: TmuxSession,
+    hostLabel: String = session.hostId,
     unread: Boolean,
     archived: Boolean,
     initialFontScale: Float,
@@ -3096,6 +3117,42 @@ internal fun ReaderScreen(
             }, modifier = Modifier.fillMaxWidth(), enabled = imageKeyDraft.isNotBlank())
         }
     }
+    if (computerTargetOpen) {
+        var targetDraft by remember(session.hostId) { mutableStateOf(computerTarget.value) }
+        var targetError by remember(session.hostId) { mutableStateOf<String?>(null) }
+        KitSheet(onDismiss = { computerTargetOpen = false }) {
+            Text("Viewer address", style = Kit.Heading, color = Kit.Text)
+            Text(
+                "Read on the server through this chat's own connection. Nothing opens to the internet.",
+                style = Kit.Hint,
+                color = Kit.TextMuted,
+            )
+            OutlinedTextField(
+                value = targetDraft,
+                onValueChange = { targetDraft = it; targetError = null },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Address and port") },
+                singleLine = true,
+                isError = targetError != null,
+                supportingText = targetError?.let { message -> { Text(message) } },
+            )
+            KitSecondaryButton("Cancel", onClick = { computerTargetOpen = false }, modifier = Modifier.fillMaxWidth())
+            KitPrimaryButton(
+                "Save address",
+                onClick = {
+                    val parsed = ComputerTarget.parse(targetDraft)
+                    if (parsed == null) {
+                        targetError = "Use an address like 127.0.0.1:6080"
+                    } else {
+                        computerStore.setTarget(session.hostId, parsed)
+                        computerTarget = parsed
+                        computerTargetOpen = false
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
     if (pinPageOpen) {
         var pageDraft by remember(session.hostId, session.name) { mutableStateOf(pinnedPage.orEmpty()) }
         var pageError by remember(session.hostId, session.name) { mutableStateOf<String?>(null) }
@@ -3164,6 +3221,27 @@ internal fun ReaderScreen(
         reader.eta?.let { "ETA ${it.label(etaNowMillis)}" },
         "waiting for input".takeIf { reader.waitingForInput },
     ).joinToString(" · ").ifEmpty { null }
+    val computerStore = remember(draftContext) { ComputerStore(draftContext) }
+    var computerTarget by remember(session.hostId) { mutableStateOf(computerStore.target(session.hostId)) }
+    var computerOpen by remember(session.hostId, session.name) {
+        mutableStateOf(computerStore.showsComputer(session))
+    }
+    var computerState by remember(connection) { mutableStateOf(ComputerState()) }
+    var computerTargetOpen by remember(session.hostId, session.name) { mutableStateOf(false) }
+    val computerViewer = remember(connection) {
+        ComputerViewer(
+            opener = { target -> connection.openComputerTunnel(target) },
+            publish = { computerState = it },
+        )
+    }
+    DisposableEffect(computerViewer) { onDispose { computerViewer.close() } }
+    LaunchedEffect(computerOpen, computerTarget) {
+        if (computerOpen) computerViewer.wake(computerTarget) else computerViewer.sleep()
+    }
+    val setComputerOpen: (Boolean) -> Unit = { value ->
+        computerOpen = value
+        computerStore.setShowsComputer(session, value)
+    }
     BackHandler(onBack = onBack)
     Scaffold(
         floatingActionButtonPosition = androidx.compose.material3.FabPosition.Center,
@@ -3175,8 +3253,9 @@ internal fun ReaderScreen(
             }
         },
         topBar = {
-            ReaderTopBar(
+            if (!computerOpen) ReaderTopBar(
                 onBack = onBack,
+                onComputerClick = { setComputerOpen(true) },
                 botFace = draftStore.botFace(session),
                 botColor = draftStore.botColor(session),
                 botPicture = draftStore.botPicture(session),
@@ -3244,6 +3323,13 @@ internal fun ReaderScreen(
                                     onClick = {
                                         menuExpanded = false
                                         onOpenTerminal()
+                                    },
+                                )
+                                KitMenuRow(
+                                    label = "Computer view",
+                                    onClick = {
+                                        menuExpanded = false
+                                        setComputerOpen(true)
                                     },
                                 )
                                 KitDivider()
@@ -3743,7 +3829,27 @@ internal fun ReaderScreen(
             }
         },
     ) { padding ->
-        if (historyChat) {
+        if (computerOpen) {
+            ComputerPane(
+                hostLabel = hostLabel,
+                state = computerState,
+                target = computerTarget,
+                picture = computerStore.lastPicture(session),
+                onBack = { setComputerOpen(false) },
+                onWake = { readerScope.launch { computerViewer.wake(computerTarget) } },
+                onSleep = { computerViewer.sleep() },
+                onEditTarget = { computerTargetOpen = true },
+                screen = { modifier ->
+                    computerState.localPort?.takeIf { computerState.status == ComputerStatus.Live }?.let { port ->
+                        ComputerScreen(
+                            url = "http://${ComputerTarget.DEFAULT_HOST}:$port/",
+                            onPicture = { computerStore.saveLastPicture(session, it) },
+                            modifier = modifier,
+                        )
+                    }
+                },
+            )
+        } else if (historyChat) {
             ChatHistoryView(
                 connection = connection,
                 reader = reader,

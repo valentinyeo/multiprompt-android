@@ -1,5 +1,7 @@
 package dev.multiprompt.companion.reader
 
+import dev.multiprompt.companion.computer.ComputerTarget
+import dev.multiprompt.companion.computer.ComputerTunnel
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.ssh.SshRepository
@@ -110,6 +112,22 @@ class SessionReaderConnection(
     @Volatile private var selected = false
 
     fun matches(host: HostProfile, agent: AgentKind): Boolean = this.host == host && this.agent == agent
+
+    /**
+     * Opens a loopback-only tunnel to the VPS screen viewer on this session's own
+     * SSH connection. Nothing listens on the network, so the viewer never leaves
+     * the VPS.
+     */
+    suspend fun openComputerTunnel(target: ComputerTarget): ComputerTunnel? {
+        val client = streamClient ?: return null
+        val forwarder = client.localPortForward(0, target.host, target.port) ?: return null
+        return object : ComputerTunnel {
+            override val localPort: Int = forwarder.boundPort
+            override fun close() {
+                runCatching { forwarder.close() }
+            }
+        }
+    }
 
     fun select(value: Boolean) {
         selected = value
