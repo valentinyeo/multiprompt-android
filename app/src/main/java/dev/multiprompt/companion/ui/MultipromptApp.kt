@@ -86,13 +86,14 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicNone
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.filled.ExpandMore
@@ -386,8 +387,9 @@ private fun AppScreens(viewModel: MainViewModel) {
         TerminalScreen(
             connection = terminal,
             title = state.terminalSession?.displayName ?: terminal.tmuxSessionName,
-            columns = state.terminalSession?.columns ?: 0,
-            rows = state.terminalSession?.rows ?: 0,
+            dictation = viewModel.dictation,
+            dictationKey = state.terminalSession?.let { SessionReadStore.key(it.hostId, it.name) }.orEmpty(),
+
             savedFontSize = state.shellFontSize,
             onFontSizeChange = viewModel::setShellFontSize,
             onBack = viewModel::closeTerminal,
@@ -4542,6 +4544,8 @@ internal fun TerminalTopBar(
     onOpenHistory: () -> Unit,
     onLiveView: () -> Unit,
     onShowKeyboard: () -> Unit,
+    onDictate: () -> Unit = {},
+    dictating: Boolean = false,
 ) {
     TopAppBar(
         modifier = Modifier
@@ -4571,6 +4575,12 @@ internal fun TerminalTopBar(
             IconButton(onClick = onLiveView) {
                 Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Back to the live view")
             }
+            IconButton(onClick = onDictate) {
+                Icon(
+                    if (dictating) Icons.Default.Mic else Icons.Default.MicNone,
+                    contentDescription = if (dictating) "Stop dictation" else "Dictate into the shell",
+                )
+            }
             IconButton(onClick = onShowKeyboard) {
                 Icon(Icons.Default.Keyboard, contentDescription = "Show keyboard")
             }
@@ -4583,8 +4593,8 @@ internal fun TerminalTopBar(
 private fun TerminalScreen(
     connection: TerminalConnection,
     title: String,
-    columns: Int,
-    rows: Int,
+    dictation: DeepgramDictation,
+    dictationKey: String,
     savedFontSize: Float?,
     onFontSizeChange: (Float) -> Unit,
     onBack: () -> Unit,
@@ -4601,7 +4611,6 @@ private fun TerminalScreen(
     }
     val fontSize = savedFontSize?.sp ?: defaultShellFontSize(MaterialTheme.typography.bodyMedium.fontSize)
     var historyVisible by remember(connection) { mutableStateOf(false) }
-    val keyboardHeightPx = WindowInsets.ime.getBottom(density)
     val lineHeightPx = remember(fontSize, terminalTypeface, density) {
         val paint = Paint().apply {
             typeface = terminalTypeface
@@ -4612,6 +4621,33 @@ private fun TerminalScreen(
     }
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    val sharedDictation by dictation.state.collectAsState()
+    val dictationState = sharedDictation.takeIf { it.sessionKey == dictationKey } ?: DictationState(configured = sharedDictation.configured)
+    val dictating = dictationState.status in setOf(DictationStatus.CONNECTING, DictationStatus.LISTENING, DictationStatus.FINISHING)
+    val microphonePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted -> if (granted) dictation.start(dictationKey) }
+    val toggleDictation = {
+        if (dictating) {
+            dictation.stop()
+        } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            dictation.start(dictationKey)
+        } else {
+            microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+    LaunchedEffect(dictationState.status) {
+        if (dictationState.status == DictationStatus.IDLE && dictationState.sessionKey == dictationKey) {
+            val spoken = dictationState.transcript.trim()
+            if (spoken.isNotBlank()) {
+                connection.paste(spoken)
+                currentOnSessionInput()
+            }
+        }
+    }
+    DisposableEffect(connection) { onDispose { if (dictation.state.value.sessionKey == dictationKey) dictation.discard() } }
     BackHandler(onBack = onBack)
     Scaffold(
         topBar = {
@@ -4623,6 +4659,8 @@ private fun TerminalScreen(
                 onOpenHistory = { historyVisible = true },
                 onLiveView = { historyVisible = false },
                 onShowKeyboard = { focusRequester.requestFocus(); keyboard?.show() },
+                onDictate = toggleDictation,
+                dictating = dictating,
             )
         },
     ) { padding ->
@@ -4634,13 +4672,6 @@ private fun TerminalScreen(
                 .clipToBounds()
                 .pointerInput(onBack) { detectPassiveDoubleTap(onBack) },
         ) {
-            val gridHeightPx = if (rows > 0 && lineHeightPx > 0) (rows * lineHeightPx).toInt() else 0
-            val viewportPx = with(density) { maxHeight.toPx() }.toInt()
-            val panPx = if (gridHeightPx in 1..viewportPx) {
-                viewportPx - gridHeightPx
-            } else {
-                0
-            }
             val charWidthPx = remember(fontSize, terminalTypeface, density) {
                 Paint().apply {
                     typeface = terminalTypeface
@@ -4654,7 +4685,7 @@ private fun TerminalScreen(
                 loadHistory = connection::history,
                 fontSize = fontSize,
                 onFontSizeChange = onFontSizeChange,
-                contentWidth = with(density) { ((columns.takeIf { it > 0 } ?: FALLBACK_COLUMNS) * charWidthPx).toDp() },
+                contentWidth = with(density) { (connection.emulator.screen.columns * charWidthPx).toDp() },
                 onLiveTap = {
                     focusRequester.requestFocus()
                     keyboard?.show()
@@ -4662,13 +4693,11 @@ private fun TerminalScreen(
             ) { liveModifier ->
                 Terminal(
                     terminalEmulator = connection.emulator,
-                    modifier = liveModifier
-                        .fillMaxSize()
-                        .offset { IntOffset(0, panPx - keyboardHeightPx) },
+                    modifier = liveModifier.fillMaxSize(),
                     initialFontSize = fontSize,
                     minFontSize = fontSize,
                     maxFontSize = fontSize,
-                    forcedSize = if (rows > 0 && columns > 0) rows to columns else null,
+                    forcedSize = null,
                     focusRequester = focusRequester,
                     onTerminalTap = {
                         focusRequester.requestFocus()
@@ -4842,7 +4871,6 @@ internal fun Modifier.horizontalSwipe(
     }
 }
 
-private const val FALLBACK_COLUMNS = 100
 
 private fun joinRemotePath(parent: String, name: String): String = when {
     parent.isBlank() || parent == "/" -> "/$name"
