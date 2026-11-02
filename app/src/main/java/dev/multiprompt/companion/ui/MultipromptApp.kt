@@ -3248,7 +3248,13 @@ internal fun ReaderScreen(
         reader.eta?.let { "ETA ${it.label(etaNowMillis)}" },
         "waiting for input".takeIf { reader.waitingForInput },
     ).joinToString(" · ").ifEmpty { null }
-    BackHandler(onBack = onBack)
+    BackHandler {
+        when {
+            pageOpen -> pageOpen = false
+            computerOpen -> setComputerOpen(false)
+            else -> onBack()
+        }
+    }
     Scaffold(
         floatingActionButtonPosition = androidx.compose.material3.FabPosition.Center,
         floatingActionButton = {
