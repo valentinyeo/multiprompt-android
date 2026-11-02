@@ -98,20 +98,24 @@ internal fun BotLookContent(
                 }
             }
             Text("Colour", style = Kit.Label, color = Kit.TextMuted)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                (0..6).forEach { index ->
-                    Box(
-                        Modifier
-                            .size(28.dp)
-                            .background(botColor(index), CircleShape)
-                            .border(
-                                if (pickedColor == index) 3.dp else 1.dp,
-                                if (pickedColor == index) Kit.Text else Kit.Outline,
-                                CircleShape,
-                            )
-                            .clickable { onPickColor(index) },
-                    )
+            (0..10).chunked(6).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    row.forEach { index ->
+                        Box(
+                            Modifier
+                                .size(28.dp)
+                                .background(botColor(index), CircleShape)
+                                .border(
+                                    if (pickedColor == index) 3.dp else 1.dp,
+                                    if (pickedColor == index) Kit.Text else Kit.Outline,
+                                    CircleShape,
+                                )
+                                .clickable { onPickColor(index) },
+                        )
+                    }
                 }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "Auto",
                     modifier = Modifier
