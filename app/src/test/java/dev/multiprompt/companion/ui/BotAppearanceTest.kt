@@ -15,6 +15,21 @@ class BotAppearanceTest {
         }
     }
 
+    @Test fun aBotsOwnPickWinsOverTheWorkspaceColour() {
+        val picked = BotAppearance.forSession("HT Product Lead", workspaceColor = 3, face = 17, color = 5)
+        assertEquals(17, picked.face)
+        assertEquals(5, picked.color)
+        val faceOnly = BotAppearance.forSession("HT Product Lead", workspaceColor = 3, face = 17)
+        assertEquals(17, faceOnly.face)
+        assertEquals("workspace colour still applies when only a face is picked", 3, faceOnly.color)
+        val colourOnly = BotAppearance.forSession("HT Product Lead", workspaceColor = 3, color = 5)
+        assertEquals(5, colourOnly.color)
+        assertEquals("the name still decides the face when only a colour is picked", 0, colourOnly.face)
+        val wrapped = BotAppearance.forSession("HT Product Lead", workspaceColor = 3, face = 24, color = 11)
+        assertEquals("an over-range face wraps", 4, wrapped.face)
+        assertEquals("an over-range colour wraps", 0, wrapped.color)
+    }
+
     @Test fun desktopCompatibleUtf8AssignmentHasFixedVectors() {
         assertEquals(BotAppearance(0, 0), BotAppearance.forSession("HT Product Lead"))
         assertEquals(BotAppearance(8, 0), BotAppearance.forSession("SF Design Lead"))
