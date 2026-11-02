@@ -15,8 +15,11 @@ async function green() {
 }
 
 test('original secret-only commit cannot pass the check wait', async () => {
-  const { waitForChecks } = await gate;
-  await assert.rejects(waitForChecks(() => original), /missing \[test, image-preview-emulator/);
+  const { waitForChecks, requiredChecks } = await gate;
+  const present = new Set(original.statusCheckRollup.filter(check => check.__typename === 'CheckRun').map(check => check.name));
+  const missing = requiredChecks.filter(name => !present.has(name));
+  assert.ok(missing.includes('test'), 'the original commit must be rejected for missing the long check');
+  await assert.rejects(waitForChecks(() => original), new RegExp(`missing \\[${missing.join(', ')}\\]`));
   console.log('ORIGINAL_SECRET_ONLY_REJECTED');
 });
 

@@ -6,7 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout } from 'node:timers/promises';
 
 export const requiredChecks = [
+  'build',
   'test',
+  'unit-tests',
+  'm3-unit-tests',
+  'lint',
   'image-preview-emulator',
   'reply-notifications-emulator',
   'session-rows-emulator',
