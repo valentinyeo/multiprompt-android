@@ -1,13 +1,19 @@
 package dev.multiprompt.companion.terminal
 
+import android.app.Application
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.security.SecretStorage
 import dev.multiprompt.companion.ssh.SshRepository
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import org.robolectric.util.ReflectionHelpers
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35], application = Application::class)
 class TerminalPhoneSizeTest {
     private class MemorySecrets : SecretStorage {
         private val values = mutableMapOf<String, ByteArray>()
