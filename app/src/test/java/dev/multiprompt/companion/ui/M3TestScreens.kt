@@ -31,6 +31,7 @@ enum class M3Screen { INBOX_SPLITS, INBOX_SEARCH, INBOX_LIST, SESSION, INBOX_MEN
 private val testHost = HostProfile("host", "VPS", "example.com", username = "user", keySecretId = "key")
 private val testSession = TmuxSession("host", "claude-reader", 1, 0, System.currentTimeMillis() / 1000 - 120, preview = "Ready for your next prompt")
 private val testWorkspace = Workspace("work", "Android", "host", "/home/user/android")
+private val emojiWorkspace = Workspace("work", "Zürich · Opéra", "host", "/home/user/android")
 
 @Composable
 internal fun M3TestScreen(screen: M3Screen, material3: Boolean, sunlight: Boolean) {
@@ -61,13 +62,13 @@ private fun InboxFixture(screen: M3Screen, material3: Boolean, sunlight: Boolean
             hosts = listOf(testHost),
             sessions = if (emojiNames) {
                 listOf(
-                    testSession.copy(name = "Rocket 🤖 Chief", accountName = "Rocket 🤖 Chief"),
+                    testSession.copy(name = "Rocket 🤖 Chief", accountName = "Rocket 🤖 Chief", preview = "Reply with 🚀 next"),
                     testSession.copy(name = "Kraków 🚀 Lead", accountName = "Kraków 🚀 Lead", lastActivityEpochSeconds = testSession.lastActivityEpochSeconds - 600),
                 )
             } else {
                 listOf(testSession, testSession.copy(name = "codex-tests", lastActivityEpochSeconds = testSession.lastActivityEpochSeconds - 600))
             },
-            workspaces = listOf(testWorkspace),
+            workspaces = listOf(if (emojiNames) emojiWorkspace else testWorkspace),
             workspaceSplitIds = listOf(null, testWorkspace.id),
             sessionWorkspaceIds = mapOf(SessionReadStore.key("host", testSession.name) to testWorkspace.id),
             unreadSessionKeys = setOf(SessionReadStore.key("host", testSession.name)),
