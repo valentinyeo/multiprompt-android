@@ -23,6 +23,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  build:
+    name: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.1"
+      - name: Build the app and test APKs once
+        run: gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g assembleDebug assembleDebugAndroidTest
+      - name: Share the build with the phone tests
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.gradle/caches/build-cache-1
+          key: gradle-build-cache-${{ github.run_id }}-${{ github.run_attempt }}
+
   test:
     name: test
     runs-on: ubuntu-24.04
@@ -109,10 +131,10 @@ jobs:
           mkdir -p app/build/reports/summary-control
           cp app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.SessionPreviewTest.xml app/build/reports/summary-control/
 
-      - name: Root files, comments, lint and unit tests
+      - name: Source files, comments and tool checks
         env:
           GRADLE: gradle
-        run: tools/check.sh
+        run: tools/check.sh source
 
       - name: Upload chat screenshots and JVM results
         if: always()
@@ -128,8 +150,8 @@ jobs:
             app/build/reports/summary-control/*.xml
             app/build/test-results/test*UnitTest/*.xml
 
-  image-preview-emulator:
-    name: image-preview-emulator
+  unit-tests:
+    name: unit-tests
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -142,6 +164,87 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.5.1"
+      - name: Debug unit tests
+        env:
+          GRADLE: gradle
+        run: tools/check.sh unit
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-tests-results
+          path: |
+            app/build/reports/igsh-844/*.png
+            app/build/reports/igsh-1045/*.png
+            app/build/reports/igsh-1015/*.png
+            app/build/outputs/igsh-423/*.png
+            app/build/test-results/testDebugUnitTest/*.xml
+          if-no-files-found: ignore
+
+  m3-unit-tests:
+    name: m3-unit-tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.1"
+      - name: Material 3 unit tests
+        env:
+          GRADLE: gradle
+        run: tools/check.sh m3
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m3-unit-tests-results
+          path: app/build/test-results/testM3UnitTest/*.xml
+          if-no-files-found: ignore
+
+  lint:
+    name: lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.1"
+      - name: Android lint
+        env:
+          GRADLE: gradle
+        run: tools/check.sh lint
+
+  image-preview-emulator:
+    name: image-preview-emulator
+    runs-on: ubuntu-24.04
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.1"
+      - name: Reuse the app build from the build job
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.gradle/caches/build-cache-1
+          key: gradle-build-cache-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: gradle-build-cache-
       - name: Install screenshot comparison tool
         run: |
           python3 -m pip install Pillow
@@ -184,6 +287,7 @@ jobs:
   reply-notifications-emulator:
     name: reply-notifications-emulator
     runs-on: ubuntu-24.04
+    needs: build
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -193,6 +297,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.5.1"
+      - name: Reuse the app build from the build job
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.gradle/caches/build-cache-1
+          key: gradle-build-cache-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: gradle-build-cache-
       - uses: ./.github/actions/android-proof
         with:
           stage: stage-3
@@ -214,6 +324,7 @@ jobs:
   session-rows-emulator:
     name: session-rows-emulator
     runs-on: ubuntu-24.04
+    needs: build
     steps:
       - uses: actions/checkout@v4
         with:
@@ -225,6 +336,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.5.1"
+      - name: Reuse the app build from the build job
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.gradle/caches/build-cache-1
+          key: gradle-build-cache-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: gradle-build-cache-
       - uses: ./.github/actions/android-proof
         with:
           stage: stage-4
@@ -243,6 +360,7 @@ jobs:
   message-actions-emulator:
     name: message-actions-emulator
     runs-on: ubuntu-24.04
+    needs: build
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -252,6 +370,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.5.1"
+      - name: Reuse the app build from the build job
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.gradle/caches/build-cache-1
+          key: gradle-build-cache-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: gradle-build-cache-
       - name: Install screenshot text reader
         run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
       - uses: ./.github/actions/android-proof
@@ -273,6 +397,7 @@ jobs:
   approved-style-emulator:
     name: approved-style-emulator
     runs-on: ubuntu-24.04
+    needs: build
     steps:
       - uses: actions/checkout@v4
         with:
@@ -284,6 +409,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.5.1"
+      - name: Reuse the app build from the build job
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.gradle/caches/build-cache-1
+          key: gradle-build-cache-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: gradle-build-cache-
       - name: Install screenshot text reader
         run: |
           sudo apt-get update && sudo apt-get install -y tesseract-ocr
