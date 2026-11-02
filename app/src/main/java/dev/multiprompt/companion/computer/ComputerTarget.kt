@@ -9,7 +9,8 @@ data class ComputerTarget(val host: String = DEFAULT_HOST, val port: Int = DEFAU
         val Default = ComputerTarget()
 
         fun parse(value: String?): ComputerTarget? {
-            val text = value?.trim()?.removeSuffix("/")?.orEmpty()
+            val text = (value ?: "").trim()
+                .removeSuffix("/")
                 .removePrefix("http://")
                 .removePrefix("https://")
             if (text.isEmpty() || text.any { it.isWhitespace() }) return null

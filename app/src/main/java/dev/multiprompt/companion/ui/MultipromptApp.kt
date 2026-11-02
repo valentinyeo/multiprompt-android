@@ -149,6 +149,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -2716,6 +2717,27 @@ internal fun ReaderScreen(
     var imageAttachments by remember(connection) { mutableStateOf(emptyList<String>()) }
     var attachMenuExpanded by remember(connection) { mutableStateOf(false) }
     var attachMenuPage by remember(connection) { mutableStateOf(ComposerMenuPage.MAIN) }
+    val computerStore = remember(draftContext) { ComputerStore(draftContext) }
+    var computerTarget by remember(session.hostId) { mutableStateOf(computerStore.target(session.hostId)) }
+    var computerOpen by remember(session.hostId, session.name) {
+        mutableStateOf(computerStore.showsComputer(session))
+    }
+    var computerState by remember(connection) { mutableStateOf(ComputerState()) }
+    var computerTargetOpen by remember(session.hostId, session.name) { mutableStateOf(false) }
+    val computerViewer = remember(connection) {
+        ComputerViewer(
+            opener = { target -> connection.openComputerTunnel(target) },
+            publish = { computerState = it },
+        )
+    }
+    DisposableEffect(computerViewer) { onDispose { computerViewer.close() } }
+    LaunchedEffect(computerOpen, computerTarget) {
+        if (computerOpen) computerViewer.wake(computerTarget) else computerViewer.sleep()
+    }
+    val setComputerOpen: (Boolean) -> Unit = { value ->
+        computerOpen = value
+        computerStore.setShowsComputer(session, value)
+    }
     var historyDialogOpen by remember(connection) { mutableStateOf(false) }
     var endDialogVisible by remember(connection) { mutableStateOf(false) }
     var renameDialogVisible by remember(connection) { mutableStateOf(false) }
@@ -3221,27 +3243,6 @@ internal fun ReaderScreen(
         reader.eta?.let { "ETA ${it.label(etaNowMillis)}" },
         "waiting for input".takeIf { reader.waitingForInput },
     ).joinToString(" · ").ifEmpty { null }
-    val computerStore = remember(draftContext) { ComputerStore(draftContext) }
-    var computerTarget by remember(session.hostId) { mutableStateOf(computerStore.target(session.hostId)) }
-    var computerOpen by remember(session.hostId, session.name) {
-        mutableStateOf(computerStore.showsComputer(session))
-    }
-    var computerState by remember(connection) { mutableStateOf(ComputerState()) }
-    var computerTargetOpen by remember(session.hostId, session.name) { mutableStateOf(false) }
-    val computerViewer = remember(connection) {
-        ComputerViewer(
-            opener = { target -> connection.openComputerTunnel(target) },
-            publish = { computerState = it },
-        )
-    }
-    DisposableEffect(computerViewer) { onDispose { computerViewer.close() } }
-    LaunchedEffect(computerOpen, computerTarget) {
-        if (computerOpen) computerViewer.wake(computerTarget) else computerViewer.sleep()
-    }
-    val setComputerOpen: (Boolean) -> Unit = { value ->
-        computerOpen = value
-        computerStore.setShowsComputer(session, value)
-    }
     BackHandler(onBack = onBack)
     Scaffold(
         floatingActionButtonPosition = androidx.compose.material3.FabPosition.Center,
