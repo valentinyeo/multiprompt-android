@@ -25,6 +25,14 @@ class AgentKindTest {
     }
 
     @Test
+    fun aDesktopLiveChatIsAClaudeChatEvenThoughItsTerminalOnlySleeps() {
+        assertEquals(AgentKind.CLAUDE, AgentKind.detect("live-abc123", paneCommand = "sleep"))
+        assertEquals(AgentKind.CLAUDE, AgentKind.detect("live-abc123", paneCommand = "/usr/bin/sleep"))
+        assertEquals(AgentKind.OTHER, AgentKind.detect("sleeping-beauty", paneCommand = "sleep"))
+        assertEquals(AgentKind.OTHER, AgentKind.detect("live-abc123", paneCommand = "bash"))
+    }
+
+    @Test
     fun incidentalAgentWordsDoNotMisclassifyShells() {
         assertEquals(AgentKind.OTHER, AgentKind.detect("api-server"))
         assertEquals(AgentKind.OTHER, AgentKind.detect("work", preview = "Ask codex to review this"))
