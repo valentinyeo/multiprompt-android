@@ -2648,6 +2648,8 @@ internal fun ReaderScreen(
     val draftContext = LocalContext.current.applicationContext
     val draftStore = remember(draftContext) { SessionReadStore(draftContext) }
     var botLookOpen by remember(session.hostId, session.name) { mutableStateOf(false) }
+    var pinnedPage by remember(session.hostId, session.name) { mutableStateOf(draftStore.pinnedPage(session)) }
+    var pinPageOpen by remember(session.hostId, session.name) { mutableStateOf(false) }
     var promptField by remember(connection) {
         mutableStateOf(TextFieldValue(draftStore.composerDraft(session)))
     }
@@ -3092,6 +3094,38 @@ internal fun ReaderScreen(
             }, modifier = Modifier.fillMaxWidth(), enabled = imageKeyDraft.isNotBlank())
         }
     }
+    if (pinPageOpen) {
+        var pageDraft by remember(session.hostId, session.name) { mutableStateOf(pinnedPage.orEmpty()) }
+        var pageError by remember(session.hostId, session.name) { mutableStateOf<String?>(null) }
+        KitSheet(onDismiss = { pinPageOpen = false }) {
+            Text("Pin a page", style = Kit.Heading, color = Kit.Text)
+            Text("This chat keeps its own page. One tap opens it in your browser.", style = Kit.Hint, color = Kit.TextMuted)
+            OutlinedTextField(
+                value = pageDraft,
+                onValueChange = { pageDraft = it; pageError = null },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Page address") },
+                singleLine = true,
+                isError = pageError != null,
+                supportingText = pageError?.let { message -> { Text(message) } },
+            )
+            KitSecondaryButton("Cancel", onClick = { pinPageOpen = false }, modifier = Modifier.fillMaxWidth())
+            KitPrimaryButton(
+                "Pin page",
+                onClick = {
+                    val cleaned = pageDraft.trim()
+                    if (!pinnablePage(cleaned)) {
+                        pageError = "Use a full address that starts with https://"
+                    } else {
+                        draftStore.setPinnedPage(session, cleaned)
+                        pinnedPage = cleaned
+                        pinPageOpen = false
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
     if (botLookOpen) {
         BotLookSheet(
             session = session,
@@ -3307,6 +3341,13 @@ internal fun ReaderScreen(
                                         botLookOpen = true
                                     },
                                 )
+                                KitMenuRow(
+                                    label = if (pinnedPage == null) "Pin a page…" else "Change pinned page…",
+                                    onClick = {
+                                        menuExpanded = false
+                                        pinPageOpen = true
+                                    },
+                                )
                                 KitDivider()
                                 KitMenuRow(
                                     label = "End tmux session",
@@ -3485,6 +3526,27 @@ internal fun ReaderScreen(
                 }
                 replyTo?.let { quoted ->
                     ReplyQuoteBar(message = quoted, author = replyAuthor, onCancel = { replyTo = null })
+                }
+                pinnedPage?.let { page ->
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            pinnedPageLabel(page),
+                            modifier = Modifier.weight(1f),
+                            style = Kit.Hint,
+                            color = Kit.TextMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        KitSecondaryButton("Open", onClick = { openPage(context, page) })
+                        KitSecondaryButton("Remove", onClick = {
+                            draftStore.setPinnedPage(session, null)
+                            pinnedPage = null
+                        }, destructive = true)
+                    }
                 }
                 if (dictationActive) {
                     DictationBar(
@@ -4237,6 +4299,24 @@ private fun UpdateScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+private fun pinnablePage(value: String): Boolean =
+    value.length in 8..2048 && (value.startsWith("https://") || value.startsWith("http://")) &&
+        value.none { it.isWhitespace() || it.code < 32 }
+
+private fun pinnedPageLabel(value: String): String =
+    value.substringAfter("://").removePrefix("www.").let { if (it.length <= 48) it else it.take(45) + "…" }
+
+private fun openPage(context: android.content.Context, value: String) {
+    runCatching {
+        context.startActivity(
+            android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(value))
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }.onFailure {
+        android.widget.Toast.makeText(context, "No app can open that page", android.widget.Toast.LENGTH_SHORT).show()
     }
 }
 
