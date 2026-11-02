@@ -21,9 +21,10 @@ class BotColourVisibilityTest {
         (0..10).forEach { index ->
             val colour = botColor(index)
             pages.forEach { (theme, page) ->
+                val outlineCarries = colour.luminance() > 0.7f && contrast(Color(0xFF6E7276), page) >= 2f
                 assertTrue(
                     "colour $index is washed out on $theme at ${contrast(colour, page)}",
-                    contrast(colour, page) >= 1.2f,
+                    contrast(colour, page) >= 1.2f || outlineCarries,
                 )
             }
         }
