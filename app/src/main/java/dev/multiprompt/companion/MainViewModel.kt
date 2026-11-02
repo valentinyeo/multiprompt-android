@@ -111,6 +111,7 @@ data class AppUiState(
     val accountPending: Boolean = false,
     val accountError: String? = null,
     val accountHosts: Map<Int, HostProfile> = emptyMap(),
+    val rooms: List<dev.multiprompt.companion.room.RoomEntry> = emptyList(),
     val pendingDevice: PendingDevice? = null,
     val deviceApprovalBusy: Boolean = false,
     val deviceApprovalError: String? = null,
@@ -184,6 +185,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val crashReportStore = app.crashReportStore
     private val workspaceStore = app.workspaceStore
     private val ssh = app.sshRepository
+    private val roomService = dev.multiprompt.companion.room.RoomService(app, ssh)
     val dictation: DeepgramDictation = app.deepgramDictation
     val updates: UpdateManager = app.updateManager
     val screencast: ScreencastUploader = app.screencastUploader
@@ -577,6 +579,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 hosts = hosts.load(),
                 pendingHostKeys = it.pendingHostKeys - hostId,
             )
+        }
+    }
+
+    fun refreshRooms() {
+        val accountId = syncAuth.accountId() ?: return
+        val host = _state.value.accountHosts.values.firstOrNull() ?: _state.value.hosts.firstOrNull() ?: return
+        viewModelScope.launch {
+            val rooms = runCatching { roomService.load(host, accountId) }.getOrElse { return@launch }
+            _state.update { it.copy(rooms = rooms) }
         }
     }
 
