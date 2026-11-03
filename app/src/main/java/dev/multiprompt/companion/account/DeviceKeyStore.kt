@@ -1,10 +1,14 @@
 package dev.multiprompt.companion.account
 
 import dev.multiprompt.companion.security.SecretStorage
+import org.bouncycastle.asn1.pkcs.PrivateKeyInfo
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.connectbot.sshlib.SshKeys
 import org.connectbot.sshlib.SshSigning
+import java.security.KeyFactory
+import java.security.KeyPair
 import java.security.KeyPairGenerator
+import java.security.spec.PKCS8EncodedKeySpec
 import java.util.Base64
 
 class DeviceKeyStore(private val secrets: SecretStorage) {
@@ -19,9 +23,16 @@ class DeviceKeyStore(private val secrets: SecretStorage) {
     fun privateKey(): ByteArray = synchronized(LOCK) {
         stored() ?: run {
             check(!secrets.contains(SECRET_ID)) { "The stored device key could not be read" }
-            val pair = KeyPairGenerator.getInstance("Ed25519", BouncyCastleProvider()).generateKeyPair()
-            SshKeys.encodeOpenSshPrivateKey(pair).toByteArray(Charsets.UTF_8).also { secrets.put(SECRET_ID, it) }
+            SshKeys.encodeOpenSshPrivateKey(generate()).toByteArray(Charsets.UTF_8).also { secrets.put(SECRET_ID, it) }
         }
+    }
+
+    private fun generate(): KeyPair {
+        val provider = BouncyCastleProvider()
+        val pair = KeyPairGenerator.getInstance("Ed25519", provider).generateKeyPair()
+        val info = PrivateKeyInfo.getInstance(pair.private.encoded)
+        val seedOnly = PrivateKeyInfo(info.privateKeyAlgorithm, info.parsePrivateKey()).encoded
+        return KeyPair(pair.public, KeyFactory.getInstance("Ed25519", provider).generatePrivate(PKCS8EncodedKeySpec(seedOnly)))
     }
 
     private fun stored(): ByteArray? {
