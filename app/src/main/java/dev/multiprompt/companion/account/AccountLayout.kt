@@ -16,6 +16,7 @@ data class AccountTab(
     val muted: Boolean? = null,
     val face: Int? = null,
     val color: Int? = null,
+    val photo: Long? = null,
 ) {
     val identity: String get() = "$host:${session.lowercase(java.util.Locale.ROOT)}"
     fun json(): JSONObject = JSONObject().put("kind", "tmux").put("name", name)
