@@ -172,11 +172,24 @@ class SessionReadStore(context: Context) {
         preferences.edit().remove(manualFontScaleKey(session.hostId, session.name)).apply()
     }
 
-    fun newestSessionsAtBottom(): Boolean =
-        preferences.getBoolean(NEWEST_SESSIONS_AT_BOTTOM, true)
+    fun newestSessionsAtBottom(): Boolean {
+        flipAStoredNewestOnTopOnce()
+        return preferences.getBoolean(NEWEST_SESSIONS_AT_BOTTOM, true)
+    }
+
+    private fun flipAStoredNewestOnTopOnce() {
+        if (preferences.getBoolean(NEWEST_SESSIONS_ORDER_SETTLED, false)) return
+        preferences.edit()
+            .putBoolean(NEWEST_SESSIONS_AT_BOTTOM, true)
+            .putBoolean(NEWEST_SESSIONS_ORDER_SETTLED, true)
+            .apply()
+    }
 
     fun setNewestSessionsAtBottom(enabled: Boolean) {
-        preferences.edit().putBoolean(NEWEST_SESSIONS_AT_BOTTOM, enabled).apply()
+        preferences.edit()
+            .putBoolean(NEWEST_SESSIONS_AT_BOTTOM, enabled)
+            .putBoolean(NEWEST_SESSIONS_ORDER_SETTLED, true)
+            .apply()
     }
 
     fun allSplitOnRight(): Boolean = preferences.getBoolean(ALL_SPLIT_ON_RIGHT, true)
@@ -283,6 +296,7 @@ class SessionReadStore(context: Context) {
         private const val APP_THEME = "app_theme"
         private const val SUNLIGHT_MODE = "sunlight_mode"
         private const val NEWEST_SESSIONS_AT_BOTTOM = "newest_sessions_at_bottom"
+        private const val NEWEST_SESSIONS_ORDER_SETTLED = "newest_sessions_order_settled"
         private const val ALL_SPLIT_ON_RIGHT = "all_split_on_right"
         private const val SESSION_BUCKET = "session_bucket"
         private const val DRAFT_PREFIX = "composer_draft::"
