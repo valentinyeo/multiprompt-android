@@ -1,6 +1,7 @@
 package dev.multiprompt.companion.account
 
 import dev.multiprompt.companion.model.HostProfile
+import dev.multiprompt.companion.ssh.SshProblem
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
@@ -61,6 +62,27 @@ class DeviceKeyApprovalTest {
         assertTrue(approval.cleanupRevoked(listing, hosts).isEmpty())
         assertEquals(hosts.map { it.id to remove }, ran)
         assertTrue(installed.isEmpty())
+        assertTrue(decisions.isEmpty())
+    }
+
+    @Test fun aServerThatRefusesThisPhoneDoesNotBlockTheOthers() = runBlocking {
+        val ran = mutableListOf<Pair<String, String>>()
+        val approval = DeviceApproval(client) { host, command ->
+            if (host == hosts[1]) throw SshProblem.Authentication("SSH key authentication failed: Failure(allowedMethods=[])")
+            ran.add(host.id to command)
+            true
+        }
+        val result = approval.approve(entry, hosts)
+        assertTrue(result.approved)
+        assertEquals(listOf(hosts[0], hosts[2]).map { it.id to DeviceKeys.addCommand(entry.publicKey) }, ran)
+        assertEquals(listOf("/v1/device-keys/other/approve"), decisions)
+    }
+
+    @Test fun noServerAcceptingThisPhoneApprovesNothing() = runBlocking {
+        val approval = DeviceApproval(client) { _, _ -> throw SshProblem.Authentication("refused") }
+        val result = approval.approve(entry, hosts)
+        assertFalse(result.approved)
+        assertEquals(hosts, result.failures.map { it.host })
         assertTrue(decisions.isEmpty())
     }
 
