@@ -218,6 +218,22 @@ class SessionReadStore(context: Context) {
         editor.apply()
     }
 
+    fun shownBotPicture(session: TmuxSession): String? =
+        botPicture(session) ?: preferences.getString(BOT_SYNCED_PHOTO_PREFIX + key(session.hostId, session.name), null)
+
+    fun applySyncedBotPhotos(photos: Map<String, String?>) {
+        val editor = preferences.edit()
+        var changed = false
+        photos.forEach { (sessionKey, path) ->
+            val prefKey = BOT_SYNCED_PHOTO_PREFIX + sessionKey
+            if (preferences.getString(prefKey, null) != path) {
+                changed = true
+                if (path == null) editor.remove(prefKey) else editor.putString(prefKey, path)
+            }
+        }
+        if (changed) editor.apply()
+    }
+
     fun botFace(session: TmuxSession): Int? =
         preferences.getInt(BOT_FACE_PREFIX + key(session.hostId, session.name), -1).takeIf { it in 0..19 }
 
@@ -323,6 +339,7 @@ class SessionReadStore(context: Context) {
         private const val BOT_FACE_PREFIX = "bot_face::"
         private const val BOT_COLOR_PREFIX = "bot_color::"
         private const val BOT_PICTURE_PREFIX = "bot_picture::"
+        private const val BOT_SYNCED_PHOTO_PREFIX = "bot_synced_photo::"
         private const val PINNED_PAGE_PREFIX = "pinned_page::"
         private const val DISPLAY_NAME_PREFIX = "display_name::"
         private const val INTERACTION_PREFIX = "interaction::"

@@ -32,6 +32,7 @@ import dev.multiprompt.companion.reader.TranscriptProtocol
 import dev.multiprompt.companion.auth.SyncAuthManager
 import android.content.Intent
 import dev.multiprompt.companion.account.AccountHosts
+import dev.multiprompt.companion.account.BotPhotoCache
 import dev.multiprompt.companion.account.AccountHostMap
 import dev.multiprompt.companion.account.AccountLayout
 import dev.multiprompt.companion.account.FREQUENT_SPLIT_ID
@@ -187,6 +188,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val hosts = app.hostStore
     private val secrets = app.secretStore
     private val sessionReads = app.sessionReadStore
+    private val botPhotos = BotPhotoCache(java.io.File(app.filesDir, "bot-photos"))
     private val sessionCache = app.sessionCacheStore
     private val dissolvedStore = app.dissolvedSessionStore
     private val crashReportStore = app.crashReportStore
@@ -1684,6 +1686,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         SessionReadStore.key(it.hostId, it.name) to (tab.face to tab.color)
                     }
                 }.toMap())
+                sessionReads.applySyncedBotPhotos(layout.tabs.mapNotNull { tab ->
+                    AccountHostMap.sessionFor(tab, current.sessions, mapping, layout)?.let {
+                        SessionReadStore.key(it.hostId, it.name) to botPhotos.file(tab)?.absolutePath
+                    }
+                }.toMap())
             }
             current.copy(accountLayout = layout, accountPending = pendingLayout?.dirty == true, accountHosts = mapping,
                 workspaces = workspaces, workspaceSplitIds = listOf(null) + workspaces.map { it.id }, sessionWorkspaceIds = assignments,
@@ -1904,6 +1911,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 syncDeviceKeys()
                 var remote = AccountLayout.response(syncAuth.request("GET", "/v1/layout").json)
                 if (generation != accountGeneration) return@launch
+                val photosSynced = syncAuth.supportsBotPhotos
                 importAccountHosts(remote)
                 usedStampThrottle.observe(remote)
                 saveAccountLayout(pendingLayout?.pull(remote) ?: PendingLayout(remote))
@@ -1932,6 +1940,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 _state.update { it.copy(accountError = if (pendingLayout?.let { usedStampThrottle.shouldPush(it) } == true) "Account changed repeatedly; pending edits will retry" else null) }
+                val photoTabs = if (photosSynced) remote.tabs else emptyList()
+                if (withContext(Dispatchers.IO) { botPhotos.sync(photoTabs, syncAuth::botPhoto) } && generation == accountGeneration) publishAccountLayout()
             } catch (e: Exception) {
                 if (generation == accountGeneration) _state.update { it.copy(signedIn = syncAuth.hasSession(), accountError = e.message ?: "Account offline; pending edits saved") }
             } finally {

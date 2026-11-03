@@ -16,11 +16,12 @@ data class AccountTab(
     val muted: Boolean? = null,
     val face: Int? = null,
     val color: Int? = null,
+    val photo: Long? = null,
 ) {
     val identity: String get() = "$host:${session.lowercase(java.util.Locale.ROOT)}"
     fun json(): JSONObject = JSONObject().put("kind", "tmux").put("name", name)
         .put("tmux_session", session).put("tmux_host", host).put("workspace", workspace).put("manual", manual)
-        .apply { favorite?.let { put("favorite", it) }; muted?.let { put("muted", it) }; used?.let { put("used", it) }; input?.let { put("input", it) }; visits?.let { put("visits", JSONArray(it)) }; face?.let { put("face", it) }; color?.let { put("color", it) } }
+        .apply { favorite?.let { put("favorite", it) }; muted?.let { put("muted", it) }; used?.let { put("used", it) }; input?.let { put("input", it) }; visits?.let { put("visits", JSONArray(it)) }; face?.let { put("face", it) }; color?.let { put("color", it) }; photo?.let { put("photo", it) } }
 }
 
 data class AccountLayout(
@@ -45,6 +46,7 @@ data class AccountLayout(
             validText(it.name, 64) && it.host in 0..2 && Regex("[A-Za-z0-9_-]{1,63}").matches(it.session) && it.workspace in workspaces &&
                 (it.used == null || it.used in 0..9_007_199_254_740_991L) &&
                 (it.input == null || it.input in 0..9_007_199_254_740_991L) &&
+                (it.photo == null || it.photo in 1..9_007_199_254_740_991L) &&
                 (it.visits == null || it.visits.size <= MAX_VISITS && it.visits.all { v -> v in 0..9_007_199_254_740_991L } &&
                     it.visits.zipWithNext().all { (a, b) -> a < b })
         }) { "Invalid or duplicate account tab" }
@@ -137,7 +139,7 @@ data class AccountLayout(
                 val t = tabs.getJSONObject(it)
                 val required = setOf("kind", "name", "tmux_session", "tmux_host", "workspace")
                 val keys = t.keys().asSequence().toSet()
-                require(keys.containsAll(required) && (keys - required).all { it in setOf("manual", "favorite", "muted", "used", "visits", "input", "face", "color") } && t.get("kind") == "tmux")
+                require(keys.containsAll(required) && (keys - required).all { it in setOf("manual", "favorite", "muted", "used", "visits", "input", "face", "color", "photo") } && t.get("kind") == "tmux")
                 require(listOf("name", "tmux_session", "workspace").all { key -> t.get(key) is String })
                 val host = t.get("tmux_host")
                 require(host is Number && host.toDouble() == host.toInt().toDouble())
@@ -164,9 +166,11 @@ data class AccountLayout(
                 require(face == null || face in 0..19)
                 val color = if (t.has("color")) t.getInt("color") else null
                 require(color == null || color in 0..10)
+                val photo = if (t.has("photo")) t.get("photo") else null
+                require(!t.has("photo") || photo is Number && photo !is Double && photo !is Float && photo.toLong() in 1..9_007_199_254_740_991L)
                 AccountTab(t.getString("name"), t.getString("tmux_session"), host.toInt(), t.getString("workspace"),
                     t.optBoolean("manual", false), if (t.has("favorite")) t.getBoolean("favorite") else null, (used as? Number)?.toLong(), visits, (input as? Number)?.toLong(),
-                    if (t.has("muted")) t.getBoolean("muted") else null, face, color)
+                    if (t.has("muted")) t.getBoolean("muted") else null, face, color, (photo as? Number)?.toLong())
             }, settings, if (json.has("hosts")) AccountHosts.parse(json.opt("hosts")) else null,
                 if (json.has("removed_hosts")) {
                     val values = json.getJSONArray("removed_hosts")
@@ -206,12 +210,13 @@ data class AccountLayout(
                     muted = if (e.muted != b.muted) e.muted else r.muted,
                     face = if (e.face != b.face) e.face else r.face,
                     color = if (e.color != b.color) e.color else r.color,
+                    photo = r.photo,
                     used = listOfNotNull(b.used, e.used, r.used).maxOrNull(),
                     input = listOfNotNull(b.input, e.input, r.input).maxOrNull(),
                     visits = mergeVisits(b.visits, e.visits, r.visits),
                 )
             }.toMutableList()
-            edited.tabs.filter { it.identity !in old && tabs.none { r -> r.identity == it.identity } }.forEach(tabs::add)
+            edited.tabs.filter { it.identity !in old && tabs.none { r -> r.identity == it.identity } }.forEach { tabs.add(it.copy(photo = null)) }
             tabs.map { it.workspace }.filterNot { it in workspaces }.distinct().forEach(workspaces::add)
             val orderedTabs = if (base.tabs.map { it.identity } != edited.tabs.map { it.identity }) {
                 val byId = tabs.associateBy { it.identity }

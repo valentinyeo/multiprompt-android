@@ -52,6 +52,22 @@ class AccountLayoutTest {
         assertEquals("One", base.tabs[0].name)
     }
 
+    @Test fun desktopPictureNumberIsReadAndAlwaysComesFromTheServer() {
+        val json = JSONObject("""{"schema":1,"revision":5,"workspaces":[{"name":"Other"}],"tabs":[{"kind":"tmux","name":"One","tmux_session":"one","tmux_host":0,"workspace":"Other","photo":3}]}""")
+        val pulled = AccountLayout.parse(json)
+        assertEquals(3L, pulled.tabs[0].photo)
+        assertEquals(pulled, AccountLayout.parse(JSONObject(pulled.json().toString())))
+        listOf<Any>(0, -1, 1.5, "3", true).forEach { bad ->
+            assertThrows(Exception::class.java) { AccountLayout.parse(JSONObject(json.toString()).apply { getJSONArray("tabs").getJSONObject(0).put("photo", bad) }) }
+        }
+        val local = pulled.renameTab(one.identity, "Renamed")
+        val newer = pulled.copy(revision = 6, tabs = pulled.tabs.map { it.copy(photo = 4) })
+        assertEquals(4L, AccountLayout.rebase(pulled, local, newer).tabs[0].photo)
+        assertEquals("Renamed", AccountLayout.rebase(pulled, local, newer).tabs[0].name)
+        assertNull(AccountLayout.rebase(pulled, local, newer.copy(tabs = newer.tabs.map { it.copy(photo = null) })).tabs[0].photo)
+        assertNull(AccountLayout.rebase(newer, newer.copy(tabs = newer.tabs.map { it.copy(photo = 9) }), pulled.copy(tabs = pulled.tabs.map { it.copy(photo = null) })).tabs[0].photo)
+    }
+
     @Test fun newerColourNumbersAreReadWithoutBreakingThePhone() {
         val json = org.json.JSONObject("""{"schema":1,"revision":5,"workspaces":[{"name":"Other","color":9}],"tabs":[{"kind":"tmux","name":"One","tmux_session":"one","tmux_host":0,"workspace":"Other","color":10}]}""")
         val pulled = AccountLayout.parse(json)
