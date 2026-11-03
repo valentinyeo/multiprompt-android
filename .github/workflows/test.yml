@@ -146,6 +146,7 @@ jobs:
             app/build/reports/igsh-1045/*.png
             app/build/reports/igsh-1015/*.png
             app/build/reports/igsh-1173/*.png
+            app/build/reports/igsh-1317/*.png
             app/build/outputs/igsh-423/*.png
             app/build/reports/question-control/*.xml
             app/build/reports/summary-control/*.xml
@@ -179,6 +180,7 @@ jobs:
             app/build/reports/igsh-1015/*.png
             app/build/reports/igsh-1547/*.png
             app/build/reports/igsh-1173/*.png
+            app/build/reports/igsh-1317/*.png
             app/build/outputs/igsh-423/*.png
             app/build/test-results/testDebugUnitTest/*.xml
           if-no-files-found: ignore
