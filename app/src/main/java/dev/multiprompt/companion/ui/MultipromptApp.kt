@@ -1644,7 +1644,7 @@ internal fun SessionsScreen(
     val botLooks = remember(state.inboxSessions, state.readerSession, state.accountLayout) {
         state.inboxSessions.associate { session ->
             SessionReadStore.key(session.hostId, session.name) to BotLook(
-                picture = drafts.botPicture(session),
+                picture = drafts.shownBotPicture(session),
                 face = drafts.botFace(session),
                 color = drafts.botColor(session),
             )
@@ -3309,7 +3309,7 @@ internal fun ReaderScreen(
                 onBack = onBack,
                 botFace = draftStore.botFace(session),
                 botColor = draftStore.botColor(session),
-                botPicture = draftStore.botPicture(session),
+                botPicture = draftStore.shownBotPicture(session),
                 session = session,
                 modelLabel = runtimeDetails.label,
                 statusLabel = statusLabel,

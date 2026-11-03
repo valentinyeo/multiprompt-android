@@ -10,6 +10,7 @@ import dev.multiprompt.companion.account.AccountAuth
 import dev.multiprompt.companion.account.AccountHttp
 import dev.multiprompt.companion.account.AccountHttpClient
 import dev.multiprompt.companion.account.AccountReply
+import dev.multiprompt.companion.account.BotPhotoCache
 import dev.multiprompt.companion.account.CrashReportUpload
 import dev.multiprompt.companion.data.CrashReport
 import dev.multiprompt.companion.security.SecretStore
@@ -27,6 +28,7 @@ class SyncAuthManager(context: Context, private val http: AccountHttp = AccountH
     var supportsWorkspaceColors = false
         private set
     var supportsHosts = false
+    var supportsBotPhotos = false
         private set
     private val auth = AccountAuth(
         "${BuildConfig.APPLICATION_ID}://auth/callback", http,
@@ -73,8 +75,20 @@ class SyncAuthManager(context: Context, private val http: AccountHttp = AccountH
             }
             supportsWorkspaceColors = reply.layoutFeatures?.split(',')?.any { it.trim() == "workspace_color" } == true
             supportsHosts = reply.layoutFeatures?.split(',')?.any { it.trim() == "hosts" } == true
+            supportsBotPhotos = reply.layoutFeatures?.split(',')?.any { it.trim() == "bot_photo" } == true
             if (reply.status !in listOf(200, 409)) throw IOException("Account request failed (${reply.status}); retry when online")
             reply
+        }
+    }
+
+    suspend fun botPhoto(key: String): ByteArray? = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            var reply = http.request("GET", "/v1/bot-photos/$key", auth.accessToken(), null)
+            if (reply.status == 401) {
+                auth.invalidateAccess()
+                reply = http.request("GET", "/v1/bot-photos/$key", auth.accessToken(), null)
+            }
+            if (reply.status == 200) BotPhotoCache.decode(reply.json) else null
         }
     }
 
