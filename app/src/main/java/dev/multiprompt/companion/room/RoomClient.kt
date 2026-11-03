@@ -11,6 +11,8 @@ data class RoomEvent(val seq: Long, val type: String, val text: String, val memb
 
 data class RoomPage(val events: List<RoomEvent>, val nextAfter: Long)
 
+data class RoomDelivery(val deliverySeq: Long, val eventId: String, val memberId: String, val status: String)
+
 class RoomClient(private val wire: RoomWire) : AutoCloseable {
 
     suspend fun hostUuid(): String {
@@ -75,6 +77,34 @@ class RoomClient(private val wire: RoomWire) : AutoCloseable {
                 .put("expected_revision", expectedRevision)
                 .put("text", text)
                 .put("recipients", JSONArray(recipients)),
+        )
+        return result.optJSONObject("event")?.optLong("seq") ?: 0L
+    }
+
+    suspend fun deliveries(roomId: String, after: Long = 0L, limit: Int = 40): List<RoomDelivery> {
+        val result = call(JSONObject().put("op", "deliveries").put("room_id", roomId).put("after", after).put("limit", limit))
+        val rows = result.optJSONArray("deliveries") ?: throw RoomFailure("missing_deliveries")
+        return (0 until rows.length()).mapNotNull { index ->
+            val row = rows.optJSONObject(index) ?: return@mapNotNull null
+            RoomDelivery(
+                deliverySeq = row.optLong("delivery_seq"),
+                eventId = row.optString("event_id"),
+                memberId = row.optString("member_id"),
+                status = row.optString("status"),
+            )
+        }
+    }
+
+    suspend fun agentReply(roomId: String, parentEventId: String, memberId: String, responseId: String, text: String): Long {
+        val result = call(
+            JSONObject()
+                .put("op", "agent_reply")
+                .put("command_id", "reply-$responseId")
+                .put("room_id", roomId)
+                .put("parent_event_id", parentEventId)
+                .put("member_id", memberId)
+                .put("response_id", responseId)
+                .put("text", text),
         )
         return result.optJSONObject("event")?.optLong("seq") ?: 0L
     }
