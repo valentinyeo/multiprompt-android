@@ -1,5 +1,6 @@
 package dev.multiprompt.companion.ui
 
+import dev.multiprompt.companion.room.roomShowsMentions
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.items
@@ -25,7 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-internal data class RoomMember(val id: String, val name: String, val color: Int)
+internal data class RoomMember(val id: String, val alias: String, val name: String, val color: Int)
 
 internal data class RoomSummary(val id: String, val name: String, val members: List<RoomMember>)
 
@@ -49,7 +50,7 @@ internal fun parseRooms(json: String?): List<RoomSummary> {
                 (0 until list.length()).mapNotNull { position ->
                     val member = list.optJSONObject(position) ?: return@mapNotNull null
                     val value = member.optString("name").takeIf(String::isNotBlank) ?: return@mapNotNull null
-                    RoomMember(member.optString("id"), value, member.optInt("color", 0).mod(7))
+                    RoomMember(member.optString("id"), member.optString("alias", value), value, member.optInt("color", 0).mod(7))
                 }
             }.orEmpty()
             RoomSummary(id, name, members)
@@ -112,8 +113,12 @@ internal fun RoomScreen(
     exhausted: Boolean,
     error: String?,
     onLoadOlder: () -> Unit,
+    onSend: (String) -> Unit = {},
+    sending: Boolean = false,
     onBack: () -> Unit,
 ) {
+    var draft by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+    val mentionsOpen = roomShowsMentions(draft)
     androidx.activity.compose.BackHandler(onBack = onBack)
     Column(Modifier.fillMaxWidth()) {
         Row(
@@ -177,12 +182,56 @@ internal fun RoomScreen(
                 }
             }
         }
+        if (mentionsOpen) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                room.members.forEach { member ->
+                    Text(
+                        "@${member.alias}",
+                        Modifier
+                            .background(botColor(member.color).copy(alpha = 0.16f), androidx.compose.foundation.shape.CircleShape)
+                            .clickable {
+                                draft = draft.replace(Regex("@[A-Za-z0-9_-]*$"), "@${member.alias} ")
+                            }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = botColor(member.color),
+                    )
+                }
+            }
+        }
         error?.let { message ->
             Text(
                 message,
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
+            )
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            androidx.compose.material3.OutlinedTextField(
+                value = draft,
+                onValueChange = { draft = it },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("Message ${room.name}") },
+                maxLines = 4,
+            )
+            KitSecondaryButton(
+                if (sending) "Sending…" else "Send",
+                onClick = {
+                    val text = draft.trim()
+                    if (text.isNotEmpty() && !sending) {
+                        onSend(text)
+                        draft = ""
+                    }
+                },
+                enabled = draft.isNotBlank() && !sending,
             )
         }
     }

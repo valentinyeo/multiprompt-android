@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import java.io.File
 import java.time.Duration
 import kotlinx.coroutines.CoroutineScope
@@ -47,7 +48,7 @@ class RoomScreenTest {
     private val room = RoomSummary(
         id = "room-1",
         name = "Launch room",
-        members = listOf(RoomMember("m1", "HT Product Lead", 1), RoomMember("m2", "SF Design Lead", 4)),
+        members = listOf(RoomMember("m1", "ht-product-lead", "HT Product Lead", 1), RoomMember("m2", "sf-design-lead", "SF Design Lead", 4)),
     )
 
     @Test fun roomShowsNameMembersAndTheWaitingLine() {
@@ -89,6 +90,22 @@ class RoomScreenTest {
         compose.onNodeWithText("SF Design Lead").assertIsDisplayed()
         compose.onNodeWithText("HT Product Lead").assertDoesNotExist()
         capture("room-conversation.png")
+    }
+
+    @Test fun typingAtOpensTheAgentListAndSendsTheDraft() {
+        var sent = ""
+        compose.setContent {
+            MultipromptTheme(sunlight = false, material3 = false) {
+                Surface {
+                    RoomScreen(room, emptyList(), loading = false, exhausted = false, error = null, onLoadOlder = {}, onSend = { sent = it }, onBack = {})
+                }
+            }
+        }
+        compose.onNodeWithText("Message Launch room").performTextInput("hello @")
+        compose.onNodeWithText("@sf-design-lead").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Send").performClick()
+        compose.waitForIdle()
+        assertTrue(sent == "hello @sf-design-lead")
     }
 
     @Test fun aRoomWithNothingLoadedOffersLoadOlder() {
