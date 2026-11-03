@@ -6,15 +6,18 @@ import android.os.SystemClock
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import org.json.JSONObject
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import java.io.File
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
@@ -68,6 +71,58 @@ class PendingMessagesTest {
                     ReplySwipeGate(), { _, _ -> }, {}, rememberLazyListState(), 0, "Claude", null, {})
             }
         }
+    }
+
+    private fun bubbleHeight(key: String) = compose.onNodeWithTag("chat-message-$key").getUnclippedBoundsInRoot().height.value
+
+    private fun assertOnlyBubbles() {
+        listOf("Queued", "Sending", "Accepted", "Failed", "Confirmation unknown", "Check status", "Send again", "Remove").forEach {
+            compose.onNodeWithText(it).assertDoesNotExist()
+        }
+    }
+
+    @Test fun aSentBubbleIsOnlyItsText() {
+        harness()
+        compose.onNodeWithText("Synthetic prompt").assertIsDisplayed()
+        assertOnlyBubbles()
+        val queued = bubbleHeight("@shared:$id")
+        compose.runOnIdle {
+            history.value = history.value.copy(replica = MessageReplica(1, 2, mapOf(id to row(MessageProtocol.State.ACCEPTED))))
+        }
+        compose.onNodeWithText("Synthetic prompt").assertIsDisplayed()
+        assertOnlyBubbles()
+        assertEquals("acceptance must not move the bubble", queued, bubbleHeight("@shared:$id"), 0.5f)
+    }
+
+    @Test fun aFailedOrUnknownSendShowsNothingExtra() {
+        harness()
+        val queued = bubbleHeight("@shared:$id")
+        compose.runOnIdle {
+            history.value = history.value.copy(replica = MessageReplica(1, 2, mapOf(id to row(MessageProtocol.State.FAILED))))
+        }
+        compose.onNodeWithText("Synthetic prompt").assertIsDisplayed()
+        assertOnlyBubbles()
+        assertEquals("a failed send must not move the bubble", queued, bubbleHeight("@shared:$id"), 0.5f)
+        compose.runOnIdle {
+            val entry = MessageJournal.Entry("unknown123456789012", "account", MessageProtocol.Scope("claude", "proof", "pending-proof"),
+                "submit", "othermessage123456", "Second attempt", 1, "attempt", true)
+            history.value = history.value.copy(unresolved = listOf(entry))
+        }
+        compose.onNodeWithText("Second attempt").assertIsDisplayed()
+        assertOnlyBubbles()
+    }
+
+    @Test fun threeSentBubblesKeepOnlyTheirText() {
+        harness()
+        val first = row(MessageProtocol.State.QUEUED).copy(id = "queued1234567890123", text = "First calm message")
+        val second = row(MessageProtocol.State.ACCEPTED).copy(id = "accepted12345678901", text = "Second calm message")
+        val third = row(MessageProtocol.State.FAILED).copy(id = "failed123456789012", text = "Third calm message")
+        compose.runOnIdle {
+            history.value = history.value.copy(replica = MessageReplica(1, 2, mapOf(first.id to first, second.id to second, third.id to third)))
+        }
+        listOf("First calm message", "Second calm message", "Third calm message").forEach { compose.onNodeWithText(it).assertIsDisplayed() }
+        screenshot("calm-sent-bubbles")
+        assertOnlyBubbles()
     }
 
     @Test fun queuedAndAcceptedRemainHostCopiesWithoutASendLabel() {
