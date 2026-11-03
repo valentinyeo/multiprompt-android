@@ -159,4 +159,17 @@ class ChatReactionsTest {
         val later = message("answer", "Next up is the Settings page")
         assertEquals(listOf(target, next, later), ChatReactions.present(listOf(target, reaction, ack, next, later)).messages)
     }
+    @Test
+    fun aReactionSentFromTheSharedStoreLeavesABadgeAndNoBubble() {
+        val first = message("msg_first", "Same first words")
+        val line = ChatReactions.format(ChatReactions.Emoji.LIKE, first.requestId, first.text)!!
+        val row = MessageProtocol.Row(
+            "sent", "claude", "sid", line, 1, "", MessageProtocol.State.SENT,
+            null, null, 0, 0.0,
+        )
+        val shared = ChatHistoryMessage("@shared:sent", "user", line, "", 0, 0, "sent", sharedRow = row)
+        val shown = ChatReactions.present(listOf(first, shared))
+        assertEquals(listOf(first), shown.messages)
+        assertEquals(setOf(ChatReactions.Emoji.LIKE), shown.badges[first.key])
+    }
 }
