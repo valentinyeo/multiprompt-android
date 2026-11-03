@@ -60,6 +60,7 @@ class ChatHistoryActorTest {
         val dismissStarted = CompletableDeferred<Unit>()
         var resetCalls = 0
         var dropSubmit = false
+        var dropSubmits = 0
         var dropAfterAdmission = false
         var dropReset = false
         var paged = false
@@ -161,6 +162,7 @@ class ChatHistoryActorTest {
                     assertEquals(sid, request.getString("sid"))
                     submitCalls++
                     if (dropSubmit) error("lost acknowledgement")
+                    if (dropSubmits > 0) { dropSubmits--; error("lost acknowledgement") }
                     if (row?.optString("id") != request.getString("message_id"))
                         row = row("queued").put("id", request.getString("message_id")).put("text", request.getString("text"))
                     else require(row?.getString("text") == request.getString("text"))
@@ -451,6 +453,27 @@ class ChatHistoryActorTest {
             assertEquals("submit", f.journal.entries().single().operation)
         } finally { owner.close() }
     }
+    @Test fun aDroppedSubmitIsRetriedBeforeTheMessageIsLost() = runBlocking {
+        for (provider in listOf("claude", "codex")) {
+            val f = Fixture(provider)
+            f.dropSubmits = 1
+            val owner = f.connection()
+            try {
+                owner.select(true); owner.start(); f.ready(owner)
+                val admission = owner.submit("hello") as PromptAdmission.Recorded
+                val landed = withTimeout(10_000) {
+                    owner.state.first { state ->
+                        state.replica?.messages?.get(admission.messageId) != null &&
+                            state.unresolved.none { it.id == admission.messageId }
+                    }
+                }
+                assertEquals(admission.messageId, landed.replica?.messages?.get(admission.messageId)?.id)
+                assertEquals(2, f.submitCalls)
+                assertTrue(f.journal.entries().isEmpty())
+            } finally { owner.close() }
+        }
+    }
+
     @Test fun lostAcknowledgementAfterAdmissionReconcilesWithoutResubmit() = runBlocking {
         for (provider in listOf("claude", "codex")) {
             val f = Fixture(provider)
