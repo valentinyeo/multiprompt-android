@@ -176,6 +176,17 @@ fill() {
     printf 'Field input did not match: %s\n' "$1" >&2
     return 1
 }
+scroll_to_newest() {
+    local attempt
+    for attempt in {1..8}; do
+        if select_node desc 'Jump to newest' >/dev/null 2>&1; then
+            tap_desc 'Jump to newest'
+            sleep 1
+        else
+            return 0
+        fi
+    done
+}
 wait_for_absence() {
     local attempt
     for attempt in {1..30}; do
@@ -1814,6 +1825,11 @@ if [[ "$feature" == chat-reactions.md ]]; then
     sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-reaction-work/a1b2c3d4-0975-4000-8000-000000000975.jsonl > "$EVIDENCE/reaction-transcript.jsonl"
     sudo -u verifyssh python3 /home/verifyssh/reaction-console.py append-mixed
     wait_for_text 'My follow-up stays visible'
+    for attempt in {1..20}; do
+        if select_node contains 'Answer to the follow-up' >/dev/null 2>&1; then break; fi
+        scroll_to_newest
+        sleep 1
+    done
     wait_for_text 'Answer to the follow-up'
     shot reactions-mixed
     python3 "$scripts/reactions.py" mixed "$EVIDENCE/current.xml" "$EVIDENCE/reactions-mixed-result.json"
