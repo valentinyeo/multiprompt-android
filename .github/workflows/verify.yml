@@ -112,6 +112,10 @@ permissions:
   contents: read
   actions: read
 
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     name: ${{ inputs.expect_shell_missing && 'original shell control' || inputs.expect_native_missing && 'original native-skill control' || 'verify' }}

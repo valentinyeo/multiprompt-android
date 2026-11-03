@@ -10,6 +10,10 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+
+concurrency:
+  group: multiprompt-parity-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   parity:
     runs-on: ubuntu-latest
