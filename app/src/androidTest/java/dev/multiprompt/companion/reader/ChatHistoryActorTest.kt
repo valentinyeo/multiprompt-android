@@ -437,19 +437,24 @@ class ChatHistoryActorTest {
         } finally { owner.close() }
     }
 
-    @Test fun lostSubmitIsNotAutomaticallyReplayed() = runBlocking {
-        val f = Fixture("codex")
-        f.dropSubmit = true
-        val owner = f.connection()
-        try {
-            owner.select(true); owner.start(); f.ready(owner)
-            assertTrue(owner.submit("hello") is PromptAdmission.Recorded)
-            withTimeout(10_000) { owner.state.first { it.retrying } }
-            f.dropSubmit = false
-            withTimeout(10_000) { owner.state.first { !it.retrying && it.replica != null } }
-            assertEquals(1, f.submitCalls)
-            assertEquals("submit", f.journal.entries().single().operation)
-        } finally { owner.close() }
+    @Test fun lostSubmitIsResentOnceWithTheSameId() = runBlocking {
+        for (provider in listOf("claude", "codex")) {
+            val f = Fixture(provider)
+            f.dropSubmit = true
+            val owner = f.connection()
+            try {
+                owner.select(true); owner.start(); f.ready(owner)
+                val admission = owner.submit("hello") as PromptAdmission.Recorded
+                withTimeout(10_000) { owner.state.first { it.retrying } }
+                assertNull(f.row)
+                f.dropSubmit = false
+                withTimeout(15_000) { owner.state.first { !it.retrying && it.unresolved.isEmpty() && it.replica?.messages?.get(admission.messageId) != null } }
+                assertEquals(2, f.submitCalls)
+                assertEquals(admission.messageId, f.row!!.getString("id"))
+                assertEquals("hello", f.row!!.getString("text"))
+                assertTrue(f.journal.entries().isEmpty())
+            } finally { owner.close() }
+        }
     }
     @Test fun lostAcknowledgementAfterAdmissionReconcilesWithoutResubmit() = runBlocking {
         for (provider in listOf("claude", "codex")) {
