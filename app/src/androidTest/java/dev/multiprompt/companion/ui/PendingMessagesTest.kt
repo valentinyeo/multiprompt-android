@@ -122,6 +122,27 @@ class PendingMessagesTest {
         assertOnlyBubbles()
     }
 
+    @Test fun anAnsweredSendShowsTheReplyBelowIt() {
+        harness()
+        val older = (1L..15L).map { position ->
+            row(MessageProtocol.State.ACCEPTED).copy(id = "older%013d".format(position), text = "Older synthetic prompt $position",
+                position = position, created = 1793690000.0 + position * 600)
+        }
+        val asked = row(MessageProtocol.State.ACCEPTED).copy(position = 16, text = "Synthetic ask", created = 1793712066.72)
+        compose.runOnIdle {
+            history.value = ChatHistoryState(ChatHistory(sid = "proof", inode = 1, offset = 900, start = 100, more = true, rows = listOf(
+                ChatHistoryProtocol.Row("user", "Synthetic ask", "u1", "2026-11-03T13:21:09.775Z", 100, 300),
+                ChatHistoryProtocol.Row("assistant", "Synthetic answer arrived", "a1", "2026-11-03T13:21:26.722Z", 600, 900),
+            )), loaded = true, replica = MessageReplica(1, 2, (older + asked).associateBy { it.id }))
+        }
+        compose.onNodeWithText("Synthetic answer arrived").assertIsDisplayed()
+        assertEquals(1, compose.onAllNodesWithText("Synthetic ask").fetchSemanticsNodes().size)
+        val ask = compose.onNodeWithText("Synthetic ask").getUnclippedBoundsInRoot()
+        val answer = compose.onNodeWithText("Synthetic answer arrived").getUnclippedBoundsInRoot()
+        assertTrue("the reply must sit below the sent message", answer.top.value >= ask.bottom.value)
+        screenshot("answered-send")
+    }
+
     @Test fun cancelledRetryShowsRecoveryWithoutBody() {
         harness()
         compose.runOnIdle {
