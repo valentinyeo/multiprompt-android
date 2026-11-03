@@ -1781,12 +1781,13 @@ if [[ "$feature" == chat-reactions.md ]]; then
         if grep -F 'content-desc="Reactions: 👍"' "$EVIDENCE/current.xml" >/dev/null; then break; fi
         sleep 1
     done
-    shot reactions-badge
-    python3 "$scripts/reactions.py" check "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-reactions-badge.png" badge "$EVIDENCE/reactions-result.json"
     for attempt in {1..30}; do
         if sudo test -s /home/verifyssh/receipts.txt; then break; fi
         sleep 1
     done
+    sleep 2
+    shot reactions-badge
+    python3 "$scripts/reactions.py" check "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-reactions-badge.png" badge "$EVIDENCE/reactions-result.json"
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/reaction-receipts.txt"
     python3 "$scripts/reactions.py" transport "$EVIDENCE/reaction-receipts.txt" "$EVIDENCE/reaction-transport.json"
     for attempt in {1..30}; do
