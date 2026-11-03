@@ -154,7 +154,11 @@ jobs:
             --argjson versionCode "$VERSION_CODE" \
             --arg date "$(date -u +%Y-%m-%d)" \
             --arg notes "$notes" \
-            '[{versionName:$versionName, versionCode:$versionCode, date:$date, notes:$notes}] + (.history // []) | .[0:20]' \
+            --arg cutoff "$(date -u -d '365 days ago' +%Y-%m-%d)" \
+            '[{versionName:$versionName, versionCode:$versionCode, date:$date, notes:$notes}] + (.history // [])
+             | .[0:1000]
+             | (map(select(.date >= $cutoff))) as $recent
+             | if ($recent | length) < 50 then .[0:50] else $recent end' \
             <<<"$previous")
 
           jq -n \
@@ -216,7 +220,11 @@ jobs:
             --argjson versionCode "$VERSION_CODE" \
             --arg date "$(date -u +%Y-%m-%d)" \
             --arg notes "$notes" \
-            '[{versionName:$versionName, versionCode:$versionCode, date:$date, notes:$notes}] + (.history // []) | .[0:20]' \
+            --arg cutoff "$(date -u -d '365 days ago' +%Y-%m-%d)" \
+            '[{versionName:$versionName, versionCode:$versionCode, date:$date, notes:$notes}] + (.history // [])
+             | .[0:1000]
+             | (map(select(.date >= $cutoff))) as $recent
+             | if ($recent | length) < 50 then .[0:50] else $recent end' \
             <<<"$previous")
 
           jq -n \
