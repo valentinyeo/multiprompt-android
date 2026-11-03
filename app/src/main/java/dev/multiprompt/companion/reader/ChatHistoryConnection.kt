@@ -133,6 +133,8 @@ class ChatHistoryConnection(
         if (selected && provider != null && ownedKey != key(sid)) {
             gate?.claim(key(sid), token)
             ownedKey = key(sid)
+        } else if (selected && provider != null) {
+            gate?.claimIfFree(key(sid), token)
         }
     }
 
@@ -238,6 +240,9 @@ class ChatHistoryConnection(
                                 if (provider != null && !selected) {
                                     withTimeoutOrNull(2_000L) { wake.receive() }
                                     continue@poll
+                                }
+                                if (provider != null && engine != null && freshSid?.let { owns(it) } == false) {
+                                    withTimeoutOrNull(2_000L) { wake.receive() }
                                 }
                                 val historyGeneration = generation
                                 var caughtUp = true
