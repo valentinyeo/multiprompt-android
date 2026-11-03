@@ -32,7 +32,7 @@ class RoomStoreRoundTripTest {
         assertEquals(2, room.members.size)
         assertTrue(room.revision >= 1)
 
-        client.postHuman(roomId, client.revision(roomId), "ship it @sf-design-lead", listOf("sf-design-lead"), "cmd-1")
+        client.postHuman(roomId, client.revision(roomId), "ship it @sf-design-lead", listOf("sf-design-lead"), java.util.UUID.randomUUID().toString())
 
         val page = client.events(roomId)
         val human = page.events.single { it.type == "human" }
@@ -42,7 +42,7 @@ class RoomStoreRoundTripTest {
         val deliveries = client.deliveries(roomId)
         assertEquals(1, deliveries.size)
         val delivery = deliveries.single()
-        client.agentReply(roomId, delivery.eventId, delivery.memberId, "on it", "reply-1")
+        client.agentReply(roomId, delivery.eventId, delivery.memberId, java.util.UUID.randomUUID().toString(), "on it")
 
         val after = client.events(roomId)
         assertEquals(2, after.events.size)
@@ -62,7 +62,7 @@ class RoomStoreRoundTripTest {
         val client = RoomClient(store.wire)
         val host = client.hostUuid()
         val roomId = createRoom(client, host)
-        client.postHuman(roomId, client.revision(roomId), "hello room", emptyList(), "cmd-1")
+        client.postHuman(roomId, client.revision(roomId), "hello room", emptyList(), java.util.UUID.randomUUID().toString())
 
         val first = client.events(roomId)
         val second = client.events(roomId, after = first.nextAfter)
@@ -79,7 +79,7 @@ class RoomStoreRoundTripTest {
         val result = store.wire.call(
             JSONObject()
                 .put("op", "create")
-                .put("command_id", "create-1")
+                .put("command_id", java.util.UUID.randomUUID().toString())
                 .put("name", "Launch room")
                 .put("members", members),
         )

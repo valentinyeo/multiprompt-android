@@ -99,7 +99,7 @@ class RoomClient(private val wire: RoomWire) : AutoCloseable {
         val result = call(
             JSONObject()
                 .put("op", "agent_reply")
-                .put("command_id", "reply-$responseId")
+                .put("command_id", java.util.UUID.randomUUID().toString())
                 .put("room_id", roomId)
                 .put("parent_event_id", parentEventId)
                 .put("member_id", memberId)
