@@ -12,7 +12,6 @@ data class ChatHistoryMessage(
     val requestId: String = "",
     val pending: Boolean = false,
     val delivery: String? = null,
-    val sharedRow: MessageProtocol.Row? = null,
     val unknownId: String? = null,
 ) {
     fun transcript(): TranscriptMessage = TranscriptMessage(role, timestamp.ifEmpty { null }, text)
@@ -83,15 +82,13 @@ data class ChatHistory(
         val occurrences = grouped.values.toList()
         val cards = replica?.messages?.values.orEmpty().filter { it.state != MessageProtocol.State.CANCELLED }.sortedBy { it.position }.map { row ->
             ChatHistoryMessage("@shared:${row.id}", "user", row.text, "", 0, 0, row.id,
-                pending = row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT),
-                delivery = row.state.name.lowercase().replaceFirstChar { it.uppercase() }, sharedRow = row)
+                pending = row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT))
         }
         val live = replica?.host?.spoken.orEmpty().filterNot { block -> block.done && landed(block.text) }.map { block ->
             ChatHistoryMessage("@live:${replica?.host?.turn}:${block.item}", "assistant", block.text, "", 0, 0, pending = !block.done)
         }
         val unknown = unresolved.filter { entry -> entry.operation == "submit" && replica?.messages?.get(entry.messageId)?.text != entry.text }.map { entry ->
-            ChatHistoryMessage("@unknown:${entry.id}", "user", entry.text.orEmpty(), "", 0, 0, entry.messageId,
-                delivery = "Confirmation unknown", unknownId = entry.id)
+            ChatHistoryMessage("@unknown:${entry.id}", "user", entry.text.orEmpty(), "", 0, 0, entry.messageId, unknownId = entry.id)
         }
         return occurrences + cards + unknown + live
     }

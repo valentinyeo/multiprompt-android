@@ -31,3 +31,12 @@ for name, labels in notes.items():
     if name != 'expanded':
         assert 'native journey is now fully green' not in words, f'session-note {name}: message text visible'
     print('SESSION_NOTE_IMAGE_OK', name)
+
+calm = root / 'pending-messages' / 'calm-sent-bubbles.png'
+text = subprocess.check_output(['tesseract', str(calm), 'stdout'], text=True, stderr=subprocess.DEVNULL)
+words = re.sub(r'\W+', ' ', text).lower()
+for label in ('First calm message', 'Second calm message', 'Third calm message'):
+    assert re.sub(r'\W+', ' ', label).lower() in words, f'calm-sent-bubbles: missing visible {label}'
+for label in ('Confirmation unknown', 'Check status', 'Send again', 'Remove'):
+    assert re.sub(r'\W+', ' ', label).lower() not in words, f'calm-sent-bubbles: status chrome visible: {label}'
+print('CALM_SENT_IMAGE_OK')
