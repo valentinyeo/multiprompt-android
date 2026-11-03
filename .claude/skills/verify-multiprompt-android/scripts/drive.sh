@@ -305,6 +305,17 @@ fi
 if [[ "$package" == dev.multiprompt.companion.debug ]]; then tap_text 'Use without account (debug)'; fi
 wait_for_text Inbox
 if [[ "$feature" == settings-navigation.md ]]; then
+    adb shell am force-stop "$package"
+    adb shell am instrument -w -e mode workspace-colors-seed dev.multiprompt.verification/dev.multiprompt.verification.Seed > "$EVIDENCE/workspace-colors-seed.txt"
+    grep -F 'ISOLATED_WORKSPACE_COLORS_SEEDED' "$EVIDENCE/workspace-colors-seed.txt"
+    relaunch_app
+    wait_for_text Inbox
+    tap_desc 'Session list actions'
+    tap_text Settings
+    wait_for_text 'Workspace colors'
+    shot settings-workspace-colors
+    adb shell input keyevent KEYCODE_BACK
+    wait_for_text Inbox
     shot settings-home
     tap_desc 'Session list actions'
     dump_ui

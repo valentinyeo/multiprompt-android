@@ -42,6 +42,7 @@ public class Seed extends Instrumentation {
                 else if (mode.equals("favorites-snapshot")) snapshotFavorites(context, result);
                 else if (mode.equals("pins-seed")) seedPins(context, result);
                 else if (mode.equals("pins-order")) orderPins(context, result);
+                else if (mode.equals("workspace-colors-seed")) seedWorkspaceColors(context, result);
                 else throw new IllegalStateException("Unknown fixture mode");
                 finish(Activity.RESULT_OK, result);
                 return;
@@ -87,6 +88,24 @@ public class Seed extends Instrumentation {
             }
             finish(Activity.RESULT_CANCELED, result);
         }
+    }
+    private void seedWorkspaceColors(Context context, Bundle result) throws Exception {
+        SharedPreferences secrets = context.getSharedPreferences("encrypted_secrets", Context.MODE_PRIVATE);
+        if (!secrets.contains("account_device_v1")) throw new IllegalStateException("Fixture account required");
+        JSONArray workspaces = new JSONArray()
+            .put(new JSONObject().put("name", "Work").put("color", 2))
+            .put(new JSONObject().put("name", "Home").put("color", 4));
+        JSONObject layout = new JSONObject()
+            .put("schema", 1)
+            .put("revision", 1)
+            .put("workspaces", workspaces)
+            .put("tabs", new JSONArray());
+        JSONObject pending = new JSONObject().put("base", layout).put("edited", layout);
+        SharedPreferences preferences = context.getSharedPreferences("account_layout", Context.MODE_PRIVATE);
+        if (!preferences.edit().putString("layout::isolated-release-fixture", pending.toString()).commit()) {
+            throw new IllegalStateException("Fixture layout was not persisted");
+        }
+        result.putString("result", "ISOLATED_WORKSPACE_COLORS_SEEDED");
     }
     private void seedHost(Context context, Bundle result) throws Exception {
         SharedPreferences secrets = context.getSharedPreferences("encrypted_secrets", Context.MODE_PRIVATE);
