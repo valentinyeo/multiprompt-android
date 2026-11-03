@@ -70,14 +70,16 @@ class PendingMessagesTest {
         }
     }
 
-    @Test fun queuedAndAcceptedRemainHostCopies() {
+    @Test fun queuedAndAcceptedRemainHostCopiesWithoutASendLabel() {
         harness()
-        compose.onNodeWithText("Queued").assertIsDisplayed()
+        compose.onNodeWithText("Synthetic prompt").assertIsDisplayed()
+        compose.onNodeWithText("Queued").assertDoesNotExist()
+        compose.onNodeWithText("Remove").assertIsDisplayed()
         compose.runOnIdle {
             history.value = history.value.copy(replica = MessageReplica(1, 2, mapOf(id to row(MessageProtocol.State.ACCEPTED))))
         }
-        compose.onNodeWithText("Accepted").assertIsDisplayed()
         compose.onNodeWithText("Synthetic prompt").assertIsDisplayed()
+        compose.onNodeWithText("Accepted").assertDoesNotExist()
         compose.onNodeWithText("Send again").assertDoesNotExist()
         compose.onNodeWithText("Remove").assertDoesNotExist()
     }
@@ -225,7 +227,7 @@ class PendingMessagesTest {
             f.dismissPause!!.complete(Unit)
             compose.waitUntil(10_000) { owner.state.value.replica?.messages?.get(submit.id)?.state == MessageProtocol.State.ACCEPTED && owner.state.value.unresolved.isEmpty() }
             compose.onNodeWithText("Accepted prompt").assertIsDisplayed()
-            compose.onNodeWithText("Accepted").assertIsDisplayed()
+            compose.onNodeWithText("Accepted").assertDoesNotExist()
             compose.onNodeWithText("Send again").assertDoesNotExist()
             compose.onNodeWithText("Remove").assertDoesNotExist()
             runBlocking { assertTrue(withTimeout(10_000) { owner.resetConversation().await() } == dev.multiprompt.companion.reader.MessageActionResult.Applied) }

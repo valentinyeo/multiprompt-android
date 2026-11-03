@@ -93,10 +93,10 @@ class ChatViewScrollTest {
     }
 
     @Test
-    fun loadingIsPlainAndQueuedMessagesRemainReplyable() {
+    fun loadingIsPlainAndAPendingMessageShowsNoStateAndStaysReplyable() {
         messages.value = emptyList()
         render(loaded = false, queued = listOf("Queued question"))
-        compose.onNodeWithText("Queued").assertIsDisplayed()
+        compose.onNodeWithText("Queued").assertDoesNotExist()
         compose.onNodeWithText("Queued question").performTouchInput { swipeRight() }
         compose.runOnIdle { assertEquals(listOf("Queued question"), replies) }
     }

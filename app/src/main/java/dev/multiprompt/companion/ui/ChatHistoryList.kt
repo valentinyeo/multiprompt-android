@@ -58,6 +58,8 @@ import kotlinx.coroutines.withContext
 
 private data class ReplyJump(val message: ChatHistoryMessage, val reply: ReplyQuote.Reply)
 
+private val FAILURE_LABELS = setOf("Failed", "Confirmation unknown", "Local · unconfirmed")
+
 @Composable
 internal fun ChatHistoryView(
     connection: SessionReaderConnection,
@@ -193,7 +195,7 @@ internal fun ChatHistoryView(
             sharedEpoch = state.replica?.epoch,
             unresolved = state.unresolved,
             collapsePendingReactions = reader.actionError == null,
-            working = reader.isWorking(agent),
+            working = reader.isWorking(agent) || state.replica?.host?.running == true,
             onNearTop = history::nearTop,
             listState = listState,
             followRequest = followRequest,
@@ -313,7 +315,7 @@ internal fun ChatHistoryList(
                     onReaction = if (agent == AgentKind.CLAUDE && message.role == "assistant" && onReaction != null) {
                         { emoji -> onReaction(message, emoji) }
                     } else null,
-                    delivery = message.delivery,
+                    delivery = message.delivery?.takeIf { it in FAILURE_LABELS },
                     onCancel = if (message.role == "user" && message.delivery == "Queued" && message.requestId.isNotEmpty() && onCancelPending != null) {
                         { onCancelPending(message) }
                     } else null)
@@ -391,12 +393,12 @@ private fun HistoryBubble(
         }
         if (reply != null) ReplyReference(reply, sunlight, fontScale, Modifier.alpha(if (pending) 0.5f else 1f)) { onJump(reply) }
         ReplyableBubble(isUser = isUser, sunlight = sunlight, text = text,
-            modifier = Modifier.alpha(if (pending) 0.5f else 1f),
+            modifier = Modifier.alpha(if (pending && isUser) 0.5f else 1f),
             onReply = { onReply(it, isUser) }, gate = gate,
             messageId = messageId, sessionName = sessionName, onMarkUnread = onMarkUnread,
             highlighted = highlighted, reactions = reactions, onReaction = onReaction, onCancel = onCancel) {
-            if (pending || delivery != null) {
-                Text(delivery ?: "Queued", fontFamily = chatFontFamily(), fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp,
+            if (delivery != null) {
+                Text(delivery, fontFamily = chatFontFamily(), fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp,
                     color = chatHintColor(sunlight))
             }
             if (isUser) {

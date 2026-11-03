@@ -86,12 +86,18 @@ data class ChatHistory(
                 pending = row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT),
                 delivery = row.state.name.lowercase().replaceFirstChar { it.uppercase() }, sharedRow = row)
         }
+        val live = replica?.host?.spoken.orEmpty().filterNot { block -> block.done && landed(block.text) }.map { block ->
+            ChatHistoryMessage("@live:${replica?.host?.turn}:${block.item}", "assistant", block.text, "", 0, 0, pending = !block.done)
+        }
         val unknown = unresolved.filter { entry -> entry.operation == "submit" && replica?.messages?.get(entry.messageId)?.text != entry.text }.map { entry ->
             ChatHistoryMessage("@unknown:${entry.id}", "user", entry.text.orEmpty(), "", 0, 0, entry.messageId,
                 delivery = "Confirmation unknown", unknownId = entry.id)
         }
-        return occurrences + cards + unknown
+        return occurrences + cards + unknown + live
     }
+
+    private fun landed(text: String): Boolean =
+        rows.any { it.role == "assistant" && it.text.trimEnd(' ') == text.trimEnd(' ') }
 
     internal fun deliveryState(prompt: QueuedMessages.SentPrompt): QueuedMessages.Delivery {
         val terminal = setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
