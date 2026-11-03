@@ -73,7 +73,7 @@ class PendingMessagesTest {
         }
     }
 
-    private fun bubbleHeight(key: String) = compose.onNodeWithTag("chat-message-$key").getUnclippedBoundsInRoot().height.value
+    private fun bubbleHeight(key: String) = compose.onNodeWithTag("chat-message-$key").getUnclippedBoundsInRoot().let { it.bottom.value - it.top.value }
 
     private fun assertOnlyBubbles() {
         listOf("Queued", "Sending", "Accepted", "Failed", "Confirmation unknown", "Check status", "Send again", "Remove").forEach {
