@@ -82,7 +82,14 @@ class RoomClient(private val wire: RoomWire) : AutoCloseable {
     }
 
     suspend fun deliveries(roomId: String, after: Long = 0L, limit: Int = 40): List<RoomDelivery> {
-        val result = call(JSONObject().put("op", "deliveries").put("room_id", roomId).put("after", after).put("limit", limit))
+        val result = call(
+            JSONObject()
+                .put("op", "deliveries")
+                .put("room_id", roomId)
+                .put("after", after)
+                .put("through", JSONObject.NULL)
+                .put("limit", limit),
+        )
         val rows = result.optJSONArray("deliveries") ?: throw RoomFailure("missing_deliveries")
         return (0 until rows.length()).mapNotNull { index ->
             val row = rows.optJSONObject(index) ?: return@mapNotNull null
