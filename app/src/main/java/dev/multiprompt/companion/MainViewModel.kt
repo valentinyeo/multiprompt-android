@@ -1604,6 +1604,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val mapping = AccountHostMap.resolve(current.hosts, accountStore.hostOverrides())
             val workspaces = layout?.workspaces.orEmpty().map { Workspace(id = it, name = it, hostId = "", remotePath = "") }
             val assignments = AccountHostMap.workspaceAssignments(current.sessions, layout, mapping)
+            if (layout != null) {
+                sessionReads.applySharedBotLooks(layout.tabs.mapNotNull { tab ->
+                    AccountHostMap.sessionFor(tab, current.sessions, mapping, layout)?.let {
+                        SessionReadStore.key(it.hostId, it.name) to (tab.face to tab.color)
+                    }
+                }.toMap())
+            }
             current.copy(accountLayout = layout, accountPending = pendingLayout?.dirty == true, accountHosts = mapping,
                 workspaces = workspaces, workspaceSplitIds = listOf(null) + workspaces.map { it.id }, sessionWorkspaceIds = assignments,
                 readerSession = current.readerSession?.let { open ->
