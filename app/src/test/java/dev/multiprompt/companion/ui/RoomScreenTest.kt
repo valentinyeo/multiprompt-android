@@ -88,6 +88,7 @@ class RoomScreenTest {
         compose.onNodeWithText("On it").assertIsDisplayed()
         compose.onNodeWithText("SF Design Lead").assertIsDisplayed()
         compose.onNodeWithText("HT Product Lead").assertDoesNotExist()
+        capture("room-conversation.png")
     }
 
     @Test fun aRoomWithNothingLoadedOffersLoadOlder() {
@@ -123,7 +124,7 @@ class RoomScreenTest {
         capture()
     }
 
-    private fun capture() {
+    private fun capture(name: String = "room-row.png") {
         val root = compose.onRoot()
         val view = (checkNotNull(root.fetchSemanticsNode().root) as ViewRootForTest).view.rootView
         val attachInfo = ReflectionHelpers.getField<Any>(view, "mAttachInfo")
@@ -144,7 +145,7 @@ class RoomScreenTest {
             redraw.cancel()
             ReflectionHelpers.setField(attachInfo, "mHardwareAccelerated", accelerated)
         }
-        val output = File("build/reports/igsh-1317/room-row.png")
+        val output = File("build/reports/igsh-1317/$name")
         checkNotNull(output.parentFile).mkdirs()
         output.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
     }
