@@ -83,7 +83,7 @@ class RoomStoreRoundTripTest {
                 .put("name", "Launch room")
                 .put("members", members),
         )
-        assertTrue(result.optBoolean("ok"), true)
+        assertTrue("create failed: $result", result.optBoolean("ok"))
         return result.getJSONObject("result").getJSONObject("room").getString("id")
     }
 
