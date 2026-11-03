@@ -313,6 +313,12 @@ if [[ "$feature" == settings-navigation.md ]]; then
     tap_desc 'Session list actions'
     tap_text Settings
     wait_for_text 'Workspace colors'
+    for attempt in {1..6}; do
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Auto >/dev/null 2>&1; then break; fi
+        read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
+        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 400
+        dump_ui
+    done
     shot settings-workspace-colors
     adb shell input keyevent KEYCODE_BACK
     wait_for_text Inbox
