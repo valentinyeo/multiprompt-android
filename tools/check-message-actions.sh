@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p build/message-actions
 status=0
-"${GRADLE:-./gradlew}" --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.multiprompt.companion.reader.ChatHistoryActorTest,dev.multiprompt.companion.reader.MessageProtocolTest,dev.multiprompt.companion.ChatReaderBundleTest,dev.multiprompt.companion.ui.MessageActionsTest,dev.multiprompt.companion.ui.PendingMessagesTest,dev.multiprompt.companion.ui.ReplyReferenceTest,dev.multiprompt.companion.ui.SessionNoteChipTest || status=$?
+"${GRADLE:-./gradlew}" --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.multiprompt.companion.reader.ChatHistoryActorTest,dev.multiprompt.companion.reader.MessageProtocolTest,dev.multiprompt.companion.ChatReaderBundleTest,dev.multiprompt.companion.ui.MessageActionsTest,dev.multiprompt.companion.ui.PendingMessagesTest,dev.multiprompt.companion.ui.ReplyReferenceTest,dev.multiprompt.companion.ui.SessionNoteChipTest,dev.multiprompt.companion.security.SecretStoreConcurrencyTest || status=$?
 find app/build/outputs/androidTest-results -type f -name '*.xml' -exec cp '{}' build/message-actions/ \;
 find app/build/outputs -type d -name pending-messages -exec cp -R '{}' build/message-actions/ \;
 find app/build/outputs -type f \( -name 'message-actions-*.png' -o -name 'reply-*.png' -o -name 'reply-*.json' -o -name 'session-note-*.png' \) -exec cp '{}' build/message-actions/ \;
@@ -17,6 +17,7 @@ required = {
     'dev.multiprompt.companion.reader.MessageProtocolTest',
     'dev.multiprompt.companion.ChatReaderBundleTest',
     'dev.multiprompt.companion.ui.PendingMessagesTest',
+    'dev.multiprompt.companion.security.SecretStoreConcurrencyTest',
 }
 counts = {name: 0 for name in required}
 for path in Path('app/build/outputs/androidTest-results').rglob('*.xml'):

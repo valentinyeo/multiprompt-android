@@ -14,12 +14,15 @@ interface SecretStorage {
     fun put(id: String, value: ByteArray)
     fun get(id: String): ByteArray?
     fun remove(id: String?)
+    fun contains(id: String): Boolean = get(id) != null
 }
 
 class SecretStore(context: Context) : SecretStorage {
     private val preferences = context.getSharedPreferences("encrypted_secrets", Context.MODE_PRIVATE)
 
-    override fun put(id: String, value: ByteArray) {
+    override fun contains(id: String): Boolean = preferences.contains(id)
+
+    override fun put(id: String, value: ByteArray) = synchronized(KEYSTORE_LOCK) {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, encryptionKey())
         val ciphertext = cipher.doFinal(value)
@@ -29,7 +32,11 @@ class SecretStore(context: Context) : SecretStorage {
 
     override fun get(id: String): ByteArray? {
         val encoded = preferences.getString(id, null) ?: return null
-        return runCatching {
+        return synchronized(KEYSTORE_LOCK) { decrypt(encoded) }
+    }
+
+    private fun decrypt(encoded: String): ByteArray? =
+        runCatching {
             val packed = Base64.decode(encoded, Base64.NO_WRAP)
             require(packed.size > IV_BYTES)
             val cipher = Cipher.getInstance(TRANSFORMATION)
@@ -40,7 +47,6 @@ class SecretStore(context: Context) : SecretStorage {
             )
             cipher.doFinal(packed.copyOfRange(IV_BYTES, packed.size))
         }.getOrNull()
-    }
 
     override fun remove(id: String?) {
         if (id != null) preferences.edit().remove(id).apply()
@@ -70,5 +76,6 @@ class SecretStore(context: Context) : SecretStorage {
         const val KEY_ALIAS = "multiprompt_companion_secrets_v1"
         const val TRANSFORMATION = "AES/GCM/NoPadding"
         const val IV_BYTES = 12
+        val KEYSTORE_LOCK = Any()
     }
 }
