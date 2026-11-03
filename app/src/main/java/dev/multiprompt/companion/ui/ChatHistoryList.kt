@@ -28,7 +28,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
@@ -52,9 +51,6 @@ import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 private data class ReplyJump(val message: ChatHistoryMessage, val reply: ReplyQuote.Reply)
 
@@ -90,27 +86,9 @@ internal fun ChatHistoryView(
     val speakable = remember(messages) { dev.multiprompt.companion.reader.ReadAloud.replies(messages) }
     LaunchedEffect(speakable) { onSpeakableReplies(speakable) }
     LaunchedEffect(state.loaded, state.history.sid) { onChatReady(state.loaded && state.history.sid.isNotEmpty()) }
-    val actionScope = rememberCoroutineScope()
-    val context = LocalContext.current
-    var hiddenRetry by remember { mutableStateOf<Pair<String, Long>?>(null) }
-    suspend fun showResult(result: dev.multiprompt.companion.reader.MessageActionResult) {
-        val text = when (result) {
-            dev.multiprompt.companion.reader.MessageActionResult.Applied -> "Request confirmed"
-            dev.multiprompt.companion.reader.MessageActionResult.Unknown -> "Confirmation unknown"
-            dev.multiprompt.companion.reader.MessageActionResult.BlockedRecovery -> "Resolve unknown messages first"
-            is dev.multiprompt.companion.reader.MessageActionResult.Rejected -> result.reason
-        }
-        withContext(Dispatchers.Main) {
-            android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
-        }
-    }
-    hiddenRetry?.let { (id, token) ->
-        KitSheet(onDismiss = { hiddenRetry = null }) {
-            Text("Send again?")
-            Text("Your agent may already have this message. Sending again may duplicate it. Send again?")
-            KitPrimaryButton("Send again", onClick = { hiddenRetry = null; actionScope.launch { showResult(history.replayUnknown(id, token)) } })
-            KitSecondaryButton("Cancel", onClick = { hiddenRetry = null })
-        }
+    val pendingReset = if (managed) state.unresolved.firstOrNull { it.operation == "reset" }?.id else null
+    LaunchedEffect(history, pendingReset) {
+        while (pendingReset != null && history.recoverReset(history.actionToken()) != dev.multiprompt.companion.reader.MessageActionResult.Applied) delay(5_000)
     }
     SideEffect {
         history.awaitingMessages(messages.any { it.pending })
@@ -120,21 +98,6 @@ internal fun ChatHistoryView(
     val questions = state.history.pendingQuestions
     Column(modifier.fillMaxSize()) {
         state.messageError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(8.dp)) }
-        if (managed && state.unresolved.any { it.operation == "reset" }) {
-            KitSecondaryButton("Check reset", onClick = { val token = history.actionToken(); actionScope.launch { showResult(history.recoverReset(token)) } })
-        }
-        state.unresolved.filter { entry -> managed && entry.operation == "retry" &&
-            state.replica?.messages?.get(entry.messageId)?.state == dev.multiprompt.companion.reader.MessageProtocol.State.CANCELLED
-        }.forEach { entry ->
-            KitSecondaryButton("Send again", onClick = { hiddenRetry = entry.id to history.actionToken() })
-        }
-        state.unresolved.filter { entry -> managed && entry.operation == "dismiss" && entry.text != null &&
-            state.unresolved.none { it.operation == "submit" && it.sameChat(entry.account, entry.scope) && it.messageId == entry.messageId && it.text == entry.text } &&
-            (state.replica?.messages?.get(entry.messageId) == null ||
-                state.replica?.messages?.get(entry.messageId)?.state == dev.multiprompt.companion.reader.MessageProtocol.State.CANCELLED)
-        }.forEach { entry ->
-            KitSecondaryButton("Remove", onClick = { val token = history.actionToken(); actionScope.launch { showResult(history.removeUnknown(entry.id, token)) } })
-        }
         if (state.retrying) {
             Text(
                 "Disconnected · retrying",

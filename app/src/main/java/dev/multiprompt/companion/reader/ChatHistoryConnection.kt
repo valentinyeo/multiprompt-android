@@ -496,7 +496,7 @@ class ChatHistoryConnection(
                             resetAck = null
                             freshSid = null
                             _state.value = _state.value.copy(retrying = true,
-                                messageError = if (failure is JournalStorageFailure) "Local storage failure; messages cannot be safely sent" else "Connection lost; confirmation may be unknown")
+                                messageError = if (failure is JournalStorageFailure) "Local storage failure; messages cannot be safely sent" else null)
                         }
                     }
                     when (val command = activeCommand) {
