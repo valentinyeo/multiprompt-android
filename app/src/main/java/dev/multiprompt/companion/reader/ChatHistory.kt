@@ -81,16 +81,29 @@ data class ChatHistory(
                     previous?.offset ?: row.offset, row.end, row.id)
             }
         val occurrences = grouped.values.toList()
-        val cards = replica?.messages?.values.orEmpty().filter { it.state != MessageProtocol.State.CANCELLED }.sortedBy { it.position }.map { row ->
+        val delivered = replica?.messages?.values.orEmpty().filter { it.state != MessageProtocol.State.CANCELLED }.sortedBy { it.position }
+        val cards = delivered.filterNot { row -> arrived(row, delivered) }.map { row ->
             ChatHistoryMessage("@shared:${row.id}", "user", row.text, "", 0, 0, row.id,
                 pending = row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT),
                 delivery = row.state.name.lowercase().replaceFirstChar { it.uppercase() }, sharedRow = row)
+        }
+        val live = replica?.host?.spoken.orEmpty().filterNot { block -> block.done && landed(block.text) }.map { block ->
+            ChatHistoryMessage("@live:${replica?.host?.turn}:${block.item}", "assistant", block.text, "", 0, 0, pending = !block.done)
         }
         val unknown = unresolved.filter { entry -> entry.operation == "submit" && replica?.messages?.get(entry.messageId)?.text != entry.text }.map { entry ->
             ChatHistoryMessage("@unknown:${entry.id}", "user", entry.text.orEmpty(), "", 0, 0, entry.messageId,
                 delivery = "Confirmation unknown", unknownId = entry.id)
         }
-        return occurrences + cards + unknown
+        return occurrences + cards + unknown + live
+    }
+
+    private fun landed(text: String): Boolean =
+        rows.any { it.role == "assistant" && it.text.trimEnd(' ') == text.trimEnd(' ') }
+
+    private fun arrived(row: MessageProtocol.Row, ordered: List<MessageProtocol.Row>): Boolean {
+        val text = row.text.trimEnd(' ')
+        val earlier = ordered.count { it.text.trimEnd(' ') == text && it.position <= row.position }
+        return rows.count { it.role == "user" && it.text.trimEnd(' ') == text } >= earlier
     }
 
     internal fun deliveryState(prompt: QueuedMessages.SentPrompt): QueuedMessages.Delivery {

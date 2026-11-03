@@ -20,11 +20,22 @@ object MessageProtocol {
         val receipt: String?, val epoch: Long, val created: Double,
     )
 
+    data class HostEvent(
+        val kind: String,
+        val turn: String?,
+        val item: String?,
+        val at: Long,
+        val text: String?,
+        val done: Boolean,
+        val state: String?,
+    )
+
     sealed interface Item {
         data class Message(val row: Row) : Item
         data class Native(val fact: Fact) : Item
         data class AttemptReceipt(val fact: Fact) : Item
         data class Reset(val epoch: Long) : Item
+        data class Host(val event: HostEvent) : Item
     }
     data class SnapshotPage(val id: String, val epoch: Long, val seq: Long, val items: List<Item>, val next: Long?)
     data class Event(val seq: Long, val item: Item)
@@ -93,8 +104,19 @@ object MessageProtocol {
         if (value.has("native_message")) return Item.Native(fact(jsonObject(value.get("native_message")), scope, true))
         if (value.has("attempt_receipt")) return Item.AttemptReceipt(fact(jsonObject(value.get("attempt_receipt")), scope, false))
         if (!snapshot && value.has("reset_epoch")) return Item.Reset(integral(value.get("reset_epoch")))
+        if (value.has("kind")) return Item.Host(hostEvent(value, scope))
         require(!snapshot)
         return Item.Message(row(value, scope))
+    }
+
+    private fun hostEvent(value: JSONObject, scope: Scope): HostEvent {
+        val kind = text(value.get("kind"))
+        require(kind.isNotBlank() && text(value.get("sid")) == scope.sid)
+        val payload = value.optJSONObject("payload") ?: JSONObject()
+        val body = if (kind.startsWith("text.") || kind.startsWith("thinking.")) payload.optString("text") else null
+        return HostEvent(kind, value.optString("turn").ifEmpty { null }, value.optString("item").ifEmpty { null },
+            if (value.has("at")) integral(value.get("at")) else 0L, body,
+            payload.optBoolean("done") || kind.endsWith(".done"), payload.optString("state").ifEmpty { null })
     }
 
     private fun fact(value: JSONObject, scope: Scope, native: Boolean): Fact {

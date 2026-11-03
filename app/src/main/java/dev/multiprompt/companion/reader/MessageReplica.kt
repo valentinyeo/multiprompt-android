@@ -6,6 +6,7 @@ data class MessageReplica(
     val messages: Map<String, MessageProtocol.Row> = emptyMap(),
     val nativeFacts: Map<String, MessageProtocol.Fact> = emptyMap(),
     val attemptReceipts: Map<String, MessageProtocol.Fact> = emptyMap(),
+    val host: HostStream = HostStream(),
 ) {
     fun apply(events: MessageProtocol.Events): MessageReplica {
         require(events.epoch == epoch)
@@ -23,6 +24,7 @@ data class MessageReplica(
         is MessageProtocol.Item.Native -> copy(nativeFacts = nativeFacts + (item.fact.eventId to item.fact))
         is MessageProtocol.Item.AttemptReceipt -> copy(attemptReceipts = attemptReceipts + (item.fact.eventId to item.fact))
         is MessageProtocol.Item.Reset -> error("Reset requires a new snapshot")
+        is MessageProtocol.Item.Host -> copy(host = host.apply(item.event))
     }
 
     companion object {
