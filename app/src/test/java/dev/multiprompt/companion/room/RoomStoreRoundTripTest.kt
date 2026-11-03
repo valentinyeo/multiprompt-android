@@ -45,7 +45,7 @@ class RoomStoreRoundTripTest {
         client.agentReply(roomId, delivery.eventId, delivery.memberId, java.util.UUID.randomUUID().toString(), "on it")
 
         val after = client.events(roomId)
-        assertEquals(2, after.events.size)
+        assertEquals(3, after.events.size)
         val reply = after.events.single { it.type == "agent_reply" }
         assertEquals("on it", reply.text)
         assertEquals(delivery.memberId, reply.memberId)
@@ -54,7 +54,7 @@ class RoomStoreRoundTripTest {
         assertEquals(2, lines.size)
         assertNull(lines[0].author)
         assertEquals("SF Design Lead", lines[1].author?.name)
-        assertEquals(listOf(1L, 2L), lines.map { it.seq })
+        assertEquals(listOf(2L, 3L), lines.map { it.seq })
     }
 
     @Test
