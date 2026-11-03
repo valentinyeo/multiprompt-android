@@ -198,6 +198,44 @@ class LiveChatStreamTest {
         capture(compose.onNodeWithTag("chat-history"), "live-chat-pong")
     }
 
+    private fun accepted(position: Long, text: String, created: Double) = MessageProtocol.Row(
+        "mp-%016d".format(position), "claude", sid, text, position, "attempt0123456789",
+        MessageProtocol.State.ACCEPTED, null, null, 0, created)
+
+    private fun answeredChat(): ChatHistoryState {
+        val history = ChatHistory(sid = sid, inode = 7, offset = 900, start = 100, more = true, rows = listOf(
+            ChatHistoryProtocol.Row("user", "Synthetic ask", "u1", "2026-11-03T13:21:09.775Z", 100, 300),
+            ChatHistoryProtocol.Row("assistant", "Synthetic answer arrived", "a1", "2026-11-03T13:21:26.722Z", 600, 900),
+        ))
+        val older = (1L..15L).map { accepted(it, "Older synthetic prompt $it", 1793690000.0 + it * 600) }
+        val newest = accepted(16, "Synthetic ask", 1793712066.72)
+        return ChatHistoryState(history, loaded = true,
+            replica = MessageReplica(0, 0, messages = (older + newest).associateBy { it.id }))
+    }
+
+    @Test
+    fun anAnsweredLiveChatEndsWithTheReply() {
+        val state = answeredChat()
+        val drawn = state.history.managedMessages(state.replica, emptyList())
+        assertEquals("Synthetic answer arrived", drawn.last().text)
+        assertEquals(1, drawn.count { it.text == "Synthetic ask" })
+        assertEquals("@shared:mp-0000000000000016", drawn.single { it.text == "Synthetic ask" }.key)
+        assertTrue(drawn.none { it.text.startsWith("Older synthetic prompt") })
+        render(state)
+        compose.onNodeWithText("Synthetic answer arrived").assertIsDisplayed()
+        capture(compose.onNodeWithTag("chat-history"), "live-chat-answered")
+    }
+
+    @Test
+    fun anAcceptedSendStaysBelowTheTranscriptUntilItLands() {
+        val state = answeredChat()
+        val waiting = accepted(17, "Synthetic follow up", 1793712100.0)
+        val replica = state.replica!!.copy(messages = state.replica!!.messages + (waiting.id to waiting))
+        val drawn = state.history.managedMessages(replica, emptyList())
+        assertEquals(listOf("Synthetic answer arrived", "Synthetic follow up"), drawn.takeLast(2).map { it.text })
+        assertEquals("@shared:${waiting.id}", drawn.last().key)
+    }
+
     private fun event(kind: String, item: String?, payload: String, turn: String? = null) =
         MessageProtocol.HostEvent(kind, turn, item, 1L, JSONObject(payload).optString("text").ifEmpty { null },
             JSONObject(payload).optBoolean("done") || kind.endsWith(".done"), JSONObject(payload).optString("state").ifEmpty { null })
