@@ -3354,10 +3354,8 @@ internal fun ReaderScreen(
                                         onClick = {
                                             menuExpanded = false
                                             onSessionInteraction()
-                                            readerScope.launch {
-                                                connection.enterHistory()
-                                                historyDialogOpen = true
-                                            }
+                                            historyDialogOpen = true
+                                            readerScope.launch { connection.enterHistory() }
                                         },
                                     )
                                 }
