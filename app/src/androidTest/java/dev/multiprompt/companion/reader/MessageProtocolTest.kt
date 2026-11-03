@@ -121,7 +121,7 @@ class MessageProtocolTest {
         ))
         val messages = history.managedMessages(MessageReplica(1, 2, mapOf(id to row)), emptyList())
         assertEquals(3, messages.size)
-        assertEquals("Accepted", messages.last().delivery)
+        assertTrue(messages.all { it.delivery == null })
         assertEquals(2, messages.map { it.key }.take(2).distinct().size)
     }
 
