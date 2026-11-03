@@ -173,15 +173,16 @@ class SessionReadStore(context: Context) {
     }
 
     fun newestSessionsAtBottom(): Boolean {
-        // IGSH-1531: an older build can leave "newest on top" stored. Flip it back once,
-        // so an update makes the phone inbox thumb-first again.
-        if (!preferences.getBoolean(NEWEST_SESSIONS_ORDER_SETTLED, false)) {
-            preferences.edit()
-                .putBoolean(NEWEST_SESSIONS_AT_BOTTOM, true)
-                .putBoolean(NEWEST_SESSIONS_ORDER_SETTLED, true)
-                .apply()
-        }
+        flipAStoredNewestOnTopOnce()
         return preferences.getBoolean(NEWEST_SESSIONS_AT_BOTTOM, true)
+    }
+
+    private fun flipAStoredNewestOnTopOnce() {
+        if (preferences.getBoolean(NEWEST_SESSIONS_ORDER_SETTLED, false)) return
+        preferences.edit()
+            .putBoolean(NEWEST_SESSIONS_AT_BOTTOM, true)
+            .putBoolean(NEWEST_SESSIONS_ORDER_SETTLED, true)
+            .apply()
     }
 
     fun setNewestSessionsAtBottom(enabled: Boolean) {
