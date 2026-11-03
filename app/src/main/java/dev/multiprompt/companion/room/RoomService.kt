@@ -20,6 +20,12 @@ class RoomService(private val context: Context, private val repository: SshRepos
             }
         }
 
+    suspend fun page(host: HostProfile, accountId: String, roomId: String, after: Long = 0L, limit: Int = 40): RoomPage =
+        open(host, accountId).use { client ->
+            client.hostUuid()
+            client.events(roomId, after, limit)
+        }
+
     private fun source(name: String): String =
         context.assets.open("rooms/$name").bufferedReader().use { it.readText() }
 

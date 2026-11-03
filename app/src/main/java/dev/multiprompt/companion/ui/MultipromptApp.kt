@@ -540,6 +540,9 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onRefreshRooms = viewModel::refreshRooms,
                     onSelectSection = viewModel::select,
                     onReleaseNotes = viewModel::openReleaseNotes,
+                    onOpenRoom = viewModel::openRoom,
+                    onCloseRoom = viewModel::closeRoom,
+                    onLoadOlderRoomEvents = viewModel::loadOlderRoomEvents,
                     onForgetSession = viewModel::forgetSession,
                     onStartNewSession = viewModel::startNewSession,
                     onSetNewestSessionsAtBottom = viewModel::setNewestSessionsAtBottom,
@@ -1132,6 +1135,9 @@ internal fun SessionsScreen(
     onRefresh: () -> Unit,
     onSelectSection: (AppSection) -> Unit,
     onReleaseNotes: () -> Unit = { onSelectSection(AppSection.UPDATE) },
+    onOpenRoom: (String) -> Unit = {},
+    onCloseRoom: () -> Unit = {},
+    onLoadOlderRoomEvents: () -> Unit = {},
     onForgetSession: (TmuxSession) -> Unit,
     onStartNewSession: () -> Unit,
     onSetNewestSessionsAtBottom: (Boolean) -> Unit,
@@ -1421,7 +1427,18 @@ internal fun SessionsScreen(
         }
     }
     openRoom?.let { room ->
-        RoomScreen(room) { openRoom = null }
+        RoomScreen(
+            room = room,
+            lines = roomLines(state.roomEvents, room.members),
+            loading = state.roomEventsLoading,
+            exhausted = state.roomEventsExhausted,
+            error = state.roomEventsError,
+            onLoadOlder = onLoadOlderRoomEvents,
+            onBack = {
+                openRoom = null
+                onCloseRoom()
+            },
+        )
     }
     if (crashReportVisible) {
         crashReport?.let { report ->
@@ -1617,7 +1634,7 @@ internal fun SessionsScreen(
             RoomSummary(
                 room.id,
                 room.name,
-                room.members.mapIndexed { index, member -> RoomMember(member.displayName, index) },
+                room.members.mapIndexed { index, member -> RoomMember(member.id, member.displayName, index) },
             )
         }
     }
@@ -1632,7 +1649,10 @@ internal fun SessionsScreen(
     }
     val roomStrip: @Composable () -> Unit = {
         rooms.forEach { room ->
-            RoomRow(room) { openRoom = room }
+            RoomRow(room) {
+                openRoom = room
+                onOpenRoom(room.id)
+            }
         }
     }
     val pinnedStrip: @Composable () -> Unit = {

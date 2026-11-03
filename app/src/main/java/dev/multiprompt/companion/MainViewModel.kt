@@ -112,6 +112,12 @@ data class AppUiState(
     val accountError: String? = null,
     val accountHosts: Map<Int, HostProfile> = emptyMap(),
     val rooms: List<dev.multiprompt.companion.room.RoomEntry> = emptyList(),
+    val roomId: String? = null,
+    val roomEvents: List<dev.multiprompt.companion.room.RoomEvent> = emptyList(),
+    val roomEventsNextAfter: Long = 0L,
+    val roomEventsLoading: Boolean = false,
+    val roomEventsExhausted: Boolean = false,
+    val roomEventsError: String? = null,
     val pendingDevice: PendingDevice? = null,
     val deviceApprovalBusy: Boolean = false,
     val deviceApprovalError: String? = null,
@@ -588,6 +594,53 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val rooms = runCatching { roomService.load(host, accountId) }.getOrElse { return@launch }
             _state.update { it.copy(rooms = rooms) }
+        }
+    }
+
+    fun openRoom(roomId: String) {
+        _state.update {
+            it.copy(
+                roomId = roomId,
+                roomEvents = emptyList(),
+                roomEventsNextAfter = 0L,
+                roomEventsExhausted = false,
+                roomEventsError = null,
+            )
+        }
+        loadRoomEvents(older = false)
+    }
+
+    fun closeRoom() {
+        _state.update {
+            it.copy(roomId = null, roomEvents = emptyList(), roomEventsNextAfter = 0L, roomEventsExhausted = false, roomEventsError = null)
+        }
+    }
+
+    fun loadOlderRoomEvents() = loadRoomEvents(older = true)
+
+    private fun loadRoomEvents(older: Boolean) {
+        val current = _state.value
+        val roomId = current.roomId ?: return
+        if (current.roomEventsLoading) return
+        if (older && current.roomEventsExhausted) return
+        val accountId = syncAuth.accountId() ?: return
+        val host = current.accountHosts.values.firstOrNull() ?: current.hosts.firstOrNull() ?: return
+        val after = if (older) current.roomEventsNextAfter else 0L
+        _state.update { it.copy(roomEventsLoading = true, roomEventsError = null) }
+        viewModelScope.launch {
+            val page = runCatching { roomService.page(host, accountId, roomId, after) }.getOrElse { failure ->
+                _state.update { it.copy(roomEventsLoading = false, roomEventsError = failure.message ?: "Could not load room messages") }
+                return@launch
+            }
+            _state.update { state ->
+                val merged = (state.roomEvents + page.events).distinctBy { it.seq }.sortedBy { it.seq }
+                state.copy(
+                    roomEvents = merged,
+                    roomEventsNextAfter = page.nextAfter,
+                    roomEventsLoading = false,
+                    roomEventsExhausted = page.events.isEmpty(),
+                )
+            }
         }
     }
 
