@@ -30,6 +30,7 @@ jobs:
       - uses: ./.github/actions/android-proof
         with:
           stage: robot-faces
+          target: google_apis
           script: bash tools/robot-faces/proof.sh
       - uses: actions/upload-artifact@v4
         if: always()
