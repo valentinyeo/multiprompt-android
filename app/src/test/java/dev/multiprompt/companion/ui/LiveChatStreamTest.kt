@@ -21,6 +21,7 @@ import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import dev.multiprompt.companion.reader.ChatHistoryState
 import dev.multiprompt.companion.reader.HostBlock
 import dev.multiprompt.companion.reader.HostStream
+import dev.multiprompt.companion.reader.MessageJournal
 import dev.multiprompt.companion.reader.MessageProtocol
 import dev.multiprompt.companion.reader.MessageReplica
 import dev.multiprompt.companion.reader.ReaderState
@@ -185,6 +186,23 @@ class LiveChatStreamTest {
         assertTrue(compose.onAllNodesWithText("Failed").fetchSemanticsNodes().isEmpty())
         assertTrue(compose.onAllNodesWithText("Send again").fetchSemanticsNodes().isEmpty())
         assertTrue(compose.onAllNodesWithText("Remove").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun leftoverRecoveryStateShowsNoButtons() {
+        val cancelled = MessageProtocol.Row("mp-abcdef0123456789", "claude", sid, "say PONG", 1, "attempt0123456789",
+            MessageProtocol.State.CANCELLED, null, null, 0, 1793653981.5)
+        val unresolved = listOf(
+            MessageJournal.Entry("reset-0123456789abc", "account", scope, "reset", "", null, 0, null, true),
+            MessageJournal.Entry("retry-0123456789abc", "account", scope, "retry", cancelled.id, null, 1, "attempt0123456789", true),
+            MessageJournal.Entry("dismiss-0123456789a", "account", scope, "dismiss", "mp-0123456789abcdef", "say PING", 1, null, true),
+        )
+        render(ChatHistoryState(ChatHistory(sid = sid, inode = 7, offset = 300), loaded = true,
+            replica = MessageReplica(0, 0, messages = mapOf(cancelled.id to cancelled)), unresolved = unresolved))
+
+        listOf("Check reset", "Send again", "Remove").forEach {
+            assertTrue("$it must not show in a live chat", compose.onAllNodesWithText(it).fetchSemanticsNodes().isEmpty())
+        }
     }
 
     @Test

@@ -16,11 +16,9 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.multiprompt.companion.MultipromptApplication
 import dev.multiprompt.companion.model.AgentKind
@@ -74,7 +72,7 @@ class PendingMessagesTest {
     private fun bubbleHeight(key: String) = compose.onNodeWithTag("chat-message-$key").getUnclippedBoundsInRoot().let { it.bottom.value - it.top.value }
 
     private fun assertOnlyBubbles() {
-        listOf("Queued", "Sending", "Accepted", "Failed", "Confirmation unknown", "Check status", "Send again", "Remove").forEach {
+        listOf("Queued", "Sending", "Accepted", "Failed", "Confirmation unknown", "Check status", "Check reset", "Send again", "Remove").forEach {
             compose.onNodeWithText(it).assertDoesNotExist()
         }
     }
@@ -144,7 +142,7 @@ class PendingMessagesTest {
         screenshot("answered-send")
     }
 
-    @Test fun cancelledRetryShowsRecoveryWithoutBody() {
+    @Test fun aLeftoverRetryShowsNoButtons() {
         harness()
         compose.runOnIdle {
             val entry = MessageJournal.Entry("retry123456789012", "account", MessageProtocol.Scope("claude", "proof", "pending-proof"),
@@ -152,35 +150,21 @@ class PendingMessagesTest {
             history.value = history.value.copy(replica = MessageReplica(1, 2, mapOf(id to row(MessageProtocol.State.CANCELLED))), unresolved = listOf(entry))
         }
         compose.onNodeWithText("Synthetic prompt").assertDoesNotExist()
-        compose.onNodeWithText("Send again").performClick()
-        compose.onNodeWithText("Your agent may already have this message. Sending again may duplicate it. Send again?").assertIsDisplayed()
+        assertOnlyBubbles()
     }
 
-    @Test fun cancelledRetryRecoveryUsesVisibleControlAndProductionOwner() {
+    @Test fun aLostResetRecoversWithoutAButton() {
         val f = ChatHistoryActorTest().Fixture("claude")
-        f.row = f.row("failed")
-        f.dropRetryAfterAdmission = true
-        val first = f.connection()
+        f.dropReset = true
+        val current = f.connection()
         val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MultipromptApplication
-        var owner: ChatHistoryConnection? = null
         try {
             runBlocking {
-                first.select(true); first.start()
-                val ready = f.ready(first)
-                val failed = requireNotNull(ready.replica?.messages?.get(id))
-                assertTrue(withTimeout(10_000) { first.retryFailed(failed, true) } is dev.multiprompt.companion.reader.MessageActionResult.Unknown)
-            }
-            val retryId = requireNotNull(f.admittedRetryId)
-            first.close()
-            runBlocking {
-                f.exchange(MessageProtocol.request(700, f.wire, "message_reset", JSONObject().put("reset_id", "otherreset123456789")))
-            }
-            val current = f.connection()
-            owner = current
-            runBlocking {
                 current.select(true); current.start(); f.ready(current)
-                assertTrue(withTimeout(10_000) { current.resetConversation().await() } == dev.multiprompt.companion.reader.MessageActionResult.BlockedRecovery)
+                assertTrue(withTimeout(10_000) { current.resetConversation().await() } == dev.multiprompt.companion.reader.MessageActionResult.Unknown)
             }
+            assertEquals("reset", f.journal.entries().single().operation)
+            f.dropReset = false
             connection = SessionReaderConnection(app.sshRepository, f.host, f.identity.tmux, f.identity.agent, app.chatHistoryScript, app.chatHistoryCache)
             connection.javaClass.getDeclaredField("historyIdentity").apply { isAccessible = true }.set(connection, f.identity)
             connection.javaClass.getDeclaredField("historyConnection").apply { isAccessible = true }.set(connection, current)
@@ -191,19 +175,14 @@ class PendingMessagesTest {
                         ReplySwipeGate(), { _, _ -> }, {}, rememberLazyListState(), 0, "Claude", null, {})
                 }
             }
-            compose.onNodeWithText("hello").assertDoesNotExist()
-            compose.onNodeWithText("Send again").performClick()
-            compose.onNodeWithText("Your agent may already have this message. Sending again may duplicate it. Send again?").assertIsDisplayed()
-            compose.onAllNodesWithText("Send again").onLast().performClick()
-            compose.waitUntil(10_000) { f.journal.entries().isEmpty() }
-            assertTrue(f.lastRetryId == retryId && f.retryCalls == 2 && f.retryAdmissions == 1)
-            compose.onNodeWithText("hello").assertDoesNotExist()
+            assertOnlyBubbles()
+            compose.waitUntil(20_000) { f.journal.entries().isEmpty() }
             runBlocking {
-                assertTrue(withTimeout(10_000) { current.resetConversation().await() } == dev.multiprompt.companion.reader.MessageActionResult.Applied)
+                assertTrue(withTimeout(10_000) { current.submit("after reset") } is dev.multiprompt.companion.reader.PromptAdmission.Recorded)
             }
+            assertOnlyBubbles()
         } finally {
-            first.close()
-            owner?.close()
+            current.close()
         }
     }
 
