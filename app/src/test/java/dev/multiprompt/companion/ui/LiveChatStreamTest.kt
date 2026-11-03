@@ -127,13 +127,15 @@ class LiveChatStreamTest {
         val replica = MessageReplica(0, 0, host = HostStream("t-1", running = false,
             blocks = listOf(HostBlock("x:text:0", "text", "Still here.", true))))
 
-        assertTrue(history.managedMessages(replica, emptyList()).none { it.text == "Still here." })
+        val drawn = history.managedMessages(replica, emptyList())
+        assertEquals(listOf("Still here."), drawn.filter { it.role == "assistant" }.map { it.text })
+        assertTrue(drawn.none { it.key.startsWith("@live:") })
 
         val streaming = replica.copy(host = replica.host.copy(running = true,
             blocks = listOf(HostBlock("y:text:0", "text", "Still here. More to come", false))))
-        val drawn = history.managedMessages(streaming, emptyList()).filter { it.role == "assistant" }
-        assertEquals(listOf("Still here. More to come"), drawn.map { it.text })
-        assertTrue(drawn.single().pending)
+        val growing = history.managedMessages(streaming, emptyList()).filter { it.key.startsWith("@live:") }
+        assertEquals(listOf("Still here. More to come"), growing.map { it.text })
+        assertTrue(growing.single().pending)
     }
 
     @Test
