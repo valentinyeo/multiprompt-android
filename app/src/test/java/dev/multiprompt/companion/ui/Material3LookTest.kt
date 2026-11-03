@@ -41,7 +41,7 @@ class Material3LookTest(private val screen: M3Screen, private val sunlight: Bool
         assertTrue(clickable.isNotEmpty())
         clickable.forEach { node ->
             val target = compose.onNode(SemanticsMatcher("node ${node.id}") { it.id == node.id }, useUnmergedTree = true)
-            if (generateSequence(node.parent) { it.parent }.any { SemanticsProperties.IsPopup in it.config }) {
+            if (generateSequence(node.parent) { it.parent }.any { SemanticsProperties.IsPopup in it.config || SemanticsProperties.VerticalScrollAxisRange in it.config }) {
                 target.performScrollTo()
             }
             val bounds = target.fetchSemanticsNode().touchBoundsInRoot
