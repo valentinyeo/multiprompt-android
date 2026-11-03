@@ -21,12 +21,13 @@ run_robots() {
 }
 python3 - "$avatar" <<'PYCONTROL'
 from pathlib import Path
+import re
 import sys
 path = Path(sys.argv[1])
 s = path.read_text()
-anchor = 'color?.mod(7) ?: workspaceColor'
-if anchor in s:
-    s = s.replace(anchor, 'color?.mod(7) ?: 0')
+anchor = re.compile(r'color\?\.mod\(\d+\) \?: workspaceColor')
+if anchor.search(s):
+    s = anchor.sub('color?.mod(11) ?: 0', s, count=1)
 else:
     legacy = '(hash % 20u).toInt(), workspaceColor'
     if legacy not in s:
