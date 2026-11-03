@@ -92,7 +92,6 @@ internal fun ChatHistoryView(
     LaunchedEffect(state.loaded, state.history.sid) { onChatReady(state.loaded && state.history.sid.isNotEmpty()) }
     val actionScope = rememberCoroutineScope()
     val context = LocalContext.current
-    var retryRow by remember { mutableStateOf<Pair<dev.multiprompt.companion.reader.MessageProtocol.Row, Long>?>(null) }
     var hiddenRetry by remember { mutableStateOf<Pair<String, Long>?>(null) }
     suspend fun showResult(result: dev.multiprompt.companion.reader.MessageActionResult) {
         val text = when (result) {
@@ -103,14 +102,6 @@ internal fun ChatHistoryView(
         }
         withContext(Dispatchers.Main) {
             android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
-        }
-    }
-    retryRow?.let { (row, token) ->
-        KitSheet(onDismiss = { retryRow = null }) {
-            Text("Send again?")
-            Text("Your agent may already have this message. Sending again may duplicate it. Send again?")
-            KitPrimaryButton("Send again", onClick = { retryRow = null; actionScope.launch { showResult(history.retryFailed(row, true, token)) } })
-            KitSecondaryButton("Cancel", onClick = { retryRow = null })
         }
     }
     hiddenRetry?.let { (id, token) ->
@@ -182,18 +173,6 @@ internal fun ChatHistoryView(
             onCancelPending = if (!managed && !reader.sending && reader.status == ReaderStatus.Live) { target ->
                 connection.cancelQueued(target.requestId, state.history.held)
             } else null,
-            onSharedAction = if (managed) { message, action ->
-                val token = history.actionToken()
-                when (action) {
-                    "status" -> actionScope.launch { showResult(history.checkStatus(requireNotNull(message.unknownId), token)) }
-                    "replay" -> actionScope.launch { showResult(history.replayUnknown(requireNotNull(message.unknownId), token)) }
-                    "retry" -> retryRow = message.sharedRow?.let { it to token }
-                    "dismiss" -> actionScope.launch { showResult(history.dismiss(requireNotNull(message.sharedRow), token)) }
-                    "removeUnknown" -> actionScope.launch { showResult(history.removeUnknown(requireNotNull(message.unknownId), token)) }
-                }
-            } else null,
-            sharedEpoch = state.replica?.epoch,
-            unresolved = state.unresolved,
             collapsePendingReactions = reader.actionError == null,
             working = reader.isWorking(agent) || state.replica?.host?.running == true,
             onNearTop = history::nearTop,
@@ -230,9 +209,6 @@ internal fun ChatHistoryList(
     hasOlder: Boolean = false,
     onReaction: ((ChatHistoryMessage, ChatReactions.Emoji) -> Unit)? = null,
     onCancelPending: ((ChatHistoryMessage) -> Unit)? = null,
-    onSharedAction: ((ChatHistoryMessage, String) -> Unit)? = null,
-    sharedEpoch: Long? = null,
-    unresolved: List<dev.multiprompt.companion.reader.MessageJournal.Entry> = emptyList(),
     collapsePendingReactions: Boolean = true,
     working: Boolean = false,
     bottomPadding: Dp = 0.dp,
@@ -319,29 +295,6 @@ internal fun ChatHistoryList(
                     onCancel = if (message.role == "user" && message.delivery == "Queued" && message.requestId.isNotEmpty() && onCancelPending != null) {
                         { onCancelPending(message) }
                     } else null)
-                if (onSharedAction != null) {
-                    if (message.unknownId != null) {
-                        val original = unresolved.firstOrNull { it.id == message.unknownId && it.operation == "submit" }
-                        val cancelling = original != null && unresolved.any { it.operation == "dismiss" && it.sameChat(original.account, original.scope) && it.messageId == message.requestId && it.text == message.text }
-                        KitSecondaryButton("Check status", onClick = { onSharedAction(message, "status") })
-                        if (!cancelling) KitSecondaryButton("Send again", onClick = { onSharedAction(message, "replay") })
-                        KitSecondaryButton("Remove", onClick = { onSharedAction(message, "removeUnknown") })
-                    }
-                    val row = message.sharedRow
-                    val uncertain = unresolved.firstOrNull { it.messageId == row?.id && it.operation in setOf("retry", "dismiss") &&
-                        (it.text == null || it.text == row?.text) }
-                    if (uncertain != null) {
-                        val recovery = message.copy(unknownId = uncertain.id)
-                        KitSecondaryButton(if (uncertain.operation == "retry") "Send again" else "Remove", onClick = {
-                            onSharedAction(recovery, if (uncertain.operation == "dismiss" && uncertain.text != null) "removeUnknown" else "replay")
-                        })
-                    } else if (row != null && row.epoch == sharedEpoch) {
-                        if (row.state == dev.multiprompt.companion.reader.MessageProtocol.State.FAILED)
-                            KitSecondaryButton("Send again", onClick = { onSharedAction(message, "retry") })
-                        if (row.state in setOf(dev.multiprompt.companion.reader.MessageProtocol.State.QUEUED, dev.multiprompt.companion.reader.MessageProtocol.State.FAILED))
-                            KitSecondaryButton("Remove", onClick = { onSharedAction(message, "dismiss") })
-                    }
-                }
             }
         }
         if (presentation.messages.isEmpty()) {

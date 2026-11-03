@@ -6,15 +6,18 @@ import android.os.SystemClock
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import org.json.JSONObject
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import java.io.File
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
@@ -32,9 +35,6 @@ import dev.multiprompt.companion.reader.MessageReplica
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
@@ -70,18 +70,56 @@ class PendingMessagesTest {
         }
     }
 
-    @Test fun queuedAndAcceptedRemainHostCopiesWithoutASendLabel() {
+    private fun bubbleHeight(key: String) = compose.onNodeWithTag("chat-message-$key").getUnclippedBoundsInRoot().let { it.bottom.value - it.top.value }
+
+    private fun assertOnlyBubbles() {
+        listOf("Queued", "Sending", "Accepted", "Failed", "Confirmation unknown", "Check status", "Send again", "Remove").forEach {
+            compose.onNodeWithText(it).assertDoesNotExist()
+        }
+    }
+
+    @Test fun aSentBubbleIsOnlyItsText() {
         harness()
         compose.onNodeWithText("Synthetic prompt").assertIsDisplayed()
-        compose.onNodeWithText("Queued").assertDoesNotExist()
-        compose.onNodeWithText("Remove").assertIsDisplayed()
+        assertOnlyBubbles()
+        val queued = bubbleHeight("@shared:$id")
         compose.runOnIdle {
             history.value = history.value.copy(replica = MessageReplica(1, 2, mapOf(id to row(MessageProtocol.State.ACCEPTED))))
         }
         compose.onNodeWithText("Synthetic prompt").assertIsDisplayed()
-        compose.onNodeWithText("Accepted").assertDoesNotExist()
-        compose.onNodeWithText("Send again").assertDoesNotExist()
-        compose.onNodeWithText("Remove").assertDoesNotExist()
+        assertOnlyBubbles()
+        assertEquals("acceptance must not move the bubble", queued, bubbleHeight("@shared:$id"), 0.5f)
+    }
+
+    @Test fun aFailedOrUnknownSendShowsNothingExtra() {
+        harness()
+        val queued = bubbleHeight("@shared:$id")
+        compose.runOnIdle {
+            history.value = history.value.copy(replica = MessageReplica(1, 2, mapOf(id to row(MessageProtocol.State.FAILED))))
+        }
+        compose.onNodeWithText("Synthetic prompt").assertIsDisplayed()
+        assertOnlyBubbles()
+        assertEquals("a failed send must not move the bubble", queued, bubbleHeight("@shared:$id"), 0.5f)
+        compose.runOnIdle {
+            val entry = MessageJournal.Entry("unknown123456789012", "account", MessageProtocol.Scope("claude", "proof", "pending-proof"),
+                "submit", "othermessage123456", "Second attempt", 1, "attempt", true)
+            history.value = history.value.copy(unresolved = listOf(entry))
+        }
+        compose.onNodeWithText("Second attempt").assertIsDisplayed()
+        assertOnlyBubbles()
+    }
+
+    @Test fun threeSentBubblesKeepOnlyTheirText() {
+        harness()
+        val first = row(MessageProtocol.State.QUEUED).copy(id = "queued1234567890123", text = "First calm message")
+        val second = row(MessageProtocol.State.ACCEPTED).copy(id = "accepted12345678901", text = "Second calm message")
+        val third = row(MessageProtocol.State.FAILED).copy(id = "failed123456789012", text = "Third calm message")
+        compose.runOnIdle {
+            history.value = history.value.copy(replica = MessageReplica(1, 2, mapOf(first.id to first, second.id to second, third.id to third)))
+        }
+        listOf("First calm message", "Second calm message", "Third calm message").forEach { compose.onNodeWithText(it).assertIsDisplayed() }
+        screenshot("calm-sent-bubbles")
+        assertOnlyBubbles()
     }
 
     @Test fun cancelledRetryShowsRecoveryWithoutBody() {
@@ -145,250 +183,6 @@ class PendingMessagesTest {
             first.close()
             owner?.close()
         }
-    }
-
-    @Test fun claudeUnknownRemoveUsesVisibleProductionOwner() = unknownRemoveUsesVisibleProductionOwner("claude")
-    @Test fun codexUnknownRemoveUsesVisibleProductionOwner() = unknownRemoveUsesVisibleProductionOwner("codex")
-
-    private fun unknownRemoveUsesVisibleProductionOwner(provider: String) {
-        val f = ChatHistoryActorTest().Fixture(provider)
-        f.dropSubmit = true
-        val owner = f.connection()
-        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MultipromptApplication
-        try {
-            val original = runBlocking {
-                owner.select(true); owner.start(); f.ready(owner)
-                val id = (owner.submit("Unknown prompt") as dev.multiprompt.companion.reader.PromptAdmission.Recorded).messageId
-                withTimeout(10_000) { owner.state.first { it.retrying } }
-                f.dropSubmit = false
-                withTimeout(15_000) { owner.state.first { !it.retrying && it.unresolved.any { entry -> entry.id == id } } }
-                id
-            }
-            f.dismissPause = CompletableDeferred()
-            connection = SessionReaderConnection(app.sshRepository, f.host, f.identity.tmux, f.identity.agent, app.chatHistoryScript, app.chatHistoryCache)
-            connection.javaClass.getDeclaredField("historyIdentity").apply { isAccessible = true }.set(connection, f.identity)
-            connection.javaClass.getDeclaredField("historyConnection").apply { isAccessible = true }.set(connection, owner)
-            compose.setContent {
-                MultipromptTheme(readerStyle = true) {
-                    val reader by connection.state.collectAsState()
-                    ChatHistoryView(connection, reader, f.identity.agent, f.identity.cwd, 1f, false,
-                        ReplySwipeGate(), { _, _ -> }, {}, rememberLazyListState(), 0, provider, null, {})
-                }
-            }
-            compose.onNodeWithText("Unknown prompt").assertIsDisplayed()
-            compose.onNodeWithText("Remove").performClick()
-            runBlocking { withTimeout(10_000) { f.dismissStarted.await() } }
-            compose.waitUntil(10_000) { owner.state.value.unresolved.any { it.operation == "dismiss" && it.messageId == original } }
-            compose.onNodeWithText("Unknown prompt").assertIsDisplayed()
-            compose.onNodeWithText("Send again").assertDoesNotExist()
-            assertTrue(f.journal.entries().any { it.operation == "submit" && it.id == original })
-            assertTrue(f.lastDismiss!!.getString("text") == "Unknown prompt")
-            f.dismissPause!!.complete(Unit)
-            compose.waitUntil(10_000) {
-                owner.state.value.replica?.messages?.get(original)?.state == MessageProtocol.State.CANCELLED && owner.state.value.unresolved.isEmpty()
-            }
-            compose.onNodeWithText("Unknown prompt").assertDoesNotExist()
-            compose.onNodeWithText("Remove").assertDoesNotExist()
-            assertTrue(f.submitCalls == 1 && f.dismissCalls == 1)
-            runBlocking { assertTrue(withTimeout(10_000) { owner.resetConversation().await() } == dev.multiprompt.companion.reader.MessageActionResult.Applied) }
-        } finally { f.dismissPause?.complete(Unit); owner.close() }
-    }
-
-    @Test fun claudeHandedOffRemoveKeepsVisibleWork() = handedOffRemoveKeepsVisibleWork("claude")
-    @Test fun codexHandedOffRemoveKeepsVisibleWork() = handedOffRemoveKeepsVisibleWork("codex")
-
-    private fun handedOffRemoveKeepsVisibleWork(provider: String) {
-        val f = ChatHistoryActorTest().Fixture(provider)
-        val submit = f.journal.create(f.account, f.wire, "submit", text = "Accepted prompt", epoch = 1)
-        f.journal.markIssued(submit.id)
-        f.row = f.row("accepted").put("id", submit.id).put("text", submit.text)
-        f.hideSnapshotRow = true
-        f.dismissPause = CompletableDeferred()
-        val owner = f.connection()
-        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MultipromptApplication
-        try {
-            runBlocking { owner.select(true); owner.start(); f.ready(owner) }
-            connection = SessionReaderConnection(app.sshRepository, f.host, f.identity.tmux, f.identity.agent, app.chatHistoryScript, app.chatHistoryCache)
-            connection.javaClass.getDeclaredField("historyIdentity").apply { isAccessible = true }.set(connection, f.identity)
-            connection.javaClass.getDeclaredField("historyConnection").apply { isAccessible = true }.set(connection, owner)
-            compose.setContent {
-                MultipromptTheme(readerStyle = true) {
-                    val reader by connection.state.collectAsState()
-                    ChatHistoryView(connection, reader, f.identity.agent, f.identity.cwd, 1f, false,
-                        ReplySwipeGate(), { _, _ -> }, {}, rememberLazyListState(), 0, provider, null, {})
-                }
-            }
-            compose.onNodeWithText("Remove").performClick()
-            runBlocking { withTimeout(10_000) { f.dismissStarted.await() } }
-            compose.waitUntil(10_000) { owner.state.value.unresolved.any { it.operation == "dismiss" } }
-            compose.onNodeWithText("Accepted prompt").assertIsDisplayed()
-            compose.onNodeWithText("Send again").assertDoesNotExist()
-            f.hideSnapshotRow = false
-            f.dismissPause!!.complete(Unit)
-            compose.waitUntil(10_000) { owner.state.value.replica?.messages?.get(submit.id)?.state == MessageProtocol.State.ACCEPTED && owner.state.value.unresolved.isEmpty() }
-            compose.onNodeWithText("Accepted prompt").assertIsDisplayed()
-            compose.onNodeWithText("Accepted").assertDoesNotExist()
-            compose.onNodeWithText("Send again").assertDoesNotExist()
-            compose.onNodeWithText("Remove").assertDoesNotExist()
-            runBlocking { assertTrue(withTimeout(10_000) { owner.resetConversation().await() } == dev.multiprompt.companion.reader.MessageActionResult.Applied) }
-        } finally { f.dismissPause?.complete(Unit); owner.close() }
-    }
-
-    @Test fun claudeAliasRemoveUsesVisibleOwner() = aliasRemoveUsesVisibleOwner("claude")
-    @Test fun codexAliasRemoveUsesVisibleOwner() = aliasRemoveUsesVisibleOwner("codex")
-
-    private fun aliasRemoveUsesVisibleOwner(provider: String) {
-        val f = ChatHistoryActorTest().Fixture(provider)
-        val submit = f.journal.create(f.account, f.wire.copy(tmux = "old-alias"), "submit", text = "Alias prompt", epoch = 1)
-        f.journal.markIssued(submit.id)
-        val dismiss = f.journal.create(f.account, f.wire, "dismiss", submit.id, submit.text, 1)
-        f.journal.markIssued(dismiss.id)
-        f.dismissPause = CompletableDeferred()
-        val owner = f.connection()
-        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MultipromptApplication
-        try {
-            runBlocking { owner.select(true); owner.start(); f.ready(owner) }
-            connection = SessionReaderConnection(app.sshRepository, f.host, f.identity.tmux, f.identity.agent, app.chatHistoryScript, app.chatHistoryCache)
-            connection.javaClass.getDeclaredField("historyIdentity").apply { isAccessible = true }.set(connection, f.identity)
-            connection.javaClass.getDeclaredField("historyConnection").apply { isAccessible = true }.set(connection, owner)
-            compose.setContent {
-                MultipromptTheme(readerStyle = true) {
-                    val reader by connection.state.collectAsState()
-                    ChatHistoryView(connection, reader, f.identity.agent, f.identity.cwd, 1f, false,
-                        ReplySwipeGate(), { _, _ -> }, {}, rememberLazyListState(), 0, provider, null, {})
-                }
-            }
-            compose.onNodeWithText("Alias prompt").assertIsDisplayed()
-            compose.onNodeWithText("Send again").assertDoesNotExist()
-            compose.onNodeWithText("Remove").performClick()
-            runBlocking { withTimeout(10_000) { f.dismissStarted.await() } }
-            assertTrue(f.lastDismiss!!.getString("tmux") == "chat")
-            assertTrue(f.lastDismiss!!.getString("message_id") == submit.id)
-            assertTrue(f.lastDismiss!!.getString("text") == "Alias prompt")
-            assertTrue(f.journal.entries().count { it.operation == "dismiss" } == 1)
-            f.dismissPause!!.complete(Unit)
-            compose.waitUntil(10_000) { owner.state.value.unresolved.isEmpty() && owner.state.value.replica?.messages?.get(submit.id)?.state == MessageProtocol.State.CANCELLED }
-            compose.onNodeWithText("Alias prompt").assertDoesNotExist()
-            compose.onNodeWithText("Remove").assertDoesNotExist()
-            assertTrue(f.submitCalls == 0 && f.retryCalls == 0)
-            runBlocking { assertTrue(withTimeout(10_000) { owner.resetConversation().await() } == dev.multiprompt.companion.reader.MessageActionResult.Applied) }
-        } finally { f.dismissPause?.complete(Unit); owner.close() }
-    }
-
-    @Test fun claudeAliasQueuedRemoveUsesVisibleOwner() = aliasQueuedRemoveUsesVisibleOwner("claude")
-    @Test fun codexAliasQueuedRemoveUsesVisibleOwner() = aliasQueuedRemoveUsesVisibleOwner("codex")
-
-    private fun aliasQueuedRemoveUsesVisibleOwner(provider: String) {
-        val f = ChatHistoryActorTest().Fixture(provider)
-        val submit = f.journal.create(f.account, f.wire.copy(tmux = "old-alias"), "submit", text = "Queued alias", epoch = 1)
-        f.journal.markIssued(submit.id)
-        f.row = f.row("queued").put("id", submit.id).put("text", submit.text)
-        val owner = f.connection()
-        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MultipromptApplication
-        try {
-            runBlocking { owner.select(true); owner.start(); f.ready(owner) }
-            assertTrue(f.journal.entries().isEmpty())
-            connection = SessionReaderConnection(app.sshRepository, f.host, f.identity.tmux, f.identity.agent, app.chatHistoryScript, app.chatHistoryCache)
-            connection.javaClass.getDeclaredField("historyIdentity").apply { isAccessible = true }.set(connection, f.identity)
-            connection.javaClass.getDeclaredField("historyConnection").apply { isAccessible = true }.set(connection, owner)
-            compose.setContent {
-                MultipromptTheme(readerStyle = true) {
-                    val reader by connection.state.collectAsState()
-                    ChatHistoryView(connection, reader, f.identity.agent, f.identity.cwd, 1f, false,
-                        ReplySwipeGate(), { _, _ -> }, {}, rememberLazyListState(), 0, provider, null, {})
-                }
-            }
-            compose.onNodeWithText("Queued alias").assertIsDisplayed()
-            compose.onNodeWithText("Remove").performClick()
-            compose.waitUntil(10_000) { owner.state.value.replica?.messages?.get(submit.id)?.state == MessageProtocol.State.CANCELLED && owner.state.value.unresolved.isEmpty() }
-            compose.onNodeWithText("Queued alias").assertDoesNotExist()
-            assertTrue(f.lastDismiss!!.getString("message_id") == submit.id && f.lastDismiss!!.getString("tmux") == "chat")
-            assertTrue(f.submitCalls == 0 && f.retryCalls == 0)
-            runBlocking { assertTrue(withTimeout(10_000) { owner.resetConversation().await() } == dev.multiprompt.companion.reader.MessageActionResult.Applied) }
-        } finally { owner.close() }
-    }
-
-    @Test fun claudeOldKnownRemoveUsesVisibleOwner() = oldKnownRemoveUsesVisibleOwner("claude")
-    @Test fun codexOldKnownRemoveUsesVisibleOwner() = oldKnownRemoveUsesVisibleOwner("codex")
-
-    private fun oldKnownRemoveUsesVisibleOwner(provider: String) {
-        val f = ChatHistoryActorTest().Fixture(provider)
-        val dismiss = f.journal.create(f.account, f.wire.copy(tmux = "old-alias"), "dismiss", id, epoch = 0, attempt = "old")
-        f.journal.markIssued(dismiss.id)
-        f.row = f.row("accepted", epoch = 0)
-        val owner = f.connection()
-        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MultipromptApplication
-        try {
-            runBlocking { owner.select(true); owner.start(); f.ready(owner) }
-            connection = SessionReaderConnection(app.sshRepository, f.host, f.identity.tmux, f.identity.agent, app.chatHistoryScript, app.chatHistoryCache)
-            connection.javaClass.getDeclaredField("historyIdentity").apply { isAccessible = true }.set(connection, f.identity)
-            connection.javaClass.getDeclaredField("historyConnection").apply { isAccessible = true }.set(connection, owner)
-            compose.setContent {
-                MultipromptTheme(readerStyle = true) {
-                    val reader by connection.state.collectAsState()
-                    ChatHistoryView(connection, reader, f.identity.agent, f.identity.cwd, 1f, false,
-                        ReplySwipeGate(), { _, _ -> }, {}, rememberLazyListState(), 0, provider, null, {})
-                }
-            }
-            compose.onNodeWithText("hello").assertIsDisplayed()
-            compose.onNodeWithText("Remove").performClick()
-            compose.waitUntil(10_000) { owner.state.value.unresolved.isEmpty() && f.dismissCalls == 1 }
-            compose.onNodeWithText("hello").assertIsDisplayed()
-            assertTrue(f.row!!.getString("state") == "accepted" && !f.lastDismiss!!.has("text"))
-            assertTrue(f.submitCalls == 0 && f.retryCalls == 0)
-            runBlocking { assertTrue(withTimeout(10_000) { owner.resetConversation().await() } == dev.multiprompt.companion.reader.MessageActionResult.Applied) }
-        } finally { owner.close() }
-    }
-
-    @Test fun claudeVisibleRemoveRejectsSnapshotConflict() = visibleRemoveRejectsSnapshotConflict("claude")
-    @Test fun codexVisibleRemoveRejectsSnapshotConflict() = visibleRemoveRejectsSnapshotConflict("codex")
-
-    @OptIn(ExperimentalCoroutinesApi::class)
-    private fun visibleRemoveRejectsSnapshotConflict(provider: String) {
-        val f = ChatHistoryActorTest().Fixture(provider)
-        val submit = f.journal.create(f.account, f.wire.copy(tmux = "old-alias"), "submit", text = "Original prompt", epoch = 1)
-        f.journal.markIssued(submit.id)
-        val owner = f.connection()
-        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MultipromptApplication
-        try {
-            runBlocking { owner.select(true); owner.start(); f.ready(owner) }
-            val initialReplica = owner.state.value.replica
-            f.row = f.row("queued").put("id", submit.id).put("text", "Conflicting prompt")
-            f.paged = true
-            f.targetOnLaterPage = true
-            f.targetOnThirdPage = true
-            f.blockLaterPage = true
-            f.pauseRestartSnapshot = CompletableDeferred()
-            f.failNextEvents.set(true)
-            owner.resync()
-            runBlocking { withTimeout(10_000) { f.laterPageRequested.await() } }
-            val commands = owner.javaClass.getDeclaredField("commands").apply { isAccessible = true }.get(owner) as Channel<*>
-            val raw = f.prefs.all.toMap()
-            connection = SessionReaderConnection(app.sshRepository, f.host, f.identity.tmux, f.identity.agent, app.chatHistoryScript, app.chatHistoryCache)
-            connection.javaClass.getDeclaredField("historyIdentity").apply { isAccessible = true }.set(connection, f.identity)
-            connection.javaClass.getDeclaredField("historyConnection").apply { isAccessible = true }.set(connection, owner)
-            compose.setContent {
-                MultipromptTheme(readerStyle = true) {
-                    val reader by connection.state.collectAsState()
-                    ChatHistoryView(connection, reader, f.identity.agent, f.identity.cwd, 1f, false,
-                        ReplySwipeGate(), { _, _ -> }, {}, rememberLazyListState(), 0, provider, null, {})
-                }
-            }
-            compose.onNodeWithText("Original prompt").assertIsDisplayed()
-            compose.onNodeWithText("Remove").performClick()
-            compose.waitUntil(10_000) { !commands.isEmpty }
-            f.laterPageRelease.complete(Unit)
-            runBlocking { withTimeout(10_000) { f.restartSnapshotStarted.await() } }
-            compose.onNodeWithText("Original prompt").assertIsDisplayed()
-            compose.onNodeWithText("Conflicting prompt").assertDoesNotExist()
-            assertTrue(f.row!!.getString("state") == "queued")
-            assertTrue(f.dismissCalls == 0 && f.submitCalls == 0 && f.retryCalls == 0)
-            assertTrue(f.journal.entries().single().id == submit.id)
-            assertTrue(f.prefs.all == raw)
-            assertTrue(f.lastStatus!!.getString("message_id") == submit.id && f.lastStatus!!.getString("tmux") == "chat")
-            assertTrue(!f.thirdPageRequested.isCompleted)
-            assertTrue(owner.state.value.replica == initialReplica)
-        } finally { f.laterPageRelease.complete(Unit); f.pauseRestartSnapshot?.complete(Unit); owner.close() }
     }
 
     private fun contrast(bitmap: Bitmap): Double {
