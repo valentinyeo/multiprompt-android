@@ -48,4 +48,31 @@ class BotLookStoreTest {
         store.setBotColor(session, 12)
         assertNull("an out of range colour is ignored", SessionReadStore(context).botColor(session))
     }
+    @Test fun aLookPickedOnAnotherDeviceLandsOnThisOne() {
+        val store = SessionReadStore(context)
+        store.applySharedBotLooks(mapOf(SessionReadStore.key("host", "claude") to (4 to 2)))
+        val reopened = SessionReadStore(context)
+        assertEquals(4, reopened.botFace(session))
+        assertEquals(2, reopened.botColor(session))
+    }
+
+    @Test fun aLookClearedOnAnotherDeviceClearsHereToo() {
+        val store = SessionReadStore(context)
+        store.setBotFace(session, 4)
+        store.setBotColor(session, 2)
+        store.applySharedBotLooks(mapOf(SessionReadStore.key("host", "claude") to (null to null)))
+        assertNull(SessionReadStore(context).botFace(session))
+        assertNull(SessionReadStore(context).botColor(session))
+    }
+
+    @Test fun anUnchangedSharedLookLeavesThisDeviceAlone() {
+        val store = SessionReadStore(context)
+        store.setBotPicture(session, "/tmp/look.png")
+        store.applySharedBotLooks(mapOf(SessionReadStore.key("host", "claude") to (7 to 3)))
+        store.applySharedBotLooks(mapOf(SessionReadStore.key("host", "claude") to (7 to 3)))
+        val reopened = SessionReadStore(context)
+        assertEquals(7, reopened.botFace(session))
+        assertEquals(3, reopened.botColor(session))
+        assertEquals("/tmp/look.png", reopened.botPicture(session))
+    }
 }
