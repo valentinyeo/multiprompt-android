@@ -225,6 +225,8 @@ class PendingMessagesTest {
     }
 
     private fun screenshot(name: String) {
+        compose.waitForIdle()
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
         val output = File(checkNotNull(InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")), "pending-messages")
         output.mkdirs()
         File(output, "$name.png").outputStream().use {
