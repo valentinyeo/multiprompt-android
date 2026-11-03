@@ -23,6 +23,9 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import dev.multiprompt.companion.room.RoomEvent
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -44,24 +47,69 @@ class RoomScreenTest {
     private val room = RoomSummary(
         id = "room-1",
         name = "Launch room",
-        members = listOf(RoomMember("HT Product Lead", 1), RoomMember("SF Design Lead", 4)),
+        members = listOf(RoomMember("m1", "HT Product Lead", 1), RoomMember("m2", "SF Design Lead", 4)),
     )
 
     @Test fun roomShowsNameMembersAndTheWaitingLine() {
         var backs = 0
         compose.setContent {
             MultipromptTheme(sunlight = false, material3 = false) {
-                Surface { RoomScreen(room) { backs++ } }
+                Surface {
+                    RoomScreen(room, emptyList(), loading = false, exhausted = false, error = null, onLoadOlder = {}, onBack = { backs++ })
+                }
             }
         }
         compose.onNodeWithText("Launch room").assertIsDisplayed()
         compose.onNodeWithText("HT Product Lead, SF Design Lead").assertIsDisplayed()
         compose.onNodeWithText("@HT Product Lead").assertIsDisplayed()
         compose.onNodeWithText("@SF Design Lead").assertIsDisplayed()
-        compose.onNodeWithText("This room's conversation arrives with the shared room store").assertIsDisplayed()
+        compose.onNodeWithText("No messages yet").assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.waitForIdle()
         assertTrue(backs == 1)
+    }
+
+    @Test fun anAgentReplyCarriesItsNameAndMyMessageDoesNot() {
+        val events = listOf(
+            RoomEvent(1, "human", "Ship it today", null),
+            RoomEvent(2, "agent_reply", "On it", "m2"),
+        )
+        val lines = roomLines(events, room.members)
+        assertEquals("SF Design Lead", lines[1].author?.name)
+        assertNull(lines[0].author)
+        compose.setContent {
+            MultipromptTheme(sunlight = false, material3 = false) {
+                Surface {
+                    RoomScreen(room, lines, loading = false, exhausted = false, error = null, onLoadOlder = {}, onBack = {})
+                }
+            }
+        }
+        compose.onNodeWithText("Ship it today").assertIsDisplayed()
+        compose.onNodeWithText("On it").assertIsDisplayed()
+        compose.onNodeWithText("SF Design Lead").assertIsDisplayed()
+        compose.onNodeWithText("HT Product Lead").assertDoesNotExist()
+    }
+
+    @Test fun aRoomWithNothingLoadedOffersLoadOlder() {
+        var older = 0
+        compose.setContent {
+            MultipromptTheme(sunlight = false, material3 = false) {
+                Surface {
+                    RoomScreen(
+                        room,
+                        listOf(RoomLine(3, room.members.first(), "Hello")),
+                        loading = false,
+                        exhausted = false,
+                        error = null,
+                        onLoadOlder = { older++ },
+                        onBack = {},
+                    )
+                }
+            }
+        }
+        compose.onNodeWithText("Load older").performClick()
+        compose.waitForIdle()
+        assertTrue(older == 1)
     }
 
     @Test fun roomRowShowsTheRoomAndItsMembers() {

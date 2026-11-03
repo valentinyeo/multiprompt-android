@@ -2,6 +2,7 @@ package dev.multiprompt.companion.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -23,9 +25,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-internal data class RoomMember(val name: String, val color: Int)
+internal data class RoomMember(val id: String, val name: String, val color: Int)
 
 internal data class RoomSummary(val id: String, val name: String, val members: List<RoomMember>)
+
+internal data class RoomLine(val seq: Long, val author: RoomMember?, val text: String)
+
+internal fun roomLines(events: List<dev.multiprompt.companion.room.RoomEvent>, members: List<RoomMember>): List<RoomLine> =
+    events.map { event ->
+        val author = event.memberId?.let { id -> members.firstOrNull { it.id == id } }
+        RoomLine(event.seq, if (event.type == "agent_reply") author else null, event.text)
+    }
 
 internal fun parseRooms(json: String?): List<RoomSummary> {
     if (json.isNullOrBlank()) return emptyList()
@@ -39,7 +49,7 @@ internal fun parseRooms(json: String?): List<RoomSummary> {
                 (0 until list.length()).mapNotNull { position ->
                     val member = list.optJSONObject(position) ?: return@mapNotNull null
                     val value = member.optString("name").takeIf(String::isNotBlank) ?: return@mapNotNull null
-                    RoomMember(value, member.optInt("color", 0).mod(7))
+                    RoomMember(member.optString("id"), value, member.optInt("color", 0).mod(7))
                 }
             }.orEmpty()
             RoomSummary(id, name, members)
@@ -95,7 +105,15 @@ internal fun RoomRow(room: RoomSummary, onClick: () -> Unit) {
 }
 
 @Composable
-internal fun RoomScreen(room: RoomSummary, onBack: () -> Unit) {
+internal fun RoomScreen(
+    room: RoomSummary,
+    lines: List<RoomLine>,
+    loading: Boolean,
+    exhausted: Boolean,
+    error: String?,
+    onLoadOlder: () -> Unit,
+    onBack: () -> Unit,
+) {
     androidx.activity.compose.BackHandler(onBack = onBack)
     Column(Modifier.fillMaxWidth()) {
         Row(
@@ -132,12 +150,71 @@ internal fun RoomScreen(room: RoomSummary, onBack: () -> Unit) {
                 )
             }
         }
-        Box(Modifier.weight(1f).fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+        if (lines.isEmpty()) {
+            Box(Modifier.weight(1f).fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                Text(
+                    if (loading) "Loading messages…" else "No messages yet",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            androidx.compose.foundation.lazy.LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                item {
+                    KitSecondaryButton(
+                        if (loading) "Loading…" else "Load older",
+                        onClick = onLoadOlder,
+                        enabled = !loading && !exhausted,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                items(lines, key = { it.seq }) { line ->
+                    RoomLineRow(line)
+                }
+            }
+        }
+        error?.let { message ->
             Text(
-                "This room's conversation arrives with the shared room store",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                message,
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
             )
         }
+    }
+}
+
+@Composable
+private fun RoomLineRow(line: RoomLine) {
+    val mine = line.author == null
+    Column(
+        Modifier.fillMaxWidth(),
+        horizontalAlignment = if (mine) Alignment.End else Alignment.Start,
+    ) {
+        line.author?.let { author ->
+            Text(
+                author.name,
+                style = MaterialTheme.typography.labelMedium,
+                color = botColor(author.color),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Text(
+            line.text,
+            Modifier
+                .widthIn(max = 300.dp)
+                .background(
+                    if (mine) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
+                    androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                )
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (mine) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
+        )
     }
 }

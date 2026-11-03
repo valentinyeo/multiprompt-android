@@ -2,9 +2,13 @@ package dev.multiprompt.companion.room
 
 import org.json.JSONObject
 
-data class RoomMemberEntry(val alias: String, val displayName: String, val sessionIdentity: String)
+data class RoomMemberEntry(val id: String, val alias: String, val displayName: String, val sessionIdentity: String)
 
 data class RoomEntry(val id: String, val name: String, val revision: Int, val members: List<RoomMemberEntry>)
+
+data class RoomEvent(val seq: Long, val type: String, val text: String, val memberId: String?)
+
+data class RoomPage(val events: List<RoomEvent>, val nextAfter: Long)
 
 class RoomClient(private val wire: RoomWire) : AutoCloseable {
 
@@ -33,7 +37,7 @@ class RoomClient(private val wire: RoomWire) : AutoCloseable {
             val member = rows?.optJSONObject(index) ?: return@mapNotNull null
             val alias = member.optString("alias").takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val name = member.optString("display_name").takeIf { it.isNotBlank() } ?: alias
-            RoomMemberEntry(alias, name, member.optString("session_identity"))
+            RoomMemberEntry(member.optString("id"), alias, name, member.optString("session_identity"))
         }
         return RoomEntry(
             room.optString("id", roomId),
@@ -41,6 +45,22 @@ class RoomClient(private val wire: RoomWire) : AutoCloseable {
             room.optInt("revision"),
             members,
         )
+    }
+
+    suspend fun events(roomId: String, after: Long = 0L, limit: Int = 40): RoomPage {
+        val result = call(JSONObject().put("op", "events").put("room_id", roomId).put("after", after).put("limit", limit))
+        val rows = result.optJSONArray("events") ?: throw RoomFailure("missing_events")
+        val events = (0 until rows.length()).mapNotNull { index ->
+            val row = rows.optJSONObject(index) ?: return@mapNotNull null
+            val type = row.optString("type").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            RoomEvent(
+                seq = row.optLong("seq"),
+                type = type,
+                text = row.optString("text"),
+                memberId = row.optString("member_id").takeIf { it.isNotBlank() },
+            )
+        }
+        return RoomPage(events, result.optLong("next_after", after))
     }
 
     private suspend fun call(request: JSONObject): JSONObject {
