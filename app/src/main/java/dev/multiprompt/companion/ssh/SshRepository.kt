@@ -136,7 +136,7 @@ class SshRepository(private val secrets: SecretStorage) {
         val auth = client.authenticatePublicKey(host.username, privateKey, passphrase)
         if (auth !is AuthResult.Success) {
             client.disconnect()
-            throw SshProblem.Authentication("SSH key authentication failed: $auth")
+            throw SshProblem.Authentication("${host.label} does not accept this phone's login key.")
         }
         client
     }

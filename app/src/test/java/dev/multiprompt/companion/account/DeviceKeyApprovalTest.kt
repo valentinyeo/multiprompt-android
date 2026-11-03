@@ -76,6 +76,7 @@ class DeviceKeyApprovalTest {
         assertTrue(result.approved)
         assertEquals(listOf(hosts[0], hosts[2]).map { it.id to DeviceKeys.addCommand(entry.publicKey) }, ran)
         assertEquals(listOf("/v1/device-keys/other/approve"), decisions)
+        assertEquals(listOf(hosts[1]), result.skipped)
     }
 
     @Test fun noServerAcceptingThisPhoneApprovesNothing() = runBlocking {
