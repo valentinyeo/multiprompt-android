@@ -269,7 +269,6 @@ class SessionReaderConnection(
     private val historyMutex = Mutex(false)
 
     @Volatile
-    @Volatile
     private var historyMode = false
 
     private val _historyPages = MutableStateFlow<List<String>>(emptyList())
