@@ -232,7 +232,6 @@ jobs:
   image-preview-emulator:
     name: image-preview-emulator
     runs-on: ubuntu-24.04
-    needs: build
     steps:
       - uses: actions/checkout@v4
         with:
@@ -244,7 +243,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.5.1"
-      - name: Reuse the app build from the build job
+      - name: Restore the shared build cache
         uses: actions/cache/restore@v4
         with:
           path: ~/.gradle/caches/build-cache-1
@@ -256,17 +255,13 @@ jobs:
           sudo apt-get update && sudo apt-get install -y tesseract-ocr
       - name: Build test APKs before starting the emulator
         run: gradle --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2g -Pkotlin.compiler.execution.strategy=in-process assembleDebug assembleDebugAndroidTest
-      - uses: ./.github/actions/android-proof
-        with:
-          stage: stage-1
-          script: bash tools/check-image-preview.sh
-        env:
-          GRADLE: gradle
-      - name: Verify day theme in a fresh emulator
+      - name: Verify image preview and day theme on one emulator
         uses: ./.github/actions/android-proof
         with:
-          stage: stage-2
-          script: bash tools/check-day-theme.sh
+          stage: stage-1
+          script: |
+            bash tools/check-image-preview.sh
+            bash tools/check-day-theme.sh
         env:
           GRADLE: gradle
           DAY_THEME_BASE_REF: ${{ inputs.baseline_ref }}
@@ -292,7 +287,6 @@ jobs:
   reply-notifications-emulator:
     name: reply-notifications-emulator
     runs-on: ubuntu-24.04
-    needs: build
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -302,7 +296,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.5.1"
-      - name: Reuse the app build from the build job
+      - name: Restore the shared build cache
         uses: actions/cache/restore@v4
         with:
           path: ~/.gradle/caches/build-cache-1
@@ -329,7 +323,6 @@ jobs:
   session-rows-emulator:
     name: session-rows-emulator
     runs-on: ubuntu-24.04
-    needs: build
     steps:
       - uses: actions/checkout@v4
         with:
@@ -341,7 +334,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.5.1"
-      - name: Reuse the app build from the build job
+      - name: Restore the shared build cache
         uses: actions/cache/restore@v4
         with:
           path: ~/.gradle/caches/build-cache-1
@@ -365,7 +358,6 @@ jobs:
   message-actions-emulator:
     name: message-actions-emulator
     runs-on: ubuntu-24.04
-    needs: build
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -375,7 +367,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.5.1"
-      - name: Reuse the app build from the build job
+      - name: Restore the shared build cache
         uses: actions/cache/restore@v4
         with:
           path: ~/.gradle/caches/build-cache-1
@@ -402,7 +394,6 @@ jobs:
   approved-style-emulator:
     name: approved-style-emulator
     runs-on: ubuntu-24.04
-    needs: build
     steps:
       - uses: actions/checkout@v4
         with:
@@ -414,7 +405,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.5.1"
-      - name: Reuse the app build from the build job
+      - name: Restore the shared build cache
         uses: actions/cache/restore@v4
         with:
           path: ~/.gradle/caches/build-cache-1
@@ -429,27 +420,16 @@ jobs:
         env:
           GRADLE: gradle
           STYLE_PHASE: before
-      - name: Reject unapproved original screens
+      - name: Reject unapproved original screens and verify approved screens on one emulator
         uses: ./.github/actions/android-proof
         with:
           stage: stage-6
-          script: bash tools/check-approved-style.sh
+          script: |
+            STYLE_PHASE=before bash tools/check-approved-style.sh
+            STYLE_PHASE=after bash tools/check-approved-style.sh prepare
+            STYLE_PHASE=after bash tools/check-approved-style.sh
         env:
           GRADLE: gradle
-          STYLE_PHASE: before
-      - name: Build approved screen APKs before restarting the emulator
-        run: bash tools/check-approved-style.sh prepare
-        env:
-          GRADLE: gradle
-          STYLE_PHASE: after
-      - name: Verify approved screens
-        uses: ./.github/actions/android-proof
-        with:
-          stage: stage-7
-          script: bash tools/check-approved-style.sh
-        env:
-          GRADLE: gradle
-          STYLE_PHASE: after
       - name: Capture host memory and emulator exit evidence
         if: always()
         run: |
