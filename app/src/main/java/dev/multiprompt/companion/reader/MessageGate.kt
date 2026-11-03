@@ -3,13 +3,20 @@ package dev.multiprompt.companion.reader
 import kotlinx.coroutines.sync.Mutex
 
 class MessageGate {
-    private data class Owner(val token: Any, val mutex: Mutex)
+    private data class Owner(val token: Any?, val mutex: Mutex)
     private val owners = mutableMapOf<String, Owner>()
 
     @Synchronized fun claim(key: String, token: Any): Mutex {
         val mutex = owners[key]?.mutex ?: Mutex()
         owners[key] = Owner(token, mutex)
         return mutex
+    }
+
+    @Synchronized fun claimIfFree(key: String, token: Any): Boolean {
+        val owner = owners[key]
+        if (owner != null && owner.token != null) return owner.token === token
+        owners[key] = Owner(token, owner?.mutex ?: Mutex())
+        return true
     }
 
     @Synchronized fun owns(key: String, token: Any): Boolean = owners[key]?.token === token
@@ -21,6 +28,6 @@ class MessageGate {
 
     @Synchronized fun release(key: String, token: Any) {
         val owner = owners[key]
-        if (owner?.token === token) owners[key] = Owner(Any(), owner.mutex)
+        if (owner?.token === token) owners[key] = Owner(null, owner.mutex)
     }
 }
