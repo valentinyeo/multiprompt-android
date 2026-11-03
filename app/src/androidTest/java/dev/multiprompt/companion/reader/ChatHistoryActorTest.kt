@@ -49,7 +49,7 @@ class ChatHistoryActorTest {
         var dropRetryAfterAdmission = false
         var admittedRetryId: String? = null
         var retryAdmissions = 0
-        var submitCalls = 0
+        @Volatile var submitCalls = 0
         var dismissCalls = 0
         var lastDismiss: JSONObject? = null
         var dropDismissAfterAdmission = false
@@ -719,6 +719,7 @@ class ChatHistoryActorTest {
                 withTimeout(10_000) { owner.state.first { it.retrying } }
                 f.dropSubmit = false
                 withTimeout(15_000) { owner.state.first { !it.retrying && it.unresolved.any { e -> e.id == original } } }
+                withTimeout(15_000) { while (f.submitCalls < if (admitted) 1 else 2) kotlinx.coroutines.delay(50) }
                 f.dismissPause = CompletableDeferred()
                 val removal = async { owner.removeUnknown(original) }
                 withTimeout(10_000) { f.dismissStarted.await() }
@@ -736,7 +737,7 @@ class ChatHistoryActorTest {
                 assertEquals(MessageActionResult.Applied, withTimeout(10_000) { removal.await() })
                 withTimeout(10_000) { owner.state.first { it.replica?.messages?.get(original)?.state == MessageProtocol.State.CANCELLED } }
                 assertEquals(listOf(other.id), f.journal.entries().map { it.id })
-                assertEquals(1, f.submitCalls)
+                assertEquals(if (admitted) 1 else 2, f.submitCalls)
                 val late = f.exchange(MessageProtocol.request(900, f.wire, "message_submit", JSONObject().put("message_id", original).put("text", "original text")))
                 assertEquals(MessageProtocol.State.CANCELLED, MessageProtocol.requiredMutation(late, 900, f.wire, original, "original text").row?.state)
                 assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
@@ -745,7 +746,7 @@ class ChatHistoryActorTest {
         }
     }
 
-    @Test fun lostCancelAckReconcilesAfterRestartWithoutResending() = runBlocking {
+    @Test fun lostCancelAckReconcilesAfterRestartWithoutAThirdSend() = runBlocking {
         for (provider in listOf("claude", "codex")) {
             val f = Fixture(provider)
             f.hideSnapshotRow = true
@@ -758,6 +759,7 @@ class ChatHistoryActorTest {
                 withTimeout(10_000) { first.state.first { it.retrying } }
                 f.dropSubmit = false
                 withTimeout(15_000) { first.state.first { !it.retrying && it.unresolved.any { e -> e.id == id } } }
+                withTimeout(15_000) { while (f.submitCalls < 2) kotlinx.coroutines.delay(50) }
                 f.dropDismissAfterAdmission = true
                 assertEquals(MessageActionResult.Unknown, withTimeout(10_000) { first.removeUnknown(id) })
                 first.close()
@@ -768,7 +770,7 @@ class ChatHistoryActorTest {
                 recovered.select(true); recovered.start(); f.ready(recovered)
                 withTimeout(10_000) { recovered.state.first { it.unresolved.isEmpty() } }
                 assertEquals(1, f.dismissCalls)
-                assertEquals(1, f.submitCalls)
+                assertEquals(2, f.submitCalls)
                 assertEquals(MessageActionResult.Applied, withTimeout(10_000) { recovered.resetConversation().await() })
             } finally { first.close(); second?.close() }
         }
