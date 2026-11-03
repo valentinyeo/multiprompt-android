@@ -127,6 +127,47 @@ else: sys.exit(2)
                     self.assertEqual(calls.count('run watch'), 1)
                     self.assertNotIn('EMULATOR_SERIES_OK', result.stdout)
 
+    def test_complete_sdk_image_skips_the_installer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)
+            script = path / 'sdk.sh'
+            script.write_text(source('.github/actions/android-proof/sdk.sh'))
+            installer = path / 'sdkmanager'
+            installer.write_text('''#!/usr/bin/env bash
+set -eu
+echo "$*" >> "$ANDROID_HOME/calls"
+''')
+            installer.chmod(0o700)
+            image = path / 'system-images/android-35/default/x86_64'
+            image.mkdir(parents=True)
+            (image / 'system.img').write_text('image')
+            (image / 'package.xml').write_text('package')
+            env = dict(os.environ, ANDROID_HOME=tmp, PROOF_TARGET='default', PATH=f'{tmp}:{os.environ["PATH"]}')
+            result = subprocess.run(['bash', str(script)], env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('ANDROID_IMAGE_READY', result.stdout)
+            self.assertFalse((path / 'calls').exists())
+
+    def double_boot_jobs(self, text):
+        if 'jobs:' not in text:
+            return []
+        jobs = re.findall(r'^  ([\w-]+):\n(.*?)(?=^  [\w-]+:\n|\Z)', text.split('jobs:', 1)[1], re.S | re.M)
+        return sorted(name for name, body in jobs if body.count('./.github/actions/android-proof') > 1)
+
+    def test_every_job_boots_one_emulator(self):
+        workflows = sorted((root / '.github/workflows').glob('*.yml'))
+        self.assertGreaterEqual(len(workflows), 10)
+        offenders = {}
+        for path in workflows:
+            names = self.double_boot_jobs(path.read_text())
+            if names:
+                offenders[path.name] = names
+        self.assertEqual(offenders, {})
+
+    def test_one_emulator_detector_flags_the_previous_two_boot_jobs(self):
+        before = subprocess.check_output(['git', '-C', str(root), 'show', '17af1b8:.github/workflows/test.yml'], text=True)
+        self.assertEqual(self.double_boot_jobs(before), ['approved-style-emulator', 'image-preview-emulator'])
+
     def test_partial_sdk_install_retries_and_never_reports_missing_image_ready(self):
         for ready_on in (2, 4):
             with self.subTest(ready_on=ready_on), tempfile.TemporaryDirectory() as tmp:
