@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: no-paid-ai-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   no-paid-ai:
     name: no-paid-ai
