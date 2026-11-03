@@ -79,8 +79,25 @@ data class ChatHistory(
                 grouped[key] = ChatHistoryMessage(key, row.role, text, previous?.timestamp ?: row.timestamp,
                     previous?.offset ?: row.offset, row.end, row.id)
             }
-        val occurrences = grouped.values.toList()
-        val cards = replica?.messages?.values.orEmpty().filter { it.state != MessageProtocol.State.CANCELLED }.sortedBy { it.position }.map { row ->
+        val transcript = grouped.values.toList()
+        val spoken = transcript.map { if (it.role == "user") seconds(it.timestamp) else null }
+        val claimed = HashMap<Int, MessageProtocol.Row>()
+        val unplaced = mutableListOf<MessageProtocol.Row>()
+        var floor = -1
+        for (card in replica?.messages?.values.orEmpty().filter { it.state != MessageProtocol.State.CANCELLED }.sortedBy { it.position }) {
+            val index = transcript.indices.firstOrNull { index ->
+                index > floor && spoken[index]?.let { it >= card.created - CLOCK_SLACK } == true &&
+                    transcript[index].text.trimEnd(' ') == card.text.trimEnd(' ')
+            }
+            if (index == null) unplaced.add(card) else { claimed[index] = card; floor = index }
+        }
+        val latest = spoken.filterNotNull().maxOrNull()
+        val occurrences = transcript.mapIndexed { index, message ->
+            claimed[index]?.let { message.copy(key = "@shared:${it.id}", requestId = it.id) } ?: message
+        }
+        val cards = unplaced.filter { row ->
+            row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT) || latest == null || latest <= row.created + CLOCK_SLACK
+        }.map { row ->
             ChatHistoryMessage("@shared:${row.id}", "user", row.text, "", 0, 0, row.id,
                 pending = row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT))
         }
@@ -92,6 +109,9 @@ data class ChatHistory(
         }
         return occurrences + cards + unknown + live
     }
+
+    private fun seconds(timestamp: String): Double? =
+        runCatching { java.time.Instant.parse(timestamp).toEpochMilli() / 1000.0 }.getOrNull()
 
     private fun landed(text: String): Boolean =
         rows.any { it.role == "assistant" && it.text.trimEnd(' ') == text.trimEnd(' ') }
@@ -173,5 +193,9 @@ data class ChatHistory(
         } else {
             ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged, mergedDeliveries, page.held, page.pendingQuestions)
         }
+    }
+
+    private companion object {
+        const val CLOCK_SLACK = 2.0
     }
 }
