@@ -13,8 +13,8 @@ The signed APK is unchanged. Published mode checks its manifest commit, URL, siz
 5. Restart the fixture app, open **All**, and long-press `verify-session`. Capture **Favorite**, the Desktop word. Tap it.
 6. Open **Favorites**. Require both sessions visible. Independently snapshot both persisted booleans as true. Restart and require both visible again.
 
-7. Long-press `verify-session`. Open **Archive session**. Check the exact title, warning, and buttons. Capture `confirmation-archive`. Tap **Cancel**. Require both sessions visible. Require both tmux sessions alive.
-8. Long-press `verify-session` again. Open **End session**. Check the exact title, warning, and buttons. Capture `confirmation-end`. Press system Back. Require Favorites selected. Require both sessions visible. Require both tmux sessions alive.
+7. Long-press `verify-session`. Open **Archive Session**. Check the exact title, warning, and buttons. Capture `confirmation-archive`. Tap **Cancel**. Require both sessions visible. Require both tmux sessions alive.
+8. Long-press `verify-session` again. Open **End tmux session**. Check the exact title, warning, and buttons. Capture `confirmation-end`. Press system Back. Require Favorites selected. Require both sessions visible. Require both tmux sessions alive.
 
 9. Verify the resolved ETA log is absent. Enable the guarded generic-console history fixture. Confirm its actual alternate-screen live marker. Open **Session history**. Capture the first numbered page. Load older and capture another page.
 10. Tap **Back to live**. Confirm the live marker returns. Reopen history and press system Back. Confirm the live marker returns again. Check `pane_in_mode=0` after each close. This guard does not prove a transition.
