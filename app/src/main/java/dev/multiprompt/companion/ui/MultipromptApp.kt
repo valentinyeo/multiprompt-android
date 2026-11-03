@@ -2486,7 +2486,6 @@ internal fun ReaderTopBar(
     botFace: Int? = null,
     botColor: Int? = null,
     botPicture: String? = null,
-    onComputerClick: (() -> Unit)? = null,
 ) {
     var modelMenuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     if (LocalReaderStyle.current) {
@@ -2517,19 +2516,6 @@ internal fun ReaderTopBar(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                    }
-                }
-                onComputerClick?.let { openComputer ->
-                    Box(
-                        Modifier
-                            .heightIn(min = 48.dp)
-                            .clip(CircleShape)
-                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                            .clickable(role = Role.Button, onClick = openComputer)
-                            .padding(horizontal = 14.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text("Computer", style = MaterialTheme.typography.labelLarge)
                     }
                 }
                 Box {
@@ -3321,7 +3307,6 @@ internal fun ReaderScreen(
         topBar = {
             if (!computerOpen) ReaderTopBar(
                 onBack = onBack,
-                onComputerClick = { setComputerOpen(true) },
                 botFace = draftStore.botFace(session),
                 botColor = draftStore.botColor(session),
                 botPicture = draftStore.botPicture(session),
@@ -3351,6 +3336,13 @@ internal fun ReaderScreen(
                                     label = listOfNotNull(runtimeDetails.label, statusLabel).joinToString(" · ").ifEmpty { "Model / effort" },
                                     enabled = false,
                                     onClick = {},
+                                )
+                                KitMenuRow(
+                                    label = "Computer",
+                                    onClick = {
+                                        menuExpanded = false
+                                        setComputerOpen(true)
+                                    },
                                 )
                                 KitMenuRow(
                                     label = "Enter / approve",
