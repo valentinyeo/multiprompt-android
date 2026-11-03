@@ -514,7 +514,7 @@ if [[ "$feature" == session-favorites.md ]]; then
     shot favorites-before
     read -r row_x row_y <<< "$(select_node text verify-session)"
     adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
-    wait_for_text 'End session'
+    wait_for_text 'End tmux session'
     shot favorites-remove-menu
     if ! select_node text Unfavorite >/dev/null 2>&1; then
         if select_node text Unstar >/dev/null 2>&1; then
@@ -555,7 +555,7 @@ PYFAVORITES
     wait_for_text verify-session
     read -r row_x row_y <<< "$(select_node text verify-session)"
     adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
-    wait_for_text 'End session'
+    wait_for_text 'End tmux session'
     shot favorites-add-menu
     if ! select_node text Favorite >/dev/null 2>&1; then
         if select_node text Star >/dev/null 2>&1; then
@@ -582,9 +582,9 @@ PYFAVORITES
     '
     read -r row_x row_y <<< "$(select_node text verify-session)"
     adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
-    wait_for_text 'End session'
+    wait_for_text 'End tmux session'
     for attempt in {1..5}; do
-        if select_node text 'Archive session' >/dev/null 2>&1; then break; fi
+        if select_node text 'Archive Session' >/dev/null 2>&1; then break; fi
         read -r x1 y1 x2 y2 <<< "$(select_node scroll-back '')"
         adb shell input swipe "$x2" "$y2" "$x1" "$y1" 500
     done
@@ -605,7 +605,7 @@ PYFAVORITES
     '
     read -r row_x row_y <<< "$(select_node text verify-session)"
     adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
-    wait_for_text 'End session'
+    wait_for_text 'End tmux session'
     tap_text 'End tmux session'
     wait_for_text 'End verify-session completely?'
     select_node text 'End verify-session completely?' >/dev/null
@@ -1065,10 +1065,10 @@ if [[ "$feature" == sessions.md ]]; then
     read -r row_x row_y <<< "$(select_node text verify-session)"
     adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 800
     wait_for_text 'Mark unread'
-    wait_for_text 'End session'
+    wait_for_text 'End tmux session'
     shot row-long-press-actions
     adb shell input keyevent KEYCODE_BACK
-    wait_for_absence 'End session'
+    wait_for_absence 'End tmux session'
     exit 0
 fi
 tap_text verify-session
