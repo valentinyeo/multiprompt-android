@@ -104,11 +104,7 @@ class SshRepository(private val secrets: SecretStorage) {
         }
     }
 
-    internal fun deviceLoginKey(): ByteArray? {
-        secrets.get(DeviceKeyStore.SECRET_ID)?.let { return it }
-        runCatching { DeviceKeyStore(secrets).ensure() }
-        return secrets.get(DeviceKeyStore.SECRET_ID)
-    }
+    internal fun deviceLoginKey(): ByteArray? = runCatching { DeviceKeyStore(secrets).privateKey() }.getOrNull()
 
     suspend fun connect(host: HostProfile): SshClient = withContext(Dispatchers.IO) {
         val probe = PinningHostKeyVerifier(host.hostKeyType, host.hostKeyFingerprint, host.hostKeys)
@@ -131,7 +127,7 @@ class SshRepository(private val secrets: SecretStorage) {
         val privateKey = hostPrivateKey ?: deviceLoginKey()
             ?: run {
                 client.disconnect()
-                throw SshProblem.Authentication("This device has no login key. Sign in again to register it.")
+                throw SshProblem.Authentication("This phone could not read its login key. Refresh to try again.")
             }
         val passphrase = (if (hostPrivateKey != null) host.passphraseSecretId else null)
             ?.let(secrets::get)
