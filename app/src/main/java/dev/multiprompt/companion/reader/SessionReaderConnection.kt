@@ -277,13 +277,22 @@ class SessionReaderConnection(
 
     val historyPages: StateFlow<List<String>> = _historyPages
 
-    suspend fun enterHistory() = historyMutex.withLock {
-        if (!historyMode) {
+    suspend fun enterHistory() {
+        historyMutex.withLock {
+            if (historyMode) return
             historyMode = true
             _historyPages.value = emptyList()
+            _historyPage.value = null
             scrollBackPage()
-            delay(1200)
-            _historyPage.value?.let { page -> _historyPages.value = listOf(page) }
+        }
+        val deadline = System.currentTimeMillis() + HISTORY_FIRST_PAGE_MS
+        while (System.currentTimeMillis() < deadline && historyMode) {
+            val page = _historyPage.value
+            if (!page.isNullOrBlank()) {
+                historyMutex.withLock { if (historyMode) _historyPages.value = listOf(page) }
+                return
+            }
+            delay(HISTORY_PAGE_POLL_MS)
         }
     }
 
@@ -527,6 +536,8 @@ class SessionReaderConnection(
         const val RECONNECT_DELAY_MS = 3_000L
         const val SENT_PROMPT_MEMORY = 3
         const val MODEL_CONFIRM_TIMEOUT_MS = 25_000L
+        const val HISTORY_FIRST_PAGE_MS = 6_000L
+        const val HISTORY_PAGE_POLL_MS = 150L
         const val HISTORY_PAGE_STEP_MS = 350L
         const val HISTORY_PAGE_READ_MS = 500L
         const val HISTORY_PAGE_STABLE_READS = 3
