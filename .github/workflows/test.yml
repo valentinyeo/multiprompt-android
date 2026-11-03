@@ -261,6 +261,7 @@ jobs:
           stage: stage-1
           script: |
             bash tools/check-image-preview.sh
+            adb shell cmd uimode night no
             bash tools/check-day-theme.sh
         env:
           GRADLE: gradle
