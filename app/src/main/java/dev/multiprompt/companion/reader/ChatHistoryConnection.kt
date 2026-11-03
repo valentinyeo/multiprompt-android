@@ -443,7 +443,18 @@ class ChatHistoryConnection(
                                                         if (!resetFence && markIssued(page.sid, command.generation, entry.id)) {
                                                             requestId++
                                                             val arguments = JSONObject().put("message_id", entry.id).put("text", entry.text)
-                                                            MessageProtocol.requiredMutation(exchange(MessageProtocol.request(requestId, messageScope, "message_submit", arguments)), requestId, messageScope, entry.id, entry.text)
+                                                            var attemptsLeft = 3
+                                                            while (true) {
+                                                                try {
+                                                                    MessageProtocol.requiredMutation(exchange(MessageProtocol.request(requestId, messageScope, "message_submit", arguments)), requestId, messageScope, entry.id, entry.text)
+                                                                    break
+                                                                } catch (cancelled: CancellationException) {
+                                                                    throw cancelled
+                                                                } catch (failure: Exception) {
+                                                                    if (--attemptsLeft == 0) throw failure
+                                                                    delay(500)
+                                                                }
+                                                            }
                                                             replica = null
                                                         }
                                                     }
