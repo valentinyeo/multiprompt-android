@@ -1,7 +1,14 @@
 package dev.multiprompt.companion.ui
 
 import android.app.Application
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.os.Looper
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -19,7 +26,16 @@ import dev.multiprompt.companion.reader.MessageReplica
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
+import java.io.File
+import java.time.Duration
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -33,13 +49,16 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.shadows.ShadowLooper.shadowMainLooper
 import org.robolectric.util.ReflectionHelpers
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class, qualifiers = "w390dp-h844dp-mdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class LiveChatStreamTest {
-    @get:Rule val compose = createComposeRule()
+    private val scheduler = TestCoroutineScheduler()
+    @get:Rule val compose = createComposeRule(effectContext = UnconfinedTestDispatcher(scheduler))
     private val sid = "d5339a17-2bfb-4710-a297-4c7548e0e636"
     private val scope = MessageProtocol.Scope("claude", sid, "live-1d21840")
     private lateinit var f: SessionActivityFixture
@@ -182,9 +201,45 @@ class LiveChatStreamTest {
         compose.onNodeWithText("Failed").assertIsDisplayed()
     }
 
+    @Test
+    fun theLiveChatProofShowsTheReplyAndNoSendLabel() {
+        val history = ChatHistory(sid = sid, inode = 7, offset = 300, start = 0,
+            rows = listOf(ChatHistoryProtocol.Row("user", "say PONG", "u1", "", 100, 180)))
+        val replica = MessageReplica(0, 0, host = HostStream("t-1", running = true,
+            blocks = listOf(HostBlock("x:text:0", "text", "PONG", false))))
+        render(ChatHistoryState(history, loaded = true, replica = replica))
+        compose.onNodeWithText("PONG").assertIsDisplayed()
+        capture(compose.onNodeWithTag("chat-history"), "live-chat-pong")
+    }
+
     private fun event(kind: String, item: String?, payload: String, turn: String? = null) =
         MessageProtocol.HostEvent(kind, turn, item, 1L, JSONObject(payload).optString("text").ifEmpty { null },
             JSONObject(payload).optBoolean("done") || kind.endsWith(".done"), JSONObject(payload).optString("state").ifEmpty { null })
+
+    private fun capture(node: SemanticsNodeInteraction, name: String) {
+        val view = (node.fetchSemanticsNode().root as ViewRootForTest).view.rootView
+        val attachInfo = ReflectionHelpers.getField<Any>(view, "mAttachInfo")
+        val hardwareAccelerated = view.isHardwareAccelerated
+        ReflectionHelpers.setField(attachInfo, "mHardwareAccelerated", false)
+        val redraw = CoroutineScope(UnconfinedTestDispatcher(scheduler)).launch {
+            while (isActive) {
+                delay(16)
+                shadowMainLooper().idleFor(Duration.ofMillis(32))
+                view.draw(Canvas(Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)))
+                view.viewTreeObserver.dispatchOnDraw()
+                shadowMainLooper().idle()
+            }
+        }
+        val bitmap = try {
+            node.captureToImage().asAndroidBitmap()
+        } finally {
+            redraw.cancel()
+            ReflectionHelpers.setField(attachInfo, "mHardwareAccelerated", hardwareAccelerated)
+        }
+        val output = File("build/reports/igsh-1547/$name.png")
+        checkNotNull(output.parentFile).mkdirs()
+        output.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+    }
 
     private fun render(state: ChatHistoryState) {
         val chat: ChatHistoryConnection = f.field(connection, "historyConnection")
