@@ -543,6 +543,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onOpenRoom = viewModel::openRoom,
                     onCloseRoom = viewModel::closeRoom,
                     onLoadOlderRoomEvents = viewModel::loadOlderRoomEvents,
+                    onSendRoomMessage = viewModel::sendRoomMessage,
                     onForgetSession = viewModel::forgetSession,
                     onStartNewSession = viewModel::startNewSession,
                     onSetNewestSessionsAtBottom = viewModel::setNewestSessionsAtBottom,
@@ -1138,6 +1139,7 @@ internal fun SessionsScreen(
     onOpenRoom: (String) -> Unit = {},
     onCloseRoom: () -> Unit = {},
     onLoadOlderRoomEvents: () -> Unit = {},
+    onSendRoomMessage: (String) -> Unit = {},
     onForgetSession: (TmuxSession) -> Unit,
     onStartNewSession: () -> Unit,
     onSetNewestSessionsAtBottom: (Boolean) -> Unit,
@@ -1434,6 +1436,7 @@ internal fun SessionsScreen(
             exhausted = state.roomEventsExhausted,
             error = state.roomEventsError,
             onLoadOlder = onLoadOlderRoomEvents,
+            onSend = onSendRoomMessage,
             onBack = {
                 openRoom = null
                 onCloseRoom()
@@ -1634,7 +1637,7 @@ internal fun SessionsScreen(
             RoomSummary(
                 room.id,
                 room.name,
-                room.members.mapIndexed { index, member -> RoomMember(member.id, member.displayName, index) },
+                room.members.mapIndexed { index, member -> RoomMember(member.id, member.alias, member.displayName, index) },
             )
         }
     }

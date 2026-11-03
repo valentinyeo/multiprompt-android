@@ -1,5 +1,6 @@
 package dev.multiprompt.companion.room
 
+import org.json.JSONArray
 import org.json.JSONObject
 
 data class RoomMemberEntry(val id: String, val alias: String, val displayName: String, val sessionIdentity: String)
@@ -61,6 +62,21 @@ class RoomClient(private val wire: RoomWire) : AutoCloseable {
             )
         }
         return RoomPage(events, result.optLong("next_after", after))
+    }
+
+    suspend fun revision(roomId: String): Int = members(roomId).revision
+
+    suspend fun postHuman(roomId: String, expectedRevision: Int, text: String, recipients: List<String>, commandId: String): Long {
+        val result = call(
+            JSONObject()
+                .put("op", "post_human")
+                .put("command_id", commandId)
+                .put("room_id", roomId)
+                .put("expected_revision", expectedRevision)
+                .put("text", text)
+                .put("recipients", JSONArray(recipients)),
+        )
+        return result.optJSONObject("event")?.optLong("seq") ?: 0L
     }
 
     private suspend fun call(request: JSONObject): JSONObject {

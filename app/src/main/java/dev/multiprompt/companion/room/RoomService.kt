@@ -26,6 +26,12 @@ class RoomService(private val context: Context, private val repository: SshRepos
             client.events(roomId, after, limit)
         }
 
+    suspend fun post(host: HostProfile, accountId: String, roomId: String, text: String, recipients: List<String>, commandId: String): Long =
+        open(host, accountId).use { client ->
+            client.hostUuid()
+            client.postHuman(roomId, client.revision(roomId), text, recipients, commandId)
+        }
+
     private fun source(name: String): String =
         context.assets.open("rooms/$name").bufferedReader().use { it.readText() }
 

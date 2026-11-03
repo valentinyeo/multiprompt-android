@@ -16,6 +16,7 @@ import dev.multiprompt.companion.model.DissolvedSession
 import dev.multiprompt.companion.model.RemoteDirectory
 import dev.multiprompt.companion.model.RefreshMerge
 import dev.multiprompt.companion.data.UnreadCount
+import dev.multiprompt.companion.room.roomRecipients
 import dev.multiprompt.companion.notify.ReplyNotificationPolicy
 import dev.multiprompt.companion.notify.ReplyNotifier
 import dev.multiprompt.companion.data.SessionReadStore
@@ -608,6 +609,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         loadRoomEvents(older = false)
+    }
+
+    fun sendRoomMessage(text: String) {
+        val current = _state.value
+        val roomId = current.roomId ?: return
+        if (current.roomEventsLoading) return
+        val room = current.rooms.firstOrNull { it.id == roomId } ?: return
+        val accountId = syncAuth.accountId() ?: return
+        val host = current.accountHosts.values.firstOrNull() ?: current.hosts.firstOrNull() ?: return
+        val recipients = roomRecipients(text, room.members.map { it.alias })
+        val commandId = java.util.UUID.randomUUID().toString()
+        _state.update { it.copy(roomEventsError = null) }
+        viewModelScope.launch {
+            runCatching { roomService.post(host, accountId, roomId, text, recipients, commandId) }
+                .onFailure { failure ->
+                    _state.update { it.copy(roomEventsError = failure.message ?: "Could not send to the room") }
+                    return@launch
+                }
+            loadRoomEvents(older = false)
+        }
     }
 
     fun closeRoom() {
