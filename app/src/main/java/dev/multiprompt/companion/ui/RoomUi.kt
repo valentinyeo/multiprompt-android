@@ -37,7 +37,7 @@ internal data class RoomSummary(val id: String, val name: String, val members: L
 internal data class RoomLine(val seq: Long, val author: RoomMember?, val text: String)
 
 internal fun roomLines(events: List<dev.multiprompt.companion.room.RoomEvent>, members: List<RoomMember>): List<RoomLine> =
-    events.map { event ->
+    events.filter { it.text.isNotBlank() }.map { event ->
         val author = event.memberId?.let { id -> members.firstOrNull { it.id == id } }
         RoomLine(event.seq, if (event.type == "agent_reply") author else null, event.text)
     }
