@@ -158,23 +158,6 @@ class LiveChatStreamTest {
     }
 
     @Test
-    fun aDeliveredMessageGivesWayToItsTranscriptRow() {
-        val row = MessageProtocol.Row("mp-abcdef0123456789", "claude", sid, "say PONG", 1, "attempt0123456789",
-            MessageProtocol.State.ACCEPTED, null, null, 0, 1793653981.5)
-        val replica = MessageReplica(0, 0, messages = mapOf(row.id to row))
-        val empty = ChatHistory(sid = sid, inode = 7, offset = 300, start = 0)
-
-        assertEquals(listOf("@shared:${row.id}"), empty.managedMessages(replica, emptyList()).map { it.key })
-
-        val arrived = empty.copy(rows = listOf(ChatHistoryProtocol.Row("user", "say PONG", "u1", "", 100, 180)))
-        assertTrue(arrived.managedMessages(replica, emptyList()).none { it.key == "@shared:${row.id}" })
-
-        val twice = replica.copy(messages = mapOf(row.id to row,
-            "mp-abcdef012345678a" to row.copy(id = "mp-abcdef012345678a", position = 2)))
-        assertEquals(1, arrived.managedMessages(twice, emptyList()).count { it.key.startsWith("@shared:") })
-    }
-
-    @Test
     fun aLiveChatDrawsTheStreamedReplyAndNoAcceptedLabel() {
         val history = ChatHistory(sid = sid, inode = 7, offset = 300, start = 0,
             rows = listOf(ChatHistoryProtocol.Row("user", "say PONG", "u1", "", 100, 180)))

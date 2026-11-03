@@ -81,8 +81,7 @@ data class ChatHistory(
                     previous?.offset ?: row.offset, row.end, row.id)
             }
         val occurrences = grouped.values.toList()
-        val delivered = replica?.messages?.values.orEmpty().filter { it.state != MessageProtocol.State.CANCELLED }.sortedBy { it.position }
-        val cards = delivered.filterNot { row -> arrived(row, delivered) }.map { row ->
+        val cards = replica?.messages?.values.orEmpty().filter { it.state != MessageProtocol.State.CANCELLED }.sortedBy { it.position }.map { row ->
             ChatHistoryMessage("@shared:${row.id}", "user", row.text, "", 0, 0, row.id,
                 pending = row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT),
                 delivery = row.state.name.lowercase().replaceFirstChar { it.uppercase() }, sharedRow = row)
@@ -99,12 +98,6 @@ data class ChatHistory(
 
     private fun landed(text: String): Boolean =
         rows.any { it.role == "assistant" && it.text.trimEnd(' ') == text.trimEnd(' ') }
-
-    private fun arrived(row: MessageProtocol.Row, ordered: List<MessageProtocol.Row>): Boolean {
-        val text = row.text.trimEnd(' ')
-        val earlier = ordered.count { it.text.trimEnd(' ') == text && it.position <= row.position }
-        return rows.count { it.role == "user" && it.text.trimEnd(' ') == text } >= earlier
-    }
 
     internal fun deliveryState(prompt: QueuedMessages.SentPrompt): QueuedMessages.Delivery {
         val terminal = setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
