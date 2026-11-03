@@ -5,9 +5,13 @@ import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.security.SecretStore
 import dev.multiprompt.companion.ssh.SshRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -142,6 +146,74 @@ class ChatHistoryConnectionTest {
             val other = seed.apply(stale.copy(sid = "other", inode = 10))
             assertEquals(QueuedMessages.Delivery.QUEUED, other.deliveries["id"])
             assertEquals(listOf(prompt), unconfirmedAfterResync(other, listOf(prompt)))
+        }
+    }
+
+    private class FakeHost {
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        @Volatile var answered = false
+        private val digest = "b".repeat(64)
+
+        private fun row(role: String, text: String, offset: Long, end: Long) =
+            JSONObject().put("role", role).put("text", text).put("id", "row$offset").put("timestamp", "")
+                .put("offset", offset).put("end", end).toString()
+
+        private fun history(id: Long): String {
+            val rows = listOf(row("user", "question", 0, 10)) + if (answered) listOf(row("assistant", "answer", 10, 20)) else emptyList()
+            val end = if (answered) 20 else 10
+            val header = listOf("@mp", id, "history", "ok", "sid1", 0, end, 1, 0, "claude", "tmux", 1, "a".repeat(64), "tail", 0).joinToString("\t")
+            return JSONObject().put("id", id).put("wire", (listOf(header) + rows + TranscriptProtocol.END).joinToString("\n") + "\n").toString()
+        }
+
+        private fun result(id: Long, value: JSONObject) =
+            JSONObject().put("id", id).put("message_protocol", 1).put("result", value).toString()
+
+        suspend fun connect(block: suspend (suspend (String) -> String) -> Unit) {
+            block { line ->
+                if (calls.incrementAndGet() > 3_000) throw java.io.IOException("Request flood")
+                val request = JSONObject(line)
+                val id = request.getLong("id")
+                when (request.optString("op")) {
+                    "engine_info" -> JSONObject().put("id", id)
+                        .put("engine_info", JSONObject().put("protocol", 1).put("generation", 53).put("sha256", digest))
+                        .put("message_protocols", JSONArray().put(1)).toString()
+                    "message_snapshot" -> result(id, JSONObject().put("snapshot_id", "snap").put("epoch", 1).put("seq", 0)
+                        .put("items", JSONArray()).put("next_cursor", JSONObject.NULL))
+                    "message_events" -> result(id, JSONObject().put("epoch", 1).put("seq", 0)
+                        .put("events", JSONArray()).put("next_after", 0))
+                    "" -> history(id)
+                    else -> error("Unexpected request")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun visibleChatKeepsUpdatingAfterAnotherReaderOfTheSameChatCloses() = runBlocking {
+        val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd")
+        val gate = MessageGate()
+        val fake = FakeHost()
+        val other = FakeHost()
+        val visible = ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()),
+            gate = gate, connectedExchange = { block -> fake.connect(block) })
+        val second = ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()),
+            gate = gate, connectedExchange = { block -> other.connect(block) })
+        visible.use {
+            visible.select(true)
+            visible.start()
+            withTimeout(10_000L) { visible.state.first { it.engine != null && it.history.rows.size == 1 } }
+            second.select(true)
+            second.start()
+            withTimeout(10_000L) { second.state.first { it.engine != null && it.history.rows.size == 1 } }
+            second.close()
+            fake.answered = true
+            val before = fake.calls.get()
+            val shown = withTimeoutOrNull(5_000L) { visible.state.first { it.history.rows.size == 2 || it.retrying } }
+            delay(3_000L)
+            val requests = fake.calls.get() - before
+            assertTrue("visible chat sent $requests requests in about 3 s", requests < 25)
+            assertNotNull("visible chat never showed the answer", shown)
+            assertEquals(listOf("question", "answer"), shown!!.history.rows.map { it.text })
         }
     }
 
