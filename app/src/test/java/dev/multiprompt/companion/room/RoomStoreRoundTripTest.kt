@@ -84,7 +84,7 @@ class RoomStoreRoundTripTest {
                 .put("members", members),
         )
         assertTrue("create failed: $result", result.optBoolean("ok"))
-        return result.getJSONObject("result").getJSONObject("room").getString("id")
+        return result.getJSONObject("result").getJSONObject("event").getString("room_id")
     }
 
     private fun member(host: String, alias: String, name: String, sid: String) = JSONObject()
