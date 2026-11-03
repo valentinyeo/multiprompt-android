@@ -269,6 +269,7 @@ class SessionReaderConnection(
     private val historyMutex = Mutex(false)
 
     @Volatile
+    @Volatile
     private var historyMode = false
 
     private val _historyPages = MutableStateFlow<List<String>>(emptyList())
@@ -277,21 +278,22 @@ class SessionReaderConnection(
 
     val historyPages: StateFlow<List<String>> = _historyPages
 
-    suspend fun enterHistory() = historyMutex.withLock {
-        if (!historyMode) {
+    suspend fun enterHistory() {
+        historyMutex.withLock {
+            if (historyMode) return
             historyMode = true
             _historyPages.value = emptyList()
             _historyPage.value = null
             scrollBackPage()
-            val deadline = System.currentTimeMillis() + HISTORY_FIRST_PAGE_MS
-            while (System.currentTimeMillis() < deadline) {
-                val page = _historyPage.value
-                if (!page.isNullOrBlank()) {
-                    _historyPages.value = listOf(page)
-                    return@withLock
-                }
-                delay(HISTORY_PAGE_POLL_MS)
+        }
+        val deadline = System.currentTimeMillis() + HISTORY_FIRST_PAGE_MS
+        while (System.currentTimeMillis() < deadline && historyMode) {
+            val page = _historyPage.value
+            if (!page.isNullOrBlank()) {
+                historyMutex.withLock { if (historyMode) _historyPages.value = listOf(page) }
+                return
             }
+            delay(HISTORY_PAGE_POLL_MS)
         }
     }
 
