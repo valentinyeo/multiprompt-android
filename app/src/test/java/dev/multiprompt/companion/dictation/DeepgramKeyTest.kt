@@ -16,7 +16,7 @@ class DeepgramKeyTest {
     fun picksTheKeyOutOfPastedText() {
         assertEquals(sample, DeepgramKey.normalize("credential: $sample\nproject: abc"))
         assertEquals(sample, DeepgramKey.normalize("Token ${sample.uppercase()}"))
-        assertEquals(sample, DeepgramKey.normalize("​$sample ‍"))
+        assertEquals(sample, DeepgramKey.normalize("\u200B$sample\u00A0\u200D"))
         assertEquals(sample, DeepgramKey.normalize("\"$sample\""))
     }
 
@@ -31,7 +31,7 @@ class DeepgramKeyTest {
     @Test
     fun keepsAnUnusualLongKeyWithoutSpaces() {
         val other = "dg_" + "Ab".repeat(20)
-        assertEquals(other, DeepgramKey.normalize(" $other​ "))
+        assertEquals(other, DeepgramKey.normalize(" $other\u200B "))
     }
 
     @Test

@@ -20,12 +20,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString.Companion.toByteString
+
+enum class KeySave { SAVED, NOT_A_KEY, REJECTED }
 
 enum class DictationStatus {
     IDLE,
@@ -49,12 +54,14 @@ class DeepgramDictation(
     private val micFactory: () -> MicSource? = { AudioRecordMicSource.create() },
     private val socketFactory: ((Request, WebSocketListener) -> WebSocket)? = null,
     private val usageLog: DictationUsageLog = DictationUsageLog(PreferencesDictationUsageStore(context)),
+    keyChecker: (suspend (String) -> Int?)? = null,
 ) : AutoCloseable {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val client = OkHttpClient.Builder()
         .pingInterval(15, TimeUnit.SECONDS)
         .build()
+    private val keyCheck: suspend (String) -> Int? = keyChecker ?: ::checkWithDeepgram
     private val finalSegments = mutableListOf<String>()
     private val _state = MutableStateFlow(
         DictationState(configured = secrets.get(API_KEY_SECRET_ID) != null),
@@ -81,12 +88,23 @@ class DeepgramDictation(
     private var gate: SpeechGate? = null
     private var usageRecorded = true
 
-    fun saveApiKey(value: String): Boolean {
-        val key = value.trim()
-        if (key.isBlank() || key.length > MAX_API_KEY_CHARACTERS) return false
+    suspend fun saveApiKey(value: String): KeySave {
+        val key = DeepgramKey.normalize(value) ?: return KeySave.NOT_A_KEY
+        if (DeepgramKey.classify(keyCheck(key)) == DeepgramKey.Check.REJECTED) return KeySave.REJECTED
         secrets.put(API_KEY_SECRET_ID, key.toByteArray(Charsets.UTF_8))
         _state.update { it.copy(configured = true, error = null) }
-        return true
+        return KeySave.SAVED
+    }
+
+    private suspend fun checkWithDeepgram(key: String): Int? = withContext(Dispatchers.IO) {
+        runCatching {
+            val request = Request.Builder()
+                .url("https://${DeepgramEndpoint.HOSTS.last()}/v1/listen?model=nova-3")
+                .header("Authorization", "Token $key")
+                .post(ByteArray(0).toRequestBody("audio/wav".toMediaType()))
+                .build()
+            client.newCall(request).execute().use { it.code }
+        }.getOrNull()
     }
 
     @Synchronized
@@ -108,6 +126,7 @@ class DeepgramDictation(
         }
         val apiKey = secrets.get(API_KEY_SECRET_ID)
             ?.toString(Charsets.UTF_8)
+            ?.let { DeepgramKey.normalize(it) ?: it.trim() }
             ?.takeIf(String::isNotBlank)
             ?: run {
                 _state.value = DictationState(configured = false, error = "Add a Deepgram API key", sessionKey = sessionKey)
@@ -391,7 +410,6 @@ class DeepgramDictation(
 
     private companion object {
         const val API_KEY_SECRET_ID = "deepgram_api_key"
-        const val MAX_API_KEY_CHARACTERS = 512
         const val AUDIO_BUFFER_BYTES = 3_200
         const val MAX_PENDING_AUDIO_BYTES = SpeechGate.SAMPLE_RATE * 2 * 8
         const val FINAL_RESULT_WAIT_MS = 1_200L
