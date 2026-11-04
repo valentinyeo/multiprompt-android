@@ -40,6 +40,10 @@ class TmuxCommandsTest {
             "tmux send-keys -t '=work:' C-c",
             TmuxCommands.action("work", TmuxAction.INTERRUPT),
         )
+        assertEquals(
+            "tmux send-keys -t '=work:' Escape",
+            TmuxCommands.action("work", TmuxAction.ESCAPE),
+        )
     }
 
     @Test

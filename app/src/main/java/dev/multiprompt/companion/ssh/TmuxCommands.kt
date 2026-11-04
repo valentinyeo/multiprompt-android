@@ -5,6 +5,7 @@ import dev.multiprompt.companion.model.AgentHarness
 enum class TmuxAction {
     ENTER,
     INTERRUPT,
+    ESCAPE,
     SCROLL_UP,
     SCROLL_BOTTOM,
 }
@@ -56,7 +57,7 @@ object TmuxCommands {
     fun action(sessionName: String, action: TmuxAction): String {
         val key = when (action) {
             TmuxAction.ENTER -> "Enter"
-            TmuxAction.INTERRUPT -> "C-c"
+            TmuxAction.INTERRUPT, TmuxAction.ESCAPE -> "C-c"
             TmuxAction.SCROLL_BOTTOM -> "End"
             TmuxAction.SCROLL_UP -> "PageUp"
         }
