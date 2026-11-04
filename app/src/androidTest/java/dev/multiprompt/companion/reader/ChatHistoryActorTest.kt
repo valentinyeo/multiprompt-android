@@ -437,6 +437,22 @@ class ChatHistoryActorTest {
         } finally { owner.close() }
     }
 
+    @Test fun unsentSubmitIsSentOnceWithTheSameId() = runBlocking {
+        for (provider in listOf("claude", "codex")) {
+            val f = Fixture(provider)
+            val submit = f.journal.create(f.account, f.wire, "submit", text = "never sent", epoch = 1)
+            val owner = f.connection()
+            try {
+                owner.select(true); owner.start(); f.ready(owner)
+                withTimeout(15_000) { owner.state.first { it.unresolved.isEmpty() && it.replica?.messages?.get(submit.id) != null } }
+                assertEquals(1, f.submitCalls)
+                assertEquals(submit.id, f.row!!.getString("id"))
+                assertEquals("never sent", f.row!!.getString("text"))
+                assertTrue(f.journal.entries().isEmpty())
+            } finally { owner.close() }
+        }
+    }
+
     @Test fun lostSubmitIsResentOnceWithTheSameId() = runBlocking {
         for (provider in listOf("claude", "codex")) {
             val f = Fixture(provider)
@@ -824,7 +840,7 @@ class ChatHistoryActorTest {
         }
     }
 
-    @Test fun oldEpochSubmitWithoutCancelStillCannotReplay() = runBlocking {
+    @Test fun oldEpochLostSubmitIsDroppedWithoutSendingAndResetWorks() = runBlocking {
         for (provider in listOf("claude", "codex")) {
             val f = Fixture(provider)
             val submit = f.journal.create(f.account, f.wire, "submit", text = "old", epoch = 1)
@@ -833,9 +849,11 @@ class ChatHistoryActorTest {
             val owner = f.connection()
             try {
                 owner.select(true); owner.start(); f.ready(owner)
-                assertEquals(MessageActionResult.Rejected("Message belongs to an earlier reset"), owner.replayUnknown(submit.id))
+                withTimeout(10_000) { owner.state.first { it.unresolved.isEmpty() } }
                 assertEquals(0, f.submitCalls)
-                assertEquals(submit.id, f.journal.entries().single().id)
+                assertNull(f.row)
+                assertTrue(f.journal.entries().isEmpty())
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
             } finally { owner.close() }
         }
     }
