@@ -19,15 +19,7 @@ import org.robolectric.annotation.Config
 class QuietInboxTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun refreshingDoesNotShowUpdatingBanner() {
-        val host = HostProfile("v", "Contabo", "vps", username = "valentin", keySecretId = "key")
-        val state = AppUiState(
-            hosts = listOf(host),
-            sessions = listOf(TmuxSession(host.id, "alpha", 1, 0, 0)),
-            signedIn = true,
-            refreshing = true,
-            updatingHostIds = setOf(host.id),
-        )
+    private fun render(state: AppUiState) {
         compose.setContent {
             MaterialTheme {
                 SessionsScreen(
@@ -46,7 +38,31 @@ class QuietInboxTest {
                 )
             }
         }
+    }
+
+    @Test fun refreshingDoesNotShowUpdatingBanner() {
+        val host = HostProfile("v", "Contabo", "vps", username = "valentin", keySecretId = "key")
+        render(AppUiState(
+            hosts = listOf(host),
+            sessions = listOf(TmuxSession(host.id, "alpha", 1, 0, 0)),
+            signedIn = true,
+            refreshing = true,
+            updatingHostIds = setOf(host.id),
+        ))
         compose.onNodeWithText("alpha").assertIsDisplayed()
         compose.onNodeWithText("Updating", substring = true).assertDoesNotExist()
+    }
+
+    @Test fun hostThatRejectsThisPhoneShowsNoRedLine() {
+        val home = HostProfile("v", "Contabo", "vps", username = "valentin", keySecretId = "key")
+        val cro = HostProfile("c", "Inne CRO", "cro", username = "inne", keySecretId = "key")
+        render(AppUiState(
+            hosts = listOf(home, cro),
+            sessions = listOf(TmuxSession(home.id, "alpha", 1, 0, 0)),
+            signedIn = true,
+            hostErrors = mapOf(cro.id to dev.multiprompt.companion.ssh.SshProblem.keyRejected(cro.label)),
+        ))
+        compose.onNodeWithText("alpha").assertIsDisplayed()
+        compose.onNodeWithText("does not accept", substring = true).assertDoesNotExist()
     }
 }

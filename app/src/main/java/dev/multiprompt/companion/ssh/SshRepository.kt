@@ -55,6 +55,12 @@ sealed class SshProblem(message: String) : Exception(message) {
 
     class Connection(message: String) : SshProblem(message)
     class Authentication(message: String) : SshProblem(message)
+
+    companion object {
+        private const val KEY_REJECTED = " does not accept this phone's login key."
+        fun keyRejected(label: String) = "$label$KEY_REJECTED"
+        fun isKeyRejected(error: String) = error.endsWith(KEY_REJECTED)
+    }
 }
 
 class SshRepository(private val secrets: SecretStorage) {
@@ -136,7 +142,7 @@ class SshRepository(private val secrets: SecretStorage) {
         val auth = client.authenticatePublicKey(host.username, privateKey, passphrase)
         if (auth !is AuthResult.Success) {
             client.disconnect()
-            throw SshProblem.Authentication("${host.label} does not accept this phone's login key.")
+            throw SshProblem.Authentication(SshProblem.keyRejected(host.label))
         }
         client
     }
