@@ -28,6 +28,8 @@ object MessageProtocol {
         val text: String?,
         val done: Boolean,
         val state: String?,
+        val request: HostRequest? = null,
+        val resolved: String? = null,
     )
 
     sealed interface Item {
@@ -116,7 +118,8 @@ object MessageProtocol {
         val body = if (kind.startsWith("text.") || kind.startsWith("thinking.")) payload.optString("text") else null
         return HostEvent(kind, value.optString("turn").ifEmpty { null }, value.optString("item").ifEmpty { null },
             if (value.has("at")) integral(value.get("at")) else 0L, body,
-            payload.optBoolean("done") || kind.endsWith(".done"), payload.optString("state").ifEmpty { null })
+            payload.optBoolean("done") || kind.endsWith(".done"), payload.optString("state").ifEmpty { null },
+            HostRequest.parse(kind, payload), HostRequest.resolved(kind, payload))
     }
 
     private fun fact(value: JSONObject, scope: Scope, native: Boolean): Fact {
