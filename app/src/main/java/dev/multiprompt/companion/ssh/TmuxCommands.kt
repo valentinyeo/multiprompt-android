@@ -14,6 +14,9 @@ object TmuxCommands {
     const val SNAPSHOT_PREFIX = "__MP_TMUX_SNAPSHOT__"
     const val ALT_PREFIX = "__MP_TMUX_ALT__"
     const val CREATED_PREFIX = "__MP_TMUX_CREATED__"
+    private val LIVE_CHAT_SID = Regex("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
+    private val LIVE_CHAT_NAME = Regex("live-[A-Za-z0-9_.:-]{1,59}")
+    private val LIVE_CHAT_FOLDER = Regex("[A-Za-z0-9/_.~-]{1,4096}")
 
     const val ETA_PREFIX = "__MP_TMUX_ETA__"
 
@@ -125,6 +128,26 @@ object TmuxCommands {
 
     fun createClaudeSession(sessionName: String, remotePath: String): String =
         createAgentSession(sessionName, remotePath, AgentHarness.CLAUDE)
+
+    fun createLiveChat(sessionName: String, remotePath: String, sid: String): String {
+        require(LIVE_CHAT_SID.matches(sid)) { "Invalid live chat id" }
+        require(LIVE_CHAT_NAME.matches(sessionName)) { "Invalid live chat name" }
+        require(LIVE_CHAT_FOLDER.matches(remotePath)) { "Live chat needs a folder name without spaces or symbols" }
+        val path = TmuxParser.shellQuote(remotePath)
+        val name = TmuxParser.shellQuote(sessionName)
+        val reader = "python3 ~/.multiprompt-runtime/reader.py"
+        val host = "$reader host enable claude $sid --tmux $sessionName --cwd $remotePath " +
+            "--permission-mode bypassPermissions >/dev/null 2>&1; " +
+            "$reader host start claude $sid >/dev/null 2>&1; exec sleep infinity"
+        return "if [ ! -d $path ]; then printf 'Project directory not found\\n' >&2; exit 2; fi; " +
+            "if ! bash -lc 'command -v claude >/dev/null 2>&1'; then " +
+            "printf 'claude was not found on the VPS PATH\\n' >&2; exit 3; fi; " +
+            "python3 - host status claude $sid >/dev/null 2>&1; " +
+            "if [ ! -f ~/.multiprompt-runtime/reader.py ]; then " +
+            "printf 'Live chat reader could not be installed\\n' >&2; exit 4; fi; " +
+            "tmux new-session -d -s $name -c $path ${TmuxParser.shellQuote(host)} && " +
+            "printf '$CREATED_PREFIX%s\\n' $name"
+    }
 
     fun createShellSession(sessionName: String, remotePath: String): String =
         createAgentSession(sessionName, remotePath, AgentHarness.SHELL)

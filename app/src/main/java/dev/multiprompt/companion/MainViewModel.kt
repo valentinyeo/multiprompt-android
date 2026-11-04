@@ -1468,7 +1468,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val host = _state.value.hosts.firstOrNull { it.id == hostId } ?: return
         viewModelScope.launch {
             _state.update { it.copy(creatingSession = true, sessionActionError = null) }
-            runCatching { ssh.createAgentSession(host, path, harness) }
+            runCatching { ssh.createAgentSession(host, path, harness, app.chatHistoryScript) }
                 .onSuccess { sessionName ->
                     val session = TmuxSession(
                         hostId = host.id,
