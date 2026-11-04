@@ -106,4 +106,6 @@ fun createdSession(hostId: String, created: CreatedSession, path: String, nowSec
         attachedClients = 0,
         lastActivityEpochSeconds = nowSeconds,
         workingDirectory = path,
+        paneCommand = if (created.liveSessionId.isEmpty()) "" else "sleep",
+        hostSessionId = created.liveSessionId,
     )
