@@ -117,11 +117,10 @@ class TmuxCommandsTest {
     }
 
     @Test
-    fun liveChatQuotesTheFolder() {
-        val command = TmuxCommands.createLiveChat("live-a", "/srv/a'; touch /x", "0b6d2c1e-4f3a-4b2c-9d8e-1a2b3c4d5e6f")
-
-        assertTrue(command.contains("if [ ! -d '/srv/a'\"'\"'; touch /x' ]"))
-        assertFalse(command.contains("--cwd /srv/a'; touch"))
+    fun liveChatRefusesAnUnsafeFolder() {
+        assertThrows(IllegalArgumentException::class.java) {
+            TmuxCommands.createLiveChat("live-a", "/srv/a'; touch /x", "0b6d2c1e-4f3a-4b2c-9d8e-1a2b3c4d5e6f")
+        }
     }
 
     @Test

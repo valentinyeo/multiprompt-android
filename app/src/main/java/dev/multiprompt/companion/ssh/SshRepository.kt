@@ -15,6 +15,7 @@ import dev.multiprompt.companion.reader.TranscriptProtocol
 import dev.multiprompt.companion.reader.ChatHistory
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import java.util.Base64
+import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -399,6 +400,7 @@ class SshRepository(private val secrets: SecretStorage) {
         host: HostProfile,
         remotePath: String,
         harness: AgentHarness,
+        readerScript: ByteArray? = null,
     ): String = withContext(Dispatchers.IO) {
         withTimeout(CONNECTION_TIMEOUT_MS) {
             withAuthenticatedClient(host) { client ->
@@ -407,8 +409,15 @@ class SshRepository(private val secrets: SecretStorage) {
                     .trim('-')
                     .ifBlank { "workspace" }
                     .take(24)
-                val sessionName = "${harness.namePrefix}-$project-${System.currentTimeMillis().toString(36)}"
-                val result = execute(client, TmuxCommands.createAgentSession(sessionName, remotePath, harness))
+                val live = harness == AgentHarness.CLAUDE
+                val prefix = if (live) "live" else harness.namePrefix
+                val sessionName = "$prefix-$project-${System.currentTimeMillis().toString(36)}"
+                val command = if (live) {
+                    TmuxCommands.createLiveChat(sessionName, remotePath, UUID.randomUUID().toString())
+                } else {
+                    TmuxCommands.createAgentSession(sessionName, remotePath, harness)
+                }
+                val result = execute(client, command, stdin = if (live) readerScript else null)
                 result.requireSuccess("create the ${harness.label} session")
                 require(result.stdout.lineSequence().any {
                     it.trim() == "${TmuxCommands.CREATED_PREFIX}$sessionName"
