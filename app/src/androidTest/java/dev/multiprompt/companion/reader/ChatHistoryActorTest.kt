@@ -76,7 +76,7 @@ class ChatHistoryActorTest {
         val secondSnapshotStarted = CompletableDeferred<Unit>()
         val thirdSnapshotStarted = CompletableDeferred<Unit>()
         var pauseSecondSnapshot: CompletableDeferred<Unit>? = null
-        var snapshotCount = 0
+        @Volatile var snapshotCount = 0
         val laterPageRequested = CompletableDeferred<Unit>()
         val thirdPageRequested = CompletableDeferred<Unit>()
         val laterPageRelease = CompletableDeferred<Unit>()
@@ -1138,9 +1138,10 @@ class ChatHistoryActorTest {
                 val remove = async { owner.removeUnknown(submit.id) }
                 withTimeout(10_000) { f.statusStarted.await() }
                 if (takeover) {
+                    val seen = f.snapshotCount
                     val next = f.connection(); current = next
                     next.select(true); next.start()
-                    withTimeout(10_000) { f.secondSnapshotStarted.await() }
+                    withTimeout(10_000) { while (f.snapshotCount <= seen) kotlinx.coroutines.delay(50) }
                 } else owner.select(false)
                 f.statusPause!!.complete(Unit)
                 assertTrue(withTimeout(10_000) { remove.await() } is MessageActionResult.Rejected)
