@@ -2980,9 +2980,9 @@ internal fun ReaderScreen(
                 when (val admission = connection.sendPrompt(composedPrompt)) {
                     is dev.multiprompt.companion.reader.PromptAdmission.Rejected -> {
                         val reason = admission.reason
-                        if (reason == "Chat is not ready" && !chatReady) {
+                        if (reason == "Chat is disconnected" || (reason == "Chat is not ready" && !chatReady)) {
                             waitingSend = draftText
-                            android.widget.Toast.makeText(context, "Will send when the chat is ready", android.widget.Toast.LENGTH_SHORT).show()
+                            android.widget.Toast.makeText(context, "Will send when back online", android.widget.Toast.LENGTH_SHORT).show()
                         } else {
                             android.widget.Toast.makeText(context, reason, android.widget.Toast.LENGTH_SHORT).show()
                         }
@@ -3010,6 +3010,7 @@ internal fun ReaderScreen(
     LaunchedEffect(chatReady, waitingSend) {
         val text = waitingSend ?: return@LaunchedEffect
         if (!chatReady) return@LaunchedEffect
+        delay(1_000)
         waitingSend = null
         sendDraft(text)
     }
