@@ -181,12 +181,11 @@ class ChatHistoryConnection(
             pending(sid).none { it.operation == "reset" }) resetFence = false
     }
 
-    fun interruptHost(): Boolean {
+    fun interruptHost(fallback: () -> Unit = {}): Boolean {
         if (_state.value.replica?.host?.running != true) return false
-        _hostError.value = null
         scope.launch {
             val result = runCatching { action("host", "interrupt", line = { id, sid -> HostReply.interrupt(id, sid) }) }.getOrElse { MessageActionResult.Unknown }
-            if (result != MessageActionResult.Applied) _hostError.value = (result as? MessageActionResult.Rejected)?.reason ?: "Could not stop the agent"
+            if (result != MessageActionResult.Applied) fallback()
         }
         return true
     }

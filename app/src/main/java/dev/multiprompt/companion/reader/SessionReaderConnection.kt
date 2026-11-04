@@ -130,7 +130,7 @@ class SessionReaderConnection(
         historyConnection?.select(value)
     }
 
-    fun interruptHost(): Boolean = historyConnection?.interruptHost() == true
+    fun interruptHost(): Boolean = historyConnection?.interruptHost { interrupt() } == true
 
     fun chatHistory(agent: AgentKind, cwd: String): ChatHistoryConnection {
         require(TranscriptProtocol.supports(agent))
