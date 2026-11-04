@@ -48,9 +48,12 @@ class MultipromptApplication : Application() {
     val chatHistoryScript by lazy {
         val claude = assets.open("chat_connectors/claude.py").use { it.readBytes() }
         val codex = assets.open("chat_connectors/codex.py").use { it.readBytes() }
+        val mpSend = assets.open("mp_send.py").use { it.readBytes() }
+        val feedback = assets.open("multibot_feedback.py").use { it.readBytes() }
         val reader = assets.open("chat_history_reader.py").use { it.readBytes() }
         val encoder = android.util.Base64.NO_WRAP
-        val prefix = "CONNECTOR_SOURCES = {'claude':'${android.util.Base64.encodeToString(claude, encoder)}','codex':'${android.util.Base64.encodeToString(codex, encoder)}'}\n"
+        fun encode(bytes: ByteArray) = android.util.Base64.encodeToString(bytes, encoder)
+        val prefix = "CONNECTOR_SOURCES = {'claude':'${encode(claude)}','codex':'${encode(codex)}'}\nMP_SEND_SOURCE = '${encode(mpSend)}'\nFEEDBACK_SOURCE = '${encode(feedback)}'\n"
         prefix.toByteArray(Charsets.UTF_8) + reader
     }
     val sshRepository by lazy { SshRepository(secretStore) }

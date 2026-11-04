@@ -28,9 +28,16 @@ const reviewedReleases = {
   'v0.28.1046': ['1c5e0cccc66cf1c6f962746b4d23506ff0d366f5', { 'IGSH-1154': 'Queued sends avoid competing terminal handoffs.' }],
   'v0.28.1047': ['4ebe5f53eeda7d8a945cfb3af2598672a87c0218', { 'IGSH-1154': checks }],
   'v0.28.1048': ['e62769a0862c8518a68a74ea6bfc6030b03dad3b', { 'IGSH-1154': checks, 'IGSH-1239': checks }],
+  'v0.28.1339': ['1f91520248bd00bf99308dcec5717b3199574fdf', { 'IGSH-1266': 'A failed move to the terminal keeps your chat open.' }],
+};
+
+const reviewedCommits = {
+  '8f52c2a6cf81d617d61bf6c439ec29719d850062': 'IGSH-1615',
 };
 
 const checksOnly = checks;
+const ciTicket = /^HYCI-\d+$/;
+const releaseTicket = /^(?:IGSH|HYCI)-\d+$/;
 
 const mainPath = 'src/main.zig';
 const changelogPath = 'src/changelog.zig';
@@ -86,7 +93,7 @@ export function checkFragments(base, head, changed) {
     const lines = fragmentLines(file, head[file]);
     if (changed.includes(file) && lines.some(line => !productChange(line))) throw new Error(`${file}: write a specific user-visible change; omit notes for checks, tests or pipeline work`);
   }
-  const appChanged = changed.some(file => file.startsWith('src/') &&
+  const appChanged = changed.some(file => (file.startsWith('src/') || file.startsWith('extension/')) &&
     (!file.endsWith('.zig') || !(file in base) || !(file in head) || runtimeZigTokens(base[file]) !== runtimeZigTokens(head[file])));
   if (appChanged && !changed.some(file => !(file in base) && file in head && file.startsWith('changelog.d/') && file !== 'changelog.d/README.md')) {
     throw new Error('App code changed: add changelog.d/<TICKET>-<slug>.md with at least one plain product line');
@@ -166,11 +173,16 @@ export function buildChangelog(files, tag, history = [], commits = []) {
     const reviewed = reviewedReleases[stepTag];
     if (reviewed && sha !== reviewed[0]) throw new Error(`${stepTag}: reviewed release commit does not match ${sha || 'missing commit'}`);
     const notes = new Map(Object.entries(reviewed?.[1] || {}));
+    const ciTickets = [];
     if (!reviewed) {
       for (const commit of stepCommits || []) {
-        const match = /^(IGSH-\d+)(?::|\s)/.exec(commit.subject);
-        if (!match) throw new Error(`${stepTag}: commit ${commit.sha} lacks a leading ticket ID; add reviewed attribution before releasing`);
-        if (!notes.has(match[1])) notes.set(match[1], checksOnly);
+        const ticket = reviewedCommits[commit.sha] ?? /^([A-Z][A-Z0-9]*-\d+)(?::|\s)/.exec(commit.subject)?.[1];
+        if (!ticket) throw new Error(`${stepTag}: commit ${commit.sha} lacks a leading ticket ID; add reviewed attribution before releasing`);
+        if (ciTicket.test(ticket)) {
+          if (!ciTickets.includes(ticket)) ciTickets.push(ticket);
+          continue;
+        }
+        if (!notes.has(ticket)) notes.set(ticket, checksOnly);
       }
     }
     const fragmentNotes = new Map();
@@ -180,12 +192,18 @@ export function buildChangelog(files, tag, history = [], commits = []) {
       if (lines.length) fragmentNotes.set(ticket, [...(fragmentNotes.get(ticket) || []), ...lines]);
     }
     for (const [ticket, lines] of fragmentNotes) {
+      if (ciTicket.test(ticket)) continue;
       if (!reviewed && !notes.has(ticket)) throw new Error(`${stepTag}: ${ticket} fragment has no matching commit ticket`);
       notes.set(ticket, lines.join(' '));
     }
-    if (!notes.size) throw new Error(`${stepTag}: no ticketed release lines; add a ticketed commit before releasing`);
+    if (!notes.size) {
+      const ticket = ciTickets.at(-1);
+      if (!ticket) throw new Error(`${stepTag}: no ticketed release lines; add a ticketed commit before releasing`);
+      notes.set(ticket, checksOnly);
+    }
     for (const [ticket, text] of notes) {
-      if (!/^IGSH-\d+$/.test(ticket) || !plainChange(text) || !(productChange(text) || text === checksOnly)) {
+      const allowed = ciTicket.test(ticket) ? text === checksOnly : productChange(text) || text === checksOnly;
+      if (!releaseTicket.test(ticket) || !plainChange(text) || !allowed) {
         throw new Error(`${stepTag}: invalid ticketed line for ${ticket}`);
       }
     }

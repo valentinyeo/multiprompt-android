@@ -9,6 +9,7 @@ mkdir -p "$tmp/src"
 cp -R tools/vendor/chat-reader/tools "$tmp/tools"
 cp app/src/main/assets/chat_history_reader.py "$tmp/src/chat_history_reader.py"
 cp -R app/src/main/assets/chat_connectors "$tmp/src/chat_connectors"
+cp app/src/main/assets/mp_send.py app/src/main/assets/multibot_feedback.py "$tmp/src/"
 python3 -B "$tmp/tools/chat-history-reader-test.py" -v
 python3 -B "$tmp/tools/chat-transcript-reconcile.test.py"
 python3 -B "$tmp/tools/chat-shared-runtime.test.py"
