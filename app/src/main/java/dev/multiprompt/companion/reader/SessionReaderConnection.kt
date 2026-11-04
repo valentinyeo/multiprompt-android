@@ -130,7 +130,7 @@ class SessionReaderConnection(
         historyConnection?.select(value)
     }
 
-    fun interruptHost(): Boolean = historyConnection?.interruptHost { interrupt() } == true
+    fun interruptHost(): Boolean = historyConnection?.interruptHost { requests.trySend(Request.Action(TmuxAction.ESCAPE)) } == true
 
     fun chatHistory(agent: AgentKind, cwd: String): ChatHistoryConnection {
         require(TranscriptProtocol.supports(agent))

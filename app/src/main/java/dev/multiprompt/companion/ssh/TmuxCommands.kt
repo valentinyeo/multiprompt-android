@@ -57,7 +57,8 @@ object TmuxCommands {
     fun action(sessionName: String, action: TmuxAction): String {
         val key = when (action) {
             TmuxAction.ENTER -> "Enter"
-            TmuxAction.INTERRUPT, TmuxAction.ESCAPE -> "C-c"
+            TmuxAction.INTERRUPT -> "C-c"
+            TmuxAction.ESCAPE -> "Escape"
             TmuxAction.SCROLL_BOTTOM -> "End"
             TmuxAction.SCROLL_UP -> "PageUp"
         }
