@@ -3360,7 +3360,7 @@ internal fun ReaderScreen(
                                     onClick = {
                                         menuExpanded = false
                                         onSessionInteraction()
-                                        connection.interrupt()
+                                        if (!connection.interruptHost()) connection.interrupt()
                                     },
                                 )
                                 if (reader.alternateOn) {

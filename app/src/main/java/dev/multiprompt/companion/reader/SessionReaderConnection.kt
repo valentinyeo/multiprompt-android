@@ -130,6 +130,8 @@ class SessionReaderConnection(
         historyConnection?.select(value)
     }
 
+    fun interruptHost(): Boolean = historyConnection?.interruptHost { interrupt() } == true
+
     fun chatHistory(agent: AgentKind, cwd: String): ChatHistoryConnection {
         require(TranscriptProtocol.supports(agent))
         val identity = ChatHistoryProtocol.Identity(agent, tmuxSessionName, cwd, hostSessionId)

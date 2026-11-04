@@ -181,6 +181,23 @@ class ChatHistoryConnection(
             pending(sid).none { it.operation == "reset" }) resetFence = false
     }
 
+    fun interruptHost(fallback: () -> Unit = {}): Boolean {
+        val host = _state.value.replica?.host ?: return false
+        val approval = host.request?.takeIf { it.kind == "approval" && it.id !in _hostClosed.value }
+        if (approval == null && !host.running) return false
+        val line: (Long, String) -> String = if (approval != null) { id, sid -> HostReply.approval(id, sid, approval.id, "cancel") }
+            else { id, sid -> HostReply.interrupt(id, sid) }
+        if (approval != null) _hostClosed.value = _hostClosed.value + approval.id
+        scope.launch {
+            val result = runCatching { action("host", approval?.id ?: "interrupt", line = line) }.getOrElse { MessageActionResult.Unknown }
+            if (result != MessageActionResult.Applied) {
+                if (approval != null) _hostClosed.value = _hostClosed.value - approval.id
+                fallback()
+            }
+        }
+        return true
+    }
+
     fun answerHost(card: PendingQuestion, choices: Set<Int>, other: String): Boolean {
         val request = _state.value.replica?.host?.request?.takeIf { it.id == card.callId && card.host == it.kind } ?: return false
         val line: (Long, String) -> String = when (request.kind) {

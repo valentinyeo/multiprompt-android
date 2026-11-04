@@ -152,6 +152,9 @@ class ChatHistoryConnectionTest {
     private class FakeHost {
         val calls = java.util.concurrent.atomic.AtomicInteger()
         @Volatile var answered = false
+        @Volatile var events: List<JSONObject> = emptyList()
+        private val head get() = events.size.toLong()
+        val stops = java.util.concurrent.CopyOnWriteArrayList<String>()
         private val digest = "b".repeat(64)
 
         private fun row(role: String, text: String, offset: Long, end: Long) =
@@ -177,14 +180,58 @@ class ChatHistoryConnectionTest {
                     "engine_info" -> JSONObject().put("id", id)
                         .put("engine_info", JSONObject().put("protocol", 1).put("generation", 53).put("sha256", digest))
                         .put("message_protocols", JSONArray().put(1)).toString()
-                    "message_snapshot" -> result(id, JSONObject().put("snapshot_id", "snap").put("epoch", 1).put("seq", 0)
+                    "message_snapshot" -> result(id, JSONObject().put("snapshot_id", "snap").put("epoch", 1).put("seq", head)
                         .put("items", JSONArray()).put("next_cursor", JSONObject.NULL))
-                    "message_events" -> result(id, JSONObject().put("epoch", 1).put("seq", 0)
-                        .put("events", JSONArray()).put("next_after", 0))
+                    "message_events" -> {
+                        val rows = JSONArray()
+                        events.forEachIndexed { index, event -> if (index + 1 > request.optLong("after")) rows.put(JSONObject().put("seq", index + 1).put("event", event)) }
+                        result(id, JSONObject().put("epoch", 1).put("seq", head).put("events", rows).put("next_after", head))
+                    }
+                    "interrupt", "approval_reply" -> { stops.add(line.trim()); result(id, JSONObject().put("status", "ok")) }
                     "" -> history(id)
                     else -> error("Unexpected request")
                 }
             }
+        }
+    }
+
+    private fun hostEvent(kind: String, payload: JSONObject = JSONObject()) =
+        JSONObject().put("v", 1).put("sid", "sid1").put("turn", "t1").put("kind", kind).put("at", 1).put("payload", payload)
+
+    @Test
+    fun stopWithAnOpenApprovalCancelsItLikeDesktop() = runBlocking {
+        val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd")
+        val fake = FakeHost().apply { events = listOf(hostEvent("turn.started"),
+            hostEvent("approval.request", JSONObject().put("request_id", "req_1").put("tool", "Bash").put("title", "Run tests"))) }
+        val chat = ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()),
+            gate = MessageGate(), connectedExchange = { block -> fake.connect(block) })
+        chat.use {
+            chat.select(true)
+            chat.start()
+            withTimeout(10_000L) { chat.state.first { it.replica?.host?.request?.id == "req_1" } }
+            assertTrue(chat.interruptHost())
+            val line = withTimeout(10_000L) { while (fake.stops.isEmpty()) delay(50L); fake.stops.single() }
+            assertEquals(HostReply.approval(JSONObject(line).getLong("id"), "sid1", "req_1", "cancel"), line)
+        }
+    }
+
+    @Test
+    fun stopInAServerRunChatSendsTheDesktopInterrupt() = runBlocking {
+        val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd")
+        val fake = FakeHost().apply { events = listOf(hostEvent("turn.started")) }
+        val chat = ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()),
+            gate = MessageGate(), connectedExchange = { block -> fake.connect(block) })
+        chat.use {
+            assertFalse(chat.interruptHost())
+            chat.select(true)
+            chat.start()
+            withTimeout(10_000L) { chat.state.first { it.replica?.host?.running == true } }
+            var fellBack = false
+            assertTrue(chat.interruptHost { fellBack = true })
+            val line = withTimeout(10_000L) { while (fake.stops.isEmpty()) delay(50L); fake.stops.single() }
+            assertEquals(HostReply.interrupt(JSONObject(line).getLong("id"), "sid1"), line)
+            delay(500L)
+            assertFalse(fellBack)
         }
     }
 
