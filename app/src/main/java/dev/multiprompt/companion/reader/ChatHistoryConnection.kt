@@ -324,8 +324,19 @@ class ChatHistoryConnection(
                                         requestId++
                                         val status = MessageProtocol.mutation(exchange(MessageProtocol.request(requestId, messageScope, "message_status", JSONObject().put("message_id", entry.messageId))), requestId, messageScope, entry.messageId)
                                         if (generation != cycleGeneration || !owns(page.sid)) { replica = null; continue@poll }
-                                        val lost = status.row == null && entry.issued && entry.text != null && entry.epoch == replica!!.epoch && !resetFence &&
-                                            pending(page.sid).none { it.operation == "reset" || (it.operation == "dismiss" && it.messageId == entry.messageId) }
+                                        val unsettled = pending(page.sid).none { it.operation == "reset" || (it.operation == "dismiss" && it.messageId == entry.messageId) }
+                                        val epoch = entry.epoch
+                                        if (status.row == null && unsettled && epoch != null && epoch < replica!!.epoch) {
+                                            val dropped = synchronized(this@ChatHistoryConnection) {
+                                                if (generation != cycleGeneration || !selected || ownedKey != key(page.sid)) false
+                                                else gate?.ifOwned(key(page.sid), token) { journalAccess { journal?.remove(entry.id) }; true } ?: false
+                                            }
+                                            if (!dropped) { replica = null; continue@poll }
+                                            checked.add(entry.id)
+                                            continue
+                                        }
+                                        val lost = status.row == null && entry.text != null && epoch == replica!!.epoch && !resetFence && unsettled
+                                        if (lost && !entry.issued && !markIssued(page.sid, cycleGeneration, entry.id)) { replica = null; continue@poll }
                                         if (lost) {
                                             requestId++
                                             val arguments = JSONObject().put("message_id", entry.messageId).put("text", entry.text)

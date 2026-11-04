@@ -76,7 +76,7 @@ class ChatHistoryActorTest {
         val secondSnapshotStarted = CompletableDeferred<Unit>()
         val thirdSnapshotStarted = CompletableDeferred<Unit>()
         var pauseSecondSnapshot: CompletableDeferred<Unit>? = null
-        var snapshotCount = 0
+        @Volatile var snapshotCount = 0
         val laterPageRequested = CompletableDeferred<Unit>()
         val thirdPageRequested = CompletableDeferred<Unit>()
         val laterPageRelease = CompletableDeferred<Unit>()
@@ -437,6 +437,22 @@ class ChatHistoryActorTest {
         } finally { owner.close() }
     }
 
+    @Test fun unsentSubmitIsSentOnceWithTheSameId() = runBlocking {
+        for (provider in listOf("claude", "codex")) {
+            val f = Fixture(provider)
+            val submit = f.journal.create(f.account, f.wire, "submit", text = "never sent", epoch = 1)
+            val owner = f.connection()
+            try {
+                owner.select(true); owner.start(); f.ready(owner)
+                withTimeout(15_000) { owner.state.first { it.unresolved.isEmpty() && it.replica?.messages?.get(submit.id) != null } }
+                assertEquals(1, f.submitCalls)
+                assertEquals(submit.id, f.row!!.getString("id"))
+                assertEquals("never sent", f.row!!.getString("text"))
+                assertTrue(f.journal.entries().isEmpty())
+            } finally { owner.close() }
+        }
+    }
+
     @Test fun lostSubmitIsResentOnceWithTheSameId() = runBlocking {
         for (provider in listOf("claude", "codex")) {
             val f = Fixture(provider)
@@ -576,6 +592,8 @@ class ChatHistoryActorTest {
             val f = Fixture(provider)
             val old = f.wire.copy(tmux = "old-alias")
             val submit = f.journal.create(f.account, old, "submit", text = "alias original", epoch = 1)
+            f.journal.markIssued(submit.id)
+            f.hideSnapshotRow = true
             val foreign = listOf(
                 f.journal.create("other-account", old, "dismiss", submit.id, submit.text, 1),
                 f.journal.create(f.account, MessageProtocol.Scope(if (provider == "claude") "codex" else "claude", f.sid, "chat"), "dismiss", submit.id, submit.text, 1),
@@ -594,7 +612,7 @@ class ChatHistoryActorTest {
                 assertEquals("cancelled", f.row!!.getString("state"))
                 assertEquals(raw, foreign.associate { it.id to f.prefs.getString(it.id, null) })
                 assertEquals(foreign.map { it.id }.toSet(), f.journal.entries().map { it.id }.toSet())
-                assertEquals(0, f.submitCalls); assertEquals(0, f.retryCalls)
+                assertEquals(1, f.submitCalls); assertEquals(0, f.retryCalls)
                 assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
                 assertEquals(raw, foreign.associate { it.id to f.prefs.getString(it.id, null) })
             } finally { owner.close() }
@@ -780,6 +798,8 @@ class ChatHistoryActorTest {
         for (provider in listOf("claude", "codex")) {
             val f = Fixture(provider)
             val submit = f.journal.create(f.account, f.wire, "submit", text = "recover", epoch = 1)
+            f.journal.markIssued(submit.id)
+            f.hideSnapshotRow = true
             val owner = f.connection()
             try {
                 owner.select(true); owner.start(); f.ready(owner)
@@ -790,14 +810,14 @@ class ChatHistoryActorTest {
                 withTimeout(10_000) { owner.state.first { it.retrying } }
                 withTimeout(15_000) { owner.state.first { !it.retrying && it.unresolved.any { e -> e.id == dismiss.id } } }
                 assertEquals(1, f.dismissCalls)
-                assertEquals(0, f.submitCalls)
+                assertEquals(1, f.submitCalls)
                 assertTrue(owner.replayUnknown(submit.id) is MessageActionResult.Rejected)
                 assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.removeUnknown(dismiss.id) })
                 assertEquals(2, f.dismissCalls)
                 assertEquals(submit.id, f.lastDismiss!!.getString("message_id"))
                 assertEquals("recover", f.lastDismiss!!.getString("text"))
                 assertTrue(f.journal.entries().isEmpty())
-                assertEquals(0, f.submitCalls)
+                assertEquals(1, f.submitCalls)
             } finally { owner.close() }
         }
     }
@@ -824,7 +844,7 @@ class ChatHistoryActorTest {
         }
     }
 
-    @Test fun oldEpochSubmitWithoutCancelStillCannotReplay() = runBlocking {
+    @Test fun oldEpochLostSubmitIsDroppedWithoutSendingAndResetWorks() = runBlocking {
         for (provider in listOf("claude", "codex")) {
             val f = Fixture(provider)
             val submit = f.journal.create(f.account, f.wire, "submit", text = "old", epoch = 1)
@@ -833,9 +853,11 @@ class ChatHistoryActorTest {
             val owner = f.connection()
             try {
                 owner.select(true); owner.start(); f.ready(owner)
-                assertEquals(MessageActionResult.Rejected("Message belongs to an earlier reset"), owner.replayUnknown(submit.id))
+                withTimeout(10_000) { owner.state.first { it.unresolved.isEmpty() } }
                 assertEquals(0, f.submitCalls)
-                assertEquals(submit.id, f.journal.entries().single().id)
+                assertNull(f.row)
+                assertTrue(f.journal.entries().isEmpty())
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
             } finally { owner.close() }
         }
     }
@@ -843,6 +865,8 @@ class ChatHistoryActorTest {
     @Test fun badRawJournalBlocksUnknownRemoveWithoutDeletingAnything() = runBlocking {
         val f = Fixture("codex")
         val submit = f.journal.create(f.account, f.wire, "submit", text = "preserve", epoch = 1)
+        f.journal.markIssued(submit.id)
+        f.hideSnapshotRow = true
         val owner = f.connection()
         try {
             owner.select(true); owner.start(); f.ready(owner)
@@ -856,7 +880,7 @@ class ChatHistoryActorTest {
             withTimeout(10_000) { owner.state.first { it.messageError?.contains("Local storage failure") == true } }
             assertEquals(before, f.prefs.all)
             assertEquals(0, f.dismissCalls)
-            assertEquals(0, f.submitCalls)
+            assertEquals(1, f.submitCalls)
         } finally { f.admissionPause?.complete(Unit); owner.close() }
     }
 
@@ -950,6 +974,8 @@ class ChatHistoryActorTest {
         for (provider in listOf("claude", "codex")) {
             val f = Fixture(provider)
             val submit = f.journal.create(f.account, f.wire, "submit", text = "repair", epoch = 1)
+            f.journal.markIssued(submit.id)
+            f.hideSnapshotRow = true
             val owner = f.connection()
             try {
                 owner.select(true); owner.start(); f.ready(owner)
@@ -963,7 +989,7 @@ class ChatHistoryActorTest {
                 assertEquals(MessageActionResult.Applied, withTimeout(10_000) { remove.await() })
                 assertTrue(f.eventCalls > 1)
                 assertEquals(1, f.dismissCalls)
-                assertEquals(0, f.submitCalls)
+                assertEquals(1, f.submitCalls)
                 assertEquals("cancelled", f.row!!.getString("state"))
                 assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
                 assertTrue(f.journal.entries().isEmpty())
@@ -975,6 +1001,8 @@ class ChatHistoryActorTest {
         for (provider in listOf("claude", "codex")) for (takeover in listOf(false, true)) {
             val f = Fixture(provider)
             val submit = f.journal.create(f.account, f.wire, "submit", text = "preserve", epoch = 1)
+            f.journal.markIssued(submit.id)
+            f.hideSnapshotRow = true
             val old = f.connection()
             var current: ChatHistoryConnection? = null
             try {
@@ -991,7 +1019,7 @@ class ChatHistoryActorTest {
                 assertTrue(withTimeout(10_000) { remove.await() } is MessageActionResult.Rejected)
                 assertEquals(before, f.prefs.all)
                 assertEquals(0, f.dismissCalls)
-                assertEquals(0, f.submitCalls)
+                assertEquals(1, f.submitCalls)
             } finally { f.admissionPause?.complete(Unit); old.close(); current?.close() }
         }
     }
@@ -1099,6 +1127,8 @@ class ChatHistoryActorTest {
         for (provider in listOf("claude", "codex")) for (takeover in listOf(false, true)) {
             val f = Fixture(provider)
             val submit = f.journal.create(f.account, f.wire.copy(tmux = "old-alias"), "submit", text = "status race", epoch = 1)
+            f.journal.markIssued(submit.id)
+            f.hideSnapshotRow = true
             val owner = f.connection()
             var current: ChatHistoryConnection? = null
             try {
@@ -1108,14 +1138,15 @@ class ChatHistoryActorTest {
                 val remove = async { owner.removeUnknown(submit.id) }
                 withTimeout(10_000) { f.statusStarted.await() }
                 if (takeover) {
+                    val seen = f.snapshotCount
                     val next = f.connection(); current = next
                     next.select(true); next.start()
-                    withTimeout(10_000) { f.secondSnapshotStarted.await() }
+                    withTimeout(10_000) { while (f.snapshotCount <= seen) kotlinx.coroutines.delay(50) }
                 } else owner.select(false)
                 f.statusPause!!.complete(Unit)
                 assertTrue(withTimeout(10_000) { remove.await() } is MessageActionResult.Rejected)
                 assertEquals(raw, f.prefs.all)
-                assertEquals(0, f.dismissCalls); assertEquals(0, f.submitCalls); assertEquals(0, f.retryCalls)
+                assertEquals(0, f.dismissCalls); assertEquals(1, f.submitCalls); assertEquals(0, f.retryCalls)
             } finally { f.statusPause?.complete(Unit); owner.close(); current?.close() }
         }
     }
