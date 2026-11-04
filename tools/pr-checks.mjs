@@ -14,6 +14,7 @@ export const requiredChecks = [
   'image-preview-emulator',
   'reply-notifications-emulator',
   'session-rows-emulator',
+  'session-pins-emulator',
   'message-actions-emulator',
   'approved-style-emulator',
   'secret-scan',
