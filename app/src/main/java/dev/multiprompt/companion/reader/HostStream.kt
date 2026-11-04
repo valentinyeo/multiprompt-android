@@ -6,6 +6,7 @@ data class HostStream(
     val turn: String? = null,
     val running: Boolean = false,
     val blocks: List<HostBlock> = emptyList(),
+    val request: HostRequest? = null,
 ) {
     val spoken: List<HostBlock>
         get() = blocks.filter { it.kind == "text" && it.text.isNotBlank() }

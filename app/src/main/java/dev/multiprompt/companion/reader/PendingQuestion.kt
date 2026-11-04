@@ -11,6 +11,7 @@ data class PendingQuestion(
     val multiSelect: Boolean,
     val other: Boolean,
     val provider: String,
+    val host: String? = null,
 ) {
     data class Option(val label: String, val description: String)
 

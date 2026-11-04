@@ -19,6 +19,8 @@ data class MessageReplica(
         return next
     }
 
+    fun replayHost(events: List<MessageProtocol.Event>): MessageReplica = this
+
     private fun applyItem(item: MessageProtocol.Item): MessageReplica = when (item) {
         is MessageProtocol.Item.Message -> copy(messages = messages + (item.row.id to item.row))
         is MessageProtocol.Item.Native -> copy(nativeFacts = nativeFacts + (item.fact.eventId to item.fact))
