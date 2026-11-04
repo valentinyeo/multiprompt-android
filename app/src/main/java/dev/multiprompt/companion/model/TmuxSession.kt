@@ -95,3 +95,17 @@ enum class AgentKind(val label: String) {
         private val HAX_NAME = Regex("(^|[-_])hax($|[-_])")
     }
 }
+
+data class CreatedSession(val name: String, val liveSessionId: String = "")
+
+fun createdSession(hostId: String, created: CreatedSession, path: String, nowSeconds: Long): TmuxSession =
+    TmuxSession(
+        hostId = hostId,
+        name = created.name,
+        windows = 1,
+        attachedClients = 0,
+        lastActivityEpochSeconds = nowSeconds,
+        workingDirectory = path,
+        paneCommand = if (created.liveSessionId.isEmpty()) "" else "sleep",
+        hostSessionId = created.liveSessionId,
+    )
