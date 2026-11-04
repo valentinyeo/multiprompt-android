@@ -1747,7 +1747,7 @@ internal fun SessionsScreen(
                         horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (state.refreshing) {
+                        if (state.refreshing && state.sessions.isEmpty()) {
                             CircularProgressIndicator(Modifier.padding(12.dp).size(20.dp), strokeWidth = 2.dp)
                         }
                         IconButton(
