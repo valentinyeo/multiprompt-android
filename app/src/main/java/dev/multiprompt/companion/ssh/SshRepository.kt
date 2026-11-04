@@ -2,6 +2,7 @@ package dev.multiprompt.companion.ssh
 
 import android.util.Log
 import dev.multiprompt.companion.model.HostProfile
+import dev.multiprompt.companion.model.CreatedSession
 import dev.multiprompt.companion.model.AgentHarness
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.model.RemoteDirectory
@@ -391,17 +392,17 @@ class SshRepository(private val secrets: SecretStorage) {
     }
 
     suspend fun createClaudeSession(host: HostProfile, remotePath: String): String =
-        createAgentSession(host, remotePath, AgentHarness.CLAUDE)
+        createAgentSession(host, remotePath, AgentHarness.CLAUDE).name
 
     suspend fun createShellSession(host: HostProfile, remotePath: String): String =
-        createAgentSession(host, remotePath, AgentHarness.SHELL)
+        createAgentSession(host, remotePath, AgentHarness.SHELL).name
 
     suspend fun createAgentSession(
         host: HostProfile,
         remotePath: String,
         harness: AgentHarness,
         readerScript: ByteArray? = null,
-    ): String = withContext(Dispatchers.IO) {
+    ): CreatedSession = withContext(Dispatchers.IO) {
         withTimeout(CONNECTION_TIMEOUT_MS) {
             withAuthenticatedClient(host) { client ->
                 val project = remotePath.substringAfterLast('/').lowercase()
@@ -412,8 +413,9 @@ class SshRepository(private val secrets: SecretStorage) {
                 val live = harness == AgentHarness.CLAUDE
                 val prefix = if (live) "live" else harness.namePrefix
                 val sessionName = "$prefix-$project-${System.currentTimeMillis().toString(36)}"
+                val sid = if (live) UUID.randomUUID().toString() else ""
                 val command = if (live) {
-                    TmuxCommands.createLiveChat(sessionName, remotePath, UUID.randomUUID().toString())
+                    TmuxCommands.createLiveChat(sessionName, remotePath, sid)
                 } else {
                     TmuxCommands.createAgentSession(sessionName, remotePath, harness)
                 }
@@ -422,7 +424,7 @@ class SshRepository(private val secrets: SecretStorage) {
                 require(result.stdout.lineSequence().any {
                     it.trim() == "${TmuxCommands.CREATED_PREFIX}$sessionName"
                 }) { "The VPS did not confirm the new tmux session" }
-                sessionName
+                CreatedSession(sessionName, sid)
             }
         }
     }

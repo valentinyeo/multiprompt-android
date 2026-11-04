@@ -12,6 +12,7 @@ import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.AgentHarness
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.model.TmuxSession
+import dev.multiprompt.companion.model.createdSession
 import dev.multiprompt.companion.model.DissolvedSession
 import dev.multiprompt.companion.model.RemoteDirectory
 import dev.multiprompt.companion.model.RefreshMerge
@@ -1469,15 +1470,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _state.update { it.copy(creatingSession = true, sessionActionError = null) }
             runCatching { ssh.createAgentSession(host, path, harness, app.chatHistoryScript) }
-                .onSuccess { sessionName ->
-                    val session = TmuxSession(
-                        hostId = host.id,
-                        name = sessionName,
-                        windows = 1,
-                        attachedClients = 0,
-                        lastActivityEpochSeconds = System.currentTimeMillis() / 1000,
-                        workingDirectory = path,
-                    )
+                .onSuccess { created ->
+                    val session = createdSession(host.id, created, path, System.currentTimeMillis() / 1000)
                     workspaceStore.bumpPathUsage(host.id, path)
                     _state.update {
                         it.copy(
