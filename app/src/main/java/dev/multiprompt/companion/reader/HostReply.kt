@@ -77,7 +77,8 @@ object HostReply {
         open(id, "plan_reply", sid, requestId).append(",\"action\":").append(JSONObject.quote(if (feedback == null) "implement" else "feedback"))
             .apply { if (feedback != null) append(",\"feedback\":").append(JSONObject.quote(feedback)) }.append('}').toString()
 
-    fun interrupt(id: Long, sid: String): String = ""
+    fun interrupt(id: Long, sid: String): String =
+        "{\"id\":$id,\"op\":\"interrupt\",\"provider\":\"claude\",\"sid\":${JSONObject.quote(sid)}}"
 
     fun answer(card: PendingQuestion, choices: Set<Int>, other: String): String {
         val labels = choices.sorted().mapNotNull { card.options.getOrNull(it)?.label }

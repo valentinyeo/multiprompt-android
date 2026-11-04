@@ -181,6 +181,16 @@ class ChatHistoryConnection(
             pending(sid).none { it.operation == "reset" }) resetFence = false
     }
 
+    fun interruptHost(): Boolean {
+        if (_state.value.replica?.host?.running != true) return false
+        _hostError.value = null
+        scope.launch {
+            val result = runCatching { action("host", "interrupt", line = { id, sid -> HostReply.interrupt(id, sid) }) }.getOrElse { MessageActionResult.Unknown }
+            if (result != MessageActionResult.Applied) _hostError.value = (result as? MessageActionResult.Rejected)?.reason ?: "Could not stop the agent"
+        }
+        return true
+    }
+
     fun answerHost(card: PendingQuestion, choices: Set<Int>, other: String): Boolean {
         val request = _state.value.replica?.host?.request?.takeIf { it.id == card.callId && card.host == it.kind } ?: return false
         val line: (Long, String) -> String = when (request.kind) {
