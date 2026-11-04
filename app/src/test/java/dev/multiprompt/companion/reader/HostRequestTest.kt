@@ -90,6 +90,8 @@ class HostRequestTest {
             HostReply.plan(91, "sid-1", "req_3", null))
         assertEquals("{\"id\":91,\"op\":\"plan_reply\",\"provider\":\"claude\",\"sid\":\"sid-1\",\"request_id\":\"req_3\",\"action\":\"feedback\",\"feedback\":\"use a queue instead\"}",
             HostReply.plan(91, "sid-1", "req_3", "use a queue instead"))
+        assertEquals("{\"id\":92,\"op\":\"interrupt\",\"provider\":\"claude\",\"sid\":\"sid-1\"}",
+            HostReply.interrupt(92, "sid-1"))
     }
 
     @Test fun cardChoicesBecomeTheHostAnswer() {
