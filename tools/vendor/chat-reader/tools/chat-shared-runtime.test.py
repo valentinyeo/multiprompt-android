@@ -58,11 +58,17 @@ class RuntimeTest(unittest.TestCase):
         self.assertEqual(result.stdout, '@mp\t9\thistory\tmissing\t-\t0\tsession transcript not found\n@@MP_NEW_END@@\n')
         self.assertEqual(json.loads(active.read_text()), newer)
 
-    def test_conflict_and_corruption_fail_closed(self):
+    def test_same_generation_different_source_replaces_the_stale_selection(self):
         first = self.info()
         conflict = SOURCE.replace('PAGE_BYTES = 350000', 'PAGE_BYTES = 350001', 1)
-        result = self.invoke(conflict)
-        self.assertIn('history\\terror', result.stdout)
+        replaced = self.info(conflict)
+        self.assertEqual(replaced['generation'], GENERATION)
+        self.assertNotEqual(replaced['sha256'], first['sha256'])
+        self.assertEqual(self.info(conflict), replaced)
+        self.assertEqual(self.info()['sha256'], first['sha256'])
+
+    def test_corruption_fails_closed(self):
+        first = self.info()
         path = Path(self.home.name) / '.multiprompt-runtime' / (first['sha256'] + '.py')
         path.write_text('corrupt')
         self.assertIn('history\\terror', self.invoke().stdout)
@@ -101,6 +107,17 @@ class RuntimeTest(unittest.TestCase):
             self.assertEqual(process.returncode, 0, error)
             self.assertIn(json.loads(output)['engine_info']['generation'], (GENERATION, GENERATION + 1))
         self.assertEqual(self.info()['generation'], GENERATION + 1)
+
+    def test_mp_send_ships_inside_the_runtime(self):
+        body = "#!/usr/bin/env python3\nprint('mp-send')\n"
+        source = "MP_SEND_SOURCE = '%s'\n%s" % (base64.b64encode(body.encode()).decode(), SOURCE)
+        self.info(source)
+        published = Path(self.home.name) / '.multiprompt-runtime' / 'mp-send'
+        self.assertEqual(published.read_text(), body)
+
+    def test_mp_send_is_not_published_without_a_bundle(self):
+        self.info()
+        self.assertFalse((Path(self.home.name) / '.multiprompt-runtime' / 'mp-send').exists())
 
     def test_import_does_not_install(self):
         code = "import importlib.util,sys; s=importlib.util.spec_from_file_location('reader',sys.argv[1]); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); assert m.READER_SOURCE"
