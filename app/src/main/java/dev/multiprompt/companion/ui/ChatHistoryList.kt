@@ -85,7 +85,7 @@ internal fun ChatHistoryView(
     val messages = if (managed) state.history.managedMessages(state.replica, state.unresolved) else state.history.displayMessages(reader.sentRecord)
     val speakable = remember(messages) { dev.multiprompt.companion.reader.ReadAloud.replies(messages) }
     LaunchedEffect(speakable) { onSpeakableReplies(speakable) }
-    LaunchedEffect(state.loaded, state.history.sid) { onChatReady(state.loaded && state.history.sid.isNotEmpty()) }
+    LaunchedEffect(state.loaded, state.history.sid, state.retrying) { onChatReady(state.loaded && state.history.sid.isNotEmpty() && !state.retrying) }
     val pendingReset = if (managed) state.unresolved.firstOrNull { it.operation == "reset" }?.id else null
     LaunchedEffect(history, pendingReset) {
         while (pendingReset != null && history.recoverReset(history.actionToken()) != dev.multiprompt.companion.reader.MessageActionResult.Applied) delay(5_000)
