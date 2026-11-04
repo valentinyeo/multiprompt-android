@@ -322,9 +322,18 @@ class ChatHistoryConnection(
                                     }
                                     for (entry in pending(page.sid).filter { it.operation == "submit" && it.id !in checked }) {
                                         requestId++
-                                        MessageProtocol.mutation(exchange(MessageProtocol.request(requestId, messageScope, "message_status", JSONObject().put("message_id", entry.messageId))), requestId, messageScope, entry.messageId)
+                                        val status = MessageProtocol.mutation(exchange(MessageProtocol.request(requestId, messageScope, "message_status", JSONObject().put("message_id", entry.messageId))), requestId, messageScope, entry.messageId)
                                         if (generation != cycleGeneration || !owns(page.sid)) { replica = null; continue@poll }
+                                        val lost = status.row == null && entry.issued && entry.text != null && entry.epoch == replica!!.epoch && !resetFence &&
+                                            pending(page.sid).none { it.operation == "reset" || (it.operation == "dismiss" && it.messageId == entry.messageId) }
+                                        if (lost) {
+                                            requestId++
+                                            val arguments = JSONObject().put("message_id", entry.messageId).put("text", entry.text)
+                                            MessageProtocol.requiredMutation(exchange(MessageProtocol.request(requestId, messageScope, "message_submit", arguments)), requestId, messageScope, entry.messageId, entry.text)
+                                            if (generation != cycleGeneration || !owns(page.sid)) { replica = null; continue@poll }
+                                        }
                                         checked.add(entry.id)
+                                        if (lost) { replica = null; continue@poll }
                                     }
                                     requestId++
                                     val pageEvents = MessageProtocol.events(exchange(MessageProtocol.request(requestId, messageScope, "message_events", JSONObject().put("after", replica!!.cursor))), requestId, messageScope, replica!!.cursor)
