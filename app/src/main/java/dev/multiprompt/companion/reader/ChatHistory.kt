@@ -87,7 +87,7 @@ data class ChatHistory(
         for (card in replica?.messages?.values.orEmpty().filter { it.state != MessageProtocol.State.CANCELLED }.sortedBy { it.position }) {
             val index = transcript.indices.firstOrNull { index ->
                 index > floor && spoken[index]?.let { it >= card.created - CLOCK_SLACK } == true &&
-                    transcript[index].text.trimEnd(' ') == card.text.trimEnd(' ')
+                    same(transcript[index].text, card.text)
             }
             if (index == null) unplaced.add(card) else { claimed[index] = card; floor = index }
         }
@@ -113,8 +113,11 @@ data class ChatHistory(
     private fun seconds(timestamp: String): Double? =
         runCatching { java.time.Instant.parse(timestamp).toEpochMilli() / 1000.0 }.getOrNull()
 
+    private fun same(left: String, right: String): Boolean =
+        left.replace("\r", "").trimEnd(' ') == right.replace("\r", "").trimEnd(' ')
+
     private fun landed(text: String): Boolean =
-        rows.any { it.role == "assistant" && it.text.trimEnd(' ') == text.trimEnd(' ') }
+        rows.any { it.role == "assistant" && same(it.text, text) }
 
     internal fun deliveryState(prompt: QueuedMessages.SentPrompt): QueuedMessages.Delivery {
         val terminal = setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
