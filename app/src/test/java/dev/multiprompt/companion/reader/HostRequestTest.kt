@@ -3,7 +3,6 @@ package dev.multiprompt.companion.reader
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -35,7 +34,7 @@ class HostRequestTest {
             1L to event("turn.started", "t1"),
             2L to event("question.request", "t1", colours),
             3L to event("turn.started", "t2")))
-        val open = assertNotNull(replica.host.request)
+        val open = requireNotNull(replica.host.request)
         assertEquals("question", open.kind)
         assertEquals("req_2", open.id)
         replica = replica.apply(page(3, 5,
@@ -61,7 +60,7 @@ class HostRequestTest {
             4L to event("text.delta", "t1", JSONObject().put("text", "waiting"), "m1"),
             6L to event("approval.resolved", "t1", JSONObject().put("request_id", "req_1").put("decision", "accept"))).events)
         assertEquals(4, replayed.cursor)
-        val open = assertNotNull(replayed.host.request)
+        val open = requireNotNull(replayed.host.request)
         assertEquals("approval", open.kind)
         val card = open.cards().single()
         assertEquals("Run rm -rf build", card.title)
