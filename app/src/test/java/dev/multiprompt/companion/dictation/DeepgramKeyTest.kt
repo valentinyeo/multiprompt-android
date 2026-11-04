@@ -30,7 +30,7 @@ class DeepgramKeyTest {
 
     @Test
     fun keepsAnUnusualLongKeyWithoutSpaces() {
-        val other = "dg_" + "Ab".repeat(20)
+        val other = "dg_" + "Kz".repeat(20)
         assertEquals(other, DeepgramKey.normalize(" $other\u200B "))
     }
 
