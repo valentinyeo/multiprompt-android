@@ -240,6 +240,7 @@ import dev.multiprompt.companion.data.UnreadCount
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.SessionSearch
 import dev.multiprompt.companion.ssh.HostKeyWarning
+import dev.multiprompt.companion.ssh.SshProblem
 import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.terminal.TerminalConnection
 import dev.multiprompt.companion.terminal.TerminalStatus
@@ -1930,7 +1931,7 @@ internal fun SessionsScreen(
                 item(key = "pinned-sessions") { pinnedStrip() }
             }
             state.hostErrors.forEach { (hostId, error) ->
-                if (hostId !in state.cachedHostIds) {
+                if (hostId !in state.cachedHostIds && !SshProblem.isKeyRejected(error)) {
                     item(key = "error-$hostId") { InlineError(error) }
                 }
             }
