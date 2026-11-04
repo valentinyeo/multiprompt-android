@@ -53,7 +53,7 @@ class ChatHistoryConnection(
 ) : AutoCloseable {
     private sealed interface Command {
         data class Submit(val text: String, val generation: Long, val result: CompletableDeferred<PromptAdmission>) : Command
-        data class Action(val kind: String, val id: String, val epoch: Long?, val attempt: String?, val generation: Long, val result: CompletableDeferred<MessageActionResult>, val target: MessageJournal.Entry? = null) : Command
+        data class Action(val kind: String, val id: String, val epoch: Long?, val attempt: String?, val generation: Long, val result: CompletableDeferred<MessageActionResult>, val target: MessageJournal.Entry? = null, val line: ((Long, String) -> String)? = null) : Command
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -80,6 +80,11 @@ class ChatHistoryConnection(
     @Volatile private var nearTop = false
     @Volatile private var awaitingMessages = false
     @Volatile private var deliveryIds: List<String> = emptyList()
+    private val hostDrafts = mutableMapOf<String, Map<String, String>>()
+    private val _hostClosed = MutableStateFlow<Set<String>>(emptySet())
+    val hostClosed: StateFlow<Set<String>> = _hostClosed.asStateFlow()
+    private val _hostError = MutableStateFlow<String?>(null)
+    val hostError: StateFlow<String?> = _hostError.asStateFlow()
 
     private fun key(sid: String) = "$account\u0000$provider\u0000$sid"
     private fun wire(sid: String) = MessageProtocol.Scope(requireNotNull(provider), sid, identity.tmux)
@@ -176,13 +181,52 @@ class ChatHistoryConnection(
             pending(sid).none { it.operation == "reset" }) resetFence = false
     }
 
-    private suspend fun action(kind: String, id: String, epoch: Long? = null, attempt: String? = null, observed: Long = generation): MessageActionResult {
+    fun answerHost(card: PendingQuestion, choices: Set<Int>, other: String): Boolean {
+        val request = _state.value.replica?.host?.request?.takeIf { it.id == card.callId && card.host == it.kind } ?: return false
+        val line: (Long, String) -> String = when (request.kind) {
+            "approval" -> {
+                val choice = choices.singleOrNull()?.takeIf { it in HostReply.APPROVAL_LABELS.indices } ?: return false
+                val decision = HostReply.decision(choice)
+                fun(id: Long, sid: String): String = HostReply.approval(id, sid, request.id, decision)
+            }
+            "plan" -> {
+                val feedback = other.trim().ifEmpty { null }
+                if (feedback == null && 0 !in choices) return false
+                fun(id: Long, sid: String): String = HostReply.plan(id, sid, request.id, feedback)
+            }
+            "question" -> {
+                val answer = HostReply.answer(card, choices, other)
+                if (answer.isEmpty()) return false
+                val answers = synchronized(hostDrafts) {
+                    (hostDrafts[request.id].orEmpty() + (card.title to answer)).also { hostDrafts[request.id] = it }
+                }
+                _hostClosed.value = _hostClosed.value + "${request.id}#${card.index}"
+                if (request.questions.any { it.question !in answers }) return true
+                val ordered = LinkedHashMap<String, String>().apply { request.questions.forEach { put(it.question, answers.getValue(it.question)) } }
+                fun(id: Long, sid: String): String = HostReply.question(id, sid, request.id, ordered, false)
+            }
+            else -> return false
+        }
+        _hostError.value = null
+        _hostClosed.value = _hostClosed.value + request.id
+        scope.launch {
+            val result = runCatching { action("host", request.id, line = line) }.getOrElse { MessageActionResult.Unknown }
+            if (result != MessageActionResult.Applied) {
+                synchronized(hostDrafts) { hostDrafts.remove(request.id) }
+                _hostClosed.value = _hostClosed.value.filterNot { it == request.id || it.startsWith("${request.id}#") }.toSet()
+                _hostError.value = (result as? MessageActionResult.Rejected)?.reason ?: "Could not send the answer"
+            }
+        }
+        return true
+    }
+
+    private suspend fun action(kind: String, id: String, epoch: Long? = null, attempt: String? = null, observed: Long = generation, line: ((Long, String) -> String)? = null): MessageActionResult {
         val result = CompletableDeferred<MessageActionResult>()
         synchronized(this) {
             if (observed != generation) return MessageActionResult.Rejected("Chat changed")
             if (freshSid == null || !selected) return MessageActionResult.Rejected("Chat is not ready")
             val target = if (kind == "removeUnknown") _state.value.unresolved.firstOrNull { it.id == id } else null
-            if (commands.trySend(Command.Action(kind, id, epoch, attempt, observed, result, target)).isFailure) return MessageActionResult.Rejected("Chat is unavailable")
+            if (commands.trySend(Command.Action(kind, id, epoch, attempt, observed, result, target, line)).isFailure) return MessageActionResult.Rejected("Chat is unavailable")
         }
         wake.trySend(Unit)
         return result.await()
@@ -230,6 +274,7 @@ class ChatHistoryConnection(
                     connected { exchange ->
                             var replica: MessageReplica? = null
                             var replicaSid: String? = null
+                            var lastReplica: MessageReplica? = null
                             var wasOlder = false
                             val checked = mutableSetOf<String>()
                             val engine = if (provider != null) runCatching {
@@ -257,6 +302,7 @@ class ChatHistoryConnection(
                                 val next = current.apply(page)
                                 if (replicaSid != page.sid) {
                                     replica = null
+                                    lastReplica = null
                                     replicaSid = page.sid
                                 }
                                 val cycleGeneration = synchronized(this@ChatHistoryConnection) {
@@ -318,7 +364,20 @@ class ChatHistoryConnection(
                                                 }
                                             }
                                         } while (cursor != null)
-                                        replica = MessageReplica.snapshot(pages)
+                                        val fresh = MessageReplica.snapshot(pages)
+                                        val carried = lastReplica?.takeIf { it.epoch == fresh.epoch && it.cursor <= fresh.cursor }
+                                        var built = fresh.copy(host = carried?.host ?: HostStream())
+                                        var after = carried?.cursor ?: 0L
+                                        while (provider == "claude" && after < built.cursor) {
+                                            requestId++
+                                            val replay = MessageProtocol.events(exchange(MessageProtocol.request(requestId, messageScope, "message_events", JSONObject().put("after", after))), requestId, messageScope, after)
+                                            if (generation != cycleGeneration || !owns(page.sid)) { replica = null; continue@poll }
+                                            if (replay.epoch != built.epoch || replay.events.isEmpty()) break
+                                            built = built.replayHost(replay.events)
+                                            after = replay.next
+                                        }
+                                        replica = built
+                                        lastReplica = built
                                     }
                                     for (entry in pending(page.sid).filter { it.operation == "submit" && it.id !in checked }) {
                                         requestId++
@@ -350,6 +409,7 @@ class ChatHistoryConnection(
                                     val pageEvents = MessageProtocol.events(exchange(MessageProtocol.request(requestId, messageScope, "message_events", JSONObject().put("after", replica!!.cursor))), requestId, messageScope, replica!!.cursor)
                                     if (generation != cycleGeneration || !owns(page.sid)) { replica = null; continue@poll }
                                     replica = replica!!.apply(pageEvents)
+                                    lastReplica = replica
                                     if (pageEvents.next < pageEvents.head) { caughtUp = false; wake.trySend(Unit) }
                                 }
                                 val published = synchronized(this@ChatHistoryConnection) {
@@ -492,7 +552,7 @@ class ChatHistoryConnection(
                                                     } else {
                                                         if (result != MessageActionResult.Applied) clearUnrecordedReset(command, page.sid)
                                                         command.result.complete(result)
-                                                        if (result == MessageActionResult.Applied || command.kind in setOf("dismiss", "removeUnknown", "replay")) replica = null
+                                                        if (command.kind != "host" && (result == MessageActionResult.Applied || command.kind in setOf("dismiss", "removeUnknown", "replay"))) replica = null
                                                     }
                                                 }
                                                 synchronized(this@ChatHistoryConnection) {
@@ -551,6 +611,15 @@ class ChatHistoryConnection(
     private suspend fun performAction(command: Command.Action, replica: MessageReplica, wire: MessageProtocol.Scope,
         exchange: suspend (String) -> String, nextId: () -> Long): MessageActionResult {
         if (command.generation != generation) return MessageActionResult.Rejected("Chat changed")
+        if (command.kind == "host") {
+            val build = command.line ?: return MessageActionResult.Rejected("Unknown action")
+            if (!owns(wire.sid)) return MessageActionResult.Rejected("Chat changed")
+            val id = nextId()
+            return when (val outcome = HostReply.outcome(exchange(build(id, wire.sid) + "\n"), id)) {
+                HostReply.Outcome.Sent, HostReply.Outcome.Gone -> MessageActionResult.Applied
+                is HostReply.Outcome.Failed -> MessageActionResult.Rejected(outcome.message)
+            }
+        }
         val entries = pending(wire.sid)
         val existing = entries.firstOrNull { it.id == command.id } ?: entries.firstOrNull { it.messageId == command.id }
         val row = replica.messages[command.id]

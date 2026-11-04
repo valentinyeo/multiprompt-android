@@ -95,7 +95,11 @@ internal fun ChatHistoryView(
         if (!managed) history.deliveryIds(reader.sentRecord.map { it.messageId }.filter { it.isNotEmpty() })
     }
     DisposableEffect(history) { onDispose { history.awaitingMessages(false) } }
-    val questions = state.history.pendingQuestions
+    val hostClosed by history.hostClosed.collectAsState()
+    val hostError by history.hostError.collectAsState()
+    val hostRequest = state.replica?.host?.request
+    val hostCards = hostRequest?.takeIf { it.id !in hostClosed }?.cards()?.filter { "${it.callId}#${it.index}" !in hostClosed }.orEmpty()
+    val questions = if (hostRequest != null) hostCards else state.history.pendingQuestions
     Column(modifier.fillMaxSize()) {
         state.messageError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(8.dp)) }
         if (state.retrying) {
@@ -124,8 +128,10 @@ internal fun ChatHistoryView(
             replyGate = replyGate,
             onReply = onReply,
             questions = questions,
-            questionError = reader.actionError,
-            onQuestionChoice = if (!reader.sending && reader.status == ReaderStatus.Live) { question, choices, other ->
+            questionError = if (hostRequest != null) hostError else reader.actionError,
+            onQuestionChoice = if (hostRequest != null) { question, choices, other ->
+                history.answerHost(question, choices, other).also { if (it) onSessionUsed() }
+            } else if (!reader.sending && reader.status == ReaderStatus.Live) { question, choices, other ->
                 connection.answerQuestion(question, choices, other).also { if (it) onSessionUsed() }
             } else null,
             questionScreen = reader.screenOutput,
@@ -234,7 +240,7 @@ internal fun ChatHistoryList(
         if (working) item(key = "working") { WorkingDots() }
         questions.asReversed().forEach { question ->
             item(key = "question:${question.callId}:${question.index}") {
-                QuestionChoices(question, enabled = onQuestionChoice != null && question.isVisible(questionScreen), error = questionError) { choices, other ->
+                QuestionChoices(question, enabled = onQuestionChoice != null && (question.host != null || question.isVisible(questionScreen)), error = questionError) { choices, other ->
                     onQuestionChoice?.invoke(question, choices, other) == true
                 }
             }

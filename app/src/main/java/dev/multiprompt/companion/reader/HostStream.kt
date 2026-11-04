@@ -6,12 +6,15 @@ data class HostStream(
     val turn: String? = null,
     val running: Boolean = false,
     val blocks: List<HostBlock> = emptyList(),
+    val request: HostRequest? = null,
 ) {
     val spoken: List<HostBlock>
         get() = blocks.filter { it.kind == "text" && it.text.isNotBlank() }
 
     fun apply(event: MessageProtocol.HostEvent): HostStream = when {
-        event.kind == "turn.started" -> HostStream(event.turn, running = true)
+        event.request != null -> copy(request = event.request)
+        event.resolved != null -> if (request?.id == event.resolved) copy(request = null) else this
+        event.kind == "turn.started" -> HostStream(event.turn, running = true, request = request)
         event.kind == "turn.ended" -> copy(running = false)
         event.kind == "host.status" -> if (event.state == "stopped") copy(running = false) else this
         event.kind.startsWith("text.") || event.kind.startsWith("thinking.") -> upsert(event)
@@ -20,7 +23,7 @@ data class HostStream(
 
     private fun upsert(event: MessageProtocol.HostEvent): HostStream {
         val body = event.text ?: return this
-        val fresh = if (event.turn != null && event.turn != turn) HostStream(event.turn, running = true) else this
+        val fresh = if (event.turn != null && event.turn != turn) HostStream(event.turn, running = true, request = request) else this
         val item = event.item ?: event.kind
         val block = HostBlock(item, event.kind.substringBefore('.'), body, event.done)
         val existing = fresh.blocks.indexOfFirst { it.item == item }
