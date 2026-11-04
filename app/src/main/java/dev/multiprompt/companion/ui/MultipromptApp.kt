@@ -1867,9 +1867,6 @@ internal fun SessionsScreen(
                         }
                     }
                 }
-                if (state.updatingHostIds.isNotEmpty()) {
-                    UpdatingSessionsNotice(hostLabels = state.updatingHostIds.mapNotNull { hostLabels[it] })
-                }
                 if (state.cachedHostIds.isNotEmpty()) {
                     CachedSessionsNotice(
                         hostLabels = state.cachedHostIds.mapNotNull { hostLabels[it] },
@@ -4806,21 +4803,6 @@ private fun DismissibleError(
             Icon(Icons.Default.Close, contentDescription = "Dismiss error", modifier = Modifier.size(16.dp))
         }
     }
-}
-
-@Composable
-private fun UpdatingSessionsNotice(hostLabels: List<String>) {
-    Text(
-        text = if (hostLabels.isEmpty()) "Updating sessions…" else "Updating · ${hostLabels.joinToString(", ")}",
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 12.dp, vertical = 4.dp),
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-    )
 }
 
 @Composable
