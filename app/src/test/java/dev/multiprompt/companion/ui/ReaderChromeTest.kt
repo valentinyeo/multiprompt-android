@@ -19,6 +19,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import dev.multiprompt.companion.dictation.DictationState
 import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.model.AgentKind
@@ -50,6 +51,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowToast
+import kotlinx.coroutines.channels.Channel
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.util.ReflectionHelpers
@@ -65,6 +68,7 @@ class ReaderChromeTest {
     private lateinit var connection: SessionReaderConnection
     private lateinit var reader: MutableStateFlow<ReaderState>
     private lateinit var history: MutableStateFlow<ChatHistoryState>
+    private lateinit var chat: ChatHistoryConnection
     private val messageCount = 20
     private val modelLabel = "Opus 5.5 · medium"
 
@@ -77,7 +81,7 @@ class ReaderChromeTest {
         reader.value = ReaderState(status = ReaderStatus.Live, waitingForInput = true,
             runtimeDetails = TmuxText.RuntimeDetails("Opus 5.5", "medium"))
         val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, f.session.name, f.session.workingDirectory)
-        val chat = ChatHistoryConnection(f.app.sshRepository, f.host, identity, byteArrayOf(), cache)
+        chat = ChatHistoryConnection(f.app.sshRepository, f.host, identity, byteArrayOf(), cache)
         ReflectionHelpers.setField(connection, "historyIdentity", identity)
         ReflectionHelpers.setField(connection, "historyConnection", chat)
         history = f.field(chat, "_state")
@@ -214,6 +218,25 @@ class ReaderChromeTest {
         compose.onNodeWithText("Model / effort", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         compose.runOnIdle { reader.value = reader.value.copy(waitingForInput = true) }
         compose.onNodeWithText("waiting for input", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun sendWhileDisconnectedWaitsAndGoesOutOnceOnReconnect() {
+        render()
+        compose.runOnIdle { history.value = history.value.copy(retrying = true) }
+        compose.onNode(hasSetTextAction()).performTextInput("offline hello")
+        compose.onNodeWithContentDescription("Send prompt").performClick()
+        compose.runOnIdle { assertEquals("Will send when back online", ShadowToast.getTextOfLatestToast()) }
+        compose.runOnIdle {
+            ReflectionHelpers.setField(chat, "selected", true)
+            ReflectionHelpers.setField(chat, "freshSid", "chrome")
+            history.value = history.value.copy(retrying = false)
+        }
+        compose.runOnIdle { scheduler.advanceTimeBy(3_000); scheduler.runCurrent() }
+        compose.runOnIdle {
+            val commands = f.field<Channel<Any>>(chat, "commands")
+            val sent = generateSequence { commands.tryReceive().getOrNull() }.map { it.toString() }.toList()
+            assertEquals(1, sent.count { "offline hello" in it })
+        }
     }
 
     @Test fun disconnectSignalIsOnlyShownWhileRetrying() {
