@@ -182,10 +182,18 @@ class ChatHistoryConnection(
     }
 
     fun interruptHost(fallback: () -> Unit = {}): Boolean {
-        if (_state.value.replica?.host?.running != true) return false
+        val host = _state.value.replica?.host ?: return false
+        val approval = host.request?.takeIf { it.kind == "approval" && it.id !in _hostClosed.value }
+        if (approval == null && !host.running) return false
+        val line: (Long, String) -> String = if (approval != null) { id, sid -> HostReply.approval(id, sid, approval.id, "cancel") }
+            else { id, sid -> HostReply.interrupt(id, sid) }
+        if (approval != null) _hostClosed.value = _hostClosed.value + approval.id
         scope.launch {
-            val result = runCatching { action("host", "interrupt", line = { id, sid -> HostReply.interrupt(id, sid) }) }.getOrElse { MessageActionResult.Unknown }
-            if (result != MessageActionResult.Applied) fallback()
+            val result = runCatching { action("host", approval?.id ?: "interrupt", line = line) }.getOrElse { MessageActionResult.Unknown }
+            if (result != MessageActionResult.Applied) {
+                if (approval != null) _hostClosed.value = _hostClosed.value - approval.id
+                fallback()
+            }
         }
         return true
     }
