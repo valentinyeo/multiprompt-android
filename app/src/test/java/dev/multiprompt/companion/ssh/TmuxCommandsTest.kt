@@ -3,6 +3,7 @@ package dev.multiprompt.companion.ssh
 import dev.multiprompt.companion.model.AgentHarness
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -99,6 +100,35 @@ class TmuxCommandsTest {
         assertTrue(command.contains("-c '/srv/a'\"'\"'; touch /bad'"))
         assertTrue(command.contains("command -v codex"))
         assertTrue(command.contains("--dangerously-bypass-approvals-and-sandbox"))
+    }
+
+    @Test
+    fun plusClaudeStartsALiveChatLikeDesktopCtrlT() {
+        val sid = "0b6d2c1e-4f3a-4b2c-9d8e-1a2b3c4d5e6f"
+        val command = TmuxCommands.createLiveChat("live-api-x1", "/srv/api", sid)
+
+        assertTrue(command.contains("-s 'live-api-x1'"))
+        assertTrue(command.contains("command -v claude"))
+        assertTrue(command.contains("reader.py host enable claude $sid --tmux live-api-x1 --cwd /srv/api --permission-mode bypassPermissions"))
+        assertTrue(command.contains("reader.py host start claude $sid"))
+        assertTrue(command.contains("exec sleep infinity"))
+        assertFalse(command.contains("exec claude"))
+        assertTrue(command.contains("printf '${TmuxCommands.CREATED_PREFIX}%s\\n' 'live-api-x1'"))
+    }
+
+    @Test
+    fun liveChatQuotesTheFolder() {
+        val command = TmuxCommands.createLiveChat("live-a", "/srv/a'; touch /x", "0b6d2c1e-4f3a-4b2c-9d8e-1a2b3c4d5e6f")
+
+        assertTrue(command.contains("if [ ! -d '/srv/a'\"'\"'; touch /x' ]"))
+        assertFalse(command.contains("--cwd /srv/a'; touch"))
+    }
+
+    @Test
+    fun liveChatRefusesAnUnsafeSessionId() {
+        assertThrows(IllegalArgumentException::class.java) {
+            TmuxCommands.createLiveChat("live-api-x1", "/srv/api", "x; reboot")
+        }
     }
 
     @Test
