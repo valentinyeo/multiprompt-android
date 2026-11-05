@@ -1325,15 +1325,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private val restoringDissolved = mutableSetOf<String>()
+
     fun restoreDissolvedSession(session: DissolvedSession) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId }
         if (host == null) {
             _state.update { it.copy(sessionActionError = "The session VPS is missing") }
             return
         }
+        if (!restoringDissolved.add(session.key)) return
         viewModelScope.launch {
             _state.update { it.copy(sessionActionError = null) }
             runCatching { ssh.resurrectSession(host, session) }
+                .also { restoringDissolved.remove(session.key) }
                 .onSuccess {
                     dissolvedStore.remove(session)
                     _state.update { it.copy(dissolvedSessions = it.dissolvedSessions.filterNot { item -> item.key == session.key }) }

@@ -237,7 +237,8 @@ object TmuxCommands {
         require(LIVE_CHAT_NAME.matches(fresh)) { "Invalid live chat name" }
         val name = TmuxParser.shellQuote(fresh)
         val reader = "python3 ~/.multiprompt-runtime/reader.py"
-        val host = "$reader host enable claude $sid --tmux $fresh >/dev/null 2>&1; " +
+        val host = "$reader host stop claude $sid >/dev/null 2>&1; " +
+            "$reader host enable claude $sid --tmux $fresh >/dev/null 2>&1; " +
             "$reader host start claude $sid >/dev/null 2>&1; exec sleep infinity"
         return "if [ ! -f ~/.multiprompt-runtime/reader.py ]; then " +
             "printf 'Live chat reader is missing\\n' >&2; exit 4; fi; " +
