@@ -3925,8 +3925,8 @@ internal fun ReaderScreen(
                 bottomPadding = padding.calculateBottomPadding(),
                 modifier = Modifier.padding(horizontal = ReaderScreenPadding)
                     .transformable(state = transcriptTransform, canPan = { false })
-                    .pointerInput(onOpenTerminal) {
-                        detectTapGestures(onDoubleTap = { if (!session.liveChat) onOpenTerminal() })
+                    .pointerInput(onOpenTerminal, session.liveChat) {
+                        if (!session.liveChat) detectEarlyDoubleTap(onOpenTerminal)
                     },
             )
         } else Column(
@@ -3934,8 +3934,8 @@ internal fun ReaderScreen(
                 .fillMaxSize()
                 .nestedScroll(overscrollLoader)
                 .readerScroll(scrollState, followRequest)
-                .pointerInput(onOpenTerminal) {
-                    detectTapGestures(onDoubleTap = { if (!session.liveChat) onOpenTerminal() })
+                .pointerInput(onOpenTerminal, session.liveChat) {
+                    if (!session.liveChat) detectEarlyDoubleTap(onOpenTerminal)
                 }
                 .padding(horizontal = ReaderScreenPadding).padding(top = ReaderFloatingInset + WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = ReaderMessageSpacing + padding.calculateBottomPadding()),
             horizontalAlignment = Alignment.Start,
@@ -4965,6 +4965,31 @@ private suspend fun PointerInputScope.detectPassiveDoubleTap(onDoubleTap: () -> 
         } ?: return@awaitEachGesture
         waitForUpOrCancellation() ?: return@awaitEachGesture
         onDoubleTap()
+    }
+}
+
+private suspend fun PointerInputScope.detectEarlyDoubleTap(onDoubleTap: () -> Unit) {
+    awaitEachGesture {
+        val first = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        if (!awaitTapUp(first)) return@awaitEachGesture
+        val second = withTimeoutOrNull(DOUBLE_TAP_TIMEOUT_MS) {
+            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        } ?: return@awaitEachGesture
+        if ((second.position - first.position).getDistance() > viewConfiguration.touchSlop * 4) return@awaitEachGesture
+        if (awaitTapUp(second)) onDoubleTap()
+    }
+}
+
+private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.awaitTapUp(
+    down: androidx.compose.ui.input.pointer.PointerInputChange,
+): Boolean {
+    while (true) {
+        val event = awaitPointerEvent(PointerEventPass.Initial)
+        if (event.changes.size > 1) return false
+        val change = event.changes.firstOrNull { it.id == down.id } ?: return false
+        if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) return false
+        if (change.uptimeMillis - down.uptimeMillis > viewConfiguration.longPressTimeoutMillis) return false
+        if (!change.pressed) return true
     }
 }
 
