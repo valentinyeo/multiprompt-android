@@ -5,7 +5,7 @@ import org.json.JSONObject
 
 data class RoomMemberEntry(val id: String, val alias: String, val displayName: String, val sessionIdentity: String)
 
-data class RoomEntry(val id: String, val name: String, val revision: Int, val members: List<RoomMemberEntry>)
+data class RoomEntry(val id: String, val name: String, val revision: Int, val members: List<RoomMemberEntry>, val hostId: String = "")
 
 data class RoomEvent(
     val seq: Long,
