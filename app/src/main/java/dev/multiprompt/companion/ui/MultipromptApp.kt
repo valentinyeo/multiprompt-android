@@ -229,7 +229,6 @@ import dev.multiprompt.companion.model.DissolvedSession
 import dev.multiprompt.companion.data.CrashReport
 import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
-import dev.multiprompt.companion.dictation.KeySave
 import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.dictation.DictationState
 import dev.multiprompt.companion.reader.ReaderStatus
@@ -514,6 +513,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             .fillMaxSize()) {
             when (state.section) {
                 AppSection.SESSIONS -> SessionsScreen(
+                    dictation = viewModel.dictation,
                     state = state,
                     signedIn = state.signedIn,
                     onSignIn = { viewModel.signInAccount { context.startActivity(it) } },
@@ -1157,6 +1157,7 @@ internal fun SessionsScreen(
     nowMillis: () -> Long = System::currentTimeMillis,
     onSetSessionListSetting: (String, Boolean) -> Unit = { _, _ -> },
     onSetWorkspaceColor: (String, Int?) -> Unit = { _, _ -> },
+    dictation: DeepgramDictation? = null,
     material3: Boolean = LocalMaterial3.current,
 ) = MultipromptTheme(
     sunlight = when (appTheme) {
@@ -1182,6 +1183,7 @@ internal fun SessionsScreen(
     var searchQuery by remember { mutableStateOf("") }
     var bucketMenuExpanded by remember { mutableStateOf(false) }
     var settingsPage by remember { mutableStateOf(SettingsPage.HIDDEN) }
+    var deepgramKeyOpen by remember { mutableStateOf(false) }
     var crashReportVisible by remember { mutableStateOf(false) }
     var openRoom by remember { mutableStateOf<RoomSummary?>(null) }
     var selectingBots by remember { mutableStateOf(false) }
@@ -1265,6 +1267,23 @@ internal fun SessionsScreen(
                         KitListRow(if (signedIn) "Switch / renew login" else "Sign in", onClick = onSignIn)
                         if (signedIn) KitListRow("Sign out", destructive = true, onClick = onSignOut)
                         KitListRow("Host mapping", onClick = { settingsPage = SettingsPage.MAPPING })
+                        if (dictation != null) {
+                            val dictationConfigured = dictation.state.collectAsState().value.configured
+                            KitListRow(
+                                "Dictation key",
+                                trailing = { Text(if (dictationConfigured) "Set" else "Not set", style = Kit.Body, color = Kit.TextMuted) },
+                                onClick = { deepgramKeyOpen = true },
+                            )
+                            if (deepgramKeyOpen) {
+                                DeepgramKeySheet(
+                                    dictation = dictation,
+                                    configured = dictationConfigured,
+                                    saveLabel = "Save key",
+                                    onDismiss = { deepgramKeyOpen = false },
+                                    onSaved = { deepgramKeyOpen = false },
+                                )
+                            }
+                        }
                         KitListRow("Update", onClick = { settingsPage = SettingsPage.HIDDEN; onSelectSection(AppSection.UPDATE) })
                     }
                     state.accountError?.let { error ->
@@ -2730,10 +2749,6 @@ internal fun ReaderScreen(
     var menuExpanded by remember(connection) { mutableStateOf(false) }
     var menuPage by remember(connection) { mutableStateOf(ReaderMenuPage.MAIN) }
     var apiKeyDialogVisible by remember(connection) { mutableStateOf(false) }
-    var apiKeyDraft by remember(connection) { mutableStateOf("") }
-    var apiKeyError by remember(connection) { mutableStateOf<String?>(null) }
-    var apiKeyChecking by remember(connection) { mutableStateOf(false) }
-    val apiKeyScope = rememberCoroutineScope()
     var microphoneError by remember(connection) { mutableStateOf<String?>(null) }
     var sendAfterDictation by remember(connection) { mutableStateOf(false) }
     var imageKeyDialogVisible by remember(connection) { mutableStateOf(false) }
@@ -3117,50 +3132,16 @@ internal fun ReaderScreen(
         )
     }
     if (apiKeyDialogVisible) {
-        KitSheet(onDismiss = {
-            apiKeyDialogVisible = false
-            apiKeyDraft = ""
-            apiKeyError = null
-        }) {
-            Text("Deepgram dictation", style = Kit.Heading, color = Kit.Text)
-            Text("The key is encrypted with Android Keystore and stays on this device.", style = Kit.Body, color = Kit.TextMuted)
-            OutlinedTextField(
-                value = apiKeyDraft,
-                onValueChange = {
-                    apiKeyDraft = it
-                    apiKeyError = null
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(if (dictationState.configured) "Replacement API key" else "API key") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                visualTransformation = PasswordVisualTransformation(),
-                isError = apiKeyError != null,
-                supportingText = apiKeyError?.let { message -> { Text(message) } },
-            )
-            KitSecondaryButton("Cancel", onClick = {
+        DeepgramKeySheet(
+            dictation = dictation,
+            configured = dictationState.configured,
+            saveLabel = "Save and dictate",
+            onDismiss = { apiKeyDialogVisible = false },
+            onSaved = {
                 apiKeyDialogVisible = false
-                apiKeyDraft = ""
-                apiKeyError = null
-            }, modifier = Modifier.fillMaxWidth())
-            KitPrimaryButton(if (apiKeyChecking) "Checking key" else "Save and dictate", onClick = {
-                apiKeyChecking = true
-                apiKeyScope.launch {
-                    val result = dictation.saveCheckedApiKey(apiKeyDraft)
-                    apiKeyChecking = false
-                    when (result) {
-                        KeySave.SAVED -> {
-                            apiKeyDialogVisible = false
-                            apiKeyDraft = ""
-                            apiKeyError = null
-                            startDictation()
-                        }
-                        KeySave.NOT_A_KEY -> apiKeyError = "This is not a Deepgram API key. Copy the 40 character key."
-                        KeySave.REJECTED -> apiKeyError = "Deepgram rejected this key. Copy it again from Deepgram."
-                    }
-                }
-            }, modifier = Modifier.fillMaxWidth(), enabled = apiKeyDraft.isNotBlank() && !apiKeyChecking)
-        }
+                startDictation()
+            },
+        )
     }
     if (imageKeyDialogVisible) {
         KitSheet(onDismiss = { imageKeyDialogVisible = false }) {
@@ -3605,8 +3586,6 @@ internal fun ReaderScreen(
                                     label = "Dictation API key",
                                     onClick = {
                                         menuExpanded = false
-                                        apiKeyDraft = ""
-                                        apiKeyError = null
                                         apiKeyDialogVisible = true
                                     },
                                 )
