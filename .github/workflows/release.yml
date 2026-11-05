@@ -144,11 +144,10 @@ jobs:
           previous=$(curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/download/android-latest/multiprompt-companion-update.json" || echo '{}')
           previous_commit=$(jq -r '.commit // ""' <<<"$previous")
           if [[ -n "$previous_commit" ]] && git cat-file -e "${previous_commit}^{commit}" 2>/dev/null; then
-            notes=$(git log --no-merges --pretty=format:'- %s' "${previous_commit}..HEAD")
+            notes=$(node tools/release-notes/notes.mjs --range "$previous_commit" HEAD)
           else
-            notes=$(git log -10 --no-merges --pretty=format:'- %s')
+            notes=$(node tools/release-notes/notes.mjs --range "" HEAD)
           fi
-          [[ -n "$notes" ]] || notes="- No source changes"
           history=$(jq -c \
             --arg versionName "$VERSION_NAME" \
             --argjson versionCode "$VERSION_CODE" \
@@ -210,11 +209,10 @@ jobs:
           previous=$(curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/download/android-m3-latest/multiprompt-m3-update.json" || echo '{}')
           previous_commit=$(jq -r '.commit // ""' <<<"$previous")
           if [[ -n "$previous_commit" ]] && git cat-file -e "${previous_commit}^{commit}" 2>/dev/null; then
-            notes=$(git log --no-merges --pretty=format:'- %s' "${previous_commit}..HEAD")
+            notes=$(node tools/release-notes/notes.mjs --range "$previous_commit" HEAD)
           else
-            notes=$(git log -10 --no-merges --pretty=format:'- %s')
+            notes=$(node tools/release-notes/notes.mjs --range "" HEAD)
           fi
-          [[ -n "$notes" ]] || notes="- No source changes"
           history=$(jq -c \
             --arg versionName "$VERSION_NAME-m3" \
             --argjson versionCode "$VERSION_CODE" \
