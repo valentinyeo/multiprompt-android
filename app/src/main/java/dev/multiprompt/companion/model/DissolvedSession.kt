@@ -10,6 +10,7 @@ data class DissolvedSession(
     val workspaceId: String? = null,
     val workspaceName: String = "",
     val dissolvedAtEpochSeconds: Long = 0L,
+    val liveSessionId: String = "",
 ) {
     val key: String get() = "$hostId::$tmuxSessionName"
 
@@ -23,15 +24,16 @@ data class DissolvedSession(
             workspaceId: String?,
             workspaceName: String,
             claudeSessionId: String? = null,
-        ): DissolvedSession =
-            DissolvedSession(
+        ): DissolvedSession {
+            val liveSessionId = session.hostSessionId.takeIf { session.liveChat && validClaudeSessionId(it) }.orEmpty()
+            return DissolvedSession(
                 hostId = session.hostId,
                 tmuxSessionName = session.name,
                 displayName = session.displayName,
                 agent = session.agent,
                 workingDirectory = session.workingDirectory,
                 resumeCommand = when (session.agent) {
-                    AgentKind.CLAUDE -> claudeSessionId
+                    AgentKind.CLAUDE -> (liveSessionId.ifBlank { null } ?: claudeSessionId)
                         ?.takeIf(::validClaudeSessionId)
                         ?.let { "claude --resume $it" }
                         ?: "claude --continue"
@@ -44,6 +46,8 @@ data class DissolvedSession(
                 workspaceId = workspaceId,
                 workspaceName = workspaceName,
                 dissolvedAtEpochSeconds = System.currentTimeMillis() / 1000,
+                liveSessionId = liveSessionId,
             )
+        }
     }
 }
