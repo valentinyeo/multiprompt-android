@@ -46,4 +46,24 @@ class DirectoryRankingTest {
         assertEquals(4, ranked.single().uses)
         assertEquals(false, ranked.single().isRepo)
     }
+
+    @Test
+    fun partialWordsMatchInEitherOrderAndNamePrefixComesFirst() {
+        val dirs = listOf(
+            RemoteDirectory("old-soft-factory-notes", isRepo = false),
+            RemoteDirectory("software-factory", isRepo = false),
+            RemoteDirectory("hypertasks", isRepo = true),
+        )
+        val usage = mapOf("old-soft-factory-notes" to 9)
+
+        assertEquals(
+            listOf("software-factory", "old-soft-factory-notes"),
+            DirectoryRanking.rank(dirs, usage, "soft").map { it.name },
+        )
+        assertEquals(
+            listOf("software-factory", "old-soft-factory-notes"),
+            DirectoryRanking.rank(dirs, usage, "factory soft").map { it.name },
+        )
+        assertEquals(emptyList<String>(), DirectoryRanking.rank(dirs, usage, "soft tasks").map { it.name })
+    }
 }

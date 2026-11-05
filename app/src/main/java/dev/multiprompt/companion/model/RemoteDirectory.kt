@@ -23,15 +23,21 @@ object DirectoryRanking {
         usage: Map<String, Int>,
         query: String,
     ): List<RankedDirectory> {
-        val needle = query.trim().lowercase()
+        val words = query.lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
         return directories
             .asSequence()
-            .filter { needle.isEmpty() || it.name.lowercase().contains(needle) }
+            .filter { dir -> words.all { dir.name.lowercase().contains(it) } }
             .map { RankedDirectory(it.name, it.isRepo, usage[it.name] ?: 0) }
             .sortedWith(
-                compareByDescending<RankedDirectory> { it.uses }
+                compareBy<RankedDirectory> { if (startsWithAWord(it.name, words)) 0 else 1 }
+                    .thenByDescending { it.uses }
                     .thenBy { it.name.lowercase() },
             )
             .toList()
+    }
+
+    private fun startsWithAWord(name: String, words: List<String>): Boolean {
+        val lower = name.substringAfterLast('/').lowercase()
+        return words.any { lower.startsWith(it) }
     }
 }
