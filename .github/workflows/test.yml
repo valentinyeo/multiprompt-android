@@ -228,6 +228,10 @@ jobs:
         env:
           GRADLE: gradle
         run: tools/check.sh lint
+      - name: Unpublished bot photo fails its test
+        env:
+          GRADLE: gradle
+        run: tools/check.sh unit-red
 
   image-preview-emulator:
     name: image-preview-emulator

@@ -30,7 +30,7 @@ source_checks() {
   node tools/strip-comments.mjs --check
 }
 
-unit_checks() {
+unit_red_checks() {
   (
     file=app/src/main/java/dev/multiprompt/companion/MainViewModel.kt
     saved=$(mktemp)
@@ -63,6 +63,9 @@ assert len(failures) == 1 and 'LATE_PHOTO_STATE_UNCHANGED' in ''.join(failures[0
 print('LATE_PHOTO_STATE_RED_OK: LATE_PHOTO_STATE_UNCHANGED')
 PYTHON
   )
+}
+
+unit_checks() {
   gradle_run testDebugUnitTest
 }
 
@@ -77,8 +80,9 @@ lint_checks() {
 case "${1:-all}" in
   source) source_checks ;;
   unit) unit_checks ;;
+  unit-red) unit_red_checks ;;
   m3) m3_unit_checks ;;
   lint) lint_checks ;;
-  all) source_checks; unit_checks; m3_unit_checks; lint_checks ;;
-  *) echo "unknown phase $1: use source, unit, m3, lint or all" >&2; exit 2 ;;
+  all) source_checks; unit_red_checks; unit_checks; m3_unit_checks; lint_checks ;;
+  *) echo "unknown phase $1: use source, unit, unit-red, m3, lint or all" >&2; exit 2 ;;
 esac
