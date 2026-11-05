@@ -99,6 +99,16 @@ function nativeZigTestsOnly() {
   return true;
 }
 
+function prepareService(dir) {
+  if (!tests.some(file => file.startsWith('service/test/'))) return;
+  for (const args of [['ci', '--no-audit', '--no-fund', '--prefer-offline'], ['run', 'pretest']]) {
+    const result = spawnSync('npm', args, {
+      cwd: path.join(dir, 'service'), encoding: 'utf8', timeout: 300000, maxBuffer: 16 * 1024 * 1024,
+    });
+    if (result.error || result.status !== 0) throw new Error(`Cannot prepare service snapshot: npm ${args.join(' ')}\n${result.stdout || ''}${result.stderr || ''}`);
+  }
+}
+
 function run(file, dir) {
   const python = file.endsWith('.py');
   const env = { ...process.env };
@@ -128,9 +138,11 @@ try {
       console.log('RED_RUN_NOT_REQUIRED native Zig test edits only; Windows tests still required');
     } else {
       if (!tests.length) throw new Error('No changed regression tests. Add a portable .test.js, .test.mjs, .test.cjs or Python regression that fails on merge-base source.');
-      const inputs = changed.filter(file => /^(?:tools\/fixtures\/|tools\/[^/]*fixture[^/]*$|tests\/fixtures\/)/.test(file));
+      const inputs = present.filter(file => /^(?:tools\/fixtures\/|tools\/[^/]*fixture[^/]*$|tests\/fixtures\/|service\/test\/fixtures\/)/.test(file));
       execFileSync('git', ['-C', red, 'restore', `--source=${head}`, '--worktree', '--', ...tests, ...inputs], { stdio: 'pipe' });
       const testOnly = changed.every(file => docs.test(file) || workflow.test(file) || (file.startsWith('tools/') && testFile(file)) || (present.includes(file) && inputs.includes(file)));
+      prepareService(green);
+      if (!testOnly) prepareService(red);
       for (const file of tests) {
         const fixed = run(file, green);
         console.log(`HEAD ${file}\n${fixed.output}`);
