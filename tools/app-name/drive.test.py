@@ -2,6 +2,7 @@ import importlib.util
 import sys
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
@@ -43,23 +44,54 @@ class FrozenPackagesTest(unittest.TestCase):
                 drive.frozen_packages(output)
 
 
+def update_page(button_enabled):
+    root = ET.fromstring(
+        f'<hierarchy><node clickable="true" enabled="{button_enabled}">'
+        '<node clickable="false" enabled="true" text="Check now"/></node></hierarchy>'
+    )
+    return root, root[0][0]
+
+
 class WaitPageTest(unittest.TestCase):
-    def test_retries_check_then_requires_update_offer(self):
+    def proof(self, pages, offered):
         proof = object.__new__(drive.Proof)
         proof.plan = SimpleNamespace(package=drive.PACKAGE, target={"versionName": "target"})
-        baseline = {"versionName": "baseline", "versionCode": 1}
-        error, offered = object(), object()
-        proof.dump = Mock(side_effect=[(b"error", error), (b"offered", offered)])
+        proof.dump = Mock(side_effect=[(name, root) for name, root in pages])
         proof.has = Mock(side_effect=lambda root, package, value: root is offered or value in (
             "App updates", "Installed: baseline (1)"
         ))
-        proof.visible_nodes = Mock(return_value=[({"enabled": "true"}, (0, 0, 1, 1))])
+        proof.visible_nodes = Mock(
+            side_effect=lambda root, package, value: [(root[0][0], (0, 0, 1, 1))]
+        )
         proof.tap = Mock()
         proof.event = Mock()
+        return proof
+
+    def test_retries_check_then_requires_update_offer(self):
+        baseline = {"versionName": "baseline", "versionCode": 1}
+        error, _ = update_page("true")
+        offered, _ = update_page("true")
+        proof = self.proof([(b"error", error), (b"offered", offered)], offered)
         with patch.object(drive.time, "sleep"):
             self.assertEqual(proof.wait_page(baseline, None, available=True), (b"offered", offered))
         proof.tap.assert_called_once_with(drive.PACKAGE, "Check now")
         proof.event.assert_called_once_with("update-check-retried")
+
+    def test_waits_while_check_button_is_disabled(self):
+        baseline = {"versionName": "baseline", "versionCode": 1}
+        checking, _ = update_page("false")
+        offered, _ = update_page("true")
+        proof = self.proof([(b"checking", checking), (b"offered", offered)], offered)
+        with patch.object(drive.time, "sleep"):
+            self.assertEqual(proof.wait_page(baseline, None, available=True), (b"offered", offered))
+        proof.tap.assert_not_called()
+
+    def test_actionable_follows_clickable_ancestor(self):
+        proof = object.__new__(drive.Proof)
+        root, label = update_page("false")
+        self.assertFalse(proof.actionable(root, label))
+        root, label = update_page("true")
+        self.assertTrue(proof.actionable(root, label))
 
 
 class WaitInstallTest(unittest.TestCase):

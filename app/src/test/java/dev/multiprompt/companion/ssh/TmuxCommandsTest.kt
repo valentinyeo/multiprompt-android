@@ -260,6 +260,7 @@ class TmuxCommandsTest {
 
         assertTrue(command.contains("host enable claude $sid --tmux live-api-x1-r"))
         assertTrue(command.contains("host start claude $sid"))
+        assertTrue(command.indexOf("host stop claude $sid") in 0 until command.indexOf("host enable claude $sid"))
         assertTrue(command.contains("tmux new-session -d -s 'live-api-x1-r"))
         assertFalse(command.contains("--cwd"))
         assertFalse(command.contains(" -c "))
