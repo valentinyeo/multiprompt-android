@@ -334,6 +334,17 @@ class Proof:
     def has(self, root, package, value):
         return bool(self.visible_nodes(root, package, value))
 
+    def actionable(self, root, node):
+        parents = {child: parent for parent in root.iter() for child in parent}
+        while True:
+            if node.get("enabled") == "false":
+                return False
+            if node.get("clickable") == "true":
+                return True
+            if node not in parents:
+                return False
+            node = parents[node]
+
     def tap(self, package, value, identity=None):
         require(self.foreground() == package, "Unexpected foreground package before tap")
         _, root = self.dump()
@@ -401,7 +412,7 @@ class Proof:
                 self.has(root, self.plan.package, value) for value in required[:2]
             ):
                 checks = self.visible_nodes(root, self.plan.package, "Check now")
-            if len(checks) == 1 and checks[0][0].get("enabled") != "false":
+            if len(checks) == 1 and self.actionable(root, checks[0][0]):
                 self.tap(self.plan.package, "Check now")
                 self.event("update-check-retried")
                 retried = True
