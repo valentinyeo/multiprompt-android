@@ -28,6 +28,7 @@ Numbered PNG/XML pairs show action and result. The transcript records commands a
 - [Retired hosts](hosts-retired.md): a saved host at a retired server address is gone after relaunch; account sync never adds it back.
 - [Changed host key](host-changed-key.md): compare a rotated identity, persist Not now and refuse authentication.
 - [Sessions](sessions.md): authenticated tmux discovery and search.
+- [Late account bot pictures](bot-photo-refresh.md): hosted ViewModel and Compose regressions; seeded picture, not live account sync.
 - [Session favorites](session-favorites.md): signed APK, isolated SSH sessions and offline favorite cache; no production sync.
 - [Pinned sessions](session-pins.md): signed scrolling in both list orders. Use `session-favorites.md` with `pins_scroll=true`.
 - [Session settings](session-settings.md): full-screen split switches; saving is blocked without account OTP and a pulled layout.

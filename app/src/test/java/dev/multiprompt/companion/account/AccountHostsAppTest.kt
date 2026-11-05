@@ -40,6 +40,8 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.util.ReflectionHelpers
 import java.util.Base64
 import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 @RunWith(RobolectricTestRunner::class)
@@ -60,6 +62,8 @@ class AccountHostsAppTest {
     private var conflict = false
     private var features: String? = "favorite,used,visits,input,settings,hosts"
     private var featureHeader = "X-Layout-Features"
+    @Volatile private var picture: ByteArray? = null
+    @Volatile private var photoGate: Pair<CountDownLatch, CountDownLatch>? = null
 
     @After fun close() {
         compose.runOnIdle { models.clear() }
@@ -108,9 +112,16 @@ class AccountHostsAppTest {
                         beforeNextLayoutGet.getAndSet(null)?.let { remote = it(remote) }
                     }
                 }
+                val body = if (request.url.encodedPath.startsWith("/v1/bot-photos/")) {
+                    photoGate?.let { (started, release) ->
+                        started.countDown()
+                        check(release.await(15, TimeUnit.SECONDS))
+                    }
+                    JSONObject().apply { picture?.let { put("png", Base64.getEncoder().encodeToString(it)) } }
+                } else JSONObject().put("revision", remote.revision).put("layout", remote.json())
                 Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(status).message("OK")
                     .apply { features?.let { header(featureHeader, it) } }
-                    .body(JSONObject().put("revision", remote.revision).put("layout", remote.json()).toString().toResponseBody()).build()
+                    .body(body.toString().toResponseBody()).build()
             }.build()
             val http = AccountHttpClient(client)
             val tokens = JSONObject().put("account_id", "test-account").put("device_id", "test-device")
@@ -132,6 +143,72 @@ class AccountHostsAppTest {
             assertNull(model.state.value.accountError)
             assertFalse(model.state.value.accountPending)
         }
+    }
+
+    @Test fun lateBotPhotoChangesStateWithoutChangingLayoutAndCanBeReplacedOrReset() {
+        features = "favorite,used,visits,input,settings,hosts,bot_photo"
+        val tab = AccountTab("Photo test", "photo-refresh-test-1611", 0, "Other", photo = 1)
+        remote = remote.copy(workspaces = listOf("Other"), tabs = listOf(tab)).validate()
+        setup()
+        val cache = BotPhotoCache(java.io.File(app.filesDir, "bot-photos"))
+        cache.file(tab)?.delete()
+        sync()
+        val oldState = model.state.value
+        val session = oldState.inboxSessions.single()
+        assertNull(app.sessionReadStore.shownBotPicture(session))
+
+        picture = Base64.getDecoder().decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=")
+        sync()
+        val downloadedState = model.state.value
+        assertEquals(oldState.accountLayout, downloadedState.accountLayout)
+        assertEquals(oldState.inboxSessions, downloadedState.inboxSessions)
+        assertEquals(oldState.readerSession, downloadedState.readerSession)
+        assertNotNull(cache.file(tab))
+        assertEquals(cache.file(tab)?.absolutePath, app.sessionReadStore.shownBotPicture(session))
+        assertNotEquals("LATE_PHOTO_STATE_UNCHANGED", oldState, downloadedState)
+        sync()
+        assertEquals(downloadedState, model.state.value)
+
+        remote = remote.copy(revision = remote.revision + 1, tabs = listOf(tab.copy(photo = 2)))
+        sync()
+        assertEquals(cache.file(tab.copy(photo = 2))?.absolutePath, app.sessionReadStore.shownBotPicture(session))
+        remote = remote.copy(revision = remote.revision + 1, tabs = listOf(tab.copy(photo = null)))
+        sync()
+        assertNull(app.sessionReadStore.shownBotPicture(session))
+    }
+
+    @Test fun oldAccountDownloadCannotRepublishAfterSignOut() {
+        features = "favorite,used,visits,input,settings,hosts,bot_photo"
+        val tab = AccountTab("Old account", "old-account-photo-1611", 0, "Other", photo = 1)
+        remote = remote.copy(workspaces = listOf("Other"), tabs = listOf(tab)).validate()
+        setup()
+        val cache = BotPhotoCache(java.io.File(app.filesDir, "bot-photos"))
+        cache.file(tab)?.delete()
+        sync()
+        val session = model.state.value.inboxSessions.single()
+        assertNull(app.sessionReadStore.shownBotPicture(session))
+        picture = Base64.getDecoder().decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=")
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        photoGate = started to release
+        try {
+            compose.runOnIdle { model.syncAccount() }
+            compose.waitUntil(15_000) {
+                shadowOf(Looper.getMainLooper()).idle()
+                started.count == 0L
+            }
+            compose.runOnIdle { model.signOutAccount() }
+        } finally {
+            release.countDown()
+        }
+        compose.waitUntil(15_000) {
+            shadowOf(Looper.getMainLooper()).idle()
+            !model.state.value.accountSyncing
+        }
+        assertNotNull(cache.file(tab))
+        assertFalse(model.state.value.signedIn)
+        assertNull(model.state.value.accountLayout)
+        assertNull(app.sessionReadStore.shownBotPicture(session))
     }
 
     @Test fun sharedColorsReachInboxAndSurviveSyncRestartAndUnrelatedPhoneEdits() {

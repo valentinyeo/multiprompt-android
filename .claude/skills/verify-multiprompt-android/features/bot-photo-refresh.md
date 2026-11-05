@@ -1,0 +1,13 @@
+# Late account bot pictures
+
+The JVM regression uses the real account sync and ViewModel with an in-process HTTP stand-in. It first returns no picture, then returns a generated PNG with the same layout. It checks the complete settled state changes once, the stored picture path changes, a repeat sync is unchanged, and replacement and reset work. A second test pauses the old account's download across sign-out and checks that its completed download does not republish the layout or picture preferences. It does not prove that old-account bytes are absent from the on-disk cache.
+
+`SessionRowsTest.lateSyncedPictureRedrawsExistingAvatarWithoutRefresh` renders the production `SessionsScreen`. It seeds the downloaded PNG and synced preference directly, then publishes a copied state with a changed photo revision and an unrelated syncing change. The existing sessions, reader and layout remain equal. The test captures the existing avatar before and after and requires generated pink pixels. This separates the real ViewModel state-change proof from the real Compose invalidation proof; it is not a live account-service or cross-client journey.
+
+## Hosted controls
+
+Run only on GitHub-hosted runners. The required unit job runs `GRADLE=gradle tools/check.sh unit`. Before the full JVM suite, it temporarily changes only `publishAccountLayout(photosChanged = true)` to `publishAccountLayout()`, runs the late-photo test and requires its XML failure to contain `LATE_PHOTO_STATE_UNCHANGED`. It restores the ViewModel even on failure, then runs the full fixed suite. A compile error or a different failure cannot pass the control. The job log records `LATE_PHOTO_STATE_RED_OK`.
+
+The required `session-rows-emulator` job runs `GRADLE=gradle bash tools/check-session-rows.sh` on a hosted emulator. Its first control temporarily removes only `state.botPhotoRevision` from the production `botLooks` remember keys, leaving the state field and publisher intact. It runs the same seeded-picture action and requires the specific test's XML failure `LATE_PHOTO_NOT_RENDERED`. It restores the production file, runs the existing old-row controls unchanged, restores again, then runs the complete fixed session-row suite. A compile error or another failure cannot pass. The job log records `LATE_PHOTO_UI_RED_OK`.
+
+Download the `session-rows-emulator` artifact. Inspect `photo-before` control XML and avatar images, and the fixed `after/photo-before.png` and `after/photo-after.png`. The fixed image must show the generated picture without refresh. Run all other required PR checks too. Live desktop-to-phone sync still requires disposable account credentials and independent service evidence.

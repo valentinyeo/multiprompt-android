@@ -43,6 +43,25 @@ class FrozenPackagesTest(unittest.TestCase):
                 drive.frozen_packages(output)
 
 
+class WaitPageTest(unittest.TestCase):
+    def test_retries_check_then_requires_update_offer(self):
+        proof = object.__new__(drive.Proof)
+        proof.plan = SimpleNamespace(package=drive.PACKAGE, target={"versionName": "target"})
+        baseline = {"versionName": "baseline", "versionCode": 1}
+        error, offered = object(), object()
+        proof.dump = Mock(side_effect=[(b"error", error), (b"offered", offered)])
+        proof.has = Mock(side_effect=lambda root, package, value: root is offered or value in (
+            "App updates", "Installed: baseline (1)"
+        ))
+        proof.visible_nodes = Mock(return_value=[({"enabled": "true"}, (0, 0, 1, 1))])
+        proof.tap = Mock()
+        proof.event = Mock()
+        with patch.object(drive.time, "sleep"):
+            self.assertEqual(proof.wait_page(baseline, None, available=True), (b"offered", offered))
+        proof.tap.assert_called_once_with(drive.PACKAGE, "Check now")
+        proof.event.assert_called_once_with("update-check-retried")
+
+
 class WaitInstallTest(unittest.TestCase):
     def test_waits_for_unfreeze_and_fails_closed(self):
         frozen = f"Frozen packages:\n  package={drive.PACKAGE}, refCounts=1\n".encode()

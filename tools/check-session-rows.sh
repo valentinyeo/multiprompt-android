@@ -9,7 +9,7 @@ trap restore EXIT
 run_rows() {
   local phase=$1 status=0 result
   rm -rf app/build/outputs/connected_android_test_additional_output app/build/outputs/androidTest-results/connected
-  "${GRADLE:-gradle}" --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.multiprompt.companion.ui.SessionRowsTest > "build/session-rows/$phase.log" 2>&1 || status=$?
+  "${GRADLE:-gradle}" --no-daemon connectedDebugAndroidTest "-Pandroid.testInstrumentationRunnerArguments.class=${2:-dev.multiprompt.companion.ui.SessionRowsTest}" > "build/session-rows/$phase.log" 2>&1 || status=$?
   cat "build/session-rows/$phase.log"
   result=$(find app/build/outputs -type d -name session-rows -print -quit)
   test -n "$result"
@@ -17,6 +17,34 @@ run_rows() {
   cp "$result"/* "build/session-rows/$phase/"
   return "$status"
 }
+python3 - "$file" <<'PYTHON'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+source = path.read_text()
+old = 'remember(state.inboxSessions, state.readerSession, state.accountLayout, state.botPhotoRevision)'
+new = 'remember(state.inboxSessions, state.readerSession, state.accountLayout)'
+assert source.count(old) == 1
+path.write_text(source.replace(old, new, 1))
+PYTHON
+if run_rows photo-before 'dev.multiprompt.companion.ui.SessionRowsTest#lateSyncedPictureRedrawsExistingAvatarWithoutRefresh'; then
+  echo 'Stale photo unexpectedly rendered' >&2
+  exit 1
+fi
+python3 - <<'PYTHON'
+from pathlib import Path
+import shutil
+import xml.etree.ElementTree as ET
+cases = []
+for path in Path('app/build/outputs/androidTest-results/connected').rglob('*.xml'):
+    shutil.copy(path, Path('build/session-rows/photo-before') / path.name)
+    cases.extend(c for c in ET.parse(path).iter('testcase') if c.get('name') == 'lateSyncedPictureRedrawsExistingAvatarWithoutRefresh')
+assert len(cases) == 1
+failures = cases[0].findall('failure')
+assert len(failures) == 1 and 'LATE_PHOTO_NOT_RENDERED' in ''.join(failures[0].itertext())
+print('LATE_PHOTO_UI_RED_OK')
+PYTHON
+restore
 python3 - "$file" <<'PYTHON'
 from pathlib import Path
 import subprocess
@@ -52,6 +80,8 @@ echo SESSION_ROWS_RED_OK
 restore
 trap - EXIT
 run_rows after
-test "$(find build/session-rows/after -name '*.png' | wc -l)" -eq 9
+test "$(find build/session-rows/after -name '*.png' | wc -l)" -eq 11
+test -s build/session-rows/after/photo-before.png
+test -s build/session-rows/after/photo-after.png
 grep -F 'FAVORITE_ACTIONS_OK:' build/session-rows/after/favorite-actions.txt
 echo SESSION_ROWS_EMULATOR_OK

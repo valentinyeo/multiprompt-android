@@ -1,6 +1,7 @@
 package dev.multiprompt.companion.ui
 
 import android.graphics.Bitmap
+import android.graphics.Color
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -11,6 +12,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -121,6 +123,50 @@ class SessionRowsTest {
         }
         capture("favorite-added-back")
         File(output, "favorite-actions.txt").writeText("FAVORITE_ACTIONS_OK: removed immediately, stored false, session retained, added back, never opened")
+    }
+
+    @Test fun lateSyncedPictureRedrawsExistingAvatarWithoutRefresh() {
+        val session = sessions[2]
+        val store = SessionReadStore(compose.activity.applicationContext)
+        val key = SessionReadStore.key(session.hostId, session.name)
+        val output = File(checkNotNull(InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")), "session-rows").apply { mkdirs() }
+        val picture = File(compose.activity.cacheDir, "late-photo-1611.png")
+        val color = Color.rgb(236, 19, 183)
+        store.setBotPicture(session, null)
+        store.applySyncedBotPhotos(mapOf(key to null))
+        try {
+            render()
+            val avatar = compose.onNodeWithContentDescription("Robot ${session.name}", useUnmergedTree = true).assertIsDisplayed()
+            fun capture(name: String): Int {
+                val bitmap = avatar.captureToImage().asAndroidBitmap()
+                val pixels = IntArray(bitmap.width * bitmap.height)
+                bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+                File(output, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                val matching = pixels.count { Color.red(it) > 220 && Color.green(it) < 40 && Color.blue(it) in 165..200 }
+                bitmap.recycle()
+                return matching
+            }
+            assertEquals(0, capture("photo-before"))
+            Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888).let { bitmap ->
+                bitmap.eraseColor(color)
+                picture.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                bitmap.recycle()
+            }
+            compose.runOnIdle {
+                val before = state.value
+                store.applySyncedBotPhotos(mapOf(key to picture.absolutePath))
+                val after = before.copy(accountSyncing = true, botPhotoRevision = before.botPhotoRevision + 1)
+                assertEquals(before.inboxSessions, after.inboxSessions)
+                assertEquals(before.readerSession, after.readerSession)
+                assertEquals(before.accountLayout, after.accountLayout)
+                state.value = after
+            }
+            val rendered = runCatching { compose.waitUntil(10_000) { capture("photo-after") > 100 } }.isSuccess
+            assertTrue("LATE_PHOTO_NOT_RENDERED", rendered)
+        } finally {
+            store.applySyncedBotPhotos(mapOf(key to null))
+            picture.delete()
+        }
     }
 
     @Test fun rowsStayCompactAcrossSplitsAndStillOpen() {
