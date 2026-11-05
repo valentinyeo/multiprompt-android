@@ -252,4 +252,24 @@ class TmuxCommandsTest {
         assertTrue(command.contains("jsonl"))
         assertTrue(command.contains("sed 's/[^A-Za-z0-9]/-/g'"))
     }
+
+    @Test
+    fun restoringALiveChatReusesItsSavedFolderInsteadOfTheStartFolder() {
+        val sid = "0b6d2c1e-4f3a-4b2c-9d8e-1a2b3c4d5e6f"
+        val command = TmuxCommands.resurrectLiveChat("live-api-x1", sid)
+
+        assertTrue(command.contains("host enable claude $sid --tmux live-api-x1-r"))
+        assertTrue(command.contains("host start claude $sid"))
+        assertTrue(command.contains("tmux new-session -d -s 'live-api-x1-r"))
+        assertFalse(command.contains("--cwd"))
+        assertFalse(command.contains(" -c "))
+        assertFalse(command.contains("claude --resume"))
+    }
+
+    @Test
+    fun restoringALiveChatRejectsAnUnsafeChatId() {
+        assertThrows(IllegalArgumentException::class.java) {
+            TmuxCommands.resurrectLiveChat("live-api-x1", "x; reboot")
+        }
+    }
 }

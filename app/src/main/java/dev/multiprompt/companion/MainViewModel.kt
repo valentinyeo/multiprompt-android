@@ -1205,6 +1205,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val key = SessionReadStore.key(session.hostId, session.name)
         viewModelScope.launch {
             val claudeSessionId = if (session.agent == AgentKind.CLAUDE &&
+                !session.liveChat &&
                 session.workingDirectory.isNotBlank()
             ) {
                 current.hosts.firstOrNull { it.id == session.hostId }

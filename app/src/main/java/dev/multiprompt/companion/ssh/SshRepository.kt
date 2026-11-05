@@ -508,12 +508,14 @@ class SshRepository(private val secrets: SecretStorage) {
                 withAuthenticatedClient(host) { client ->
                     execute(
                         client,
-                        TmuxCommands.resurrectSession(
+                        if (session.liveSessionId.isNotBlank()) {
+                            TmuxCommands.resurrectLiveChat(session.tmuxSessionName, session.liveSessionId)
+                        } else TmuxCommands.resurrectSession(
                             sessionName = session.tmuxSessionName,
                             displayName = session.displayName,
                             workingDirectory = session.workingDirectory,
                             resumeCommand = session.resumeCommand,
-                        ),
+                        )
                     ).requireSuccess("restore the archived session")
                 }
             }

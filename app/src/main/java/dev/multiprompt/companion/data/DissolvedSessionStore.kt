@@ -26,6 +26,7 @@ class DissolvedSessionStore(context: Context) {
                         workspaceId = item.optString("workspaceId").takeIf(String::isNotBlank),
                         workspaceName = item.optString("workspaceName"),
                         dissolvedAtEpochSeconds = item.optLong("dissolvedAtEpochSeconds"),
+                        liveSessionId = item.optString("liveSessionId"),
                     ),
                 )
             }
@@ -57,7 +58,8 @@ class DissolvedSessionStore(context: Context) {
                     .put("resumeCommand", session.resumeCommand)
                     .put("workspaceId", session.workspaceId)
                     .put("workspaceName", session.workspaceName)
-                    .put("dissolvedAtEpochSeconds", session.dissolvedAtEpochSeconds),
+                    .put("dissolvedAtEpochSeconds", session.dissolvedAtEpochSeconds)
+                    .put("liveSessionId", session.liveSessionId),
             )
         }
         preferences.edit().putString(KEY, array.toString()).apply()

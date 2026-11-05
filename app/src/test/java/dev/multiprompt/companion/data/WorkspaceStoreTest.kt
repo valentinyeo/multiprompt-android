@@ -14,6 +14,15 @@ class WorkspaceStoreTest {
     }
 
     @Test
+    fun matchingFoldersOfDifferentPeopleStaySeparate() {
+        val mine = WorkspaceStore.projectRoot("/home/valentin/projects/site/src")
+        val theirs = WorkspaceStore.projectRoot("/home/inne/projects/site/src")
+
+        assertEquals("/home/valentin/projects/site", mine)
+        assertEquals("/home/inne/projects/site", theirs)
+    }
+
+    @Test
     fun keepsNonProjectDirectoryAsWorkspaceRoot() {
         assertEquals("/srv/agent", WorkspaceStore.projectRoot("/srv/agent/"))
     }
