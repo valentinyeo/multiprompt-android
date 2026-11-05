@@ -148,7 +148,7 @@ class AccountHostsAppTest {
     @Test fun lateBotPhotoChangesStateWithoutChangingLayoutAndCanBeReplacedOrReset() {
         features = "favorite,used,visits,input,settings,hosts,bot_photo"
         val tab = AccountTab("Photo test", "photo-refresh-test-1611", 0, "Other", photo = 1)
-        remote = remote.copy(tabs = listOf(tab))
+        remote = remote.copy(workspaces = listOf("Other"), tabs = listOf(tab)).validate()
         setup()
         val cache = BotPhotoCache(java.io.File(app.filesDir, "bot-photos"))
         cache.file(tab)?.delete()
@@ -180,7 +180,7 @@ class AccountHostsAppTest {
     @Test fun oldAccountDownloadCannotRepublishAfterSignOut() {
         features = "favorite,used,visits,input,settings,hosts,bot_photo"
         val tab = AccountTab("Old account", "old-account-photo-1611", 0, "Other", photo = 1)
-        remote = remote.copy(tabs = listOf(tab))
+        remote = remote.copy(workspaces = listOf("Other"), tabs = listOf(tab)).validate()
         setup()
         val cache = BotPhotoCache(java.io.File(app.filesDir, "bot-photos"))
         cache.file(tab)?.delete()
