@@ -131,6 +131,12 @@ jobs:
           mkdir -p app/build/reports/summary-control
           cp app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.SessionPreviewTest.xml app/build/reports/summary-control/
 
+      - name: PR title names a ticket with its exact title
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: node tools/release-notes/notes.mjs --pr-title "$PR_TITLE"
+
       - name: Source files, comments and tool checks
         env:
           GRADLE: gradle
