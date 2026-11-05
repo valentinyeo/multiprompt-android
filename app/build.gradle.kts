@@ -102,7 +102,7 @@ android {
     testOptions.unitTests {
         isIncludeAndroidResources = true
         all {
-            it.maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, 4)
+            it.maxParallelForks = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
             it.maxHeapSize = "2g"
             providers.gradleProperty("m3Shots").orNull?.let { directory ->
                 it.systemProperty("m3.shots", directory)
