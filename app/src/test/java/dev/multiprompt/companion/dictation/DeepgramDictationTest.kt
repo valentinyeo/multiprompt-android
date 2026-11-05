@@ -219,10 +219,10 @@ class DeepgramDictationTest {
         }, keyChecker = { checked += it; answers.removeFirst() })
         dictation.use {
             val sample = (0 until 40).joinToString("") { (it % 16).toString(16) }
-            assertEquals(KeySave.NOT_A_KEY, runBlocking { it.saveApiKey("a1b2c3d4e5") })
-            assertEquals(KeySave.REJECTED, runBlocking { it.saveApiKey(sample) })
+            assertEquals(KeySave.NOT_A_KEY, runBlocking { it.saveCheckedApiKey("a1b2c3d4e5") })
+            assertEquals(KeySave.REJECTED, runBlocking { it.saveCheckedApiKey(sample) })
             assertTrue(stored.isEmpty())
-            assertEquals(KeySave.SAVED, runBlocking { it.saveApiKey("credential\u200B ${sample.uppercase()} ") })
+            assertEquals(KeySave.SAVED, runBlocking { it.saveCheckedApiKey("credential\u200B ${sample.uppercase()} ") })
             assertEquals(listOf(sample, sample), checked)
             assertEquals(sample, stored.values.single().toString(Charsets.UTF_8))
             assertTrue(it.state.value.configured)

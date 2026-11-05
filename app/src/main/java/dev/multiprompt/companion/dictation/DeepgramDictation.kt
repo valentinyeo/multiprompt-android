@@ -88,12 +88,22 @@ class DeepgramDictation(
     private var gate: SpeechGate? = null
     private var usageRecorded = true
 
-    suspend fun saveApiKey(value: String): KeySave {
+    fun saveApiKey(value: String): Boolean {
+        val key = DeepgramKey.normalize(value) ?: return false
+        store(key)
+        return true
+    }
+
+    suspend fun saveCheckedApiKey(value: String): KeySave {
         val key = DeepgramKey.normalize(value) ?: return KeySave.NOT_A_KEY
         if (DeepgramKey.classify(keyCheck(key)) == DeepgramKey.Check.REJECTED) return KeySave.REJECTED
+        store(key)
+        return KeySave.SAVED
+    }
+
+    private fun store(key: String) {
         secrets.put(API_KEY_SECRET_ID, key.toByteArray(Charsets.UTF_8))
         _state.update { it.copy(configured = true, error = null) }
-        return KeySave.SAVED
     }
 
     private suspend fun checkWithDeepgram(key: String): Int? = withContext(Dispatchers.IO) {

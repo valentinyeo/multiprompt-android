@@ -3146,7 +3146,7 @@ internal fun ReaderScreen(
             KitPrimaryButton(if (apiKeyChecking) "Checking key" else "Save and dictate", onClick = {
                 apiKeyChecking = true
                 apiKeyScope.launch {
-                    val result = dictation.saveApiKey(apiKeyDraft)
+                    val result = dictation.saveCheckedApiKey(apiKeyDraft)
                     apiKeyChecking = false
                     when (result) {
                         KeySave.SAVED -> {
