@@ -1,4 +1,5 @@
 {
+  "IGSH-1631": "Android: no disconnect warning, chat reconnects on its own",
   "IGSH-1684": "Multibot Android: every update note line names its ticket",
   "IGSH-1722": "Android: folder search finds partial words in any order"
 }

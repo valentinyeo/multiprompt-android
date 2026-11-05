@@ -3981,25 +3981,6 @@ internal fun ReaderScreen(
                 }
             }
             val failure = reader.status as? ReaderStatus.Failed
-            if (failure != null) {
-                Row(
-                    Modifier
-                        .background(
-                            MaterialTheme.colorScheme.errorContainer,
-                            chromeShape(RoundedCornerShape(8.dp)),
-                        )
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    CircularProgressIndicator(Modifier.size(11.dp), strokeWidth = 1.5.dp)
-                    Text(
-                        "Disconnected · retrying",
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-            }
             val displayedOutput = reader.output.ifBlank {
                 if (failure == null && reader.status != ReaderStatus.Connecting) {
                     "No recent output"
@@ -4010,22 +3991,19 @@ internal fun ReaderScreen(
             val waitingForInput = reader.hookState?.isReady(System.currentTimeMillis())
                 ?: reader.waitingForInput
             val connectionLabel = when {
-                failure != null -> "Disconnected · retrying"
-                reader.status == ReaderStatus.Connecting -> "Connecting"
+                failure != null || reader.status == ReaderStatus.Connecting -> "Connecting"
                 reader.sending -> "Live · Sending"
                 reader.output.isBlank() -> "Live"
                 waitingForInput -> "Live · Ready"
                 else -> "Live · Working"
             }
             val connectionColor = when {
-                failure != null -> MaterialTheme.colorScheme.errorContainer
-                reader.status == ReaderStatus.Connecting -> MaterialTheme.colorScheme.surfaceVariant
+                failure != null || reader.status == ReaderStatus.Connecting -> MaterialTheme.colorScheme.surfaceVariant
                 waitingForInput -> MaterialTheme.colorScheme.secondaryContainer
                 else -> MaterialTheme.colorScheme.primaryContainer
             }
             val connectionTextColor = when {
-                failure != null -> MaterialTheme.colorScheme.onErrorContainer
-                reader.status == ReaderStatus.Connecting -> MaterialTheme.colorScheme.onSurfaceVariant
+                failure != null || reader.status == ReaderStatus.Connecting -> MaterialTheme.colorScheme.onSurfaceVariant
                 waitingForInput -> MaterialTheme.colorScheme.onSecondaryContainer
                 else -> MaterialTheme.colorScheme.onPrimaryContainer
             }
@@ -4071,7 +4049,7 @@ internal fun ReaderScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
-                        if (reader.status == ReaderStatus.Connecting || reader.sending) {
+                        if (reader.status == ReaderStatus.Connecting || failure != null || reader.sending) {
                             CircularProgressIndicator(
                                 Modifier.size(11.dp),
                                 strokeWidth = 1.5.dp,

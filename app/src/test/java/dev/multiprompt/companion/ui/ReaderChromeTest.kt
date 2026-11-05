@@ -239,11 +239,11 @@ class ReaderChromeTest {
         }
     }
 
-    @Test fun disconnectSignalIsOnlyShownWhileRetrying() {
+    @Test fun retryingShowsNoDisconnectWarning() {
         render()
-        compose.onNodeWithText("Disconnected · retrying").assertDoesNotExist()
         compose.runOnIdle { history.value = history.value.copy(retrying = true) }
-        compose.onNodeWithText("Disconnected · retrying").assertIsDisplayed()
+        compose.onNodeWithText("Disconnected · retrying").assertDoesNotExist()
+        compose.onNodeWithText("Reconnect").assertDoesNotExist()
         compose.onNodeWithText("Conversation").assertDoesNotExist()
         compose.runOnIdle { history.value = history.value.copy(retrying = false) }
         compose.onNodeWithText("Disconnected · retrying").assertDoesNotExist()
