@@ -12,6 +12,7 @@ internal object SessionPreview {
     private val activity = Regex("^[✢✳✶✻✽·]\\s+(.+?)(?:…|\\.\\.\\.)(?:\\s.*)?$")
     private val shellPrompt = Regex("^(?:\\S+@\\S+[: ].*?[#$]|[\\w./~:-]+[#$])(?:\\s.*)?$")
     private val completed = Regex("^[✢✳✶✻✽]\\s+.*\\bfor\\s+\\d+.*$")
+    private val terminalReply = Regex("(?:\\^\\[|\u001b)\\[[?>=]?[0-9;]*[A-Za-z~]")
 
     fun line(raw: String): String {
         val rows = raw.lines().map { it.trim() }
@@ -22,7 +23,7 @@ internal object SessionPreview {
         }
         val content = TmuxText.withoutActiveComposer(raw).lines()
         val useful = content.map { candidate ->
-            candidate.filterNot { it in boxChars }.trim()
+            terminalReply.replace(candidate, "").filterNot { it in boxChars }.trim()
         }.filter { candidate ->
             candidate.isNotEmpty() && chrome.none { candidate.lowercase().contains(it) } &&
                 TmuxText.runtimeDetails(candidate).model == null && !shellPrompt.matches(candidate) &&

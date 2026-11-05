@@ -26,6 +26,17 @@ class SessionPreviewTest {
     }
 
     @Test
+    fun terminalReplyCodesAreNotShown() {
+        val raw = "⏺ House rules reloaded.\n^[[?61;1;6;7;21;22;23;24;28;32;42;52c^[[>0;10;1c"
+        assertEquals("House rules reloaded.", SessionPreview.line(raw))
+    }
+
+    @Test
+    fun terminalReplyCodesAreCutFromText() {
+        assertEquals("Ready", SessionPreview.line("\u001b[?62;22cReady"))
+    }
+
+    @Test
     fun whitespaceIsCollapsed() {
         assertEquals("a b c", SessionPreview.line("a    b \t c"))
     }
