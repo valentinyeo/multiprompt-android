@@ -391,10 +391,20 @@ class Proof:
                 f"v{self.plan.target['versionName']} available",
                 "Download and update",
             ]
+        retried = False
         while time.monotonic() < deadline:
             xml, root = self.dump()
             if all(self.has(root, self.plan.package, value) for value in required):
                 return xml, root
+            checks = []
+            if available and not retried and all(
+                self.has(root, self.plan.package, value) for value in required[:2]
+            ):
+                checks = self.visible_nodes(root, self.plan.package, "Check now")
+            if len(checks) == 1 and checks[0][0].get("enabled") != "false":
+                self.tap(self.plan.package, "Check now")
+                self.event("update-check-retried")
+                retried = True
             time.sleep(1)
         raise RuntimeError("Timed out waiting for update page: " + ", ".join(required))
 

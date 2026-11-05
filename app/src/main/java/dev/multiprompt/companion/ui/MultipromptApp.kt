@@ -1642,7 +1642,7 @@ internal fun SessionsScreen(
             )
         }
     }
-    val botLooks = remember(state.inboxSessions, state.readerSession, state.accountLayout) {
+    val botLooks = remember(state.inboxSessions, state.readerSession, state.accountLayout, state.botPhotoRevision) {
         state.inboxSessions.associate { session ->
             SessionReadStore.key(session.hostId, session.name) to BotLook(
                 picture = drafts.shownBotPicture(session),

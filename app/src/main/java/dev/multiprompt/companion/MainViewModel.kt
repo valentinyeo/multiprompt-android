@@ -110,6 +110,7 @@ data class AppUiState(
     val crashReport: CrashReport? = null,
     val signedIn: Boolean = false,
     val accountLayout: AccountLayout? = null,
+    val botPhotoRevision: Long = 0,
     val accountSyncing: Boolean = false,
     val accountPending: Boolean = false,
     val accountError: String? = null,
@@ -1668,7 +1669,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         publishAccountLayout()
     }
 
-    private fun publishAccountLayout() {
+    private fun publishAccountLayout(photosChanged: Boolean = false) {
         val layout = pendingLayout?.edited
         _state.update { current ->
             val mapping = AccountHostMap.resolve(current.hosts, accountStore.hostOverrides())
@@ -1686,7 +1687,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }.toMap())
             }
-            current.copy(accountLayout = layout, accountPending = pendingLayout?.dirty == true, accountHosts = mapping,
+            current.copy(accountLayout = layout, botPhotoRevision = current.botPhotoRevision + if (photosChanged) 1 else 0,
+                accountPending = pendingLayout?.dirty == true, accountHosts = mapping,
                 workspaces = workspaces, workspaceSplitIds = listOf(null) + workspaces.map { it.id }, sessionWorkspaceIds = assignments,
                 readerSession = current.readerSession?.let { open ->
                     layout?.let { AccountHostMap.tabFor(open, it, mapping) }?.let { AccountHostMap.sessionFor(it, current.sessions, mapping, layout) } ?: open
@@ -1935,7 +1937,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 _state.update { it.copy(accountError = if (pendingLayout?.let { usedStampThrottle.shouldPush(it) } == true) "Account changed repeatedly; pending edits will retry" else null) }
                 val photoTabs = if (photosSynced) remote.tabs else emptyList()
-                if (withContext(Dispatchers.IO) { botPhotos.sync(photoTabs, syncAuth::botPhoto) } && generation == accountGeneration) publishAccountLayout()
+                if (withContext(Dispatchers.IO) { botPhotos.sync(photoTabs, syncAuth::botPhoto) } && generation == accountGeneration) publishAccountLayout(photosChanged = true)
             } catch (e: Exception) {
                 if (generation == accountGeneration) _state.update { it.copy(signedIn = syncAuth.hasSession(), accountError = e.message ?: "Account offline; pending edits saved") }
             } finally {
