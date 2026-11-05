@@ -88,6 +88,7 @@ class RoomStore:
             CREATE INDEX IF NOT EXISTS delivery_pages ON deliveries(room_id, delivery_seq);
             CREATE TABLE IF NOT EXISTS commands (id TEXT PRIMARY KEY, body TEXT NOT NULL, receipt TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS responses (room_id TEXT NOT NULL, member_id TEXT NOT NULL, response_id TEXT NOT NULL, body TEXT NOT NULL, receipt TEXT NOT NULL, PRIMARY KEY(room_id, member_id, response_id));
+            CREATE TABLE IF NOT EXISTS reply_progress (delivery_id TEXT PRIMARY KEY REFERENCES deliveries(id), after_seq INTEGER, turn TEXT, parts TEXT NOT NULL, done INTEGER NOT NULL, checked REAL NOT NULL);
         ''')
         self.db.execute('INSERT OR IGNORE INTO meta VALUES (?, ?)', ('host_uuid', new_id()))
         self.host_uuid = self.db.execute('SELECT value FROM meta WHERE key=?', ('host_uuid',)).fetchone()[0]

@@ -7,19 +7,34 @@ data class RoomMemberEntry(val id: String, val alias: String, val displayName: S
 
 data class RoomEntry(val id: String, val name: String, val revision: Int, val members: List<RoomMemberEntry>)
 
-data class RoomEvent(val seq: Long, val type: String, val text: String, val memberId: String?)
+data class RoomEvent(
+    val seq: Long,
+    val type: String,
+    val text: String,
+    val memberId: String?,
+    val id: String? = null,
+    val parentEventId: String? = null,
+)
+
+data class RoomCapabilities(val hostUuid: String, val liveSend: Boolean)
 
 data class RoomPage(val events: List<RoomEvent>, val nextAfter: Long)
 
 data class RoomDelivery(val deliverySeq: Long, val eventId: String, val memberId: String, val status: String)
 
 class RoomClient(private val wire: RoomWire) : AutoCloseable {
+    private var host: String? = null
 
-    suspend fun hostUuid(): String {
-        val result = call(JSONObject().put("op", "capabilities"))
-        return result.optString("host_uuid").takeIf { it.isNotBlank() }
+    suspend fun capabilities(): RoomCapabilities {
+        val result = call(JSONObject().put("op", "capabilities").put("room_messages", 1))
+        val uuid = result.optString("host_uuid").takeIf { it.isNotBlank() }
             ?: throw RoomFailure("missing_host_uuid")
+        host = uuid
+        val live = result.optBoolean("live_send", false) && result.optInt("room_reply_protocol", 0) == 1
+        return RoomCapabilities(uuid, live)
     }
+
+    suspend fun hostUuid(): String = capabilities().hostUuid
 
     suspend fun rooms(limit: Int = 100): List<RoomEntry> {
         val result = call(JSONObject().put("op", "list").put("after", 0).put("through", JSONObject.NULL).put("limit", limit))
@@ -61,6 +76,8 @@ class RoomClient(private val wire: RoomWire) : AutoCloseable {
                 type = type,
                 text = row.optString("text"),
                 memberId = row.optString("member_id").takeIf { it.isNotBlank() },
+                id = row.optString("id").takeIf { it.isNotBlank() },
+                parentEventId = row.optString("parent_event_id").takeIf { it.isNotBlank() },
             )
         }
         return RoomPage(events, result.optLong("next_after", after))
@@ -117,6 +134,7 @@ class RoomClient(private val wire: RoomWire) : AutoCloseable {
     }
 
     private suspend fun call(request: JSONObject): JSONObject {
+        host?.let { if (request.optString("op") != "capabilities") request.put("host_uuid", it) }
         val response = wire.call(request)
         if (!response.optBoolean("ok", false)) {
             throw RoomFailure(response.optString("error").ifBlank { "unknown" })

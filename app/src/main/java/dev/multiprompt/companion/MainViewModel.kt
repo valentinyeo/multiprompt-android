@@ -51,6 +51,7 @@ import dev.multiprompt.companion.account.DeviceKeyEntry
 import dev.multiprompt.companion.account.DeviceKeyStatus
 import dev.multiprompt.companion.ui.PendingDevice
 import dev.multiprompt.companion.ui.sshKeyFingerprint
+import dev.multiprompt.companion.ui.roomSendError
 import org.json.JSONObject
 import dev.multiprompt.companion.ssh.PresentedHostKey
 import dev.multiprompt.companion.ssh.SshProblem
@@ -122,6 +123,8 @@ data class AppUiState(
     val roomEventsLoading: Boolean = false,
     val roomEventsExhausted: Boolean = false,
     val roomEventsError: String? = null,
+    val roomSending: Boolean = false,
+    val roomSent: Int = 0,
     val pendingDevice: PendingDevice? = null,
     val deviceApprovalBusy: Boolean = false,
     val deviceApprovalError: String? = null,
@@ -613,29 +616,58 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         loadRoomEvents(older = false)
+        roomPoll?.cancel()
+        roomPoll = viewModelScope.launch {
+            while (_state.value.roomId == roomId) {
+                delay(ROOM_POLL_MS)
+                if (_state.value.roomId != roomId) break
+                pollRoomEvents(roomId)
+            }
+        }
+    }
+
+    private var roomPoll: kotlinx.coroutines.Job? = null
+
+    private suspend fun pollRoomEvents(roomId: String) {
+        val current = _state.value
+        if (current.roomEventsLoading || current.roomSending) return
+        val accountId = syncAuth.accountId() ?: return
+        val host = current.accountHosts.values.firstOrNull() ?: current.hosts.firstOrNull() ?: return
+        val page = runCatching { roomService.page(host, accountId, roomId, current.roomEventsNextAfter) }.getOrNull() ?: return
+        _state.update { state ->
+            if (state.roomId != roomId || page.events.isEmpty()) return@update state
+            state.copy(
+                roomEvents = (state.roomEvents + page.events).distinctBy { it.seq }.sortedBy { it.seq },
+                roomEventsNextAfter = maxOf(state.roomEventsNextAfter, page.nextAfter),
+            )
+        }
     }
 
     fun sendRoomMessage(text: String) {
         val current = _state.value
         val roomId = current.roomId ?: return
-        if (current.roomEventsLoading) return
+        if (current.roomEventsLoading || current.roomSending) return
         val room = current.rooms.firstOrNull { it.id == roomId } ?: return
         val accountId = syncAuth.accountId() ?: return
         val host = current.accountHosts.values.firstOrNull() ?: current.hosts.firstOrNull() ?: return
         val recipients = roomRecipients(text, room.members.map { it.alias })
         val commandId = java.util.UUID.randomUUID().toString()
-        _state.update { it.copy(roomEventsError = null) }
+        _state.update { it.copy(roomEventsError = null, roomSending = true) }
         viewModelScope.launch {
             runCatching { roomService.post(host, accountId, roomId, text, recipients, commandId) }
                 .onFailure { failure ->
-                    _state.update { it.copy(roomEventsError = failure.message ?: "Could not send to the room") }
+                    val code = (failure as? dev.multiprompt.companion.room.RoomFailure)?.code
+                    _state.update { it.copy(roomSending = false, roomEventsError = roomSendError(code)) }
                     return@launch
                 }
-            loadRoomEvents(older = false)
+            _state.update { it.copy(roomSending = false, roomSent = it.roomSent + 1) }
+            pollRoomEvents(roomId)
         }
     }
 
     fun closeRoom() {
+        roomPoll?.cancel()
+        roomPoll = null
         _state.update {
             it.copy(roomId = null, roomEvents = emptyList(), roomEventsNextAfter = 0L, roomEventsExhausted = false, roomEventsError = null)
         }
@@ -1990,6 +2022,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
     private companion object {
+        const val ROOM_POLL_MS = 4_000L
         const val MAX_WARM_READERS = 3
         const val READER_CACHE_TTL_MS = 15 * 60 * 1000L
         const val MAX_PRIVATE_KEY_BYTES = 256 * 1024

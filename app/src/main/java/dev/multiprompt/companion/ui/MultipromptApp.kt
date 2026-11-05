@@ -1458,6 +1458,8 @@ internal fun SessionsScreen(
             error = state.roomEventsError,
             onLoadOlder = onLoadOlderRoomEvents,
             onSend = onSendRoomMessage,
+            sending = state.roomSending,
+            sent = state.roomSent,
             onBack = {
                 openRoom = null
                 onCloseRoom()

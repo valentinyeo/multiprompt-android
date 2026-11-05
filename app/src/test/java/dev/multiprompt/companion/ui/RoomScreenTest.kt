@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -70,6 +71,26 @@ class RoomScreenTest {
         assertTrue(backs == 1)
     }
 
+    @Test fun eachAnswerSitsBeneathItsOwnQuestionOnce() {
+        val events = listOf(
+            RoomEvent(1, "human", "First question", null, id = "q1"),
+            RoomEvent(2, "human", "Second question", null, id = "q2"),
+            RoomEvent(3, "agent_reply", "Second answer", "m2", id = "r2", parentEventId = "q2"),
+            RoomEvent(4, "agent_reply", "First answer", "m1", id = "r1", parentEventId = "q1"),
+            RoomEvent(4, "agent_reply", "First answer", "m1", id = "r1", parentEventId = "q1"),
+            RoomEvent(5, "agent_reply", "Older answer", "m1", id = "r0", parentEventId = "q0"),
+        )
+        val lines = roomLines(events, room.members)
+        assertEquals(listOf("First question", "First answer", "Second question", "Second answer", "Older answer"), lines.map { it.text })
+        assertEquals("HT Product Lead", lines[1].author?.name)
+        assertEquals("SF Design Lead", lines[3].author?.name)
+    }
+
+    @Test fun offlineAgentsSayTheMessageWasNotSent() {
+        assertEquals("Agents are offline on this computer. Your message was not sent.", roomSendError("agents_offline"))
+        assertEquals("Agents are offline on this computer. Your message was not sent.", roomSendError("unsupported_remote_capability"))
+    }
+
     @Test fun anAgentReplyCarriesItsNameAndMyMessageDoesNot() {
         val events = listOf(
             RoomEvent(1, "human", "Ship it today", null),
@@ -106,6 +127,25 @@ class RoomScreenTest {
         compose.onNodeWithText("Send").performClick()
         compose.waitForIdle()
         assertTrue(sent == "hello @sf-design-lead")
+    }
+
+    @Test fun aFailedSendKeepsTheDraftAndASentOneClearsIt() {
+        val sent = androidx.compose.runtime.mutableIntStateOf(0)
+        compose.setContent {
+            MultipromptTheme(sunlight = false, material3 = false) {
+                Surface {
+                    RoomScreen(room, emptyList(), loading = false, exhausted = false, error = "Agents are offline on this computer. Your message was not sent.", onLoadOlder = {}, onSend = {}, sent = sent.intValue, onBack = {})
+                }
+            }
+        }
+        compose.onNodeWithText("Message Launch room").performTextInput("keep me")
+        compose.onNodeWithText("Send").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("keep me").assertIsDisplayed()
+        compose.onNodeWithText("Agents are offline on this computer. Your message was not sent.").assertIsDisplayed()
+        sent.intValue = 1
+        compose.waitForIdle()
+        assertTrue(compose.onAllNodesWithText("keep me").fetchSemanticsNodes().isEmpty())
     }
 
     @Test fun aRoomWithNothingLoadedOffersLoadOlder() {
