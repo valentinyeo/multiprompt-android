@@ -22,8 +22,8 @@ from pathlib import Path
 import sys
 path = Path(sys.argv[1])
 source = path.read_text()
-old = 'remember(state.inboxSessions, state.readerSession, state.accountLayout, state.botPhotoRevision)'
-new = 'remember(state.inboxSessions, state.readerSession, state.accountLayout)'
+old = 'remember(state.inboxSessions, visibleSessions, state.readerSession, state.accountLayout, state.botPhotoRevision)'
+new = 'remember(state.inboxSessions, visibleSessions, state.readerSession, state.accountLayout)'
 assert source.count(old) == 1
 path.write_text(source.replace(old, new, 1))
 PYTHON

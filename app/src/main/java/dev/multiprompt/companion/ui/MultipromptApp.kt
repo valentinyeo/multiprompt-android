@@ -1662,8 +1662,8 @@ internal fun SessionsScreen(
             )
         }
     }
-    val botLooks = remember(state.inboxSessions, state.readerSession, state.accountLayout, state.botPhotoRevision) {
-        state.inboxSessions.associate { session ->
+    val botLooks = remember(state.inboxSessions, visibleSessions, state.readerSession, state.accountLayout, state.botPhotoRevision) {
+        (state.inboxSessions + visibleSessions).associate { session ->
             SessionReadStore.key(session.hostId, session.name) to BotLook(
                 picture = drafts.shownBotPicture(session),
                 face = drafts.botFace(session),
@@ -1692,7 +1692,8 @@ internal fun SessionsScreen(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Box {
-                        BotAvatar(session.name, 56.dp, workspaceColor = session.workspaceColor)
+                        val look = botLooks[key]
+                        BotAvatar(session.name, 56.dp, workspaceColor = session.workspaceColor, face = look?.face, color = look?.color, picture = look?.picture)
                         if (key in state.unreadSessionKeys) {
                             Badge(
                                 Modifier.align(Alignment.TopEnd).semantics {
@@ -2563,7 +2564,7 @@ internal fun ReaderTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                BotAvatar(session.name, 28.dp, workspaceColor = session.workspaceColor, face = botFace, color = botColor)
+                BotAvatar(session.name, 28.dp, workspaceColor = session.workspaceColor, face = botFace, color = botColor, picture = botPicture)
                 Box(Modifier.weight(1f)) {
                     Column(
                         Modifier
