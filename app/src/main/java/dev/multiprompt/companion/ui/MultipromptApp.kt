@@ -1449,23 +1449,6 @@ internal fun SessionsScreen(
             KitSecondaryButton("Cancel", onClick = { moveSelectionOpen = false }, modifier = Modifier.fillMaxWidth())
         }
     }
-    openRoom?.let { room ->
-        RoomScreen(
-            room = room,
-            lines = roomLines(state.roomEvents, room.members),
-            loading = state.roomEventsLoading,
-            exhausted = state.roomEventsExhausted,
-            error = state.roomEventsError,
-            onLoadOlder = onLoadOlderRoomEvents,
-            onSend = onSendRoomMessage,
-            sending = state.roomSending,
-            sent = state.roomSent,
-            onBack = {
-                openRoom = null
-                onCloseRoom()
-            },
-        )
-    }
     if (crashReportVisible) {
         crashReport?.let { report ->
             val displayName = stringResource(R.string.app_name)
@@ -1495,6 +1478,28 @@ internal fun SessionsScreen(
         HostMappingDialog(state, onMapAccountHost, onDismiss = { settingsPage = SettingsPage.PREFERENCES })
     }
     if (settingsPage != SettingsPage.HIDDEN) return@MultipromptTheme
+    openRoom?.let { room ->
+        Scaffold(modifier = Modifier.fillMaxSize().imePadding(), containerColor = MaterialTheme.colorScheme.background) { padding ->
+            Box(Modifier.fillMaxSize().padding(padding)) {
+                RoomScreen(
+                    room = room,
+                    lines = roomLines(state.roomEvents, room.members),
+                    loading = state.roomEventsLoading,
+                    exhausted = state.roomEventsExhausted,
+                    error = state.roomEventsError,
+                    onLoadOlder = onLoadOlderRoomEvents,
+                    onSend = onSendRoomMessage,
+                    sending = state.roomSending,
+                    sent = state.roomSent,
+                    onBack = {
+                        openRoom = null
+                        onCloseRoom()
+                    },
+                )
+            }
+        }
+        return@MultipromptTheme
+    }
     reminderPromptSession?.let { session ->
         ReminderDialog(
             session = session,
