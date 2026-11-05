@@ -18,6 +18,7 @@ import dev.multiprompt.companion.model.RemoteDirectory
 import dev.multiprompt.companion.model.RefreshMerge
 import dev.multiprompt.companion.data.UnreadCount
 import dev.multiprompt.companion.room.roomRecipients
+import dev.multiprompt.companion.room.RoomHosts
 import dev.multiprompt.companion.notify.ReplyNotificationPolicy
 import dev.multiprompt.companion.notify.ReplyNotifier
 import dev.multiprompt.companion.data.SessionReadStore
@@ -598,10 +599,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refreshRooms() {
         val accountId = syncAuth.accountId() ?: return
-        val host = _state.value.accountHosts.values.firstOrNull() ?: _state.value.hosts.firstOrNull() ?: return
+        val hosts = RoomHosts.candidates(_state.value.accountHosts.values, _state.value.hosts)
+        if (hosts.isEmpty()) return
         viewModelScope.launch {
-            val rooms = runCatching { roomService.load(host, accountId) }.getOrElse { return@launch }
-            _state.update { it.copy(rooms = rooms) }
+            val loaded = hosts.map { host ->
+                async { runCatching { roomService.load(host, accountId) }.getOrNull()?.let { host.id to it } }
+            }.awaitAll().filterNotNull()
+            if (loaded.isEmpty()) return@launch
+            _state.update { it.copy(rooms = RoomHosts.merge(loaded)) }
         }
     }
 
@@ -632,7 +637,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val current = _state.value
         if (current.roomEventsLoading || current.roomSending) return
         val accountId = syncAuth.accountId() ?: return
-        val host = current.accountHosts.values.firstOrNull() ?: current.hosts.firstOrNull() ?: return
+        val host = RoomHosts.hostFor(current.rooms.firstOrNull { it.id == roomId }, current.accountHosts.values, current.hosts) ?: return
         val page = runCatching { roomService.page(host, accountId, roomId, current.roomEventsNextAfter) }.getOrNull() ?: return
         _state.update { state ->
             if (state.roomId != roomId || page.events.isEmpty()) return@update state
@@ -649,7 +654,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (current.roomEventsLoading || current.roomSending) return
         val room = current.rooms.firstOrNull { it.id == roomId } ?: return
         val accountId = syncAuth.accountId() ?: return
-        val host = current.accountHosts.values.firstOrNull() ?: current.hosts.firstOrNull() ?: return
+        val host = RoomHosts.hostFor(room, current.accountHosts.values, current.hosts) ?: return
         val recipients = roomRecipients(text, room.members.map { it.alias })
         val commandId = java.util.UUID.randomUUID().toString()
         _state.update { it.copy(roomEventsError = null, roomSending = true) }
@@ -681,7 +686,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (current.roomEventsLoading) return
         if (older && current.roomEventsExhausted) return
         val accountId = syncAuth.accountId() ?: return
-        val host = current.accountHosts.values.firstOrNull() ?: current.hosts.firstOrNull() ?: return
+        val host = RoomHosts.hostFor(current.rooms.firstOrNull { it.id == roomId }, current.accountHosts.values, current.hosts) ?: return
         val after = if (older) current.roomEventsNextAfter else 0L
         _state.update { it.copy(roomEventsLoading = true, roomEventsError = null) }
         viewModelScope.launch {
