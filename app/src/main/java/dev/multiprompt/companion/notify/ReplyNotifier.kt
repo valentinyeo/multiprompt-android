@@ -50,7 +50,7 @@ object ReplyNotifier {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val reply = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_robot)
             .setContentTitle(title)
             .setContentText(text)
             .setContentIntent(pending)
@@ -59,7 +59,7 @@ object ReplyNotifier {
             .setOnlyAlertOnce(true)
             .build()
         val summary = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_robot)
             .setContentTitle(context.getString(R.string.app_name))
             .setContentText("New replies")
             .setGroup(GROUP_KEY)
