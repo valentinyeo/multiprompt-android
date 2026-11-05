@@ -231,6 +231,21 @@ object TmuxCommands {
             "tmux send-keys -t $target Enter$rename"
     }
 
+    fun resurrectLiveChat(sessionName: String, sid: String): String {
+        require(LIVE_CHAT_SID.matches(sid)) { "Invalid live chat id" }
+        val fresh = freshSessionName(sessionName)
+        require(LIVE_CHAT_NAME.matches(fresh)) { "Invalid live chat name" }
+        val name = TmuxParser.shellQuote(fresh)
+        val reader = "python3 ~/.multiprompt-runtime/reader.py"
+        val host = "$reader host enable claude $sid --tmux $fresh >/dev/null 2>&1; " +
+            "$reader host start claude $sid >/dev/null 2>&1; exec sleep infinity"
+        return "if [ ! -f ~/.multiprompt-runtime/reader.py ]; then " +
+            "printf 'Live chat reader is missing\\n' >&2; exit 4; fi; " +
+            "if tmux has-session -t ${sessionTarget(fresh)} 2>/dev/null; then " +
+            "printf 'session_exists\\n' >&2; exit 2; fi; " +
+            "tmux new-session -d -s $name ${TmuxParser.shellQuote(host)}"
+    }
+
     fun freshSessionName(sessionName: String): String {
         val base = sessionName.take(40).trimEnd('-', '.', ':')
         return "$base-r${System.currentTimeMillis() % 100000}"

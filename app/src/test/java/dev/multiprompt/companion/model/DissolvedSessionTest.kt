@@ -65,4 +65,22 @@ class DissolvedSessionTest {
             DissolvedSession.from(session("plain-shell"), null, "").resumeCommand,
         )
     }
+
+    @Test
+    fun anArchivedLiveChatKeepsItsOwnChatIdInsteadOfTheStartFolder() {
+        val sid = "0b6d2c1e-4f3a-4b2c-9d8e-1a2b3c4d5e6f"
+        val live = session("live-api-x1", paneCommand = "sleep").copy(workingDirectory = "/home/valentin", hostSessionId = sid)
+
+        val dissolved = DissolvedSession.from(live, null, "", claudeSessionId = "462717f8-6e8b-46bf-ab93-de7095ed3618")
+
+        assertEquals(sid, dissolved.liveSessionId)
+        assertEquals("claude --resume $sid", dissolved.resumeCommand)
+    }
+
+    @Test
+    fun onlyLiveChatsRememberAChatId() {
+        val plain = session("claude-work").copy(hostSessionId = "0b6d2c1e-4f3a-4b2c-9d8e-1a2b3c4d5e6f")
+
+        assertEquals("", DissolvedSession.from(plain, null, "").liveSessionId)
+    }
 }
