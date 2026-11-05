@@ -36,11 +36,25 @@ internal data class RoomSummary(val id: String, val name: String, val members: L
 
 internal data class RoomLine(val seq: Long, val author: RoomMember?, val text: String)
 
-internal fun roomLines(events: List<dev.multiprompt.companion.room.RoomEvent>, members: List<RoomMember>): List<RoomLine> =
-    events.filter { it.text.isNotBlank() }.map { event ->
+internal fun roomLines(events: List<dev.multiprompt.companion.room.RoomEvent>, members: List<RoomMember>): List<RoomLine> {
+    val shown = events.filter { it.text.isNotBlank() }.distinctBy { it.id ?: "seq:${it.seq}" }.sortedBy { it.seq }
+    val ids = shown.mapNotNull { it.id }.toSet()
+    val replies = shown.filter { it.type == "agent_reply" && it.parentEventId in ids }.groupBy { it.parentEventId }
+    fun line(event: dev.multiprompt.companion.room.RoomEvent): RoomLine {
         val author = event.memberId?.let { id -> members.firstOrNull { it.id == id } }
-        RoomLine(event.seq, if (event.type == "agent_reply") author else null, event.text)
+        return RoomLine(event.seq, if (event.type == "agent_reply") author else null, event.text)
     }
+    return shown.filterNot { it.type == "agent_reply" && it.parentEventId in ids }.flatMap { event ->
+        listOf(line(event)) + replies[event.id].orEmpty().map(::line)
+    }
+}
+
+internal fun roomSendError(code: String?): String = when (code) {
+    "agents_offline", "unsupported_remote_capability", "runtime_unavailable" ->
+        "Agents are offline on this computer. Your message was not sent."
+    "revision_conflict" -> "The room changed. Send again."
+    else -> "Could not send to the room"
+}
 
 internal fun parseRooms(json: String?): List<RoomSummary> {
     if (json.isNullOrBlank()) return emptyList()
@@ -119,9 +133,11 @@ internal fun RoomScreen(
     onLoadOlder: () -> Unit,
     onSend: (String) -> Unit = {},
     sending: Boolean = false,
+    sent: Int = 0,
     onBack: () -> Unit,
 ) {
     var draft by remember { mutableStateOf("") }
+    androidx.compose.runtime.LaunchedEffect(sent) { if (sent > 0) draft = "" }
     val mentionsOpen = roomShowsMentions(draft)
     androidx.activity.compose.BackHandler(onBack = onBack)
     Column(Modifier.fillMaxWidth()) {
@@ -230,10 +246,7 @@ internal fun RoomScreen(
                 if (sending) "Sending…" else "Send",
                 onClick = {
                     val text = draft.trim()
-                    if (text.isNotEmpty() && !sending) {
-                        onSend(text)
-                        draft = ""
-                    }
+                    if (text.isNotEmpty() && !sending) onSend(text)
                 },
                 enabled = draft.isNotBlank() && !sending,
             )

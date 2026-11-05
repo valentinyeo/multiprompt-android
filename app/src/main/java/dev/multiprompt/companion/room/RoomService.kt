@@ -28,7 +28,7 @@ class RoomService(private val context: Context, private val repository: SshRepos
 
     suspend fun post(host: HostProfile, accountId: String, roomId: String, text: String, recipients: List<String>, commandId: String): Long =
         open(host, accountId).use { client ->
-            client.hostUuid()
+            if (!client.capabilities().liveSend) throw RoomFailure("agents_offline")
             client.postHuman(roomId, client.revision(roomId), text, recipients, commandId)
         }
 

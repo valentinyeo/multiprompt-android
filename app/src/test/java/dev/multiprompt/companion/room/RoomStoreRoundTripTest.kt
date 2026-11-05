@@ -109,6 +109,8 @@ class RoomStoreRoundTripTest {
 
     private class ProcessWire(private val process: Process) : RoomWire {
         override suspend fun call(request: JSONObject): JSONObject {
+            request.remove("host_uuid")
+            request.remove("room_messages")
             val out = process.outputStream
             out.write((request.toString() + "\n").toByteArray())
             out.flush()

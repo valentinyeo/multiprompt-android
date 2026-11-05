@@ -62,6 +62,36 @@ class RoomClientTest {
         assertTrue(wire.closed)
     }
 
+    @Test fun theClientOptsIntoRoomRepliesAndNamesItsHostOnEveryCall() {
+        val wire = FakeWire(
+            mutableListOf(
+                ok(JSONObject().put("host_uuid", "u-1").put("store_only", false).put("live_send", true).put("room_reply_protocol", 1)),
+                ok(
+                    JSONObject().put("next_after", 3).put(
+                        "events",
+                        org.json.JSONArray()
+                            .put(JSONObject().put("id", "e-1").put("seq", 2).put("type", "human").put("text", "First"))
+                            .put(JSONObject().put("id", "e-2").put("seq", 3).put("type", "agent_reply").put("text", "Answer").put("member_id", "m-1").put("parent_event_id", "e-1")),
+                    ),
+                ),
+            ),
+        )
+        val client = RoomClient(wire)
+        val capabilities = runBlocking { client.capabilities() }
+        assertTrue(capabilities.liveSend)
+        assertEquals(1, wire.requests[0].getInt("room_messages"))
+        assertTrue(!wire.requests[0].has("host_uuid"))
+        val page = runBlocking { client.events("r-1") }
+        assertEquals("u-1", wire.requests[1].getString("host_uuid"))
+        assertEquals("e-1", page.events[1].parentEventId)
+        assertEquals("e-2", page.events[1].id)
+    }
+
+    @Test fun anOldStoreWithoutReplyCollectionCannotSend() {
+        val wire = FakeWire(mutableListOf(ok(JSONObject().put("host_uuid", "u-1").put("store_only", true).put("live_send", false))))
+        assertTrue(!runBlocking { RoomClient(wire).capabilities() }.liveSend)
+    }
+
     @Test fun aStoreThatRefusesTheRequestSaysWhy() {
         val wire = FakeWire(mutableListOf(JSONObject().put("ok", false).put("error", "different_host")))
         val failure = runCatching { runBlocking { RoomClient(wire).hostUuid() } }.exceptionOrNull()
