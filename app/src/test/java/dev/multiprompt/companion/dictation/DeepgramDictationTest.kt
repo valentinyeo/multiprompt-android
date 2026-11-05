@@ -15,6 +15,7 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
 import org.junit.Assert.*
+import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -203,6 +204,28 @@ class DeepgramDictationTest {
             dictation.stop()
             assertEquals(1, fixture.mic.stops)
             assertEquals(1, fixture.mic.releases)
+        }
+    }
+
+    @Test
+    fun savesOnlyACleanKeyThatDeepgramAccepts() {
+        val stored = mutableMapOf<String, ByteArray>()
+        val answers = ArrayDeque(listOf(401, 400))
+        val checked = mutableListOf<String>()
+        val dictation = DeepgramDictation(RuntimeEnvironment.getApplication(), object : SecretStorage {
+            override fun get(id: String): ByteArray? = stored[id]
+            override fun put(id: String, value: ByteArray) { stored[id] = value }
+            override fun remove(id: String?) { stored.remove(id) }
+        }, keyChecker = { checked += it; answers.removeFirst() })
+        dictation.use {
+            val sample = (0 until 40).joinToString("") { (it % 16).toString(16) }
+            assertEquals(KeySave.NOT_A_KEY, runBlocking { it.saveCheckedApiKey("a1b2c3d4e5") })
+            assertEquals(KeySave.REJECTED, runBlocking { it.saveCheckedApiKey(sample) })
+            assertTrue(stored.isEmpty())
+            assertEquals(KeySave.SAVED, runBlocking { it.saveCheckedApiKey("credential\u200B ${sample.uppercase()} ") })
+            assertEquals(listOf(sample, sample), checked)
+            assertEquals(sample, stored.values.single().toString(Charsets.UTF_8))
+            assertTrue(it.state.value.configured)
         }
     }
 

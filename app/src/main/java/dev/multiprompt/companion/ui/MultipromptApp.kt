@@ -229,6 +229,7 @@ import dev.multiprompt.companion.model.DissolvedSession
 import dev.multiprompt.companion.data.CrashReport
 import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
+import dev.multiprompt.companion.dictation.KeySave
 import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.dictation.DictationState
 import dev.multiprompt.companion.reader.ReaderStatus
@@ -2731,6 +2732,8 @@ internal fun ReaderScreen(
     var apiKeyDialogVisible by remember(connection) { mutableStateOf(false) }
     var apiKeyDraft by remember(connection) { mutableStateOf("") }
     var apiKeyError by remember(connection) { mutableStateOf<String?>(null) }
+    var apiKeyChecking by remember(connection) { mutableStateOf(false) }
+    val apiKeyScope = rememberCoroutineScope()
     var microphoneError by remember(connection) { mutableStateOf<String?>(null) }
     var sendAfterDictation by remember(connection) { mutableStateOf(false) }
     var imageKeyDialogVisible by remember(connection) { mutableStateOf(false) }
@@ -3140,16 +3143,23 @@ internal fun ReaderScreen(
                 apiKeyDraft = ""
                 apiKeyError = null
             }, modifier = Modifier.fillMaxWidth())
-            KitPrimaryButton("Save and dictate", onClick = {
-                if (dictation.saveApiKey(apiKeyDraft)) {
-                    apiKeyDialogVisible = false
-                    apiKeyDraft = ""
-                    apiKeyError = null
-                    startDictation()
-                } else {
-                    apiKeyError = "Enter a valid API key"
+            KitPrimaryButton(if (apiKeyChecking) "Checking key" else "Save and dictate", onClick = {
+                apiKeyChecking = true
+                apiKeyScope.launch {
+                    val result = dictation.saveCheckedApiKey(apiKeyDraft)
+                    apiKeyChecking = false
+                    when (result) {
+                        KeySave.SAVED -> {
+                            apiKeyDialogVisible = false
+                            apiKeyDraft = ""
+                            apiKeyError = null
+                            startDictation()
+                        }
+                        KeySave.NOT_A_KEY -> apiKeyError = "This is not a Deepgram API key. Copy the 40 character key."
+                        KeySave.REJECTED -> apiKeyError = "Deepgram rejected this key. Copy it again from Deepgram."
+                    }
                 }
-            }, modifier = Modifier.fillMaxWidth(), enabled = apiKeyDraft.isNotBlank())
+            }, modifier = Modifier.fillMaxWidth(), enabled = apiKeyDraft.isNotBlank() && !apiKeyChecking)
         }
     }
     if (imageKeyDialogVisible) {
