@@ -2,6 +2,7 @@
   "IGSH-1628": "Android: answers to questions and permissions use our answer rows",
   "IGSH-1631": "Android: no disconnect warning, chat reconnects on its own",
   "IGSH-1684": "Multibot Android: every update note line names its ticket",
+  "IGSH-1717": "Android: three dots tick while the agent works",
   "IGSH-1719": "Android: chat updates stay fast after slash commands",
   "IGSH-1722": "Android: folder search finds partial words in any order"
 }
