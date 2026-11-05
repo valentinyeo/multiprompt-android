@@ -185,23 +185,6 @@ jobs:
             app/build/test-results/testDebugUnitTest/*.xml
           if-no-files-found: ignore
 
-  late-photo-red:
-    name: late-photo-red
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "9.5.1"
-      - name: Unpublished bot photo fails its test
-        env:
-          GRADLE: gradle
-        run: tools/check.sh unit-red
-
   m3-unit-tests:
     name: m3-unit-tests
     runs-on: ubuntu-24.04
@@ -245,6 +228,10 @@ jobs:
         env:
           GRADLE: gradle
         run: tools/check.sh lint
+      - name: Unpublished bot photo fails its test
+        env:
+          GRADLE: gradle
+        run: tools/check.sh unit-red
 
   image-preview-emulator:
     name: image-preview-emulator
