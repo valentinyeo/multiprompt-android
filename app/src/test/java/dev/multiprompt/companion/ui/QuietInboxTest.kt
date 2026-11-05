@@ -6,9 +6,12 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import dev.multiprompt.companion.AppUiState
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
+import dev.multiprompt.companion.room.RoomEntry
+import dev.multiprompt.companion.room.RoomMemberEntry
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -78,5 +81,18 @@ class QuietInboxTest {
         compose.onNodeWithText("alpha").assertIsDisplayed()
         compose.onAllNodes(androidx.compose.ui.test.hasProgressBarRangeInfo(androidx.compose.ui.semantics.ProgressBarRangeInfo.Indeterminate))
             .assertCountEquals(0)
+    }
+
+    @Test fun tappingARoomOpensItOverTheInbox() {
+        val host = HostProfile("v", "Contabo", "vps", username = "valentin", keySecretId = "key")
+        render(AppUiState(
+            hosts = listOf(host),
+            sessions = listOf(TmuxSession(host.id, "alpha", 1, 0, 0)),
+            signedIn = true,
+            rooms = listOf(RoomEntry("room-1", "Proof room", 1, listOf(RoomMemberEntry("m1", "helper", "Room Helper", "claude:sid")))),
+        ))
+        compose.onNodeWithText("Proof room").performClick()
+        compose.onNodeWithText("Message Proof room").assertIsDisplayed()
+        compose.onNodeWithText("alpha").assertDoesNotExist()
     }
 }
