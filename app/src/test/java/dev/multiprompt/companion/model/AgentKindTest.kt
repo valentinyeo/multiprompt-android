@@ -1,9 +1,20 @@
 package dev.multiprompt.companion.model
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AgentKindTest {
+    @Test
+    fun onlyLiveChatsAreMarkedLive() {
+        fun session(name: String, command: String) = TmuxSession("h", name, 1, 0, 0, paneCommand = command)
+        assertTrue(session("live-1d21840", "sleep").liveChat)
+        assertFalse(session("live-1d21840", "bash").liveChat)
+        assertFalse(session("cl-hypertasks", "claude").liveChat)
+        assertFalse(session("work", "sleep").liveChat)
+    }
+
     @Test
     fun paneCommandIsAuthoritativeForEverySupportedAgent() {
         assertEquals(AgentKind.CLAUDE, AgentKind.detect("work", paneCommand = "claude"))

@@ -2556,7 +2556,7 @@ internal fun ReaderTopBar(
             }
         },
         modifier = Modifier.testTag("reader-top-bar").statusBarsPadding().pointerInput(onOpenTerminal) {
-            detectTapGestures(onDoubleTap = { onOpenTerminal() })
+            detectTapGestures(onDoubleTap = { if (!session.liveChat) onOpenTerminal() })
         },
         title = {
             Row(
@@ -3926,7 +3926,7 @@ internal fun ReaderScreen(
                 modifier = Modifier.padding(horizontal = ReaderScreenPadding)
                     .transformable(state = transcriptTransform, canPan = { false })
                     .pointerInput(onOpenTerminal) {
-                        detectTapGestures(onDoubleTap = { onOpenTerminal() })
+                        detectTapGestures(onDoubleTap = { if (!session.liveChat) onOpenTerminal() })
                     },
             )
         } else Column(
@@ -3935,7 +3935,7 @@ internal fun ReaderScreen(
                 .nestedScroll(overscrollLoader)
                 .readerScroll(scrollState, followRequest)
                 .pointerInput(onOpenTerminal) {
-                    detectTapGestures(onDoubleTap = { onOpenTerminal() })
+                    detectTapGestures(onDoubleTap = { if (!session.liveChat) onOpenTerminal() })
                 }
                 .padding(horizontal = ReaderScreenPadding).padding(top = ReaderFloatingInset + WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = ReaderMessageSpacing + padding.calculateBottomPadding()),
             horizontalAlignment = Alignment.Start,
