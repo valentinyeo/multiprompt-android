@@ -21,6 +21,8 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import dev.multiprompt.companion.data.CrashReport
+import dev.multiprompt.companion.security.SecretStorage
+import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.account.AccountLayout
 import dev.multiprompt.companion.account.AccountLayoutStore
 import dev.multiprompt.companion.account.FAVORITES_SPLIT_ID
@@ -60,7 +62,7 @@ class SessionListSettingsTest {
         if (::fixture.isInitialized) fixture.close()
     }
 
-    private fun render(report: CrashReport? = null) {
+    private fun render(report: CrashReport? = null, dictation: DeepgramDictation? = null) {
         val displayedReport = mutableStateOf(report)
         fixture = SessionActivityFixture()
         compose.setContent {
@@ -84,6 +86,7 @@ class SessionListSettingsTest {
                 onClearSessionActionError = {}, readerDefaultFontScale = state.readerDefaultFontScale,
                 onSetReaderDefaultFontScale = fixture.model::setReaderDefaultFontScale,
                 crashReport = displayedReport.value, onClearCrashReport = { displayedReport.value = null }, onMapAccountHost = { _, _ -> },
+                dictation = dictation,
             )
         }
     }
@@ -106,6 +109,27 @@ class SessionListSettingsTest {
         compose.onNodeWithContentDescription("Session list actions").performClick()
         compose.onNodeWithText("Hosts").assertDoesNotExist()
         compose.onNodeWithText("Workspaces").assertDoesNotExist()
+    }
+
+    @Test fun settingsSavesTheDictationKeyWithoutOpeningAChat() {
+        val stored = mutableMapOf<String, ByteArray>()
+        val dictation = DeepgramDictation(RuntimeEnvironment.getApplication(), object : SecretStorage {
+            override fun get(id: String): ByteArray? = stored[id]
+            override fun put(id: String, value: ByteArray) { stored[id] = value }
+            override fun remove(id: String?) { stored.remove(id) }
+        }, keyChecker = { 400 })
+        dictation.use {
+            render(dictation = it)
+            openSettings()
+            compose.onNodeWithText("Not set").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText("Dictation key").performClick()
+            compose.onNodeWithText("Deepgram dictation").assertIsDisplayed()
+            compose.onNodeWithText("API key").performTextInput((0 until 40).joinToString("") { n -> (n % 16).toString(16) })
+            compose.onNodeWithText("Save key").performClick()
+            compose.waitUntil(5_000) { compose.onAllNodesWithText("Set").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("Deepgram dictation").assertDoesNotExist()
+            assertTrue(stored.isNotEmpty())
+        }
     }
 
     @Test fun signedInAccountErrorIsVisibleWithoutClearingCredentials() {
