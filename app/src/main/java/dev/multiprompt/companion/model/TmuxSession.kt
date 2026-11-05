@@ -21,6 +21,9 @@ data class TmuxSession(
     val agent: AgentKind
         get() = AgentKind.detect(name, title, preview, paneCommand)
 
+    val liveChat: Boolean
+        get() = AgentKind.liveChat(name, paneCommand)
+
     val displayName: String
         get() {
             accountName?.let { return it }
@@ -56,7 +59,7 @@ enum class AgentKind(val label: String) {
     companion object {
         fun detect(name: String, title: String = "", preview: String = "", paneCommand: String = ""): AgentKind {
             val command = paneCommand.lowercase().substringAfterLast('/').substringAfterLast('\\')
-            if (command == "sleep" && name.lowercase().startsWith(LIVE_CHAT_PREFIX)) return CLAUDE
+            if (liveChat(name, paneCommand)) return CLAUDE
             when {
                 command == "codex" || command.startsWith("codex-") -> return CODEX
                 command == "claude" || command.startsWith("claude-") -> return CLAUDE
@@ -89,6 +92,10 @@ enum class AgentKind(val label: String) {
                 else -> OTHER
             }
         }
+
+        fun liveChat(name: String, paneCommand: String): Boolean =
+            paneCommand.lowercase().substringAfterLast('/').substringAfterLast('\\') == "sleep" &&
+                name.lowercase().startsWith(LIVE_CHAT_PREFIX)
 
         private const val LIVE_CHAT_PREFIX = "live-"
         private val PI_NAME = Regex("(^|[-_])pi($|[-_])")
