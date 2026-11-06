@@ -132,7 +132,7 @@ class TopFadeInstrumentedTest {
         val bar = compose.onNodeWithTag("floating-bottom-bar", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val density = compose.activity.resources.displayMetrics.density
         val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
-        for (y in listOf(bar.top - 24 * density, bar.top + 1, (bar.top + bar.bottom) / 2, bar.bottom - 2)) {
+        for (y in listOf(bar.top - 24 * density, bar.top + 1, bar.top + 28 * density, bar.top + 54 * density)) {
             assertEquals("Nothing paints behind the bottom pills at y=$y", Color.RED, bitmap.getPixel(1, y.toInt()))
         }
         bitmap.recycle()

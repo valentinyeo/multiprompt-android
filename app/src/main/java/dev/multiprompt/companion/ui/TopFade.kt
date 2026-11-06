@@ -2,9 +2,7 @@ package dev.multiprompt.companion.ui
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -13,22 +11,23 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 
 @Composable
 internal fun TopFade(content: @Composable ColumnScope.() -> Unit) {
     val background = MaterialTheme.colorScheme.background
-    val statusHeight = WindowInsets.statusBars.getTop(LocalDensity.current).toFloat()
     Column(
         Modifier.fillMaxWidth().testTag("top-fade").drawBehind {
-            val height = size.height + 24.dp.toPx()
+            val height = size.height + 40.dp.toPx()
+            val solid = (size.height / height).coerceIn(0.01f, 0.99f)
+            val fade = 1f - solid
             drawRect(
                 brush = Brush.verticalGradient(
                     0f to background,
-                    (statusHeight / height).coerceIn(0.01f, 0.5f) to background,
-                    0.65f to background.copy(alpha = 0.95f),
+                    solid to background,
+                    solid + fade * 0.3f to background.copy(alpha = 0.7f),
+                    solid + fade * 0.65f to background.copy(alpha = 0.3f),
                     1f to Color.Transparent,
                     endY = height,
                 ),
