@@ -1,0 +1,562 @@
+{
+  "$start": [
+    [
+      {
+        "type": "extension_ui_request",
+        "id": "ui-status",
+        "method": "setStatus",
+        "statusKey": "fixture"
+      },
+      {
+        "type": "extension_ui_request",
+        "id": "ui-ask",
+        "method": "confirm",
+        "title": "Allow?",
+        "message": "fixture"
+      }
+    ]
+  ],
+  "prompt": [
+    [
+      {
+        "id": "$ID",
+        "type": "response",
+        "command": "prompt",
+        "success": true,
+        "data": {
+          "disposition": "started"
+        }
+      },
+      {
+        "type": "agent_start"
+      },
+      {
+        "type": "turn_start"
+      },
+      {
+        "type": "message_start",
+        "message": {
+          "role": "assistant",
+          "content": []
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "thinking_start",
+          "contentIndex": 0
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "thinking_delta",
+          "contentIndex": 0,
+          "delta": "Short "
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "thinking_delta",
+          "contentIndex": 0,
+          "delta": "answer"
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "thinking_end",
+          "contentIndex": 0,
+          "content": "Short answer"
+        }
+      },
+      {
+        "type": "message_end",
+        "message": {
+          "role": "assistant",
+          "stopReason": "toolUse",
+          "usage": {
+            "input": 40,
+            "output": 6,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "totalTokens": 46,
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "total": 0
+            }
+          },
+          "provider": "opencode-go",
+          "model": "deepseek-v4.1-flash"
+        }
+      },
+      {
+        "type": "tool_execution_start",
+        "toolCallId": "tool-1",
+        "toolName": "bash",
+        "args": {
+          "command": "ls"
+        }
+      },
+      {
+        "type": "tool_execution_end",
+        "toolCallId": "tool-1",
+        "toolName": "bash",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "notes.txt"
+            }
+          ],
+          "details": {}
+        },
+        "isError": false
+      },
+      {
+        "type": "message_start",
+        "message": {
+          "role": "assistant",
+          "content": []
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "text_start",
+          "contentIndex": 0
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "PO"
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "NG"
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "PONG"
+        }
+      },
+      {
+        "type": "message_end",
+        "message": {
+          "role": "assistant",
+          "stopReason": "stop",
+          "usage": {
+            "input": 40,
+            "output": 6,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "totalTokens": 46,
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "total": 0
+            }
+          },
+          "provider": "opencode-go",
+          "model": "deepseek-v4.1-flash"
+        }
+      },
+      {
+        "type": "turn_end"
+      },
+      {
+        "type": "agent_end",
+        "willRetry": false
+      },
+      {
+        "type": "agent_settled",
+        "aborted": false
+      }
+    ],
+    [
+      {
+        "id": "$ID",
+        "type": "response",
+        "command": "prompt",
+        "success": true,
+        "data": {
+          "disposition": "started"
+        }
+      },
+      {
+        "type": "agent_start"
+      },
+      {
+        "$wait": "prompt"
+      },
+      {
+        "id": "$WID",
+        "type": "response",
+        "command": "prompt",
+        "success": true,
+        "data": {
+          "disposition": "queued"
+        }
+      },
+      {
+        "type": "turn_start"
+      },
+      {
+        "type": "message_start",
+        "message": {
+          "role": "assistant",
+          "content": []
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "thinking_start",
+          "contentIndex": 0
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "thinking_delta",
+          "contentIndex": 0,
+          "delta": "Short "
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "thinking_delta",
+          "contentIndex": 0,
+          "delta": "answer"
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "thinking_end",
+          "contentIndex": 0,
+          "content": "Short answer"
+        }
+      },
+      {
+        "type": "message_end",
+        "message": {
+          "role": "assistant",
+          "stopReason": "toolUse",
+          "usage": {
+            "input": 40,
+            "output": 6,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "totalTokens": 46,
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "total": 0
+            }
+          },
+          "provider": "opencode-go",
+          "model": "deepseek-v4.1-flash"
+        }
+      },
+      {
+        "type": "tool_execution_start",
+        "toolCallId": "tool-1",
+        "toolName": "bash",
+        "args": {
+          "command": "ls"
+        }
+      },
+      {
+        "type": "tool_execution_end",
+        "toolCallId": "tool-1",
+        "toolName": "bash",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "notes.txt"
+            }
+          ],
+          "details": {}
+        },
+        "isError": false
+      },
+      {
+        "type": "message_start",
+        "message": {
+          "role": "assistant",
+          "content": []
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "text_start",
+          "contentIndex": 0
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "PO"
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "NG"
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "PONG"
+        }
+      },
+      {
+        "type": "message_end",
+        "message": {
+          "role": "assistant",
+          "stopReason": "stop",
+          "usage": {
+            "input": 40,
+            "output": 6,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "totalTokens": 46,
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "total": 0
+            }
+          },
+          "provider": "opencode-go",
+          "model": "deepseek-v4.1-flash"
+        }
+      },
+      {
+        "type": "turn_end"
+      },
+      {
+        "type": "agent_end",
+        "willRetry": false
+      },
+      {
+        "type": "agent_settled",
+        "aborted": false
+      }
+    ],
+    [
+      {
+        "id": "$ID",
+        "type": "response",
+        "command": "prompt",
+        "success": true,
+        "data": {
+          "disposition": "started"
+        }
+      },
+      {
+        "type": "agent_start"
+      },
+      {
+        "$wait": "prompt"
+      },
+      {
+        "id": "$WID",
+        "type": "response",
+        "command": "prompt",
+        "success": false,
+        "error": "follow-up queue is full"
+      },
+      {
+        "type": "turn_start"
+      },
+      {
+        "type": "message_start",
+        "message": {
+          "role": "assistant",
+          "content": []
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "thinking_start",
+          "contentIndex": 0
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "thinking_delta",
+          "contentIndex": 0,
+          "delta": "Short "
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "thinking_delta",
+          "contentIndex": 0,
+          "delta": "answer"
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "thinking_end",
+          "contentIndex": 0,
+          "content": "Short answer"
+        }
+      },
+      {
+        "type": "message_end",
+        "message": {
+          "role": "assistant",
+          "stopReason": "toolUse",
+          "usage": {
+            "input": 40,
+            "output": 6,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "totalTokens": 46,
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "total": 0
+            }
+          },
+          "provider": "opencode-go",
+          "model": "deepseek-v4.1-flash"
+        }
+      },
+      {
+        "type": "tool_execution_start",
+        "toolCallId": "tool-1",
+        "toolName": "bash",
+        "args": {
+          "command": "ls"
+        }
+      },
+      {
+        "type": "tool_execution_end",
+        "toolCallId": "tool-1",
+        "toolName": "bash",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "notes.txt"
+            }
+          ],
+          "details": {}
+        },
+        "isError": false
+      },
+      {
+        "type": "message_start",
+        "message": {
+          "role": "assistant",
+          "content": []
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "text_start",
+          "contentIndex": 0
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "PO"
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "NG"
+        }
+      },
+      {
+        "type": "message_update",
+        "assistantMessageEvent": {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "PONG"
+        }
+      },
+      {
+        "type": "message_end",
+        "message": {
+          "role": "assistant",
+          "stopReason": "stop",
+          "usage": {
+            "input": 40,
+            "output": 6,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "totalTokens": 46,
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "total": 0
+            }
+          },
+          "provider": "opencode-go",
+          "model": "deepseek-v4.1-flash"
+        }
+      },
+      {
+        "type": "turn_end"
+      },
+      {
+        "type": "agent_end",
+        "willRetry": false
+      },
+      {
+        "type": "agent_settled",
+        "aborted": false
+      }
+    ]
+  ]
+}
