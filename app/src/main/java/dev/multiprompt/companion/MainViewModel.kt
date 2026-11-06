@@ -786,7 +786,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val text = ReplyNotificationPolicy.text(history) ?: return@launch
                 val current = _state.value
                 val front = if (foreground.value) current.terminalSession ?: current.readerSession else null
-                if (current.sessions.none { it.hostId == session.hostId && it.name == session.name && it.lastActivityEpochSeconds == session.lastActivityEpochSeconds }) return@launch
+                if (current.sessions.none { it.hostId == session.hostId && it.name == session.name && it.replyActivityEpochSeconds == session.replyActivityEpochSeconds }) return@launch
                 if (key !in favoriteReplyKeys(current, setOf(key)) || (current.unreadCounts[key] ?: 0) <= 0 ||
                     front?.let { SessionReadStore.key(it.hostId, it.name) } == key) return@launch
                 ReplyNotifier.show(app, session.hostId, session.name, session.displayName, text)
@@ -866,10 +866,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             .toMap()
+        val frontKey = if (foreground.value) (current.terminalSession ?: current.readerSession)?.let {
+            SessionReadStore.key(it.hostId, it.name)
+        } else null
+        sessions.filter { SessionReadStore.key(it.hostId, it.name) == frontKey && sessionReads.isUnread(it) }
+            .forEach(sessionReads::markRead)
         val unreadKeys = sessions
             .filterNot { isMutedSession(it, current.accountLayout, mapping) }
             .filter { SessionReadStore.key(it.hostId, it.name) !in archivedKeys }
-            .filter { TmuxText.isWaitingForInput(it.preview, it.agent) }
+            .filter(SessionReadStore::waitingForReply)
             .filter(sessionReads::isUnread)
             .mapTo(mutableSetOf()) { SessionReadStore.key(it.hostId, it.name) }
         val replied = mutableSetOf<String>()
@@ -878,8 +883,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val stored = sessionReads.unreadCountState(session)
             val counted = if (answered[session.hostId]?.error == null && session.hostId in answered) UnreadCount.step(
                 stored,
-                activity = session.lastActivityEpochSeconds,
-                waiting = TmuxText.isWaitingForInput(session.preview, session.agent),
+                activity = session.replyActivityEpochSeconds,
+                waiting = SessionReadStore.waitingForReply(session),
                 unread = sessionReads.isUnread(session),
             ) else stored
             if (counted != stored) sessionReads.saveUnreadCountState(session, counted)
