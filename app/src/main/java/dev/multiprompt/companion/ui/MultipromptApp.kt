@@ -59,6 +59,9 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -119,7 +122,6 @@ import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
@@ -467,18 +469,20 @@ private fun AppScreens(viewModel: MainViewModel) {
 
     val newSession = state.newSession
     if (newSession != null && newSession.step == NewSessionStep.PATH) {
-        NewSessionFolderScreen(
+        MultipromptTheme(sunlight = sunlight, readerStyle = true) { NewSessionFolderScreen(
+            sunlight = sunlight,
             picker = newSession,
             hosts = state.hosts,
             onBrowse = viewModel::browseNewSessionDirectory,
             onChoose = viewModel::chooseNewSessionFolder,
             onModeChange = viewModel::setNewSessionMode,
             onClose = viewModel::closeNewSession,
-        )
+        ) }
         return
     }
     if (newSession != null && newSession.step == NewSessionStep.EXISTING) {
-        ExistingSessionScreen(
+        MultipromptTheme(sunlight = sunlight, readerStyle = true) { ExistingSessionScreen(
+            sunlight = sunlight,
             picker = newSession,
             hosts = state.hosts,
             archivedKeys = state.archivedSessionKeys,
@@ -486,7 +490,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             onNeedsAttentionChange = viewModel::setNewSessionNeedsAttentionOnly,
             onOpen = viewModel::openExistingSession,
             onClose = viewModel::closeNewSession,
-        )
+        ) }
         return
     }
 
@@ -789,6 +793,18 @@ private fun UpdateBanner(release: UpdateRelease, onInstall: () -> Unit) {
     }
 }
 
+internal val PickerControlHeight = ReaderControlSize
+
+@Composable
+private fun pickerSelectedFill(sunlight: Boolean): Color =
+    if (sunlight) MaterialTheme.colorScheme.surfaceContainerHigh else ReaderSelected
+
+@Composable
+private fun Modifier.pickerSurface(shape: androidx.compose.ui.graphics.Shape = CircleShape): Modifier =
+    background(MaterialTheme.colorScheme.surfaceContainer, shape)
+        .border(ReaderOutlineWidth, MaterialTheme.colorScheme.outline, shape)
+        .clip(shape)
+
 @Composable
 private fun PickerSearchBar(
     query: String,
@@ -798,59 +814,149 @@ private fun PickerSearchBar(
     placeholder: String,
     onClose: () -> Unit,
 ) {
+    val colors = MaterialTheme.colorScheme
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(start = 10.dp, end = 6.dp, top = 6.dp),
+            .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            singleLine = true,
-            placeholder = { Text(placeholder) },
-            leadingIcon = { Icon(Icons.Default.Search, null) },
-            trailingIcon = {
-                if (query.isNotEmpty()) {
-                    IconButton(onClick = { onQueryChange("") }) { Icon(Icons.Default.Close, "Clear") }
+        Box(
+            Modifier
+                .size(PickerControlHeight)
+                .pickerSurface()
+                .clickable(role = Role.Button, onClick = onClose)
+                .testTag("picker-back"),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", Modifier.size(20.dp), tint = colors.onSurface)
+        }
+        Row(
+            Modifier
+                .weight(1f)
+                .height(PickerControlHeight)
+                .pickerSurface()
+                .padding(start = 14.dp, end = 6.dp)
+                .testTag("picker-search"),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Default.Search, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
+            Spacer(Modifier.width(10.dp))
+            BasicTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                singleLine = true,
+                textStyle = TextStyle(fontSize = 16.sp, color = colors.onSurface),
+                cursorBrush = SolidColor(colors.onSurface),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { onSubmit() }),
+                modifier = Modifier.weight(1f).focusRequester(focusRequester),
+                decorationBox = { field ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (query.isEmpty()) Text(placeholder, fontSize = 16.sp, color = colors.onSurfaceVariant, maxLines = 1)
+                        field()
+                    }
+                },
+            )
+            if (query.isNotEmpty()) {
+                Box(
+                    Modifier.size(32.dp).clip(CircleShape).clickable(role = Role.Button) { onQueryChange("") },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Default.Close, "Clear", Modifier.size(18.dp), tint = colors.onSurfaceVariant)
                 }
-            },
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { onSubmit() }),
-            modifier = Modifier.weight(1f).focusRequester(focusRequester),
-        )
-        TextButton(onClick = onClose) { Text("Cancel") }
+            }
+        }
     }
 }
 
 @Composable
-private fun PickerModeRow(mode: NewSessionMode, onModeChange: (NewSessionMode) -> Unit) {
+private fun PickerModeRow(mode: NewSessionMode, sunlight: Boolean, onModeChange: (NewSessionMode) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val selectedFill = pickerSelectedFill(sunlight)
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .height(PickerControlHeight)
+            .pickerSurface()
+            .padding(3.dp)
+            .testTag("picker-mode"),
     ) {
-        val newSelected = mode == NewSessionMode.NEW
-        val newClick = { if (!newSelected) onModeChange(NewSessionMode.NEW) }
-        if (newSelected) {
-            Button(onClick = newClick, modifier = Modifier.weight(1f)) { Text("New session") }
-        } else {
-            OutlinedButton(onClick = newClick, modifier = Modifier.weight(1f)) { Text("New session") }
-        }
-        val existingSelected = mode == NewSessionMode.EXISTING
-        val existingClick = { if (!existingSelected) onModeChange(NewSessionMode.EXISTING) }
-        if (existingSelected) {
-            Button(onClick = existingClick, modifier = Modifier.weight(1f)) { Text("Existing") }
-        } else {
-            OutlinedButton(onClick = existingClick, modifier = Modifier.weight(1f)) { Text("Existing") }
+        listOf(NewSessionMode.NEW to "New session", NewSessionMode.EXISTING to "Existing").forEach { (value, label) ->
+            val isSelected = value == mode
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(CircleShape)
+                    .background(if (isSelected) selectedFill else Color.Transparent, CircleShape)
+                    .selectable(isSelected, role = Role.Tab) { if (!isSelected) onModeChange(value) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    label,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isSelected) colors.onSurface else colors.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
+
+@Composable
+private fun PickerToggle(checked: Boolean, sunlight: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Box(
+        Modifier
+            .width(52.dp)
+            .height(32.dp)
+            .background(if (checked) pickerSelectedFill(sunlight) else colors.surfaceContainer, CircleShape)
+            .border(ReaderOutlineWidth, colors.outline, CircleShape)
+            .clip(CircleShape)
+            .toggleable(checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .padding(4.dp),
+        contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart,
+    ) {
+        Box(Modifier.size(22.dp).background(if (checked) colors.onSurface else colors.onSurfaceVariant, CircleShape))
+    }
+}
+
+@Composable
+private fun PickerRow(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    leading: (@Composable () -> Unit)? = null,
+) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        leading?.invoke()
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 16.sp, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (subtitle.isNotEmpty()) {
+                Text(subtitle, fontSize = 12.sp, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+internal fun pickerEntrySubtitle(isRepo: Boolean, uses: Int): String =
+    listOfNotNull(if (isRepo) "git" else null, if (uses > 0) "used ${uses}×" else null).joinToString(" · ")
 
 @Composable
 private fun ExistingSessionScreen(
+    sunlight: Boolean,
     picker: NewSessionPicker,
     hosts: List<HostProfile>,
     archivedKeys: Set<String>,
@@ -893,7 +999,7 @@ private fun ExistingSessionScreen(
             placeholder = "Find a session",
             onClose = onClose,
         )
-        PickerModeRow(mode = picker.mode, onModeChange = onModeChange)
+        PickerModeRow(mode = picker.mode, sunlight = sunlight, onModeChange = onModeChange)
         Row(
             Modifier
                 .fillMaxWidth()
@@ -908,13 +1014,15 @@ private fun ExistingSessionScreen(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            Text("Needs attention", style = MaterialTheme.typography.labelSmall)
-            Switch(
+            Text("Needs attention", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(8.dp))
+            PickerToggle(
                 checked = picker.needsAttentionOnly,
+                sunlight = sunlight,
                 onCheckedChange = onNeedsAttentionChange,
             )
         }
-        if (picker.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (picker.loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.onSurfaceVariant, trackColor = MaterialTheme.colorScheme.surfaceContainer)
         picker.error?.let { message ->
             Text(
                 message,
@@ -943,53 +1051,34 @@ private fun ExistingSessionScreen(
                 val key = SessionReadStore.key(session.hostId, session.name)
                 val openInApp = key in picker.openSessionKeys
                 val archived = key in archivedKeys
-                TextButton(
+                PickerRow(
+                    title = session.displayName,
+                    subtitle = listOf(
+                        session.workingDirectory.ifBlank { session.name },
+                        buildString {
+                            if (session.attachedClients > 0) append("desktop attached")
+                            if (openInApp) {
+                                if (isNotEmpty()) append(" · ")
+                                append("open here")
+                            }
+                            if (archived) {
+                                if (isNotEmpty()) append(" · ")
+                                append("archived")
+                            }
+                            if (isEmpty()) append("detached")
+                        },
+                    ).joinToString(" · "),
                     onClick = { onOpen(session) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        AgentIcon(session.agent, Modifier.size(20.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(session.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(
-                                session.workingDirectory.ifBlank { session.name },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                buildString {
-                                    if (session.attachedClients > 0) append("desktop attached")
-                                    if (openInApp) {
-                                        if (isNotEmpty()) append(" · ")
-                                        append("open here")
-                                    }
-                                    if (archived) {
-                                        if (isNotEmpty()) append(" · ")
-                                        append("archived")
-                                    }
-                                    if (isEmpty()) append("detached")
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                }
+                    leading = { AgentIcon(session.agent, Modifier.size(20.dp)) },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun NewSessionFolderScreen(
+internal fun NewSessionFolderScreen(
+    sunlight: Boolean,
     picker: NewSessionPicker,
     hosts: List<HostProfile>,
     onBrowse: (String) -> Unit,
@@ -1028,16 +1117,16 @@ private fun NewSessionFolderScreen(
             placeholder = "Find a repo",
             onClose = onClose,
         )
-        PickerModeRow(mode = picker.mode, onModeChange = onModeChange)
+        PickerModeRow(mode = picker.mode, sunlight = sunlight, onModeChange = onModeChange)
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(start = 14.dp, end = 6.dp),
+                .padding(start = 16.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 "$hostLabel · ${picker.path.ifBlank { "…" }}",
-                style = MaterialTheme.typography.labelSmall,
+                fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -1046,9 +1135,10 @@ private fun NewSessionFolderScreen(
             TextButton(
                 onClick = { onChoose(picker.path) },
                 enabled = picker.path.isNotBlank(),
-            ) { Text("Use this folder") }
+                colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
+            ) { Text("Use this folder", fontSize = 14.sp, fontWeight = FontWeight.Medium) }
         }
-        if (picker.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (picker.loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.onSurfaceVariant, trackColor = MaterialTheme.colorScheme.surfaceContainer)
         picker.error?.let { message ->
             Text(
                 message,
@@ -1063,48 +1153,24 @@ private fun NewSessionFolderScreen(
         ) {
             if (query.isBlank() && picker.path.isNotBlank() && picker.path != "/") {
                 item {
-                    TextButton(
-                        onClick = { onBrowse(parentRemotePath(picker.path)) },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("..", Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
-                    }
+                    PickerRow(title = "..", subtitle = "", onClick = { onBrowse(parentRemotePath(picker.path)) })
                 }
             }
             if (query.startsWith("/")) {
                 val typed = query.trim()
                 if (typed.length > 1) {
                     item {
-                        TextButton(
-                            onClick = { onBrowse(typed) },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text("Go to $typed", Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
-                        }
+                        PickerRow(title = "Go to $typed", subtitle = "", onClick = { onBrowse(typed) })
                     }
                 }
             }
             items(ranked, key = { it.name }) { entry ->
                 val full = joinRemotePath(picker.path, entry.name)
-                TextButton(
+                PickerRow(
+                    title = entry.name,
+                    subtitle = pickerEntrySubtitle(entry.isRepo, entry.uses),
                     onClick = { if (entry.isRepo) onChoose(full) else onBrowse(full) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(Modifier.fillMaxWidth()) {
-                        Text(entry.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            buildString {
-                                append(full)
-                                if (entry.isRepo) append(" · git")
-                                if (entry.uses > 0) append(" · used ${entry.uses}×")
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
+                )
             }
         }
     }
