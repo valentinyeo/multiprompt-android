@@ -15,6 +15,8 @@ import dev.multiprompt.companion.account.DeviceKeyStore
 import dev.multiprompt.companion.reader.TranscriptProtocol
 import dev.multiprompt.companion.reader.ChatHistory
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
+import dev.multiprompt.companion.reader.ChatHistoryCache
+import dev.multiprompt.companion.reader.ChatHistoryPrefetch
 import java.util.Base64
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
@@ -246,6 +248,14 @@ class SshRepository(private val secrets: SecretStorage) {
             session.close()
         }
     }
+
+    suspend fun prefetchChatHistories(host: HostProfile, sessions: List<TmuxSession>, script: ByteArray, cache: ChatHistoryCache) =
+        withContext(Dispatchers.IO) {
+            withAuthenticatedClient(host) { client ->
+                val identities = sessions.map { ChatHistoryProtocol.Identity(it.agent, it.name, it.workingDirectory, it.hostSessionId) }
+                streamChatHistory(client, script) { exchange -> ChatHistoryPrefetch.refresh(cache, host, identities, exchange) }
+            }
+        }
 
     suspend fun readChatHistory(host: HostProfile, session: TmuxSession, script: ByteArray): ChatHistory? =
         withContext(Dispatchers.IO) {

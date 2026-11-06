@@ -64,8 +64,7 @@ class ChatHistoryConnection(
     private val commands = Channel<Command>(Channel.UNLIMITED)
     private val token = Any()
     private val account = listOf(host.id, host.hostname, host.port.toString(), host.username, host.hostKeyType.orEmpty(), host.hostKeyFingerprint.orEmpty(), host.hostKeys.joinToString(",")).joinToString("\u0000")
-    private val cacheKey = listOf(host.id, host.hostname, host.port.toString(), host.username,
-        identity.agent.name, identity.tmux, identity.cwd).joinToString("\u0000")
+    private val cacheKey = cacheKey(host, identity)
     private val provider = when (identity.agent) { AgentKind.CLAUDE -> "claude"; AgentKind.CODEX -> "codex"; AgentKind.PI -> "pi"; else -> null }
     @Volatile private var selected = false
     @Volatile private var freshSid: String? = null
@@ -270,6 +269,7 @@ class ChatHistoryConnection(
 
     fun start() {
         if (job != null) return
+        cache.peek(cacheKey)?.let { _state.value = ChatHistoryState(it, loaded = true) }
         job = scope.launch {
             val restoreGeneration = generation
             runCatching { cache.restore(cacheKey) }.getOrNull()?.let {
@@ -799,5 +799,11 @@ class ChatHistoryConnection(
             }
         }
         scope.cancel()
+    }
+
+    companion object {
+        fun cacheKey(host: HostProfile, identity: ChatHistoryProtocol.Identity): String =
+            listOf(host.id, host.hostname, host.port.toString(), host.username,
+                identity.agent.name, identity.tmux, identity.cwd).joinToString("\u0000")
     }
 }

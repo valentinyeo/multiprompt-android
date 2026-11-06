@@ -15,5 +15,6 @@
   "IGSH-1818": "Android: remove pinned chats from the inbox",
   "IGSH-1819": "Android: remove agent work steps from chats",
   "IGSH-1827": "Android: blue dot shows for every new reply",
-  "IGSH-1817": "Android: the bot's last reply vanishes when you send again"
+  "IGSH-1817": "Android: the bot's last reply vanishes when you send again",
+  "IGSH-1814": "Android: chats open instantly, no loading screen"
 }
