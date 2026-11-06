@@ -20,8 +20,8 @@ new = b"report.asText(context.getString(dev.multiprompt.companion.R.string.app_n
 assert source.count(old) == 2, "Expected exactly two original formatter callsites"
 popup = b"DropdownMenu("
 assert source.count(popup) == 6, "Expected exactly six original popup calls"
-assert source.count(b"BottomFade(") == 1, "Expected exactly one original bottom fade"
-source = source.replace(old, new).replace(popup, b"androidx.compose.material3.DropdownMenu(").replace(b"BottomFade(", b"FloatingBottomBar(")
+assert source.count(b"BottomFade") == 2, "Expected exactly two original bottom fades"
+source = source.replace(old, new).replace(popup, b"androidx.compose.material3.DropdownMenu(").replace(b"BottomFade", b"FloatingBottomBar")
 Path(sys.argv[2]).write_bytes(source)
 PYTHON
 echo SESSION_PINS_FORMATTER_CALLSITES_ADAPTED
