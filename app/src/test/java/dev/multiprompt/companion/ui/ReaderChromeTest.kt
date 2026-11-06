@@ -8,7 +8,6 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -195,8 +194,7 @@ class ReaderChromeTest {
         render()
         val before = compose.onNode(hasSetTextAction()).getUnclippedBoundsInRoot()
         compose.onNodeWithTag("chat-history").performScrollToIndex(messageCount - 1)
-        compose.onAllNodesWithText("Message ${messageCount - 1}", substring = true, useUnmergedTree = true)[0]
-            .performTouchInput { longClick() }
+        compose.onNodeWithText("Message ${messageCount - 3}").assertIsDisplayed().performTouchInput { longClick() }
         compose.onNodeWithText("Reply").performClick()
         compose.onNodeWithText("Replying").assertIsDisplayed()
         compose.onNodeWithText("Reply to", substring = true).assertDoesNotExist()

@@ -6,7 +6,7 @@ import sys
 root = Path(sys.argv[1])
 expected = {
     'sheet': ('Reply', 'Mark as unread', 'Copy', 'Select Text', 'Copy Request ID', 'Report'),
-    'reply': ('Reply to Claude', 'First line Second line', 'Message Claude'),
+    'reply': ('Replying', 'First line Second line', 'Message Claude'),
     'unread': ('New', 'My question'),
 }
 for name, labels in expected.items():
