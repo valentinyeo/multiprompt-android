@@ -62,7 +62,6 @@ class MessageActionsTest {
         compose.setContent {
             MultipromptTheme(readerStyle = true) {
                 var quote by remember { mutableStateOf<String?>(null) }
-                var author by remember { mutableStateOf("") }
                 var unreadKey by remember { mutableStateOf<String?>(null) }
                 Surface(Modifier.fillMaxSize()) {
                 Column(Modifier.fillMaxSize().systemBarsPadding()) {
@@ -72,13 +71,13 @@ class MessageActionsTest {
                         modifier = Modifier.weight(1f),
                         sessionName = session.displayName,
                         unreadMessageKey = unreadKey,
-                        onReply = { text, user -> quote = text; author = if (user) "You" else "Claude" },
+                        onReply = { text, _ -> quote = text },
                         onMarkUnread = { key ->
                             reads.markUnreadFrom(session, key)
                             unreadKey = key
                         },
                     )
-                    quote?.let { ReplyQuoteBar(it, author, { quote = null }) }
+                    quote?.let { ReplyQuoteBar(it, false, { quote = null }) }
                     Text("Message Claude…")
                 }
                 }
@@ -189,7 +188,7 @@ class MessageActionsTest {
         }
         open("First line\nSecond line")
         compose.onNodeWithText("Reply").performClick()
-        compose.onNodeWithText("Reply to Claude").assertIsDisplayed()
+        compose.onNodeWithText("Replying").assertIsDisplayed()
         compose.onNodeWithText("First line Second line").assertIsDisplayed()
         screenshot("reply")
         compose.runOnIdle { assertEquals("> First line\n> Second line\n\nFollow up", ReplyQuote.compose("First line\nSecond line", "Follow up")) }

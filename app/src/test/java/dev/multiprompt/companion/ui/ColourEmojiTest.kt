@@ -95,7 +95,7 @@ class ColourEmojiTest {
             MultipromptTheme(sunlight = false, material3 = false) {
                 Surface {
                     Column(Modifier.padding(8.dp).testTag("preview")) {
-                        ReplyQuoteBar(message = "Ship it 👍🚀", author = "HT Product Lead", onCancel = {})
+                        ReplyQuoteBar(message = "Ship it 👍🚀", sunlight = false, onCancel = {})
                     }
                 }
             }

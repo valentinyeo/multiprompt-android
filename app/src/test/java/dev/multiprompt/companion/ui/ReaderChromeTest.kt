@@ -6,6 +6,9 @@ import android.graphics.Canvas
 import android.os.Looper
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -186,6 +189,32 @@ class ReaderChromeTest {
         compose.runOnIdle {
             assertTrue("send button stops dictation", f.app.deepgramDictation.state.value.status == DictationStatus.IDLE)
         }
+    }
+
+    @Test fun replyCardSitsInsideTheMessageBox() {
+        render()
+        val before = compose.onNode(hasSetTextAction()).getUnclippedBoundsInRoot()
+        compose.onNodeWithTag("chat-history").performScrollToIndex(messageCount - 1)
+        compose.onAllNodesWithText("Message ${messageCount - 1}", substring = true, useUnmergedTree = true)[0]
+            .performTouchInput { longClick() }
+        compose.onNodeWithText("Reply").performClick()
+        compose.onNodeWithText("Replying").assertIsDisplayed()
+        compose.onNodeWithText("Reply to", substring = true).assertDoesNotExist()
+        val field = compose.onNode(hasSetTextAction()).getUnclippedBoundsInRoot()
+        val card = compose.onNodeWithTag("reply-card").getUnclippedBoundsInRoot()
+        val send = compose.onNodeWithContentDescription("Send prompt").getUnclippedBoundsInRoot()
+        val attach = compose.onNodeWithContentDescription("Attach").getUnclippedBoundsInRoot()
+        screenshot("reply-card")
+        println("REPLY_CARD_GEOMETRY field=$field card=$card send=$send attach=$attach")
+        assertEquals("card inset top", 6f, (card.top - field.top).value, 0.5f)
+        assertEquals("card inset start", 6f, (card.left - field.left).value, 0.5f)
+        assertEquals("card inset end", 6f, (field.right - card.right).value, 0.5f)
+        assertTrue("typing line sits below the card: $card $send", send.top >= card.bottom)
+        assertEquals("box keeps its bottom edge", before.bottom.value, field.bottom.value, 0.5f)
+        assertEquals("plus button stays on the bottom line", field.bottom.value, attach.bottom.value, 0.5f)
+        compose.onNodeWithContentDescription("Cancel reply").performClick()
+        compose.onNodeWithTag("reply-card").assertDoesNotExist()
+        assertEquals("message box returns to one line", before, compose.onNode(hasSetTextAction()).getUnclippedBoundsInRoot())
     }
 
     @Test fun historyMenuIsOnlyAvailableForAlternateScreenSessions() {
