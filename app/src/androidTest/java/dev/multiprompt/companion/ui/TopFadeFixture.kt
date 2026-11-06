@@ -33,7 +33,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 enum class FadeScreen { INBOX_SPLITS, INBOX_SEARCH, INBOX_LIST, SESSION, INBOX_MENU, SESSION_MENU }
 
 private val testHost = HostProfile("host", "VPS", "example.com", username = "user", keySecretId = "key")
-private val testSession = TmuxSession("host", "claude-reader", 1, 0, System.currentTimeMillis() / 1000 - 120, preview = "Ready for your next prompt")
+private val testSession = TmuxSession("host", "claude-reader", 1, 0, System.currentTimeMillis() / 1000 - 120, preview = "⏺ Ready for your next prompt")
 private val testWorkspace = Workspace("work", "Android", "host", "/home/user/android")
 
 @Composable
