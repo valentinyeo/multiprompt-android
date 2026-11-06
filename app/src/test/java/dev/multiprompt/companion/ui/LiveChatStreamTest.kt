@@ -141,6 +141,29 @@ class LiveChatStreamTest {
     }
 
     @Test
+    fun theLastReplyStaysWhenTheNextMessageStartsATurn() {
+        val replied = HostStream().apply(event("turn.started", null, """{"message_id":"m1"}""", "t-1"))
+            .apply(event("text.delta", "a:text:0", """{"text":"Here is the answer.","done":true}"""))
+            .apply(event("turn.ended", null, "{}"))
+        val next = replied.apply(event("turn.started", null, """{"message_id":"m2"}""", "t-2"))
+        assertEquals(listOf("Here is the answer."), next.earlier.map { it.text })
+        assertEquals("t-1", next.earlier.single().turn)
+
+        val asked = ChatHistory(sid = sid, inode = 7, offset = 300, start = 0,
+            rows = listOf(ChatHistoryProtocol.Row("user", "first", "u1", "", 100, 180)))
+        val second = MessageProtocol.Row("mp-abcdef0123456789", "claude", sid, "second", 2, "attempt0123456789",
+            MessageProtocol.State.QUEUED, null, null, 0, 1793653981.5)
+        val replica = MessageReplica(0, 0, messages = mapOf(second.id to second), host = next)
+        val drawn = asked.managedMessages(replica, emptyList()).map { it.text }
+        assertEquals(listOf("first", "Here is the answer.", "second"), drawn)
+
+        val landed = asked.copy(rows = asked.rows + ChatHistoryProtocol.Row("assistant", "Here is the answer.", "a1", "", 180, 300))
+        val settled = landed.managedMessages(replica, emptyList())
+        assertEquals(1, settled.count { it.text == "Here is the answer." })
+        assertTrue(settled.none { it.key.startsWith("@live:t-1") })
+    }
+
+    @Test
     fun aFinishedLiveReplyGivesWayToTheTranscript() {
         val history = ChatHistory(sid = sid, inode = 7, offset = 300, start = 0,
             rows = listOf(ChatHistoryProtocol.Row("assistant", "Still here.", "a1", "", 200, 300)))

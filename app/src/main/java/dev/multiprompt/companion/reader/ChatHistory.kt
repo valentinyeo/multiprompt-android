@@ -104,10 +104,13 @@ data class ChatHistory(
         val live = replica?.host?.spoken.orEmpty().filterNot { block -> block.done && landed(block.text) }.map { block ->
             ChatHistoryMessage("@live:${replica?.host?.turn}:${block.item}", "assistant", block.text, "", 0, 0, pending = !block.done)
         }
+        val earlier = replica?.host?.earlier.orEmpty().filterNot { block -> landed(block.text) }.map { block ->
+            ChatHistoryMessage("@live:${block.turn}:${block.item}", "assistant", block.text, "", 0, 0)
+        }
         val unknown = unresolved.filter { entry -> entry.operation == "submit" && replica?.messages?.get(entry.messageId)?.text != entry.text }.map { entry ->
             ChatHistoryMessage("@unknown:${entry.id}", "user", entry.text.orEmpty(), "", 0, 0, entry.messageId, unknownId = entry.id)
         }
-        return occurrences + cards + unknown + live
+        return occurrences + earlier + cards + unknown + live
     }
 
     private fun seconds(timestamp: String): Double? =
