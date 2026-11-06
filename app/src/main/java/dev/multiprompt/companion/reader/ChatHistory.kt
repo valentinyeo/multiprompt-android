@@ -33,6 +33,7 @@ data class ChatHistory(
     val messages: List<ChatHistoryMessage> by lazy {
         val grouped = LinkedHashMap<String, ChatHistoryMessage>()
         for (row in rows) {
+            if (row.role in ChatHistoryProtocol.STEP_ROLES) continue
             if ((row.settlement != null && row.text.isBlank()) || row.questions.isNotEmpty() || row.questionResult.isNotEmpty()) continue
             val key = "$sid:$inode:${row.role}:${row.id.ifEmpty { "@${row.offset}" }}"
             val previous = grouped[key]
@@ -58,7 +59,7 @@ data class ChatHistory(
         }
         val grouped = LinkedHashMap<String, ChatHistoryMessage>()
         source.distinctBy { listOf(it.offset, it.end, it.role, it.id, it.normalized) }.sortedBy { it.offset }
-            .filter { (it.settlement == null || it.text.isNotBlank()) && it.questions.isEmpty() && it.questionResult.isEmpty() }
+            .filter { it.role !in ChatHistoryProtocol.STEP_ROLES && (it.settlement == null || it.text.isNotBlank()) && it.questions.isEmpty() && it.questionResult.isEmpty() }
             .forEach { row ->
                 val metadata = if (row.normalized.isEmpty()) org.json.JSONObject() else org.json.JSONObject(row.normalized)
                 val readId = metadata.optString("read_id")
