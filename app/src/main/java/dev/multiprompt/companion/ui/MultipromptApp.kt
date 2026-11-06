@@ -1174,7 +1174,7 @@ internal fun SessionsScreen(
     var workspaceError by remember { mutableStateOf<String?>(null) }
     var splitOrderDialogVisible by remember { mutableStateOf(false) }
     var reminderPromptSession by remember { mutableStateOf<TmuxSession?>(null) }
-    var dissolvePromptSession by remember { mutableStateOf<TmuxSession?>(null) }
+    var moveSessionTarget by remember { mutableStateOf<TmuxSession?>(null) }
     var endPromptSession by remember { mutableStateOf<TmuxSession?>(null) }
     var renamePromptSession by remember { mutableStateOf<TmuxSession?>(null) }
     var renameDraft by remember { mutableStateOf("") }
@@ -1510,17 +1510,20 @@ internal fun SessionsScreen(
             },
         )
     }
-    dissolvePromptSession?.let { session ->
-        DestructiveConfirmationSheet(
-            title = "Archive ${session.displayName}?",
-            warning = "This ends its tmux session but saves the name and resume command so it can be restored later.",
-            confirmLabel = "Archive",
-            onDismiss = { dissolvePromptSession = null },
-            onConfirm = {
-                dissolvePromptSession = null
-                onDissolve(session)
-            },
-        )
+    moveSessionTarget?.let { session ->
+        KitSheet(onDismiss = { moveSessionTarget = null }) {
+            Text("Move to", style = Kit.Heading, color = Kit.Text)
+            state.workspaces.forEach { workspace ->
+                KitMenuRow(
+                    label = workspace.name,
+                    onClick = {
+                        moveSessionTarget = null
+                        onMoveSession(session, workspace)
+                    },
+                )
+            }
+            KitSecondaryButton("Cancel", onClick = { moveSessionTarget = null }, modifier = Modifier.fillMaxWidth())
+        }
     }
     endPromptSession?.let { session ->
         DestructiveConfirmationSheet(
@@ -1998,13 +2001,13 @@ internal fun SessionsScreen(
                             if (key in state.archivedSessionKeys) onRestore(session) else onArchive(session)
                         },
                         onMarkUnread = { onMarkUnread(session) },
-                        onMove = { workspace -> onMoveSession(session, workspace) },
+                        onMove = { moveSessionTarget = session },
                         onRename = {
                             renameDraft = session.displayName
                             renameError = null
                             renamePromptSession = session
                         },
-                        onDissolve = { dissolvePromptSession = session },
+                        onDissolve = { onDissolve(session) },
                         onEnd = { endPromptSession = session },
                         onForget = { onForgetSession(session) },
                     )
@@ -2224,7 +2227,7 @@ private fun SessionCard(
     onRemind: () -> Unit,
     onArchiveToggle: () -> Unit,
     onMarkUnread: () -> Unit,
-    onMove: (Workspace) -> Unit,
+    onMove: () -> Unit,
     onRename: () -> Unit,
     onDissolve: () -> Unit,
     onEnd: () -> Unit,
@@ -2357,6 +2360,40 @@ private fun SessionCard(
                             },
                         )
                     }
+                    if (!archived && workspaces.isNotEmpty()) {
+                        KitMenuRow(
+                            label = "Move to workspace",
+                            onClick = {
+                                menuExpanded = false
+                                onMove()
+                            },
+                        )
+                    }
+                    if (!unread && !archived) {
+                        KitMenuRow(
+                            label = "Mark as unread",
+                            onClick = {
+                                menuExpanded = false
+                                onMarkUnread()
+                            },
+                        )
+                    }
+                    if (!archived && session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {
+                        KitMenuRow(
+                            label = "Rename",
+                            onClick = {
+                                menuExpanded = false
+                                onRename()
+                            },
+                        )
+                    }
+                    KitMenuRow(
+                        label = "Hide from sidebar",
+                        onClick = {
+                            menuExpanded = false
+                            onForget()
+                        },
+                    )
                     KitMenuRow(
                         label = if (archived) "Return to open" else "Waiting",
                         onClick = {
@@ -2373,30 +2410,6 @@ private fun SessionCard(
                             },
                         )
                     }
-                    KitMenuRow(
-                        label = "End tmux session",
-                        destructive = true,
-                        onClick = {
-                            menuExpanded = false
-                            onEnd()
-                        },
-                    )
-                    KitMenuRow(
-                        label = "Remove from list",
-                        onClick = {
-                            menuExpanded = false
-                            onForget()
-                        },
-                    )
-                    if (!unread && !archived) {
-                        KitMenuRow(
-                            label = "Mark unread",
-                            onClick = {
-                                menuExpanded = false
-                                onMarkUnread()
-                            },
-                        )
-                    }
                     LocalStartSelection.current?.let { start ->
                         KitMenuRow(
                             label = "Select bots",
@@ -2406,26 +2419,6 @@ private fun SessionCard(
                             },
                         )
                     }
-                    if (!archived && session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {
-                        KitMenuRow(
-                            label = "Rename Session",
-                            onClick = {
-                                menuExpanded = false
-                                onRename()
-                            },
-                        )
-                    }
-                    if (!archived) {
-                        workspaces.forEach { workspace ->
-                            KitMenuRow(
-                                label = "Move to ${workspace.name}",
-                                onClick = {
-                                    menuExpanded = false
-                                    onMove(workspace)
-                                },
-                            )
-                        }
-                    }
                     KitMenuRow(
                         label = "Pure terminal output",
                         onClick = {
@@ -2433,9 +2426,16 @@ private fun SessionCard(
                             onOpenTerminal()
                         },
                     )
+                    KitMenuRow(
+                        label = "End tmux session",
+                        onClick = {
+                            menuExpanded = false
+                            onEnd()
+                        },
+                    )
                     KitDivider()
                     KitMenuRow(
-                        label = "Archive Session",
+                        label = "Delete",
                         destructive = true,
                         onClick = {
                             menuExpanded = false
@@ -3398,7 +3398,7 @@ internal fun ReaderScreen(
                                 }
                                 if (session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {
                                     KitMenuRow(
-                                        label = "Rename Session",
+                                        label = "Rename",
                                         onClick = {
                                             menuExpanded = false
                                             renameDraft = session.displayName
@@ -3416,7 +3416,8 @@ internal fun ReaderScreen(
                                     onClick = { menuExpanded = false; onArchiveToggle() },
                                 )
                                 KitMenuRow(
-                                    label = "Archive Session",
+                                    label = "Delete",
+                                    destructive = true,
                                     onClick = { menuExpanded = false; onDissolve() },
                                 )
                                 KitDivider()
@@ -3502,14 +3503,13 @@ internal fun ReaderScreen(
                                 KitDivider()
                                 KitMenuRow(
                                     label = "End tmux session",
-                                    destructive = true,
                                     onClick = {
                                         menuExpanded = false
                                         endDialogVisible = true
                                     },
                                 )
                                 KitMenuRow(
-                                    label = "Remove from list",
+                                    label = "Hide from sidebar",
                                     onClick = {
                                         menuExpanded = false
                                         onForget()

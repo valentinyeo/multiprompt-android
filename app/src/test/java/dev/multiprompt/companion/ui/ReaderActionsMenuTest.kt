@@ -92,9 +92,9 @@ class ReaderActionsMenuTest {
     @Test fun archiveFromOverflowKeepsTheExistingDirectArchiveBehaviour() {
         render()
         openMenu()
-        compose.onNodeWithText("Archive Session").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithText("Delete").performScrollTo().assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(1, archives); assertEquals(0, waits); assertTrue(reminders.isEmpty()) }
-        compose.onNodeWithText("Archive Session").assertDoesNotExist()
+        compose.onNodeWithText("Delete").assertDoesNotExist()
     }
 
     @Test fun endConfirmationCancelsAndConfirms() {
@@ -168,11 +168,11 @@ class ReaderActionsMenuTest {
 
     @Test fun sessionActionsAreNotDuplicatedAboveTheComposer() {
         render(material3 = true)
-        listOf("Archive", "Remind", "Wait", "Open", "Archive Session", "Remind Me…", "Waiting").forEach {
+        listOf("Archive", "Remind", "Wait", "Open", "Delete", "Remind Me…", "Waiting").forEach {
             compose.onNodeWithText(it).assertDoesNotExist()
         }
         openMenu()
-        listOf("Archive Session", "Remind Me…", "Waiting").forEach {
+        listOf("Delete", "Remind Me…", "Waiting").forEach {
             compose.onNodeWithText(it).performScrollTo().assertIsDisplayed()
         }
     }
@@ -181,8 +181,8 @@ class ReaderActionsMenuTest {
         render(material3 = true)
         openMenu()
         listOf(
-            "Enter / approve", "Interrupt session", "Open live terminal", "Rename Session", "Remind Me…", "Waiting",
-            "Archive Session", "Model and effort ›", "Display ›", "More ›", "Reset this chat", "End tmux session", "Remove from list",
+            "Enter / approve", "Interrupt session", "Open live terminal", "Rename", "Remind Me…", "Waiting",
+            "Delete", "Model and effort ›", "Display ›", "More ›", "Reset this chat", "End tmux session", "Hide from sidebar",
         ).forEach { compose.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
         listOf(
             "Set effort: low", "Set effort: max", "Use Claude Opus", "Open model picker (/model)", "Sunlight mode on",

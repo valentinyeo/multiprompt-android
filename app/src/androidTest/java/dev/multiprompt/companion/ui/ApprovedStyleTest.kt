@@ -70,7 +70,7 @@ class ApprovedStyleTest {
                 compose.onNodeWithContentDescription("Close session search").performClick()
                 compose.onNode(hasScrollToIndexAction()).performScrollToIndex(0)
                 compose.onNodeWithText("Session 0").performTouchInput { longClick() }
-                compose.onNodeWithText("Mark unread").assertIsDisplayed()
+                compose.onNodeWithText("Mark as unread").assertIsDisplayed()
             }
         }
         File(output, "samples.txt").writeText((samples + problems).joinToString("\n"))

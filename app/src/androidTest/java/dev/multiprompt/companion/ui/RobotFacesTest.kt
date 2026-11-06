@@ -91,8 +91,8 @@ class RobotFacesTest {
         compose.onNodeWithText(names[0]).performClick()
         compose.runOnIdle { assertEquals(sessions[0].copy(workspaceName = workspaceNames[0], workspaceColor = 1), opened) }
         compose.onNodeWithText(names[2]).performTouchInput { longClick() }
-        compose.onNodeWithText("Mark unread").assertIsDisplayed()
-        compose.onNodeWithText("Mark unread").performClick()
+        compose.onNodeWithText("Mark as unread").assertIsDisplayed()
+        compose.onNodeWithText("Mark as unread").performClick()
         compose.runOnIdle { assertEquals(sessions[2].copy(workspaceName = workspaceNames[2], workspaceColor = 4), markedUnread) }
         compose.onNodeWithText(names[2]).performClick()
         compose.runOnIdle { assertEquals(sessions[2].copy(workspaceName = workspaceNames[2], workspaceColor = 4), opened) }
