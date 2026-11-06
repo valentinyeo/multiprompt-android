@@ -10,7 +10,7 @@ class SessionReadStore(context: Context) {
     private val preferences = context.getSharedPreferences("session_read_state", Context.MODE_PRIVATE)
 
     fun isUnread(session: TmuxSession): Boolean =
-        session.lastActivityEpochSeconds > preferences.getLong(key(session.hostId, session.name), 0L)
+        session.replyActivityEpochSeconds > preferences.getLong(key(session.hostId, session.name), 0L)
 
     fun unreadCountState(session: TmuxSession): UnreadCount.State = runCatching {
         val stored = preferences.getString("$UNREAD_COUNT_PREFIX${key(session.hostId, session.name)}", null)
@@ -46,18 +46,17 @@ class SessionReadStore(context: Context) {
 
     fun markRead(session: TmuxSession) {
         preferences.edit().remove("$UNREAD_MESSAGE_PREFIX${key(session.hostId, session.name)}").apply()
-        val readAt = maxOf(session.lastActivityEpochSeconds, System.currentTimeMillis() / 1000)
+        val readAt = maxOf(session.replyActivityEpochSeconds, System.currentTimeMillis() / 1000)
         preferences.edit().putLong(key(session.hostId, session.name), readAt).apply()
         saveUnreadCountState(session, UnreadCount.read(
-            unreadCountState(session), session.lastActivityEpochSeconds,
-            TmuxText.isWaitingForInput(session.preview, session.agent),
+            unreadCountState(session), session.replyActivityEpochSeconds, waitingForReply(session),
         ))
     }
 
     fun markUnread(session: TmuxSession) {
         saveUnreadCountState(session, UnreadCount.unread(unreadCountState(session)))
         preferences.edit()
-            .putLong(key(session.hostId, session.name), session.lastActivityEpochSeconds - 1)
+            .putLong(key(session.hostId, session.name), session.replyActivityEpochSeconds - 1)
             .apply()
     }
 
@@ -76,7 +75,7 @@ class SessionReadStore(context: Context) {
 
     fun archiveUntil(session: TmuxSession, resumeAtEpochSeconds: Long?) {
         markRead(session)
-        val archivedAt = maxOf(session.lastActivityEpochSeconds, System.currentTimeMillis() / 1000)
+        val archivedAt = maxOf(session.replyActivityEpochSeconds, System.currentTimeMillis() / 1000)
         val editor = preferences.edit()
             .putLong(key(session.hostId, session.name), archivedAt)
             .putLong(archiveKey(session.hostId, session.name), archivedAt)
@@ -363,6 +362,9 @@ class SessionReadStore(context: Context) {
 
         private fun interactionKey(hostId: String, sessionName: String): String =
             "$INTERACTION_PREFIX${key(hostId, sessionName)}"
+
+        fun waitingForReply(session: TmuxSession): Boolean =
+            session.replyWaiting ?: TmuxText.isWaitingForInput(session.preview, session.agent)
 
         internal fun normalizeFontScale(scale: Float): Float =
             if (scale.isFinite()) scale.coerceIn(MIN_FONT_SCALE, MAX_FONT_SCALE) else DEFAULT_FONT_SCALE

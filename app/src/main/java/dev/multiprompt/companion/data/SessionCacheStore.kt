@@ -30,6 +30,9 @@ class SessionCacheStore(context: Context) {
                             preview = item.optString("preview"),
                             paneCommand = item.optString("paneCommand"),
                             hostSessionId = item.optString("hostSessionId"),
+                            outputActivityEpochSeconds = item.optLong("outputActivityEpochSeconds"),
+                            replyAtEpochSeconds = if (item.has("replyAtEpochSeconds")) item.optLong("replyAtEpochSeconds") else null,
+                            replyWaiting = if (item.has("replyWaiting")) item.optBoolean("replyWaiting") else null,
                         ),
                     )
                 }
@@ -53,7 +56,10 @@ class SessionCacheStore(context: Context) {
                     .put("windowName", session.windowName)
                     .put("preview", session.preview)
                     .put("paneCommand", session.paneCommand)
-                    .put("hostSessionId", session.hostSessionId),
+                    .put("hostSessionId", session.hostSessionId)
+                    .put("outputActivityEpochSeconds", session.outputActivityEpochSeconds)
+                    .put("replyAtEpochSeconds", session.replyAtEpochSeconds)
+                    .put("replyWaiting", session.replyWaiting),
             )
         }
         preferences.edit().putString(key(hostId), array.toString()).apply()

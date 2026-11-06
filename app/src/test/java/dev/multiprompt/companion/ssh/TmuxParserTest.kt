@@ -37,7 +37,7 @@ class TmuxParserTest {
         assertEquals(
             listOf("#{session_name}", "#{session_windows}", "#{session_attached}",
                 "#{session_activity}", "#{window_width}", "#{window_height}", "#{session_path}",
-                "#{host}", "#{pane_current_command}", "#{window_name}", "#{@mp_host_sid}", "#{pane_title}"),
+                "#{host}", "#{pane_current_command}", "#{window_name}", "#{@mp_host_sid}", "#{window_activity}", "#{pane_title}"),
             format.split(TmuxParser.FIELD_SEPARATOR),
         )
     }
@@ -193,5 +193,36 @@ class TmuxParserTest {
         assertEquals(1200, states.getValue("strix").totalSeconds)
         assertEquals("fix tests", states.getValue("strix").description)
         assertTrue(TmuxParser.parseEtaStates("${TmuxParser.START_MARKER}\n${TmuxParser.END_MARKER}\n").isEmpty())
+    }
+
+    @Test
+    fun readsWindowOutputTimeAndTitleFromTheThirteenColumnRow() {
+        val output = row("cl-1", "1", "0", "200", "98", "51", "/tmp", "box", "claude", "named", "", "900", "fix")
+
+        val session = TmuxParser.parse("de", output).single()
+
+        assertEquals(200, session.lastActivityEpochSeconds)
+        assertEquals(900, session.outputActivityEpochSeconds)
+        assertEquals(900, session.replyActivityEpochSeconds)
+        assertEquals("fix", session.title)
+    }
+
+    @Test
+    fun attachesFinishedReplyTimesOnlyToLiveChats() {
+        val hex = "@reply\tlive-abc\t1700\t1\n@reply\tcl-1\t1800\t0\nstrix\t600\t1200\tfix".toByteArray()
+            .joinToString("") { byte -> "%02x".format(byte) }
+        val output = row("live-abc", "1", "0", "200", "98", "51", "/tmp", "box", "sleep", "sleep", "", "300", "Live") +
+            row("cl-1", "1", "0", "200", "98", "51", "/tmp", "box", "claude", "named", "", "400", "fix") +
+            "${TmuxCommands.ETA_PREFIX}$hex\n"
+
+        val sessions = TmuxParser.parse("de", output)
+        val live = sessions.first { it.name == "live-abc" }
+        val plain = sessions.first { it.name == "cl-1" }
+
+        assertEquals(1700, live.replyActivityEpochSeconds)
+        assertEquals(true, live.replyWaiting)
+        assertEquals(400, plain.replyActivityEpochSeconds)
+        assertEquals(null, plain.replyWaiting)
+        assertEquals(600, TmuxParser.parseEtaStates(output).getValue("strix").remainingSeconds)
     }
 }

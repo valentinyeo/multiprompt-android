@@ -23,6 +23,7 @@ object TmuxParser {
             "#{pane_current_command}",
             "#{window_name}",
             "#{@mp_host_sid}",
+            "#{window_activity}",
             "#{pane_title}",
         ).joinToString(FIELD_SEPARATOR)
         return "printf '${START_MARKER}\\n'; " +
@@ -60,7 +61,7 @@ object TmuxParser {
             if (line.isBlank() || line == START_MARKER || line == END_MARKER || line.startsWith(ERROR_PREFIX)) {
                 return@forEach
             }
-            val fields = line.split(FIELD_SEPARATOR, limit = 12)
+            val fields = line.split(FIELD_SEPARATOR, limit = 13)
             if (fields.size < 4 || fields[0].isBlank()) return@forEach
             val count = fields.size
             val serverHost = fields.getOrNull(7).orEmpty()
@@ -69,6 +70,7 @@ object TmuxParser {
             val hostSessionId = if (count >= 12) fields[10].trim().takeIf { SESSION_ID.matches(it) }.orEmpty() else ""
             val title = fields.getOrNull(
                 when {
+                    count >= 13 -> 12
                     count >= 12 -> 11
                     count >= 11 -> 10
                     count >= 10 -> 9
@@ -81,6 +83,7 @@ object TmuxParser {
                 windows = fields[1].toIntOrNull() ?: return@forEach,
                 attachedClients = fields[2].toIntOrNull() ?: return@forEach,
                 lastActivityEpochSeconds = fields[3].toLongOrNull() ?: 0,
+                outputActivityEpochSeconds = if (count >= 13) fields[11].toLongOrNull() ?: 0 else 0,
                 columns = fields.getOrNull(4)?.toIntOrNull() ?: 0,
                 rows = fields.getOrNull(5)?.toIntOrNull() ?: 0,
                 workingDirectory = fields.getOrNull(6).orEmpty(),
@@ -90,20 +93,28 @@ object TmuxParser {
                 hostSessionId = hostSessionId,
             )
         }
-        return sessions.sortedWith(
+        val replies = parseLiveReplies(output)
+        return sessions.map { session ->
+            replies[session.name]?.takeIf { session.liveChat }?.let {
+                session.copy(replyAtEpochSeconds = it.atEpochSeconds, replyWaiting = it.waiting)
+            } ?: session
+        }.sortedWith(
             compareByDescending<TmuxSession> { it.lastActivityEpochSeconds }.thenBy { it.name },
         )
     }
 
+    fun parseLiveReplies(output: String): Map<String, TmuxText.LiveReply> =
+        etaPayload(output)?.let(TmuxText::parseLiveReplies).orEmpty()
+
     fun shellQuote(value: String): String = "'" + value.replace("'", "'\"'\"'") + "'"
 
-    fun parseEtaStates(output: String): Map<String, TmuxText.SessionEtaState> {
-        val payload = output.lineSequence()
-            .firstOrNull { it.startsWith(TmuxCommands.ETA_PREFIX) }
-            ?.removePrefix(TmuxCommands.ETA_PREFIX)
-            ?.trim()
-            ?: return emptyMap()
-        if (payload.isEmpty()) return emptyMap()
-        return TmuxText.parseSessionEtaStates(TmuxText.decodeHex(payload))
-    }
+    fun parseEtaStates(output: String): Map<String, TmuxText.SessionEtaState> =
+        etaPayload(output)?.let(TmuxText::parseSessionEtaStates).orEmpty()
+
+    private fun etaPayload(output: String): String? = output.lineSequence()
+        .firstOrNull { it.startsWith(TmuxCommands.ETA_PREFIX) }
+        ?.removePrefix(TmuxCommands.ETA_PREFIX)
+        ?.trim()
+        ?.takeIf(String::isNotEmpty)
+        ?.let(TmuxText::decodeHex)
 }

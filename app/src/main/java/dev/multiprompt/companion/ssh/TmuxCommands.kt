@@ -43,7 +43,19 @@ object TmuxCommands {
         "    states={}\n" +
         "sys.stdout.write(\"\".join(\"@state\\t%s\\t%s\\t%d\\n\" % (n, str(st.get(\"state\") or \"\"), " +
         "int(st.get(\"at\") or 0)) " +
-        "for n, st in states.items() if isinstance(st, dict) and (not want or n == want)))"
+        "for n, st in states.items() if isinstance(st, dict) and (not want or n == want)))\n" +
+        "if not want:\n" +
+        "    import glob\n" +
+        "    best={}\n" +
+        "    for p in glob.glob(os.path.join(d,\"agent-host\",\"*.state.json\")):\n" +
+        "        try:\n" +
+        "            s=json.load(open(p)); m=os.path.getmtime(p); t=s.get(\"tmux\"); r=s.get(\"result\")\n" +
+        "            a=int(float(r.get(\"at\") or 0)) if isinstance(r, dict) else 0\n" +
+        "        except Exception:\n" +
+        "            continue\n" +
+        "        if isinstance(t, str) and t and (t not in best or m > best[t][0]):\n" +
+        "            best[t]=(m, a, 0 if s.get(\"inflight\") else 1)\n" +
+        "    sys.stdout.write(\"\".join(\"@reply\\t%s\\t%d\\t%d\\n\" % (t, a, w) for t, (m, a, w) in best.items()))"
 
     fun etaLogCommand(): String =
         "mp_dir=\"\${MULTIPROMPT_STATE_DIR:-\$HOME/.local/state/multiprompt}\"; " +

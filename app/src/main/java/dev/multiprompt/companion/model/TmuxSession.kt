@@ -17,7 +17,13 @@ data class TmuxSession(
     val accountName: String? = null,
     val workspaceName: String = "",
     val workspaceColor: Int = 0,
+    val outputActivityEpochSeconds: Long = 0,
+    val replyAtEpochSeconds: Long? = null,
+    val replyWaiting: Boolean? = null,
 ) {
+    val replyActivityEpochSeconds: Long
+        get() = replyAtEpochSeconds ?: outputActivityEpochSeconds.takeIf { it > 0 } ?: lastActivityEpochSeconds
+
     val agent: AgentKind
         get() = AgentKind.detect(name, title, preview, paneCommand)
 
