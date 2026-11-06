@@ -1,6 +1,7 @@
 {
   "IGSH-1628": "Android: answers to questions and permissions use our answer rows",
   "IGSH-1631": "Android: no disconnect warning, chat reconnects on its own",
+  "IGSH-1632": "Android: hidden agent steps open from one grey line",
   "IGSH-1658": "Android: full robot in the status bar, not cut off",
   "IGSH-1684": "Multibot Android: every update note line names its ticket",
   "IGSH-1715": "Android: chat menu in desktop order, Delete last in red",
