@@ -11,7 +11,7 @@ expected = {
 }
 for name, labels in expected.items():
     image = root / f'message-actions-{name}.png'
-    text = subprocess.check_output(['tesseract', str(image), 'stdout'], text=True, stderr=subprocess.DEVNULL)
+    text = subprocess.check_output(['tesseract', str(image), 'stdout', '--psm', '11'], text=True, stderr=subprocess.DEVNULL)
     words = re.sub(r'\W+', ' ', text).lower()
     for label in labels:
         assert re.sub(r'\W+', ' ', label).lower() in words, f'{name}: missing visible {label}'
