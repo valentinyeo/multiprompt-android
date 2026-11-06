@@ -53,7 +53,7 @@ class MultipromptApplication : Application() {
         val reader = assets.open("chat_history_reader.py").use { it.readBytes() }
         val encoder = android.util.Base64.NO_WRAP
         fun encode(bytes: ByteArray) = android.util.Base64.encodeToString(bytes, encoder)
-        val prefix = "CONNECTOR_SOURCES = {'claude':'${encode(claude)}','codex':'${encode(codex)}'}\nMP_SEND_SOURCE = '${encode(mpSend)}'\nFEEDBACK_SOURCE = '${encode(feedback)}'\n"
+        val prefix = "CONNECTOR_SOURCES = {'claude':'${encode(claude)}','codex':'${encode(codex)}'}\nMP_SEND_SOURCE = '${encode(mpSend)}'\nFEEDBACK_SOURCE = '${encode(feedback)}'\nMULTIBOT_APP_VERSION = 'android-${BuildConfig.VERSION_NAME}'\n"
         prefix.toByteArray(Charsets.UTF_8) + reader
     }
     val sshRepository by lazy { SshRepository(secretStore) }

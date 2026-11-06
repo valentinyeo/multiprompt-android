@@ -1,0 +1,364 @@
+{
+  "initialize": [
+    [
+      {
+        "id": "$ID",
+        "result": {
+          "userAgent": "multibot/0.166.0 (linux; x86_64)",
+          "codexHome": "/home/user/.codex",
+          "platformFamily": "unix",
+          "platformOs": "linux"
+        }
+      }
+    ]
+  ],
+  "thread/start": [
+    [
+      {
+        "jsonrpc": "2.0",
+        "method": "account/updated",
+        "params": {
+          "authMode": "chatgpt",
+          "planType": "pro"
+        }
+      },
+      {
+        "id": "$ID",
+        "result": {
+          "thread": {
+            "id": "019a0000-0000-7000-8000-00000000c0de",
+            "preview": "",
+            "cwd": "/work/demo",
+            "status": {
+              "type": "idle"
+            },
+            "turns": []
+          },
+          "model": "gpt-6.1-sol",
+          "modelProvider": "openai",
+          "cwd": "/work/demo",
+          "approvalPolicy": "on-request",
+          "sandbox": {
+            "type": "workspaceWrite"
+          }
+        }
+      },
+      {
+        "jsonrpc": "2.0",
+        "method": "thread/started",
+        "params": {
+          "thread": {
+            "id": "019a0000-0000-7000-8000-00000000c0de"
+          }
+        }
+      }
+    ]
+  ],
+  "turn/start": [
+    [
+      {
+        "id": "$ID",
+        "result": {
+          "turn": {
+            "id": "turn-1",
+            "items": [],
+            "status": "inProgress",
+            "error": null
+          }
+        }
+      },
+      {
+        "jsonrpc": "2.0",
+        "method": "turn/started",
+        "params": {
+          "threadId": "019a0000-0000-7000-8000-00000000c0de",
+          "turn": {
+            "id": "turn-1",
+            "items": [],
+            "status": "inProgress",
+            "error": null
+          }
+        }
+      },
+      {
+        "jsonrpc": "2.0",
+        "method": "item/started",
+        "params": {
+          "threadId": "019a0000-0000-7000-8000-00000000c0de",
+          "turnId": "turn-1",
+          "item": {
+            "type": "reasoning",
+            "id": "rs-1",
+            "summary": [],
+            "content": []
+          }
+        }
+      },
+      {
+        "jsonrpc": "2.0",
+        "method": "item/reasoning/summaryTextDelta",
+        "params": {
+          "threadId": "019a0000-0000-7000-8000-00000000c0de",
+          "turnId": "turn-1",
+          "itemId": "rs-1",
+          "delta": "Checking ",
+          "summaryIndex": 0
+        }
+      },
+      {
+        "jsonrpc": "2.0",
+        "method": "item/reasoning/summaryTextDelta",
+        "params": {
+          "threadId": "019a0000-0000-7000-8000-00000000c0de",
+          "turnId": "turn-1",
+          "itemId": "rs-1",
+          "delta": "the folder",
+          "summaryIndex": 0
+        }
+      },
+      {
+        "jsonrpc": "2.0",
+        "method": "item/completed",
+        "params": {
+          "threadId": "019a0000-0000-7000-8000-00000000c0de",
+          "turnId": "turn-1",
+          "item": {
+            "type": "reasoning",
+            "id": "rs-1",
+            "summary": [
+              "Checking the folder"
+            ],
+            "content": []
+          }
+        }
+      },
+      {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": "item/commandExecution/requestApproval",
+        "params": {
+          "threadId": "019a0000-0000-7000-8000-00000000c0de",
+          "turnId": "turn-1",
+          "itemId": "call-1",
+          "command": "ls",
+          "cwd": "/work/demo",
+          "reason": "List the folder"
+        }
+      },
+      {
+        "$wait": 0
+      },
+      {
+        "jsonrpc": "2.0",
+        "method": "serverRequest/resolved",
+        "params": {
+          "threadId": "019a0000-0000-7000-8000-00000000c0de",
+          "requestId": 0
+        }
+      },
+      {
+        "jsonrpc": "2.0",
+        "method": "item/started",
+        "params": {
+          "threadId": "019a0000-0000-7000-8000-00000000c0de",
+          "turnId": "turn-1",
+          "item": {
+            "type": "commandExecution",
+            "id": "call-1",
+            "command": "ls",
+            "cwd": "/work/demo",
+            "status": "inProgress",
+            "aggregatedOutput": null,
+            "exitCode": null
+          }
+        }
+      },
+      {
+        "jsonrpc": "2.0",
+        "method": "item/completed",
+        "params": {
+          "threadId": "019a0000-0000-7000-8000-00000000c0de",
+          "turnId": "turn-1",
+          "item": {
+            "type": "commandExecution",
+            "id": "call-1",
+            "command": "ls",
+            "cwd": "/work/demo",
+            "status": "completed",
+            "aggregatedOutput": "notes.txt\n",
+            "exitCode": 0
+          }
+        }
+      },
+      {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "item/tool/requestUserInput",
+        "params": {
+          "threadId": "019a0000-0000-7000-8000-00000000c0de",
+          "turnId": "turn-1",
+          "itemId": "ask-1",
+          "questions": []
+        }
+      },
+      {
+        "$wait": 1
+      },
+      {
+        "jsonrpc": "2.0",
+        "method": "item/started",
+        "params": {
+          "threadId": "019a0000-0000-7000-8000-00000000c0de",
+          "turnId": "turn-1",
+          "item": {
+            "type": "agentMessage",
+            "id": "msg-1",
+            "text": ""
+          }
+        }
+      },
+      {
+        "jsonrpc": "2.0",
+        "method": "item/agentMessage/delta",
+        "params": {
+          "threadId": "019a0000-0000-7000-8000-00000000c0de",
+          "turnId": "turn-1",
+          "itemId": "msg-1",
+          "delta": "PO"
+        }
+      },
+      {
+        "jsonrpc": "2.0",
+        "method": "item/agentMessage/delta",
+        "params": {
+          "threadId": "019a0000-0000-7000-8000-00000000c0de",
+          "turnId": "turn-1",
+          "itemId": "msg-1",
+          "delta": "NG"
+        }
+      },
+      {
+        "jsonrpc": "2.0",
+        "method": "item/completed",
+        "params": {
+          "threadId": "019a0000-0000-7000-8000-00000000c0de",
+          "turnId": "turn-1",
+          "item": {
+            "type": "agentMessage",
+            "id": "msg-1",
+            "text": "PONG"
+          }
+        }
+      },
+      {
+        "jsonrpc": "2.0",
+        "method": "thread/tokenUsage/updated",
+        "params": {
+          "threadId": "019a0000-0000-7000-8000-00000000c0de",
+          "turnId": "turn-1",
+          "tokenUsage": {
+            "total": {
+              "totalTokens": 120
+            }
+          }
+        }
+      },
+      {
+        "jsonrpc": "2.0",
+        "method": "turn/completed",
+        "params": {
+          "threadId": "019a0000-0000-7000-8000-00000000c0de",
+          "turn": {
+            "id": "turn-1",
+            "items": [],
+            "status": "completed",
+            "error": null
+          }
+        }
+      }
+    ],
+    [
+      {
+        "id": "$ID",
+        "result": {
+          "turn": {
+            "id": "turn-2",
+            "items": [],
+            "status": "inProgress",
+            "error": null
+          }
+        }
+      },
+      {
+        "jsonrpc": "2.0",
+        "method": "turn/started",
+        "params": {
+          "threadId": "019a0000-0000-7000-8000-00000000c0de",
+          "turn": {
+            "id": "turn-2",
+            "items": [],
+            "status": "inProgress",
+            "error": null
+          }
+        }
+      },
+      {
+        "jsonrpc": "2.0",
+        "method": "item/agentMessage/delta",
+        "params": {
+          "threadId": "019a0000-0000-7000-8000-00000000c0de",
+          "turnId": "turn-2",
+          "itemId": "msg-2",
+          "delta": "Done"
+        }
+      },
+      {
+        "jsonrpc": "2.0",
+        "method": "item/completed",
+        "params": {
+          "threadId": "019a0000-0000-7000-8000-00000000c0de",
+          "turnId": "turn-2",
+          "item": {
+            "type": "agentMessage",
+            "id": "msg-2",
+            "text": "Done"
+          }
+        }
+      },
+      {
+        "jsonrpc": "2.0",
+        "method": "turn/completed",
+        "params": {
+          "threadId": "019a0000-0000-7000-8000-00000000c0de",
+          "turn": {
+            "id": "turn-2",
+            "items": [],
+            "status": "completed",
+            "error": null
+          }
+        }
+      }
+    ]
+  ],
+  "turn/steer": [
+    [
+      {
+        "jsonrpc": "2.0",
+        "id": "$ID",
+        "result": {
+          "turnId": "turn-1"
+        }
+      }
+    ],
+    [
+      {
+        "jsonrpc": "2.0",
+        "id": "$ID",
+        "error": {
+          "code": -32600,
+          "message": "expected active turn id mismatch"
+        }
+      }
+    ]
+  ]
+}
