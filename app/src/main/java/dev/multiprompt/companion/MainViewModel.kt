@@ -1187,8 +1187,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             ?: return "The session VPS is missing"
         viewModelScope.launch {
             _state.update { it.copy(sessionActionError = null) }
-            runCatching { ssh.renameSession(host, session.name, displayName) }
+            val tellAgent = session.agent != AgentKind.OTHER && !session.liveChat
+            runCatching { ssh.renameSession(host, session.name, displayName, tellAgent) }
                 .onSuccess {
+                    if (session.liveChat && session.agent != AgentKind.OTHER) {
+                        _state.value.reader?.takeIf {
+                            _state.value.readerSession?.let { open -> open.hostId == session.hostId && open.name == session.name } == true
+                        }?.let { reader -> runCatching { reader.sendPrompt("/rename $displayName") } }
+                    }
                     sessionReads.setDisplayName(session, displayName)
                     _state.update { current ->
                         current.copy(

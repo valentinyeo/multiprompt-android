@@ -532,13 +532,15 @@ class SshRepository(private val secrets: SecretStorage) {
             }
         }
 
-    suspend fun renameSession(host: HostProfile, sessionName: String, displayName: String) =
+    suspend fun renameSession(host: HostProfile, sessionName: String, displayName: String, tellAgent: Boolean) =
         withContext(Dispatchers.IO) {
             withTimeout(CONNECTION_TIMEOUT_MS) {
                 withAuthenticatedClient(host) { client ->
-                    sendPrompt(client, sessionName, "/rename $displayName")
-                    execute(client, TmuxCommands.renameWindow(sessionName, displayName))
-                        .requireSuccess("rename the tmux window")
+                    execute(
+                        client,
+                        TmuxCommands.rename(sessionName, displayName, tellAgent),
+                        "/rename $displayName".toByteArray(Charsets.UTF_8).takeIf { tellAgent },
+                    ).requireSuccess("rename the session")
                 }
             }
         }

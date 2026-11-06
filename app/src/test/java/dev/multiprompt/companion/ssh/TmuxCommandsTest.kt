@@ -184,6 +184,15 @@ class TmuxCommandsTest {
     }
 
     @Test
+    fun renameUsesOneCommandAndTellsOnlyRealAgents() {
+        assertEquals(TmuxCommands.renameWindow("live-b4", "Big Boss Man"), TmuxCommands.rename("live-b4", "Big Boss Man", tellAgent = false))
+        assertEquals(
+            "${TmuxCommands.renameWindow("work", "New name")} && ${TmuxCommands.pastePrompt("work")}",
+            TmuxCommands.rename("work", "New name", tellAgent = true),
+        )
+    }
+
+    @Test
     fun attachTargetsTheExactQuotedSession() {
         assertEquals(
             "exec tmux attach-session -f ignore-size -t '=a'\"'\"'; reboot'",
