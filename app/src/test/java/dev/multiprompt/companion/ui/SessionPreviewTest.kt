@@ -5,13 +5,20 @@ import org.junit.Test
 
 class SessionPreviewTest {
     @Test
-    fun plainLineIsKept() {
-        assertEquals("Ready for your next prompt", SessionPreview.line("Ready for your next prompt"))
+    fun plainPaneTextIsNotAReply() {
+        for (raw in listOf("Ready for your next prompt", "/rename Big Boss Man", "/rename HTPR-8827\n/rename Big Boss Man")) {
+            assertEquals(raw, "", SessionPreview.line(raw))
+        }
     }
 
     @Test
-    fun lastNonBlankLineWins() {
-        assertEquals("Tests are green", SessionPreview.line("Building\n\nTests are green\n\n  \n"))
+    fun lastReplyWins() {
+        assertEquals("Tests are green", SessionPreview.line("⏺ Building\n\n⏺ Tests are green\n\n  \n"))
+    }
+
+    @Test
+    fun toolCallsAreNotReplies() {
+        assertEquals("Checked the logs.", SessionPreview.line("⏺ Checked the logs.\n⏺ Bash(ls -la)\n  ⎿ done"))
     }
 
     @Test
@@ -21,7 +28,7 @@ class SessionPreviewTest {
 
     @Test
     fun terminalChromeLinesAreSkipped() {
-        val raw = "Done, pushed the branch\n? for shortcuts\n⏵⏵ bypass permissions on (shift+tab to cycle)"
+        val raw = "⏺ Done, pushed the branch\n? for shortcuts\n⏵⏵ bypass permissions on (shift+tab to cycle)"
         assertEquals("Done, pushed the branch", SessionPreview.line(raw))
     }
 
@@ -33,12 +40,12 @@ class SessionPreviewTest {
 
     @Test
     fun terminalReplyCodesAreCutFromText() {
-        assertEquals("Ready", SessionPreview.line("\u001b[?62;22cReady"))
+        assertEquals("Ready", SessionPreview.line("\u001b[?62;22c⏺ Ready"))
     }
 
     @Test
     fun whitespaceIsCollapsed() {
-        assertEquals("a b c", SessionPreview.line("a    b \t c"))
+        assertEquals("a b c", SessionPreview.line("⏺ a    b \t c"))
     }
 
     @Test

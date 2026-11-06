@@ -6,5 +6,6 @@
   "IGSH-1719": "Android: chat updates stay fast after slash commands",
   "IGSH-1722": "Android: folder search finds partial words in any order",
   "IGSH-1776": "Android: bottom pills float on a clear background, inbox top fades softly",
-  "IGSH-1777": "Android: renaming a chat works again"
+  "IGSH-1777": "Android: renaming a chat works again",
+  "IGSH-1778": "Android: inbox second line matches desktop, never shows /rename"
 }
