@@ -4,7 +4,10 @@ import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -91,12 +94,24 @@ class InboxConfirmationTest {
         }
     }
 
-    @Test fun archiveConfirmationTargetsGamma() {
-        checkConfirmation(
-            "Archive Session", "Archive gamma?",
-            "This ends its tmux session but saves the name and resume command so it can be restored later.",
-            "Archive", true,
-        )
+    @Test fun deleteIsOnePressAndLastLikeDesktop() {
+        render()
+        compose.onNodeWithText("gamma").performTouchInput { longClick() }
+        val labels = compose.onAllNodes(hasClickAction() and hasAnyAncestor(isDialog())).fetchSemanticsNodes()
+            .mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.joinToString("") }
+        assertEquals("Delete", labels.last())
+        assertTrue(labels.toString(), "Hide from sidebar" in labels)
+        val shared = listOf("Favorite", "Unfavorite", "Move to workspace", "Mark as unread", "Rename", "Hide from sidebar")
+        val present = labels.filter { it in shared }
+        assertEquals(shared.filter { it in present }, present)
+        assertTrue(labels.indexOf("Hide from sidebar") < labels.indexOf("End tmux session"))
+        compose.onNodeWithText("Delete").performScrollTo().performClick()
+        compose.runOnIdle {
+            assertEquals(listOf(state.value.inboxSessions.single { it.name == "gamma" }), dissolved)
+            assertTrue(ended.isEmpty())
+        }
+        compose.onNodeWithText("Archive gamma?").assertDoesNotExist()
+        compose.onNodeWithText("Delete").assertDoesNotExist()
     }
 
     @Test fun endConfirmationTargetsGamma() {

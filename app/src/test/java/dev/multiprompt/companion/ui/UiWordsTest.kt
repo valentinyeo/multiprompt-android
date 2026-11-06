@@ -40,7 +40,6 @@ class UiWordsTest {
 
     private val phoneLabels = listOf(
         "Reset this chat",
-        "Archive Session",
         "End tmux session",
         "Favorite",
         "Unfavorite",

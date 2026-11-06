@@ -4,6 +4,7 @@
   "IGSH-1632": "Android: hidden agent steps open from one grey line",
   "IGSH-1658": "Android: full robot in the status bar, not cut off",
   "IGSH-1684": "Multibot Android: every update note line names its ticket",
+  "IGSH-1715": "Android: chat menu in desktop order, Delete last in red",
   "IGSH-1717": "Android: three dots tick while the agent works",
   "IGSH-1719": "Android: chat updates stay fast after slash commands",
   "IGSH-1721": "Android: type /rename and a name to rename the chat",
