@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,7 +50,7 @@ internal fun DictationBar(
     val dark = Color(0xFF2B2B2B)
     val onDark = Color.White
     Row(
-        Modifier.fillMaxWidth(),
+        Modifier.fillMaxWidth().minimumInteractiveComponentSize(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
     ) {
