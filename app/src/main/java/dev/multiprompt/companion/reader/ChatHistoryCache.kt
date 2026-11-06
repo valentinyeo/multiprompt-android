@@ -51,7 +51,6 @@ class ChatHistoryCache(
     @Synchronized
     fun save(sessionKey: String, history: ChatHistory) {
         if (history.sid.isEmpty()) return
-        memory[sessionKey] = history
         directory.mkdirs()
         val lines = ArrayList<ByteArray>()
         var used = 0L
@@ -77,6 +76,8 @@ class ChatHistoryCache(
             }
             check(temporary.length() <= sessionBytes)
             check(temporary.renameTo(target))
+            memory[sessionKey] = ChatHistory(history.sid, history.inode, history.offset, start, history.mtime,
+                history.probe, history.more, history.rows.takeLast(lines.size))
         } finally {
             temporary.delete()
         }

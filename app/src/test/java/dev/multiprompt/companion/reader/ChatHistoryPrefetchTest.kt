@@ -74,4 +74,20 @@ class ChatHistoryPrefetchTest {
         assertTrue(failure.isFailure)
         assertEquals(saved, cache.peek(key))
     }
+
+    @Test
+    fun savedMemoryMatchesWhatTheDiskKeeps() {
+        val directory = temporary.newFolder()
+        val cache = ChatHistoryCache(directory, sessionBytes = 1_200)
+        val key = ChatHistoryConnection.cacheKey(host, identity)
+        val rows = (0 until 6).map { ChatHistoryProtocol.Row("user", "x".repeat(60) + it, "id$it", "", it * 10L, it * 10L + 10) }
+        val question = PendingQuestion.parse("id5", 0, JSONObject().put("question", "Pick").put("options", org.json.JSONArray()), "claude")
+        cache.save(key, ChatHistory("sid", 1, 60, 0, 1, "a".repeat(64), rows = rows, pendingQuestions = listOf(question)))
+        val memory = requireNotNull(cache.peek(key))
+        val disk = requireNotNull(ChatHistoryCache(directory, sessionBytes = 1_200).restore(key))
+        assertTrue(memory.rows.size < rows.size)
+        assertEquals(disk.rows.map { it.text }, memory.rows.map { it.text })
+        assertEquals(disk.start, memory.start)
+        assertTrue(memory.pendingQuestions.isEmpty())
+    }
 }

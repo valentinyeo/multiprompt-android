@@ -28,6 +28,8 @@ import dev.multiprompt.companion.data.WorkspaceStore
 import dev.multiprompt.companion.data.CrashReport
 import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
+import dev.multiprompt.companion.reader.ChatHistoryPrefetch
+import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.reader.TranscriptProtocol
@@ -216,7 +218,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     internal var historyPrefetcher: suspend (HostProfile, List<TmuxSession>) -> Unit = { host, sessions ->
         ssh.prefetchChatHistories(host, sessions, app.chatHistoryScript, app.chatHistoryCache)
     }
+    internal var historyWarmer: suspend (HostProfile, List<TmuxSession>) -> Unit = { host, sessions ->
+        withContext(Dispatchers.IO) {
+            ChatHistoryPrefetch.warm(app.chatHistoryCache, host,
+                sessions.map { ChatHistoryProtocol.Identity(it.agent, it.name, it.workingDirectory, it.hostSessionId) })
+        }
+    }
     private val prefetchedActivity = mutableMapOf<String, Long>()
+    private val prefetchedHostAt = mutableMapOf<String, Long>()
     private var prefetchRunning = false
     private var replyNotificationsBaselined = false
     private var pendingNotificationKey: String? = null
@@ -755,23 +764,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun prefetchRecentHistories() {
-        if (prefetchRunning) return
+        if (prefetchRunning || !foreground.value) return
         val state = _state.value
         val open = warmReaders.keys + listOfNotNull(state.readerSession?.let { SessionReadStore.key(it.hostId, it.name) })
-        val picks = state.sessions
+        val recent = state.sessions
             .filter { TranscriptProtocol.supports(it.agent) && SessionReadStore.key(it.hostId, it.name) !in open }
             .sortedByDescending { maxOf(state.sessionInteractionEpochSeconds[SessionReadStore.key(it.hostId, it.name)] ?: 0L, it.lastActivityEpochSeconds) }
             .take(PREFETCH_SESSIONS)
-            .filter { prefetchedActivity[SessionReadStore.key(it.hostId, it.name)] != it.lastActivityEpochSeconds }
-        if (picks.isEmpty()) return
-        picks.forEach { prefetchedActivity[SessionReadStore.key(it.hostId, it.name)] = it.lastActivityEpochSeconds }
+        if (recent.isEmpty()) return
+        val now = System.currentTimeMillis()
+        val due = recent.filter { session ->
+            prefetchedActivity[SessionReadStore.key(session.hostId, session.name)] != session.lastActivityEpochSeconds &&
+                now - (prefetchedHostAt[session.hostId] ?: 0L) >= PREFETCH_HOST_GAP_MS
+        }
+        due.forEach { prefetchedActivity[SessionReadStore.key(it.hostId, it.name)] = it.lastActivityEpochSeconds }
+        due.mapTo(mutableSetOf()) { it.hostId }.forEach { prefetchedHostAt[it] = now }
         prefetchRunning = true
         viewModelScope.launch {
             try {
-                picks.groupBy { it.hostId }.forEach { (hostId, sessions) ->
+                recent.groupBy { it.hostId }.forEach { (hostId, sessions) ->
                     val host = state.hosts.firstOrNull { it.id == hostId } ?: return@forEach
                     try {
-                        historyPrefetcher(host, sessions)
+                        historyWarmer(host, sessions)
+                        val fetch = sessions.filter { it in due }
+                        if (fetch.isNotEmpty()) historyPrefetcher(host, fetch)
                     } catch (failure: Exception) {
                         if (failure is CancellationException) throw failure
                     }
@@ -2080,6 +2096,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val IDLE_OBSERVATIONS_TO_RELEASE = 2
         const val SESSION_REFRESH_INTERVAL_MS = 2_000L
         const val PREFETCH_SESSIONS = 8
+        const val PREFETCH_HOST_GAP_MS = 45_000L
         const val BACKGROUND_REFRESH_EVERY = 30
     }
 }
