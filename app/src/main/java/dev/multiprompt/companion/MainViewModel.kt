@@ -213,6 +213,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     internal var notificationHistoryReader: suspend (HostProfile, TmuxSession) -> dev.multiprompt.companion.reader.ChatHistory? = { host, session ->
         ssh.readChatHistory(host, session, app.chatHistoryScript)
     }
+    internal var historyPrefetcher: suspend (HostProfile, List<TmuxSession>) -> Unit = { host, sessions ->
+        ssh.prefetchChatHistories(host, sessions, app.chatHistoryScript, app.chatHistoryCache)
+    }
+    private val prefetchedActivity = mutableMapOf<String, Long>()
+    private var prefetchRunning = false
     private var replyNotificationsBaselined = false
     private var pendingNotificationKey: String? = null
     private var trustRefreshQueued = false
@@ -741,9 +746,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             pendingNotificationKey = null
             syncReplyNotifications()
             refreshRooms()
+            prefetchRecentHistories()
             if (trustRefreshQueued) {
                 trustRefreshQueued = false
                 refresh()
+            }
+        }
+    }
+
+    private fun prefetchRecentHistories() {
+        if (prefetchRunning) return
+        val state = _state.value
+        val open = warmReaders.keys + listOfNotNull(state.readerSession?.let { SessionReadStore.key(it.hostId, it.name) })
+        val picks = state.sessions
+            .filter { TranscriptProtocol.supports(it.agent) && SessionReadStore.key(it.hostId, it.name) !in open }
+            .sortedByDescending { maxOf(state.sessionInteractionEpochSeconds[SessionReadStore.key(it.hostId, it.name)] ?: 0L, it.lastActivityEpochSeconds) }
+            .take(PREFETCH_SESSIONS)
+            .filter { prefetchedActivity[SessionReadStore.key(it.hostId, it.name)] != it.lastActivityEpochSeconds }
+        if (picks.isEmpty()) return
+        picks.forEach { prefetchedActivity[SessionReadStore.key(it.hostId, it.name)] = it.lastActivityEpochSeconds }
+        prefetchRunning = true
+        viewModelScope.launch {
+            try {
+                picks.groupBy { it.hostId }.forEach { (hostId, sessions) ->
+                    val host = state.hosts.firstOrNull { it.id == hostId } ?: return@forEach
+                    try {
+                        historyPrefetcher(host, sessions)
+                    } catch (failure: Exception) {
+                        if (failure is CancellationException) throw failure
+                    }
+                }
+            } finally {
+                prefetchRunning = false
             }
         }
     }
@@ -2045,6 +2079,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val MAX_DISPLAY_NAME_LENGTH = 63
         const val IDLE_OBSERVATIONS_TO_RELEASE = 2
         const val SESSION_REFRESH_INTERVAL_MS = 2_000L
+        const val PREFETCH_SESSIONS = 8
         const val BACKGROUND_REFRESH_EVERY = 30
     }
 }

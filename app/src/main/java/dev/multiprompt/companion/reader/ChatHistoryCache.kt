@@ -8,7 +8,15 @@ class ChatHistoryCache(
     private val directory: File,
     private val sessionBytes: Long = 2L * 1024 * 1024,
     private val totalBytes: Long = 64L * 1024 * 1024,
+    private val memoryEntries: Int = 12,
 ) {
+    private val memory = object : LinkedHashMap<String, ChatHistory>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ChatHistory>) = size > memoryEntries
+    }
+
+    @Synchronized
+    fun peek(sessionKey: String): ChatHistory? = memory[sessionKey]
+
     @Synchronized
     fun restore(sessionKey: String): ChatHistory? {
         val prefix = digest(sessionKey) + "-"
@@ -33,6 +41,7 @@ class ChatHistoryCache(
             }.getOrNull()
             if (restored != null) {
                 file.setLastModified(System.currentTimeMillis())
+                memory[sessionKey] = restored
                 return restored
             }
         }
@@ -42,6 +51,7 @@ class ChatHistoryCache(
     @Synchronized
     fun save(sessionKey: String, history: ChatHistory) {
         if (history.sid.isEmpty()) return
+        memory[sessionKey] = history
         directory.mkdirs()
         val lines = ArrayList<ByteArray>()
         var used = 0L
