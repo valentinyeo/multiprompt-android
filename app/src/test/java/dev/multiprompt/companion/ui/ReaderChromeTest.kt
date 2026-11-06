@@ -199,8 +199,8 @@ class ReaderChromeTest {
         compose.onNodeWithText("Replying").assertIsDisplayed()
         compose.onNodeWithText("Reply to", substring = true).assertDoesNotExist()
         val field = compose.onNode(hasSetTextAction()).getUnclippedBoundsInRoot()
-        val card = compose.onNodeWithTag("reply-card").getUnclippedBoundsInRoot()
-        val send = compose.onNodeWithContentDescription("Send prompt").getUnclippedBoundsInRoot()
+        val card = compose.onNodeWithTag("reply-card", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val send = compose.onNodeWithContentDescription("Send prompt", useUnmergedTree = true).getUnclippedBoundsInRoot()
         val attach = compose.onNodeWithContentDescription("Attach").getUnclippedBoundsInRoot()
         screenshot("reply-card")
         println("REPLY_CARD_GEOMETRY field=$field card=$card send=$send attach=$attach")
@@ -210,8 +210,8 @@ class ReaderChromeTest {
         assertTrue("typing line sits below the card: $card $send", send.top >= card.bottom)
         assertEquals("box keeps its bottom edge", before.bottom.value, field.bottom.value, 0.5f)
         assertEquals("plus button stays on the bottom line", field.bottom.value, attach.bottom.value, 0.5f)
-        compose.onNodeWithContentDescription("Cancel reply").performClick()
-        compose.onNodeWithTag("reply-card").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Cancel reply", useUnmergedTree = true).performClick()
+        compose.onNodeWithTag("reply-card", useUnmergedTree = true).assertDoesNotExist()
         assertEquals("message box returns to one line", before, compose.onNode(hasSetTextAction()).getUnclippedBoundsInRoot())
     }
 
