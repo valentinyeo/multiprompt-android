@@ -19,15 +19,15 @@ internal fun TopFade(content: @Composable ColumnScope.() -> Unit) {
     val background = MaterialTheme.colorScheme.background
     Column(
         Modifier.fillMaxWidth().testTag("top-fade").drawBehind {
-            val height = size.height + 40.dp.toPx()
+            val height = size.height + 24.dp.toPx()
             val solid = (size.height / height).coerceIn(0.01f, 0.99f)
             val fade = 1f - solid
             drawRect(
                 brush = Brush.verticalGradient(
                     0f to background,
                     solid to background,
-                    solid + fade * 0.3f to background.copy(alpha = 0.7f),
-                    solid + fade * 0.65f to background.copy(alpha = 0.3f),
+                    solid + fade * 0.25f to background.copy(alpha = 0.55f),
+                    solid + fade * 0.5f to background.copy(alpha = 0.25f),
                     1f to Color.Transparent,
                     endY = height,
                 ),
