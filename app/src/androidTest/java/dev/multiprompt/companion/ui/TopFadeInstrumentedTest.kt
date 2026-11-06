@@ -118,6 +118,26 @@ class TopFadeInstrumentedTest {
         bitmap.recycle()
     }
 
+    @Test fun bottomPillsFloatOnAClearBackground() {
+        compose.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MultipromptTheme {
+                    Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Red)) {
+                        FloatingBottomBar(Modifier.align(androidx.compose.ui.Alignment.BottomCenter)) { Spacer(Modifier.height(56.dp)) }
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        val bar = compose.onNodeWithTag("floating-bottom-bar", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val density = compose.activity.resources.displayMetrics.density
+        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
+        for (y in listOf(bar.top - 24 * density, bar.top + 1, (bar.top + bar.bottom) / 2, bar.bottom - 2)) {
+            assertEquals("Nothing paints behind the bottom pills at y=$y", Color.RED, bitmap.getPixel(1, y.toInt()))
+        }
+        bitmap.recycle()
+    }
+
     @Suppress("DEPRECATION")
     private fun verify(screen: FadeScreen, name: String, first: String, chat: Boolean = false) {
         compose.activityRule.scenario.onActivity { activity ->
