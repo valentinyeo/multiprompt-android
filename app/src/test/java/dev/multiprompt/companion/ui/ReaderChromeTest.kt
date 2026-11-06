@@ -193,6 +193,7 @@ class ReaderChromeTest {
     @Test fun replyCardSitsInsideTheMessageBox() {
         render()
         val before = compose.onNode(hasSetTextAction()).getUnclippedBoundsInRoot()
+        compose.onNodeWithTag("chat-history").performScrollToIndex(messageCount - 1)
         compose.onNodeWithText("Message 0", useUnmergedTree = true).assertIsDisplayed().performTouchInput { longClick() }
         compose.onNodeWithText("Reply").performClick()
         compose.onNodeWithText("Replying").assertIsDisplayed()
