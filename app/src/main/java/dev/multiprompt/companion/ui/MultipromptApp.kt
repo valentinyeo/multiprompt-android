@@ -3060,7 +3060,14 @@ internal fun ReaderScreen(
                     dictation.stop()
                 }
             } else {
-                sendDraft(prompt)
+                val renameTo = dev.multiprompt.companion.model.RenameCommand.parse(prompt)
+                if (renameTo == null) {
+                    sendDraft(prompt)
+                } else {
+                    val error = onRename(renameTo)
+                    if (error == null) setPrompt("")
+                    else android.widget.Toast.makeText(context, error, android.widget.Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
