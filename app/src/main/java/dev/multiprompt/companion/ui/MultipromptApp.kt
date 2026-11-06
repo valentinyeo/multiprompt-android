@@ -836,9 +836,9 @@ private fun PickerSearchBar(
             Modifier
                 .weight(1f)
                 .height(PickerControlHeight)
+                .testTag("picker-search")
                 .pickerSurface()
-                .padding(start = 14.dp, end = 6.dp)
-                .testTag("picker-search"),
+                .padding(start = 14.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(Icons.Default.Search, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
@@ -880,9 +880,9 @@ private fun PickerModeRow(mode: NewSessionMode, sunlight: Boolean, onModeChange:
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp)
             .height(PickerControlHeight)
+            .testTag("picker-mode")
             .pickerSurface()
-            .padding(3.dp)
-            .testTag("picker-mode"),
+            .padding(3.dp),
     ) {
         listOf(NewSessionMode.NEW to "New session", NewSessionMode.EXISTING to "Existing").forEach { (value, label) ->
             val isSelected = value == mode
