@@ -14,6 +14,11 @@ internal object SessionPreview {
     private val completed = Regex("^[✢✳✶✻✽]\\s+.*\\bfor\\s+\\d+.*$")
     private val terminalReply = Regex("(?:\\^\\[|\u001b)\\[[?>=]?[0-9;]*[A-Za-z~]")
 
+    private val toolCall = Regex("^[⏺●•]\\s+[A-Za-z_][\\w.-]*\\(.*$")
+
+    private fun isReply(line: String): Boolean =
+        (line.startsWith("⏺ ") || line.startsWith("● ") || line.startsWith("• ")) && !toolCall.matches(line)
+
     fun line(raw: String): String {
         val rows = raw.lines().map { it.trim() }
         val working = rows.lastOrNull { activity.matches(it) }
@@ -31,9 +36,9 @@ internal object SessionPreview {
                 !candidate.startsWith("❯") && !candidate.startsWith("›") &&
                 !candidate.startsWith("$ ") && !candidate.startsWith("# ")
         }
-        val start = useful.indexOfLast { it.startsWith("⏺ ") || it.startsWith("● ") || it.startsWith("• ") }
-        val text = if (start >= 0) useful.drop(start).takeWhile { !it.startsWith("⎿") }.joinToString(" ")
-            else useful.lastOrNull().orEmpty()
+        val start = useful.indexOfLast { isReply(it) }
+        if (start < 0) return ""
+        val text = useful.drop(start).takeWhile { !it.startsWith("⎿") }.joinToString(" ")
         return text.trimStart(*promptGlyphs).trim().replace(Regex("\\s+"), " ")
             .split(Regex("(?<=[.!?])\\s+"), limit = 2).first()
     }

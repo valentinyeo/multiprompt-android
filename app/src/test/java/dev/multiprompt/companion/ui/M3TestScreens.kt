@@ -29,7 +29,7 @@ import org.robolectric.util.ReflectionHelpers
 enum class M3Screen { INBOX_SPLITS, INBOX_SEARCH, INBOX_LIST, SESSION, INBOX_MENU, SESSION_MENU }
 
 private val testHost = HostProfile("host", "VPS", "example.com", username = "user", keySecretId = "key")
-private val testSession = TmuxSession("host", "claude-reader", 1, 0, System.currentTimeMillis() / 1000 - 120, preview = "Ready for your next prompt")
+private val testSession = TmuxSession("host", "claude-reader", 1, 0, System.currentTimeMillis() / 1000 - 120, preview = "⏺ Ready for your next prompt")
 private val testWorkspace = Workspace("work", "Android", "host", "/home/user/android")
 private val emojiWorkspace = Workspace("work", "Zürich · Opéra", "host", "/home/user/android")
 
@@ -62,7 +62,7 @@ private fun InboxFixture(screen: M3Screen, material3: Boolean, sunlight: Boolean
             hosts = listOf(testHost),
             sessions = if (emojiNames) {
                 listOf(
-                    testSession.copy(name = "Rocket 🤖 Chief", accountName = "Rocket 🤖 Chief", preview = "Reply with 🚀 next"),
+                    testSession.copy(name = "Rocket 🤖 Chief", accountName = "Rocket 🤖 Chief", preview = "⏺ Reply with 🚀 next"),
                     testSession.copy(name = "Kraków 🚀 Lead", accountName = "Kraków 🚀 Lead", lastActivityEpochSeconds = testSession.lastActivityEpochSeconds - 600),
                 )
             } else {

@@ -43,7 +43,7 @@ class SessionRowsTest {
     private val host = HostProfile("host", "VPS", "example.com", username = "user", keySecretId = "key")
     private val sessions = List(6) { index ->
         TmuxSession("host", "claude-runner-$index", 1, 0, 1_799_999_880 - index * 60L,
-            preview = "[CAVEMAN] Opus 5.5 medium software-factory $index")
+            preview = "⏺ [CAVEMAN] Opus 5.5 medium software-factory $index")
     }
     private val layout = AccountLayout.parse(JSONObject("""{"schema":1,"revision":1,"workspaces":[{"name":"Android"}],"tabs":[${sessions.mapIndexed { index, session -> index to session }.joinToString(",") { (index, session) ->
         """{"kind":"tmux","name":"${session.name}","tmux_session":"${session.name}","tmux_host":0,"workspace":"Android","favorite":${index < 2},"input":1799999940000}"""

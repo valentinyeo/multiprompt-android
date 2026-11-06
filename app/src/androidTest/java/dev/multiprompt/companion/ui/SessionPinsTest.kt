@@ -57,7 +57,7 @@ class SessionPinsTest {
             1,
             0,
             1_799_999_880 - index * 60L,
-            preview = "Session preview $index",
+            preview = "⏺ Session preview $index",
         )
     }
     private val layout = AccountLayout.parse(

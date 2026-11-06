@@ -35,7 +35,7 @@ class RobotFacesTest {
     private val names = listOf("inne Chief of Staff", "Mini Boss", "HT Product Lead", "SF Design Lead", "HT Design Lead", "inne Design Lead", "BTOP Contabo", "HT Desktop")
     private val sessions = names.mapIndexed { index, name ->
         TmuxSession("host", "bot-$index", 1, 0, System.currentTimeMillis() / 1000 - index * 120,
-            accountName = name, preview = "${name}: latest reply\nshift+tab to cycle")
+            accountName = name, preview = "⏺ ${name}: latest reply\nshift+tab to cycle")
     }
     private val workspaceNames = listOf("Cedar", "Orbit", "Lagoon", "Orbit", "Lagoon", "Cedar", "Cedar", "Lagoon")
     private val layout = AccountLayout.parse(JSONObject("""{"schema":1,"revision":1,"workspaces":[{"name":"Cedar","color":1},{"name":"Orbit","color":3},{"name":"Lagoon","color":4}],"tabs":[${sessions.mapIndexed { index, session ->
