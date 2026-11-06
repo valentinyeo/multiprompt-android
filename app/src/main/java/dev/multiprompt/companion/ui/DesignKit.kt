@@ -368,7 +368,7 @@ internal fun KitAnswerOption(
         }
         Column(Modifier.weight(1f)) {
             Text(title, style = Kit.BodyStrong.copy(lineHeight = 22.sp), color = Kit.Text)
-            Text(detail, style = Kit.Hint, color = Kit.TextMuted)
+            if (detail.isNotBlank()) Text(detail, style = Kit.Hint, color = Kit.TextMuted)
         }
     }
 }

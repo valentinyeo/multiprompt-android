@@ -103,12 +103,23 @@ class ChatChoicesTest {
         compose.setContent {
             MaterialTheme { QuestionChoices(question, enabled = true) { selected, other -> answer = selected to other; true } }
         }
-        listOf("Account", "Which route?", "Create", "Keep work separate.", "Keep", "Current setup.", "Other").forEach {
+        listOf("Account", "Which route?", "1", "Create", "Keep work separate.", "2", "Keep", "Current setup.", "Other").forEach {
             compose.onNodeWithText(it).assertIsDisplayed()
         }
         compose.onNodeWithText("Keep").performClick()
-        compose.onNodeWithText("Submit answer").performClick().assertIsNotEnabled()
+        compose.onNodeWithText("Submit answer").assertIsNotEnabled()
         compose.runOnIdle { assertEquals(setOf(1) to "", answer) }
+    }
+
+    @Test fun tappingARowAnswersOnceAndLocksTheOthers() {
+        var answers = 0
+        compose.setContent {
+            MaterialTheme { QuestionChoices(question.copy(other = false), enabled = true) { _, _ -> answers++; true } }
+        }
+        compose.onNodeWithText("Submit answer").assertDoesNotExist()
+        compose.onNodeWithText("Create").performClick()
+        compose.onNodeWithText("Keep").performClick()
+        compose.runOnIdle { assertEquals(1, answers) }
     }
 
     @Test fun multipleSelectionsAndOtherArePreservedTogether() {
@@ -126,7 +137,7 @@ class ChatChoicesTest {
     @Test fun singleChoiceAndOtherAreExclusive() {
         var answer: Pair<Set<Int>, String>? = null
         compose.setContent {
-            MaterialTheme { QuestionChoices(question, enabled = true) { selected, other -> answer = selected to other; true } }
+            MaterialTheme { QuestionChoices(question, enabled = true) { selected, other -> answer = selected to other; other.isNotEmpty() } }
         }
         compose.onNodeWithText("Create").performClick()
         compose.onNodeWithText("Other").performTextInput("Custom answer")
@@ -141,9 +152,9 @@ class ChatChoicesTest {
             MaterialTheme { QuestionChoices(question, enabled = true, error = error.value) { _, _ -> attempts++; true } }
         }
         compose.onNodeWithText("Keep").performClick()
-        compose.onNodeWithText("Submit answer").performClick().assertIsNotEnabled()
+        compose.onNodeWithText("Submit answer").assertIsNotEnabled()
         compose.runOnIdle { error.value = "Connection failed" }
-        compose.onNodeWithText("Submit answer").assertIsEnabled().performClick()
+        compose.onNodeWithText("Keep").performClick()
         compose.runOnIdle { assertEquals(2, attempts) }
     }
 }
