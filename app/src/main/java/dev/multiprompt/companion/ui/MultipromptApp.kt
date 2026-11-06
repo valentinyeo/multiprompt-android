@@ -73,6 +73,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.KeyboardOptions
@@ -114,6 +115,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -155,6 +157,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -194,6 +197,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.account.AccountTab
@@ -2094,7 +2098,7 @@ private fun ReminderDialog(
 
 @Composable
 internal fun Modifier.roundOutlined(): Modifier = if (LocalReaderStyle.current) {
-    size(ReaderControlSize)
+    minimumInteractiveComponentSize().size(ReaderControlSize)
         .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
         .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
 } else {
@@ -2487,7 +2491,7 @@ internal fun ReaderTopBar(
                 }
                 Box(Modifier.weight(1f)) {
                     Row(
-                        Modifier.background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
+                        Modifier.height(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
                             .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
                             .padding(8.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -3674,7 +3678,7 @@ internal fun ReaderScreen(
                             IconButton(
                                 onClick = { attachMenuPage = ComposerMenuPage.MAIN; attachMenuExpanded = true },
                                 enabled = !reader.sending && !dictationActive && !imageUploading,
-                                modifier = Modifier.size(ReaderControlSize)
+                                modifier = Modifier.minimumInteractiveComponentSize().size(ReaderControlSize)
                                     .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
                                     .border(ReaderOutlineWidth, ReaderOutline, CircleShape),
                             ) {
@@ -3742,10 +3746,16 @@ internal fun ReaderScreen(
                                 }
                             }
                         }
-                        OutlinedTextField(
+                        val sendEnabled = !reader.sending &&
+                            pendingPromptAction == null &&
+                            !sendAfterDictation &&
+                            (prompt.isNotBlank() || imageAttachments.isNotEmpty() || dictationActive)
+                        val composerText = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
+                        BasicTextField(
                             value = promptField,
                             onValueChange = { promptField = it },
-                            modifier = Modifier.weight(1f).heightIn(min = ReaderComposerHeight)
+                            modifier = Modifier.weight(1f).heightIn(min = ReaderControlSize)
+                                .background(MaterialTheme.colorScheme.surfaceContainer, ReaderComposerShape)
                                 .border(1.dp, MaterialTheme.colorScheme.outline, ReaderComposerShape).focusRequester(promptFocusRequester)
                                 .drawWithContent {
                                     drawContent()
@@ -3754,62 +3764,71 @@ internal fun ReaderScreen(
                                         sendMarkPending = false
                                     }
                                 },
-                            filled = true,
-                            placeholder = {
-                                Text("Message ${session.displayName}", maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            },
+                            textStyle = composerText,
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                             minLines = 1,
                             maxLines = 6,
-                            shape = ReaderComposerShape,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                             keyboardActions = KeyboardActions(onSend = { submitPrompt() }),
                             readOnly = dictationActive,
-                            trailingIcon = {
-                                val sendEnabled = !reader.sending &&
-                                    pendingPromptAction == null &&
-                                    !sendAfterDictation &&
-                                    (prompt.isNotBlank() || imageAttachments.isNotEmpty() || dictationActive)
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(
-                                        onClick = {
-                                            if (dictationActive) {
-                                                dictation.stop()
-                                            } else if (dictationState.configured) {
-                                                startDictation()
-                                            } else {
-                                                apiKeyDialogVisible = true
-                                            }
-                                        },
-                                        enabled = !reader.sending,
-                                    ) {
-                                        when (dictationState.status) {
-                                            DictationStatus.CONNECTING, DictationStatus.FINISHING -> {
-                                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                                            }
-                                            DictationStatus.LISTENING -> {
-                                                Icon(Icons.Default.Stop, "Stop dictation")
-                                            }
-                                            else -> {
-                                                Icon(Icons.Default.Mic, "Start dictation")
+                            decorationBox = { inner ->
+                                Row(
+                                    Modifier.heightIn(min = ReaderControlSize).padding(start = 16.dp, end = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Box(Modifier.weight(1f).padding(vertical = 10.dp)) {
+                                        if (prompt.isEmpty()) {
+                                            Text(
+                                                "Message ${session.displayName}",
+                                                style = composerText,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                        inner()
+                                    }
+                                    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                                        IconButton(
+                                            onClick = {
+                                                if (dictationActive) {
+                                                    dictation.stop()
+                                                } else if (dictationState.configured) {
+                                                    startDictation()
+                                                } else {
+                                                    apiKeyDialogVisible = true
+                                                }
+                                            },
+                                            enabled = !reader.sending,
+                                        ) {
+                                            when (dictationState.status) {
+                                                DictationStatus.CONNECTING, DictationStatus.FINISHING -> {
+                                                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                                }
+                                                DictationStatus.LISTENING -> {
+                                                    Icon(Icons.Default.Stop, "Stop dictation")
+                                                }
+                                                else -> {
+                                                    Icon(Icons.Default.Mic, "Start dictation")
+                                                }
                                             }
                                         }
                                     }
-                                    IconButton(
-                                        onClick = submitPrompt,
-                                        enabled = sendEnabled,
-                                        modifier = Modifier
-                                            .minimumInteractiveComponentSize().size(ReaderSendSize)
-                                            .background(
-                                                if (sunlightMode) MaterialTheme.colorScheme.surfaceContainerHigh else Color(0xFF353535),
-                                                CircleShape,
-                                            ),
+                                    Box(
+                                        Modifier.size(ReaderSendSize)
+                                            .clip(CircleShape)
+                                            .background(if (sunlightMode) MaterialTheme.colorScheme.surfaceContainerHigh else Color(0xFF353535))
+                                            .clickable(enabled = sendEnabled, role = Role.Button, onClick = submitPrompt)
+                                            .semantics { contentDescription = "Send prompt" },
+                                        contentAlignment = Alignment.Center,
                                     ) {
                                         if (reader.sending || sendAfterDictation) {
-                                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                            CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
                                         } else {
                                             Icon(
                                                 Icons.AutoMirrored.Filled.Send,
-                                                "Send prompt",
+                                                null,
+                                                Modifier.size(18.dp),
                                                 tint = if (sendEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
                                         }

@@ -55,14 +55,17 @@ class Material3LookTest(private val screen: M3Screen, private val sunlight: Bool
             compose.onNodeWithText("claude-reader", useUnmergedTree = true).assertIsDisplayed()
             val back = compose.onNodeWithContentDescription("Back").fetchSemanticsNode().boundsInRoot
             val menu = compose.onNodeWithContentDescription("Session actions").fetchSemanticsNode().boundsInRoot
-            assertEquals(48f, back.width, 0.01f)
-            assertEquals(48f, menu.width, 0.01f)
+            assertEquals(44f, back.width, 0.01f)
+            assertEquals(44f, back.height, 0.01f)
+            assertEquals(44f, menu.width, 0.01f)
             assertEquals(back.top, menu.top, 0.01f)
             val send = compose.onNodeWithContentDescription("Send prompt").fetchSemanticsNode().boundsInRoot
-            assertEquals(40f, send.width, 0.01f)
-            assertEquals(40f, send.height, 0.01f)
+            assertEquals(28f, send.width, 0.01f)
+            assertEquals(28f, send.height, 0.01f)
             val field = compose.onNode(hasSetTextAction()).fetchSemanticsNode().boundsInRoot
-            assertTrue("composer=$field", field.height >= 56f)
+            assertEquals("composer=$field", 44f, field.height, 0.01f)
+            assertEquals("send=$send composer=$field", 8f, field.right - send.right, 0.01f)
+            assertEquals("send=$send composer=$field", field.center.y, send.center.y, 0.01f)
             listOf("Archive", "Remind", "Wait").forEach { label ->
                 compose.onNodeWithText(label).assertDoesNotExist()
             }

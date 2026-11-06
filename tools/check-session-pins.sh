@@ -3,12 +3,15 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 test "${GITHUB_ACTIONS:-}" = true
 file=app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt
+theme=app/src/main/java/dev/multiprompt/companion/ui/Theme.kt
 base=build/session-rows/pins
 mkdir -p "$base"
 cp "$file" "$base/current.kt"
-restore() { cp "$base/current.kt" "$file"; }
+cp "$theme" "$base/current-theme.kt"
+restore() { cp "$base/current.kt" "$file"; cp "$base/current-theme.kt" "$theme"; }
 trap restore EXIT
 git show "93f137d8adc6bd8993758e8564a8430612c06c4d:$file" > "$base/original.kt"
+git show "93f137d8adc6bd8993758e8564a8430612c06c4d:$theme" > "$base/original-theme.kt"
 
 run_pins() {
   local phase=$1 status=0 dir
@@ -73,6 +76,7 @@ PYTHON
 }
 
 cp "$base/original.kt" "$file"
+cp "$base/original-theme.kt" "$theme"
 run_pins before
 restore
 run_pins after

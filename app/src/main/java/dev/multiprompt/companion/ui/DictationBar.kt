@@ -10,12 +10,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,19 +50,19 @@ internal fun DictationBar(
     val dark = Color(0xFF2B2B2B)
     val onDark = Color.White
     Row(
-        Modifier.fillMaxWidth(),
+        Modifier.fillMaxWidth().minimumInteractiveComponentSize(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
     ) {
         Box(
-            Modifier.weight(1f).height(ReaderComposerHeight).clip(ReaderComposerShape).background(dark)
+            Modifier.weight(1f).height(ReaderControlSize).clip(ReaderComposerShape).background(dark)
                 .clickable(enabled = !sending, onClick = onStop)
                 .semantics { contentDescription = "Stop dictation" }
                 .testTag("dictation-stop"),
             contentAlignment = Alignment.Center,
-        ) { Box(Modifier.size(ReaderBadgeSize).background(onDark, RoundedCornerShape(4.dp))) }
+        ) { Icon(Icons.Default.Stop, null, Modifier.size(24.dp), tint = onDark) }
         Row(
-            Modifier.weight(1.4f).height(ReaderComposerHeight).clip(ReaderComposerShape).background(dark)
+            Modifier.weight(1.4f).height(ReaderControlSize).clip(ReaderComposerShape).background(dark)
                 .padding(horizontal = 12.dp).testTag("dictation-meter"),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -70,7 +71,7 @@ internal fun DictationBar(
             LevelDotsRow(level, onDark)
         }
         Box(
-            Modifier.size(ReaderComposerHeight).clip(CircleShape).background(Color(0xFFF2F2F2))
+            Modifier.size(ReaderControlSize).clip(CircleShape).background(Color(0xFFF2F2F2))
                 .clickable(enabled = !sending, onClick = onSend)
                 .semantics { contentDescription = "Send prompt" }
                 .testTag("dictation-send"),
