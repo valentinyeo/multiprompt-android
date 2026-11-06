@@ -249,14 +249,22 @@ object TmuxCommands {
         require(LIVE_CHAT_NAME.matches(fresh)) { "Invalid live chat name" }
         val name = TmuxParser.shellQuote(fresh)
         val reader = "python3 ~/.multiprompt-runtime/reader.py"
-        val host = "$reader host stop claude $sid >/dev/null 2>&1; " +
-            "$reader host enable claude $sid --tmux $fresh >/dev/null 2>&1; " +
-            "$reader host start claude $sid >/dev/null 2>&1; exec sleep infinity"
+        val host = "${liveChatProvider(sid)}; " +
+            "$reader host stop \$mp_p $sid >/dev/null 2>&1; " +
+            "$reader host enable \$mp_p $sid --tmux $fresh >/dev/null 2>&1; " +
+            "$reader host start \$mp_p $sid >/dev/null 2>&1; exec sleep infinity"
         return "if [ ! -f ~/.multiprompt-runtime/reader.py ]; then " +
             "printf 'Live chat reader is missing\\n' >&2; exit 4; fi; " +
             "if tmux has-session -t ${sessionTarget(fresh)} 2>/dev/null; then " +
             "printf 'session_exists\\n' >&2; exit 2; fi; " +
             "tmux new-session -d -s $name ${TmuxParser.shellQuote(host)}"
+    }
+
+    fun liveChatProvider(sid: String): String {
+        require(LIVE_CHAT_SID.matches(sid)) { "Invalid live chat id" }
+        return "mp_p=claude; for mp_c in claude codex pi hax; do " +
+            "mp_k=\$(printf '%s' \"\$mp_c:$sid\" | sha256sum | cut -c1-32); " +
+            "if [ -f \"\$HOME/.local/state/multiprompt/agent-host/\$mp_k.config.json\" ]; then mp_p=\$mp_c; break; fi; done"
     }
 
     fun freshSessionName(sessionName: String): String {

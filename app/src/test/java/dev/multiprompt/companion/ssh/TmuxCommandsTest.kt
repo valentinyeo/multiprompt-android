@@ -6,6 +6,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
+import java.nio.file.Files
+import java.security.MessageDigest
 
 class TmuxCommandsTest {
     @Test
@@ -267,9 +270,10 @@ class TmuxCommandsTest {
         val sid = "0b6d2c1e-4f3a-4b2c-9d8e-1a2b3c4d5e6f"
         val command = TmuxCommands.resurrectLiveChat("live-api-x1", sid)
 
-        assertTrue(command.contains("host enable claude $sid --tmux live-api-x1-r"))
-        assertTrue(command.contains("host start claude $sid"))
-        assertTrue(command.indexOf("host stop claude $sid") in 0 until command.indexOf("host enable claude $sid"))
+        assertTrue(command.contains("host enable \$mp_p $sid --tmux live-api-x1-r"))
+        assertTrue(command.contains("host start \$mp_p $sid"))
+        assertTrue(command.indexOf("mp_p=claude;") in 0 until command.indexOf("host stop \$mp_p $sid"))
+        assertTrue(command.indexOf("host stop \$mp_p $sid") in 0 until command.indexOf("host enable \$mp_p $sid"))
         assertTrue(command.contains("tmux new-session -d -s 'live-api-x1-r"))
         assertFalse(command.contains("--cwd"))
         assertFalse(command.contains(" -c "))
@@ -280,6 +284,37 @@ class TmuxCommandsTest {
     fun restoringALiveChatRejectsAnUnsafeChatId() {
         assertThrows(IllegalArgumentException::class.java) {
             TmuxCommands.resurrectLiveChat("live-api-x1", "x; reboot")
+        }
+    }
+
+    @Test
+    fun restoringALiveChatKeepsItsOriginalAssistant() {
+        val sid = "0b6d2c1e-4f3a-4b2c-9d8e-1a2b3c4d5e6f"
+        assertEquals("claude", pickedAssistant(sid, null))
+        assertEquals("claude", pickedAssistant(sid, "claude"))
+        assertEquals("codex", pickedAssistant(sid, "codex"))
+        assertEquals("pi", pickedAssistant(sid, "pi"))
+        assertEquals("hax", pickedAssistant(sid, "hax"))
+    }
+
+    private fun pickedAssistant(sid: String, saved: String?): String {
+        val home = Files.createTempDirectory("mp-home").toFile()
+        try {
+            val folder = File(home, ".local/state/multiprompt/agent-host").apply { mkdirs() }
+            if (saved != null) {
+                val key = MessageDigest.getInstance("SHA-256").digest("$saved:$sid".toByteArray())
+                    .joinToString("") { "%02x".format(it) }.take(32)
+                File(folder, "$key.config.json").writeText("{}")
+            }
+            val process = ProcessBuilder("sh", "-c", TmuxCommands.liveChatProvider(sid) + "; printf '%s' \"\$mp_p\"")
+                .apply { environment()["HOME"] = home.path }
+                .redirectErrorStream(true)
+                .start()
+            val output = process.inputStream.bufferedReader().readText()
+            assertEquals(0, process.waitFor())
+            return output
+        } finally {
+            home.deleteRecursively()
         }
     }
 }
