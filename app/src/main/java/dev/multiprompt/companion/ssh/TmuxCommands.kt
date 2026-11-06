@@ -263,6 +263,10 @@ object TmuxCommands {
     fun renameWindow(sessionName: String, displayName: String): String =
         "tmux rename-window -t ${target(sessionName)} ${TmuxParser.shellQuote(displayName)}"
 
+    fun rename(sessionName: String, displayName: String, tellAgent: Boolean): String =
+        if (tellAgent) "${renameWindow(sessionName, displayName)} && ${pastePrompt(sessionName)}"
+        else renameWindow(sessionName, displayName)
+
     fun attach(sessionName: String): String =
         "exec tmux attach-session -f ignore-size -t ${sessionTarget(sessionName)}"
 
