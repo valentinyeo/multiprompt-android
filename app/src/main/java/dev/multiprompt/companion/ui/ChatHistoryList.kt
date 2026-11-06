@@ -102,14 +102,6 @@ internal fun ChatHistoryView(
     val questions = if (hostRequest != null) hostCards else state.history.pendingQuestions
     Column(modifier.fillMaxSize()) {
         state.messageError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(8.dp)) }
-        if (state.retrying) {
-            Text(
-                "Disconnected · retrying",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(8.dp),
-            )
-        }
         reader.modelPickerOptions.forEach { option ->
             OutlinedButton(
                 onClick = { if (connection.selectModelPickerOption(option.index)) onSessionUsed() },
