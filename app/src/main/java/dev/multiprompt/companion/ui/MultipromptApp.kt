@@ -1647,10 +1647,6 @@ internal fun SessionsScreen(
     val visibleSessions = if (state.selectedWorkspaceId == FREQUENT_SPLIT_ID) {
         frequentSessions(matchingSessions, state.accountLayout, state.accountHosts, etaNowMillis)
     } else SessionSearch.newestFirst(matchingSessions, state.sessionInteractionEpochSeconds)
-    val pinnedSessions = if (state.sessionBucket == SessionBucket.OPEN && normalizedQuery.isBlank() &&
-        state.selectedWorkspaceId != FAVORITES_SPLIT_ID && state.selectedWorkspaceId != FREQUENT_SPLIT_ID
-    ) visibleSessions.filter { isFavoriteSession(it, state.accountLayout, state.accountHosts) } else emptyList()
-    val rowSessions = visibleSessions.filterNot { it in pinnedSessions }
     val visibleDissolvedSessions = if (state.sessionBucket == SessionBucket.ARCHIVE && state.selectedWorkspaceId != FAVORITES_SPLIT_ID && state.selectedWorkspaceId != FREQUENT_SPLIT_ID) {
         state.dissolvedSessions.filter { session ->
             normalizedQuery.isBlank() ||
@@ -1686,36 +1682,6 @@ internal fun SessionsScreen(
             RoomRow(room) {
                 openRoom = room
                 onOpenRoom(room.id)
-            }
-        }
-    }
-    val pinnedStrip: @Composable () -> Unit = {
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            pinnedSessions.forEach { session ->
-                val key = SessionReadStore.key(session.hostId, session.name)
-                Column(
-                    Modifier.width(80.dp).height(90.dp).clickable { onOpen(session) },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Box {
-                        val look = botLooks[key]
-                        BotAvatar(session.name, 56.dp, workspaceColor = session.workspaceColor, face = look?.face, color = look?.color, picture = look?.picture)
-                        if (key in state.unreadSessionKeys) {
-                            Badge(
-                                Modifier.align(Alignment.TopEnd).semantics {
-                                    contentDescription = "${(state.unreadCounts[key] ?: 1).coerceAtLeast(1)} unread messages"
-                                },
-                                containerColor = Color(0xFF89B4F8),
-                                contentColor = Color(0xFF121212),
-                            ) { Text(UnreadCount.label(state.unreadCounts[key] ?: 1)) }
-                        }
-                    }
-                    Text(session.displayName, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
             }
         }
     }
@@ -1958,15 +1924,12 @@ internal fun SessionsScreen(
             if (rooms.isNotEmpty()) {
                 item(key = "rooms") { roomStrip() }
             }
-            if (!reversedSessions && pinnedSessions.isNotEmpty()) {
-                item(key = "pinned-sessions") { pinnedStrip() }
-            }
             state.hostErrors.forEach { (hostId, error) ->
                 if (hostId !in state.cachedHostIds && !SshProblem.isKeyRejected(error)) {
                     item(key = "error-$hostId") { InlineError(error) }
                 }
             }
-            items(rowSessions, key = { "${it.hostId}:${it.name}" }) { session ->
+            items(visibleSessions, key = { "${it.hostId}:${it.name}" }) { session ->
                 val key = SessionReadStore.key(session.hostId, session.name)
                 val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
                 val starred = tab?.favorite == true
@@ -2034,9 +1997,6 @@ internal fun SessionsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-            }
-            if (reversedSessions && pinnedSessions.isNotEmpty()) {
-                item(key = "pinned-sessions") { pinnedStrip() }
             }
         }
     }

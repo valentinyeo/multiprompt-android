@@ -8,23 +8,7 @@ mkdir -p "$base"
 cp "$file" "$base/current.kt"
 restore() { cp "$base/current.kt" "$file"; }
 trap restore EXIT
-git show "bebcb708b7ae9338230c2c5b04fa769484f46ccd:$file" > "$base/original.kt"
-
-python3 - "$base/original.kt" "$base/original-compatible.kt" <<'PYTHON'
-from pathlib import Path
-import sys
-
-source = Path(sys.argv[1]).read_bytes()
-old = b"report.asText()"
-new = b"report.asText(context.getString(dev.multiprompt.companion.R.string.app_name))"
-assert source.count(old) == 2, "Expected exactly two original formatter callsites"
-popup = b"DropdownMenu("
-assert source.count(popup) == 6, "Expected exactly six original popup calls"
-assert source.count(b"BottomFade") == 2, "Expected exactly two original bottom fades"
-source = source.replace(old, new).replace(popup, b"androidx.compose.material3.DropdownMenu(").replace(b"BottomFade", b"FloatingBottomBar")
-Path(sys.argv[2]).write_bytes(source)
-PYTHON
-echo SESSION_PINS_FORMATTER_CALLSITES_ADAPTED
+git show "93f137d8adc6bd8993758e8564a8430612c06c4d:$file" > "$base/original.kt"
 
 run_pins() {
   local phase=$1 status=0 dir
@@ -73,7 +57,7 @@ for case in cases:
         assert len(failures) == 1, case.get("name")
         failure = failures[0]
         text = " ".join(failure.itertext()) + " " + " ".join(failure.attrib.values())
-        assert "PINNED_STRIP_MUST_SCROLL" in text, (case.get("name"), text)
+        assert "PINNED_STRIP_MUST_NOT_SHOW" in text, (case.get("name"), text)
     else:
         assert not failures, case.get("name")
 if phase == "after":
@@ -81,18 +65,18 @@ if phase == "after":
     expected_pngs = {
         f"{case}-{stage}.png"
         for case in ("reader-normal", "reader-reversed", "m3-normal", "m3-reversed")
-        for stage in ("top", "scrolled", "restored")
+        for stage in ("top", "newest")
     }
-    assert len(pngs) == 12 and {p.name for p in pngs} == expected_pngs, pngs
+    assert len(pngs) == 8 and {p.name for p in pngs} == expected_pngs, pngs
     assert all(p.stat().st_size > 0 for p in pngs), pngs
 PYTHON
 }
 
-cp "$base/original-compatible.kt" "$file"
+cp "$base/original.kt" "$file"
 run_pins before
 restore
 run_pins after
 verify_pins before
 echo SESSION_PINS_ORIGINAL_REJECTED
 verify_pins after
-echo SESSION_PINS_SCROLL_OK
+echo SESSION_PINS_STRIP_GONE
