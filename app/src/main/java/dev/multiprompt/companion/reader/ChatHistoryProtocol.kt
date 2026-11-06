@@ -6,8 +6,6 @@ import org.json.JSONObject
 object ChatHistoryProtocol {
     const val COMMAND = "exec python3 -u -c 'import base64,sys;exec(base64.b64decode(sys.stdin.buffer.readline()))' --serve"
     const val MAX_REPLY_BYTES = 64 * 1024 * 1024
-    val STEP_ROLES = setOf("tool", "tool_result")
-    private val ROLES = setOf("user", "assistant") + STEP_ROLES
 
     data class Identity(val agent: AgentKind, val tmux: String, val cwd: String = "", val sid: String = "")
 
@@ -108,7 +106,7 @@ object ChatHistoryProtocol {
                     deliveries[value.getString("id")] = QueuedMessages.Delivery.valueOf(value.getString("state").uppercase())
                 }
             }
-            if (row.optString("role") !in ROLES) null else parseRow(row).also {
+            if (row.optString("role") !in setOf("user", "assistant")) null else parseRow(row).also {
                 require(it.offset >= base && it.end <= end && it.end > it.offset)
             }
         }
@@ -175,8 +173,7 @@ object ChatHistoryProtocol {
             listOf("role", "text", "id", "timestamp", "offset", "end", "queued", "settlement", "question", "questionResult").forEach { metadata.remove(it) }
         }.let { if (it.length() == 0) "" else it.toString() },
     ).also {
-        require(it.role in ROLES && it.offset >= 0 && it.end > it.offset)
-        if (it.role in STEP_ROLES) return@also
+        require(it.role in setOf("user", "assistant") && it.offset >= 0 && it.end > it.offset)
         require(if (it.settlement == null && it.questions.isEmpty() && it.questionResult.isEmpty()) it.text.isNotBlank() else it.role == "assistant" && it.text.isEmpty())
         require(!it.queued || it.role == "user" && it.settlement == null)
     }

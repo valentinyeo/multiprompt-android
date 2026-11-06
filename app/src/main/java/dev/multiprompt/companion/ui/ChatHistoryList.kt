@@ -1,6 +1,5 @@
 package dev.multiprompt.companion.ui
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
@@ -35,13 +34,6 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
@@ -55,7 +47,6 @@ import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.reader.PendingQuestion
 import dev.multiprompt.companion.reader.ChatHistoryMessage
-import dev.multiprompt.companion.reader.ChatSteps
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -92,7 +83,6 @@ internal fun ChatHistoryView(
     val state by history.state.collectAsState()
     val managed = agent == AgentKind.CLAUDE || agent == AgentKind.CODEX || agent == AgentKind.PI
     val messages = if (managed) state.history.managedMessages(state.replica, state.unresolved) else state.history.displayMessages(reader.sentRecord)
-    val steps = remember(state.history.rows) { ChatSteps.of(state.history.rows) }
     val speakable = remember(messages) { dev.multiprompt.companion.reader.ReadAloud.replies(messages) }
     LaunchedEffect(speakable) { onSpeakableReplies(speakable) }
     LaunchedEffect(state.loaded, state.history.sid, state.retrying) { onChatReady(state.loaded && state.history.sid.isNotEmpty() && !state.retrying) }
@@ -121,7 +111,6 @@ internal fun ChatHistoryView(
         }
         ChatHistoryList(
             messages = messages,
-            steps = steps,
             focusKey = focusKey,
             loaded = state.loaded,
             hasOlder = !state.loaded || state.history.start > 0 || state.history.more,
@@ -161,7 +150,6 @@ internal fun ChatHistoryView(
 internal fun ChatHistoryList(
     messages: List<ChatHistoryMessage>,
     modifier: Modifier = Modifier,
-    steps: List<ChatSteps.Step> = emptyList(),
     focusKey: String? = null,
     loaded: Boolean = true,
     agent: AgentKind = AgentKind.CLAUDE,
@@ -190,9 +178,6 @@ internal fun ChatHistoryList(
         if (agent == AgentKind.CLAUDE) ChatReactions.present(messages, collapsePendingReactions)
         else ChatReactions.Presentation(messages, emptyMap())
     }
-    val placement = remember(presentation.messages, steps) { ChatSteps.place(presentation.messages, steps) }
-    var openSteps by remember { mutableStateOf(emptySet<String>()) }
-    val toggleSteps: (String) -> Unit = { key -> openSteps = if (key in openSteps) openSteps - key else openSteps + key }
     val nearTop by rememberUpdatedState(onNearTop)
     var pendingJump by remember { mutableStateOf<ReplyJump?>(null) }
     var highlightedKey by remember { mutableStateOf<String?>(null) }
@@ -208,7 +193,7 @@ internal fun ChatHistoryList(
         val source = ReplyQuote.sourceIndex(texts, before, request.reply.quoted)
         if (source != null) {
             highlightedKey = keys[source]
-            listState.scrollToItem(keys.lastIndex - source + questions.size + (if (working) 1 else 0) + (if (placement.trailing != null) 1 else 0))
+            listState.scrollToItem(keys.lastIndex - source + questions.size + (if (working) 1 else 0))
             pendingJump = null
         } else if (before < 0 || (!hasOlder && loaded)) {
             pendingJump = null
@@ -252,14 +237,8 @@ internal fun ChatHistoryList(
                 }
             }
         }
-        placement.trailing?.let { group ->
-            item(key = "steps:${group.key}") { StepsGroup(group, group.key in openSteps, sunlight, fontScale) { toggleSteps(group.key) } }
-        }
         itemsIndexed(presentation.messages.asReversed(), key = { _, message -> message.key }, contentType = { _, message -> message.role }) { index, message ->
             Column {
-                placement.above[message.key]?.let { group ->
-                    StepsGroup(group, group.key in openSteps, sunlight, fontScale) { toggleSteps(group.key) }
-                }
                 if (message.key == unreadMessageKey) {
                     Text("New", color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
                 }
@@ -283,40 +262,6 @@ internal fun ChatHistoryList(
             item(key = "empty") {
                 Text(if (loaded) "No messages yet" else "Loading conversation…", fontSize = fontSize,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun StepsGroup(group: ChatSteps.Group, open: Boolean, sunlight: Boolean, fontScale: Float, onToggle: () -> Unit) {
-    val hint = chatHintColor(sunlight)
-    val style = Kit.Hint.copy(fontSize = Kit.Hint.fontSize * fontScale, lineHeight = Kit.Hint.lineHeight * fontScale)
-    val output = style.copy(fontFamily = FontFamily.Monospace, fontSize = ReaderMetaTextSize * fontScale, lineHeight = ReaderMetaTextSize * 1.5f * fontScale)
-    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).testTag("chat-steps-${group.key}")) {
-        Text(ChatSteps.label(group, open), style = style, color = hint,
-            modifier = Modifier.clickable(onClick = onToggle).padding(horizontal = Kit.ScreenEdge, vertical = 6.dp)
-                .semantics { stateDescription = if (open) "Steps open" else "Steps folded" })
-        if (open) group.steps.forEach { step ->
-            Column(Modifier.padding(start = Kit.ScreenEdge, end = Kit.ScreenEdge, top = 4.dp, bottom = 4.dp).testTag("chat-step-${step.id}")) {
-                val verb = step.text.substringBefore(' ')
-                val rest = step.text.substringAfter(' ', "")
-                Text(buildAnnotatedString {
-                    withStyle(SpanStyle(color = hint)) { append(verb) }
-                    if (rest.isNotEmpty()) {
-                        append(" ")
-                        withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(rest) }
-                    }
-                }, style = style, color = chatTextColor(sunlight), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (step.output.isNotEmpty()) {
-                    Column(Modifier.padding(start = 2.dp, top = 2.dp).drawBehind {
-                        drawLine(Kit.Outline, Offset(0f, 0f), Offset(0f, size.height), strokeWidth = Kit.OutlineWidth.toPx())
-                    }.padding(start = 10.dp)) {
-                        step.output.forEach { line ->
-                            Text(line, style = output, color = hint, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                }
             }
         }
     }
