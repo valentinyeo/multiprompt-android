@@ -4180,11 +4180,14 @@ internal fun ReaderScreen(
                         }
                     }
                 }
-                transcript?.forEach { message ->
+                val batchStart = transcript?.let { messages -> lastBatchStart(messages.map { it.role }) }
+                val batchLabel = batchStart?.let { start -> batchTimeLabel(transcript?.getOrNull(start)?.timestamp, System.currentTimeMillis()) }
+                transcript?.forEachIndexed { index, message ->
                     val isUser = message.role == "user"
                     val bodyColor = chatTextColor(sunlightMode, isUser)
                     key(connection, message.role, message.timestamp, message.text) {
                         if (unreadMessageKey == "transcript:${message.role}:${message.timestamp}:${message.text.hashCode()}") Text("New", color = MaterialTheme.colorScheme.primary)
+                        if (index == batchStart && batchLabel != null) BatchTimeLine(batchLabel, sunlightMode)
                         ReplyableBubble(
                             isUser = isUser,
                             sunlight = sunlightMode,
@@ -5077,4 +5080,15 @@ private fun NativeSkillPicker(
             }
         }
     }
+}
+
+@Composable
+internal fun BatchTimeLine(label: String, sunlight: Boolean) {
+    Text(
+        label,
+        modifier = Modifier.fillMaxWidth().testTag("batch-time").padding(vertical = ReaderMessageSpacing),
+        textAlign = TextAlign.Center,
+        fontSize = ReaderMetaTextSize,
+        color = if (sunlight) MaterialTheme.colorScheme.onSurfaceVariant else ReaderHint,
+    )
 }

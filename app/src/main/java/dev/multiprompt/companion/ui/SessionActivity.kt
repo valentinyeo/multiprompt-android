@@ -15,3 +15,23 @@ internal fun sessionActivityLabel(activitySeconds: Long, nowSeconds: Long, zone:
         else -> "${java.time.temporal.ChronoUnit.DAYS.between(day, today).coerceAtLeast(0)}d"
     }
 }
+
+internal fun lastBatchStart(roles: List<String>): Int? {
+    if (roles.isEmpty()) return null
+    val lastIsUser = roles.last() == "user"
+    var start = roles.size - 1
+    while (start > 0 && (roles[start - 1] == "user") == lastIsUser) start--
+    return start
+}
+
+internal fun batchTimeLabel(timestamp: String?, nowMillis: Long, zone: ZoneId = ZoneId.systemDefault()): String? {
+    val instant = timestamp?.let { runCatching { Instant.parse(it) }.getOrNull() } ?: return null
+    val time = instant.atZone(zone)
+    val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
+    val clock = time.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+    return when (time.toLocalDate()) {
+        today -> "Today $clock"
+        today.minusDays(1) -> "Yesterday $clock"
+        else -> time.format(java.time.format.DateTimeFormatter.ofPattern("d MMM HH:mm", java.util.Locale.ENGLISH))
+    }
+}

@@ -19,5 +19,6 @@
   "IGSH-1817": "Android: the bot's last reply vanishes when you send again",
   "IGSH-1814": "Android: chats open instantly, no loading screen",
   "IGSH-1757": "Android: reply card inside the message box, like Grok Bot",
-  "IGSH-1756": "Android: new session screen in the chat's new style"
+  "IGSH-1756": "Android: new session screen in the chat's new style",
+  "IGSH-1755": "Android chat: show when the last batch of messages started"
 }
