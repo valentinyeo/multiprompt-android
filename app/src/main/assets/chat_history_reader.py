@@ -2,6 +2,7 @@ READER_SOURCE = r'''
 
 import base64
 import difflib
+from contextlib import contextmanager
 from datetime import datetime
 import hashlib
 import html
@@ -119,7 +120,7 @@ def conversation_path(agent, sid, cwd, home=None):
                     continue
             for path in candidates:
                 try:
-                    if path.is_file() and path.resolve().is_relative_to(root.resolve()):
+                    if path.is_file() and transcript_inside(path, root):
                         with path.open("rb"):
                             return path
                 except PermissionError as error:
@@ -139,6 +140,13 @@ def conversation_path(agent, sid, cwd, home=None):
     if denied is not None:
         raise denied
     return None
+
+def transcript_inside(path, root):
+    if path.resolve().is_relative_to(root.resolve()):
+        return True
+    target = path.resolve()
+    return (path.is_symlink() and path.parent.resolve().is_relative_to(root.resolve()) and
+            target.name == path.name and target.is_file() and target.stat().st_uid == os.getuid())
 
 def owner_response(q, owner, source):
     user, _home = owner
@@ -1561,6 +1569,9 @@ def resolve_response_path(q, source=None, as_owner=False):
     rid = q["id"]
     agent = q.get("provider") if q.get("provider") in HOST_PROVIDERS else "codex" if q["codex"] else "claude"
     sid, tmux, cwd = q["sid"], q["tmux"], q["cwd"]
+    hosted = host_config(agent, sid) if isinstance(sid, str) and SESSION_ID.fullmatch(sid) else None
+    if isinstance(hosted, dict) and isinstance(hosted.get("cwd"), str) and Path(hosted["cwd"]).is_absolute():
+        cwd = q["cwd"] = hosted["cwd"]
     if (not isinstance(rid, int) or rid < 0 or
             sid and not SESSION_ID.fullmatch(sid) or
             tmux and not TMUX_NAME.fullmatch(tmux) or not sid and not tmux or
@@ -2360,6 +2371,7 @@ def import_legacy_messages(db, sid, transcript, epoch):
 
 HOST_PROVIDERS = ('claude', 'codex', 'pi', 'hax')
 MESSAGE_WORKER_IDLE_SECONDS = 120
+MESSAGE_WORKER_STALL_SECONDS = 90
 HOST_BINARY_NAMES = {'claude': 'claude', 'codex': 'codex', 'pi': 'pi', 'hax': 'hax'}
 HOST_BINARY_FOLDERS = ('~/.local/bin', '~/.claude/local', '~/.npm-global/bin', '~/.bun/bin')
 HOST_FOLDER = re.compile(r"[A-Za-z0-9_./~+-]{1,220}\Z")
@@ -3913,7 +3925,42 @@ def host_claude_open(provider, sid, tmux, session):
     pass
 
 
+HOST_SKILL_TOKEN = re.compile(r"(?<!\S)/([A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)?)(?=\s|$)")
+
+
+def host_skill_file(name, cwd=None):
+    home = Path.home() / ".claude"
+    if ":" in name:
+        plugin, skill = name.split(":", 1)
+        files = [f for r in (home / "plugins" / "cache").glob("*/" + plugin + "/*") for f in (r / "skills" / skill / "SKILL.md", r / "commands" / (skill + ".md"))]
+    else:
+        bases = [home] + ([Path(cwd) / ".claude"] if isinstance(cwd, str) and cwd else [])
+        files = [f for b in bases for f in (b / "skills" / name / "SKILL.md", b / "commands" / (name + ".md"))]
+    return next((f for f in files if f.is_file()), None)
+
+
+def host_skill_user_only(path):
+    try:
+        head = path.read_text(errors="replace")[:4000]
+    except OSError:
+        return False
+    return bool(re.search(r"^disable-model-invocation:\s*true\s*$", head, re.M))
+
+
+def host_claude_lead_skill(text, cwd=None):
+    if not isinstance(text, str) or text.lstrip().startswith("/"):
+        return text
+    found = [(m, f) for m in HOST_SKILL_TOKEN.finditer(text) for f in [host_skill_file(m.group(1), cwd)] if f is not None]
+    if not found:
+        return text
+    match = next((m for m, f in found if host_skill_user_only(f)), found[0][0])
+    rest = (text[:match.start()].rstrip() + " " + text[match.end():].lstrip()).strip()
+    return "/" + match.group(1) + (" " + rest if rest else "")
+
+
 def host_claude_write(provider, sid, session, token, text):
+    config = host_config(provider, sid)
+    text = host_claude_lead_skill(text, config.get("cwd") if isinstance(config, dict) else None)
     return host_control_send(session, dict(type="user", message=dict(role="user", content=[dict(type="text", text=text)])))
 
 
@@ -4789,6 +4836,9 @@ def message_store_transaction(q):
     import uuid
     provider, sid, tmux = q['provider'], q['sid'], q['tmux']
     op = q.get('op')
+    resolved = None
+    if op in ('message_submit', 'message_snapshot', 'message_events', 'message_status', 'message_retry', 'message_reset', 'message_dispatch'):
+        resolved = resolve_tmux_agent(provider, tmux, require_bound=True)
     with closing(message_store_db(tmux)) as db, db:
         db.execute('BEGIN IMMEDIATE')
         db.execute('INSERT OR IGNORE INTO message_chats(provider,sid) VALUES (?,?)', (provider, sid))
@@ -4803,7 +4853,6 @@ def message_store_transaction(q):
         message_expire(db, provider, sid)
         epoch, seq = db.execute('SELECT epoch,seq FROM message_chats WHERE provider=? AND sid=?', (provider, sid)).fetchone()
         if op in ('message_submit', 'message_snapshot', 'message_events', 'message_status', 'message_retry', 'message_reset'):
-            resolved = resolve_tmux_agent(provider, tmux, require_bound=True)
             if resolved and resolved[0] == sid:
                 db.execute('INSERT OR REPLACE INTO message_locators VALUES (?,?,?)', (provider, sid, tmux))
             elif host_dispatch_switch(provider, sid) and host_chat_name(provider, sid) == tmux:
@@ -4907,7 +4956,6 @@ def message_store_transaction(q):
             scope_row = db.execute('SELECT scope FROM message_room_scopes WHERE id=?', (row[0],)).fetchone()
             if scope_row is not None and not hosting:
                 return dict(epoch=epoch, seq=seq, message=None)
-            resolved = resolve_tmux_agent(provider, tmux, require_bound=True)
             if not hosting and (not resolved or resolved[0] != sid):
                 db.execute("UPDATE shared_messages SET state='failed',receipt='session_unavailable' WHERE id=? AND state='queued'", (row[0],))
                 row = message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', (row[0],)).fetchone())
@@ -4964,6 +5012,7 @@ def message_store_transaction(q):
                 if status != 'busy':
                     host_backoff_fail(provider, sid)
                 return dict(epoch=epoch, seq=seq, message=None)
+            db.commit()
             bound = resolve_tmux_agent(provider, tmux, require_bound=True)
             if current != ('sent', epoch) or not bound or bound[0] != sid or Path(bound[1]) != Path(resolved[1]):
                 return dict(epoch=epoch, seq=seq, message=None)
@@ -5122,6 +5171,31 @@ def superseded_engine():
     return isinstance(active, dict) and active.get('sha256') not in (None, engine.get('sha256'))
 
 
+class MessageWorkerTimeout(BaseException):
+    pass
+
+
+@contextmanager
+def message_worker_deadline(seconds):
+    import signal
+    if seconds <= 0:
+        raise MessageWorkerTimeout()
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+
+    def expired(signum, frame):
+        raise MessageWorkerTimeout()
+
+    previous = signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
 def message_worker(tmux, provider, sid):
     import fcntl
     import selectors
@@ -5135,44 +5209,63 @@ def message_worker(tmux, provider, sid):
             return
         request = dict(message_protocol=1, tmux=tmux, provider=provider, sid=sid)
         idle_since = time.time()
+        head = None
+        stalled_at = time.monotonic()
         with selectors.DefaultSelector() as selector:
             while True:
                 try:
-                    with closing(message_store_db(tmux)) as db:
-                        locator = db.execute('SELECT tmux FROM message_locators WHERE provider=? AND sid=?', (provider, sid)).fetchone()
-                    hosting = host_dispatch_switch(provider, sid)
-                    if locator:
-                        tmux = locator[0]
-                    elif hosting:
-                        tmux = host_chat_name(provider, sid)
-                        if tmux is None:
-                            host_log(provider, sid, 'worker_wait', dict(reason='chat_name_unset'))
+                    if head is None:
+                        stalled_at = time.monotonic()
+                    with message_worker_deadline(MESSAGE_WORKER_STALL_SECONDS - (time.monotonic() - stalled_at)):
+                        with closing(message_store_db(tmux)) as db:
+                            locator = db.execute('SELECT tmux FROM message_locators WHERE provider=? AND sid=?', (provider, sid)).fetchone()
+                        hosting = host_dispatch_switch(provider, sid)
+                        if locator:
+                            tmux = locator[0]
+                        elif hosting:
+                            tmux = host_chat_name(provider, sid)
+                            if tmux is None:
+                                host_log(provider, sid, 'worker_wait', dict(reason='chat_name_unset'))
+                                return
+                            host_log(provider, sid, 'worker_locator', dict(reason='host_chat_name', tmux=tmux))
+                        else:
+                            host_log(provider, sid, 'worker_stop', dict(reason='no_locator'))
                             return
-                        host_log(provider, sid, 'worker_locator', dict(reason='host_chat_name', tmux=tmux))
-                    else:
-                        host_log(provider, sid, 'worker_stop', dict(reason='no_locator'))
-                        return
-                    bound = resolve_tmux_agent(provider, tmux, require_bound=True)
-                    if (not bound or bound[0] != sid) and not hosting:
-                        host_log(provider, sid, 'worker_stop', dict(reason='no_pane_agent'))
-                        return
-                    request['tmux'] = tmux
-                    if superseded_engine():
-                        return
-                    message_poll(tmux, provider, sid)
-                    message_store_request(dict(request, op='message_dispatch'))
-                    with closing(message_store_db(tmux)) as db:
-                        queued, deadline, observed = db.execute("SELECT SUM(state='queued'),MIN(CASE WHEN state='sent' THEN deadline END),SUM(state IN ('failed','accepted','started')) FROM shared_messages WHERE provider=? AND sid=?", (provider, sid)).fetchone()
-                    if not queued and deadline is None:
-                        if not observed or message_connector(provider) is None:
+                        bound = resolve_tmux_agent(provider, tmux, require_bound=True)
+                        if (not bound or bound[0] != sid) and not hosting:
+                            host_log(provider, sid, 'worker_stop', dict(reason='no_pane_agent'))
                             return
-                        if time.time() - idle_since >= MESSAGE_WORKER_IDLE_SECONDS:
+                        request['tmux'] = tmux
+                        if superseded_engine():
                             return
-                    else:
-                        idle_since = time.time()
-                    timeout = max(0.0, deadline - time.time()) if deadline is not None else 1.0
-                    timeout = min(timeout, 1.0)
+                        with closing(message_store_db(tmux)) as db:
+                            pending = db.execute("SELECT id FROM shared_messages WHERE provider=? AND sid=? AND state IN ('queued','sent') ORDER BY position LIMIT 1", (provider, sid)).fetchone()
+                        if pending != head:
+                            head = pending
+                            stalled_at = time.monotonic()
+                        message_poll(tmux, provider, sid)
+                        message_store_request(dict(request, op='message_dispatch'))
+                        with closing(message_store_db(tmux)) as db:
+                            queued, deadline, observed = db.execute("SELECT SUM(state='queued'),MIN(CASE WHEN state='sent' THEN deadline END),SUM(state IN ('failed','accepted','started')) FROM shared_messages WHERE provider=? AND sid=?", (provider, sid)).fetchone()
+                        if not queued and deadline is None:
+                            if not observed or message_connector(provider) is None:
+                                return
+                            if time.time() - idle_since >= MESSAGE_WORKER_IDLE_SECONDS:
+                                return
+                        else:
+                            idle_since = time.time()
+                        timeout = max(0.0, deadline - time.time()) if deadline is not None else 1.0
+                        timeout = min(timeout, 1.0)
                     selector.select(timeout)
+                except MessageWorkerTimeout:
+                    with closing(message_store_db(tmux)) as db, db:
+                        db.execute('BEGIN IMMEDIATE')
+                        row = db.execute("SELECT id FROM shared_messages WHERE provider=? AND sid=? AND state IN ('queued','sent') ORDER BY position LIMIT 1", (provider, sid)).fetchone()
+                        if row:
+                            db.execute("UPDATE shared_messages SET state='failed',deadline=NULL,receipt='watchdog_timeout' WHERE id=?", row)
+                            message_event(db, provider, sid, message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', row).fetchone()))
+                    host_log(provider, sid, 'worker_watchdog', dict(reason='no_progress', id=row[0] if row else None))
+                    return
                 except (OSError, ValueError, subprocess.SubprocessError):
                     return
 
@@ -6154,10 +6247,41 @@ def serve(source):
     push = threading.Thread(target=serve_push, args=(subscriptions, lock, wake), daemon=True)
     push.start()
     threading.Thread(target=serve_retire, daemon=True).start()
-    for line in sys.stdin.buffer:
-        if not line.strip():
-            continue
-        serve_request(line, source, subscriptions, lock)
+    from concurrent.futures import ThreadPoolExecutor
+    chats = {}
+    try:
+        for line in sys.stdin.buffer:
+            if not line.strip():
+                continue
+            try:
+                query = json.loads(line)
+            except (ValueError, UnicodeError):
+                query = None
+            if (not isinstance(query, dict) or not str(query.get('op', '')).startswith('message_')
+                    or query.get('provider') not in HOST_PROVIDERS or not isinstance(query.get('sid'), str)
+                    or not SESSION_ID.fullmatch(query['sid'])):
+                serve_request(line, source, subscriptions, lock)
+                continue
+            key = (query['provider'], query['sid'])
+            if key not in chats and len(chats) >= 256:
+                for idle, (executor, slots, last) in list(chats.items()):
+                    if last.done():
+                        executor.shutdown(wait=False)
+                        del chats[idle]
+            if key not in chats and len(chats) < 256:
+                chats[key] = (ThreadPoolExecutor(max_workers=1), threading.BoundedSemaphore(64), None)
+            if key not in chats or not chats[key][1].acquire(blocking=False):
+                rid = query.get('id', 0)
+                rid = rid if type(rid) is int and rid >= 0 else 0
+                serve_print(dict(id=rid, wire=f"@mp\t{rid}\thistory\terror\t-\t0\n{END}\n"))
+                continue
+            executor, slots, last = chats[key]
+            future = executor.submit(serve_request, line, source, subscriptions, lock)
+            future.add_done_callback(lambda done, slots=slots: slots.release())
+            chats[key] = (executor, slots, future)
+    finally:
+        for executor, slots, last in chats.values():
+            executor.shutdown(wait=True)
 
 
 if __name__ == "__main__" and "--watch" in sys.argv[1:]:
@@ -6188,7 +6312,7 @@ elif __name__ == "__main__":
 
 '''
 READER_SOURCE = 'CONNECTOR_SOURCES = ' + repr(globals().get('CONNECTOR_SOURCES', {})) + '\n' + READER_SOURCE
-RUNTIME_GENERATION = 77
+RUNTIME_GENERATION = 82
 
 if __name__ == '__main__':
     import base64 as _base64

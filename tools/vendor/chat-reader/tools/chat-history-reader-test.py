@@ -3569,6 +3569,118 @@ class IGSH_1266_SharedMessageHostTest(unittest.TestCase):
         self.append(dict(type='queue-operation', operation='enqueue', content=text, sessionId='sid'))
         self.poll()
 
+    def test_stuck_discovery_releases_the_shared_writer(self):
+        entered, release, completed = threading.Event(), threading.Event(), threading.Event()
+        failures = []
+
+        def resolve(provider, tmux, **kwargs):
+            if tmux == 'fixture':
+                entered.set()
+                release.wait(5)
+            return ('sid' if tmux == 'fixture' else 'other-sid', self.path)
+
+        def request(query, done=None):
+            try:
+                reader.message_store_request(query)
+            except Exception as error:
+                failures.append(error)
+            finally:
+                if done:
+                    done.set()
+
+        with patch.object(reader, 'resolve_tmux_agent', side_effect=resolve):
+            first = threading.Thread(target=request, args=(dict(self.base, op='message_submit', message_id='message_fixture_0001', text='first'),))
+            first.start()
+            self.assertTrue(entered.wait(2))
+            second = threading.Thread(target=request, args=(dict(self.base, sid='other-sid', tmux='other-chat', op='message_submit', message_id='message_fixture_0002', text='second'), completed))
+            second.start()
+            try:
+                self.assertTrue(completed.wait(2), 'chat A discovery held the shared SQLite writer')
+            finally:
+                release.set()
+                first.join(5)
+                second.join(5)
+        self.assertEqual(failures, [])
+        self.assertFalse(first.is_alive() or second.is_alive())
+
+    def test_server_answers_chat_b_before_stuck_chat_a(self):
+        release = threading.Event()
+        frames = []
+
+        def resolve(provider, tmux, **kwargs):
+            if tmux == 'fixture':
+                release.wait(2)
+            return ('sid' if tmux == 'fixture' else 'other-sid', self.path)
+
+        def output(frame):
+            frames.append(frame)
+            if frame['id'] == 2:
+                release.set()
+
+        requests = [dict(self.base, id=1, op='message_submit', message_id='message_fixture_0001', text='first'),
+                    dict(self.base, id=2, sid='other-sid', tmux='other-chat', op='message_submit', message_id='message_fixture_0002', text='second')]
+        incoming = types.SimpleNamespace(buffer=io.BytesIO(('\n'.join(map(json.dumps, requests)) + '\n').encode()))
+        with patch.object(reader, 'resolve_tmux_agent', side_effect=resolve), \
+                patch.object(reader, 'serve_print', side_effect=output), \
+                patch.object(reader.sys, 'stdin', incoming):
+            reader.serve(None)
+        self.assertEqual([frame['id'] for frame in frames], [2, 1], 'chat A blocked the shared request channel')
+        self.assertEqual([frame['result']['message']['state'] for frame in frames], ['queued', 'queued'])
+
+    def test_worker_watchdog_fails_only_its_chat_and_logs_once(self):
+        self.assertTrue(hasattr(reader, 'MESSAGE_WORKER_STALL_SECONDS'), 'worker has no stalled-progress watchdog')
+        self.submit()
+        other = dict(self.base, sid='other-sid', tmux='other-chat')
+        reader.message_store_request(dict(other, op='message_submit', message_id='message_fixture_0002', text='second'))
+        with patch.object(reader, 'MESSAGE_WORKER_STALL_SECONDS', 0.1), \
+                patch.object(reader, 'message_poll', side_effect=lambda *args: time.sleep(5)), \
+                patch.object(reader, 'host_log') as log:
+            reader.message_worker('fixture', 'claude', 'sid')
+        self.assertEqual(self.status()['state'], 'failed')
+        self.assertEqual(self.status()['receipt'], 'watchdog_timeout')
+        self.assertEqual(reader.message_store_request(dict(other, op='message_status', message_id='message_fixture_0002'))['message']['state'], 'queued')
+        self.assertEqual([call.args[2] for call in log.call_args_list].count('worker_watchdog'), 1)
+        first = self.request('retry', message_id='message_fixture_0001', retry_id='retry_fixture_0001')['message']
+        replay = self.request('retry', message_id='message_fixture_0001', retry_id='retry_fixture_0001')['message']
+        self.assertEqual(first['attempt'], replay['attempt'])
+        self.request('dispatch')
+        self.request('dispatch')
+        self.assertEqual(self.send.call_count, 1)
+
+    def test_worker_watchdog_detects_repeated_busy_without_progress(self):
+        self.assertTrue(hasattr(reader, 'MESSAGE_WORKER_STALL_SECONDS'))
+        self.submit()
+        with patch.object(reader, 'MESSAGE_WORKER_STALL_SECONDS', 0.1), \
+                patch.object(reader, 'message_poll'), \
+                patch.object(reader, 'message_store_request'), \
+                patch.object(reader, 'host_log') as log:
+            reader.message_worker('fixture', 'claude', 'sid')
+        self.assertEqual(self.status()['state'], 'failed')
+        self.assertEqual(self.status()['receipt'], 'watchdog_timeout')
+        self.assertEqual([call.args[2] for call in log.call_args_list].count('worker_watchdog'), 1)
+
+    def test_idle_accepted_chat_is_not_a_watchdog_jam(self):
+        from contextlib import nullcontext
+        self.assertTrue(hasattr(reader, 'MESSAGE_WORKER_STALL_SECONDS'))
+
+        def deadline(seconds):
+            self.assertGreater(seconds, 0, 'idle time consumed the pending-message budget')
+            return nullcontext()
+
+        self.submit()
+        db = reader.message_store_db('fixture')
+        with db:
+            db.execute("UPDATE shared_messages SET state='accepted',deadline=NULL")
+        db.close()
+        with patch.object(reader, 'MESSAGE_WORKER_STALL_SECONDS', 0.1), \
+                patch.object(reader, 'message_worker_deadline', side_effect=deadline), \
+                patch.object(reader, 'MESSAGE_WORKER_IDLE_SECONDS', 0.2), \
+                patch.object(reader, 'message_poll'), \
+                patch.object(reader, 'host_log') as log:
+            reader.message_worker('fixture', 'claude', 'sid')
+        self.assertEqual(self.status()['state'], 'accepted')
+        self.assertNotIn('worker_watchdog', [call.args[2] for call in log.call_args_list])
+
     def test_submit_replay_has_one_handoff_and_global_id(self):
         first = self.submit()
         self.assertEqual(self.submit()['attempt'], first['attempt'])

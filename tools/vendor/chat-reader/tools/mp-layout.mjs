@@ -13,7 +13,7 @@ commands:
   create-section <name>                            add a workspace
   move --to <workspace> [--create] <session>...    move sessions into a workspace in one change
   move --to <workspace> --match <glob> [--host N]  move every session whose name matches
-  spawn --name NAME --folder DIR --workspace WORKSPACE [--group GROUP] [--mode visible|headless] [--task TEXT] [--host N]  create or reveal a live chat
+  spawn --name NAME --folder DIR --workspace WORKSPACE [--group GROUP] [--mode visible|headless] [--provider claude|hax] [--task TEXT] [--host N]  create or reveal a live chat
   open <session> [--workspace <name>] [--host N] [--title <text>] [--no-tmux]
 
 environment:
@@ -37,12 +37,12 @@ const REFUSALS = {
 
 function parse(argv, command) {
   const flags = { _: [] };
-  const withValue = new Set(['to', 'match', 'host', 'workspace', 'title', 'name', 'folder', 'task', 'group', 'mode']);
+  const withValue = new Set(['to', 'match', 'host', 'workspace', 'title', 'name', 'folder', 'task', 'group', 'mode', 'provider']);
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (!arg.startsWith('--')) { flags._.push(arg); continue; }
     const name = arg.slice(2);
-    if (command === 'spawn' && (!['name', 'folder', 'workspace', 'task', 'host', 'group', 'mode'].includes(name) || Object.hasOwn(flags, name))) throw new Failure('invalid spawn option');
+    if (command === 'spawn' && (!['name', 'folder', 'workspace', 'task', 'host', 'group', 'mode', 'provider'].includes(name) || Object.hasOwn(flags, name))) throw new Failure('invalid spawn option');
     if (withValue.has(name)) {
       if (i + 1 >= argv.length || (command === 'spawn' && argv[i + 1].startsWith('--'))) throw new Failure(`--${name} needs a value`);
       flags[name] = argv[++i];
@@ -197,6 +197,8 @@ async function spawnSession(ctx, flags) {
   const group = flags.group === undefined ? null : flags.group.normalize('NFC').trim();
   const mode = flags.mode ?? 'visible';
   if (!['visible', 'headless'].includes(mode)) throw new Failure('mode must be visible or headless');
+  const provider = flags.provider ?? 'claude';
+  if (!['claude', 'hax'].includes(provider)) throw new Failure('provider must be claude or hax');
   if (group !== null && (!group || group.length > 64 || /[\p{Cc}\p{Cs}]/u.test(group))) throw new Failure('invalid group');
   if (!name || name.length > 64 || /[\p{Cc}\p{Cs}]/u.test(name)) throw new Failure('invalid session name');
   if (!flags.workspace.trim() || Buffer.byteLength(flags.workspace, 'utf8') > 31 || /[\p{Cc}\p{Cs}]/u.test(flags.workspace)) throw new Failure('invalid workspace');
@@ -232,7 +234,7 @@ async function spawnSession(ctx, flags) {
   const home = ctx.env.HOME;
   if (!home) throw new Failure('HOME is required');
   const root = join(home, '.local/state/multiprompt/agent-host');
-  const stateKey = hash('claude:' + sid).slice(0, 32);
+  const stateKey = hash(provider + ':' + sid).slice(0, 32);
   if (process.platform === 'win32' && !ctx.mockFolder) throw new Failure('spawn requires a Unix host');
   const unsafeMode = st => process.platform !== 'win32' && ((st.mode & 0o077) || (process.getuid && st.uid !== process.getuid()));
   const lockPath = join(root, stateKey + '.spawn.lock');
@@ -285,7 +287,7 @@ async function spawnSession(ctx, flags) {
       try { return result.stdout.trim().split('\n').filter(Boolean).map(line => JSON.parse(line)); } catch { throw new Failure('invalid host response'); }
     };
     if (!config || config.enabled !== true) {
-      const [enabled] = runtime(['host', 'enable', 'claude', sid, '--tmux', session, '--cwd', folder, '--permission-mode', 'bypassPermissions']);
+      const [enabled] = runtime(['host', 'enable', provider, sid, '--tmux', session, '--cwd', folder, ...(provider === 'claude' ? ['--permission-mode', 'bypassPermissions'] : [])]);
       if (enabled?.status !== 'enabled') throw new Failure('host enable failed');
     }
     const result = mode === 'headless' ? { changed: false, revision: current.data.revision } : await edit(ctx, layout => {
@@ -293,17 +295,17 @@ async function spawnSession(ctx, flags) {
       layout.tabs.push({ kind: 'tmux', name, tmux_session: session, tmux_host: host, workspace: flags.workspace, manual: true, ...(group === null ? {} : { group }) });
       return layout;
     });
-    const [started] = runtime(['host', 'start', 'claude', sid]);
+    const [started] = runtime(['host', 'start', provider, sid]);
     if (!['started', 'already'].includes(started?.status)) throw new Failure('host start failed');
     if (flags.task !== undefined) {
-      const base = { message_protocol: 1, provider: 'claude', sid, tmux: session };
+      const base = { message_protocol: 1, provider, sid, tmux: session };
       const requests = [{ ...base, id: 1, op: 'message_submit', message_id: token, text: flags.task }, { ...base, id: 2, op: 'message_dispatch' }];
       const replies = runtime(['--serve'], requests.map(x => JSON.stringify(x)).join('\n') + '\n');
       const submitted = replies.find(r => r.id === 1)?.result?.message;
       const dispatched = replies.find(r => r.id === 2)?.result;
       if (submitted?.id !== token || submitted.text !== flags.task || !dispatched || submitted.state === 'failed' || dispatched.message?.state === 'failed') throw new Failure('task submission failed');
     }
-    ctx.out(JSON.stringify({ ok: true, sid, session, host, name, workspace: flags.workspace, group, mode, first_task_id: flags.task === undefined ? null : token, revision: result.revision, changed: result.changed }));
+    ctx.out(JSON.stringify({ ok: true, sid, session, host, name, workspace: flags.workspace, group, mode, provider, first_task_id: flags.task === undefined ? null : token, revision: result.revision, changed: result.changed }));
   } finally { release(); }
 }
 
