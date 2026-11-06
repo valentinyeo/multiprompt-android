@@ -2697,12 +2697,10 @@ internal fun ReaderScreen(
         draftStore.setComposerDraft(session, promptField.text)
     }
     var replyTo by remember(connection, session.hostId, session.name) { mutableStateOf<String?>(null) }
-    var replyAuthor by remember(connection, session.hostId, session.name) { mutableStateOf("") }
     val replyGate = remember(connection, session.hostId, session.name) { ReplySwipeGate() }
     val promptFocusRequester = remember { FocusRequester() }
-    val chooseReply: (String, Boolean) -> Unit = { text, isUser ->
+    val chooseReply: (String, Boolean) -> Unit = { text, _ ->
         replyTo = text
-        replyAuthor = if (isUser) "You" else session.agent.label
         promptFocusRequester.requestFocus()
     }
     val prompt = promptField.text
@@ -3637,9 +3635,6 @@ internal fun ReaderScreen(
                         }
                     }
                 }
-                replyTo?.let { quoted ->
-                    ReplyQuoteBar(message = quoted, author = replyAuthor, onCancel = { replyTo = null })
-                }
                 pinnedPage?.let { page ->
                     Row(
                         Modifier.fillMaxWidth(),
@@ -3662,6 +3657,9 @@ internal fun ReaderScreen(
                     }
                 }
                 if (dictationActive) {
+                    replyTo?.let { quoted ->
+                        ReplyQuoteBar(message = quoted, sunlight = sunlightMode, onCancel = { replyTo = null })
+                    }
                     DictationBar(
                         level = dictation.level,
                         sending = reader.sending || sendAfterDictation || pendingPromptAction != null || recordingPrompt,
@@ -3671,7 +3669,7 @@ internal fun ReaderScreen(
                 } else {
                     Row(
                         Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
+                        verticalAlignment = Alignment.Bottom,
                         horizontalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
                     ) {
                         Box {
@@ -3751,12 +3749,13 @@ internal fun ReaderScreen(
                             !sendAfterDictation &&
                             (prompt.isNotBlank() || imageAttachments.isNotEmpty() || dictationActive)
                         val composerText = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
+                        Box(Modifier.weight(1f).padding(vertical = 2.dp)) {
                         BasicTextField(
                             value = promptField,
                             onValueChange = { promptField = it },
-                            modifier = Modifier.weight(1f).heightIn(min = ReaderControlSize)
-                                .background(MaterialTheme.colorScheme.surfaceContainer, ReaderComposerShape)
-                                .border(1.dp, MaterialTheme.colorScheme.outline, ReaderComposerShape).focusRequester(promptFocusRequester)
+                            modifier = Modifier.fillMaxWidth().heightIn(min = ReaderControlSize)
+                                .background(MaterialTheme.colorScheme.surfaceContainer, ReaderComposerFieldShape)
+                                .border(1.dp, MaterialTheme.colorScheme.outline, ReaderComposerFieldShape).focusRequester(promptFocusRequester)
                                 .drawWithContent {
                                     drawContent()
                                     if (sendMarkPending && prompt.isEmpty()) {
@@ -3772,6 +3771,15 @@ internal fun ReaderScreen(
                             keyboardActions = KeyboardActions(onSend = { submitPrompt() }),
                             readOnly = dictationActive,
                             decorationBox = { inner ->
+                                Column {
+                                replyTo?.let { quoted ->
+                                    ReplyQuoteBar(
+                                        message = quoted,
+                                        sunlight = sunlightMode,
+                                        onCancel = { replyTo = null },
+                                        modifier = Modifier.padding(start = 6.dp, top = 6.dp, end = 6.dp),
+                                    )
+                                }
                                 Row(
                                     Modifier.heightIn(min = ReaderControlSize).padding(start = 16.dp, end = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -3834,8 +3842,10 @@ internal fun ReaderScreen(
                                         }
                                     }
                                 }
+                                }
                             },
                         )
+                        }
                     }
                 }
                 (microphoneError ?: dictationState.error ?: imageUploadError)?.let { message ->

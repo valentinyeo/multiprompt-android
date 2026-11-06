@@ -287,27 +287,29 @@ internal fun ReplyableBubble(
 @Composable
 internal fun ReplyQuoteBar(
     message: String,
-    author: String,
+    sunlight: Boolean,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val hint = if (sunlight) MaterialTheme.colorScheme.onSurfaceVariant else ReaderHint
     Row(
-        modifier.fillMaxWidth().padding(vertical = 4.dp)
-            .then(if (LocalMaterial3.current) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp)) else Modifier),
+        modifier.fillMaxWidth().testTag("reply-card")
+            .background(if (sunlight) MaterialTheme.colorScheme.surfaceContainerHigh else ReaderSelected, ReaderInsetCardShape)
+            .padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.width(3.dp).height(40.dp).background(MaterialTheme.colorScheme.primary))
-        Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-            Text("Reply to $author", style = if (LocalMaterial3.current) MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp) else MaterialTheme.typography.labelMedium, color = if (LocalMaterial3.current) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary)
+        Column(Modifier.weight(1f)) {
+            Text("Replying", fontSize = 13.sp, color = hint, maxLines = 1)
             Text(
                 ReplyQuote.preview(message),
-                style = if (LocalMaterial3.current) MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) else MaterialTheme.typography.bodySmall,
-                maxLines = 2,
+                fontSize = 14.sp,
+                color = if (sunlight) MaterialTheme.colorScheme.onSurface else ReaderForeground,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        IconButton(onClick = onCancel) {
-            Icon(Icons.Default.Close, contentDescription = "Cancel reply")
+        IconButton(onClick = onCancel, modifier = Modifier.size(32.dp)) {
+            Icon(Icons.Default.Close, contentDescription = "Cancel reply", tint = hint, modifier = Modifier.size(20.dp))
         }
     }
 }

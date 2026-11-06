@@ -4,14 +4,20 @@ cd "$(dirname "$0")/.."
 test "${GITHUB_ACTIONS:-}" = true
 file=app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt
 theme=app/src/main/java/dev/multiprompt/companion/ui/Theme.kt
+bubble=app/src/main/java/dev/multiprompt/companion/ui/ReplyableBubble.kt
+actions=app/src/androidTest/java/dev/multiprompt/companion/ui/MessageActionsTest.kt
 base=build/session-rows/pins
 mkdir -p "$base"
 cp "$file" "$base/current.kt"
 cp "$theme" "$base/current-theme.kt"
-restore() { cp "$base/current.kt" "$file"; cp "$base/current-theme.kt" "$theme"; }
+cp "$bubble" "$base/current-bubble.kt"
+cp "$actions" "$base/current-actions.kt"
+restore() { cp "$base/current.kt" "$file"; cp "$base/current-theme.kt" "$theme"; cp "$base/current-bubble.kt" "$bubble"; cp "$base/current-actions.kt" "$actions"; }
 trap restore EXIT
 git show "93f137d8adc6bd8993758e8564a8430612c06c4d:$file" > "$base/original.kt"
 git show "93f137d8adc6bd8993758e8564a8430612c06c4d:$theme" > "$base/original-theme.kt"
+git show "93f137d8adc6bd8993758e8564a8430612c06c4d:$bubble" > "$base/original-bubble.kt"
+git show "bd3c1b86:$actions" > "$base/original-actions.kt"
 
 run_pins() {
   local phase=$1 status=0 dir
@@ -77,6 +83,8 @@ PYTHON
 
 cp "$base/original.kt" "$file"
 cp "$base/original-theme.kt" "$theme"
+cp "$base/original-bubble.kt" "$bubble"
+cp "$base/original-actions.kt" "$actions"
 run_pins before
 restore
 run_pins after

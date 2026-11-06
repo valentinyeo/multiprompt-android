@@ -82,7 +82,6 @@ class ReplyToMessageTest {
         compose.setContent {
             MaterialTheme {
                 var replyTo by remember { mutableStateOf<String?>(null) }
-                var author by remember { mutableStateOf("") }
                 val gate = remember { ReplySwipeGate() }
                 clipboard = LocalClipboardManager.current
                 view = LocalView.current
@@ -94,7 +93,7 @@ class ReplyToMessageTest {
                         isUser = true,
                         sunlight = true,
                         text = "My question",
-                        onReply = { replyTo = it; author = "You" },
+                        onReply = { replyTo = it },
                         gate = gate,
                         modifier = Modifier.testTag("user"),
                     ) { Text("You\nMy question") }
@@ -103,13 +102,13 @@ class ReplyToMessageTest {
                         isUser = false,
                         sunlight = true,
                         text = agentText,
-                        onReply = { replyTo = it; author = "Claude" },
+                        onReply = { replyTo = it },
                         gate = gate,
                         modifier = Modifier.testTag("agent"),
                     ) { MarkdownText(agentText, 14.sp, Color.Black, Color.Blue) }
                     Spacer(Modifier.fillMaxWidth().height(90.dp).testTag("outside"))
                     replyTo?.let {
-                        ReplyQuoteBar(message = it, author = author, onCancel = { replyTo = null })
+                        ReplyQuoteBar(message = it, sunlight = true, onCancel = { replyTo = null })
                     }
                     Button(onClick = { sent.add(ReplyQuote.compose(replyTo, "my answer")) }) {
                         Text("Send")
@@ -123,7 +122,7 @@ class ReplyToMessageTest {
     fun swipeRightRepliesInsteadOfSwitchingSessionAndSendsQuote() {
         harness()
         compose.onNodeWithTag("agent").performTouchInput { swipeRight() }
-        compose.onNodeWithText("Reply to Claude").assertIsDisplayed()
+        compose.onNodeWithText("Replying").assertIsDisplayed()
         compose.onNodeWithText("First line Second line").assertIsDisplayed()
         compose.onNodeWithText("Send").performClick()
         compose.runOnIdle {
@@ -151,7 +150,7 @@ class ReplyToMessageTest {
         compose.onNodeWithText("Copy").assertIsDisplayed()
         compose.onNodeWithText("Select Text").assertIsDisplayed()
         compose.onNodeWithText("Reply").performClick()
-        compose.onNodeWithText("Reply to You").assertIsDisplayed()
+        compose.onNodeWithText("Replying").assertIsDisplayed()
     }
 
     @Test
@@ -159,7 +158,7 @@ class ReplyToMessageTest {
         harness()
         compose.onNodeWithTag("agent").performTouchInput { swipeRight() }
         compose.onNodeWithContentDescription("Cancel reply").performClick()
-        compose.onNodeWithText("Reply to Claude").assertDoesNotExist()
+        compose.onNodeWithText("Replying").assertDoesNotExist()
         compose.onNodeWithText("Send").performClick()
         compose.runOnIdle { assertEquals(listOf("my answer"), sent) }
     }
@@ -182,7 +181,7 @@ class ReplyToMessageTest {
     fun elevenLinesAreTruncatedWhenSending() {
         harness((1..11).joinToString("\n") { "Line $it" })
         compose.onNodeWithTag("agent").performTouchInput { swipeRight() }
-        compose.onNodeWithText("Reply to Claude").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Replying").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Send").performScrollTo().performClick()
         compose.runOnIdle {
             assertEquals(
@@ -218,7 +217,7 @@ class ReplyToMessageTest {
         assumeTrue(System.getenv("IGSH418_SHOT") != null)
         harness()
         compose.onNodeWithTag("agent").performTouchInput { swipeRight() }
-        compose.onNodeWithText("Reply to Claude").assertIsDisplayed()
+        compose.onNodeWithText("Replying").assertIsDisplayed()
         val attachInfo = ReflectionHelpers.getField<Any>(view.rootView, "mAttachInfo")
         val hardwareAccelerated = view.rootView.isHardwareAccelerated
         ReflectionHelpers.setField(attachInfo, "mHardwareAccelerated", false)
