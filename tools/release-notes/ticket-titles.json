@@ -14,5 +14,6 @@
   "IGSH-1778": "Android: inbox second line matches desktop, never shows /rename",
   "IGSH-1818": "Android: remove pinned chats from the inbox",
   "IGSH-1819": "Android: remove agent work steps from chats",
-  "IGSH-1827": "Android: blue dot shows for every new reply"
+  "IGSH-1827": "Android: blue dot shows for every new reply",
+  "IGSH-1817": "Android: the bot's last reply vanishes when you send again"
 }
