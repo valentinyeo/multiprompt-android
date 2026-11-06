@@ -1721,7 +1721,7 @@ internal fun SessionsScreen(
         modifier = Modifier.fillMaxSize().imePadding(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
+            Box(Modifier.fillMaxWidth()) {
             TopFade {
                 Row(
                     Modifier.fillMaxWidth()
@@ -1911,7 +1911,7 @@ internal fun SessionsScreen(
         },
         bottomBar = {
             if (!LocalMaterial3.current) {
-                BottomFade {
+                FloatingBottomBar {
                     Row(
                         Modifier.padding(horizontal = ReaderScreenPadding, vertical = 8.dp)
                             .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
@@ -3613,7 +3613,7 @@ internal fun ReaderScreen(
             )
         },
         bottomBar = {
-            BottomFade(
+            FloatingBottomBar(
                 Modifier.imePadding().padding(horizontal = ReaderScreenPadding, vertical = ReaderControlSpacing),
                 verticalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
             ) {
