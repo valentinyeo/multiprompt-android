@@ -12,5 +12,6 @@
   "IGSH-1776": "Android: bottom pills float on a clear background, inbox top fades softly",
   "IGSH-1777": "Android: renaming a chat works again",
   "IGSH-1778": "Android: inbox second line matches desktop, never shows /rename",
+  "IGSH-1818": "Android: remove pinned chats from the inbox",
   "IGSH-1819": "Android: remove agent work steps from chats"
 }
