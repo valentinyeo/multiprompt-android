@@ -86,6 +86,63 @@ class NativeSkillsTest(unittest.TestCase):
         self.write(config / "skills/bad/SKILL.md", "---\nname: bad name\n---\nbody")
         self.assertEqual(skills.discover(self.home, self.cwd, config), [dict(name="native", description="café")])
 
+    def test_dump_ui_retries_null_roots_without_using_stale_xml(self):
+        function = "dump_ui() {" + DRIVER.read_text().split("dump_ui() {", 1)[1].split("\nshot() {", 1)[0]
+        adb = self.write(self.home / "adb", """#!/usr/bin/env bash
+if [[ "$1 $2 $3" == 'shell rm -f' ]]; then
+    rm -f "$EVIDENCE/device.xml"
+elif [[ "$1 $2 $3" == 'shell uiautomator dump' ]]; then
+    n=$(cat "$EVIDENCE/attempts")
+    n=$((n + 1))
+    echo "$n" > "$EVIDENCE/attempts"
+    if [[ "$MODE" == failure ]]; then
+        echo 'ERROR: null root node returned by UiTestAutomationBridge.' >&2
+        exit "$FAILURE_CODE"
+    elif [[ "$MODE" == empty ]]; then
+        :
+    elif (( n <= NULLS )); then
+        echo 'ERROR: null root node returned by UiTestAutomationBridge.' >&"$STREAM"
+    else
+        echo fresh > "$EVIDENCE/device.xml"
+    fi
+elif [[ "$1" == pull ]]; then
+    cp "$EVIDENCE/device.xml" "$3"
+else
+    exit 1
+fi
+""")
+        adb.chmod 0o755
+        cases = [("null", stream, nulls, 0, expected, 3)
+                 for stream in (1, 2) for nulls, expected in ((2, 0), (3, 1))]
+        cases += [("empty", 1, 0, 0, 1, 1), ("failure", 2, 0, 1, 1, 1),
+                  ("failure", 2, 0, 124, 1, 1)]
+        for mode, stream, nulls, failure_code, expected, attempts in cases:
+            with self.subTest(mode=mode, stream=stream, nulls=nulls, failure_code=failure_code):
+                self.write(self.home / "attempts", "0")
+                self.write(self.home / "device.xml", "stale")
+                self.write(self.home / "current.xml", "stale")
+                env = dict(os.environ, EVIDENCE=str(self.home), MODE=mode, STREAM=str(stream),
+                           NULLS=str(nulls), FAILURE_CODE=str(failure_code), PATH=f"{self.home}:{os.environ['PATH']}")
+                result = subprocess.run(["bash", "-c", function + "\ndump_ui"], env=env, capture_output=True)
+                self.assertEqual(result.returncode, expected)
+                self.assertEqual((self.home / "attempts").read_text().strip(), str(attempts))
+                if expected == 0:
+                    self.assertEqual((self.home / "current.xml").read_text().strip(), "fresh")
+                else:
+                    self.assertFalse((self.home / "current.xml").exists())
+
+        old_function = function.replace(' /sdcard/verify-ui.xml 2>&1)', ' /sdcard/verify-ui.xml)')
+        self.assertNotEqual(old_function, function)
+        self.write(self.home / "attempts", "0")
+        self.write(self.home / "device.xml", "stale")
+        self.write(self.home / "current.xml", "stale")
+        env = dict(os.environ, EVIDENCE=str(self.home), MODE="null", STREAM="2", NULLS="2",
+                   PATH=f"{self.home}:{os.environ['PATH']}")
+        result = subprocess.run(["bash", "-c", old_function + "\ndump_ui"], env=env, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.home / "attempts").read_text().strip(), "1")
+        self.assertFalse((self.home / "current.xml").exists())
+
     def test_relaunch_waits_for_trust_dialog_or_default_inbox(self):
         function = "relaunch_app() {" + DRIVER.read_text().split("relaunch_app() {", 1)[1].split("refresh_inbox() {", 1)[0]
         for screen, arguments in (("Inbox", []), ("Trust Verify?", ["Trust Verify?"]), ("Inbox", ["Inbox"])):

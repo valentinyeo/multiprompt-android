@@ -11,6 +11,7 @@ export const requiredChecks = [
   'unit-tests',
   'm3-unit-tests',
   'lint',
+  'phone-routing',
   'image-preview-emulator',
   'reply-notifications-emulator',
   'session-rows-emulator',

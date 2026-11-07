@@ -19,8 +19,19 @@ adb logcat -v threadtime > "$EVIDENCE/logcat-stream.txt" 2>&1 &
 logcat_stream_pid=$!
 recorder_pid=
 dump_ui() {
-    timeout 20s adb shell uiautomator dump /sdcard/verify-ui.xml >/dev/null || return
-    timeout 20s adb pull /sdcard/verify-ui.xml "$EVIDENCE/current.xml" >/dev/null
+    local attempt output
+    rm -f "$EVIDENCE/current.xml"
+    for attempt in 1 2 3; do
+        timeout 20s adb shell rm -f /sdcard/verify-ui.xml || return 1
+        output=$(timeout 20s adb shell uiautomator dump /sdcard/verify-ui.xml 2>&1) || return 1
+        if [[ "$output" == *"null root node"* ]]; then
+            printf '%s\n' "$output" >&2
+            continue
+        fi
+        timeout 20s adb pull /sdcard/verify-ui.xml "$EVIDENCE/current.xml" >/dev/null || return 1
+        return 0
+    done
+    return 1
 }
 shot() {
     dump_ui
@@ -99,7 +110,7 @@ select_node() {
 }
 tap_node() {
     local point x y
-    point=$(select_node "$1" "$2")
+    point=$(select_node "$1" "$2") || return
     read -r x y <<< "$point"
     adb shell input tap "$x" "$y"
 }
