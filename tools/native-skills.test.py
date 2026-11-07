@@ -111,7 +111,7 @@ else
     exit 1
 fi
 """)
-        adb.chmod 0o755
+        adb.chmod(0o755)
         cases = [("null", stream, nulls, 0, expected, 3)
                  for stream in (1, 2) for nulls, expected in ((2, 0), (3, 1))]
         cases += [("empty", 1, 0, 0, 1, 1), ("failure", 2, 0, 1, 1, 1),
