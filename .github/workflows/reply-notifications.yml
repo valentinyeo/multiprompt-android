@@ -6,6 +6,12 @@ on:
   pull_request:
     paths:
       - 'app/**'
+      - '.github/actions/android-proof/**'
+      - 'gradle.properties'
+      - '*.gradle.kts'
+      - 'gradlew.bat'
+      - 'gradlew'
+      - 'gradle/**'
       - 'tools/reply-notifications/**'
       - 'tools/release-choices/prepare.sh'
       - '.github/workflows/reply-notifications.yml'

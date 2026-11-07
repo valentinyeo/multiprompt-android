@@ -6,6 +6,11 @@ on:
   pull_request:
     paths:
       - 'app/**'
+      - 'gradle.properties'
+      - '*.gradle.kts'
+      - 'gradlew.bat'
+      - 'gradlew'
+      - 'gradle/**'
       - 'tools/native-skills.test.py'
       - 'tools/release-choices/**'
       - '.claude/skills/verify-multiprompt-android/**'

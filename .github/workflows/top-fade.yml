@@ -6,6 +6,10 @@ on:
   pull_request:
     paths:
       - 'app/**'
+      - 'gradle.properties'
+      - '*.gradle.kts'
+      - 'gradlew.bat'
+      - 'gradlew'
       - 'gradle/**'
       - 'tools/top-fade-proof.sh'
       - '.github/workflows/top-fade.yml'

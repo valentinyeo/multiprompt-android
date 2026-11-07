@@ -6,6 +6,10 @@ on:
   pull_request:
     paths:
       - 'app/**'
+      - 'gradle.properties'
+      - '*.gradle.kts'
+      - 'gradlew.bat'
+      - 'gradlew'
       - 'gradle/**'
       - 'tools/account-journey/**'
       - '.github/workflows/account-journey.yml'

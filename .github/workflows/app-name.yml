@@ -4,6 +4,12 @@ on:
   pull_request:
     paths:
       - 'app/**'
+      - '.github/actions/android-proof/**'
+      - 'gradle.properties'
+      - '*.gradle.kts'
+      - 'gradlew.bat'
+      - 'gradlew'
+      - 'gradle/**'
       - 'tools/app-name/**'
       - 'tools/release-choices/**'
       - '.github/workflows/app-name.yml'
