@@ -178,12 +178,13 @@ internal fun ChatHistoryList(
         if (agent == AgentKind.CLAUDE) ChatReactions.present(messages, collapsePendingReactions)
         else ChatReactions.Presentation(messages, emptyMap())
     }
+    val showDots = working || awaitingReply(presentation.messages, questions.size)
     val nearTop by rememberUpdatedState(onNearTop)
     var pendingJump by remember { mutableStateOf<ReplyJump?>(null) }
     var highlightedKey by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(focusKey) { if (focusKey != null) highlightedKey = focusKey }
     val context = LocalContext.current
-    LaunchedEffect(pendingJump, presentation.messages, hasOlder, loaded, questions, working) {
+    LaunchedEffect(pendingJump, presentation.messages, hasOlder, loaded, questions, showDots) {
         val request = pendingJump ?: return@LaunchedEffect
         val visible = presentation.messages
         val keys = visible.map { it.key }
@@ -193,7 +194,7 @@ internal fun ChatHistoryList(
         val source = ReplyQuote.sourceIndex(texts, before, request.reply.quoted)
         if (source != null) {
             highlightedKey = keys[source]
-            listState.scrollToItem(keys.lastIndex - source + questions.size + (if (working) 1 else 0))
+            listState.scrollToItem(keys.lastIndex - source + questions.size + (if (showDots) 1 else 0))
             pendingJump = null
         } else if (before < 0 || (!hasOlder && loaded)) {
             pendingJump = null
@@ -229,7 +230,7 @@ internal fun ChatHistoryList(
         verticalArrangement = Arrangement.spacedBy(if (LocalReaderStyle.current) ReaderMessageSpacing else 10.dp),
         contentPadding = if (LocalReaderStyle.current) androidx.compose.foundation.layout.PaddingValues(top = ReaderFloatingInset + WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = ReaderMessageSpacing + bottomPadding) else androidx.compose.foundation.layout.PaddingValues(bottom = bottomPadding),
     ) {
-        if (working) item(key = "working") { WorkingDots() }
+        if (showDots) item(key = "working") { WorkingDots() }
         questions.asReversed().forEach { question ->
             item(key = "question:${question.callId}:${question.index}") {
                 QuestionChoices(question, enabled = onQuestionChoice != null && (question.host != null || question.isVisible(questionScreen)), error = questionError) { choices, other ->
