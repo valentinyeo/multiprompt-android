@@ -1,0 +1,65 @@
+# Gates: HYCI-169 Android phone check routing
+
+OWNS: .github/workflows/**, tools/ci/**, tools/pr-checks.mjs, tools/pr-checks.test.js, tools/native-skills.test.py, .claude/skills/verify-multiprompt-android/scripts/**, tools/release-notes/ticket-titles.json
+
+Resumed 2026-11-07T11:24Z: bounded shipment follow-up, no code edits or local builds/tests. Preserve G4/G5; read remote release/routing/alarm evidence once, then record remaining acceptance and timed handoff. Prior ABANDON entries describe earlier runs, not successful completion.
+
+- [x] U1: Published merge-SHA release confirmed, remaining acceptance and timed handoff read back on same ticket.
+  CHECK: python3 -c 'import json,pathlib; d=pathlib.Path("/home/valentin/projects/hypertask-evidence/HYCI-169"); r=json.loads((d/"release-1127.json").read_text()); assert r["headSha"]=="a097ae8e9e2440dfeca5f38f08746d027e07e9a3" and r["conclusion"]=="success"; assert "serves "+r["headSha"] in (d/"release-status-1127.txt").read_text(); t=json.loads((d/"ticket-1130.json").read_text())["tasks"][0]; assert t["section"]=="AI Review"; a=json.loads((d/"activity-1130.json").read_text())["activities"]; assert any("2026-11-08T10:56:02Z" in x["text"] and "2026-11-07T11:50:00Z" in x["text"] for x in a); print("SHIPMENT_AND_TIMED_HANDOFF_VERIFIED")'
+  EXPECT: SHIPMENT_AND_TIMED_HANDOFF_VERIFIED
+  EVIDENCE: automatic-evidence=v1; definition-sha256=79e604f0b102c78c187d140a432dd0b81ab10e736426bab05faf3905fbae0583; exit=0; EXPECT=matched; output-sha256=81c5816a0c53d731835016ae3653c48c7c4965310a800f67b459a60af72e1d93; output-bytes=36; shell=/bin/sh; cwd=/home/valentin/projects/multiprompt-android-ci-runner-5-hyci-169; path=9df2d9843125/14 entries
+
+Resumed 2026-11-07T10:48Z: preserve original acceptance G4/G5. Inspect complete-green remote checks, review change and merge matched head; end with timed handoff if shipment or observation remains pending. No VPS builds/tests.
+
+- [x] T1: Current complete-green PR head independently reviewed and merged only through repository complete-check guard.
+  EVIDENCE: Parent inspected all changed workflows/router/regressions/retry code; Luna source review found no merge blockers. All 20 remote contexts SUCCESS on d41e99db, saved pr294-1047.json. node tools/pr-checks.mjs 294 returned COMPLETE_CHECKS_GREEN d41e99db363415b0b4d6464227321f6e77a15ab6. Matched-head squash merge confirmed in pr294-merged.json: MERGED at2026-11-07T10:49:33Z, merge a097ae8e9e2440dfeca5f38f08746d027e07e9a3. No local builds/tests.
+
+- [x] T2: Shipment state read remotely and exact remaining acceptance recorded on ticket with recheck time.
+  CHECK: python3 -c 'import json,pathlib; d=pathlib.Path("/home/valentin/projects/hypertask-evidence/HYCI-169"); p=json.loads((d/"pr294-merged.json").read_text()); assert p["state"]=="MERGED" and p["headRefOid"]=="d41e99db363415b0b4d6464227321f6e77a15ab6"; r=json.loads((d/"main-runs-1050.json").read_text()); assert any(x["headSha"]==p["mergeCommit"]["oid"] and x["workflowName"]=="Android release" and x["status"] in ("queued","in_progress") for x in r); t=json.loads((d/"ticket-1052.json").read_text())["tasks"][0]; assert t["section"]=="AI Review"; a=json.loads((d/"activity-1052.json").read_text())["activities"][0]["text"]; assert all(x in a for x in ("11:10:00Z","unrelated-change","full eligible day","not Done","MERGED")); print("MERGED_RELEASE_HANDOFF_VERIFIED")'
+  EXPECT: MERGED_RELEASE_HANDOFF_VERIFIED
+  EVIDENCE: automatic-evidence=v1; definition-sha256=3f306e1d0ec2defa863852166cebe00b10b521c54adc94df2539139dd36f0a1f; exit=0; EXPECT=matched; output-sha256=669910c9fd2660d516b25266185b87da29eb859c086d12ac073ed26932e632f0; output-bytes=32; shell=/bin/sh; cwd=/home/valentin/projects/multiprompt-android-ci-runner-5-hyci-169; path=9df2d9843125/14 entries
+
+Resumed 2026-11-07T10:10Z: retain G4/G5 acceptance and prior handoff evidence.
+
+- [x] S1: Current red test diagnosed and syntax-only repair reviewed before push.
+  EVIDENCE: Real run42360356825 log saved as test-1008.log identifies SyntaxError at native-skills.test.py:114. Terra helper changed only adb.chmod 0o755 to adb.chmod(0o755). Runner read surrounding addition and exact diff; git diff --check passed; origin/main unchanged at6bef82b6. Commit d41e99db363415b0b4d6464227321f6e77a15ab6 pushed to same PR294. No local builds, tests or compile checks.
+
+- [x] S2: Same PR contains the repair, checks have started, and timed board handoff read back.
+  CHECK: python3 -c 'import json,pathlib,subprocess; d=pathlib.Path("/home/valentin/projects/hypertask-evidence/HYCI-169"); p=json.loads((d/"pr294-1015.json").read_text()); t=json.loads((d/"ticket-1014.json").read_text())["tasks"][0]; a=json.loads((d/"activity-1014.json").read_text())["activities"][0]["text"]; assert p["headRefOid"]==subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(); assert p["state"]=="OPEN" and p["baseRefName"]=="main" and p["autoMergeRequest"] is None; c={v["name"]:v for v in p["statusCheckRollup"]}; assert c["phone-routing"]["conclusion"]=="SUCCESS"; assert c["test"]["status"]=="IN_PROGRESS"; assert all(c[n]["status"]=="IN_PROGRESS" for n in ("image-preview-emulator","reply-notifications-emulator","session-rows-emulator","session-pins-emulator","message-actions-emulator","approved-style-emulator")); assert t["section"]=="AI Review"; assert "2026-11-07T10:34:00Z" in a and "G4/G5 remain unmet" in a; print("SYNTAX_FIX_HANDOFF_VERIFIED")'
+  EXPECT: SYNTAX_FIX_HANDOFF_VERIFIED
+  EVIDENCE: automatic-evidence=v1; definition-sha256=baa6533a84f734c1f13e1651500c9a2cccc63f5335b82f084bbdfed1a7bd387d; exit=0; EXPECT=matched; output-sha256=9b0571a46fc12a97bb5ea1f33e81715e8af7980dbdfa48f0b5832394634290e2; output-bytes=28; shell=/bin/sh; cwd=/home/valentin/projects/multiprompt-android-ci-runner-5-hyci-169; path=9df2d9843125/14 entries
+
+Resumed 2026-11-07T09:31Z: retain G4/G5 acceptance and prior handoff evidence. This bounded continuation fixes red checks and hands off without waiting; no completion claim until G4/G5 pass.
+
+- [x] R1: Current-head failed checks diagnosed from real GitHub logs before changes.
+  EVIDENCE: pr294-resume.json at e2732a00 plus test-failed.log show required-context equality failure: phone-routing missing; verify-failed.log shows native-skills Attach->Model null-root dump then stale XML read/Missing text Model. All six phone contexts/router successful. Saved real logs inspected before edits.
+
+- [x] R2: Minimal fixes independently reviewed and pushed to existing PR294, with no local tests/builds.
+  EVIDENCE: Runner independently reviewed Terra diff, caught stdout-only capture (null-root may be stderr), required second pass capturing both streams and negative control. c5ed49e9df1dd12ef6b35e0965057827cdd55fee pushed to existing branch; only tools/pr-checks.mjs (add routing requirement), driver (clear stale XML, three retries, propagate failure), existing Python regression file changed. git diff --check clean. origin/main remains6bef82b6, no rebase needed. No tests/builds executed locally; GitHub verification pending.
+
+- [x] R3: New head and remote check state recorded with next recheck time, ticket AI Review, and acceptance handoff.
+  CHECK: python3 -c 'import json,pathlib,subprocess; d=pathlib.Path("/home/valentin/projects/hypertask-evidence/HYCI-169"); p=json.loads((d/"pr294-1015.json").read_text()); t=json.loads((d/"ticket-1014.json").read_text()); a=json.loads((d/"activity-1014.json").read_text())["activities"][0]["text"]; assert p["headRefOid"]==subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip() and p["state"]=="OPEN" and p["autoMergeRequest"] is None and p["baseRefName"]=="main"; assert any(c["name"]=="test" for c in p["statusCheckRollup"]) and any(c["status"]!="COMPLETED" for c in p["statusCheckRollup"]); assert t["tasks"][0]["section"]=="AI Review"; assert "2026-11-07T10:34:00Z" in a and p["headRefOid"] in a and "G4" in a and "G5" in a; print("RESUME_HANDOFF_VERIFIED")'
+  EXPECT: RESUME_HANDOFF_VERIFIED
+  EVIDENCE: automatic-evidence=v1; definition-sha256=fff5efd7d6e31eb512c43e43f872000f5fa3b2e6ca5fef70b5f0ad1fed014b2f; exit=0; EXPECT=matched; output-sha256=f136ea952ef4432c86435cf64d825f34d6f181e8053362034bc44df2b53ed8fe; output-bytes=24; shell=/bin/sh; cwd=/home/valentin/projects/multiprompt-android-ci-runner-5-hyci-169; path=9df2d9843125/14 entries
+
+Scope: Route expensive phone proofs by changed files while preserving required checks, scheduled/manual coverage and cancellation. Run no builds or tests on the VPS. End this run after pushing and recording a timed handoff if checks remain pending.
+
+- [x] G1: Existing workflows, required checks and real-run baseline inspected before edits.
+  EVIDENCE: Reviewed origin/main 6bef82b63ef4a02d2448286a8db1b129e8766db8 and tools/pr-checks.mjs. Thirteen required names include six phone jobs; all CheckRun conclusions must be SUCCESS (job-level skip is not accepted). Runner-App branch protection read returns HTTP403; no contracts changed. Run42288577129, actual successful phone jobs: 228,449,315,357,734,382 seconds; aggregate2465 seconds, wall735 seconds (queue excluded, n=1 relevant app change, not a docs-only baseline or measured speedup). Raw API JSON retained outside worktree in hypertask-evidence/HYCI-169. Existing manual/scheduled phone proofs and cancel-in-progress reviewed.
+
+- [x] G2: Minimal routing change reviewed; regression checks execute on GitHub, not the VPS.
+  EVIDENCE: Two Terra code passes completed, independently inspected all changed files. Six required phone contexts always start and fail if router fails/omits boolean; only heavy steps are gated. Unknown inputs and empty diffs run phones. Router compares PR merge-base and head, rejects absent revisions; regression proof uses real temporary Git history for docs/mixed/deleted/renamed/diverged-base/invalid revision cases, executed early in phone-routing on GitHub only. Five optional workflows include root Gradle/wrapper/shared-action changes while preserving schedules, dispatch and cancellation. tools/pr-checks.mjs and required contexts unchanged. git diff --check clean; no builds/tests executed on VPS. Review intentionally manual; this gate does not assert remote tests passed.
+
+- [x] G3: Actual PR snapshot binds the pushed SHA, main base, disabled auto-merge, successful router and all six launched phone contexts.
+  CHECK: python3 -c 'import json; p=json.load(open("/home/valentin/projects/hypertask-evidence/HYCI-169/pr294-initial.json")); assert p["headRefOid"]=="e2732a00cda1de908b27e0b2883ccbfa788fc98d" and p["state"]=="OPEN" and p["baseRefName"]=="main" and p["headRefName"]=="ci-runner-5/hyci-169" and p["autoMergeRequest"] is None; c={v["name"]:v for v in p["statusCheckRollup"]}; assert c["phone-routing"]["conclusion"]=="SUCCESS"; assert all(n in c and c[n]["status"]=="IN_PROGRESS" for n in ("image-preview-emulator","reply-notifications-emulator","session-rows-emulator","session-pins-emulator","message-actions-emulator","approved-style-emulator")); print("REMOTE_PR_SNAPSHOT_VERIFIED")'
+  EXPECT: REMOTE_PR_SNAPSHOT_VERIFIED
+  EVIDENCE: automatic-evidence=v1; definition-sha256=3593a23b1b920ca4ad80fc11f6fdb397bc4fe83bb7c8da1cd0a598dd15c1f429; exit=0; EXPECT=matched; output-sha256=6b18a54e185f8e66e8537aa5caf818554f052f18ce0b6a5f3302ff2634a39643; output-bytes=28; shell=/bin/sh; cwd=/home/valentin/projects/multiprompt-android-ci-runner-5-hyci-169; path=9df2d9843125/14 entries
+
+- [ ] G4: Relevant and unrelated changed-file cases proven by GitHub checks, before/after real timings recorded, and required checks preserved.
+  EVIDENCE: Current-head router and all 20 reported checks SUCCESS; mandatory router regression runs on GitHub. Relevant-change six phone jobs actual run42363016755: wall374s aggregate1536s; baseline wall735s aggregate2465s. Different relevant commits, n1 each, not causal speedup. Comparable actual docs-only before/after timing remains unproven. PR merged; retain acceptance and finish real unrelated-change proof.
+
+- [ ] G5: Shipped default-branch routing confirmed and Android slowdown alarms observed for a full day before Done.
+  EVIDENCE: Follow-up 11:27Z: Android release run42365574307 succeeded for merge a097ae8e9e2440dfeca5f38f08746d027e07e9a3; publish completed10:56:01Z, run updated10:56:02Z. Live android-latest manifest serves exact merge, version0.1.460/100460 (release-status-1127.txt). Conservative full-day observation boundary2026-11-08T10:56:02Z; cannot prove it at11:27Z on Nov7. Luna identified ci-boss/bin/ship-watch alarm and ci-kpi-page factory monitor; premerge snapshot is ineligible. Default-branch unrelated-change routing remains G4 proof. Do not close.
+
+ABANDON: G4 Actual unrelated-change before/after run timing remains unavailable; retain required proof on same ticket, recheck no earlier than2026-11-07T11:10:00Z.
+ABANDON: G5 Release pending and full-day observation cannot finish in this bounded run. Keep AI Review (QA column absent), verify release then full-day acceptance on same ticket; not Done.
