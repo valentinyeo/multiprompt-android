@@ -1595,6 +1595,70 @@ class HistoryReaderTest(unittest.TestCase):
             self.write(question, hidden, self.event('ANSWER-358'))
             self.assertNotIn('QUESTION-358', reader.response(dict(self.query)))
 
+    def test_igsh1855_reopen_shows_newest_without_rereading_the_log(self):
+        if hasattr(reader, 'TAIL_CACHE'):
+            reader.TAIL_CACHE.clear()
+        row = json.dumps(self.event('y' * 200)) + '\n'
+        with self.path.open('w') as output:
+            while output.tell() < reader.TAIL_BYTES * 2:
+                output.write(row)
+            output.write(json.dumps(self.event('NEWEST-1855')) + '\n')
+        original_open = Path.open
+        started = time.monotonic()
+        first = reader.response(dict(self.query))
+        self.assertIn('NEWEST-1855', first)
+        self.assertLess(time.monotonic() - started, 1.0)
+
+        def measured(query):
+            read_bytes = 0
+
+            class Counted:
+                def __init__(self, source):
+                    self.source = source
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *args):
+                    return self.source.__exit__(*args)
+
+                def __getattr__(self, name):
+                    return getattr(self.source, name)
+
+                def read(self, *args):
+                    nonlocal read_bytes
+                    data = self.source.read(*args)
+                    read_bytes += len(data)
+                    return data
+
+                def readline(self, *args):
+                    nonlocal read_bytes
+                    data = self.source.readline(*args)
+                    read_bytes += len(data)
+                    return data
+
+            def counted_open(path, *args, **kwargs):
+                source = original_open(path, *args, **kwargs)
+                return Counted(source) if path == self.path and args == ('rb',) else source
+
+            started = time.monotonic()
+            with patch.object(Path, 'open', counted_open):
+                wire = reader.response(query)
+            return read_bytes, time.monotonic() - started, wire
+
+        again = dict(self.query, cached_sid='', inode=0, offset=0)
+        read_bytes, elapsed, wire = measured(again)
+        self.assertIn('NEWEST-1855', wire)
+        self.assertLess(read_bytes, 8192)
+        self.assertLess(elapsed, 1.0)
+        with self.path.open('a') as output:
+            output.write(json.dumps(self.event('NEWER-1855')) + '\n')
+        read_bytes, elapsed, wire = measured(dict(again))
+        self.assertIn('NEWER-1855', wire)
+        self.assertIn('NEWEST-1855', wire)
+        self.assertLess(read_bytes, reader.TAIL_BYTES)
+        self.assertLess(elapsed, 1.0)
+
     def test_igsh631_first_page_keeps_replies_before_a_record_bigger_than_the_tail(self):
         question = dict(type='user', message=dict(role='user', content='QUESTION-631 far back'))
         talk = [self.event('t' * 4000) for _ in range(reader.TAIL_BYTES // 4000 + 10)]
@@ -1676,6 +1740,49 @@ class HistoryReaderTest(unittest.TestCase):
                 patch.object(reader, 'tmux_owner_process', return_value=None), \
                 patch.object(reader, 'owner_response', return_value=expected):
             self.assertEqual(reader.response(self.query, reader.READER_SOURCE), expected)
+
+    def test_IGSH_1822_hosted_other_user_chat_reads_its_pinned_transcript_while_following(self):
+        sid = '783da795-e250-4189-bd8a-8947248eecae'
+        self.query.update(follow=True, sid=sid, cwd='/home/secondary/project')
+        expected = '@mp\t7\thistory\tok\t' + sid + '\t0\n{"role":"assistant","text":"hosted reply"}\n@@MP_END@@\n'
+        owner = ('secondary', Path('/home/secondary'))
+        with patch.object(reader, 'conversation_owner', return_value=owner), \
+                patch.object(reader, 'host_dispatch_switch', return_value=True), \
+                patch.object(reader, 'conversation_path', side_effect=lambda agent, s, cwd, home=None: (_ for _ in ()).throw(PermissionError()) if home else None), \
+                patch.object(reader, 'resolve_tmux_agent', side_effect=AssertionError('hosted chat must not follow tmux')), \
+                patch.object(reader, 'owner_response', return_value=expected) as read_owner:
+            self.assertEqual(reader.response(self.query, reader.READER_SOURCE), expected)
+        sent = read_owner.call_args.args[0]
+        self.assertEqual(sent['sid'], sid)
+        self.assertFalse(sent['follow'])
+
+    def test_IGSH_1822_hosted_chat_without_sid_is_found_by_its_tab(self):
+        self.assertTrue(callable(getattr(reader, 'host_sid_for_tmux', None)), 'hosted chat tab lookup is missing')
+        sid = '783da795-e250-4189-bd8a-8947248eecae'
+        self.query.update(follow=True, sid='', cwd='/home/secondary/project')
+        with patch.object(reader, 'host_sid_for_tmux', return_value=sid) as lookup, \
+                patch.object(reader, 'conversation_owner', return_value=('secondary', Path('/home/secondary'))), \
+                patch.object(reader, 'host_dispatch_switch', return_value=True), \
+                patch.object(reader, 'conversation_path', side_effect=lambda agent, s, cwd, home=None: (_ for _ in ()).throw(PermissionError()) if home else None), \
+                patch.object(reader, 'owner_response', return_value='@mp\t7\thistory\tok\n@@MP_END@@\n') as read_owner:
+            reader.response(self.query, reader.READER_SOURCE)
+        lookup.assert_called_once_with('claude', 'term-1')
+        self.assertEqual(read_owner.call_args.args[0]['sid'], sid)
+
+    def test_IGSH_1822_tab_lookup_reads_only_one_enabled_hosted_chat(self):
+        self.assertTrue(callable(getattr(reader, 'host_sid_for_tmux', None)), 'hosted chat tab lookup is missing')
+        with tempfile.TemporaryDirectory() as home:
+            root = Path(home) / '.local/state/multiprompt/agent-host'
+            root.mkdir(parents=True)
+            sid = '783da795-e250-4189-bd8a-8947248eecae'
+            key = reader.host_key('claude', sid)
+            (root / (key + '.config.json')).write_text(json.dumps(dict(enabled=True, tmux='live-b06323d')))
+            (root / (key + '.state.json')).write_text(json.dumps(dict(provider='claude', sid=sid)))
+            with patch.object(reader, 'HOME', Path(home)):
+                self.assertEqual(reader.host_sid_for_tmux('claude', 'live-b06323d'), sid)
+                self.assertIsNone(reader.host_sid_for_tmux('claude', 'live-other'))
+                (root / (key + '.config.json')).write_text(json.dumps(dict(enabled=False, tmux='live-b06323d')))
+                self.assertIsNone(reader.host_sid_for_tmux('claude', 'live-b06323d'))
 
     def test_IGSH_1064_stale_owner_cwd_still_discovers_exact_live_process(self):
         self.write(self.event('current live reply'))
@@ -2420,6 +2527,66 @@ class HistoryReaderTest(unittest.TestCase):
         self.assertEqual(base64.b64decode(supplied).decode(), reader.READER_SOURCE)
         self.assertEqual(json.loads(forwarded), dict(query, discovery_pid=99))
 
+    def watch_forwarded_to_owner(self, query, **patches):
+        class Input(io.BytesIO):
+            def close(self):
+                self.payload = self.getvalue()
+                super().close()
+        owner = ('secondary', Path('/home/secondary'))
+        incoming = types.SimpleNamespace(buffer=io.BytesIO(json.dumps(query).encode() + b'\n'), fileno=lambda: 55)
+        child = types.SimpleNamespace(stdin=Input(), wait=lambda: 0)
+        with patch.object(reader, 'conversation_owner', return_value=owner), \
+                patch.object(reader, 'tmux_owner_process', return_value=None), \
+                patch.object(reader, 'host_dispatch_switch', side_effect=lambda agent, sid: sid == '783da795-e250-4189-bd8a-8947248eecae'), \
+                patch.object(reader, 'host_sid_for_tmux', patches.get('lookup', lambda agent, tmux: None)), \
+                patch.object(reader.subprocess, 'Popen', return_value=child) as start, \
+                patch.object(reader.sys, 'stdin', incoming), patch.object(reader.os, 'read', return_value=b''):
+            reader.watch(reader.READER_SOURCE)
+        self.assertEqual(start.call_args.args[0][:6], ['sudo', '-n', '-H', '-u', 'secondary', '--'])
+        return json.loads(child.stdin.payload.splitlines()[1])
+
+    def test_IGSH_1822_watch_hands_hosted_other_user_chat_its_pinned_transcript(self):
+        sid = '783da795-e250-4189-bd8a-8947248eecae'
+        forwarded = self.watch_forwarded_to_owner(dict(self.query, sid=sid, cwd='/home/secondary/project', follow=True))
+        self.assertEqual(forwarded['sid'], sid)
+        self.assertFalse(forwarded['follow'], 'the owner has no host state, so a hosted chat must reach it pinned, not following the tab')
+
+    def test_IGSH_1822_watch_finds_hosted_other_user_chat_by_its_tab(self):
+        sid = '783da795-e250-4189-bd8a-8947248eecae'
+        asked = []
+        forwarded = self.watch_forwarded_to_owner(dict(self.query, sid='', cwd='/home/secondary/project', follow=True),
+                                                  lookup=lambda agent, tmux: asked.append((agent, tmux)) or sid)
+        self.assertEqual(asked, [('claude', 'term-1')])
+        self.assertEqual(forwarded['sid'], sid)
+        self.assertFalse(forwarded['follow'])
+
+    def test_IGSH_1822_watch_owner_keeps_hosted_chat_when_another_chat_in_the_folder_writes(self):
+        from concurrent.futures import ThreadPoolExecutor
+
+        self.write(self.event('hosted reply'))
+        incoming, writer = os.pipe()
+        self.addCleanup(os.close, incoming)
+        self.addCleanup(os.close, writer)
+        query = dict(self.query, follow=False, host_pinned=True)
+        resolved = ('claude', 'sid', self.path, None)
+        with patch.object(reader.sys, 'stdin', types.SimpleNamespace(fileno=lambda: incoming)), \
+                patch.object(reader, 'resolve_tmux_agent', return_value=None):
+            events = reader.watch_changes(query, resolved, reader.READER_SOURCE, True)
+            self.assertEqual(next(events), resolved)
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                following = pool.submit(next, events, None)
+                (self.path.parent / 'other-chat.jsonl').write_text(json.dumps(self.event('other chat reply')) + '\n')
+                with self.path.open('a') as output:
+                    output.write(json.dumps(self.event('next hosted reply')) + '\n')
+                current = following.result(timeout=5)
+            events.close()
+        self.assertEqual(current, resolved, 'the owner stream ended when another chat in the same folder wrote')
+
+    def test_IGSH_1822_watch_keeps_following_terminal_other_user_chat(self):
+        forwarded = self.watch_forwarded_to_owner(dict(self.query, sid='stale', cwd='/home/secondary/project', follow=True))
+        self.assertEqual(forwarded['sid'], 'stale')
+        self.assertTrue(forwarded['follow'])
+
     def test_IGSH_1064_watch_discovers_owner_without_a_remote_cwd(self):
         owner = ('secondary', Path('/home/secondary'))
         query = dict(self.query, cwd='', follow=True)
@@ -2474,6 +2641,42 @@ class HistoryReaderTest(unittest.TestCase):
         calls = [json.loads(line) for line in log.read_text().splitlines()]
         self.assertEqual(sum(call[:1] == ['-C'] for call in calls), 1)
         self.assertFalse(any(call[:1] == ['capture-pane'] for call in calls), calls)
+
+    @unittest.skipUnless(os.name == 'posix' and shutil.which('tmux'), 'requires isolated Linux tmux')
+    def test_IGSH_1851_stopped_host_with_missing_tmux_answers_saved_history(self):
+        self.assertTrue(hasattr(reader, 'watch_changes'), 'reader must provide an event watch')
+        sid = 'live1517b1'
+        tmux_name = 'live-1517b1'
+        self.query.update(sid=sid, tmux=tmux_name, cwd='/work/demo', follow=True, live=True)
+        self.path = self.home / '.claude/projects' / reader.claude_project_folder('/work/demo') / (sid + '.jsonl')
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.write(self.event('saved hosted reply'))
+        reader.host_write(reader.host_paths('claude', sid)['config'],
+                          dict(enabled=True, tmux=tmux_name, cwd='/work/demo'))
+        reader.host_write(reader.host_paths('claude', sid)['state'], dict(stopped=1, inflight=None))
+        self.assertFalse(reader.host_alive('claude', sid), 'the hosted chat must be stopped')
+        real_tmux = shutil.which('tmux')
+        socket = 'igsh1851' + uuid.uuid4().hex[:8]
+        tools = self.home / 'bin'
+        tools.mkdir()
+        wrapper = tools / 'tmux'
+        wrapper.write_text('#!' + sys.executable + '\nimport os,sys\n' +
+                           'os.execv(' + repr(real_tmux) + ', [' + repr(real_tmux) + ', "-L", ' + repr(socket) + '] + sys.argv[1:])\n')
+        wrapper.chmod(0o755)
+        self.addCleanup(lambda: subprocess.run([real_tmux, '-L', socket, 'kill-server'], capture_output=True))
+        with patch.dict(os.environ, PATH=str(tools) + os.pathsep + os.environ['PATH']):
+            server = self.start_server('--watch')
+        reply = self.server_request(server, self.query)
+        self.assertIn('saved hosted reply', reply['wire'])
+        self.assertIn('\thistory\tok\t', reply['wire'])
+        self.assertNotIn('tmux control closed', reply['wire'])
+        self.assertIsNone(server.poll(), 'missing terminal session ended the reader')
+        with selectors.DefaultSelector() as selector:
+            selector.register(server.stdout, selectors.EVENT_READ)
+            self.assertFalse(selector.select(timeout=0.4), 'missing terminal session made the reader loop')
+        server.stdin.close()
+        self.assertEqual(server.wait(timeout=5), 0)
+        self.assertNotIn(b'tmux control closed', server.stderr.read())
 
     @unittest.skipUnless(os.name == 'posix' and shutil.which('tmux'), 'requires isolated Linux tmux')
     def test_watch_appends_do_not_recapture_screen(self):
@@ -4751,9 +4954,14 @@ class AgentHostTest(AgentHostFixture, unittest.TestCase):
         self.enable(spawn_name='headless fixture', spawn_workspace='Work', spawn_group=None,
                     spawn_mode='headless', permission_mode='bypassPermissions')
         script = '''
+const {spawnSync} = await import('node:child_process');
 const {run} = await import(process.argv[1]);
+const temp = {};
+for (const key of ['TMPDIR', 'TMP', 'TEMP']) if (process.env[key]) temp[key] = process.env[key];
+const runtimeEnv = {HOME: process.argv[2], PATH: process.env.PATH, LANG: 'C.UTF-8', ...temp};
 process.exitCode = await run(['spawn', '--name', 'Headless fixture', '--folder', process.argv[2], '--workspace', 'Work', '--mode', 'headless', '--task', process.argv[4]], {
-  env: {HOME: process.argv[2], PATH: process.env.PATH, MULTIPROMPT_KEY: 'fixture-key', MULTIPROMPT_READER: process.argv[3]},
+  env: {...runtimeEnv, MULTIPROMPT_KEY: 'fixture-key', MULTIPROMPT_READER: process.argv[3]},
+  runtime: (args, input) => spawnSync('python3', [process.argv[3], ...args], {input, encoding: 'utf8', timeout: 30000, env: runtimeEnv, maxBuffer: 1048576}),
   fetch: async () => ({status: 200, json: async () => ({revision: 0, layout: {workspaces: [{name: 'Work'}], tabs: []}})}),
   tmux: args => { if (args[0] !== 'has-session') throw new Error('headless created a pane'); return {status: 1}; }
 });

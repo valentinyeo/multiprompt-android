@@ -27,7 +27,7 @@ def capabilities(context=None):
         protocol=PROTOCOL,
         provider=PROVIDER,
         attachment=dict(native_tmux_session=attachable, sdk_parallel_agent=False, daemon_endpoint=False),
-        transport=dict(kind="tmux_terminal_input", carries_app_id=False, busy_queue=True,
+        transport=dict(kind="tmux_terminal_input", carries_app_id=True, busy_queue=True,
                        preserves_unfinished_draft="send_response_preserve_draft", typed_draft="not_sent",
                        durable_binding_before_write=True, repeated_attempt_sends_once=True),
         binding=dict(mode=BINDING, one_time=True, ambiguity="uncorrelated_never_promoted",
@@ -42,7 +42,6 @@ def capabilities(context=None):
         ),
         requires_services=list(REQUIRED_SERVICES),
         unsupported=[
-            "app_id_carriage_into_native_session",
             "native_ack_carrying_app_id",
             "hook_receipts",
             "sdk_parallel_agent_as_attachment",
@@ -52,6 +51,37 @@ def capabilities(context=None):
             "fuzzy_prefix_suffix_or_substring_matching",
         ],
     )
+
+
+APP_ID = re.compile(r"\n\[mp:([0-9a-f]{16})\]\s*\Z")
+
+
+def _visible(text):
+    return APP_ID.sub("", text) if isinstance(text, str) else ""
+
+
+def _app_id_of(text):
+    found = APP_ID.search(text) if isinstance(text, str) else None
+    return found.group(1) if found else None
+
+
+def _raw_prompt(event):
+    if not isinstance(event, dict):
+        return ""
+    if event.get("type") == "queue-operation":
+        content = event.get("content")
+        return content if isinstance(content, str) else ""
+    if event.get("type") == "attachment":
+        attachment = event.get("attachment") if isinstance(event.get("attachment"), dict) else {}
+        prompt = attachment.get("prompt")
+        return prompt if isinstance(prompt, str) else ""
+    message = event.get("message") if isinstance(event.get("message"), dict) else {}
+    content = message.get("content", "")
+    if isinstance(content, list):
+        return "\n".join(part.get("text", "") for part in content
+                         if isinstance(part, dict) and part.get("type") in ("text", "input_text", "output_text")
+                         and isinstance(part.get("text"), str))
+    return content if isinstance(content, str) else ""
 
 
 def _normal(text):
@@ -181,8 +211,9 @@ def submit(context, intent, state, services):
         return _refusal(state, context, intent, "transcript_unavailable")
     key = dict(provider=PROVIDER, sid=sid, id=intent["id"], attempt=intent["attempt"], epoch=intent.get("epoch"),
                text_sha256=_text_digest(text))
+    token = _text_digest(f"{_marker(key)}")[:16]
     binding = dict(v=1, dev=info.st_dev, ino=info.st_ino, boundary=info.st_size, match=_match_digest(text),
-                   time=time.time())
+                   app_id=token, time=time.time())
     try:
         claim = services["attempt_prepare"](key, binding)
     except Exception:
@@ -196,7 +227,7 @@ def submit(context, intent, state, services):
                         else "attempt_prepare_invalid")
     try:
         handoff, why = _outcome(services["send_response_preserve_draft"](
-            dict(op="send", tmux=context["tmux"], sid=sid, text=text, token=_text_digest(f"{_marker(key)}")[:16])))
+            dict(op="send", tmux=context["tmux"], sid=sid, text=text, token=token)))
     except Exception:
         handoff, why = "uncertain", "send_interrupted"
     recorded = True
@@ -249,8 +280,11 @@ def _attempts(services, sid, notes):
                 or not isinstance(binding.get("match"), str)):
             continue
         outcome = row.get("outcome")
+        app_id = binding.get("app_id")
+        if not isinstance(app_id, str) or re.fullmatch(r"[0-9a-f]{16}\Z", app_id) is None:
+            app_id = None
         found[marker] = dict(marker=marker, id=key["id"], attempt=key["attempt"], match=binding["match"],
-                             dev=binding.get("dev"), ino=binding["ino"], boundary=binding["boundary"],
+                             app_id=app_id, dev=binding.get("dev"), ino=binding["ino"], boundary=binding["boundary"],
                              handoff=outcome if outcome in HANDOFFS + ("accepted",) else None)
     return found
 
@@ -297,7 +331,11 @@ def _parse(start, finish, raw, sid, inode, services):
         operation, content = event.get("operation"), event.get("content")
         if (operation == "enqueue" and isinstance(content, str) and content.strip()
                 and not content.lstrip().startswith("<task-notification>")):
-            return [dict(shape, kind="enqueue", source="queue-operation.enqueue", key=_match_digest(content))], []
+            occurrence = dict(shape, kind="enqueue", source="queue-operation.enqueue", key=_match_digest(_visible(content)))
+            found = _app_id_of(content)
+            if found:
+                occurrence["app_id"] = found
+            return [occurrence], []
         if operation == "popAll":
             return [dict(shape, kind="popAll", source="queue-operation.popAll")], []
         return [], []
@@ -330,7 +368,10 @@ def _parse(start, finish, raw, sid, inode, services):
                 aliases["record_uuid"] = event["uuid"]
             occurrence = dict(shape, kind="queued" if attachment is not None else "user",
                               source="attachment.queued_command" if attachment is not None else "user",
-                              key=_match_digest(row["text"]), aliases=aliases)
+                              key=_match_digest(_visible(row["text"])), aliases=aliases)
+            found = _app_id_of(_raw_prompt(event))
+            if found:
+                occurrence["app_id"] = found
             if isinstance(event.get("uuid"), str):
                 occurrence["native_id"] = event["uuid"]
             occurrences.append(occurrence)
@@ -356,6 +397,14 @@ def _open(marks, current):
             if not marks[a["marker"]]["started"] and not marks[a["marker"]]["popped"]]
 
 
+def _tracks(attempt, occurrence):
+    app_id = attempt.get("app_id")
+    found = occurrence.get("app_id")
+    if isinstance(app_id, str) and isinstance(found, str):
+        return app_id == found
+    return attempt["match"] == occurrence["key"]
+
+
 def _bind(state, current, occurrences, notes):
     sid = state["sid"]
     marks = state["marks"]
@@ -370,7 +419,7 @@ def _bind(state, current, occurrences, notes):
             continue
         candidates = []
         for attempt, mark in _open(marks, current):
-            if attempt["match"] != occurrence["key"] or attempt["handoff"] == "not_sent":
+            if not _tracks(attempt, occurrence) or attempt["handoff"] == "not_sent":
                 continue
             if mark["accepted"] is None and attempt["boundary"] <= occurrence["start"]:
                 candidates.append((attempt, mark, "accept"))

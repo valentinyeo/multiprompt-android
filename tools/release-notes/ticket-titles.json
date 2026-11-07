@@ -23,5 +23,6 @@
   "IGSH-1756": "Android: new session screen in the chat's new style",
   "IGSH-1755": "Android chat: show when the last batch of messages started",
   "IGSH-1784": "Android: restored chats keep their original assistant",
-  "IGSH-1823": "Android: chats recover when one message gets stuck"
+  "IGSH-1823": "Android: chats recover when one message gets stuck",
+  "IGSH-1856": "Android: chats show their newest messages the moment you open them"
 }
