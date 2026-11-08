@@ -176,7 +176,7 @@ object MessageProtocol {
         val next = result.get("next_cursor")
         return SnapshotPage(text(result.get("snapshot_id")).also { require(it.isNotBlank()) },
             integral(result.get("epoch")), integral(result.get("seq")),
-            (0 until values.length()).map { item(jsonObject(values.get(it)), scope, true) },
+            (0 until values.length()).map { jsonObject(values.get(it)) }.filterNot { it.length() == 1 && it.has("host_settings") }.map { item(it, scope, true) },
             if (next == JSONObject.NULL) null else integral(next))
     }
 
