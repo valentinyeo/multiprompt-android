@@ -21,6 +21,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.multiprompt.companion.model.AgentKind
+import dev.multiprompt.companion.reader.ChatHistoryMessage
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.ssh.TmuxText
 
@@ -28,6 +29,9 @@ internal fun ReaderState.isWorking(agent: AgentKind): Boolean = sending || (hook
     ?: TmuxText.readerBlocks(screenOutput, agent).any {
         it.kind == TmuxText.ReaderBlockKind.PROGRESS && isTransientProgress(it.text)
     })
+
+internal fun awaitingReply(messages: List<ChatHistoryMessage>, openQuestions: Int): Boolean =
+    openQuestions == 0 && messages.lastOrNull()?.role == "user"
 
 internal fun workingDotAlpha(dot: Int, phase: Float): Float =
     if (dot == phase.toInt().coerceIn(0, 2)) 0.85f else 0.3f
