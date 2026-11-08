@@ -26,5 +26,6 @@
   "IGSH-1823": "Android: chats recover when one message gets stuck",
   "IGSH-1856": "Android: chats show their newest messages the moment you open them",
   "IGSH-1857": "Android: a sent message always shows the working dots until the reply",
-  "IGSH-1875": "Android: desktop-hosted chats load and send again"
+  "IGSH-1875": "Android: desktop-hosted chats load and send again",
+  "IGSH-1876": "Android: working dots move even with battery saver on"
 }
