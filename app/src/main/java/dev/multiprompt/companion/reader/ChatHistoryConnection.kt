@@ -3,6 +3,8 @@ package dev.multiprompt.companion.reader
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.ssh.SshRepository
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.concurrent.thread
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -11,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,9 +21,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
+import org.connectbot.sshlib.SshClient
 import org.json.JSONObject
 
 data class ChatHistoryState(
@@ -50,6 +55,7 @@ class ChatHistoryConnection(
     private val gate: MessageGate? = null,
     private val connectedExchange: (suspend (suspend (suspend (String) -> String) -> Unit) -> Unit)? = null,
     private val beforeAdmission: (suspend () -> Unit)? = null,
+    private val stallMillis: Long = 60_000L,
 ) : AutoCloseable {
     private sealed interface Command {
         data class Submit(val text: String, val generation: Long, val result: CompletableDeferred<PromptAdmission>) : Command
@@ -67,6 +73,8 @@ class ChatHistoryConnection(
     private val cacheKey = cacheKey(host, identity)
     private val provider = when (identity.agent) { AgentKind.CLAUDE -> "claude"; AgentKind.CODEX -> "codex"; AgentKind.PI -> "pi"; else -> null }
     @Volatile private var selected = false
+    @Volatile private var lastReply = System.nanoTime()
+    private class StalledChat : Exception("Chat stopped answering")
     @Volatile private var freshSid: String? = null
     @Volatile private var generation = 0L
     private var hostCarry: Pair<String, MessageReplica>? = null
@@ -111,6 +119,7 @@ class ChatHistoryConnection(
     @Synchronized fun select(value: Boolean) {
         if (selected == value) return
         selected = value
+        if (value) lastReply = System.nanoTime()
         generation++
         if (!value) {
             resetReply?.complete(MessageActionResult.Unknown)
@@ -257,15 +266,38 @@ class ChatHistoryConnection(
         wake.trySend(Unit)
     }
 
-    private suspend fun connected(block: suspend (suspend (String) -> String) -> Unit) {
-        val transport = connectedExchange
-        if (transport != null) {
-            transport(block)
-        } else {
-            val client = withTimeout(20_000L) { repository.connect(host) }
-            try { repository.streamChatHistory(client, script, block) }
-            finally { runCatching { client.disconnect() } }
+    private suspend fun connected(block: suspend (suspend (String) -> String) -> Unit) = coroutineScope {
+        lastReply = System.nanoTime()
+        val client = AtomicReference<SshClient?>()
+        val watchdog = launch {
+            while (true) {
+                delay(stallMillis / 4)
+                if (selected && System.nanoTime() - lastReply > stallMillis * 1_000_000L) {
+                    client.get()?.let(::disconnectAside)
+                    throw StalledChat()
+                }
+            }
         }
+        val tracked: suspend (suspend (String) -> String) -> Unit = { exchange ->
+            block { query -> exchange(query).also { lastReply = System.nanoTime() } }
+        }
+        try {
+            val transport = connectedExchange
+            if (transport != null) {
+                transport(tracked)
+            } else {
+                val connectedClient = withTimeout(20_000L) { repository.connect(host) }
+                client.set(connectedClient)
+                try { repository.streamChatHistory(connectedClient, script, tracked) }
+                finally { disconnectAside(connectedClient) }
+            }
+        } finally {
+            watchdog.cancel()
+        }
+    }
+
+    private fun disconnectAside(client: SshClient) {
+        thread(isDaemon = true, name = "chat-disconnect") { runCatching { runBlocking { client.disconnect() } } }
     }
 
     fun start() {

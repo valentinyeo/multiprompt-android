@@ -157,6 +157,7 @@ class ChatHistoryConnectionTest {
         val stops = java.util.concurrent.CopyOnWriteArrayList<String>()
         val afters = java.util.concurrent.CopyOnWriteArrayList<Long>()
         @Volatile var dropAt = -1
+        @Volatile var hangAt = -1
         private val digest = "b".repeat(64)
 
         private fun row(role: String, text: String, offset: Long, end: Long) =
@@ -187,6 +188,7 @@ class ChatHistoryConnectionTest {
                     "message_events" -> {
                         afters.add(request.optLong("after"))
                         if (afters.size == dropAt) throw java.io.IOException("Dropped")
+                        if (afters.size == hangAt) kotlinx.coroutines.awaitCancellation()
                         val rows = JSONArray()
                         events.forEachIndexed { index, event -> if (index + 1 > request.optLong("after")) rows.put(JSONObject().put("seq", index + 1).put("event", event)) }
                         result(id, JSONObject().put("epoch", 1).put("seq", head).put("events", rows).put("next_after", head))
@@ -228,6 +230,20 @@ class ChatHistoryConnectionTest {
             withTimeout(15_000L) { chat.state.first { it.replica?.host?.running == true } }
             assertEquals(listOf(0L), fake.afters.filter { it == 0L })
             assertTrue(fake.afters.size >= 3)
+        }
+    }
+
+    @Test
+    fun silentlyStuckChatShowsRetryingAndReconnects(): Unit = runBlocking {
+        val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd")
+        val fake = FakeHost().apply { events = listOf(hostEvent("turn.started")); hangAt = 2 }
+        val chat = ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()),
+            gate = MessageGate(), connectedExchange = { block -> fake.connect(block) }, stallMillis = 1_000L)
+        chat.use {
+            chat.select(true)
+            chat.start()
+            withTimeout(10_000L) { chat.state.first { it.retrying } }
+            withTimeout(15_000L) { chat.state.first { !it.retrying && it.replica?.host?.running == true && fake.afters.size > 2 } }
         }
     }
 
