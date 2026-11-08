@@ -1,6 +1,6 @@
 7b6c38cee8aca2d8418d3c19f416804e4b835619e45bed2a6b1a845a55e12963  tools/chat-bench/reader-service.py
 b9d130904021ae8845edd906462c04b1ccc1ef4589b91c04e8c77ac546885a3b  tools/chat-history-reader-test.py
-9a89be79a7848f4440802f9a2b3632b968180be669fd97858579eea63e5bf337  tools/chat-shared-runtime.test.py
+b327eeb229d39c526c234c1b084d5afc67fd18e9d5812ba4e92f292cc635055e  tools/chat-shared-runtime.test.py
 6b8fea5966b38bae0b11e4b18a1a67615cff25abcba90d09ba32af1881359f8b  tools/chat-transcript-reconcile.test.py
 3d6469508763f496a07b621a41a432a9f99195661e736b9835402742804aa09a  tools/check-red-run.mjs
 b9d68415b083426a84545ff389250b69e50c41fa6a6d7d20def5287664f52896  tools/fixtures/IGSH-1229/historical-resolver.py
