@@ -1,11 +1,5 @@
 package dev.multiprompt.companion.ui
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,7 +9,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -24,6 +22,7 @@ import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.reader.ChatHistoryMessage
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.ssh.TmuxText
+import kotlinx.coroutines.delay
 
 internal fun ReaderState.isWorking(agent: AgentKind): Boolean = sending || (hookState?.active
     ?: TmuxText.readerBlocks(screenOutput, agent).any {
@@ -33,17 +32,20 @@ internal fun ReaderState.isWorking(agent: AgentKind): Boolean = sending || (hook
 internal fun awaitingReply(messages: List<ChatHistoryMessage>, openQuestions: Int): Boolean =
     openQuestions == 0 && messages.lastOrNull()?.role == "user"
 
-internal fun workingDotAlpha(dot: Int, phase: Float): Float =
-    if (dot == phase.toInt().coerceIn(0, 2)) 0.85f else 0.3f
+internal fun workingDotAlpha(dot: Int, phase: Int): Float =
+    if (dot == phase.mod(3)) 0.85f else 0.3f
+
+internal const val WORKING_DOT_STEP_MS = 300L
 
 @Composable
 internal fun WorkingDots() {
-    val phase by rememberInfiniteTransition(label = "working").animateFloat(
-        initialValue = 0f,
-        targetValue = 3f,
-        animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart),
-        label = "tick",
-    )
+    var phase by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(WORKING_DOT_STEP_MS)
+            phase = (phase + 1).mod(3)
+        }
+    }
     Row(
         Modifier.padding(horizontal = 16.dp, vertical = 12.dp).semantics { contentDescription = "Working" },
         horizontalArrangement = Arrangement.spacedBy(5.dp),
