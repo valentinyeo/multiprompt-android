@@ -69,6 +69,7 @@ class ChatHistoryConnection(
     @Volatile private var selected = false
     @Volatile private var freshSid: String? = null
     @Volatile private var generation = 0L
+    private var hostCarry: Pair<String, MessageReplica>? = null
     @Volatile private var resetFence = false
     @Volatile private var ownedKey: String? = null
     private data class ResetAck(val sid: String, val id: String, val epoch: Long, val generation: Long)
@@ -291,7 +292,6 @@ class ChatHistoryConnection(
                     connected { exchange ->
                             var replica: MessageReplica? = null
                             var replicaSid: String? = null
-                            var lastReplica: MessageReplica? = null
                             var wasOlder = false
                             val checked = mutableSetOf<String>()
                             val engine = if (provider != null) runCatching {
@@ -319,7 +319,6 @@ class ChatHistoryConnection(
                                 val next = current.apply(page)
                                 if (replicaSid != page.sid) {
                                     replica = null
-                                    lastReplica = null
                                     replicaSid = page.sid
                                 }
                                 val cycleGeneration = synchronized(this@ChatHistoryConnection) {
@@ -382,9 +381,9 @@ class ChatHistoryConnection(
                                             }
                                         } while (cursor != null)
                                         val fresh = MessageReplica.snapshot(pages)
-                                        val carried = lastReplica?.takeIf { it.epoch == fresh.epoch && it.cursor <= fresh.cursor }
+                                        val carried = hostCarry?.takeIf { it.first == page.sid }?.second?.takeIf { it.epoch == fresh.epoch && it.cursor <= fresh.cursor }
                                         var built = fresh.copy(host = carried?.host ?: HostStream())
-                                        var after = carried?.cursor ?: 0L
+                                        var after = carried?.cursor ?: maxOf(0L, built.cursor - HOST_REPLAY_TAIL)
                                         while (provider == "claude" && after < built.cursor) {
                                             requestId++
                                             val replay = MessageProtocol.events(exchange(MessageProtocol.request(requestId, messageScope, "message_events", JSONObject().put("after", after))), requestId, messageScope, after)
@@ -392,9 +391,10 @@ class ChatHistoryConnection(
                                             if (replay.epoch != built.epoch || replay.events.isEmpty()) break
                                             built = built.replayHost(replay.events)
                                             after = replay.next
+                                            hostCarry = page.sid to built.copy(cursor = minOf(after, built.cursor))
                                         }
                                         replica = built
-                                        lastReplica = built
+                                        hostCarry = page.sid to built
                                     }
                                     for (entry in pending(page.sid).filter { it.operation == "submit" && it.id !in checked }) {
                                         requestId++
@@ -426,7 +426,7 @@ class ChatHistoryConnection(
                                     val pageEvents = MessageProtocol.events(exchange(MessageProtocol.request(requestId, messageScope, "message_events", JSONObject().put("after", replica!!.cursor))), requestId, messageScope, replica!!.cursor)
                                     if (generation != cycleGeneration || !owns(page.sid)) { replica = null; continue@poll }
                                     replica = replica!!.apply(pageEvents)
-                                    lastReplica = replica
+                                    hostCarry = page.sid to replica!!
                                     if (pageEvents.next < pageEvents.head) { caughtUp = false; wake.trySend(Unit) }
                                 }
                                 val published = synchronized(this@ChatHistoryConnection) {
@@ -802,6 +802,8 @@ class ChatHistoryConnection(
     }
 
     companion object {
+        const val HOST_REPLAY_TAIL = 1_024L
+
         fun cacheKey(host: HostProfile, identity: ChatHistoryProtocol.Identity): String =
             listOf(host.id, host.hostname, host.port.toString(), host.username,
                 identity.agent.name, identity.tmux, identity.cwd).joinToString("\u0000")

@@ -155,6 +155,8 @@ class ChatHistoryConnectionTest {
         @Volatile var events: List<JSONObject> = emptyList()
         private val head get() = events.size.toLong()
         val stops = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val afters = java.util.concurrent.CopyOnWriteArrayList<Long>()
+        @Volatile var dropAt = -1
         private val digest = "b".repeat(64)
 
         private fun row(role: String, text: String, offset: Long, end: Long) =
@@ -183,6 +185,8 @@ class ChatHistoryConnectionTest {
                     "message_snapshot" -> result(id, JSONObject().put("snapshot_id", "snap").put("epoch", 1).put("seq", head)
                         .put("items", JSONArray()).put("next_cursor", JSONObject.NULL))
                     "message_events" -> {
+                        afters.add(request.optLong("after"))
+                        if (afters.size == dropAt) throw java.io.IOException("Dropped")
                         val rows = JSONArray()
                         events.forEachIndexed { index, event -> if (index + 1 > request.optLong("after")) rows.put(JSONObject().put("seq", index + 1).put("event", event)) }
                         result(id, JSONObject().put("epoch", 1).put("seq", head).put("events", rows).put("next_after", head))
@@ -197,6 +201,35 @@ class ChatHistoryConnectionTest {
 
     private fun hostEvent(kind: String, payload: JSONObject = JSONObject()) =
         JSONObject().put("v", 1).put("sid", "sid1").put("turn", "t1").put("kind", kind).put("at", 1).put("payload", payload)
+
+    @Test
+    fun longLiveChatLoadsFromRecentHostEventsOnly() = runBlocking {
+        val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd")
+        val fake = FakeHost().apply { events = List(5_000) { hostEvent("host.status", JSONObject().put("state", "running")) } + hostEvent("turn.started") }
+        val chat = ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()),
+            gate = MessageGate(), connectedExchange = { block -> fake.connect(block) })
+        chat.use {
+            chat.select(true)
+            chat.start()
+            withTimeout(10_000L) { chat.state.first { it.replica?.host?.running == true } }
+            assertEquals(5_001L - ChatHistoryConnection.HOST_REPLAY_TAIL, fake.afters.first())
+        }
+    }
+
+    @Test
+    fun reconnectKeepsHostStateInsteadOfReplayingAgain() = runBlocking {
+        val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd")
+        val fake = FakeHost().apply { events = listOf(hostEvent("turn.started")); dropAt = 2 }
+        val chat = ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()),
+            gate = MessageGate(), connectedExchange = { block -> fake.connect(block) })
+        chat.use {
+            chat.select(true)
+            chat.start()
+            withTimeout(15_000L) { chat.state.first { it.replica?.host?.running == true } }
+            assertEquals(listOf(0L), fake.afters.filter { it == 0L })
+            assertTrue(fake.afters.size >= 3)
+        }
+    }
 
     @Test
     fun stopWithAnOpenApprovalCancelsItLikeDesktop() = runBlocking {
