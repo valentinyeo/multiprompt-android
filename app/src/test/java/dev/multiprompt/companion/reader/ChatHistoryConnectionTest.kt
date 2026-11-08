@@ -234,7 +234,7 @@ class ChatHistoryConnectionTest {
     }
 
     @Test
-    fun silentlyStuckChatShowsRetryingAndReconnects() = runBlocking {
+    fun silentlyStuckChatShowsRetryingAndReconnects(): Unit = runBlocking {
         val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd")
         val fake = FakeHost().apply { events = listOf(hostEvent("turn.started")); hangAt = 2 }
         val chat = ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()),
