@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -296,7 +297,7 @@ class ChatHistoryConnection(
     }
 
     private fun disconnectAside(client: SshClient) {
-        thread(isDaemon = true, name = "chat-disconnect") { runCatching { client.disconnect() } }
+        thread(isDaemon = true, name = "chat-disconnect") { runCatching { runBlocking { client.disconnect() } } }
     }
 
     fun start() {
