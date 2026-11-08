@@ -1706,7 +1706,8 @@ from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
 root = Path(sys.argv[1])
-rows = (root / 'native-receipts.txt').read_text().splitlines()
+import re
+rows = [row for row in (root / 'native-receipts.txt').read_text().splitlines() if not re.fullmatch(r'VERIFY_RECEIVED:\[mp:[0-9a-f]{16}\]', row)]
 assert rows == ['VERIFY_RECEIVED:/review-native investigation', 'VERIFY_RECEIVED:/qa:verify-native draft stays', 'VERIFY_RECEIVED:/model sonnet', 'VERIFY_RECEIVED:/effort high'], rows
 assert 'Sonnet 5.5 high' in (root / 'native-tmux-final.txt').read_text()
 assert 'BODY_MUST_NOT_BE_INJECTED' not in (root / 'native-transcript.jsonl').read_text()

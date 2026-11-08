@@ -111,7 +111,8 @@ function prepareService(dir) {
 
 function run(file, dir) {
   const python = file.endsWith('.py');
-  const env = { ...process.env };
+  const temp = fs.mkdtempSync(path.join(scratch, 'test-'));
+  const env = { ...process.env, TMPDIR: temp, TMP: temp, TEMP: temp };
   delete env.NODE_TEST_CONTEXT;
   const result = spawnSync(python ? 'python3' : process.execPath, python ? [file] : ['--test', '--test-reporter=tap', file], {
     cwd: dir, env, encoding: 'utf8', timeout: 300000, maxBuffer: 16 * 1024 * 1024,

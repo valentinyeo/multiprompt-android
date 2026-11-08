@@ -13,8 +13,10 @@ commands:
   create-section <name>                            add a workspace
   move --to <workspace> [--create] <session>...    move sessions into a workspace in one change
   move --to <workspace> --match <glob> [--host N]  move every session whose name matches
-  spawn --name NAME --folder DIR --workspace WORKSPACE [--group GROUP] [--mode visible|headless] [--task TEXT] [--host N]  create or reveal a live chat
-  open <session> [--workspace <name>] [--host N] [--title <text>] [--no-tmux]
+  spawn --name NAME --folder DIR --workspace WORKSPACE [--group GROUP] [--mode visible|headless] [--provider claude|hax] [--task TEXT] [--host N]  create or reveal a live chat
+  open <session> [--workspace <name>] [--host N] [--title <text>|--name <text>] [--group <group>] [--star] [--move] [--no-tmux]
+  open --kind shell --tmux <session> --name <title> --workspace <name> [--group <group>] [--host N] [--star] [--move] [--no-tmux]
+  open --kind chat --name NAME --folder DIR --workspace WORKSPACE [--group GROUP] [--mode visible|headless] [--provider claude|hax] [--task TEXT] [--host N]
 
 environment:
   MULTIPROMPT_KEY   admin or workspace key (never printed)
@@ -37,16 +39,16 @@ const REFUSALS = {
 
 function parse(argv, command) {
   const flags = { _: [] };
-  const withValue = new Set(['to', 'match', 'host', 'workspace', 'title', 'name', 'folder', 'task', 'group', 'mode']);
+  const withValue = new Set(['to', 'match', 'host', 'workspace', 'title', 'name', 'folder', 'task', 'group', 'mode', 'provider', 'kind', 'tmux']);
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (!arg.startsWith('--')) { flags._.push(arg); continue; }
     const name = arg.slice(2);
-    if (command === 'spawn' && (!['name', 'folder', 'workspace', 'task', 'host', 'group', 'mode'].includes(name) || Object.hasOwn(flags, name))) throw new Failure('invalid spawn option');
+    if (command === 'spawn' && (!['name', 'folder', 'workspace', 'task', 'host', 'group', 'mode', 'provider'].includes(name) || Object.hasOwn(flags, name))) throw new Failure('invalid spawn option');
     if (withValue.has(name)) {
       if (i + 1 >= argv.length || (command === 'spawn' && argv[i + 1].startsWith('--'))) throw new Failure(`--${name} needs a value`);
       flags[name] = argv[++i];
-    } else if (['json', 'create', 'no-tmux'].includes(name)) flags[name] = true;
+    } else if (['json', 'create', 'no-tmux', 'star', 'move'].includes(name)) flags[name] = true;
     else throw new Failure(`unknown option --${name}`);
   }
   return flags;
@@ -60,12 +62,20 @@ const hostSlot = text => {
   return n;
 };
 
+function normalizedGroup(value) {
+  if (value === undefined) return null;
+  const group = value.normalize('NFC').trim();
+  if (!group || group.length > 64 || /[\p{Cc}\p{Cs}]/u.test(group)) throw new Failure('invalid group');
+  return group;
+}
+
 async function call(ctx, method, body) {
+  const features = ctx.command === 'spawn' ? 'groups' : ctx.command === 'open' ? (ctx.features || 'groups') : '';
   let response;
   try {
     response = await ctx.fetch(ctx.url + '/v1/layout', {
       method,
-      headers: { Authorization: 'Bearer ' + ctx.key, 'Content-Type': 'application/json', ...(ctx.command === 'spawn' ? { 'X-Layout-Features': 'groups' } : {}) },
+      headers: { Authorization: 'Bearer ' + ctx.key, 'Content-Type': 'application/json', ...(features ? { 'X-Layout-Features': features } : {}) },
       body: body ? JSON.stringify(body) : undefined,
       ...(ctx.command === 'spawn' ? { signal: AbortSignal.timeout(8000) } : {})
     });
@@ -154,11 +164,19 @@ function ensureTmux(ctx, session) {
 }
 
 async function open(ctx, flags) {
-  const session = flags._[0];
-  if (!session || flags._.length !== 1) throw new Failure('give one session name');
+  const positional = flags._;
+  const session = flags.tmux || positional[0];
+  if (!session || positional.length > 1 || (flags.tmux && positional.length === 1 && positional[0] !== flags.tmux)) throw new Failure('give one session name');
   if (!/^[A-Za-z0-9_-]{1,63}$/.test(session)) throw new Failure('session names use letters, digits, - and _ (63 at most)');
   const host = hostSlot(flags.host ?? ctx.env.MULTIPROMPT_HOST ?? '0');
-  const title = flags.title || session;
+  const title = flags.name || flags.title || session;
+  const group = normalizedGroup(flags.group);
+  ctx.features = flags.star ? 'groups,favorite' : 'groups';
+  if (group !== null) {
+    const probe = await call(ctx, 'GET');
+    if (probe.status !== 200) throw refusal(probe);
+    if (!probe.groupsSupported) throw new Failure('account service does not support groups');
+  }
   let started = false;
   if (!flags['no-tmux']) started = ensureTmux(ctx, session);
   const result = await edit(ctx, layout => {
@@ -167,10 +185,23 @@ async function open(ctx, flags) {
     if (!layout.workspaces.some(w => w.name === workspace)) throw new Failure(`workspace ${workspace} not found or not visible to this key`);
     const existing = layout.tabs.find(t => tabId(t) === `${host}:${session.toLowerCase()}`);
     if (existing) {
-      if (existing.workspace !== workspace) throw new Failure(`session ${session} is already open in ${existing.workspace}`);
-      return null;
+      let changed = false;
+      if (existing.workspace !== workspace) {
+        if (!flags.move) throw new Failure(`session ${session} is already open in ${existing.workspace}`);
+        existing.workspace = workspace;
+        changed = true;
+      }
+      if (group !== null && (existing.group || null) !== group) {
+        existing.group = group;
+        changed = true;
+      }
+      if (flags.star && existing.favorite !== true) {
+        existing.favorite = true;
+        changed = true;
+      }
+      return changed ? layout : null;
     }
-    layout.tabs.push({ kind: 'tmux', name: title.slice(0, 64), tmux_session: session, tmux_host: host, workspace });
+    layout.tabs.push({ kind: 'tmux', name: title.slice(0, 64), tmux_session: session, tmux_host: host, workspace, ...(group === null ? {} : { group }), ...(flags.star ? { favorite: true } : {}) });
     return layout;
   });
   ctx.out(`${result.changed ? 'opened' : 'already open'} ${session}${started ? ' (tmux session started)' : ''} (revision ${result.revision})`);
@@ -194,10 +225,11 @@ function spawnLock(path, env) {
 async function spawnSession(ctx, flags) {
   if (flags._.length || !flags.name || !flags.folder || !flags.workspace) throw new Failure('spawn needs name, folder and workspace');
   const name = flags.name.normalize('NFC').trim();
-  const group = flags.group === undefined ? null : flags.group.normalize('NFC').trim();
+  const group = normalizedGroup(flags.group);
   const mode = flags.mode ?? 'visible';
   if (!['visible', 'headless'].includes(mode)) throw new Failure('mode must be visible or headless');
-  if (group !== null && (!group || group.length > 64 || /[\p{Cc}\p{Cs}]/u.test(group))) throw new Failure('invalid group');
+  const provider = flags.provider ?? 'claude';
+  if (!['claude', 'hax'].includes(provider)) throw new Failure('provider must be claude or hax');
   if (!name || name.length > 64 || /[\p{Cc}\p{Cs}]/u.test(name)) throw new Failure('invalid session name');
   if (!flags.workspace.trim() || Buffer.byteLength(flags.workspace, 'utf8') > 31 || /[\p{Cc}\p{Cs}]/u.test(flags.workspace)) throw new Failure('invalid workspace');
   if (flags.task !== undefined && (!flags.task.trim() || flags.task.includes('\0') || Buffer.byteLength(flags.task, 'utf8') > 65536)) throw new Failure('invalid task');
@@ -232,7 +264,7 @@ async function spawnSession(ctx, flags) {
   const home = ctx.env.HOME;
   if (!home) throw new Failure('HOME is required');
   const root = join(home, '.local/state/multiprompt/agent-host');
-  const stateKey = hash('claude:' + sid).slice(0, 32);
+  const stateKey = hash(provider + ':' + sid).slice(0, 32);
   if (process.platform === 'win32' && !ctx.mockFolder) throw new Failure('spawn requires a Unix host');
   const unsafeMode = st => process.platform !== 'win32' && ((st.mode & 0o077) || (process.getuid && st.uid !== process.getuid()));
   const lockPath = join(root, stateKey + '.spawn.lock');
@@ -285,7 +317,7 @@ async function spawnSession(ctx, flags) {
       try { return result.stdout.trim().split('\n').filter(Boolean).map(line => JSON.parse(line)); } catch { throw new Failure('invalid host response'); }
     };
     if (!config || config.enabled !== true) {
-      const [enabled] = runtime(['host', 'enable', 'claude', sid, '--tmux', session, '--cwd', folder, '--permission-mode', 'bypassPermissions']);
+      const [enabled] = runtime(['host', 'enable', provider, sid, '--tmux', session, '--cwd', folder, ...(provider === 'claude' ? ['--permission-mode', 'bypassPermissions'] : [])]);
       if (enabled?.status !== 'enabled') throw new Failure('host enable failed');
     }
     const result = mode === 'headless' ? { changed: false, revision: current.data.revision } : await edit(ctx, layout => {
@@ -293,17 +325,17 @@ async function spawnSession(ctx, flags) {
       layout.tabs.push({ kind: 'tmux', name, tmux_session: session, tmux_host: host, workspace: flags.workspace, manual: true, ...(group === null ? {} : { group }) });
       return layout;
     });
-    const [started] = runtime(['host', 'start', 'claude', sid]);
+    const [started] = runtime(['host', 'start', provider, sid]);
     if (!['started', 'already'].includes(started?.status)) throw new Failure('host start failed');
     if (flags.task !== undefined) {
-      const base = { message_protocol: 1, provider: 'claude', sid, tmux: session };
+      const base = { message_protocol: 1, provider, sid, tmux: session };
       const requests = [{ ...base, id: 1, op: 'message_submit', message_id: token, text: flags.task }, { ...base, id: 2, op: 'message_dispatch' }];
       const replies = runtime(['--serve'], requests.map(x => JSON.stringify(x)).join('\n') + '\n');
       const submitted = replies.find(r => r.id === 1)?.result?.message;
       const dispatched = replies.find(r => r.id === 2)?.result;
       if (submitted?.id !== token || submitted.text !== flags.task || !dispatched || submitted.state === 'failed' || dispatched.message?.state === 'failed') throw new Failure('task submission failed');
     }
-    ctx.out(JSON.stringify({ ok: true, sid, session, host, name, workspace: flags.workspace, group, mode, first_task_id: flags.task === undefined ? null : token, revision: result.revision, changed: result.changed }));
+    ctx.out(JSON.stringify({ ok: true, sid, session, host, name, workspace: flags.workspace, group, mode, provider, first_task_id: flags.task === undefined ? null : token, revision: result.revision, changed: result.changed }));
   } finally { release(); }
 }
 
@@ -311,11 +343,16 @@ export async function run(argv, overrides = {}) {
   const env = overrides.env || process.env;
   const out = overrides.out || (line => process.stdout.write(line + '\n'));
   const err = overrides.err || (line => process.stderr.write(line + '\n'));
-  const [command, ...rest] = argv;
+  let [command, ...rest] = argv;
   if (!command || command === '--help' || command === 'help') { out(USAGE.trimEnd()); return command ? 0 : 2; }
   try {
     const key = env.MULTIPROMPT_KEY;
     if (!key) throw new Failure('set MULTIPROMPT_KEY');
+    const flags = parse(rest, command);
+    if (command === 'open' && flags.kind === 'chat') {
+      command = 'spawn';
+      if (flags._.length || flags.tmux || flags.title || flags.star || flags.move || flags['no-tmux']) throw new Failure('invalid spawn option');
+    } else if (command === 'open' && flags.kind !== undefined && flags.kind !== 'shell') throw new Failure('kind must be shell or chat');
     const ctx = {
       key, env, out, command,
       url: (env.MULTIPROMPT_URL || DEFAULT_URL).replace(/\/+$/, ''),
@@ -327,7 +364,6 @@ export async function run(argv, overrides = {}) {
       runtime: overrides.runtime || ((args, input) => spawnSync('python3', [env.MULTIPROMPT_READER || join(env.HOME, '.multiprompt-runtime/reader.py'), ...args], { input, encoding: 'utf8', timeout: 30000, env: { HOME: env.HOME, PATH: env.PATH || '/usr/bin:/bin', LANG: 'C.UTF-8' }, maxBuffer: 1048576 })),
       tmux: overrides.tmux || (args => spawnSync('tmux', args, { ...(command === 'spawn' ? { timeout: 5000 } : {}), stdio: command === 'spawn' && args[0] === 'display-message' ? ['ignore', 'pipe', 'ignore'] : 'ignore', encoding: 'utf8', ...(command === 'spawn' ? { env: { HOME: env.HOME, PATH: env.PATH || '/usr/bin:/bin', LANG: 'C.UTF-8' } } : {}) }))
     };
-    const flags = parse(rest, command);
     const commands = { list, 'create-section': createSection, move, open, spawn: spawnSession };
     if (!commands[command]) throw new Failure(`unknown command ${command}`);
     await commands[command](ctx, flags);

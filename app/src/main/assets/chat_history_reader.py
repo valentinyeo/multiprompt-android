@@ -2,6 +2,7 @@ READER_SOURCE = r'''
 
 import base64
 import difflib
+from contextlib import contextmanager
 from datetime import datetime
 import hashlib
 import html
@@ -37,9 +38,11 @@ TAIL_BYTES = 512 * 1024
 QUESTION_SCAN_BYTES = 16 * TAIL_BYTES
 STATUS_CACHE = {}
 QUEUE_CACHE = {}
+TAIL_CACHE = {}
 QUEUE_SCAN_BYTES = 4 * 1024 * 1024
 QUEUE_SHOWN = 8
 QUEUE_TEXT = 500
+_TRACKED_ID = re.compile(r"\n\[mp:([0-9a-f]{16})\]\s*\Z")
 DRAFT_TEXT = 4000
 SGR = re.compile(r"\x1b\[([0-9;:]*)m")
 ANSI = re.compile(r"\x1b(?:\[[0-9;:?]*[ -/]*[@-~]|[@-Z\\-_])")
@@ -119,7 +122,7 @@ def conversation_path(agent, sid, cwd, home=None):
                     continue
             for path in candidates:
                 try:
-                    if path.is_file() and path.resolve().is_relative_to(root.resolve()):
+                    if path.is_file() and transcript_inside(path, root):
                         with path.open("rb"):
                             return path
                 except PermissionError as error:
@@ -139,6 +142,13 @@ def conversation_path(agent, sid, cwd, home=None):
     if denied is not None:
         raise denied
     return None
+
+def transcript_inside(path, root):
+    if path.resolve().is_relative_to(root.resolve()):
+        return True
+    target = path.resolve()
+    return (path.is_symlink() and path.parent.resolve().is_relative_to(root.resolve()) and
+            target.name == path.name and target.is_file() and target.stat().st_uid == os.getuid())
 
 def owner_response(q, owner, source):
     user, _home = owner
@@ -160,6 +170,9 @@ def missing_response(q, reason):
     if q.get("op") == "settle":
         return f"@mp\t{q['id']}\tsettle\terror\t{reason}\t0\n{END}\n"
     return f"@mp\t{q['id']}\thistory\tmissing\t-\t0\t{reason}\n{END}\n"
+
+def visible_prompt(text):
+    return _TRACKED_ID.sub("", text) if isinstance(text, str) else text
 
 def clean_command_markup(text):
     if re.search(r"</?pasted_content\b", text, re.I):
@@ -757,7 +770,7 @@ def conversation_event(event, agent):
     if role == "user":
         if text.lstrip().startswith("<task-notification>") or text.strip() in _INTERRUPT_MARKERS:
             return None
-        text = clean_command_markup(text)
+        text = visible_prompt(clean_command_markup(text))
     if not text.strip():
         return None
     identity = (event.get("id") if agent == "pi" else message.get("id") or event.get("uuid")) or ""
@@ -1277,6 +1290,8 @@ def queue_apply(state, event):
     queue, sent = state
     operation = event.get("operation")
     content = event.get("content")
+    if isinstance(content, str):
+        content = visible_prompt(content)
     if operation == "enqueue" and isinstance(content, str):
         if content.lstrip().startswith("<task-notification>"):
             return
@@ -1557,10 +1572,25 @@ def live_fields(source, size, tmux, shown=None, sid=None):
     return fields
 
 
+def pin_hosted_claude(q, agent, as_owner=False):
+    if agent != "claude" or not q.get("tmux"):
+        return q
+    if not q.get("sid") and not as_owner:
+        q["sid"] = host_sid_for_tmux(agent, q["tmux"]) or ""
+    sid = q.get("sid")
+    if isinstance(sid, str) and SESSION_ID.fullmatch(sid) and host_dispatch_switch(agent, sid):
+        q["follow"] = False
+        q["host_pinned"] = True
+    return q
+
+
 def resolve_response_path(q, source=None, as_owner=False):
     rid = q["id"]
     agent = q.get("provider") if q.get("provider") in HOST_PROVIDERS else "codex" if q["codex"] else "claude"
     sid, tmux, cwd = q["sid"], q["tmux"], q["cwd"]
+    hosted = host_config(agent, sid) if isinstance(sid, str) and SESSION_ID.fullmatch(sid) else None
+    if isinstance(hosted, dict) and isinstance(hosted.get("cwd"), str) and Path(hosted["cwd"]).is_absolute():
+        cwd = q["cwd"] = hosted["cwd"]
     if (not isinstance(rid, int) or rid < 0 or
             sid and not SESSION_ID.fullmatch(sid) or
             tmux and not TMUX_NAME.fullmatch(tmux) or not sid and not tmux or
@@ -1574,6 +1604,8 @@ def resolve_response_path(q, source=None, as_owner=False):
         except PermissionError:
             return agent, sid, None, missing_response(q, "permission denied")
         return (agent, sid, path, None) if path else (agent, sid, None, empty_history_response(q, sid, tmux, agent))
+    pin_hosted_claude(q, agent, as_owner)
+    sid = q["sid"]
     follow = bool(tmux and (q.get("follow") or agent == "codex"))
     denied = False
     delegated = None
@@ -1824,6 +1856,53 @@ def search_response(q, path, agent, sid):
     return "\n".join((header, *(wire_row(row) for row in hits), END, ""))
 
 
+def tail_view(q, agent, fill):
+    return (agent, bool(fill), bool(q.get("settlement")), q.get("message_protocol"), bool(q.get("source_offsets")),
+            bool(ISSUE_263_TOOL_STEPS), bool(ISSUE_349_QUEUED_STAMP_FROM_QUEUE),
+            bool(ISSUE_358_TAIL_STARTS_AT_QUESTION), bool(ISSUE_631_TAIL_FILLS_SHOWN_BUDGET))
+
+
+def recall_tail(path, source, info, q, agent, fill):
+    hit = TAIL_CACHE.get((str(Path(path).resolve()), info.st_ino, tail_view(q, agent, fill)))
+    if not hit or hit["end"] > info.st_size or info.st_size - hit["end"] > TAIL_BYTES:
+        return None
+    source.seek(max(0, hit["end"] - 64))
+    if hashlib.sha256(source.read(min(hit["end"], 64))).hexdigest() != hit["probe"]:
+        return None
+    rows = [json.loads(line) for line in hit["wires"]]
+    if hit["size"] == info.st_size and hit["mtime"] == info.st_mtime_ns:
+        return hit["base"], hit["end"], b"", hit["oldest"], rows, "exact", hit["end"]
+    source.seek(hit["end"])
+    extra = source.read(info.st_size - hit["end"])
+    complete = extra.rfind(b"\n") + 1
+    extra = extra[:complete]
+    return hit["base"], hit["end"] + len(extra), extra, hit["oldest"], rows, "append", hit["end"]
+
+
+def remember_tail(path, info, q, agent, fill, base, end, oldest, rows, probe):
+    if end <= 0:
+        return
+    TAIL_CACHE[(str(Path(path).resolve()), info.st_ino, tail_view(q, agent, fill))] = dict(
+        size=info.st_size, mtime=info.st_mtime_ns, base=base, end=end,
+        oldest=oldest, probe=probe, wires=[wire_row(row) for row in rows])
+    while len(TAIL_CACHE) > 8:
+        del TAIL_CACHE[next(iter(TAIL_CACHE))]
+
+
+def fit_tail(rows, oldest):
+    budget = sum(len(wire_row(row)) + 1 for row in rows)
+    if budget <= TAIL_BYTES or len(rows) < 2:
+        return rows, oldest
+    start = 0
+    while budget > TAIL_BYTES and start + 1 < len(rows):
+        budget -= len(wire_row(rows[start])) + 1
+        start += 1
+    kept = rows[start:]
+    if kept and isinstance(kept[0].get("offset"), int):
+        oldest = kept[0]["offset"]
+    return kept, oldest
+
+
 def response(q, source=None, as_owner=False, resolved=None):
     q["_held_queue_progress"] = False
     if ISSUE_268_CHAT_FIND and "search" in q:
@@ -1860,6 +1939,9 @@ def response(q, source=None, as_owner=False, resolved=None):
             raise ValueError("invalid page")
         scan_more = False
         jumped = False
+        tail_fill = None
+        tail_reuse = None
+        append_at = None
         if before and valid:
             mode = "older"
             base, end, data = read_window(source, before)
@@ -1870,17 +1952,32 @@ def response(q, source=None, as_owner=False, resolved=None):
             oldest = base
         elif not valid:
             mode = "tail"
-            base, end, data = read_tail(source, info.st_size, agent, captured)
-            oldest = base
+            tail_fill = True
+            recalled = recall_tail(path, source, info, q, agent, True)
+            if recalled:
+                base, end, data, oldest, rows, tail_reuse, append_at = recalled
+                budget = sum(len(wire_row(row)) + 1 for row in rows)
+            else:
+                base, end, data = read_tail(source, info.st_size, agent, captured)
+                oldest = base
         else:
             mode = "delta"
             if ISSUE_345_STALE_JUMPS_TO_TAIL and not q.get("no_jump") and info.st_size - offset > 2 * SCAN_BYTES:
-                base, end, data = read_tail(source, info.st_size, agent, captured, fill=False)
-                if data:
+                tail_fill = False
+                recalled = recall_tail(path, source, info, q, agent, False)
+                if recalled and (recalled[2] or recalled[4]):
+                    base, end, data, oldest, rows, tail_reuse, append_at = recalled
+                    budget = sum(len(wire_row(row)) + 1 for row in rows)
                     jumped = True
                     mode = "tail"
-                    oldest = base
                     scan_more = False
+                else:
+                    base, end, data = read_tail(source, info.st_size, agent, captured, fill=False)
+                    if data:
+                        jumped = True
+                        mode = "tail"
+                        oldest = base
+                        scan_more = False
             if mode == "delta":
                 base = offset
                 oldest = q.get("start", 0)
@@ -1901,7 +1998,7 @@ def response(q, source=None, as_owner=False, resolved=None):
                     data = data[:end - base]
         page_more = False
         groups = []
-        consumed = base
+        consumed = append_at if tail_reuse == "append" else base
         for raw in data.splitlines(keepends=True):
             event = load_line(raw)
             messages = conversation_rows(event, agent, consumed)
@@ -1939,7 +2036,9 @@ def response(q, source=None, as_owner=False, resolved=None):
             rows.extend(messages)
             budget += cost
             consumed += len(raw)
-        if mode != "delta" and budget > TAIL_BYTES and len(groups) > 1 and any(row["role"] in ("tool", "tool_result") for row in rows):
+        if tail_reuse == "append":
+            rows, oldest = fit_tail(rows, oldest)
+        elif tail_reuse != "exact" and mode != "delta" and budget > TAIL_BYTES and len(groups) > 1 and any(row["role"] in ("tool", "tool_result") for row in rows):
             first = 0
             while budget > TAIL_BYTES and first + 1 < len(groups):
                 budget -= groups[first][2]
@@ -1962,8 +2061,11 @@ def response(q, source=None, as_owner=False, resolved=None):
         more = scan_more or page_more
         source.seek(max(0, end - 64))
         probe = hashlib.sha256(source.read(min(end, 64))).hexdigest()
+        paired = pair_tool_rows(rows)
+        if mode == "tail" and tail_fill is not None and tail_reuse != "exact":
+            remember_tail(path, info, q, agent, tail_fill, base, end, oldest, paired, probe)
     header = f"@mp\t{rid}\thistory\tok\t{sid}\t{base}\t{end}\t{info.st_ino}\t{int(more)}\t{agent}\t{tmux or '-'}\t{info.st_mtime_ns}\t{probe}\t{mode}\t{oldest}"
-    return "\n".join((header, *(wire_row(row) for row in pair_tool_rows(rows)), *((wire_row(status),) if status else ()), END, ""))
+    return "\n".join((header, *(wire_row(row) for row in paired), *((wire_row(status),) if status else ()), END, ""))
 
 
 def prompt_box_text(target):
@@ -2186,16 +2288,21 @@ def message_row(row):
 
 
 def message_expire(db, provider, sid):
-    rows = db.execute("SELECT * FROM shared_messages WHERE provider=? AND sid=? AND state='sent' AND deadline<=? ORDER BY position", (provider, sid, time.time())).fetchall()
-    if rows and provider in HOST_PROVIDERS and host_owned(provider, sid):
-        state = host_session_state(provider, sid)
-        inflight = state.get('inflight')
-        current = {token for token in state.get('sends') or [] if isinstance(token, str)}
-        if isinstance(inflight, dict):
-            current.add(inflight.get('id'))
-        rows = [row for row in rows if row[0] not in current]
-    for row in rows:
-        db.execute("UPDATE shared_messages SET state='failed',deadline=NULL WHERE id=? AND state='sent'", (row[0],))
+    def idle(rows):
+        if rows and provider in HOST_PROVIDERS and host_owned(provider, sid):
+            state = host_session_state(provider, sid)
+            inflight = state.get('inflight')
+            current = {token for token in state.get('sends') or [] if isinstance(token, str)}
+            if isinstance(inflight, dict):
+                current.add(inflight.get('id'))
+            return [row for row in rows if row[0] not in current]
+        return rows
+    now = time.time()
+    for row in idle(db.execute("SELECT * FROM shared_messages WHERE provider=? AND sid=? AND state IN ('queued','sent') AND deadline IS NOT NULL AND deadline<=? ORDER BY position", (provider, sid, now)).fetchall()):
+        db.execute("UPDATE shared_messages SET state='failed',deadline=NULL WHERE id=? AND state IN ('queued','sent')", (row[0],))
+        message_event(db, provider, sid, message_row(db.execute("SELECT * FROM shared_messages WHERE id=?", (row[0],)).fetchone()))
+    for row in idle(db.execute("SELECT * FROM shared_messages WHERE provider=? AND sid=? AND state IN ('queued','sent') AND created<=? ORDER BY position", (provider, sid, now - 600)).fetchall()):
+        db.execute("UPDATE shared_messages SET state='failed',deadline=NULL,receipt='waiting_too_long' WHERE id=? AND state IN ('queued','sent')", (row[0],))
         message_event(db, provider, sid, message_row(db.execute("SELECT * FROM shared_messages WHERE id=?", (row[0],)).fetchone()))
 
 
@@ -2360,6 +2467,7 @@ def import_legacy_messages(db, sid, transcript, epoch):
 
 HOST_PROVIDERS = ('claude', 'codex', 'pi', 'hax')
 MESSAGE_WORKER_IDLE_SECONDS = 120
+MESSAGE_WORKER_STALL_SECONDS = 90
 HOST_BINARY_NAMES = {'claude': 'claude', 'codex': 'codex', 'pi': 'pi', 'hax': 'hax'}
 HOST_BINARY_FOLDERS = ('~/.local/bin', '~/.claude/local', '~/.npm-global/bin', '~/.bun/bin')
 HOST_FOLDER = re.compile(r"[A-Za-z0-9_./~+-]{1,220}\Z")
@@ -2729,6 +2837,23 @@ def host_pane_claimed(tmux):
     return False
 
 
+def host_sid_for_tmux(provider, tmux):
+    try:
+        configs = list((HOME / ".local/state/multiprompt/agent-host").glob("*.config.json"))
+    except OSError:
+        return None
+    found = set()
+    for path in configs:
+        config = host_read(path)
+        if not isinstance(config, dict) or config.get("enabled") is not True or config.get("tmux") != tmux:
+            continue
+        state = host_read(path.with_name(path.name[:-len(".config.json")] + ".state.json")) or {}
+        sid = state.get("sid")
+        if state.get("provider") == provider and host_identity(provider, sid) and host_key(provider, sid) + ".config.json" == path.name:
+            found.add(sid)
+    return found.pop() if len(found) == 1 else None
+
+
 def host_handed_over(provider, sid):
     owner = host_owner(provider, sid)
     return bool(owner) and owner["owner"] == "terminal"
@@ -2819,10 +2944,36 @@ def host_reply(query):
     provider, sid = query.get("provider"), query.get("sid")
     if not host_identity(provider, sid):
         return dict(status="refused", reason="unsupported_provider")
+    if query.get("op") in ("set_model", "set_effort") and provider != "claude":
+        return dict(status="refused", reason="unsupported_provider")
     if not host_owned(provider, sid):
-        return dict(status="unavailable", reason="host_not_running")
+        operation = query.get("op")
+        if operation not in ("set_model", "set_effort"):
+            return dict(status="unavailable", reason="host_not_running")
+        key = "model" if operation == "set_model" else "effort"
+        allowed = ("opus", "sonnet", "haiku") if key == "model" else ("low", "medium", "high")
+        value = query.get(key)
+        if value not in allowed:
+            return dict(status="refused", reason="invalid_" + key)
+        lock = host_lock(provider, sid)
+        if lock is None:
+            return dict(status="unavailable", reason="host_starting")
+        try:
+            if host_handed_over(provider, sid):
+                return dict(status="refused", reason="host_handed_over")
+            config = host_config(provider, sid)
+            if config is None:
+                return dict(status="refused", reason="host_disabled")
+            config[key] = value
+            host_write(host_paths(provider, sid)["config"], config)
+            settings = host_settings(provider, sid)
+            host_event(provider, sid, host_chat_name(provider, sid), dict(state={}),
+                       "host.settings", dict(settings, applied=False, mode=host_permission_mode(provider, sid)))
+            return dict(status="ok")
+        finally:
+            host_release(lock)
     request = {key: query[key] for key in ("op", "request_id", "decision", "answers", "dismissed",
-                                           "action", "feedback", "input", "mode") if key in query}
+                                           "action", "feedback", "input", "mode", "model", "effort") if key in query}
     reply = host_request(provider, sid, request)
     return reply if isinstance(reply, dict) else dict(status="error", reason="invalid_reply")
 
@@ -3141,6 +3292,9 @@ def host_agent_env(provider, sid):
     if provider == 'codex':
         for key in HOST_CODEX_SECRETS:
             env.pop(key, None)
+    if provider == 'claude' and config.get('model') in ('opus', 'sonnet', 'haiku'):
+        for key in ('ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL'):
+            env.pop(key, None)
     tmux = config.get('tmux')
     if isinstance(tmux, str) and tmux:
         env['MULTIBOT_SESSION'] = tmux
@@ -3152,8 +3306,8 @@ def host_agent_env(provider, sid):
     return env
 
 
-def host_claude_argv(provider, sid, base):
-    mode = (host_config(provider, sid) or {}).get("permission_mode")
+def host_claude_argv(provider, sid, base, mode=None):
+    mode = mode if mode in HOST_PERMISSION_MODES else (host_config(provider, sid) or {}).get("permission_mode")
     command = base + (["--permission-mode", mode] if mode in HOST_PERMISSION_MODES else [])
     command += ["--print", "--input-format", "stream-json",
                 "--output-format", "stream-json", "--verbose",
@@ -3177,7 +3331,54 @@ def host_hax_argv(provider, sid, base):
     return ["python3", "-u", "-c", HOST_HAX_BRIDGE] + base + ([] if chosen else list(HOST_HAX_MODEL)) + resume
 
 
-def host_agent_start(provider, sid):
+def host_model_name(value):
+    if not isinstance(value, str):
+        return ""
+    match = re.fullmatch(r"(?:claude-)?(opus|sonnet|haiku)(?:-[a-zA-Z0-9._-]+)?(?:\[[a-zA-Z0-9]+\])?", value)
+    return match.group(1) if match else ""
+
+
+HOST_MODE_NAMES = dict(default="manual", manual="manual", acceptEdits="acceptEdits", plan="plan", bypassPermissions="bypassPermissions")
+
+
+def host_permission_mode(provider, sid, state=None):
+    mode = state.get("mode") if isinstance(state, dict) else None
+    if mode is None:
+        stored = host_read(host_paths(provider, sid)["state"])
+        mode = stored.get("mode") if stored else None
+    if mode is None:
+        mode = (host_config(provider, sid) or {}).get("permission_mode")
+    return HOST_MODE_NAMES.get(mode if mode is not None else "default", "")
+
+
+def host_settings(provider, sid):
+    config = host_config(provider, sid) or {}
+    args = config.get("args") if isinstance(config.get("args"), list) else []
+    command = config.get("command") if isinstance(config.get("command"), list) else []
+    parts = command + args
+    values = {}
+    for index, part in enumerate(parts):
+        if part in ("--model", "--effort") and index + 1 < len(parts):
+            values[part[2:]] = parts[index + 1]
+        elif isinstance(part, str) and (part.startswith("--model=") or part.startswith("--effort=")):
+            key, value = part[2:].split("=", 1)
+            values[key] = value
+    model = config.get("model", values.get("model"))
+    effort = config.get("effort", values.get("effort"))
+    return dict(model=host_model_name(model),
+                effort=effort if effort in ("low", "medium", "high") else "")
+
+
+def host_settings_event(provider, sid, tmux, session):
+    settings = session["settings"]
+    applied = session.get("ready", False) and session.get("applied_settings") == settings
+    shown = dict(settings)
+    if not shown["model"] and applied:
+        shown["model"] = session.get("init_model", "")
+    host_event(provider, sid, tmux, session, "host.settings", dict(shown, applied=applied, mode=host_permission_mode(provider, sid, session.get("state"))))
+
+
+def host_agent_start(provider, sid, mode=None):
     cwd = host_cwd(provider, sid)
     owner = conversation_owner(cwd, include_home=True)
     cross_owner = owner is not None and owner[1] != HOME
@@ -3191,7 +3392,28 @@ def host_agent_start(provider, sid):
         base = host_command(provider, sid)
     if base is None:
         return None
-    command = HOST_ADAPTERS[provider]["argv"](provider, sid, base)
+    if provider == "claude":
+        config = host_config(provider, sid) or {}
+        overrides = {key: config[key] for key, values in
+                     (("model", ("opus", "sonnet", "haiku")), ("effort", ("low", "medium", "high")))
+                     if config.get(key) in values}
+        if overrides:
+            filtered = base[:1]
+            index = 1
+            while index < len(base):
+                part = base[index]
+                key = next((key for key in overrides if part == "--" + key or part.startswith("--" + key + "=")), None)
+                if key is None:
+                    filtered.append(part)
+                elif part == "--" + key and index + 1 < len(base) and not base[index + 1].startswith("--"):
+                    index += 1
+                index += 1
+            base = filtered
+        for key, value in overrides.items():
+            base += ["--" + key, value]
+        command = host_claude_argv(provider, sid, base, mode)
+    else:
+        command = HOST_ADAPTERS[provider]["argv"](provider, sid, base)
     if cross_owner:
         user, home = owner
         env = {"PATH": "/usr/bin:/bin"}
@@ -3204,6 +3426,8 @@ def host_agent_start(provider, sid):
         shell = ["/bin/sh", "-l", "-c"]
         folders = ':'.join('$HOME/' + folder[2:] for folder in HOST_BINARY_FOLDERS)
         setup = 'PATH="$HOME/.multiprompt-runtime:' + folders + ':$PATH"; export PATH; '
+        if provider == "claude" and config.get("model") in ("opus", "sonnet", "haiku"):
+            setup += 'unset ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL; '
         source = host_reader_source()
         if not source:
             raise RuntimeError("owner_unavailable")
@@ -3644,6 +3868,8 @@ def host_set_mode(provider, sid, session, mode):
         return dict(status="error", reason="stdin_write_failed")
     session["state"]["mode"] = mode
     host_state_write(provider, sid, session["state"])
+    if "settings" in session:
+        host_settings_event(provider, sid, host_chat_name(provider, sid), session)
     return dict(status="ok")
 
 
@@ -3725,6 +3951,8 @@ def host_plan_settled(provider, sid, session):
     else:
         session["state"].pop("mode", None)
     host_state_write(provider, sid, session["state"])
+    if "settings" in session:
+        host_settings_event(provider, sid, host_chat_name(provider, sid), session)
 
 
 def host_refuse(reason, **extra):
@@ -3746,12 +3974,33 @@ def host_handle_request(provider, sid, tmux, session, request):
         return adapter["answer"](provider, sid, tmux, session, request)
     if operation == "interrupt":
         return adapter["interrupt"](provider, sid, session)
+    if operation in ("set_model", "set_effort"):
+        if provider != "claude":
+            return host_refuse("unsupported_provider")
+        key = "model" if operation == "set_model" else "effort"
+        allowed = ("opus", "sonnet", "haiku") if key == "model" else ("low", "medium", "high")
+        value = request.get(key)
+        if value not in allowed:
+            return host_refuse("invalid_" + key)
+        config = host_config(provider, sid)
+        if config is None:
+            return host_refuse("host_disabled")
+        config[key] = value
+        host_write(host_paths(provider, sid)["config"], config)
+        session["settings"][key] = value
+        host_settings_event(provider, sid, tmux, session)
+        return dict(status="ok")
     if operation == "set_permission_mode":
         if request.get("mode") not in HOST_PERMISSION_MODES:
             return host_refuse("invalid_permission_mode")
         return adapter["set_mode"](provider, sid, session, request["mode"])
     if operation != "deliver":
         return dict(status="error", reason="invalid_op")
+    if provider == "claude" and "settings" in session and (session.get("agent") is None or session.get("starting_settings") != session["settings"]):
+        return dict(status="busy", reason="settings_pending")
+    if (provider == "claude" and session.get("ready") and session.get("settings", {}).get("model")
+            and session.get("init_model") and session["init_model"] != session["settings"]["model"]):
+        return host_refuse("model_mismatch")
     token, attempt, epoch, text = request.get("id"), request.get("attempt"), request.get("epoch"), request.get("text")
     if not isinstance(text, str) or not text.strip() or "\x00" in text:
         return host_refuse("invalid_text")
@@ -3767,7 +4016,7 @@ def host_handle_request(provider, sid, tmux, session, request):
         return host_refuse("unsupported_room_provider")
     written = host_written(session["state"])
     seen = written.get(token)
-    if isinstance(seen, dict) and seen.get("epoch") == epoch:
+    if isinstance(seen, dict) and seen.get("epoch") == epoch and seen.get("attempt") == attempt:
         if seen.get("room_scope") != room_scope:
             return host_refuse("room_scope_conflict")
         return dict(status="duplicate", reason="already_written", attempt=seen.get("attempt"))
@@ -3868,6 +4117,18 @@ def host_claude_event(provider, sid, tmux, session, event):
     if kind == "system":
         if event.get("subtype") == "init":
             session["ready"] = True
+            if "starting_settings" in session:
+                settings = session["starting_settings"]
+                actual = host_model_name(event.get("model"))
+                session["init_model"] = actual
+                session["applied_settings"] = dict(settings) if actual and (not settings["model"] or settings["model"] == actual) else None
+                host_settings_event(provider, sid, tmux, session)
+                if session["applied_settings"] is not None:
+                    host_log(provider, sid, "model_effort_settings_applied",
+                             dict(model=actual, effort=settings["effort"] or "default"))
+                elif settings["model"]:
+                    host_log(provider, sid, "model_settings_mismatch",
+                             dict(requested=settings["model"], actual=actual or "unknown"))
             if isinstance(event.get("session_id"), str):
                 session["state"]["native_session"] = event["session_id"]
             host_state_write(provider, sid, session["state"])
@@ -3913,7 +4174,42 @@ def host_claude_open(provider, sid, tmux, session):
     pass
 
 
+HOST_SKILL_TOKEN = re.compile(r"(?<!\S)/([A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)?)(?=\s|$)")
+
+
+def host_skill_file(name, cwd=None):
+    home = Path.home() / ".claude"
+    if ":" in name:
+        plugin, skill = name.split(":", 1)
+        files = [f for r in (home / "plugins" / "cache").glob("*/" + plugin + "/*") for f in (r / "skills" / skill / "SKILL.md", r / "commands" / (skill + ".md"))]
+    else:
+        bases = [home] + ([Path(cwd) / ".claude"] if isinstance(cwd, str) and cwd else [])
+        files = [f for b in bases for f in (b / "skills" / name / "SKILL.md", b / "commands" / (name + ".md"))]
+    return next((f for f in files if f.is_file()), None)
+
+
+def host_skill_user_only(path):
+    try:
+        head = path.read_text(errors="replace")[:4000]
+    except OSError:
+        return False
+    return bool(re.search(r"^disable-model-invocation:\s*true\s*$", head, re.M))
+
+
+def host_claude_lead_skill(text, cwd=None):
+    if not isinstance(text, str) or text.lstrip().startswith("/"):
+        return text
+    found = [(m, f) for m in HOST_SKILL_TOKEN.finditer(text) for f in [host_skill_file(m.group(1), cwd)] if f is not None]
+    if not found:
+        return text
+    match = next((m for m, f in found if host_skill_user_only(f)), found[0][0])
+    rest = (text[:match.start()].rstrip() + " " + text[match.end():].lstrip()).strip()
+    return "/" + match.group(1) + (" " + rest if rest else "")
+
+
 def host_claude_write(provider, sid, session, token, text):
+    config = host_config(provider, sid)
+    text = host_claude_lead_skill(text, config.get("cwd") if isinstance(config, dict) else None)
     return host_control_send(session, dict(type="user", message=dict(role="user", content=[dict(type="text", text=text)])))
 
 
@@ -4462,12 +4758,36 @@ def host_startup_failure(provider, sid, tmux, state, reason, retry_generation=0)
 def host_loop(provider, sid, tmux, session, server, agent):
     import selectors
     host_session_reset(session, agent)
+    if provider == "claude":
+        session["settings"] = host_settings(provider, sid)
+        session["starting_settings"] = dict(session["settings"])
+        session["applied_settings"] = None
+        host_settings_event(provider, sid, tmux, session)
     host_event(provider, sid, tmux, session, "host.status", dict(state="starting"))
     HOST_ADAPTERS[provider]["open"](provider, sid, tmux, session)
     with selectors.DefaultSelector() as selector:
         selector.register(server, selectors.EVENT_READ, "client")
         selector.register(agent.stdout, selectors.EVENT_READ, "agent")
         while not session["stop"]:
+            if (provider == "claude" and session["settings"] != session["starting_settings"]
+                    and session["turn"] is None and not session["inflight"] and not session["sends"] and not session["parked"]):
+                selector.unregister(agent.stdout)
+                host_agent_stop(agent)
+                session["agent"] = None
+                session["ready"] = False
+                session["starting_settings"] = dict(session["settings"])
+                try:
+                    agent = host_agent_start(provider, sid, session["state"].get("mode"))
+                except (OSError, RuntimeError):
+                    agent = None
+                if agent is None:
+                    host_log(provider, sid, "settings_restart_failed")
+                    return
+                session["agent"] = agent
+                session["buffer"] = b""
+                session["state"]["agent_pid"] = agent.pid
+                host_state_write(provider, sid, session["state"])
+                selector.register(agent.stdout, selectors.EVENT_READ, "agent")
             idle_expired = time.time() - session["idle"] >= HOST_IDLE_SECONDS
             if session["turn"] is None and not isinstance(session.get("inflight"), dict) and not session["parked"] and idle_expired:
                 host_log(provider, sid, "idle_stop")
@@ -4554,7 +4874,7 @@ def host_main(provider, sid):
         host_log(provider, sid, "host_error", dict(error=type(error).__name__))
         return 4
     finally:
-        host_agent_stop(agent)
+        host_agent_stop(session.get("agent") if "session" in locals() else agent)
         if server is not None:
             server.close()
         try:
@@ -4789,6 +5109,9 @@ def message_store_transaction(q):
     import uuid
     provider, sid, tmux = q['provider'], q['sid'], q['tmux']
     op = q.get('op')
+    resolved = None
+    if op in ('message_submit', 'message_snapshot', 'message_events', 'message_status', 'message_retry', 'message_reset', 'message_dispatch'):
+        resolved = resolve_tmux_agent(provider, tmux, require_bound=True)
     with closing(message_store_db(tmux)) as db, db:
         db.execute('BEGIN IMMEDIATE')
         db.execute('INSERT OR IGNORE INTO message_chats(provider,sid) VALUES (?,?)', (provider, sid))
@@ -4803,7 +5126,6 @@ def message_store_transaction(q):
         message_expire(db, provider, sid)
         epoch, seq = db.execute('SELECT epoch,seq FROM message_chats WHERE provider=? AND sid=?', (provider, sid)).fetchone()
         if op in ('message_submit', 'message_snapshot', 'message_events', 'message_status', 'message_retry', 'message_reset'):
-            resolved = resolve_tmux_agent(provider, tmux, require_bound=True)
             if resolved and resolved[0] == sid:
                 db.execute('INSERT OR REPLACE INTO message_locators VALUES (?,?,?)', (provider, sid, tmux))
             elif host_dispatch_switch(provider, sid) and host_chat_name(provider, sid) == tmux:
@@ -4815,6 +5137,20 @@ def message_store_transaction(q):
             token, text = q.get('message_id'), q.get('text')
             if not isinstance(token, str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,80}', token) or not isinstance(text, str) or not text.strip() or '\x00' in text:
                 raise ValueError('invalid message')
+            replaces = q.get('replaces')
+            if isinstance(replaces, str) and replaces:
+                if not re.fullmatch(r'[A-Za-z0-9_-]{16,80}', replaces) or replaces == token:
+                    raise ValueError('invalid replacement')
+                old = db.execute('SELECT * FROM shared_messages WHERE id=?', (replaces,)).fetchone()
+                if old:
+                    if old[1:3] != (provider, sid):
+                        raise ValueError('invalid replacement')
+                    aged = old[6] in ('queued', 'sent') and time.time() - float(old[10]) >= 600
+                    if old[6] not in ('failed', 'cancelled') and not aged:
+                        raise ValueError('message is not retryable')
+                    if old[6] != 'cancelled':
+                        db.execute("UPDATE shared_messages SET state='cancelled',deadline=NULL WHERE id=? AND state=?", (replaces, old[6]))
+                        message_event(db, provider, sid, message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', (replaces,)).fetchone()))
             admission_epoch = q.get('admission_epoch')
             if admission_epoch is not None and (type(admission_epoch) is not int or admission_epoch < 0):
                 raise ValueError('invalid admission epoch')
@@ -4848,7 +5184,8 @@ def message_store_transaction(q):
                 raise ValueError('future admission epoch')
             position = db.execute('SELECT COALESCE(MAX(position),0)+1 FROM shared_messages WHERE provider=? AND sid=?', (provider, sid)).fetchone()[0]
             state = 'cancelled' if admission_epoch is not None and admission_epoch < epoch else 'queued'
-            db.execute('INSERT INTO shared_messages VALUES (?,?,?,?,?,?,?,NULL,NULL,?,?)', (token, provider, sid, text, position, uuid.uuid4().hex, state, epoch, time.time()))
+            deadline = None if state == 'cancelled' else time.time() + 15
+            db.execute('INSERT INTO shared_messages VALUES (?,?,?,?,?,?,?,?,NULL,?,?)', (token, provider, sid, text, position, uuid.uuid4().hex, state, deadline, epoch, time.time()))
             if scope_body is not None:
                 db.execute('INSERT INTO message_room_scopes VALUES (?,?)', (token, scope_body))
             row = message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', (token,)).fetchone())
@@ -4868,8 +5205,9 @@ def message_store_transaction(q):
                 return dict(message=message_row(row), epoch=epoch, seq=seq)
             if row[9] != epoch:
                 return dict(message=dict(message_row(row), state='cancelled'), epoch=epoch, seq=seq)
-            if row[6] in ('queued', 'failed'):
-                db.execute("UPDATE shared_messages SET state='cancelled',deadline=NULL WHERE id=? AND epoch=? AND state IN ('queued','failed')", (token, epoch))
+            aged = row[6] == 'sent' and time.time() - float(row[10]) >= 600
+            if row[6] in ('queued', 'failed') or aged:
+                db.execute("UPDATE shared_messages SET state='cancelled',deadline=NULL WHERE id=? AND epoch=? AND state=?", (token, epoch, row[6]))
                 row = db.execute('SELECT * FROM shared_messages WHERE id=?', (token,)).fetchone()
                 seq = message_event(db, provider, sid, message_row(row))
             elif row[6] != 'cancelled':
@@ -4895,7 +5233,7 @@ def message_store_transaction(q):
                 host_state_write(provider, sid, state)
             attempt = uuid.uuid4().hex
             db.execute('INSERT INTO message_retries VALUES (?,?,?)', (token, request, attempt))
-            db.execute("UPDATE shared_messages SET attempt=?,state='queued',deadline=NULL,receipt=NULL WHERE id=? AND state='failed' AND epoch=?", (attempt, token, epoch))
+            db.execute("UPDATE shared_messages SET attempt=?,state='queued',deadline=?,receipt=NULL,created=? WHERE id=? AND state='failed' AND epoch=?", (attempt, time.time() + 15, time.time(), token, epoch))
             row = message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', (token,)).fetchone())
             seq = message_event(db, provider, sid, row)
             return dict(message=row, epoch=epoch, seq=seq)
@@ -4907,7 +5245,6 @@ def message_store_transaction(q):
             scope_row = db.execute('SELECT scope FROM message_room_scopes WHERE id=?', (row[0],)).fetchone()
             if scope_row is not None and not hosting:
                 return dict(epoch=epoch, seq=seq, message=None)
-            resolved = resolve_tmux_agent(provider, tmux, require_bound=True)
             if not hosting and (not resolved or resolved[0] != sid):
                 db.execute("UPDATE shared_messages SET state='failed',receipt='session_unavailable' WHERE id=? AND state='queued'", (row[0],))
                 row = message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', (row[0],)).fetchone())
@@ -4958,12 +5295,13 @@ def message_store_transaction(q):
                     if changed:
                         message_event(db, provider, sid, message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', (row['id'],)).fetchone()))
                     return dict(epoch=epoch, seq=seq, message=None)
-                changed = db.execute("UPDATE shared_messages SET state='queued',deadline=NULL WHERE id=? AND attempt=? AND epoch=? AND state='sent'", (row['id'], row['attempt'], epoch)).rowcount
+                changed = db.execute("UPDATE shared_messages SET state='queued',deadline=? WHERE id=? AND attempt=? AND epoch=? AND state='sent'", (time.time() + 15, row['id'], row['attempt'], epoch)).rowcount
                 if changed:
                     message_event(db, provider, sid, message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', (row['id'],)).fetchone()))
                 if status != 'busy':
                     host_backoff_fail(provider, sid)
                 return dict(epoch=epoch, seq=seq, message=None)
+            db.commit()
             bound = resolve_tmux_agent(provider, tmux, require_bound=True)
             if current != ('sent', epoch) or not bound or bound[0] != sid or Path(bound[1]) != Path(resolved[1]):
                 return dict(epoch=epoch, seq=seq, message=None)
@@ -5006,6 +5344,7 @@ def message_store_transaction(q):
             for (token,) in rows:
                 db.execute("UPDATE shared_messages SET state='cancelled',deadline=NULL WHERE id=?", (token,))
                 message_event(db, provider, sid, message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', (token,)).fetchone()))
+            db.execute("UPDATE legacy.messages SET state='cancelled', receipt='@mp-shared-v1:reset:' || key WHERE sid=? AND state IN ('queued','submitted')", (sid,))
             seq = message_event(db, provider, sid, dict(reset_epoch=epoch))
             db.execute('INSERT INTO message_resets VALUES (?,?,?,?,?)', (provider, sid, request, epoch, seq))
             return dict(epoch=epoch, seq=seq)
@@ -5026,6 +5365,16 @@ def message_store_transaction(q):
                 items = [dict(message=message_row(row)) for row in db.execute('SELECT * FROM shared_messages WHERE provider=? AND sid=? ORDER BY position', (provider, sid))]
                 items.extend(dict(native_message=json.loads(body)) for (body,) in db.execute("SELECT body FROM connector_facts WHERE provider=? AND sid=? AND json_extract(body,'$.kind')='message' ORDER BY rowid", (provider, sid)))
                 items.extend(dict(attempt_receipt=json.loads(body)) for (body,) in db.execute("SELECT body FROM connector_facts WHERE provider=? AND sid=? AND json_extract(body,'$.kind') IN ('accepted','started') ORDER BY rowid", (provider, sid)))
+                if provider == "claude" and host_enabled(provider, sid):
+                    settings = host_settings(provider, sid)
+                    last = db.execute("SELECT body FROM message_events WHERE provider=? AND sid=? AND json_extract(body,'$.kind')='host.settings' ORDER BY seq DESC LIMIT 1", (provider, sid)).fetchone()
+                    payload = json.loads(last[0]).get("payload", {}) if last else {}
+                    applied = (host_owned(provider, sid) and payload.get("applied") is True
+                               and payload.get("effort") == settings["effort"]
+                               and (not settings["model"] or payload.get("model") == settings["model"]))
+                    if applied and not settings["model"]:
+                        settings["model"] = host_model_name(payload.get("model"))
+                    items.append(dict(host_settings=dict(settings, applied=applied, mode=host_permission_mode(provider, sid))))
                 db.execute('INSERT INTO message_snapshots VALUES (?,?,?,?,?,?,?)', (snapshot, provider, sid, epoch, seq, time.time(), json.dumps(items, separators=(',', ':'))))
             else:
                 saved = db.execute('SELECT epoch,seq,body FROM message_snapshots WHERE id=? AND provider=? AND sid=?', (snapshot, provider, sid)).fetchone()
@@ -5122,6 +5471,31 @@ def superseded_engine():
     return isinstance(active, dict) and active.get('sha256') not in (None, engine.get('sha256'))
 
 
+class MessageWorkerTimeout(BaseException):
+    pass
+
+
+@contextmanager
+def message_worker_deadline(seconds):
+    import signal
+    if seconds <= 0:
+        raise MessageWorkerTimeout()
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+
+    def expired(signum, frame):
+        raise MessageWorkerTimeout()
+
+    previous = signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
 def message_worker(tmux, provider, sid):
     import fcntl
     import selectors
@@ -5135,44 +5509,63 @@ def message_worker(tmux, provider, sid):
             return
         request = dict(message_protocol=1, tmux=tmux, provider=provider, sid=sid)
         idle_since = time.time()
+        head = None
+        stalled_at = time.monotonic()
         with selectors.DefaultSelector() as selector:
             while True:
                 try:
-                    with closing(message_store_db(tmux)) as db:
-                        locator = db.execute('SELECT tmux FROM message_locators WHERE provider=? AND sid=?', (provider, sid)).fetchone()
-                    hosting = host_dispatch_switch(provider, sid)
-                    if locator:
-                        tmux = locator[0]
-                    elif hosting:
-                        tmux = host_chat_name(provider, sid)
-                        if tmux is None:
-                            host_log(provider, sid, 'worker_wait', dict(reason='chat_name_unset'))
+                    if head is None:
+                        stalled_at = time.monotonic()
+                    with message_worker_deadline(MESSAGE_WORKER_STALL_SECONDS - (time.monotonic() - stalled_at)):
+                        with closing(message_store_db(tmux)) as db:
+                            locator = db.execute('SELECT tmux FROM message_locators WHERE provider=? AND sid=?', (provider, sid)).fetchone()
+                        hosting = host_dispatch_switch(provider, sid)
+                        if locator:
+                            tmux = locator[0]
+                        elif hosting:
+                            tmux = host_chat_name(provider, sid)
+                            if tmux is None:
+                                host_log(provider, sid, 'worker_wait', dict(reason='chat_name_unset'))
+                                return
+                            host_log(provider, sid, 'worker_locator', dict(reason='host_chat_name', tmux=tmux))
+                        else:
+                            host_log(provider, sid, 'worker_stop', dict(reason='no_locator'))
                             return
-                        host_log(provider, sid, 'worker_locator', dict(reason='host_chat_name', tmux=tmux))
-                    else:
-                        host_log(provider, sid, 'worker_stop', dict(reason='no_locator'))
-                        return
-                    bound = resolve_tmux_agent(provider, tmux, require_bound=True)
-                    if (not bound or bound[0] != sid) and not hosting:
-                        host_log(provider, sid, 'worker_stop', dict(reason='no_pane_agent'))
-                        return
-                    request['tmux'] = tmux
-                    if superseded_engine():
-                        return
-                    message_poll(tmux, provider, sid)
-                    message_store_request(dict(request, op='message_dispatch'))
-                    with closing(message_store_db(tmux)) as db:
-                        queued, deadline, observed = db.execute("SELECT SUM(state='queued'),MIN(CASE WHEN state='sent' THEN deadline END),SUM(state IN ('failed','accepted','started')) FROM shared_messages WHERE provider=? AND sid=?", (provider, sid)).fetchone()
-                    if not queued and deadline is None:
-                        if not observed or message_connector(provider) is None:
+                        bound = resolve_tmux_agent(provider, tmux, require_bound=True)
+                        if (not bound or bound[0] != sid) and not hosting:
+                            host_log(provider, sid, 'worker_stop', dict(reason='no_pane_agent'))
                             return
-                        if time.time() - idle_since >= MESSAGE_WORKER_IDLE_SECONDS:
+                        request['tmux'] = tmux
+                        if superseded_engine():
                             return
-                    else:
-                        idle_since = time.time()
-                    timeout = max(0.0, deadline - time.time()) if deadline is not None else 1.0
-                    timeout = min(timeout, 1.0)
+                        with closing(message_store_db(tmux)) as db:
+                            pending = db.execute("SELECT id FROM shared_messages WHERE provider=? AND sid=? AND state IN ('queued','sent') ORDER BY position LIMIT 1", (provider, sid)).fetchone()
+                        if pending != head:
+                            head = pending
+                            stalled_at = time.monotonic()
+                        message_poll(tmux, provider, sid)
+                        message_store_request(dict(request, op='message_dispatch'))
+                        with closing(message_store_db(tmux)) as db:
+                            queued, deadline, observed = db.execute("SELECT SUM(state='queued'),MIN(CASE WHEN state='sent' THEN deadline END),SUM(state IN ('failed','accepted','started')) FROM shared_messages WHERE provider=? AND sid=?", (provider, sid)).fetchone()
+                        if not queued and deadline is None:
+                            if not observed or message_connector(provider) is None:
+                                return
+                            if time.time() - idle_since >= MESSAGE_WORKER_IDLE_SECONDS:
+                                return
+                        else:
+                            idle_since = time.time()
+                        timeout = max(0.0, deadline - time.time()) if deadline is not None else 1.0
+                        timeout = min(timeout, 1.0)
                     selector.select(timeout)
+                except MessageWorkerTimeout:
+                    with closing(message_store_db(tmux)) as db, db:
+                        db.execute('BEGIN IMMEDIATE')
+                        row = db.execute("SELECT id FROM shared_messages WHERE provider=? AND sid=? AND state IN ('queued','sent') ORDER BY position LIMIT 1", (provider, sid)).fetchone()
+                        if row:
+                            db.execute("UPDATE shared_messages SET state='failed',deadline=NULL,receipt='watchdog_timeout' WHERE id=?", row)
+                            message_event(db, provider, sid, message_row(db.execute('SELECT * FROM shared_messages WHERE id=?', row).fetchone()))
+                    host_log(provider, sid, 'worker_watchdog', dict(reason='no_progress', id=row[0] if row else None))
+                    return
                 except (OSError, ValueError, subprocess.SubprocessError):
                     return
 
@@ -5620,10 +6013,12 @@ def send_response_preserve_draft(q):
         return dict(status='not_sent', reason='invalid_tmux_name')
     if not isinstance(sid, str) or not SESSION_ID.fullmatch(sid) or not isinstance(text, str) or not text.strip() or '\x00' in text:
         return dict(status='not_sent', reason='invalid_identity_or_text')
+    token = q.get('token')
+    payload = text + '\n[mp:' + token + ']' if isinstance(token, str) and re.fullmatch(r'[0-9a-f]{16}', token) else text
     target = '=' + name + ':'
     buffer = 'mp-send-' + uuid.uuid4().hex
     try:
-        subprocess.run(['tmux', 'load-buffer', '-b', buffer, '-'], input=text.encode('utf-8'), check=True, capture_output=True, timeout=5)
+        subprocess.run(['tmux', 'load-buffer', '-b', buffer, '-'], input=payload.encode('utf-8'), check=True, capture_output=True, timeout=5)
     except (OSError, subprocess.SubprocessError, UnicodeError):
         return dict(status='not_sent', reason='buffer_unavailable')
     try:
@@ -5644,7 +6039,7 @@ def send_response_preserve_draft(q):
             draft_note(name, displaced=displaced, displaced_at=time.time())
 
         def known(box):
-            return own_draft(box, text, typed, sent) or bool(displaced) and squashed(box) in squashed(displaced)
+            return own_draft(box, payload, typed, sent) or own_draft(box, text, typed, sent) or bool(displaced) and squashed(box) in squashed(displaced)
         for wait in (0, 0.3, 0.7):
             time.sleep(wait)
             box = prompt_box_text(target)
@@ -5830,6 +6225,28 @@ def watch_changes(q, resolved, source, as_owner):
     control = None
     control_buffer = b""
     attached = False
+    selector = None
+
+    def detach_control():
+        nonlocal control, control_buffer, attached, selector
+        if control is None:
+            return
+        proc = control
+        control = None
+        control_buffer = b""
+        attached = False
+        q["watch_screen"] = ""
+        if selector is not None and proc.stdout is not None:
+            try:
+                selector.unregister(proc.stdout)
+            except (KeyError, ValueError, OSError):
+                pass
+        if proc.poll() is None:
+            proc.terminate()
+        try:
+            proc.communicate()
+        except OSError:
+            pass
 
     def capture():
         nonlocal control_buffer, attached
@@ -5858,10 +6275,14 @@ def watch_changes(q, resolved, source, as_owner):
                 rows.append(line)
 
     def refresh_screen():
-        if control is not None:
+        if control is None:
+            return
+        try:
             started = time.perf_counter_ns()
             q["watch_screen"] = capture()
             q["watch_capture_us"] = (time.perf_counter_ns() - started) // 1000
+        except OSError:
+            detach_control()
 
     def refresh_codex_binding():
         nonlocal resolved, agent, sid, path, delegated
@@ -5885,7 +6306,8 @@ def watch_changes(q, resolved, source, as_owner):
         metadata = HOME / ".claude/sessions"
         metadata_watch = (libc.inotify_add_watch(fd, os.fsencode(metadata), 0x00000FCE)
                           if agent == "claude" and q.get("tmux") and metadata.is_dir() else -1)
-        with selectors.DefaultSelector() as selector:
+        with selectors.DefaultSelector() as opened:
+            selector = opened
             selector.register(fd, selectors.EVENT_READ, "file")
             selector.register(sys.stdin.fileno(), selectors.EVENT_READ, "input")
             if as_owner:
@@ -5915,9 +6337,15 @@ def watch_changes(q, resolved, source, as_owner):
                         if not os.read(key.fd, 4096):
                             return
                     elif key.data == "tmux":
-                        output = os.read(key.fd, 65536)
+                        if control is None:
+                            continue
+                        try:
+                            output = os.read(key.fd, 65536)
+                        except OSError:
+                            output = b""
                         if not output:
-                            return
+                            detach_control()
+                            continue
                         control_buffer += output
                         lines = control_buffer.split(b"\n")
                         control_buffer = lines.pop()
@@ -5932,7 +6360,7 @@ def watch_changes(q, resolved, source, as_owner):
                             at += 16 + length
                             if mask & 0x4000 or name == path.name:
                                 changed = True
-                            elif q.get("tmux") and mask & 0x18A and (name.endswith(".jsonl") or _wd == metadata_watch and name.endswith(".json")):
+                            elif q.get("tmux") and not (as_owner and q.get("host_pinned")) and mask & 0x18A and (name.endswith(".jsonl") or _wd == metadata_watch and name.endswith(".json")):
                                 latest = resolve_response_path(dict(q, follow=True), source, as_owner)
                                 if latest[2] is None and as_owner:
                                     return
@@ -5959,6 +6387,8 @@ def watch_changes(q, resolved, source, as_owner):
 
 def watch(source, as_owner=False):
     q = json.loads(sys.stdin.buffer.readline())
+    if not as_owner:
+        q = pin_hosted_claude(q, q.get("provider") if q.get("provider") in HOST_PROVIDERS else "codex" if q.get("codex") else "claude")
     owner = conversation_owner(q.get("cwd", "")) if not q.get("codex") and q.get("provider") != "pi" else None
     if not as_owner and q.get("tmux") and q.get("provider") != "pi":
         discovered = tmux_owner_process("codex" if q.get("codex") else "claude", q["tmux"], source)
@@ -6064,10 +6494,24 @@ def events_push(subscriptions):
         serve_print(dict(id=rid, message_protocol=1, result=page))
 
 
+SERVE_WORK = dict(busy=0, last=time.monotonic())
+SERVE_WORK_LOCK = threading.Lock()
+
+
+def serve_work(delta):
+    with SERVE_WORK_LOCK:
+        SERVE_WORK['busy'] += delta
+        SERVE_WORK['last'] = time.monotonic()
+
+
 def serve_retire(interval=2.0):
-    while not superseded_engine():
+    while True:
         time.sleep(interval)
-    os._exit(0)
+        if not superseded_engine():
+            continue
+        with SERVE_WORK_LOCK:
+            if not SERVE_WORK['busy'] and time.monotonic() - SERVE_WORK['last'] >= interval:
+                os._exit(0)
 
 
 def serve_push(subscriptions, lock, wake):
@@ -6119,7 +6563,7 @@ def serve_request(line, source, subscriptions, lock):
                 subscriptions.pop(rid, None)
             serve_print(dict(id=rid, message_protocol=1, result=dict(events=[], next_after=query.get("after", 0))))
             return
-        if query.get("op") in ("approval_reply", "question_reply", "plan_reply", "set_permission_mode", "interrupt"):
+        if query.get("op") in ("approval_reply", "question_reply", "plan_reply", "set_permission_mode", "set_model", "set_effort", "interrupt"):
             serve_print(dict(id=rid, message_protocol=1, result=host_reply(query)))
             return
         if query.get("op") in ("message_submit", "message_retry", "message_dismiss", "message_dispatch", "message_status", "message_snapshot", "message_events", "message_reset"):
@@ -6154,10 +6598,46 @@ def serve(source):
     push = threading.Thread(target=serve_push, args=(subscriptions, lock, wake), daemon=True)
     push.start()
     threading.Thread(target=serve_retire, daemon=True).start()
-    for line in sys.stdin.buffer:
-        if not line.strip():
-            continue
-        serve_request(line, source, subscriptions, lock)
+    from concurrent.futures import ThreadPoolExecutor
+    chats = {}
+    try:
+        for line in sys.stdin.buffer:
+            if not line.strip():
+                continue
+            serve_work(1)
+            try:
+                query = json.loads(line)
+            except (ValueError, UnicodeError):
+                query = None
+            if (not isinstance(query, dict) or not str(query.get('op', '')).startswith('message_')
+                    or query.get('provider') not in HOST_PROVIDERS or not isinstance(query.get('sid'), str)
+                    or not SESSION_ID.fullmatch(query['sid'])):
+                try:
+                    serve_request(line, source, subscriptions, lock)
+                finally:
+                    serve_work(-1)
+                continue
+            key = (query['provider'], query['sid'])
+            if key not in chats and len(chats) >= 256:
+                for idle, (executor, slots, last) in list(chats.items()):
+                    if last.done():
+                        executor.shutdown(wait=False)
+                        del chats[idle]
+            if key not in chats and len(chats) < 256:
+                chats[key] = (ThreadPoolExecutor(max_workers=1), threading.BoundedSemaphore(64), None)
+            if key not in chats or not chats[key][1].acquire(blocking=False):
+                rid = query.get('id', 0)
+                rid = rid if type(rid) is int and rid >= 0 else 0
+                serve_print(dict(id=rid, wire=f"@mp\t{rid}\thistory\terror\t-\t0\n{END}\n"))
+                serve_work(-1)
+                continue
+            executor, slots, last = chats[key]
+            future = executor.submit(serve_request, line, source, subscriptions, lock)
+            future.add_done_callback(lambda done, slots=slots: (slots.release(), serve_work(-1)))
+            chats[key] = (executor, slots, future)
+    finally:
+        for executor, slots, last in chats.values():
+            executor.shutdown(wait=True)
 
 
 if __name__ == "__main__" and "--watch" in sys.argv[1:]:
@@ -6188,7 +6668,7 @@ elif __name__ == "__main__":
 
 '''
 READER_SOURCE = 'CONNECTOR_SOURCES = ' + repr(globals().get('CONNECTOR_SOURCES', {})) + '\n' + READER_SOURCE
-RUNTIME_GENERATION = 77
+RUNTIME_GENERATION = 93
 
 if __name__ == '__main__':
     import base64 as _base64
