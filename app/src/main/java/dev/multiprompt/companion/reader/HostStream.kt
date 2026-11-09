@@ -9,6 +9,7 @@ data class HostStream(
     val request: HostRequest? = null,
     val earlier: List<HostBlock> = emptyList(),
     val settings: HostSettings? = null,
+    val sentRows: Map<String, List<String>> = emptyMap(),
 ) {
     val spoken: List<HostBlock>
         get() = blocks.filter { it.kind == "text" && it.text.isNotBlank() }
@@ -17,7 +18,9 @@ data class HostStream(
         event.settings != null -> copy(settings = event.settings)
         event.request != null -> copy(request = event.request)
         event.resolved != null -> if (request?.id == event.resolved) copy(request = null) else this
-        event.kind == "turn.started" -> next(event.turn)
+        event.kind == "turn.started" -> next(event.turn).let { started ->
+            event.sent?.let { (id, uuids) -> started.copy(sentRows = (started.sentRows - id + (id to uuids)).entries.toList().takeLast(SENT_KEPT).associate { it.toPair() }) } ?: started
+        }
         event.kind == "turn.ended" -> copy(running = false)
         event.kind == "host.status" -> if (event.state == "stopped") copy(running = false) else this
         event.kind.startsWith("text.") || event.kind.startsWith("thinking.") -> upsert(event)
@@ -26,7 +29,7 @@ data class HostStream(
 
     private fun next(next: String?): HostStream {
         val finished = spoken.filter { it.done }.map { it.copy(turn = turn) }
-        return HostStream(next, running = true, request = request, earlier = finished.ifEmpty { earlier }, settings = settings)
+        return HostStream(next, running = true, request = request, earlier = finished.ifEmpty { earlier }, settings = settings, sentRows = sentRows)
     }
 
     private fun upsert(event: MessageProtocol.HostEvent): HostStream {
@@ -37,5 +40,9 @@ data class HostStream(
         val existing = fresh.blocks.indexOfFirst { it.item == item }
         val blocks = if (existing < 0) fresh.blocks + block else fresh.blocks.toMutableList().also { it[existing] = block }
         return fresh.copy(blocks = blocks)
+    }
+
+    private companion object {
+        const val SENT_KEPT = 8
     }
 }

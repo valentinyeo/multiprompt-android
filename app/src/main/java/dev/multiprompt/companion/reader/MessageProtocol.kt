@@ -31,6 +31,7 @@ object MessageProtocol {
         val request: HostRequest? = null,
         val resolved: String? = null,
         val settings: HostSettings? = null,
+        val sent: Pair<String, List<String>>? = null,
     )
 
     sealed interface Item {
@@ -123,7 +124,15 @@ object MessageProtocol {
             if (value.has("at")) integral(value.get("at")) else 0L, body,
             payload.optBoolean("done") || kind.endsWith(".done"), payload.optString("state").ifEmpty { null },
             HostRequest.parse(kind, payload), HostRequest.resolved(kind, payload),
-            if (kind == "host.settings") HostSettings.parse(payload) else null)
+            if (kind == "host.settings") HostSettings.parse(payload) else null,
+            if (kind == "turn.started") sentRows(payload) else null)
+    }
+
+    private fun sentRows(payload: JSONObject): Pair<String, List<String>>? {
+        val id = payload.optString("message_id").ifEmpty { return null }
+        val listed = payload.optJSONArray("uuids") ?: return null
+        val uuids = (0 until listed.length()).mapNotNull { listed.opt(it) as? String }.filter { it.isNotEmpty() }
+        return if (uuids.isEmpty()) null else id to uuids
     }
 
     private fun fact(value: JSONObject, scope: Scope, native: Boolean): Fact {

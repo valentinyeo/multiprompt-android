@@ -84,12 +84,16 @@ data class ChatHistory(
         val claimed = HashMap<Int, MessageProtocol.Row>()
         val unplaced = mutableListOf<MessageProtocol.Row>()
         var floor = -1
+        val sentRows = replica?.host?.sentRows.orEmpty()
         for (card in replica?.messages?.values.orEmpty().filter { it.state != MessageProtocol.State.CANCELLED }.sortedBy { it.position }) {
-            val index = transcript.indices.firstOrNull { index ->
-                index > floor && spoken[index]?.let { it >= card.created - CLOCK_SLACK } == true &&
+            val keyed = sentRows[card.id]?.let { uuids ->
+                transcript.indices.firstOrNull { index -> index !in claimed && transcript[index].role == "user" && transcript[index].requestId in uuids }
+            }
+            val index = keyed ?: transcript.indices.firstOrNull { index ->
+                index > floor && index !in claimed && spoken[index]?.let { it >= card.created - CLOCK_SLACK } == true &&
                     same(transcript[index].text, card.text)
             }
-            if (index == null) unplaced.add(card) else { claimed[index] = card; floor = index }
+            if (index == null) unplaced.add(card) else { claimed[index] = card; floor = maxOf(floor, index) }
         }
         val latest = spoken.filterNotNull().maxOrNull()
         val occurrences = transcript.mapIndexed { index, message ->
@@ -103,10 +107,12 @@ data class ChatHistory(
                 pending = !notSent && row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT),
                 delivery = if (notSent) NOT_SENT else null)
         }
-        val live = replica?.host?.spoken.orEmpty().filterNot { block -> block.done && landed(block.text) }.map { block ->
+        val drawn = source.filter { it.role == "assistant" }.map { rowKey(it.id) }.filter { it.isNotEmpty() }.toSet()
+        fun hidden(block: HostBlock) = rowKey(block.item) in drawn || (block.done && landed(block.text))
+        val live = replica?.host?.spoken.orEmpty().filterNot { block -> hidden(block) }.map { block ->
             ChatHistoryMessage("@live:${replica?.host?.turn}:${block.item}", "assistant", block.text, "", 0, 0, pending = !block.done)
         }
-        val earlier = replica?.host?.earlier.orEmpty().filterNot { block -> landed(block.text) }.map { block ->
+        val earlier = replica?.host?.earlier.orEmpty().filterNot { block -> hidden(block.copy(done = true)) }.map { block ->
             ChatHistoryMessage("@live:${block.turn}:${block.item}", "assistant", block.text, "", 0, 0)
         }
         val unknown = unresolved.filter { entry -> entry.operation == "submit" && replica?.messages?.get(entry.messageId)?.text != entry.text }.map { entry ->
@@ -118,6 +124,8 @@ data class ChatHistory(
 
     private fun seconds(timestamp: String): Double? =
         runCatching { java.time.Instant.parse(timestamp).toEpochMilli() / 1000.0 }.getOrNull()
+
+    private fun rowKey(id: String): String = id.substringBefore(":text:")
 
     private fun same(left: String, right: String): Boolean =
         left.replace("\r", "").trimEnd(' ') == right.replace("\r", "").trimEnd(' ')
