@@ -117,12 +117,13 @@ class WorkspaceColorsTest {
         assertEquals(6, AccountHostMap.withAccountSessions(listOf(session), current, mapOf(0 to host)).single().workspaceColor)
         assertEquals(1, layout().workspaceColor("Orbit"))
         assertEquals(0, layout().workspaceColor("Cedar"))
-        assertEquals(0, AccountLayout(workspaces = (0..8).map { "Workspace$it" }).workspaceColor("Workspace7"))
+        assertEquals(7, AccountLayout(workspaces = (0..8).map { "Workspace$it" }).workspaceColor("Workspace7"))
+        assertEquals(0, AccountLayout(workspaces = (0..8).map { "Workspace$it" }).workspaceColor("Workspace8"))
     }
 
     @Test fun onlyDesktopPaletteIndicesAreAccepted() {
-        for (color in 0..10) assertEquals(color, layout(color).json().getJSONArray("workspaces").getJSONObject(0).getInt("color"))
-        for (color in listOf(-1, 11, 1.5, "1", true, JSONObject.NULL)) {
+        for (color in 0..7) assertEquals(color, layout(color).json().getJSONArray("workspaces").getJSONObject(0).getInt("color"))
+        for (color in listOf(-1, 1.5, "1", true, JSONObject.NULL)) {
             val json = layout().json().apply { getJSONArray("workspaces").getJSONObject(0).put("color", color) }
             assertThrows(Exception::class.java) { AccountLayout.parse(json) }
         }

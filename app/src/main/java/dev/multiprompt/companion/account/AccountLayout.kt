@@ -1,5 +1,7 @@
 package dev.multiprompt.companion.account
 
+import dev.multiprompt.companion.ui.BOT_COLORS
+import dev.multiprompt.companion.ui.botPaletteColor
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -34,7 +36,7 @@ data class AccountLayout(
     val workspaceColors: Map<String, Int> = emptyMap(),
 ) {
     fun validate(): AccountLayout {
-        require(workspaceColors.all { (name, color) -> name in workspaces && color in 0..10 }) { "Invalid workspace color" }
+        require(workspaceColors.all { (name, color) -> name in workspaces && color in 0 until BOT_COLORS }) { "Invalid workspace color" }
         require(hosts == null || AccountHosts.parse(JSONArray(hosts.map { it.json() })) == hosts) { "Invalid layout hosts" }
         require(removedHosts.size <= 3 && removedHosts.distinct().size == removedHosts.size && removedHosts.all { it in 0..2 }) { "Invalid removed hosts" }
         require(settings == null || settings.keys.all { it in setOf("frequent", "favorites", "all", "frequent_first") }) { "Invalid layout settings" }
@@ -64,7 +66,7 @@ data class AccountLayout(
 
     fun sameContent(other: AccountLayout): Boolean = workspaces == other.workspaces && workspaceColors == other.workspaceColors && tabs == other.tabs && settings == other.settings && hosts.orEmpty() == other.hosts.orEmpty() && removedHosts == other.removedHosts
 
-    fun workspaceColor(name: String): Int = workspaceColors[name] ?: workspaces.indexOf(name).coerceAtLeast(0) % 7
+    fun workspaceColor(name: String): Int = workspaceColors[name] ?: workspaces.indexOf(name).coerceAtLeast(0) % BOT_COLORS
 
     fun renameTab(identity: String, name: String): AccountLayout = copy(tabs = tabs.map {
         if (it.identity == identity) it.copy(name = name, manual = true) else it
@@ -132,7 +134,7 @@ data class AccountLayout(
                 require(w.keys().asSequence().toSet() in setOf(setOf("name"), setOf("name", "color")) && w.get("name") is String)
                 if (w.has("color")) {
                     val color = w.get("color")
-                    require(color is Number && color.toDouble() in 0.0..10.0 && color.toDouble() == color.toInt().toDouble())
+                    require(color is Number && color.toDouble() >= 0.0 && color.toDouble() == color.toInt().toDouble())
                 }
                 w.getString("name")
             }, (0 until tabs.length()).map {
@@ -165,12 +167,12 @@ data class AccountLayout(
                 val face = if (t.has("face")) t.getInt("face") else null
                 require(face == null || face in 0..19)
                 val color = if (t.has("color")) t.getInt("color") else null
-                require(color == null || color in 0..10)
+                require(color == null || color >= 0)
                 val photo = if (t.has("photo")) t.get("photo") else null
                 require(!t.has("photo") || photo is Number && photo !is Double && photo !is Float && photo.toLong() in 1..9_007_199_254_740_991L)
                 AccountTab(t.getString("name"), t.getString("tmux_session"), host.toInt(), t.getString("workspace"),
                     t.optBoolean("manual", false), if (t.has("favorite")) t.getBoolean("favorite") else null, (used as? Number)?.toLong(), visits, (input as? Number)?.toLong(),
-                    if (t.has("muted")) t.getBoolean("muted") else null, face, color, (photo as? Number)?.toLong())
+                    if (t.has("muted")) t.getBoolean("muted") else null, face, botPaletteColor(color), (photo as? Number)?.toLong())
             }, settings, if (json.has("hosts")) AccountHosts.parse(json.opt("hosts")) else null,
                 if (json.has("removed_hosts")) {
                     val values = json.getJSONArray("removed_hosts")
@@ -180,7 +182,7 @@ data class AccountLayout(
                         slot.toInt()
                     }
                 } else emptyList(),
-                (0 until ws.length()).map { ws.getJSONObject(it) }.filter { it.has("color") }
+                (0 until ws.length()).map { ws.getJSONObject(it) }.filter { it.has("color") && botPaletteColor(it.getInt("color")) != null }
                     .associate { it.getString("name") to it.getInt("color") }).validate()
         }
 

@@ -1424,7 +1424,7 @@ internal fun SessionsScreen(
                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
-                                        (0..6).forEach { index ->
+                                        (0 until BOT_COLORS).forEach { index ->
                                             val chosen = if (picked == null) shown == index else picked == index
                                             Box(
                                                 Modifier

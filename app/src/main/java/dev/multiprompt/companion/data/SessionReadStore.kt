@@ -244,7 +244,7 @@ class SessionReadStore(context: Context) {
     }
 
     fun botColor(session: TmuxSession): Int? =
-        preferences.getInt(BOT_COLOR_PREFIX + key(session.hostId, session.name), -1).takeIf { it in 0..6 }
+        preferences.getInt(BOT_COLOR_PREFIX + key(session.hostId, session.name), -1).takeIf { it in 0..7 }
 
     fun applySharedBotLooks(looks: Map<String, Pair<Int?, Int?>>) {
         val editor = preferences.edit()
@@ -258,7 +258,7 @@ class SessionReadStore(context: Context) {
                 changed = true
                 if (face == null) editor.remove(faceKey) else editor.putInt(faceKey, face)
             }
-            if (preferences.getInt(colorKey, -1).takeIf { it in 0..6 } != color) {
+            if (preferences.getInt(colorKey, -1).takeIf { it in 0..7 } != color) {
                 changed = true
                 if (color == null) editor.remove(colorKey) else editor.putInt(colorKey, color)
             }
