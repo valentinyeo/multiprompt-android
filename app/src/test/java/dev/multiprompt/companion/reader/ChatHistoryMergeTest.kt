@@ -172,7 +172,7 @@ class ChatHistoryMergeTest {
         val query = JSONObject(ChatHistoryProtocol.request(1, identity.copy(tmux = "x'; unsafe", cwd = "/a\n€"), ChatHistory()))
         assertEquals("x'; unsafe", query.getString("tmux"))
         assertEquals("/a\n€", query.getString("cwd"))
-        assertFalse(ChatHistoryProtocol.COMMAND.contains("safe"))
+        assertFalse(ChatHistoryProtocol.command("safe".toByteArray()).contains("safe"))
         assertTrue(query.getBoolean("no_jump"))
     }
     @Test
