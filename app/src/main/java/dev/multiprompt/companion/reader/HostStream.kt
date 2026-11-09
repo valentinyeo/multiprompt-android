@@ -17,7 +17,9 @@ data class HostStream(
         event.settings != null -> copy(settings = event.settings)
         event.request != null -> copy(request = event.request)
         event.resolved != null -> if (request?.id == event.resolved) copy(request = null) else this
-        event.kind == "turn.started" -> next(event.turn)
+        event.kind == "turn.started" -> next(event.turn).let { started ->
+            event.sent?.let { (id, uuids) -> started.copy(sentRows = (started.sentRows - id + (id to uuids)).entries.toList().takeLast(SENT_KEPT).associate { it.toPair() }) } ?: started
+        }
         event.kind == "turn.ended" -> copy(running = false)
         event.kind == "host.status" -> if (event.state == "stopped") copy(running = false) else this
         event.kind.startsWith("text.") || event.kind.startsWith("thinking.") -> upsert(event)
@@ -37,5 +39,9 @@ data class HostStream(
         val existing = fresh.blocks.indexOfFirst { it.item == item }
         val blocks = if (existing < 0) fresh.blocks + block else fresh.blocks.toMutableList().also { it[existing] = block }
         return fresh.copy(blocks = blocks)
+    }
+
+    private companion object {
+        const val SENT_KEPT = 8
     }
 }
