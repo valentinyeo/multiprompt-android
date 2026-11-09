@@ -32,5 +32,6 @@
   "IGSH-1882": "Android: open chat stops showing new messages until reopened",
   "IGSH-1883": "Android: same 20 robots and Soft colours as desktop",
   "IGSH-1884": "Android: model, effort and permission in the plus menu",
+  "IGSH-1886": "Android: mention another live chat with @",
   "IGSH-1885": "Android: undelivered messages show Not sent with Send again"
 }
