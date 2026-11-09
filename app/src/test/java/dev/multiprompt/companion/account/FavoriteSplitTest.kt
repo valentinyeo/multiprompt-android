@@ -134,7 +134,7 @@ class FavoriteSplitTest {
             http.request("POST", "/oauth/revoke", "token", JSONObject())
             assertEquals(listOf("GET", "PUT", "POST", "POST"), requests.map { it.method })
             requests.forEach {
-                assertEquals(listOf("favorite,muted,used,visits,input,settings,hosts,workspace_color,bot_appearance,bot_photo,bot_palette8"), it.headers.values("X-Layout-Features"))
+                assertEquals(listOf("favorite,muted,used,visits,input,settings,hosts,workspace_color,bot_appearance,bot_photo,bot_palette8,groups"), it.headers.values("X-Layout-Features"))
                 assertEquals("application/json", it.header("Accept"))
                 assertEquals("account.multiprompt.dev", it.url.host)
             }

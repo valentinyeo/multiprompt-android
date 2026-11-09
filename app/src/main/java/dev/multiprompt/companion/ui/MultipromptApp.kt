@@ -2003,52 +2003,59 @@ internal fun SessionsScreen(
                     item(key = "error-$hostId") { InlineError(error) }
                 }
             }
-            items(visibleSessions, key = { "${it.hostId}:${it.name}" }) { session ->
-                val key = SessionReadStore.key(session.hostId, session.name)
-                val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
-                val starred = tab?.favorite == true
-                CompositionLocalProvider(
-                    LocalOpenSession provides state.readerSession?.let { SessionReadStore.key(it.hostId, it.name) },
-                    LocalBotSelection provides if (selectingBots) BotSelection(chosenBots.toSet()) { session ->
-                        val key = SessionReadStore.key(session.hostId, session.name)
-                        if (key in chosenBots) chosenBots.remove(key) else chosenBots.add(key)
-                    } else null,
-                    LocalBotLook provides botLooks[key],
-                    LocalStartSelection provides { session ->
-                        selectingBots = true
-                        chosenBots.clear()
-                        chosenBots.add(SessionReadStore.key(session.hostId, session.name))
-                    },
-                ) {
-                    SessionCard(
-                        session = session,
-                        workspaces = state.workspaces,
-                        unread = key in state.unreadSessionKeys,
-                        unreadCount = state.unreadCounts[key] ?: 1,
-                        archived = key in state.archivedSessionKeys,
-                        starred = starred,
-                        onToggleFavorite = if (tab != null && state.signedIn) {
-                            { onSetFavorite(tab, !starred) }
+            SessionGroups.split(visibleSessions) { session ->
+                state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }?.group
+            }.forEach { group ->
+                val heading: () -> Unit = { group.name?.let { name -> item(key = "group:$name") { KitSectionLabel(name) } } }
+                if (!reversedSessions) heading()
+                items(group.items, key = { "${it.hostId}:${it.name}" }) { session ->
+                    val key = SessionReadStore.key(session.hostId, session.name)
+                    val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
+                    val starred = tab?.favorite == true
+                    CompositionLocalProvider(
+                        LocalOpenSession provides state.readerSession?.let { SessionReadStore.key(it.hostId, it.name) },
+                        LocalBotSelection provides if (selectingBots) BotSelection(chosenBots.toSet()) { session ->
+                            val key = SessionReadStore.key(session.hostId, session.name)
+                            if (key in chosenBots) chosenBots.remove(key) else chosenBots.add(key)
                         } else null,
-                        onClick = { onOpen(session) },
-                        onOpenTerminal = { onOpenTerminal(session) },
-                        onArchive = { onArchive(session) },
-                        onRemind = { reminderPromptSession = session },
-                        onArchiveToggle = {
-                            if (key in state.archivedSessionKeys) onRestore(session) else onArchive(session)
+                        LocalBotLook provides botLooks[key],
+                        LocalStartSelection provides { session ->
+                            selectingBots = true
+                            chosenBots.clear()
+                            chosenBots.add(SessionReadStore.key(session.hostId, session.name))
                         },
-                        onMarkUnread = { onMarkUnread(session) },
-                        onMove = { moveSessionTarget = session },
-                        onRename = {
-                            renameDraft = session.displayName
-                            renameError = null
-                            renamePromptSession = session
-                        },
-                        onDissolve = { onDissolve(session) },
-                        onEnd = { endPromptSession = session },
-                        onForget = { onForgetSession(session) },
-                    )
+                    ) {
+                        SessionCard(
+                            session = session,
+                            workspaces = state.workspaces,
+                            unread = key in state.unreadSessionKeys,
+                            unreadCount = state.unreadCounts[key] ?: 1,
+                            archived = key in state.archivedSessionKeys,
+                            starred = starred,
+                            onToggleFavorite = if (tab != null && state.signedIn) {
+                                { onSetFavorite(tab, !starred) }
+                            } else null,
+                            onClick = { onOpen(session) },
+                            onOpenTerminal = { onOpenTerminal(session) },
+                            onArchive = { onArchive(session) },
+                            onRemind = { reminderPromptSession = session },
+                            onArchiveToggle = {
+                                if (key in state.archivedSessionKeys) onRestore(session) else onArchive(session)
+                            },
+                            onMarkUnread = { onMarkUnread(session) },
+                            onMove = { moveSessionTarget = session },
+                            onRename = {
+                                renameDraft = session.displayName
+                                renameError = null
+                                renamePromptSession = session
+                            },
+                            onDissolve = { onDissolve(session) },
+                            onEnd = { endPromptSession = session },
+                            onForget = { onForgetSession(session) },
+                        )
+                    }
                 }
+                if (reversedSessions) heading()
             }
             items(visibleDissolvedSessions, key = { "dissolved:${it.key}" }) { session ->
                 DissolvedSessionCard(
