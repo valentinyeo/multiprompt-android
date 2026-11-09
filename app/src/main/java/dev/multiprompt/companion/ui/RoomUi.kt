@@ -68,7 +68,7 @@ internal fun parseRooms(json: String?): List<RoomSummary> {
                 (0 until list.length()).mapNotNull { position ->
                     val member = list.optJSONObject(position) ?: return@mapNotNull null
                     val value = member.optString("name").takeIf(String::isNotBlank) ?: return@mapNotNull null
-                    RoomMember(member.optString("id"), member.optString("alias", value), value, member.optInt("color", 0).mod(7))
+                    RoomMember(member.optString("id"), member.optString("alias", value), value, member.optInt("color", 0).mod(BOT_COLORS))
                 }
             }.orEmpty()
             RoomSummary(id, name, members)

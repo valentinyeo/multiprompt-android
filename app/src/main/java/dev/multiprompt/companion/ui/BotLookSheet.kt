@@ -82,7 +82,7 @@ internal fun BotLookContent(
                                 .border(
                                     if (pickedFace == index) 3.dp else 1.dp,
                                     if (pickedFace == index) Kit.Text else Kit.Outline,
-                                    CircleShape,
+                                    BotTileShape,
                                 ),
                         ) {
                             BotAvatar(
@@ -98,7 +98,7 @@ internal fun BotLookContent(
                 }
             }
             Text("Colour", style = Kit.Label, color = Kit.TextMuted)
-            (0..10).chunked(6).forEach { row ->
+            (0 until BOT_COLORS).chunked(4).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     row.forEach { index ->
                         Box(

@@ -6,7 +6,7 @@ import org.junit.Test
 
 class BotAppearanceTest {
     @Test fun workspaceOwnsColorButSessionStillOwnsFace() {
-        for (color in 0..6) {
+        for (color in 0..7) {
             val first = BotAppearance.forSession("inne Chief of Staff", color)
             val second = BotAppearance.forSession("inne-cro", color)
             assertEquals(color, first.color)
@@ -27,7 +27,7 @@ class BotAppearanceTest {
         assertEquals("the name still decides the face when only a colour is picked", 0, colourOnly.face)
         val wrapped = BotAppearance.forSession("HT Product Lead", workspaceColor = 3, face = 24, color = 11)
         assertEquals("an over-range face wraps", 4, wrapped.face)
-        assertEquals("an over-range colour wraps", 0, wrapped.color)
+        assertEquals("an over-range colour wraps", 3, wrapped.color)
     }
 
     @Test fun desktopCompatibleUtf8AssignmentHasFixedVectors() {

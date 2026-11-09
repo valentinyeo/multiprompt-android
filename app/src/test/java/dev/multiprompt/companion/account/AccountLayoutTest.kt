@@ -68,12 +68,21 @@ class AccountLayoutTest {
         assertNull(AccountLayout.rebase(newer, newer.copy(tabs = newer.tabs.map { it.copy(photo = 9) }), pulled.copy(tabs = pulled.tabs.map { it.copy(photo = null) })).tabs[0].photo)
     }
 
-    @Test fun newerColourNumbersAreReadWithoutBreakingThePhone() {
+    @Test fun retiredColourNumbersFallBackToAutoWithoutBreakingThePhone() {
         val json = org.json.JSONObject("""{"schema":1,"revision":5,"workspaces":[{"name":"Other","color":9}],"tabs":[{"kind":"tmux","name":"One","tmux_session":"one","tmux_host":0,"workspace":"Other","color":10}]}""")
         val pulled = AccountLayout.parse(json)
-        assertEquals(9, pulled.workspaceColor("Other"))
-        assertEquals(10, pulled.tabs.first { it.identity == one.identity }.color)
-        assertEquals(9, AccountLayout.parse(org.json.JSONObject(pulled.json().toString())).workspaceColor("Other"))
+        assertEquals(0, pulled.workspaceColor("Other"))
+        assertNull(pulled.tabs.first { it.identity == one.identity }.color)
+        val written = pulled.json()
+        assertFalse(written.getJSONArray("workspaces").getJSONObject(0).has("color"))
+        assertFalse(written.getJSONArray("tabs").getJSONObject(0).has("color"))
+    }
+
+    @Test fun whiteRoundTripsLikeEveryOtherSoftColour() {
+        val json = org.json.JSONObject("""{"schema":1,"revision":5,"workspaces":[{"name":"Other","color":7}],"tabs":[{"kind":"tmux","name":"One","tmux_session":"one","tmux_host":0,"workspace":"Other","color":7}]}""")
+        val again = AccountLayout.parse(org.json.JSONObject(AccountLayout.parse(json).json().toString()))
+        assertEquals(7, again.workspaceColor("Other"))
+        assertEquals(7, again.tabs.first { it.identity == one.identity }.color)
     }
 
     @Test fun desktopHostRemovalsAreReadAndSurviveAPhoneEdit() {
