@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,11 +29,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
@@ -52,10 +56,15 @@ import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import dev.multiprompt.companion.reader.ChatHistory
+import dev.multiprompt.companion.reader.MessageActionResult
+import dev.multiprompt.companion.reader.MessageProtocol
+import dev.multiprompt.companion.reader.PromptAdmission
 
 private data class ReplyJump(val message: ChatHistoryMessage, val reply: ReplyQuote.Reply)
 
-private val FAILURE_LABELS = setOf("Failed", "Confirmation unknown", "Local · unconfirmed")
+private val FAILURE_LABELS = setOf("Failed", "Confirmation unknown", "Local · unconfirmed", ChatHistory.NOT_SENT)
 
 @Composable
 internal fun ChatHistoryView(
@@ -83,7 +92,16 @@ internal fun ChatHistoryView(
     val history = remember(connection, agent, workingDirectory) { connection.chatHistory(agent, workingDirectory) }
     val state by history.state.collectAsState()
     val managed = agent == AgentKind.CLAUDE || agent == AgentKind.CODEX || agent == AgentKind.PI
-    val messages = if (managed) state.history.managedMessages(state.replica, state.unresolved) else state.history.displayMessages(reader.sentRecord)
+    val waiting = state.replica?.messages?.values?.any { it.state == MessageProtocol.State.QUEUED || it.state == MessageProtocol.State.SENT } == true
+    val now by produceState(System.currentTimeMillis() / 1000.0, waiting) {
+        while (waiting) {
+            value = System.currentTimeMillis() / 1000.0
+            delay(15_000)
+        }
+    }
+    val seen = remember(history) { HashMap<String, Double>() }
+    state.replica?.messages?.values?.forEach { if (it.state == MessageProtocol.State.QUEUED || it.state == MessageProtocol.State.SENT) seen.getOrPut(it.id) { System.currentTimeMillis() / 1000.0 } }
+    val messages = if (managed) state.history.managedMessages(state.replica, state.unresolved, now, state.retrying, seen) else state.history.displayMessages(reader.sentRecord)
     val speakable = remember(messages) { dev.multiprompt.companion.reader.ReadAloud.replies(messages) }
     LaunchedEffect(speakable) { onSpeakableReplies(speakable) }
     LaunchedEffect(state.loaded, state.history.sid, state.retrying) { onChatReady(state.loaded && state.history.sid.isNotEmpty() && !state.retrying) }
@@ -96,6 +114,9 @@ internal fun ChatHistoryView(
         if (!managed) history.deliveryIds(reader.sentRecord.map { it.messageId }.filter { it.isNotEmpty() })
     }
     DisposableEffect(history) { onDispose { history.awaitingMessages(false) } }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val toast: (String) -> Unit = { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show() }
     val hostClosed by history.hostClosed.collectAsState()
     val hostError by history.hostError.collectAsState()
     val hostRequest = state.replica?.host?.request
@@ -135,6 +156,26 @@ internal fun ChatHistoryView(
             onCancelPending = if (!managed && !reader.sending && reader.status == ReaderStatus.Live) { target ->
                 connection.cancelQueued(target.requestId, state.history.held)
             } else null,
+            onSendAgain = if (managed) { target, confirmed ->
+                val row = state.replica?.messages?.get(target.requestId)
+                when {
+                    target.unknownId != null -> { scope.launch { if (history.replayUnknown(target.unknownId) != MessageActionResult.Applied) toast("Could not send again. Try again") }; true }
+                    row == null -> true
+                    row.state != MessageProtocol.State.FAILED && !confirmed -> false
+                    else -> { scope.launch { if (history.sendAgain(row) is PromptAdmission.Rejected) toast("Could not send again. Try again") else onSessionUsed() }; true }
+                }
+            } else null,
+            onRemove = if (managed) { target ->
+                val row = state.replica?.messages?.get(target.requestId)
+                scope.launch {
+                    val result = when {
+                        target.unknownId != null -> history.removeUnknown(target.unknownId)
+                        row != null -> history.dismiss(row)
+                        else -> MessageActionResult.Applied
+                    }
+                    if (result != MessageActionResult.Applied) toast("Could not remove yet. Try again")
+                }
+            } else null,
             collapsePendingReactions = reader.actionError == null,
             working = reader.isWorking(agent) || state.replica?.host?.running == true,
             onNearTop = history::nearTop,
@@ -171,6 +212,8 @@ internal fun ChatHistoryList(
     hasOlder: Boolean = false,
     onReaction: ((ChatHistoryMessage, ChatReactions.Emoji) -> Unit)? = null,
     onCancelPending: ((ChatHistoryMessage) -> Unit)? = null,
+    onSendAgain: ((ChatHistoryMessage, Boolean) -> Boolean)? = null,
+    onRemove: ((ChatHistoryMessage) -> Unit)? = null,
     collapsePendingReactions: Boolean = true,
     working: Boolean = false,
     bottomPadding: Dp = 0.dp,
@@ -183,6 +226,19 @@ internal fun ChatHistoryList(
     val nearTop by rememberUpdatedState(onNearTop)
     var pendingJump by remember { mutableStateOf<ReplyJump?>(null) }
     var highlightedKey by remember { mutableStateOf<String?>(null) }
+    var confirmResend by remember { mutableStateOf<ChatHistoryMessage?>(null) }
+    confirmResend?.let { target ->
+        KitSheet(onDismiss = { confirmResend = null }) {
+            Text("Your agent may already have this message. Sending again may duplicate it. Send again?", color = Kit.Text)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                KitSecondaryButton("Cancel", { confirmResend = null })
+                KitPrimaryButton("Send again", {
+                    confirmResend = null
+                    onSendAgain?.invoke(target, true)
+                })
+            }
+        }
+    }
     LaunchedEffect(focusKey) { if (focusKey != null) highlightedKey = focusKey }
     val context = LocalContext.current
     LaunchedEffect(pendingJump, presentation.messages, hasOlder, loaded, questions, showDots) {
@@ -258,6 +314,12 @@ internal fun ChatHistoryList(
                     onCancel = if (message.role == "user" && message.delivery == "Queued" && message.requestId.isNotEmpty() && onCancelPending != null) {
                         { onCancelPending(message) }
                     } else null)
+                if (message.role == "user" && message.delivery == ChatHistory.NOT_SENT && (onSendAgain != null || onRemove != null)) {
+                    Row(Modifier.fillMaxWidth().padding(top = 6.dp).testTag("not-sent-${message.key}"), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                        if (onRemove != null) KitSecondaryButton("Remove", { onRemove(message) }, destructive = true)
+                        if (onSendAgain != null) KitSecondaryButton("Send again", { if (!onSendAgain(message, false)) confirmResend = message })
+                    }
+                }
             }
         }
         if (presentation.messages.isEmpty()) {

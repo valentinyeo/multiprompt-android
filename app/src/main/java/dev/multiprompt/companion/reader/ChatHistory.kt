@@ -48,7 +48,7 @@ data class ChatHistory(
         grouped.values.toList()
     }
 
-    fun managedMessages(replica: MessageReplica?, unresolved: List<MessageJournal.Entry>): List<ChatHistoryMessage> {
+    fun managedMessages(replica: MessageReplica?, unresolved: List<MessageJournal.Entry>, now: Double? = null, offline: Boolean = false, seen: Map<String, Double> = emptyMap()): List<ChatHistoryMessage> {
         val source = rows.toMutableList()
         replica?.nativeFacts?.values?.forEach { fact ->
             if (fact.inode == inode && fact.offset != null && fact.offset >= offset) {
@@ -96,10 +96,12 @@ data class ChatHistory(
             claimed[index]?.let { message.copy(key = "@shared:${it.id}", requestId = it.id) } ?: message
         }
         val cards = unplaced.filter { row ->
-            row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT) || latest == null || latest <= row.created + CLOCK_SLACK
+            row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT, MessageProtocol.State.FAILED) || latest == null || latest <= row.created + CLOCK_SLACK
         }.map { row ->
+            val notSent = notSent(row, now, seen[row.id])
             ChatHistoryMessage("@shared:${row.id}", "user", row.text, "", 0, 0, row.id,
-                pending = row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT))
+                pending = !notSent && row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT),
+                delivery = if (notSent) NOT_SENT else null)
         }
         val live = replica?.host?.spoken.orEmpty().filterNot { block -> block.done && landed(block.text) }.map { block ->
             ChatHistoryMessage("@live:${replica?.host?.turn}:${block.item}", "assistant", block.text, "", 0, 0, pending = !block.done)
@@ -108,7 +110,8 @@ data class ChatHistory(
             ChatHistoryMessage("@live:${block.turn}:${block.item}", "assistant", block.text, "", 0, 0)
         }
         val unknown = unresolved.filter { entry -> entry.operation == "submit" && replica?.messages?.get(entry.messageId)?.text != entry.text }.map { entry ->
-            ChatHistoryMessage("@unknown:${entry.id}", "user", entry.text.orEmpty(), "", 0, 0, entry.messageId, unknownId = entry.id)
+            ChatHistoryMessage("@unknown:${entry.id}", "user", entry.text.orEmpty(), "", 0, 0, entry.messageId,
+                delivery = if (offline) NOT_SENT else null, unknownId = entry.id)
         }
         return occurrences + earlier + cards + unknown + live
     }
@@ -201,7 +204,15 @@ data class ChatHistory(
         }
     }
 
-    private companion object {
-        const val CLOCK_SLACK = 2.0
+    companion object {
+        private const val CLOCK_SLACK = 2.0
+        const val NOT_SENT = "Not sent"
+        private const val NOT_SENT_WAIT = 600.0
+
+        fun notSent(row: MessageProtocol.Row, now: Double?, seen: Double? = null): Boolean = when (row.state) {
+            MessageProtocol.State.FAILED -> true
+            MessageProtocol.State.QUEUED, MessageProtocol.State.SENT -> now != null && now - maxOf(row.created, seen ?: row.created) >= NOT_SENT_WAIT
+            else -> false
+        }
     }
 }

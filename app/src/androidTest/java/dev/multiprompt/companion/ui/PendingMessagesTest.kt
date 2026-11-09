@@ -47,7 +47,7 @@ class PendingMessagesTest {
     private val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "pending-proof", "/pending")
     private val id = "1234567890123456"
     private fun row(state: MessageProtocol.State) = MessageProtocol.Row(id, "claude", "proof", "Synthetic prompt", 1,
-        "attempt", state, null, null, 1, 1.0)
+        "attempt", state, null, null, 1, System.currentTimeMillis() / 1000.0)
 
     @Suppress("UNCHECKED_CAST")
     private fun harness() {
@@ -72,7 +72,16 @@ class PendingMessagesTest {
     private fun bubbleHeight(key: String) = compose.onNodeWithTag("chat-message-$key").getUnclippedBoundsInRoot().let { it.bottom.value - it.top.value }
 
     private fun assertOnlyBubbles() {
-        listOf("Queued", "Sending", "Accepted", "Failed", "Confirmation unknown", "Check status", "Check reset", "Send again", "Remove").forEach {
+        listOf("Queued", "Sending", "Accepted", "Failed", "Not sent", "Confirmation unknown", "Check status", "Check reset", "Send again", "Remove").forEach {
+            compose.onNodeWithText(it).assertDoesNotExist()
+        }
+    }
+
+    private fun assertNotSent(count: Int) {
+        assertEquals(count, compose.onAllNodesWithText("Not sent").fetchSemanticsNodes().size)
+        assertEquals(count, compose.onAllNodesWithText("Send again").fetchSemanticsNodes().size)
+        assertEquals(count, compose.onAllNodesWithText("Remove").fetchSemanticsNodes().size)
+        listOf("Queued", "Sending", "Accepted", "Failed", "Confirmation unknown", "Check status", "Check reset").forEach {
             compose.onNodeWithText(it).assertDoesNotExist()
         }
     }
@@ -90,15 +99,16 @@ class PendingMessagesTest {
         assertEquals("acceptance must not move the bubble", queued, bubbleHeight("@shared:$id"), 0.5f)
     }
 
-    @Test fun aFailedOrUnknownSendShowsNothingExtra() {
+    @Test fun aFailedSendSaysNotSentAndAnUnknownOneStaysCalm() {
         harness()
-        val queued = bubbleHeight("@shared:$id")
         compose.runOnIdle {
             history.value = history.value.copy(replica = MessageReplica(1, 2, mapOf(id to row(MessageProtocol.State.FAILED))))
         }
         compose.onNodeWithText("Synthetic prompt").assertIsDisplayed()
-        assertOnlyBubbles()
-        assertEquals("a failed send must not move the bubble", queued, bubbleHeight("@shared:$id"), 0.5f)
+        assertNotSent(1)
+        compose.runOnIdle {
+            history.value = history.value.copy(replica = MessageReplica(1, 3, emptyMap()))
+        }
         compose.runOnIdle {
             val entry = MessageJournal.Entry("unknown123456789012", "account", MessageProtocol.Scope("claude", "proof", "pending-proof"),
                 "submit", "othermessage123456", "Second attempt", 1, "attempt", true)
@@ -118,7 +128,7 @@ class PendingMessagesTest {
         }
         listOf("First calm message", "Second calm message", "Third calm message").forEach { compose.onNodeWithText(it).assertIsDisplayed() }
         screenshot("calm-sent-bubbles")
-        assertOnlyBubbles()
+        assertNotSent(1)
     }
 
     @Test fun anAnsweredSendShowsTheReplyBelowIt() {

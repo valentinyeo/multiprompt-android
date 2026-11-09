@@ -58,7 +58,7 @@ class ChatHistoryConnection(
     private val stallMillis: Long = 60_000L,
 ) : AutoCloseable {
     private sealed interface Command {
-        data class Submit(val text: String, val generation: Long, val result: CompletableDeferred<PromptAdmission>) : Command
+        data class Submit(val text: String, val generation: Long, val result: CompletableDeferred<PromptAdmission>, val replaces: String? = null) : Command
         data class Action(val kind: String, val id: String, val epoch: Long?, val attempt: String?, val generation: Long, val result: CompletableDeferred<MessageActionResult>, val target: MessageJournal.Entry? = null, val line: ((Long, String) -> String)? = null) : Command
     }
 
@@ -152,12 +152,12 @@ class ChatHistoryConnection(
         }
     }
 
-    suspend fun submit(text: String): PromptAdmission {
+    suspend fun submit(text: String, replaces: String? = null): PromptAdmission {
         if (text.isBlank() || '\u0000' in text) return PromptAdmission.Rejected("Message is empty or invalid")
         val result = CompletableDeferred<PromptAdmission>()
         synchronized(this) {
             if (freshSid == null || !selected || resetFence) return PromptAdmission.Rejected("Chat is not ready")
-            if (commands.trySend(Command.Submit(text, generation, result)).isFailure) return PromptAdmission.Rejected("Chat is unavailable")
+            if (commands.trySend(Command.Submit(text, generation, result, replaces)).isFailure) return PromptAdmission.Rejected("Chat is unavailable")
         }
         wake.trySend(Unit)
         return result.await()
@@ -169,6 +169,7 @@ class ChatHistoryConnection(
     suspend fun retryFailed(row: MessageProtocol.Row, confirmed: Boolean, observed: Long = generation): MessageActionResult =
         if (!confirmed) MessageActionResult.Rejected("Retry requires confirmation") else action("retry", row.id, row.epoch, row.attempt, observed)
     suspend fun dismiss(row: MessageProtocol.Row, observed: Long = generation) = action("dismiss", row.id, row.epoch, row.attempt, observed)
+    suspend fun sendAgain(row: MessageProtocol.Row): PromptAdmission = submit(row.text, row.id)
     suspend fun removeUnknown(id: String, observed: Long = generation) = action("removeUnknown", id, observed = observed)
     suspend fun recoverReset(observed: Long = generation) = action("reset", "", observed = observed)
 
@@ -580,6 +581,7 @@ class ChatHistoryConnection(
                                                         if (!resetFence && markIssued(page.sid, command.generation, entry.id)) {
                                                             requestId++
                                                             val arguments = JSONObject().put("message_id", entry.id).put("text", entry.text)
+                                                            command.replaces?.let { arguments.put("replaces", it) }
                                                             MessageProtocol.requiredMutation(exchange(MessageProtocol.request(requestId, messageScope, "message_submit", arguments)), requestId, messageScope, entry.id, entry.text)
                                                             replica = null
                                                         }
@@ -740,7 +742,7 @@ class ChatHistoryConnection(
             "retry", "dismiss" -> {
                 if (resetFence || row == null || row.epoch != replica.epoch || row.epoch != command.epoch || row.attempt != command.attempt ||
                     (command.kind == "retry" && row.state != MessageProtocol.State.FAILED) ||
-                    (command.kind == "dismiss" && row.state !in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.FAILED))) return MessageActionResult.Rejected("Message changed")
+                    (command.kind == "dismiss" && row.state !in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT, MessageProtocol.State.FAILED))) return MessageActionResult.Rejected("Message changed")
                 beforeAdmission?.invoke()
                 entry = entries.firstOrNull { it.operation == command.kind && it.messageId == row.id }
                     ?: admit(wire.sid, command.generation) { journalAccess { requireNotNull(journal).create(account, wire, command.kind, row.id, epoch = row.epoch, attempt = row.attempt) } }
