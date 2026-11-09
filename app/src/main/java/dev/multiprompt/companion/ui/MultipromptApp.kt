@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import android.text.format.DateUtils
 import androidx.compose.foundation.lazy.rememberLazyListState
 import dev.multiprompt.companion.reader.TranscriptProtocol
+import dev.multiprompt.companion.reader.ChatMention
+import dev.multiprompt.companion.reader.MentionChat
+import androidx.compose.foundation.layout.ColumnScope
 import android.Manifest
 import android.content.ClipboardManager
 import android.content.ClipData
@@ -28,7 +31,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -108,7 +110,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -423,6 +424,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             onSignOut = viewModel::signOutAccount,
             session = readerSession,
             hostLabel = state.hosts.firstOrNull { it.id == readerSession.hostId }?.label ?: readerSession.hostId,
+            mentionChats = ChatMention.chats(state.sessions, readerSession),
             unread = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.unreadSessionKeys,
             archived = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.archivedSessionKeys,
             initialFontScale = viewModel.readerFontScale(readerSession),
@@ -2729,6 +2731,7 @@ internal fun ReaderScreen(
     material3: Boolean = LocalMaterial3.current,
     unreadMessageKey: String? = null,
     onMarkUnreadFrom: (String) -> Unit = {},
+    mentionChats: List<MentionChat> = emptyList(),
 ) = key(connection) {
     MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
     val reader by connection.state.collectAsState()
@@ -2778,6 +2781,11 @@ internal fun ReaderScreen(
     val setPrompt: (String) -> Unit = { value ->
         promptField = TextFieldValue(value, selection = TextRange(value.length))
     }
+    var mentionPicks by remember(connection) { mutableStateOf(emptyList<MentionChat>()) }
+    val mentionQuery = if (mentionChats.isNotEmpty() && skillQuery == null && promptField.selection.collapsed) {
+        ChatMention.query(prompt, promptField.selection.start)
+    } else null
+    val mentionOptions = mentionQuery?.let { ChatMention.options(mentionChats, it.text) }.orEmpty()
     var dictationPrefix by remember(connection) { mutableStateOf("") }
     val dictationSubmissionStarted = remember(connection) { AtomicBoolean(false) }
     var pendingPromptAction by remember(connection) { mutableStateOf<Long?>(null) }
@@ -3024,7 +3032,7 @@ internal fun ReaderScreen(
         }
     }
     val sendDraft: (String) -> Unit = { draftText ->
-        val composedPrompt = PromptComposer.composeMessage(draftText, imageAttachments, replyTo, reader.nativeSkills)
+        val composedPrompt = PromptComposer.composeMessage(ChatMention.annotate(draftText, mentionPicks, mentionChats), imageAttachments, replyTo, reader.nativeSkills)
         if (composedPrompt.isNotBlank() &&
             !reader.sending &&
             pendingPromptAction == null && !recordingPrompt
@@ -3051,6 +3059,7 @@ internal fun ReaderScreen(
                         }
                         if (promptField.text == draft.prompt && imageAttachments == draft.images && replyTo == draft.replyTo) {
                             setPrompt("")
+                            mentionPicks = emptyList()
                             imageAttachments = emptyList()
                             replyTo = null
                         }
@@ -3660,6 +3669,17 @@ internal fun ReaderScreen(
                         error = reader.skillsError,
                         onSelect = { skill ->
                             promptField = TextFieldValue(NativeSkills.insert(prompt, skill.name), selection = TextRange(skill.name.length + 2))
+                            promptFocusRequester.requestFocus()
+                        },
+                    )
+                }
+                if (mentionQuery != null && mentionOptions.isNotEmpty() && !dictationActive) {
+                    ChatMentionPicker(
+                        chats = mentionOptions,
+                        onSelect = { chat ->
+                            val (value, cursor) = ChatMention.pick(prompt, mentionQuery, promptField.selection.start, chat)
+                            promptField = TextFieldValue(value, selection = TextRange(cursor))
+                            mentionPicks = mentionPicks + chat
                             promptFocusRequester.requestFocus()
                         },
                     )
@@ -5037,33 +5057,57 @@ private fun NativeSkillPicker(
     error: String?,
     onSelect: (NativeSkill) -> Unit,
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = ReaderMenuShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHighest,
-        border = BorderStroke(ReaderOutlineWidth, ReaderOutline),
-    ) {
-        Column(Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState())) {
-            when {
-                loading -> DropdownMenuItem(text = { Text("Loading session skills…") }, enabled = false, onClick = {})
-                error != null -> DropdownMenuItem(text = { Text(error) }, enabled = false, onClick = {})
-                skills.isEmpty() -> DropdownMenuItem(text = { Text("No matching session skills") }, enabled = false, onClick = {})
-                else -> skills.forEach { skill ->
-                    DropdownMenuItem(
-                        text = {
-                            Column {
-                                Text("/${skill.name}", style = MaterialTheme.typography.bodyMedium)
-                                if (skill.description.isNotBlank()) {
-                                    Text(skill.description, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                }
-                            }
-                        },
-                        onClick = { onSelect(skill) },
-                    )
+    ComposerList {
+        when {
+            loading -> ComposerListNote("Loading session skills…")
+            error != null -> ComposerListNote(error)
+            skills.isEmpty() -> ComposerListNote("No matching session skills")
+            else -> skills.forEach { skill ->
+                Column(
+                    Modifier.fillMaxWidth().heightIn(min = Kit.RowHeight).clickable(role = Role.Button) { onSelect(skill) }
+                        .padding(horizontal = Kit.SideChange, vertical = 8.dp),
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text("/${skill.name}", style = Kit.Body, color = Kit.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (skill.description.isNotBlank()) {
+                        Text(skill.description, style = Kit.Hint, color = Kit.TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun ChatMentionPicker(chats: List<MentionChat>, onSelect: (MentionChat) -> Unit) {
+    ComposerList {
+        chats.forEach { chat ->
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = Kit.RowHeight).testTag("mention-row")
+                    .clickable(role = Role.Button) { onSelect(chat) }
+                    .padding(horizontal = Kit.SideChange),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                BotAvatar(chat.session, diameter = 28.dp)
+                Text(chat.name, style = Kit.Body, color = Kit.Text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text("Bot", style = Kit.Hint, color = Kit.TextMuted)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ComposerList(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().kitSurface(Kit.CardShape).heightIn(max = 220.dp).verticalScroll(rememberScrollState()),
+        content = content,
+    )
+}
+
+@Composable
+private fun ComposerListNote(text: String) {
+    Text(text, style = Kit.Hint, color = Kit.TextMuted, modifier = Modifier.fillMaxWidth().padding(horizontal = Kit.SideChange, vertical = 14.dp))
 }
 
 @Composable
