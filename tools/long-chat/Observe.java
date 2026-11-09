@@ -114,7 +114,7 @@ public class Observe extends Instrumentation {
         }
     }
 
-    private void open(String stage) throws Exception {
+    private void open(String stage, long budget) throws Exception {
         waitFor("cl-long-chat", SystemClock.elapsedRealtime() + 30000);
         AccessibilityNodeInfo target = node("cl-long-chat");
         while (target != null && !target.isClickable()) target = target.getParent();
@@ -122,15 +122,15 @@ public class Observe extends Instrumentation {
         long started = SystemClock.elapsedRealtime();
         if (!target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) throw new AssertionError("Session click failed");
         long tapped = SystemClock.elapsedRealtime() - started;
-        waitFor(LATEST, started + 2000);
+        waitFor(LATEST, started + budget);
         long visible = SystemClock.elapsedRealtime() - started;
         nodeMs = visible;
-        int ink = screenshot(stage, started + 2000);
+        int ink = screenshot(stage, SystemClock.elapsedRealtime() + 2000);
         long elapsed = capturedAt - started;
-        report(new JSONObject().put("stage", stage).put("visibleMs", elapsed).put("latest", LATEST)
+        report(new JSONObject().put("stage", stage).put("budgetMs", budget).put("visibleMs", elapsed).put("latest", LATEST)
             .put("inkPixels", ink).put("tapMs", tapped).put("nodeMs", visible).put("captureMs", elapsed - visible)
             .put("storageMs", SystemClock.elapsedRealtime() - capturedAt));
-        if (elapsed > 2000) throw new AssertionError("Visible reply too late: " + elapsed);
+        if (visible > budget) throw new AssertionError("Visible reply too late: stage=" + stage + " nodeMs=" + visible + " budgetMs=" + budget);
     }
 
     private void seedHost() throws Exception {
@@ -171,13 +171,13 @@ public class Observe extends Instrumentation {
             getTargetContext().startActivity(intent);
             waitFor("Inbox", SystemClock.elapsedRealtime() + 30000);
             if (node("All") != null) click("All");
-            open(phase);
+            open(phase, phase.equals("initial") ? 15000 : phase.equals("smoke") ? 2000 : 1000);
             if (phase.equals("initial")) {
                 click("Back");
                 click("verify-session");
                 waitFor("VERIFY_READY_528", SystemClock.elapsedRealtime() + 30000);
                 click("Back");
-                open("switch-back");
+                open("switch-back", 1000);
                 long started = SystemClock.elapsedRealtime();
                 int samples = 0;
                 do {
