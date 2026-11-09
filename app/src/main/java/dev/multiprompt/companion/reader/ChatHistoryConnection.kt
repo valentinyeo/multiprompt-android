@@ -191,6 +191,9 @@ class ChatHistoryConnection(
             pending(sid).none { it.operation == "reset" }) resetFence = false
     }
 
+    suspend fun changeHost(change: HostChange): MessageActionResult =
+        runCatching { action("host", change.name, line = change::line) }.getOrElse { if (it is CancellationException) throw it else MessageActionResult.Unknown }
+
     fun interruptHost(fallback: () -> Unit = {}): Boolean {
         val host = _state.value.replica?.host ?: return false
         val approval = host.request?.takeIf { it.kind == "approval" && it.id !in _hostClosed.value }

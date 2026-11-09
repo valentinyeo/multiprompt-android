@@ -8,11 +8,13 @@ data class HostStream(
     val blocks: List<HostBlock> = emptyList(),
     val request: HostRequest? = null,
     val earlier: List<HostBlock> = emptyList(),
+    val settings: HostSettings? = null,
 ) {
     val spoken: List<HostBlock>
         get() = blocks.filter { it.kind == "text" && it.text.isNotBlank() }
 
     fun apply(event: MessageProtocol.HostEvent): HostStream = when {
+        event.settings != null -> copy(settings = event.settings)
         event.request != null -> copy(request = event.request)
         event.resolved != null -> if (request?.id == event.resolved) copy(request = null) else this
         event.kind == "turn.started" -> next(event.turn)
@@ -24,7 +26,7 @@ data class HostStream(
 
     private fun next(next: String?): HostStream {
         val finished = spoken.filter { it.done }.map { it.copy(turn = turn) }
-        return HostStream(next, running = true, request = request, earlier = finished.ifEmpty { earlier })
+        return HostStream(next, running = true, request = request, earlier = finished.ifEmpty { earlier }, settings = settings)
     }
 
     private fun upsert(event: MessageProtocol.HostEvent): HostStream {

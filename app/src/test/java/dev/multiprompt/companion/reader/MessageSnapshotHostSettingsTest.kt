@@ -18,8 +18,22 @@ class MessageSnapshotHostSettingsTest {
     @Test fun aDesktopHostedChatSnapshotWithHostSettingsStillLoads() {
         val settings = JSONObject().put("host_settings", JSONObject().put("model", "").put("effort", "").put("applied", false).put("mode", "bypassPermissions"))
         val page = MessageProtocol.snapshot(reply(JSONArray().put(message()).put(settings)), 3, scope)
-        assertEquals(1, page.items.size)
-        assertEquals("hello", (page.items.single() as MessageProtocol.Item.Message).row.text)
+        val replica = MessageReplica.snapshot(listOf(page))
+        assertEquals("hello", replica.messages.values.single().text)
+        assertEquals(HostSettings("", "", "bypassPermissions", false), replica.host.settings)
+    }
+
+    @Test fun aLiveSettingsEventReplacesTheSnapshotSettingsAndSurvivesTheNextTurn() {
+        val settings = JSONObject().put("host_settings", JSONObject().put("model", "opus").put("effort", "high").put("applied", true).put("mode", "manual"))
+        var replica = MessageReplica.snapshot(listOf(MessageProtocol.snapshot(reply(JSONArray().put(settings)), 3, scope)))
+        fun event(seq: Int, kind: String, payload: JSONObject) = JSONObject().put("seq", seq).put("event",
+            JSONObject().put("kind", kind).put("sid", scope.sid).put("turn", "t$seq").put("payload", payload))
+        val events = JSONObject().put("id", 4).put("message_protocol", 1).put("result", JSONObject().put("epoch", 0).put("seq", 18017)
+            .put("next_after", 18017).put("events", JSONArray()
+                .put(event(18016, "host.settings", JSONObject().put("model", "sonnet").put("effort", "low").put("applied", false).put("mode", "plan")))
+                .put(event(18017, "turn.started", JSONObject())))).toString()
+        replica = replica.apply(MessageProtocol.events(events, 4, scope, 18015))
+        assertEquals(HostSettings("sonnet", "low", "plan", false), replica.host.settings)
     }
 
     @Test fun anUnknownSnapshotItemIsStillRefused() {
