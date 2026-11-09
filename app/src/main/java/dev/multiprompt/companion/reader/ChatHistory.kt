@@ -48,7 +48,7 @@ data class ChatHistory(
         grouped.values.toList()
     }
 
-    fun managedMessages(replica: MessageReplica?, unresolved: List<MessageJournal.Entry>, now: Double? = null, offline: Boolean = false): List<ChatHistoryMessage> {
+    fun managedMessages(replica: MessageReplica?, unresolved: List<MessageJournal.Entry>, now: Double? = null, offline: Boolean = false, seen: Map<String, Double> = emptyMap()): List<ChatHistoryMessage> {
         val source = rows.toMutableList()
         replica?.nativeFacts?.values?.forEach { fact ->
             if (fact.inode == inode && fact.offset != null && fact.offset >= offset) {
@@ -98,7 +98,7 @@ data class ChatHistory(
         val cards = unplaced.filter { row ->
             row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT, MessageProtocol.State.FAILED) || latest == null || latest <= row.created + CLOCK_SLACK
         }.map { row ->
-            val notSent = notSent(row, now)
+            val notSent = notSent(row, now, seen[row.id])
             ChatHistoryMessage("@shared:${row.id}", "user", row.text, "", 0, 0, row.id,
                 pending = !notSent && row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT),
                 delivery = if (notSent) NOT_SENT else null)
@@ -209,9 +209,9 @@ data class ChatHistory(
         const val NOT_SENT = "Not sent"
         private const val NOT_SENT_WAIT = 600.0
 
-        fun notSent(row: MessageProtocol.Row, now: Double?): Boolean = when (row.state) {
+        fun notSent(row: MessageProtocol.Row, now: Double?, seen: Double? = null): Boolean = when (row.state) {
             MessageProtocol.State.FAILED -> true
-            MessageProtocol.State.QUEUED, MessageProtocol.State.SENT -> now != null && now - row.created >= NOT_SENT_WAIT
+            MessageProtocol.State.QUEUED, MessageProtocol.State.SENT -> now != null && now - maxOf(row.created, seen ?: row.created) >= NOT_SENT_WAIT
             else -> false
         }
     }

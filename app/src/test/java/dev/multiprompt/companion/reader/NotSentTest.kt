@@ -11,10 +11,10 @@ class NotSentTest {
     private val id = "sharedmessage654321"
     private val created = 1_000.0
 
-    private fun drawn(state: MessageProtocol.State, now: Double?, unresolved: List<MessageJournal.Entry> = emptyList(), offline: Boolean = false) =
+    private fun drawn(state: MessageProtocol.State, now: Double?, unresolved: List<MessageJournal.Entry> = emptyList(), offline: Boolean = false, seen: Map<String, Double> = emptyMap()) =
         ChatHistory(sid = sid, inode = 1, offset = 100).managedMessages(
             MessageReplica(1, 1, mapOf(id to MessageProtocol.Row(id, "claude", sid, "hello", 1, "attempt", state, null, null, 1, created))),
-            unresolved, now, offline,
+            unresolved, now, offline, seen,
         )
 
     @Test fun aQueuedMessageWaitsTenMinutesBeforeNotSent() {
@@ -25,6 +25,12 @@ class NotSentTest {
         assertEquals("Not sent", late.delivery)
         assertFalse(late.pending)
         assertEquals(id, late.requestId)
+    }
+
+    @Test fun theWaitStartsWhenThePhoneFirstSeesTheMessage() {
+        val seen = mapOf(id to created + 5_000)
+        assertNull(drawn(MessageProtocol.State.QUEUED, created + 5_599, seen = seen).single().delivery)
+        assertEquals("Not sent", drawn(MessageProtocol.State.QUEUED, created + 5_600, seen = seen).single().delivery)
     }
 
     @Test fun aSentMessageThatNeverLandsSaysNotSent() {
