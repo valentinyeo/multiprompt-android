@@ -199,7 +199,7 @@ class LiveChatStreamTest {
     }
 
     @Test
-    fun aFailedMessageShowsOnlyItsBubble() {
+    fun aFailedMessageSaysNotSentWithSendAgain() {
         val failed = MessageProtocol.Row("mp-abcdef0123456789", "claude", sid, "say PONG", 1, "attempt0123456789",
             MessageProtocol.State.FAILED, null, null, 0, 1793653981.5)
         render(ChatHistoryState(ChatHistory(sid = sid, inode = 7, offset = 300), loaded = true,
@@ -207,8 +207,9 @@ class LiveChatStreamTest {
 
         compose.onNodeWithText("say PONG").assertIsDisplayed()
         assertTrue(compose.onAllNodesWithText("Failed").fetchSemanticsNodes().isEmpty())
-        assertTrue(compose.onAllNodesWithText("Send again").fetchSemanticsNodes().isEmpty())
-        assertTrue(compose.onAllNodesWithText("Remove").fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithText("Not sent").assertIsDisplayed()
+        compose.onNodeWithText("Send again").assertIsDisplayed()
+        compose.onNodeWithText("Remove").assertIsDisplayed()
     }
 
     @Test
