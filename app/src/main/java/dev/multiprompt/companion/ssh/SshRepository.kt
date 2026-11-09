@@ -279,22 +279,29 @@ class SshRepository(private val secrets: SecretStorage) {
             val session = client.openSession()
                 ?: throw SshProblem.Connection("The SSH server refused a history channel")
             try {
-                check(session.requestExec(ChatHistoryProtocol.COMMAND))
+                check(session.requestExec(ChatHistoryProtocol.command(script)))
                 launch { for (chunk in session.stderr) { } }
-                session.write(Base64.getEncoder().encode(script) + byteArrayOf(10))
                 val framer = ChatHistoryProtocol.Framer()
+                suspend fun line(): String {
+                    var reply: String? = null
+                    while (reply == null) {
+                        val chunk = session.stdout.receiveCatching().getOrNull()
+                            ?: throw SshProblem.Connection("The history reader is unavailable")
+                        val replies = framer.feed(chunk)
+                        check(replies.size <= 1 && (replies.isEmpty() || !framer.hasPending()))
+                        reply = replies.firstOrNull()
+                    }
+                    return reply
+                }
+                when (withTimeout(45_000L) { line() }) {
+                    ChatHistoryProtocol.HAVE -> Unit
+                    ChatHistoryProtocol.NEED -> session.write(Base64.getEncoder().encode(script) + byteArrayOf(10))
+                    else -> throw SshProblem.Connection("The history reader did not start")
+                }
                 exchange { query ->
                     withTimeout(45_000L) {
                         session.write(query.toByteArray(Charsets.UTF_8))
-                        var reply: String? = null
-                        while (reply == null) {
-                            val chunk = session.stdout.receiveCatching().getOrNull()
-                                ?: throw SshProblem.Connection("The history reader is unavailable")
-                            val replies = framer.feed(chunk)
-                            check(replies.size <= 1 && (replies.isEmpty() || !framer.hasPending()))
-                            reply = replies.firstOrNull()
-                        }
-                        reply
+                        line()
                     }
                 }
             } finally {

@@ -4,7 +4,40 @@ import dev.multiprompt.companion.model.AgentKind
 import org.json.JSONObject
 
 object ChatHistoryProtocol {
-    const val COMMAND = "exec python3 -u -c 'import base64,sys;exec(base64.b64decode(sys.stdin.buffer.readline()))' --serve"
+    const val NEED = "@mp-need"
+    const val HAVE = "@mp-have"
+    private val BOOT = """
+        import base64,hashlib,os,sys
+        h=sys.argv[2]
+        del sys.argv[2:]
+        d=os.path.expanduser("~/.multiprompt-runtime")
+        p=os.path.join(d,"payload-"+h+".py")
+        s=None
+        try:
+         f=os.open(p,os.O_RDONLY|os.O_NOFOLLOW)
+         with os.fdopen(f,"rb") as r:s=r.read()
+        except OSError:pass
+        if s is None or hashlib.sha256(s).hexdigest()!=h:
+         sys.stdout.write("@mp-need\n");sys.stdout.flush()
+         s=base64.b64decode(sys.stdin.buffer.readline())
+         if hashlib.sha256(s).hexdigest()!=h:sys.exit(65)
+         try:
+          os.makedirs(d,0o700,exist_ok=True)
+          t=p+".tmp"+str(os.getpid())
+          with os.fdopen(os.open(t,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600),"wb") as w:w.write(s)
+          os.replace(t,p)
+          for o in sorted((os.path.join(d,n) for n in os.listdir(d) if n.startswith("payload-") and n.endswith(".py")),key=os.path.getmtime)[:-4]:os.unlink(o)
+         except OSError:pass
+        else:
+         sys.stdout.write("@mp-have\n");sys.stdout.flush()
+        exec(compile(s,"<chat-history-reader>","exec"),{"__name__":"__main__","__builtins__":__builtins__})
+    """.trimIndent()
+
+    fun command(script: ByteArray): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(script).joinToString("") { "%02x".format(it) }
+        return "exec python3 -u -c '$BOOT' --serve $digest"
+    }
+
     const val MAX_REPLY_BYTES = 64 * 1024 * 1024
 
     data class Identity(val agent: AgentKind, val tmux: String, val cwd: String = "", val sid: String = "")

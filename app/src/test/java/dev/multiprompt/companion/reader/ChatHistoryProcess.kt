@@ -18,8 +18,7 @@ internal class ChatHistoryProcess(
     val identity = ChatHistoryProtocol.Identity(agent, "", cwd, sid)
     private val script = sequenceOf(File("src/main/assets/chat_history_reader.py"),
         File("app/src/main/assets/chat_history_reader.py")).first { it.isFile }.readBytes()
-    private val process = ProcessBuilder("python3", "-u", "-c",
-        "import base64,sys;exec(base64.b64decode(sys.stdin.buffer.readline()))", "--serve").apply {
+    private val process = ProcessBuilder("sh", "-c", ChatHistoryProtocol.command(script)).apply {
         if (home != null) {
             environment()["HOME"] = home.absolutePath
             environment()["CLAUDE_CONFIG_DIR"] = File(home, ".claude").absolutePath
@@ -35,9 +34,13 @@ internal class ChatHistoryProcess(
     var pages = 0
         private set
 
+    val hello: String = executor.submit<String> { requireNotNull(output.readLine()) }.get(60, TimeUnit.SECONDS)
+
     init {
-        input.write(Base64.getEncoder().encodeToString(script) + "\n")
-        input.flush()
+        if (hello == ChatHistoryProtocol.NEED) {
+            input.write(Base64.getEncoder().encodeToString(script) + "\n")
+            input.flush()
+        }
     }
 
     fun poll(before: Long = 0): ChatHistory {
