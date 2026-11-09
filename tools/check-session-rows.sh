@@ -58,6 +58,7 @@ original = old[old.index(start):old.index(end)]
 original = original.replace('workspaceName: String?,', 'workspaceName: String? = null,').replace('etaLabel: String?,', 'etaLabel: String? = null,')
 assert original.count('DropdownMenu(') == 1, "Expected exactly one original popup call"
 original = original.replace('DropdownMenu(', 'androidx.compose.material3.DropdownMenu(')
+original = original.replace('DropdownMenuItem(', 'androidx.compose.material3.DropdownMenuItem(')
 path.write_text(current[:current.index(start)] + original + current[current.index(end):])
 PYTHON
 if run_rows before; then
