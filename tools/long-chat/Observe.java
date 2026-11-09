@@ -71,12 +71,15 @@ public class Observe extends Instrumentation {
         sendStatus(0, result);
     }
 
+    private long nodeMs = -1;
+
     private int screenshot(String name, long deadline) throws Exception {
         while (true) {
         AccessibilityNodeInfo latest = node(LATEST);
         if (latest == null) throw new AssertionError("Visible screenshot text missing");
         Rect bounds = new Rect();
         latest.getBoundsInScreen(bounds);
+        long shot = SystemClock.elapsedRealtime();
         Bitmap bitmap = getUiAutomation().takeScreenshot();
         long captured = SystemClock.elapsedRealtime();
         if (bitmap == null) throw new AssertionError("Screenshot missing");
@@ -96,7 +99,8 @@ public class Observe extends Instrumentation {
         }
         bitmap.recycle();
         if (expired) throw new AssertionError("Latest reply pixels missed deadline: stage=" + name
-            + " lateMs=" + (captured - deadline) + " ink=" + ink + " reference=" + referenceInk);
+            + " lateMs=" + (captured - deadline) + " ink=" + ink + " reference=" + referenceInk
+            + " nodeMs=" + nodeMs + " shotMs=" + (captured - shot));
         if (visible) {
             capturedAt = captured;
             if (referenceInk == 0) {
@@ -120,6 +124,7 @@ public class Observe extends Instrumentation {
         long tapped = SystemClock.elapsedRealtime() - started;
         waitFor(LATEST, started + 2000);
         long visible = SystemClock.elapsedRealtime() - started;
+        nodeMs = visible;
         int ink = screenshot(stage, started + 2000);
         long elapsed = capturedAt - started;
         report(new JSONObject().put("stage", stage).put("visibleMs", elapsed).put("latest", LATEST)
