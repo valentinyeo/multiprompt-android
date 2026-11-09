@@ -289,4 +289,21 @@ class AccountLayoutTest {
         assertEquals(true, acknowledged.edited.json().getJSONArray("tabs").getJSONObject(0).get("muted"))
         assertEquals(true, acknowledged.base.json().getJSONArray("tabs").getJSONObject(0).get("muted"))
     }
+
+    @Test fun desktopGroupNameIsReadAndKeptWhenThePhoneSaves() {
+        val json = JSONObject("""{"schema":1,"revision":5,"workspaces":[{"name":"Other"}],"tabs":[{"kind":"tmux","name":"One","tmux_session":"one","tmux_host":0,"workspace":"Other","group":"Runners"},{"kind":"tmux","name":"Two","tmux_session":"two","tmux_host":1,"workspace":"Other","group":""}]}""")
+        val pulled = AccountLayout.parse(json)
+        assertEquals(listOf("Runners", ""), pulled.tabs.map { it.group })
+        assertEquals("Runners", pulled.json().getJSONArray("tabs").getJSONObject(0).getString("group"))
+        assertEquals(pulled, AccountLayout.parse(JSONObject(pulled.json().toString())))
+        listOf<Any>(1, true, "a".repeat(65), "bad\nname", JSONObject.NULL).forEach { bad ->
+            assertThrows(Exception::class.java) { AccountLayout.parse(JSONObject(json.toString()).apply { getJSONArray("tabs").getJSONObject(0).put("group", bad) }) }
+        }
+        val local = pulled.renameTab(one.identity, "Renamed")
+        val newer = pulled.copy(revision = 6, tabs = pulled.tabs.map { it.copy(group = "Leads") })
+        val saved = AccountLayout.rebase(pulled, local, newer)
+        assertEquals(listOf("Leads", "Leads"), saved.tabs.map { it.group })
+        assertEquals("Renamed", saved.tabs[0].name)
+        assertNull(AccountTab("One", "one", 0, "Other").json().opt("group"))
+    }
 }

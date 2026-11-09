@@ -19,11 +19,12 @@ data class AccountTab(
     val face: Int? = null,
     val color: Int? = null,
     val photo: Long? = null,
+    val group: String? = null,
 ) {
     val identity: String get() = "$host:${session.lowercase(java.util.Locale.ROOT)}"
     fun json(): JSONObject = JSONObject().put("kind", "tmux").put("name", name)
         .put("tmux_session", session).put("tmux_host", host).put("workspace", workspace).put("manual", manual)
-        .apply { favorite?.let { put("favorite", it) }; muted?.let { put("muted", it) }; used?.let { put("used", it) }; input?.let { put("input", it) }; visits?.let { put("visits", JSONArray(it)) }; face?.let { put("face", it) }; color?.let { put("color", it) }; photo?.let { put("photo", it) } }
+        .apply { favorite?.let { put("favorite", it) }; muted?.let { put("muted", it) }; used?.let { put("used", it) }; input?.let { put("input", it) }; visits?.let { put("visits", JSONArray(it)) }; face?.let { put("face", it) }; color?.let { put("color", it) }; photo?.let { put("photo", it) }; group?.let { put("group", it) } }
 }
 
 data class AccountLayout(
@@ -49,6 +50,7 @@ data class AccountLayout(
                 (it.used == null || it.used in 0..9_007_199_254_740_991L) &&
                 (it.input == null || it.input in 0..9_007_199_254_740_991L) &&
                 (it.photo == null || it.photo in 1..9_007_199_254_740_991L) &&
+                (it.group == null || it.group.isEmpty() || validText(it.group, 64)) &&
                 (it.visits == null || it.visits.size <= MAX_VISITS && it.visits.all { v -> v in 0..9_007_199_254_740_991L } &&
                     it.visits.zipWithNext().all { (a, b) -> a < b })
         }) { "Invalid or duplicate account tab" }
@@ -141,7 +143,7 @@ data class AccountLayout(
                 val t = tabs.getJSONObject(it)
                 val required = setOf("kind", "name", "tmux_session", "tmux_host", "workspace")
                 val keys = t.keys().asSequence().toSet()
-                require(keys.containsAll(required) && (keys - required).all { it in setOf("manual", "favorite", "muted", "used", "visits", "input", "face", "color", "photo") } && t.get("kind") == "tmux")
+                require(keys.containsAll(required) && (keys - required).all { it in setOf("manual", "favorite", "muted", "used", "visits", "input", "face", "color", "photo", "group") } && t.get("kind") == "tmux")
                 require(listOf("name", "tmux_session", "workspace").all { key -> t.get(key) is String })
                 val host = t.get("tmux_host")
                 require(host is Number && host.toDouble() == host.toInt().toDouble())
@@ -170,9 +172,11 @@ data class AccountLayout(
                 require(color == null || color >= 0)
                 val photo = if (t.has("photo")) t.get("photo") else null
                 require(!t.has("photo") || photo is Number && photo !is Double && photo !is Float && photo.toLong() in 1..9_007_199_254_740_991L)
+                val group = if (t.has("group")) t.get("group") else null
+                require(group == null || group is String && (group.isEmpty() || validText(group, 64)))
                 AccountTab(t.getString("name"), t.getString("tmux_session"), host.toInt(), t.getString("workspace"),
                     t.optBoolean("manual", false), if (t.has("favorite")) t.getBoolean("favorite") else null, (used as? Number)?.toLong(), visits, (input as? Number)?.toLong(),
-                    if (t.has("muted")) t.getBoolean("muted") else null, face, botPaletteColor(color), (photo as? Number)?.toLong())
+                    if (t.has("muted")) t.getBoolean("muted") else null, face, botPaletteColor(color), (photo as? Number)?.toLong(), group as String?)
             }, settings, if (json.has("hosts")) AccountHosts.parse(json.opt("hosts")) else null,
                 if (json.has("removed_hosts")) {
                     val values = json.getJSONArray("removed_hosts")
@@ -213,6 +217,7 @@ data class AccountLayout(
                     face = if (e.face != b.face) e.face else r.face,
                     color = if (e.color != b.color) e.color else r.color,
                     photo = r.photo,
+                    group = if (e.group != b.group) e.group else r.group,
                     used = listOfNotNull(b.used, e.used, r.used).maxOrNull(),
                     input = listOfNotNull(b.input, e.input, r.input).maxOrNull(),
                     visits = mergeVisits(b.visits, e.visits, r.visits),

@@ -30,5 +30,6 @@
   "IGSH-1875": "Android: desktop-hosted chats load and send again",
   "IGSH-1876": "Android: working dots move even with battery saver on",
   "IGSH-1882": "Android: open chat stops showing new messages until reopened",
-  "IGSH-1883": "Android: same 20 robots and Soft colours as desktop"
+  "IGSH-1883": "Android: same 20 robots and Soft colours as desktop",
+  "IGSH-1888": "Android: server runners show in their own group"
 }
