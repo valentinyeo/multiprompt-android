@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.model.AgentKind
+import dev.multiprompt.companion.reader.ChatMention
 import dev.multiprompt.companion.reader.ChatReactions
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.ssh.TmuxText
@@ -245,7 +246,7 @@ internal fun ChatHistoryList(
                 }
                 val previous = presentation.messages.getOrNull(presentation.messages.lastIndex - index - 1)
                 if (LocalReaderStyle.current && previous != null && previous.role != message.role) Spacer(Modifier.height(10.dp))
-                HistoryBubble(message.text, message.role, message.pending, fontScale, sunlight, replyGate, onReply,
+                HistoryBubble(if (message.role == "user") ChatMention.visible(message.text) else message.text, message.role, message.pending, fontScale, sunlight, replyGate, onReply,
                     messageId = message.requestId, sessionName = sessionName, onMarkUnread = { onMarkUnread(message.key) },
                     key = message.key, highlighted = highlightedKey == message.key,
                     onJump = { pendingJump = ReplyJump(message, it) },
