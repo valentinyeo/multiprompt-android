@@ -11,6 +11,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -150,15 +152,15 @@ class ReaderAttachOutlineTest {
         render()
         compose.onNode(hasSetTextAction()).performTextInput("keep my draft")
         compose.onNodeWithContentDescription("Attach").performClick()
-        compose.onNodeWithText("Model").performClick()
-        compose.onNodeWithText("Use Claude Sonnet").performClick()
+        compose.onNode(hasText("MODEL") and hasAnyAncestor(isDialog())).assertExists()
+        compose.onNode(hasText("PERMISSION LEVEL") and hasAnyAncestor(isDialog())).assertDoesNotExist()
+        compose.onNode(hasText("Sonnet") and hasAnyAncestor(isDialog())).performScrollTo().performClick()
         compose.onNode(hasSetTextAction()).assertTextEquals("keep my draft")
         compose.runOnIdle {
             assertRuntimeCommand("/model sonnet")
         }
         compose.onNodeWithContentDescription("Attach").performClick()
-        compose.onNodeWithText("Effort").performClick()
-        compose.onNodeWithText("Set effort: high").performClick()
+        compose.onNode(hasText("High") and hasAnyAncestor(isDialog())).performScrollTo().performClick()
         compose.onNode(hasSetTextAction()).assertTextEquals("keep my draft")
         compose.runOnIdle { assertRuntimeCommand("/effort high") }
     }

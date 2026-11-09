@@ -238,6 +238,8 @@ import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.dictation.DictationState
+import dev.multiprompt.companion.reader.HostChange
+import dev.multiprompt.companion.reader.MessageActionResult
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.skills.NativeSkill
@@ -2802,7 +2804,6 @@ internal fun ReaderScreen(
     var imageUploadError by remember(connection) { mutableStateOf<String?>(null) }
     var imageAttachments by remember(connection) { mutableStateOf(emptyList<String>()) }
     var attachMenuExpanded by remember(connection) { mutableStateOf(false) }
-    var attachMenuPage by remember(connection) { mutableStateOf(ComposerMenuPage.MAIN) }
     val computerStore = remember(draftContext) { ComputerStore(draftContext) }
     var computerTarget by remember(session.hostId) { mutableStateOf(computerStore.target(session.hostId)) }
     var computerOpen by remember(session.hostId, session.name) {
@@ -3760,7 +3761,7 @@ internal fun ReaderScreen(
                     ) {
                         Box {
                             IconButton(
-                                onClick = { attachMenuPage = ComposerMenuPage.MAIN; attachMenuExpanded = true },
+                                onClick = { attachMenuExpanded = true },
                                 enabled = !reader.sending && !dictationActive && !imageUploading,
                                 modifier = Modifier.minimumInteractiveComponentSize().size(ReaderControlSize)
                                     .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
@@ -3772,58 +3773,43 @@ internal fun ReaderScreen(
                             KitMenu(
                                 expanded = attachMenuExpanded,
                                 onDismissRequest = { attachMenuExpanded = false },
-                                contentResetKey = attachMenuPage.name,
                             ) {
-                                when (attachMenuPage) {
-                                    ComposerMenuPage.MAIN -> {
-                                        KitMenuRow(
-                                            label = "Add image",
-                                            icon = Icons.Outlined.OutlinedImage,
-                                            onClick = {
-                                                attachMenuExpanded = false
-                                                if (screencast.configured) imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                                                else imageKeyDialogVisible = true
-                                            },
-                                        )
-                                        if (session.agent == AgentKind.CLAUDE) {
+                                KitMenuRow(
+                                    label = "Add image",
+                                    icon = Icons.Outlined.OutlinedImage,
+                                    onClick = {
+                                        attachMenuExpanded = false
+                                        if (screencast.configured) imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                        else imageKeyDialogVisible = true
+                                    },
+                                )
+                                if (session.agent == AgentKind.CLAUDE) {
+                                    KitMenuRow(
+                                        label = "Skill",
+                                        icon = Icons.Outlined.AutoAwesome,
+                                        onClick = {
+                                            attachMenuExpanded = false
+                                            promptField = TextFieldValue(NativeSkills.open(prompt), selection = TextRange(1))
+                                            promptFocusRequester.requestFocus()
+                                        },
+                                    )
+                                    val hostSettings = connection.hostSettings()
+                                    HostChange.sections(hostSettings != null).forEach { (title, changes) ->
+                                        KitDivider()
+                                        KitSectionLabel(title)
+                                        changes.forEach { change ->
                                             KitMenuRow(
-                                                label = "Skill",
-                                                icon = Icons.Outlined.AutoAwesome,
+                                                label = change.label,
+                                                trailingText = if (change.active(hostSettings, runtimeDetails.model, runtimeDetails.effort)) "✓" else null,
                                                 onClick = {
                                                     attachMenuExpanded = false
-                                                    promptField = TextFieldValue(NativeSkills.open(prompt), selection = TextRange(1))
-                                                    promptFocusRequester.requestFocus()
+                                                    if (hostSettings == null) change.command?.let(sendModelCommand)
+                                                    else readerScope.launch {
+                                                        val applied = connection.changeHost(change) == MessageActionResult.Applied
+                                                        if (applied) onSessionInteraction()
+                                                        android.widget.Toast.makeText(context, if (applied) change.notice else change.failure, android.widget.Toast.LENGTH_SHORT).show()
+                                                    }
                                                 },
-                                            )
-                                            KitMenuRow(
-                                                label = "Model",
-                                                trailingText = runtimeDetails.model ?: "Unknown",
-                                                onClick = { attachMenuPage = ComposerMenuPage.MODEL },
-                                            )
-                                            KitMenuRow(
-                                                label = "Effort",
-                                                trailingText = runtimeDetails.effort ?: "Unknown",
-                                                onClick = { attachMenuPage = ComposerMenuPage.EFFORT },
-                                            )
-                                        }
-                                    }
-                                    ComposerMenuPage.MODEL -> {
-                                        KitMenuRow(label = "‹ Back", onClick = { attachMenuPage = ComposerMenuPage.MAIN })
-                                        KitMenuRow(label = "Current: ${runtimeDetails.model ?: "Unknown"}", enabled = false, onClick = {})
-                                        listOf("Opus", "Sonnet", "Fable").forEach { model ->
-                                            KitMenuRow(
-                                                label = "Use Claude $model",
-                                                onClick = { attachMenuExpanded = false; sendModelCommand("/model ${model.lowercase()}") },
-                                            )
-                                        }
-                                    }
-                                    ComposerMenuPage.EFFORT -> {
-                                        KitMenuRow(label = "‹ Back", onClick = { attachMenuPage = ComposerMenuPage.MAIN })
-                                        KitMenuRow(label = "Current: ${runtimeDetails.effort ?: "Unknown"}", enabled = false, onClick = {})
-                                        listOf("low", "medium", "high", "xhigh", "max").forEach { level ->
-                                            KitMenuRow(
-                                                label = "Set effort: $level",
-                                                onClick = { attachMenuExpanded = false; sendModelCommand("/effort $level") },
                                             )
                                         }
                                     }
@@ -5063,8 +5049,6 @@ private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.awa
         if (!change.pressed) return true
     }
 }
-
-private enum class ComposerMenuPage { MAIN, MODEL, EFFORT }
 
 @Composable
 private fun NativeSkillPicker(
