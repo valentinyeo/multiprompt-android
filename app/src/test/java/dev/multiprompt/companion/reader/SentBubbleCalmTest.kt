@@ -28,8 +28,10 @@ class SentBubbleCalmTest {
         assertNull(drawn(MessageProtocol.State.ACCEPTED).single().delivery)
     }
 
-    @Test fun aFailedHostCopyCarriesNoLabel() {
-        assertNull(drawn(MessageProtocol.State.FAILED).single().delivery)
+    @Test fun aFailedHostCopySaysNotSent() {
+        val failed = drawn(MessageProtocol.State.FAILED).single()
+        assertEquals("Not sent", failed.delivery)
+        assertTrue(!failed.pending)
     }
 
     @Test fun anUnknownSubmitCarriesNoLabel() {
