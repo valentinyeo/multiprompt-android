@@ -152,8 +152,8 @@ class ReaderAttachOutlineTest {
         render()
         compose.onNode(hasSetTextAction()).performTextInput("keep my draft")
         compose.onNodeWithContentDescription("Attach").performClick()
-        compose.onNode(hasText("Model") and hasAnyAncestor(isDialog())).assertExists()
-        compose.onNode(hasText("Permission level") and hasAnyAncestor(isDialog())).assertDoesNotExist()
+        compose.onNode(hasText("MODEL") and hasAnyAncestor(isDialog())).assertExists()
+        compose.onNode(hasText("PERMISSION LEVEL") and hasAnyAncestor(isDialog())).assertDoesNotExist()
         compose.onNode(hasText("Sonnet") and hasAnyAncestor(isDialog())).performScrollTo().performClick()
         compose.onNode(hasSetTextAction()).assertTextEquals("keep my draft")
         compose.runOnIdle {
