@@ -30,6 +30,7 @@ object MessageProtocol {
         val state: String?,
         val request: HostRequest? = null,
         val resolved: String? = null,
+        val settings: HostSettings? = null,
     )
 
     sealed interface Item {
@@ -106,6 +107,8 @@ object MessageProtocol {
         if (value.has("native_message")) return Item.Native(fact(jsonObject(value.get("native_message")), scope, true))
         if (value.has("attempt_receipt")) return Item.AttemptReceipt(fact(jsonObject(value.get("attempt_receipt")), scope, false))
         if (!snapshot && value.has("reset_epoch")) return Item.Reset(integral(value.get("reset_epoch")))
+        if (snapshot && value.length() == 1 && value.has("host_settings")) return Item.Host(
+            HostEvent("host.settings", null, null, 0L, null, false, null, settings = HostSettings.parse(jsonObject(value.get("host_settings")))))
         if (value.has("kind")) return Item.Host(hostEvent(value, scope))
         require(!snapshot)
         return Item.Message(row(value, scope))
@@ -119,7 +122,8 @@ object MessageProtocol {
         return HostEvent(kind, value.optString("turn").ifEmpty { null }, value.optString("item").ifEmpty { null },
             if (value.has("at")) integral(value.get("at")) else 0L, body,
             payload.optBoolean("done") || kind.endsWith(".done"), payload.optString("state").ifEmpty { null },
-            HostRequest.parse(kind, payload), HostRequest.resolved(kind, payload))
+            HostRequest.parse(kind, payload), HostRequest.resolved(kind, payload),
+            if (kind == "host.settings") HostSettings.parse(payload) else null)
     }
 
     private fun fact(value: JSONObject, scope: Scope, native: Boolean): Fact {
@@ -176,7 +180,7 @@ object MessageProtocol {
         val next = result.get("next_cursor")
         return SnapshotPage(text(result.get("snapshot_id")).also { require(it.isNotBlank()) },
             integral(result.get("epoch")), integral(result.get("seq")),
-            (0 until values.length()).map { jsonObject(values.get(it)) }.filterNot { it.length() == 1 && it.has("host_settings") }.map { item(it, scope, true) },
+            (0 until values.length()).map { jsonObject(values.get(it)) }.map { item(it, scope, true) },
             if (next == JSONObject.NULL) null else integral(next))
     }
 

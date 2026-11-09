@@ -130,6 +130,11 @@ class SessionReaderConnection(
         historyConnection?.select(value)
     }
 
+    fun hostSettings(): HostSettings? = historyConnection?.state?.value?.replica?.host?.settings
+
+    suspend fun changeHost(change: HostChange): MessageActionResult =
+        historyConnection?.changeHost(change) ?: MessageActionResult.Rejected("Chat is not ready")
+
     fun interruptHost(): Boolean = historyConnection?.interruptHost { requests.trySend(Request.Action(TmuxAction.ESCAPE)) } == true
 
     fun chatHistory(agent: AgentKind, cwd: String): ChatHistoryConnection {
