@@ -2811,6 +2811,7 @@ internal fun ReaderScreen(
     var imageUploadError by remember(connection) { mutableStateOf<String?>(null) }
     var imageAttachments by remember(connection) { mutableStateOf(emptyList<String>()) }
     var attachMenuExpanded by remember(connection) { mutableStateOf(false) }
+    var attachMenuSection by remember(connection) { mutableStateOf<String?>(null) }
     val computerStore = remember(draftContext) { ComputerStore(draftContext) }
     var computerTarget by remember(session.hostId) { mutableStateOf(computerStore.target(session.hostId)) }
     var computerOpen by remember(session.hostId, session.name) {
@@ -3768,7 +3769,7 @@ internal fun ReaderScreen(
                     ) {
                         Box {
                             IconButton(
-                                onClick = { attachMenuExpanded = true },
+                                onClick = { attachMenuSection = null; attachMenuExpanded = true },
                                 enabled = !reader.sending && !dictationActive && !imageUploading,
                                 modifier = Modifier.minimumInteractiveComponentSize().size(ReaderControlSize)
                                     .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
@@ -3780,43 +3781,63 @@ internal fun ReaderScreen(
                             KitMenu(
                                 expanded = attachMenuExpanded,
                                 onDismissRequest = { attachMenuExpanded = false },
+                                contentResetKey = attachMenuSection.orEmpty(),
                             ) {
-                                KitMenuRow(
-                                    label = "Add image",
-                                    icon = Icons.Outlined.OutlinedImage,
-                                    onClick = {
-                                        attachMenuExpanded = false
-                                        if (screencast.configured) imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                                        else imageKeyDialogVisible = true
-                                    },
-                                )
-                                if (session.agent == AgentKind.CLAUDE) {
+                                val openSection = if (session.agent == AgentKind.CLAUDE) {
+                                    HostChange.sections(connection.hostSettings() != null).firstOrNull { it.first == attachMenuSection }
+                                } else null
+                                if (openSection != null) {
+                                    val hostSettings = connection.hostSettings()
                                     KitMenuRow(
-                                        label = "Skill",
-                                        icon = Icons.Outlined.AutoAwesome,
+                                        label = openSection.first,
+                                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                        onClick = { attachMenuSection = null },
+                                    )
+                                    KitDivider()
+                                    openSection.second.forEach { change ->
+                                        KitMenuRow(
+                                            label = change.label,
+                                            trailingText = if (change.active(hostSettings, runtimeDetails.model, runtimeDetails.effort)) "✓" else null,
+                                            onClick = {
+                                                attachMenuExpanded = false
+                                                if (hostSettings == null) change.command?.let(sendModelCommand)
+                                                else readerScope.launch {
+                                                    val applied = connection.changeHost(change) == MessageActionResult.Applied
+                                                    if (applied) onSessionInteraction()
+                                                    android.widget.Toast.makeText(context, if (applied) change.notice else change.failure, android.widget.Toast.LENGTH_SHORT).show()
+                                                }
+                                            },
+                                        )
+                                    }
+                                } else {
+                                    KitMenuRow(
+                                        label = "Add image",
+                                        icon = Icons.Outlined.OutlinedImage,
                                         onClick = {
                                             attachMenuExpanded = false
-                                            promptField = TextFieldValue(NativeSkills.open(prompt), selection = TextRange(1))
-                                            promptFocusRequester.requestFocus()
+                                            if (screencast.configured) imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                            else imageKeyDialogVisible = true
                                         },
                                     )
-                                    val hostSettings = connection.hostSettings()
-                                    HostChange.sections(hostSettings != null).forEach { (title, changes) ->
+                                    if (session.agent == AgentKind.CLAUDE) {
+                                        KitMenuRow(
+                                            label = "Skill",
+                                            icon = Icons.Outlined.AutoAwesome,
+                                            onClick = {
+                                                attachMenuExpanded = false
+                                                promptField = TextFieldValue(NativeSkills.open(prompt), selection = TextRange(1))
+                                                promptFocusRequester.requestFocus()
+                                            },
+                                        )
+                                        val hostSettings = connection.hostSettings()
+                                        val sections = HostChange.sections(hostSettings != null)
                                         KitDivider()
-                                        KitSectionLabel(title)
-                                        changes.forEach { change ->
+                                        sections.forEach { (title, changes) ->
+                                            val current = changes.firstOrNull { it.active(hostSettings, runtimeDetails.model, runtimeDetails.effort) }?.label
                                             KitMenuRow(
-                                                label = change.label,
-                                                trailingText = if (change.active(hostSettings, runtimeDetails.model, runtimeDetails.effort)) "✓" else null,
-                                                onClick = {
-                                                    attachMenuExpanded = false
-                                                    if (hostSettings == null) change.command?.let(sendModelCommand)
-                                                    else readerScope.launch {
-                                                        val applied = connection.changeHost(change) == MessageActionResult.Applied
-                                                        if (applied) onSessionInteraction()
-                                                        android.widget.Toast.makeText(context, if (applied) change.notice else change.failure, android.widget.Toast.LENGTH_SHORT).show()
-                                                    }
-                                                },
+                                                label = title,
+                                                trailingText = listOfNotNull(current, "›").joinToString(" "),
+                                                onClick = { attachMenuSection = title },
                                             )
                                         }
                                     }
