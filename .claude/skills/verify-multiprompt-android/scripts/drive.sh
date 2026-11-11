@@ -1652,8 +1652,8 @@ if [[ "$feature" == native-skills.md ]]; then
     set_composer 'draft%sstays'
     tap_desc Attach
     wait_for_text Skill
-    wait_for_text MODEL
-    wait_for_text EFFORT
+    wait_for_text Model
+    wait_for_text Effort
     wait_for_text 'Add image'
     shot native-plus-menu
     tap_text Skill
@@ -1667,16 +1667,22 @@ if [[ "$feature" == native-skills.md ]]; then
     wait_receipt 'VERIFY_RECEIVED:/qa:verify-native draft stays'
     set_composer 'keep%sthis%sdraft'
     tap_desc Attach
-    wait_for_text MODEL
+    tap_text Model
+    wait_for_text Haiku
+    wait_for_absence 'Add image'
     shot native-model-menu
     tap_text Sonnet
     wait_receipt 'VERIFY_RECEIVED:/model sonnet'
     tap_desc Attach
-    wait_for_text EFFORT
+    tap_text Effort
+    wait_for_text Medium
     shot native-effort-menu
     tap_text High
     wait_receipt 'VERIFY_RECEIVED:/effort high'
     tap_desc Attach
+    wait_for_text 'Sonnet ›'
+    wait_for_text 'High ›'
+    tap_text Effort
     wait_for_text '✓'
     shot native-model-effort-observed
     adb shell input keyevent KEYCODE_BACK
