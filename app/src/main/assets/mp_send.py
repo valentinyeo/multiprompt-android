@@ -5,15 +5,20 @@ import json
 import os
 import re
 import sqlite3
+import subprocess
 import sys
 import time
 import uuid
 from pathlib import Path
 
 TERMINAL_STATES = ("accepted", "started", "failed", "cancelled")
+HANDOFF_STATES = ("sent", "accepted", "started", "failed", "cancelled")
+HANDOFF_TIMEOUT = 15.0
 PROVIDERS = ("claude", "codex")
 SESSION_ID = re.compile(r"[A-Za-z0-9_-]{1,80}\Z")
 MESSAGE_ID = re.compile(r"[A-Za-z0-9_-]{16,80}\Z")
+TMUX_NAME = re.compile(r"[A-Za-z0-9_.:-]{1,64}\Z")
+MENTION = re.compile(r"@?(.*?)\{([A-Za-z0-9_.:-]{1,64})\}\Z", re.S)
 _reader = None
 
 
@@ -73,7 +78,7 @@ def submit(reader, provider, sid, tmux, text, message_id=None):
     token = message_id or ("mp-" + uuid.uuid4().hex)
     if MESSAGE_ID.match(token) is None:
         raise ValueError("invalid message id: " + token)
-    query = dict(op="message_submit", message_protocol=1, provider=provider, sid=sid, tmux=tmux, message_id=token, text=text)
+    query = dict(op="message_submit", message_protocol=1, provider=provider, sid=sid, tmux=tmux, message_id=token, text=text, origin="agent")
     result = reader.message_store_request(query)
     return result.get("message") or {"id": token, "state": "queued"}
 
@@ -112,6 +117,171 @@ def wait(reader, provider, sid, tmux, message_id, timeout):
     return message
 
 
+def handoff(reader, provider, sid, tmux, message_id, timeout):
+    deadline = time.monotonic() + max(0.0, min(timeout, HANDOFF_TIMEOUT))
+    message = status(reader, provider, sid, tmux, message_id)
+    while message is None or message.get("state") not in HANDOFF_STATES:
+        if time.monotonic() >= deadline:
+            return message
+        time.sleep(0.2)
+        if message is not None and message.get("state") == "queued":
+            dispatch(reader, provider, sid, tmux)
+        poll(reader, provider, sid, tmux)
+        message = status(reader, provider, sid, tmux, message_id) or message
+    return message
+
+
+def state_root():
+    return Path.home() / ".local/state/multiprompt"
+
+
+def read_json(path):
+    try:
+        value = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def pid_alive(pid):
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def tmux_names():
+    try:
+        done = subprocess.run(["tmux", "list-sessions", "-F", "#{session_name}"], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if done.returncode != 0:
+        return None
+    return set(done.stdout.split())
+
+
+def published_names():
+    known = read_json(state_root() / "chat-names.json") or {}
+    return {tmux: entry["name"] for tmux, entry in known.items() if isinstance(entry, dict) and isinstance(entry.get("name"), str) and entry["name"].strip()}
+
+
+def live_chats():
+    root = state_root() / "agent-host"
+    names = published_names()
+    sessions = tmux_names()
+    best = {}
+    for config_path in sorted(root.glob("*.config.json")):
+        config = read_json(config_path)
+        state = read_json(config_path.with_name(config_path.name[: -len(".config.json")] + ".state.json"))
+        if not config or not state or config.get("enabled") is False:
+            continue
+        tmux, sid, provider = config.get("tmux"), state.get("sid"), state.get("provider")
+        if not isinstance(tmux, str) or TMUX_NAME.match(tmux) is None or not isinstance(sid, str) or SESSION_ID.match(sid) is None:
+            continue
+        if provider not in PROVIDERS or not pid_alive(state.get("pid")):
+            continue
+        if sessions is not None and tmux not in sessions:
+            continue
+        started = state.get("started") if isinstance(state.get("started"), (int, float)) else 0
+        row = dict(name=names.get(tmux), provider=provider, sid=sid, tmux=tmux, cwd=config.get("cwd"), state="busy" if state.get("inflight") else "idle", started=started)
+        if tmux not in best or started >= best[tmux]["started"]:
+            best[tmux] = row
+    rows = sorted(best.values(), key=lambda row: ((row["name"] or row["tmux"]).casefold(), row["tmux"]))
+    for row in rows:
+        del row["started"]
+    return rows
+
+
+def label(chat):
+    return chat["name"] or chat["tmux"]
+
+
+def squash(text):
+    return " ".join(text.split()).casefold()
+
+
+def describe(chats):
+    return "; ".join(label(chat) + " {" + chat["tmux"] + "}" for chat in chats)
+
+
+def resolve_chat(target, chats):
+    wanted = target.strip()
+    mention = MENTION.match(wanted)
+    if mention:
+        wanted = mention.group(2)
+        exact_session = True
+    else:
+        exact_session = False
+    for chat in chats:
+        if chat["tmux"].casefold() == wanted.casefold():
+            return chat
+    if exact_session:
+        raise ValueError("no live chat in terminal session " + wanted)
+    key = squash(wanted.lstrip("@"))
+    if not key:
+        raise ValueError("empty chat name")
+    exact = [chat for chat in chats if chat["name"] and squash(chat["name"]) == key]
+    if len(exact) == 1:
+        return exact[0]
+    if len(exact) > 1:
+        raise ValueError("more than one chat is named " + repr(target) + ": " + describe(exact) + "; pass the {session} form")
+    prefixed = [chat for chat in chats if chat["name"] and squash(chat["name"]).startswith(key)]
+    if len(prefixed) == 1:
+        return prefixed[0]
+    if len(prefixed) > 1:
+        raise ValueError(repr(target) + " matches more than one chat: " + describe(prefixed) + "; type more of the name")
+    raise ValueError("no live chat named " + repr(target) + "; run mp-sessions to see the names")
+
+
+def own_tmux(environ=None):
+    environ = os.environ if environ is None else environ
+    tab = environ.get("MULTIPROMPT_TAB")
+    if tab and TMUX_NAME.match(tab):
+        return tab
+    pane = environ.get("TMUX_PANE")
+    if pane:
+        try:
+            done = subprocess.run(["tmux", "display-message", "-p", "-t", pane, "#{session_name}"], capture_output=True, text=True, timeout=5)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        name = done.stdout.strip()
+        if done.returncode == 0 and TMUX_NAME.match(name):
+            return name
+    return None
+
+
+def sender_label(chats, explicit=None):
+    if explicit and explicit.strip():
+        return " ".join(explicit.split())
+    tmux = own_tmux()
+    if not tmux:
+        raise ValueError("cannot tell which chat is sending; run from inside a chat or pass --from NAME")
+    names = published_names()
+    return names.get(tmux) or tmux
+
+
+def parse_named(argv):
+    parser = argparse.ArgumentParser(prog="mp-send", description="Send one message to a live chat by the name shown in the desktop app. The text starts with who sent it.")
+    parser.add_argument("--to", required=True)
+    parser.add_argument("text", nargs="?")
+    parser.add_argument("--from", dest="sender", default=None)
+    parser.add_argument("--id", dest="message_id", default=None)
+    parser.add_argument("--wait", action="store_true")
+    parser.add_argument("--timeout", type=float, default=60.0)
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--reader", default=None)
+    return parser.parse_args(argv)
+
+
+def named_mode(argv):
+    return any(arg == "--to" or arg.startswith("--to=") for arg in argv)
+
+
 def parse(argv):
     parser = argparse.ArgumentParser(prog="mp-send", description="Put one message into an agent session they own, without typing into a terminal.")
     parser.add_argument("provider", choices=PROVIDERS)
@@ -126,44 +296,70 @@ def parse(argv):
     return parser.parse_args(argv)
 
 
-def run(args):
-    if SESSION_ID.match(args.sid) is None:
-        raise ValueError("invalid session id: " + str(args.sid))
-    text = sys.stdin.read() if args.text in (None, "-") else args.text
+def read_text(text):
+    text = sys.stdin.read() if text in (None, "-") else text
     if not text.strip() or "\x00" in text:
         raise ValueError("empty message")
+    return text
+
+
+def deliver(args, provider, sid, tmux, text):
     reader = reader_module(args.reader)
-    tmux = args.tmux or locator_tmux(reader, args.provider, args.sid)
     if not tmux:
-        raise ValueError("no terminal binding for this session; pass --tmux")
-    message = submit(reader, args.provider, args.sid, tmux, text, args.message_id)
+        tmux = args.tmux or reader.host_chat_name(provider, sid) or locator_tmux(reader, provider, sid)
+        if not tmux:
+            raise ValueError("no terminal binding for this session; pass --tmux")
+    message = submit(reader, provider, sid, tmux, text, args.message_id)
     message_id = message.get("id")
-    dispatch(reader, args.provider, args.sid, tmux)
-    final = wait(reader, args.provider, args.sid, tmux, message_id, args.timeout) if args.wait else message
+    dispatch(reader, provider, sid, tmux)
+    final = wait(reader, provider, sid, tmux, message_id, args.timeout) if args.wait else handoff(reader, provider, sid, tmux, message_id, args.timeout)
     if args.json:
         print(json.dumps(dict(id=message_id, state=(final or {}).get("state"), receipt=(final or {}).get("receipt")), separators=(",", ":")))
     else:
         print(message_id)
-        if args.wait:
+        if args.wait and (final or {}).get("state") is not None:
             line = "state=" + str((final or {}).get("state"))
             if (final or {}).get("receipt"):
                 line += " receipt=" + str(final["receipt"])
             print(line)
     state = (final or {}).get("state")
-    if not args.wait:
-        return 0
     if state == "failed" or state == "cancelled":
         return 3
+    if not args.wait:
+        return 0
     if state not in TERMINAL_STATES:
         print("timed out waiting for the message", file=sys.stderr)
         return 4
     return 0
 
 
+def run(args):
+    if SESSION_ID.match(args.sid) is None:
+        raise ValueError("invalid session id: " + str(args.sid))
+    text = read_text(args.text)
+    reader = reader_module(args.reader)
+    tmux = args.tmux or locator_tmux(reader, args.provider, args.sid)
+    if not tmux:
+        raise ValueError("no terminal binding for this session; pass --tmux")
+    return deliver(args, args.provider, args.sid, tmux, text)
+
+
+def run_named(args):
+    text = read_text(args.text)
+    chats = live_chats()
+    target = resolve_chat(args.to, chats)
+    sender = sender_label(chats, args.sender)
+    if own_tmux() == target["tmux"] and not args.sender:
+        raise ValueError("that is this chat; pick another chat")
+    return deliver(args, target["provider"], target["sid"], target["tmux"], "From " + sender + ": " + text)
+
+
 def main(argv=None):
-    args = parse(sys.argv[1:] if argv is None else argv)
+    argv = sys.argv[1:] if argv is None else argv
+    named = named_mode(argv)
+    args = parse_named(argv) if named else parse(argv)
     try:
-        return run(args)
+        return run_named(args) if named else run(args)
     except (OSError, ValueError, KeyError, TypeError, sqlite3.Error) as error:
         print("mp-send: " + str(error), file=sys.stderr)
         return 2
