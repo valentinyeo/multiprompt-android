@@ -37,5 +37,6 @@
   "IGSH-1888": "Android: server runners show in their own group",
   "IGSH-1532": "Android: show each live message once",
   "IGSH-1942": "Android: plus menu is short, model and effort open on tap",
-  "IGSH-2287": "Android: phone chat engine catches up with desktop"
+  "IGSH-2287": "Android: phone chat engine catches up with desktop",
+  "IGSH-2284": "Android: start Codex, Pi, Hax and Cursor as live chats"
 }
