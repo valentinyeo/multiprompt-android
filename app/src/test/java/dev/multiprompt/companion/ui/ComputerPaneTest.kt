@@ -82,7 +82,7 @@ class ComputerPaneTest {
         compose.onNodeWithText("A tap clicks on the VPS. Keyboard types there.").assertIsDisplayed()
         assertEquals(true, shown?.enabled)
         compose.onNodeWithText("Keyboard").performClick()
-        assertEquals(ComputerControl(enabled = true, keyboardRequests = 1), shown)
+        compose.runOnIdle { assertEquals(ComputerControl(enabled = true, keyboardRequests = 1), shown) }
         compose.onNodeWithText("Give back").performClick()
         compose.onNodeWithText("View only").assertIsDisplayed()
         compose.onNodeWithText("Take control").assertIsDisplayed()
@@ -92,7 +92,7 @@ class ComputerPaneTest {
     @Test fun controlEndsWhenTheScreenSleepsAndViewOnlyComesBack() {
         show(ComputerState(ComputerStatus.Live, localPort = 45123))
         compose.onNodeWithText("Take control").performClick()
-        assertEquals(true, shown?.enabled)
+        compose.runOnIdle { assertEquals(true, shown?.enabled) }
         state.value = ComputerState(ComputerStatus.Sleeping)
         compose.waitForIdle()
         compose.onNodeWithText("Take control").assertIsNotEnabled()
@@ -107,7 +107,7 @@ class ComputerPaneTest {
         compose.onNodeWithText("Take control").performClick()
         compose.onNodeWithText("Open full screen").performClick()
         compose.onNodeWithText("Give back").performClick()
-        assertEquals(false, shown?.enabled)
+        compose.runOnIdle { assertEquals(false, shown?.enabled) }
         compose.onNodeWithText("Exit full screen").performClick()
         compose.onNodeWithText("View only").assertIsDisplayed()
     }
