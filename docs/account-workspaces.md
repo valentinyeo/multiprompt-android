@@ -40,6 +40,8 @@ All Sessions lists the existing SSH inventory on **every saved profile**, withou
 Inbox/Waiting/archive filtering, including sessions outside the account layout.
 Each row shows membership or “Not in a workspace”, with an Add/Move action.
 
+Arrange splits lists every workspace with an Archive action. Archiving removes the workspace and its tabs from the account layout, so other devices see it leave, and keeps a copy of both on this phone only. The Archived list on the same sheet offers Restore, which writes the workspace and its tabs back, and Delete (red, after a confirmation), which discards the copy. Delete is offered only for an archived workspace. The synced schema has no archived field and the account service rejects unknown keys, so Android never sends one. Main cannot be archived, and an empty Main that is not selected stays out of the split row, like the desktop switcher.
+
 Inbox shows gold stars synced with the laptop; signed-in account tabs offer Star/Unstar.
 The ★ Favorites split stays just after All and shows only starred account sessions.
 Android negotiates favorite metadata and preserves absent values without inventing stars.

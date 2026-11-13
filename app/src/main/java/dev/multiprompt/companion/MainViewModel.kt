@@ -39,6 +39,8 @@ import dev.multiprompt.companion.account.AccountHosts
 import dev.multiprompt.companion.account.BotPhotoCache
 import dev.multiprompt.companion.account.AccountHostMap
 import dev.multiprompt.companion.account.AccountLayout
+import dev.multiprompt.companion.account.ArchivedWorkspace
+import dev.multiprompt.companion.account.WorkspaceArchive
 import dev.multiprompt.companion.account.FREQUENT_SPLIT_ID
 import dev.multiprompt.companion.account.frequentSessions
 import dev.multiprompt.companion.account.UsedStampThrottle
@@ -133,6 +135,7 @@ data class AppUiState(
     val deviceApprovalError: String? = null,
     val workspaces: List<Workspace> = emptyList(),
     val workspaceSplitIds: List<String?> = listOf(null),
+    val archivedWorkspaces: List<ArchivedWorkspace> = emptyList(),
     val selectedWorkspaceId: String? = null,
     val workspaceSelectionInitialized: Boolean = false,
     val sessionWorkspaceIds: Map<String, String> = emptyMap(),
@@ -160,7 +163,8 @@ data class AppUiState(
     val showAllSplit: Boolean get() = accountLayout?.settings?.get("all") ?: true
     val frequentFirst: Boolean get() = accountLayout?.settings?.get("frequent_first") ?: true
     val visibleWorkspaceSplitIds: List<String?> get() = inboxSplitIds(
-        workspaceSplitIds, allSplitOnRight, showFrequentSplit, showFavoritesSplit, showAllSplit, frequentFirst,
+        workspaceSplitIds.filterNot { WorkspaceArchive.isHiddenMain(it, selectedWorkspaceId, sessionWorkspaceIds.values) },
+        allSplitOnRight, showFrequentSplit, showFavoritesSplit, showAllSplit, frequentFirst,
     )
 }
 
@@ -245,6 +249,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             signedIn = syncAuth.hasSession(),
             accountLayout = pendingLayout?.edited,
             accountPending = pendingLayout?.dirty == true,
+            archivedWorkspaces = accountStore.archived(syncAuth.accountId()),
             accountHosts = AccountHostMap.resolve(hosts.load(), accountStore.hostOverrides()),
             newestSessionsAtBottom = sessionReads.newestSessionsAtBottom(),
             allSplitOnRight = sessionReads.allSplitOnRight(),
@@ -1763,7 +1768,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         usedStampThrottle = UsedStampThrottle()
         _state.update { it.copy(signedIn = false, accountLayout = null, accountPending = false,
             accountError = null, pendingDevice = null, deviceApprovalBusy = false, deviceApprovalError = null,
-            workspaces = emptyList(), workspaceSplitIds = listOf(null), sessionWorkspaceIds = emptyMap()) }
+            workspaces = emptyList(), workspaceSplitIds = listOf(null), sessionWorkspaceIds = emptyMap(), archivedWorkspaces = emptyList()) }
         viewModelScope.launch { syncAuth.signOut() }
     }
 
@@ -1774,6 +1779,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun publishAccountLayout(photosChanged: Boolean = false) {
         val layout = pendingLayout?.edited
+        val archived = accountStore.archived(syncAuth.accountId())
         _state.update { current ->
             val mapping = AccountHostMap.resolve(current.hosts, accountStore.hostOverrides())
             val workspaces = layout?.workspaces.orEmpty().map { Workspace(id = it, name = it, hostId = "", remotePath = "") }
@@ -1790,7 +1796,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }.toMap())
             }
-            current.copy(accountLayout = layout, botPhotoRevision = current.botPhotoRevision + if (photosChanged) 1 else 0,
+            current.copy(accountLayout = layout, archivedWorkspaces = archived, botPhotoRevision = current.botPhotoRevision + if (photosChanged) 1 else 0,
                 accountPending = pendingLayout?.dirty == true, accountHosts = mapping,
                 workspaces = workspaces, workspaceSplitIds = listOf(null) + workspaces.map { it.id }, sessionWorkspaceIds = assignments,
                 readerSession = current.readerSession?.let { open ->
@@ -1860,6 +1866,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             syncAccount()
             null
         } catch (e: Exception) { e.message ?: "Could not save account edit" }
+    }
+
+    fun archiveAccountWorkspace(name: String): String? {
+        if (!_state.value.signedIn) return "Sign in before editing account workspaces"
+        val pending = pendingLayout ?: return "Pull the account layout before editing"
+        val account = syncAuth.accountId() ?: return "Sign in before editing account workspaces"
+        val before = accountStore.archived(account)
+        return try {
+            val result = WorkspaceArchive.archive(pending.edited, before, name)
+            accountStore.saveArchived(account, result.archived)
+            try {
+                saveAccountLayout(pending.edit(result.layout))
+            } catch (failed: Exception) {
+                accountStore.saveArchived(account, before)
+                throw failed
+            }
+            syncAccount()
+            null
+        } catch (e: Exception) { e.message ?: "Could not archive the workspace" }
+    }
+
+    fun restoreAccountWorkspace(name: String): String? {
+        if (!_state.value.signedIn) return "Sign in before editing account workspaces"
+        val pending = pendingLayout ?: return "Pull the account layout before editing"
+        val account = syncAuth.accountId() ?: return "Sign in before editing account workspaces"
+        return try {
+            val result = WorkspaceArchive.restore(pending.edited, accountStore.archived(account), name)
+            saveAccountLayout(pending.edit(result.layout))
+            accountStore.saveArchived(account, result.archived)
+            publishAccountLayout()
+            syncAccount()
+            null
+        } catch (e: Exception) { e.message ?: "Could not restore the workspace" }
+    }
+
+    fun deleteArchivedWorkspace(name: String): String? {
+        val account = syncAuth.accountId() ?: return "Sign in before editing account workspaces"
+        return try {
+            accountStore.saveArchived(account, WorkspaceArchive.delete(accountStore.archived(account), name))
+            publishAccountLayout()
+            null
+        } catch (e: Exception) { e.message ?: "Could not delete the workspace" }
     }
 
     fun addAccountSession(session: TmuxSession, workspace: String): String? {

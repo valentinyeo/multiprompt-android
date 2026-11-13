@@ -204,6 +204,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.account.AccountTab
+import dev.multiprompt.companion.account.WorkspaceArchive
 import dev.multiprompt.companion.account.AccountHostMap
 import dev.multiprompt.companion.account.FREQUENT_SPLIT_ID
 import dev.multiprompt.companion.account.frequentSessions
@@ -564,6 +565,9 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onSetAllSplitOnRight = viewModel::setAllSplitOnRight,
                     onSetSessionListSetting = viewModel::setSessionListSetting,
                     onSetWorkspaceColor = viewModel::setAccountWorkspaceColor,
+                    onArchiveWorkspace = viewModel::archiveAccountWorkspace,
+                    onRestoreWorkspace = viewModel::restoreAccountWorkspace,
+                    onDeleteArchivedWorkspace = viewModel::deleteArchivedWorkspace,
                     appTheme = state.appTheme,
                     onSetAppTheme = viewModel::setAppTheme,
                     onClearSessionActionError = viewModel::clearSessionActionError,
@@ -1231,6 +1235,9 @@ internal fun SessionsScreen(
     nowMillis: () -> Long = System::currentTimeMillis,
     onSetSessionListSetting: (String, Boolean) -> Unit = { _, _ -> },
     onSetWorkspaceColor: (String, Int?) -> Unit = { _, _ -> },
+    onArchiveWorkspace: (String) -> String? = { null },
+    onRestoreWorkspace: (String) -> String? = { null },
+    onDeleteArchivedWorkspace: (String) -> String? = { null },
     dictation: DeepgramDictation? = null,
     material3: Boolean = LocalMaterial3.current,
 ) = MultipromptTheme(
@@ -1247,6 +1254,8 @@ internal fun SessionsScreen(
     var workspaceName by remember { mutableStateOf("") }
     var workspaceError by remember { mutableStateOf<String?>(null) }
     var splitOrderDialogVisible by remember { mutableStateOf(false) }
+    var workspaceActionError by remember { mutableStateOf<String?>(null) }
+    var deleteArchivedTarget by remember { mutableStateOf<String?>(null) }
     var reminderPromptSession by remember { mutableStateOf<TmuxSession?>(null) }
     var moveSessionTarget by remember { mutableStateOf<TmuxSession?>(null) }
     var endPromptSession by remember { mutableStateOf<TmuxSession?>(null) }
@@ -1647,6 +1656,14 @@ internal fun SessionsScreen(
                             style = Kit.Label,
                             color = Kit.TextMuted,
                         )
+                        if (splitId != null && !WorkspaceArchive.isMain(splitName)) {
+                            Text(
+                                "Archive",
+                                modifier = Modifier.clickable { workspaceActionError = onArchiveWorkspace(splitName) }.padding(horizontal = 8.dp, vertical = 12.dp),
+                                style = Kit.Label,
+                                color = Kit.Text,
+                            )
+                        }
                         IconButton(
                             onClick = {
                                 onMoveWorkspaceSplit(splitId, if (state.allSplitOnRight) 1 else -1)
@@ -1661,10 +1678,46 @@ internal fun SessionsScreen(
                         ) { Text("↓", color = Kit.Text) }
                     }
                 }
+                if (state.archivedWorkspaces.isNotEmpty()) {
+                    KitSectionLabel("Archived")
+                    state.archivedWorkspaces.forEach { archived ->
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(archived.name, style = Kit.Body, color = Kit.Text, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                "Restore",
+                                modifier = Modifier.clickable { workspaceActionError = onRestoreWorkspace(archived.name) }.padding(horizontal = 8.dp, vertical = 12.dp),
+                                style = Kit.Label,
+                                color = Kit.Text,
+                            )
+                            Text(
+                                "Delete",
+                                modifier = Modifier.clickable { deleteArchivedTarget = archived.name }.padding(horizontal = 8.dp, vertical = 12.dp),
+                                style = Kit.Label,
+                                color = Kit.Danger,
+                            )
+                        }
+                    }
+                }
+                workspaceActionError?.let { InlineError(it) }
             }
             KitSecondaryButton("Automatic order", onClick = onResetWorkspaceSplitOrder, modifier = Modifier.fillMaxWidth())
             KitPrimaryButton("Done", onClick = { splitOrderDialogVisible = false }, modifier = Modifier.fillMaxWidth())
         }
+    }
+    deleteArchivedTarget?.let { name ->
+        DestructiveConfirmationSheet(
+            title = "Delete $name for good?",
+            warning = "The archived workspace and its saved split are removed from this phone. Sessions keep running.",
+            confirmLabel = "Delete workspace",
+            onDismiss = { deleteArchivedTarget = null },
+            onConfirm = {
+                deleteArchivedTarget = null
+                workspaceActionError = onDeleteArchivedWorkspace(name)
+            },
+        )
     }
     if (workspaceDialogVisible) {
         KitSheet(onDismiss = { workspaceDialogVisible = false }) {
@@ -1849,7 +1902,10 @@ internal fun SessionsScreen(
                         }
                         InboxOverflowMenu(
                             onSettings = { settingsPage = SettingsPage.PREFERENCES },
-                            onArrangeSplits = { splitOrderDialogVisible = true },
+                            onArrangeSplits = {
+                                workspaceActionError = null
+                                splitOrderDialogVisible = true
+                            },
                             onNewWorkspace = {
                                 workspaceError = null
                                 workspaceDialogVisible = true

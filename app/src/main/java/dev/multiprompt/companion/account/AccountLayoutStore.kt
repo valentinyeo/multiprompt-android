@@ -1,6 +1,7 @@
 package dev.multiprompt.companion.account
 
 import android.content.Context
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
@@ -23,6 +24,21 @@ class AccountLayoutStore(context: Context) {
 
     fun saveAsync(account: String, state: PendingLayout): Future<Unit> = writer.submit<Unit> {
         check(preferences.edit().putString("layout::$account", state.json().toString()).commit()) { "Could not save pending account edits" }
+    }
+
+    fun archived(account: String?): List<ArchivedWorkspace> = account?.let {
+        preferences.getString("archived::$it", null)?.let { raw ->
+            runCatching {
+                val values = JSONArray(raw)
+                (0 until values.length()).map { index -> ArchivedWorkspace.parse(values.getJSONObject(index)) }
+            }.getOrNull()
+        }
+    }.orEmpty()
+
+    fun saveArchived(account: String, archived: List<ArchivedWorkspace>) {
+        check(preferences.edit().putString("archived::$account", JSONArray(archived.map { it.json() }).toString()).commit()) {
+            "Could not save archived workspaces"
+        }
     }
 
     fun hostOverrides(): Map<Int, String> = (0..2).mapNotNull { slot ->
