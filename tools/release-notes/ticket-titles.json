@@ -36,5 +36,6 @@
   "IGSH-1885": "Android: undelivered messages show Not sent with Send again",
   "IGSH-1888": "Android: server runners show in their own group",
   "IGSH-1532": "Android: show each live message once",
-  "IGSH-1942": "Android: plus menu is short, model and effort open on tap"
+  "IGSH-1942": "Android: plus menu is short, model and effort open on tap",
+  "IGSH-2286": "Android: dictation key comes with the account"
 }
