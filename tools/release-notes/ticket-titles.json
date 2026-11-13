@@ -37,5 +37,6 @@
   "IGSH-1888": "Android: server runners show in their own group",
   "IGSH-1532": "Android: show each live message once",
   "IGSH-1942": "Android: plus menu is short, model and effort open on tap",
-  "IGSH-2292": "Android: send any file to the server, not only pictures"
+  "IGSH-2292": "Android: send any file to the server, not only pictures",
+  "IGSH-1850": "Android: show a named live chat mention as a name"
 }
