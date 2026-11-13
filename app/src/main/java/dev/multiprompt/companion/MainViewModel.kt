@@ -726,7 +726,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (snapshot.isEmpty()) return
         viewModelScope.launch {
             _state.update { it.copy(refreshing = true) }
-            val cachedByHost = snapshot.associate { host -> host.id to sessionCache.load(host.id) }
+            val cachedByHost = withContext(Dispatchers.IO) { snapshot.associate { host -> host.id to sessionCache.load(host.id) } }
             val results = mutableMapOf<String, HostRefresh>()
             _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = false) }
             openPendingNotificationSession()
