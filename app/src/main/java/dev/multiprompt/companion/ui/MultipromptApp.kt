@@ -217,6 +217,7 @@ import dev.multiprompt.companion.computer.ComputerStatus
 import dev.multiprompt.companion.computer.ComputerStore
 import dev.multiprompt.companion.computer.ComputerTarget
 import dev.multiprompt.companion.computer.ComputerViewer
+import dev.multiprompt.companion.computer.ComputerViewerPage
 import dev.multiprompt.companion.AppUiState
 import dev.multiprompt.companion.SessionBucket
 import dev.multiprompt.companion.BuildConfig
@@ -3987,10 +3988,11 @@ internal fun ReaderScreen(
                 onWake = { readerScope.launch { computerViewer.wake(computerTarget) } },
                 onSleep = { computerViewer.sleep() },
                 onEditTarget = { computerTargetOpen = true },
-                screen = { modifier ->
+                screen = { modifier, control ->
                     computerState.localPort?.takeIf { computerState.status == ComputerStatus.Live }?.let { port ->
                         ComputerScreen(
-                            url = "http://${ComputerTarget.DEFAULT_HOST}:$port/",
+                            url = ComputerViewerPage.url(port),
+                            control = control,
                             onPicture = { computerStore.saveLastPicture(session, it) },
                             modifier = modifier,
                             onUnreachable = { computerViewer.fail("Cannot reach the VPS") },
