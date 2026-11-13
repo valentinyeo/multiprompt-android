@@ -30,11 +30,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -64,7 +66,7 @@ internal fun ComputerPane(
     onSleep: () -> Unit,
     onEditTarget: () -> Unit,
     modifier: Modifier = Modifier,
-    screen: @Composable (Modifier, ComputerControl) -> Unit,
+    screen: @Composable (Modifier) -> Unit,
 ) {
     var fullScreen by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
@@ -113,7 +115,9 @@ internal fun ComputerPane(
                 .testTag("computer-screen"),
         ) {
             when (state.status) {
-                ComputerStatus.Live -> screen(Modifier.fillMaxSize(), control.copy(enabled = controlling))
+                ComputerStatus.Live -> CompositionLocalProvider(LocalComputerControl provides control.copy(enabled = controlling)) {
+                    screen(Modifier.fillMaxSize())
+                }
                 else -> ScreenPicture(picture, dimmed = state.status == ComputerStatus.Sleeping)
             }
             when (state.status) {
@@ -290,13 +294,15 @@ private fun statusColor(status: ComputerStatus): Color = when (status) {
     ComputerStatus.Lost -> MaterialTheme.colorScheme.error
 }
 
+internal val LocalComputerControl = staticCompositionLocalOf { ComputerControl() }
+
 @Composable
 internal fun ComputerScreen(
     url: String,
-    control: ComputerControl,
     onPicture: (Bitmap) -> Unit,
     modifier: Modifier = Modifier,
     onUnreachable: () -> Unit = {},
+    control: ComputerControl = LocalComputerControl.current,
 ) {
     AndroidView(
         modifier = modifier,

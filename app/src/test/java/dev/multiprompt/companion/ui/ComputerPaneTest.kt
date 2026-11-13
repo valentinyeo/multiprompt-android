@@ -53,8 +53,8 @@ class ComputerPaneTest {
                     onWake = { woken++ },
                     onSleep = { slept++ },
                     onEditTarget = { addressEdited++ },
-                    screen = { modifier, control ->
-                        shown = control
+                    screen = { modifier ->
+                        shown = LocalComputerControl.current
                         Box(modifier.padding(4.dp).then(Modifier.fillMaxSize())) { Text("live picture") }
                     },
                 )

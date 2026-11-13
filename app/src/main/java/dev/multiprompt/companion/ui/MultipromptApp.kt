@@ -3988,11 +3988,10 @@ internal fun ReaderScreen(
                 onWake = { readerScope.launch { computerViewer.wake(computerTarget) } },
                 onSleep = { computerViewer.sleep() },
                 onEditTarget = { computerTargetOpen = true },
-                screen = { modifier, control ->
+                screen = { modifier ->
                     computerState.localPort?.takeIf { computerState.status == ComputerStatus.Live }?.let { port ->
                         ComputerScreen(
                             url = ComputerViewerPage.url(port),
-                            control = control,
                             onPicture = { computerStore.saveLastPicture(session, it) },
                             modifier = modifier,
                             onUnreachable = { computerViewer.fail("Cannot reach the VPS") },
