@@ -153,7 +153,12 @@ internal fun ChatHistoryView(
             unreadMessageKey = unreadMessageKey,
             onMarkUnread = onMarkUnread,
             onReaction = onReaction,
-            onCancelPending = if (!managed && !reader.sending && reader.status == ReaderStatus.Live) { target ->
+            onCancelPending = if (managed) { target ->
+                val row = state.replica?.messages?.get(target.requestId)
+                if (row != null) scope.launch {
+                    if (history.dismiss(row) != MessageActionResult.Applied) toast("Could not cancel yet. Try again")
+                }
+            } else if (!reader.sending && reader.status == ReaderStatus.Live) { target ->
                 connection.cancelQueued(target.requestId, state.history.held)
             } else null,
             onSendAgain = if (managed) { target, confirmed ->
@@ -311,7 +316,7 @@ internal fun ChatHistoryList(
                         { emoji -> onReaction(message, emoji) }
                     } else null,
                     delivery = message.delivery?.takeIf { it in FAILURE_LABELS },
-                    onCancel = if (message.role == "user" && message.delivery == "Queued" && message.requestId.isNotEmpty() && onCancelPending != null) {
+                    onCancel = if (message.role == "user" && (message.delivery == "Queued" || message.cancellable) && message.requestId.isNotEmpty() && onCancelPending != null) {
                         { onCancelPending(message) }
                     } else null)
                 if (message.role == "user" && message.delivery == ChatHistory.NOT_SENT && (onSendAgain != null || onRemove != null)) {
