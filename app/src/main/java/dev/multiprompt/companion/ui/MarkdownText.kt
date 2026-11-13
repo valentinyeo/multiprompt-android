@@ -51,7 +51,7 @@ fun MarkdownText(
     modifier: Modifier = Modifier,
     imagePreviews: Boolean = false,
 ) {
-    val blocks = remember(text) { MarkdownParser.parse(text) }
+    val blocks = remember(text) { MarkdownParser.parse(LiveMention.visible(text)) }
     val codeBg = color.copy(alpha = 0.10f)
     val codeFontFamily = if (LocalReaderStyle.current) FontFamily.SansSerif else FontFamily.Monospace
     val scale = if (LocalReaderStyle.current) fontSize.value / ReaderTextSize.value else if (LocalMaterial3.current) fontSize.value / 15f else 1f

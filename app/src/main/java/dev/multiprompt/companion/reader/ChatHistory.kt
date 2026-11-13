@@ -86,8 +86,10 @@ data class ChatHistory(
         var floor = -1
         val sentRows = replica?.host?.sentRows.orEmpty()
         for (card in replica?.messages?.values.orEmpty().filter { it.state != MessageProtocol.State.CANCELLED }.sortedBy { it.position }) {
-            val keyed = sentRows[card.id]?.let { uuids ->
-                transcript.indices.firstOrNull { index -> index !in claimed && transcript[index].role == "user" && transcript[index].requestId in uuids }
+            val uuids = sentRows[card.id].orEmpty()
+            val keyed = transcript.indices.firstOrNull { index ->
+                index !in claimed && transcript[index].role == "user" &&
+                    (transcript[index].requestId == card.id || transcript[index].requestId in uuids)
             }
             val index = keyed ?: transcript.indices.firstOrNull { index ->
                 index > floor && index !in claimed && spoken[index]?.let { it >= card.created - CLOCK_SLACK } == true &&
