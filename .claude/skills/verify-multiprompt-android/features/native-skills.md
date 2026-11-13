@@ -13,8 +13,8 @@ It creates actual user/project/plugin skill directories and session metadata. Mo
 3. Keep typing `rev`; require only the matching row. Tap it and verify exact `/review-native ` editor contents.
 4. Send `/review-native investigation`; compare the independently recorded SSH receipt.
 5. Type a draft; open **Attach → Skill**. Require the same rows and `/late-native`, created since the first send. Pick the plugin skill and send; exact native command retains the draft.
-6. Keep another draft; open **Attach** and tap **Sonnet** under MODEL. Check actual tmux receipt and observed session label.
-7. Open **Attach** and tap **High** under EFFORT. Check actual receipt and reopen **Attach** to require the ✓ marks.
+6. Keep another draft; open **Attach → Model** and tap **Sonnet**; the first page shows one row each for Model and Effort, never the options. Check actual tmux receipt and observed session label.
+7. Open **Attach → Effort** and tap **High**. Check actual receipt and reopen **Attach** to require `Sonnet ›` and `High ›` on the rows and the ✓ mark inside Effort.
 8. Open **Attach → Add image**. Save the inert fixture upload setting through the real UI and require Android's Photos picker. Cancel; verify the draft stayed intact.
 
 No upload request is made. Live upload-service authentication and uploading a selected image are not exercised. The unchanged image upload pipeline retains its unit coverage.
