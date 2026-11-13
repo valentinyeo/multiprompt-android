@@ -19,6 +19,8 @@ import dev.multiprompt.companion.model.RefreshMerge
 import dev.multiprompt.companion.data.UnreadCount
 import dev.multiprompt.companion.room.roomRecipients
 import dev.multiprompt.companion.room.RoomHosts
+import dev.multiprompt.companion.room.RoomLoadPolicy
+import dev.multiprompt.companion.room.RoomLoadTrigger
 import dev.multiprompt.companion.notify.ReplyNotificationPolicy
 import dev.multiprompt.companion.notify.ReplyNotifier
 import dev.multiprompt.companion.data.SessionReadStore
@@ -230,6 +232,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var replyNotificationsBaselined = false
     private var pendingNotificationKey: String? = null
     private var trustRefreshQueued = false
+    private var roomsLoading = false
     private var accountRequestRunning = false
     private var lastRemoteRevision: Long? = null
     private var accountGeneration = 0
@@ -321,6 +324,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun onResume() {
         foreground.value = true
         refresh()
+        refreshRooms(RoomLoadTrigger.APP_RESUMED)
         syncAccount()
     }
 
@@ -611,16 +615,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun refreshRooms() {
-        val accountId = syncAuth.accountId() ?: return
+    fun refreshRooms(trigger: RoomLoadTrigger) {
+        val accountId = syncAuth.accountId()
         val hosts = RoomHosts.candidates(_state.value.accountHosts.values, _state.value.hosts)
-        if (hosts.isEmpty()) return
+        if (!RoomLoadPolicy.shouldLoad(trigger, accountId != null, hosts.size, roomsLoading) || accountId == null) return
+        roomsLoading = true
         viewModelScope.launch {
-            val loaded = hosts.map { host ->
-                async { runCatching { roomService.load(host, accountId) }.getOrNull()?.let { host.id to it } }
-            }.awaitAll().filterNotNull()
-            if (loaded.isEmpty()) return@launch
-            _state.update { it.copy(rooms = RoomHosts.merge(loaded)) }
+            try {
+                val loaded = hosts.map { host ->
+                    async { runCatching { roomService.load(host, accountId) }.getOrNull()?.let { host.id to it } }
+                }.awaitAll().filterNotNull()
+                if (loaded.isEmpty()) return@launch
+                _state.update { it.copy(rooms = RoomHosts.merge(loaded)) }
+            } finally {
+                roomsLoading = false
+            }
         }
     }
 
@@ -754,7 +763,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             openPendingNotificationSession()
             pendingNotificationKey = null
             syncReplyNotifications()
-            refreshRooms()
             prefetchRecentHistories()
             if (trustRefreshQueued) {
                 trustRefreshQueued = false

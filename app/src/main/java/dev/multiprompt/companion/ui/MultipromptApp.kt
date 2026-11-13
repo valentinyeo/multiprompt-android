@@ -551,7 +551,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onRenameSession = viewModel::renameSession,
                     onSetFavorite = { tab, value -> viewModel.editAccountLayout { it.setFavorite(tab.identity, value) } },
                     onRefresh = viewModel::refresh,
-                    onRefreshRooms = viewModel::refreshRooms,
+                    onRefreshRooms = { viewModel.refreshRooms(dev.multiprompt.companion.room.RoomLoadTrigger.ROOMS_SCREEN) },
                     onSelectSection = viewModel::select,
                     onReleaseNotes = viewModel::openReleaseNotes,
                     onOpenRoom = viewModel::openRoom,
@@ -1273,7 +1273,7 @@ internal fun SessionsScreen(
     LaunchedEffect(searchVisible) {
         if (searchVisible) searchFocusRequester.requestFocus()
     }
-    LaunchedEffect(Unit) { onRefreshRooms() }
+    LaunchedEffect(signedIn) { onRefreshRooms() }
     LaunchedEffect(state.allSplitOnRight, state.workspaceSplitIds) {
         snapshotFlow { splitScrollState.maxValue }.collect { maximum ->
             splitScrollState.scrollTo(if (state.allSplitOnRight) maximum else 0)
@@ -1854,7 +1854,10 @@ internal fun SessionsScreen(
                                 workspaceError = null
                                 workspaceDialogVisible = true
                             },
-                            onRefresh = onRefresh,
+                            onRefresh = {
+                                onRefresh()
+                                onRefreshRooms()
+                            },
                             onReleaseNotes = onReleaseNotes,
                         )
                     }
