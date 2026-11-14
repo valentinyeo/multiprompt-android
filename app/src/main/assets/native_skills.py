@@ -88,11 +88,52 @@ def discover(home, cwd, config=None):
     return sorted(result.values(), key=lambda row: row["name"].lower())
 
 
-if __name__ == "__main__":
-    session = sys.argv[1]
-    target = "=" + session + ":"
-    cwd = Path(subprocess.check_output(["tmux", "display-message", "-p", "-t", target, "#{pane_current_path}"], text=True).strip())
-    if not cwd.is_absolute() or not cwd.is_dir():
+def usable(value):
+    if not isinstance(value, str) or not value.strip():
+        return None
+    path = Path(value.strip()).expanduser()
+    return path if path.is_absolute() and path.is_dir() else None
+
+
+def tmux_directory(session):
+    try:
+        output = subprocess.check_output(
+            ["tmux", "display-message", "-p", "-t", "=" + session + ":", "#{pane_current_path}"],
+            text=True, stderr=subprocess.DEVNULL, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return usable(output)
+
+
+def hosted_directory(session):
+    reader = Path.home() / ".multiprompt-runtime/reader.py"
+    try:
+        output = subprocess.check_output(
+            ["python3", str(reader), "host", "list"], text=True, stderr=subprocess.DEVNULL, timeout=15)
+        chats = json.loads(output).get("chats")
+    except (OSError, subprocess.SubprocessError, ValueError, AttributeError):
+        return None
+    for chat in chats if isinstance(chats, list) else []:
+        if isinstance(chat, dict) and chat.get("name") == session:
+            return usable(chat.get("cwd"))
+    return None
+
+
+def project_directory(session, requested):
+    path = tmux_directory(session) or usable(requested) or hosted_directory(session)
+    if path is None:
         raise SystemExit("The session project directory is unavailable")
+    return path
+
+
+def main():
+    cwd = project_directory(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "")
     config = Path(os.environ["CLAUDE_CONFIG_DIR"]).expanduser() if os.environ.get("CLAUDE_CONFIG_DIR") else None
     print(json.dumps(discover(Path.home(), cwd, config), ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as error:
+        raise SystemExit(f"{type(error).__name__}: {error}")

@@ -3379,10 +3379,9 @@ internal fun ReaderScreen(
             }
         }
     }
+    val loadSkills = { connection.loadSkills(context.assets.open("native_skills.py").use { it.readBytes() }, session.workingDirectory) }
     LaunchedEffect(connection, skillQuery != null) {
-        if (skillQuery != null) {
-            connection.loadSkills(context.assets.open("native_skills.py").use { it.readBytes() })
-        }
+        if (skillQuery != null) loadSkills()
     }
     val routeSlashCommand: (String) -> Boolean = { draftText ->
         val route = if (replyTo != null || imageAttachments.isNotEmpty()) {
@@ -4082,6 +4081,7 @@ internal fun ReaderScreen(
                         skills = NativeSkills.matches(reader.nativeSkills, skillQuery),
                         loading = reader.skillsLoading,
                         error = reader.skillsError,
+                        onRetry = loadSkills,
                         onSelect = { skill ->
                             promptField = TextFieldValue(NativeSkills.insert(prompt, skill.name), selection = TextRange(skill.name.length + 2))
                             promptFocusRequester.requestFocus()
@@ -5518,12 +5518,13 @@ private fun NativeSkillPicker(
     skills: List<NativeSkill>,
     loading: Boolean,
     error: String?,
+    onRetry: () -> Unit = {},
     onSelect: (NativeSkill) -> Unit,
 ) {
     ComposerList {
         when {
             loading -> ComposerListNote("Loading session skills…")
-            error != null -> ComposerListNote(error)
+            error != null -> ComposerListNote(error, onClick = onRetry)
             skills.isEmpty() -> ComposerListNote("No matching session skills")
             else -> skills.forEach { skill ->
                 Column(
@@ -5569,8 +5570,15 @@ private fun ComposerList(content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-private fun ComposerListNote(text: String) {
-    Text(text, style = Kit.Hint, color = Kit.TextMuted, modifier = Modifier.fillMaxWidth().padding(horizontal = Kit.SideChange, vertical = 14.dp))
+private fun ComposerListNote(text: String, onClick: (() -> Unit)? = null) {
+    Text(
+        text,
+        style = Kit.Hint,
+        color = Kit.TextMuted,
+        modifier = Modifier.fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+            .padding(horizontal = Kit.SideChange, vertical = 14.dp),
+    )
 }
 
 @Composable

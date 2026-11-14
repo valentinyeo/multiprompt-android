@@ -188,6 +188,92 @@ wait_for_text() { test "$1" = "$expected_screen"; }
         result = subprocess.run([sys.executable, str(SCRIPT), name], env=env, capture_output=True, text=True, check=True)
         self.assertEqual(json.loads(result.stdout), [dict(name="local", description="Description")])
 
+    def cli(self, *arguments, tmux=None):
+        binary = self.write(self.home / "bin/tmux", tmux or "#!/usr/bin/env python3\nraise SystemExit(1)\n")
+        binary.chmod(0o700)
+        env = dict(os.environ, HOME=str(self.home), PATH=str(binary.parent) + os.pathsep + os.environ["PATH"])
+        return subprocess.run([sys.executable, str(SCRIPT), *arguments], env=env, capture_output=True, text=True)
+
+    def names(self, result):
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return [row["name"] for row in json.loads(result.stdout)]
+
+    def fake_reader(self, chats):
+        self.write(self.home / ".multiprompt-runtime/reader.py",
+                   "import json, sys\nassert sys.argv[1:] == ['host', 'list']\nprint(json.dumps({'chats': " + repr(chats) + "}))\n")
+
+    def test_cli_prefers_the_live_tmux_pane_over_the_stale_working_directory(self):
+        self.skill(self.cwd, "pane-skill")
+        stale = self.home / "stale"
+        stale.mkdir()
+        self.skill(stale, "stale-skill")
+        tmux = "#!/usr/bin/env python3\nprint(" + repr(str(self.cwd)) + ")\n"
+        self.assertEqual(self.names(self.cli("verify-session", str(stale), tmux=tmux)), ["pane-skill"])
+
+    def test_cli_uses_the_working_directory_when_the_chat_has_no_tmux_session(self):
+        self.skill(self.cwd, "project-only")
+        self.assertEqual(self.names(self.cli("live-abc", str(self.cwd))), ["project-only"])
+
+    def test_cli_finds_a_hosted_chat_folder_from_the_desktop_reader(self):
+        self.skill(self.cwd, "hosted-skill")
+        other = self.home / "other"
+        other.mkdir()
+        self.fake_reader([dict(name="live-other", cwd=str(other)), dict(name="live-abc", cwd=str(self.cwd))])
+        self.assertEqual(self.names(self.cli("live-abc")), ["hosted-skill"])
+        self.assertEqual(self.names(self.cli("live-abc", str(self.home / "missing"))), ["hosted-skill"])
+
+    def test_cli_working_directory_beats_the_desktop_reader(self):
+        self.skill(self.cwd, "argv-skill")
+        other = self.home / "other"
+        self.skill(other, "reader-skill")
+        self.fake_reader([dict(name="live-abc", cwd=str(other))])
+        self.assertEqual(self.names(self.cli("live-abc", str(self.cwd))), ["argv-skill"])
+
+    def test_cli_hosted_lookup_needs_a_matching_chat_with_a_real_folder(self):
+        self.fake_reader([dict(name="live-other", cwd=str(self.cwd)), dict(name="live-abc", cwd=str(self.home / "gone")),
+                          dict(name="live-rel", cwd="relative")])
+        for name in ("live-abc", "live-rel", "live-none"):
+            with self.subTest(name=name):
+                result = self.cli(name)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(len(result.stderr.strip().splitlines()), 1)
+
+    def test_cli_survives_a_missing_or_broken_desktop_reader(self):
+        self.assertNotEqual(self.cli("live-abc").returncode, 0)
+        for body in ("raise SystemExit(3)\n", "print('not json')\n", "print('[1, 2]')\n", "print('{\"chats\": 5}')\n"):
+            with self.subTest(body=body):
+                self.write(self.home / ".multiprompt-runtime/reader.py", body)
+                result = self.cli("live-abc")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn("Traceback", result.stderr)
+
+    def test_cli_expands_a_home_relative_working_directory(self):
+        self.skill(self.cwd, "tilde-skill")
+        binary = self.write(self.home / "bin/tmux", "#!/usr/bin/env python3\nraise SystemExit(1)\n")
+        binary.chmod(0o700)
+        env = dict(os.environ, HOME=str(self.home), PATH=str(binary.parent) + os.pathsep + os.environ["PATH"])
+        result = subprocess.run([sys.executable, str(SCRIPT), "live-abc", "~/projects/one/nested"], env=env, capture_output=True, text=True, check=True)
+        self.assertEqual([row["name"] for row in json.loads(result.stdout)], ["tilde-skill"])
+
+    def test_cli_falls_back_to_the_tmux_pane_when_the_working_directory_is_unusable(self):
+        self.skill(self.cwd, "pane-skill")
+        binary = self.write(self.home / "bin/tmux", "#!/usr/bin/env python3\nprint(" + repr(str(self.cwd)) + ")\n")
+        binary.chmod(0o700)
+        env = dict(os.environ, HOME=str(self.home), PATH=str(binary.parent) + os.pathsep + os.environ["PATH"])
+        for requested in ("relative/dir", "~/missing", str(self.home / "missing"), ""):
+            with self.subTest(requested=requested):
+                result = subprocess.run([sys.executable, str(SCRIPT), "live-abc", requested], env=env, capture_output=True, text=True, check=True)
+                self.assertEqual([row["name"] for row in json.loads(result.stdout)], ["pane-skill"])
+
+    def test_cli_failure_is_one_plain_stderr_line_not_a_traceback(self):
+        binary = self.write(self.home / "bin/tmux", "#!/usr/bin/env python3\nraise SystemExit(1)\n")
+        binary.chmod(0o700)
+        env = dict(os.environ, HOME=str(self.home), PATH=str(binary.parent) + os.pathsep + os.environ["PATH"])
+        result = subprocess.run([sys.executable, str(SCRIPT), "live-abc"], env=env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertEqual(len(result.stderr.strip().splitlines()), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
