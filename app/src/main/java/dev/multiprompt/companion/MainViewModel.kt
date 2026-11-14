@@ -1872,6 +1872,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } catch (e: Exception) { e.message ?: "Could not save account edit" }
     }
 
+    fun renameAccountGroup(old: String, name: String): String? = editAccountLayout { it.renameGroup(old, name.trim()) }
+
     fun addAccountSession(session: TmuxSession, workspace: String): String? {
         val slot = _state.value.accountHosts.entries.firstOrNull { it.value.id == session.hostId }?.key
             ?: return "Map this SSH profile to an account host first; direct inne/agent tmux is not host 0"
