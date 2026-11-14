@@ -13,6 +13,7 @@ data class ChatHistoryMessage(
     val pending: Boolean = false,
     val delivery: String? = null,
     val unknownId: String? = null,
+    val cancellable: Boolean = false,
 ) {
     fun transcript(): TranscriptMessage = TranscriptMessage(role, timestamp.ifEmpty { null }, text)
 }
@@ -107,7 +108,8 @@ data class ChatHistory(
             val notSent = notSent(row, now, seen[row.id])
             ChatHistoryMessage("@shared:${row.id}", "user", row.text, "", 0, 0, row.id,
                 pending = !notSent && row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT),
-                delivery = if (notSent) NOT_SENT else null)
+                delivery = if (notSent) NOT_SENT else null,
+                cancellable = cancellable(row, now, seen[row.id]))
         }
         val drawn = source.filter { it.role == "assistant" }.map { rowKey(it.id) }.filter { it.isNotEmpty() }.toSet()
         fun hidden(block: HostBlock) = rowKey(block.item) in drawn || (block.done && landed(block.text))
@@ -224,5 +226,8 @@ data class ChatHistory(
             MessageProtocol.State.QUEUED, MessageProtocol.State.SENT -> now != null && now - maxOf(row.created, seen ?: row.created) >= NOT_SENT_WAIT
             else -> false
         }
+
+        fun cancellable(row: MessageProtocol.Row, now: Double?, seen: Double? = null): Boolean =
+            row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT) && !notSent(row, now, seen)
     }
 }
