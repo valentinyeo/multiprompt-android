@@ -295,6 +295,7 @@ class TmuxCommandsTest {
         assertEquals("codex", pickedAssistant(sid, "codex"))
         assertEquals("pi", pickedAssistant(sid, "pi"))
         assertEquals("hax", pickedAssistant(sid, "hax"))
+        assertEquals("cursor", pickedAssistant(sid, "cursor"))
     }
 
     private fun pickedAssistant(sid: String, saved: String?): String {
