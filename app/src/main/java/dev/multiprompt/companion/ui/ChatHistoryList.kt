@@ -91,7 +91,7 @@ internal fun ChatHistoryView(
 ) {
     val history = remember(connection, agent, workingDirectory) { connection.chatHistory(agent, workingDirectory) }
     val state by history.state.collectAsState()
-    val managed = agent == AgentKind.CLAUDE || agent == AgentKind.CODEX || agent == AgentKind.PI
+    val managed = connection.sharedMessages
     val waiting = state.replica?.messages?.values?.any { it.state == MessageProtocol.State.QUEUED || it.state == MessageProtocol.State.SENT } == true
     val now by produceState(System.currentTimeMillis() / 1000.0, waiting) {
         while (waiting) {

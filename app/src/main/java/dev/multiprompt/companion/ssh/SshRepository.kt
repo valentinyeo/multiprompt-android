@@ -428,12 +428,13 @@ class SshRepository(private val secrets: SecretStorage) {
                     .trim('-')
                     .ifBlank { "workspace" }
                     .take(24)
-                val live = harness == AgentHarness.CLAUDE
-                val prefix = if (live) "live" else harness.namePrefix
-                val sessionName = "$prefix-$project-${System.currentTimeMillis().toString(36)}"
+                val agent = harness.agent
+                val live = agent != null
+                val stamp = System.currentTimeMillis().toString(36)
+                val sessionName = if (agent != null) AgentKind.liveChatName(agent, project, stamp) else "${harness.namePrefix}-$project-$stamp"
                 val sid = if (live) UUID.randomUUID().toString() else ""
                 val command = if (live) {
-                    TmuxCommands.createLiveChat(sessionName, remotePath, sid)
+                    TmuxCommands.createLiveChat(sessionName, remotePath, sid, harness)
                 } else {
                     TmuxCommands.createAgentSession(sessionName, remotePath, harness)
                 }

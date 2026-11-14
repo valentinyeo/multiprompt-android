@@ -141,20 +141,27 @@ object TmuxCommands {
     fun createClaudeSession(sessionName: String, remotePath: String): String =
         createAgentSession(sessionName, remotePath, AgentHarness.CLAUDE)
 
-    fun createLiveChat(sessionName: String, remotePath: String, sid: String): String {
+    fun createLiveChat(
+        sessionName: String,
+        remotePath: String,
+        sid: String,
+        harness: AgentHarness = AgentHarness.CLAUDE,
+    ): String {
         require(LIVE_CHAT_SID.matches(sid)) { "Invalid live chat id" }
         require(LIVE_CHAT_NAME.matches(sessionName)) { "Invalid live chat name" }
         require(LIVE_CHAT_FOLDER.matches(remotePath)) { "Live chat needs a folder name without spaces or symbols" }
+        val provider = requireNotNull(harness.agent?.hostProvider) { "${harness.label} cannot start a live chat" }
         val path = TmuxParser.shellQuote(remotePath)
         val name = TmuxParser.shellQuote(sessionName)
         val reader = "python3 ~/.multiprompt-runtime/reader.py"
-        val host = "$reader host enable claude $sid --tmux $sessionName --cwd $remotePath " +
-            "--permission-mode bypassPermissions >/dev/null 2>&1; " +
-            "$reader host start claude $sid >/dev/null 2>&1; exec sleep infinity"
+        val mode = if (harness == AgentHarness.CLAUDE) " --permission-mode bypassPermissions" else ""
+        val host = "$reader host enable $provider $sid --tmux $sessionName --cwd $remotePath" +
+            "$mode >/dev/null 2>&1; " +
+            "$reader host start $provider $sid >/dev/null 2>&1; exec sleep infinity"
         return "if [ ! -d $path ]; then printf 'Project directory not found\\n' >&2; exit 2; fi; " +
-            "if ! bash -lc 'command -v claude >/dev/null 2>&1'; then " +
-            "printf 'claude was not found on the VPS PATH\\n' >&2; exit 3; fi; " +
-            "python3 - host status claude $sid >/dev/null 2>&1; " +
+            "if ! bash -lc 'command -v ${harness.binary} >/dev/null 2>&1'; then " +
+            "printf '${harness.binary} was not found on the VPS PATH\\n' >&2; exit 3; fi; " +
+            "python3 - host status $provider $sid >/dev/null 2>&1; " +
             "if [ ! -f ~/.multiprompt-runtime/reader.py ]; then " +
             "printf 'Live chat reader could not be installed\\n' >&2; exit 4; fi; " +
             "tmux new-session -d -s $name -c $path ${TmuxParser.shellQuote(host)} && " +
@@ -262,7 +269,7 @@ object TmuxCommands {
 
     fun liveChatProvider(sid: String): String {
         require(LIVE_CHAT_SID.matches(sid)) { "Invalid live chat id" }
-        return "mp_p=claude; for mp_c in claude codex pi hax; do " +
+        return "mp_p=claude; for mp_c in claude codex pi hax cursor; do " +
             "mp_k=\$(printf '%s' \"\$mp_c:$sid\" | sha256sum | cut -c1-32); " +
             "if [ -f \"\$HOME/.local/state/multiprompt/agent-host/\$mp_k.config.json\" ]; then mp_p=\$mp_c; break; fi; done"
     }
