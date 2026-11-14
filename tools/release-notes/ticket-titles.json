@@ -57,5 +57,6 @@
   "IGSH-2321": "Android: Favorites groups and group order sync from desktop",
   "IGSH-1506": "Android: design the session menu",
   "IGSH-2320": "Android: bot replies no longer reorder the chat list",
-  "IGSH-2318": "Android: chat list ties sort like desktop"
+  "IGSH-2318": "Android: chat list ties sort like desktop",
+  "IGSH-2342": "Android: add a chat to a group and remove it"
 }

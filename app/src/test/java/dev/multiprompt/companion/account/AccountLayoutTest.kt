@@ -380,6 +380,153 @@ class AccountLayoutTest {
         assertEquals(listOf("Runners", "Design"), grouped.tabs.map { it.group })
     }
 
+    private val three = AccountTab("Three", "three", 0, "Other")
+
+    @Test fun setGroupPutsAChatInANewGroupAndRoundTripsTheWireJson() {
+        val grouped = base.setGroup(one.identity, "Runners", false)
+        assertEquals(listOf("Runners", null), grouped.tabs.map { it.group })
+        assertEquals(listOf(null, null), grouped.tabs.map { it.starredGroup })
+        assertNull(grouped.groupOrder)
+        val sent = grouped.json().getJSONArray("tabs")
+        assertEquals("Runners", sent.getJSONObject(0).getString("group"))
+        assertFalse(sent.getJSONObject(1).has("group"))
+        assertEquals(grouped, AccountLayout.parse(JSONObject(grouped.json().toString())))
+        assertEquals(listOf("Runners"), grouped.groupNames(false))
+        assertEquals(emptyList<String>(), grouped.groupNames(true))
+    }
+
+    @Test fun setGroupJoinsAnExistingGroupWithoutDuplicatingIt() {
+        val grouped = base.setGroup(one.identity, "Runners", false).setGroup(two.identity, "Runners", false)
+        assertEquals(listOf("Runners", "Runners"), grouped.tabs.map { it.group })
+        assertEquals(listOf("Runners"), grouped.groupNames(false))
+        assertSame(grouped, grouped.setGroup(two.identity, "Runners", false))
+    }
+
+    @Test fun setGroupAppendsANewGroupAtTheEndOfAnExistingGroupOrder() {
+        val ordered = base.copy(tabs = listOf(one.copy(group = "Runners"), two.copy(group = "Design"), three), groupOrder = listOf("Design", "Runners"))
+        val added = ordered.setGroup(three.identity, "Product", false)
+        assertEquals(listOf("Design", "Runners", "Product"), added.groupOrder)
+        assertEquals(listOf("Design", "Runners", "Product"), added.groupNames(false))
+        val sent = added.json().getJSONArray("group_order")
+        assertEquals(listOf("Design", "Runners", "Product"), (0 until sent.length()).map { sent.getString(it) })
+        val joined = ordered.setGroup(three.identity, "Runners", false)
+        assertEquals(listOf("Design", "Runners"), joined.groupOrder)
+    }
+
+    @Test fun setGroupWithoutAnOrderLeavesTheOrderAbsent() {
+        val grouped = base.copy(tabs = listOf(one.copy(group = "Runners"), two, three))
+        assertNull(grouped.setGroup(two.identity, "Design", false).groupOrder)
+        assertFalse(grouped.setGroup(two.identity, "Design", false).json().has("group_order"))
+    }
+
+    @Test fun setGroupToNoGroupWritesAnEmptyNameSoDesktopClearsIt() {
+        val grouped = base.copy(tabs = listOf(one.copy(group = "Runners"), two.copy(group = "Runners")), groupOrder = listOf("Runners"))
+        val loose = grouped.setGroup(one.identity, null, false)
+        assertEquals(listOf("", "Runners"), loose.tabs.map { it.group })
+        assertEquals("", loose.json().getJSONArray("tabs").getJSONObject(0).getString("group"))
+        assertEquals(listOf("Runners"), loose.groupOrder)
+        assertEquals(listOf("Runners"), loose.groupNames(false))
+        val last = loose.setGroup(two.identity, null, false)
+        assertNull(last.groupOrder)
+        assertFalse(last.json().has("group_order"))
+        assertEquals(emptyList<String>(), last.groupNames(false))
+        assertSame(last, last.setGroup(two.identity, null, false))
+        assertSame(base, base.setGroup(one.identity, null, false))
+    }
+
+    @Test fun setGroupMovingTheLastChatOutRemovesTheEmptyGroupFromTheOrder() {
+        val grouped = base.copy(tabs = listOf(one.copy(group = "Runners"), two.copy(group = "Design")), groupOrder = listOf("Runners", "Design"))
+        val moved = grouped.setGroup(one.identity, "Design", false)
+        assertEquals(listOf("Design", "Design"), moved.tabs.map { it.group })
+        assertEquals(listOf("Design"), moved.groupOrder)
+    }
+
+    @Test fun setGroupUsesTheFavoritesFieldOnlyInTheFavoritesView() {
+        val grouped = base.copy(tabs = listOf(one.copy(group = "Runners"), two))
+        val starred = grouped.setGroup(one.identity, "Hypertask", true)
+        assertEquals("Runners", starred.tabs[0].group)
+        assertEquals("Hypertask", starred.tabs[0].starredGroup)
+        assertEquals("Hypertask", starred.json().getJSONArray("tabs").getJSONObject(0).getString("starred_group"))
+        assertEquals(listOf("Hypertask"), starred.groupNames(true))
+        assertEquals(listOf("Runners"), starred.groupNames(false))
+        val cleared = starred.setGroup(one.identity, null, true)
+        assertEquals("Runners", cleared.tabs[0].group)
+        assertEquals("", cleared.tabs[0].starredGroup)
+    }
+
+    @Test fun setGroupRejectsBadNamesNamesHeldByTheOtherViewAndTooManyGroups() {
+        val grouped = base.copy(tabs = listOf(one.copy(group = "Runners"), two.copy(starredGroup = "Hypertask")))
+        listOf("", "   ", "a".repeat(65), "bad\nname").forEach { bad ->
+            assertThrows(IllegalArgumentException::class.java) { grouped.setGroup(two.identity, bad, false) }
+        }
+        assertThrows(IllegalArgumentException::class.java) { grouped.setGroup(two.identity, "Runners", true) }
+        assertThrows(IllegalArgumentException::class.java) { grouped.setGroup(one.identity, "Hypertask", false) }
+        val full = base.copy(tabs = (0 until MAX_GROUPS).map { AccountTab("T$it", "t$it", 0, "Other", group = "g$it") } + three)
+        assertThrows(IllegalArgumentException::class.java) { full.setGroup(three.identity, "one more", false) }
+        assertEquals("g0", full.setGroup(three.identity, "g0", false).tabs.last().group)
+    }
+
+    @Test fun setGroupOnAnUnknownChatChangesNothing() {
+        assertSame(base, base.setGroup("0:missing", "Runners", false))
+    }
+
+    @Test fun ungroupReturnsEveryChatToLooseAndRemovesTheGroupFromTheOrder() {
+        val grouped = base.copy(
+            tabs = listOf(one.copy(group = "Runners"), two.copy(group = "Runners"), three.copy(group = "Design")),
+            groupOrder = listOf("Design", "Runners"),
+        )
+        val loose = grouped.ungroup("Runners", false)
+        assertEquals(listOf("", "", "Design"), loose.tabs.map { it.group })
+        assertEquals(listOf("Design"), loose.groupOrder)
+        assertEquals(listOf("Design"), loose.groupNames(false))
+        val sent = loose.json().getJSONArray("tabs")
+        assertEquals("", sent.getJSONObject(0).getString("group"))
+        assertEquals("", sent.getJSONObject(1).getString("group"))
+        assertEquals(loose, AccountLayout.parse(JSONObject(loose.json().toString())))
+        assertNull(loose.ungroup("Design", false).groupOrder)
+        assertSame(grouped, grouped.ungroup("Nothing here", false))
+    }
+
+    @Test fun ungroupLeavesTheOtherViewsGroupAndKeepsTheOrderWhileItIsStillHeld() {
+        val both = base.copy(
+            tabs = listOf(one.copy(group = "Runners", starredGroup = "Hypertask"), two.copy(starredGroup = "Runners")),
+            groupOrder = listOf("Hypertask", "Runners"),
+        )
+        val loose = both.ungroup("Runners", false)
+        assertEquals(listOf("", null), loose.tabs.map { it.group })
+        assertEquals(listOf("Hypertask", "Runners"), loose.tabs.map { it.starredGroup })
+        assertEquals(listOf("Hypertask", "Runners"), loose.groupOrder)
+        val starredLoose = both.ungroup("Hypertask", true)
+        assertEquals(listOf("", "Runners"), starredLoose.tabs.map { it.starredGroup })
+        assertEquals(listOf("Runners"), starredLoose.groupOrder)
+    }
+
+    @Test fun phoneGroupEditsRebaseOntoADesktopChangeToOtherFields() {
+        val start = base.copy(tabs = listOf(one.copy(group = "Runners"), two.copy(group = "Runners")), groupOrder = listOf("Runners"))
+        val moved = start.setGroup(one.identity, "Design", false)
+        val desktop = start.copy(revision = 2, tabs = start.tabs.map { if (it.session == "two") it.copy(favorite = true) else it })
+        val saved = AccountLayout.rebase(start, moved, desktop)
+        assertEquals(listOf("Design", "Runners"), saved.tabs.map { it.group })
+        assertEquals(true, saved.tabs[1].favorite)
+
+        val ungrouped = start.ungroup("Runners", false)
+        val renamedOnDesktop = start.copy(revision = 3, tabs = start.tabs.map { if (it.session == "one") it.copy(name = "Desktop name", manual = true) else it })
+        val savedLoose = AccountLayout.rebase(start, ungrouped, renamedOnDesktop)
+        assertEquals(listOf("", ""), savedLoose.tabs.map { it.group })
+        assertEquals("Desktop name", savedLoose.tabs[0].name)
+        assertNull(savedLoose.groupOrder)
+        assertEquals(listOf("", ""), AccountLayout.parse(JSONObject(savedLoose.json().toString())).tabs.map { it.group })
+    }
+
+    @Test fun phoneGroupOrderEditSurvivesADesktopGroupAddedMeanwhile() {
+        val start = base.copy(tabs = listOf(one.copy(group = "Runners"), two, three), groupOrder = listOf("Runners"))
+        val edited = start.setGroup(two.identity, "Design", false)
+        val desktop = start.copy(revision = 2, tabs = listOf(one.copy(group = "Runners"), two, three.copy(group = "Product")), groupOrder = listOf("Runners", "Product"))
+        val saved = AccountLayout.rebase(start, edited, desktop)
+        assertEquals(listOf("Runners", "Design", "Product"), saved.tabs.map { it.group })
+        assertEquals(listOf("Runners", "Design", "Product"), saved.groupOrder)
+    }
+
     private fun favoritesGroupJson(): JSONObject = JSONObject("""{"schema":1,"revision":9,"workspaces":[{"name":"Other"}],"tabs":[{"kind":"tmux","name":"One","tmux_session":"one","tmux_host":0,"workspace":"Other","group":"Runners","starred_group":"Hypertask"},{"kind":"tmux","name":"Two","tmux_session":"two","tmux_host":1,"workspace":"Other","starred_group":""}],"group_order":["Hypertask","Runners"]}""")
 
     @Test fun desktopFavoritesGroupAndGroupOrderRoundTripTheWireJson() {
