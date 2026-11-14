@@ -59,6 +59,7 @@
   "IGSH-1853": "Android: take back a waiting message the bot already received",
   "IGSH-2312": "Multi Bot Android release check fails after a cancelled release run",
   "IGSH-1840": "Android: Frequent split after Favorites, and reorder splits",
+  "IGSH-2322": "Android: typed slash commands open the right picker",
   "IGSH-2300": "Android: pause updates for chats that are not on screen",
   "IGSH-2301": "Android: make the app open faster after an update",
   "IGSH-2291": "Android: rename a group and a Recents heading in the list",
