@@ -5,6 +5,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.ByteArrayOutputStream
+import java.util.Base64
+import java.util.zip.GZIPOutputStream
 
 class TmuxTextTest {
     @Test
@@ -20,6 +23,71 @@ class TmuxTextTest {
     @Test
     fun decodesSnapshotHex() {
         assertEquals("hello\nworld", TmuxText.decodeHex("68656c6c6f0a776f726c64"))
+    }
+
+    private fun pack(text: String): String {
+        val bytes = ByteArrayOutputStream()
+        GZIPOutputStream(bytes).use { it.write(text.toByteArray(Charsets.UTF_8)) }
+        return Base64.getEncoder().encodeToString(bytes.toByteArray())
+    }
+
+    private fun hex(text: String): String =
+        text.toByteArray(Charsets.UTF_8).joinToString("") { "%02x".format(it) }
+
+    @Test
+    fun packedSnapshotRoundTrips() {
+        val text = "hello\nworld\n" + "repeated terminal row\n".repeat(2000)
+
+        assertEquals(text, TmuxText.decodeSnapshot(TmuxCommands.SNAPSHOT_PACKED_MARKER + pack(text)))
+    }
+
+    @Test
+    fun packedSnapshotIsAtLeastSeventyPercentSmallerThanHex() {
+        val text = (1..4000).joinToString("\n") { "line $it of a long terminal transcript with normal prose" }
+
+        val packed = (TmuxCommands.SNAPSHOT_PACKED_MARKER + pack(text)).length
+        assertTrue(packed <= hex(text).length * 0.3)
+    }
+
+    @Test
+    fun hexSnapshotStillDecodes() {
+        val text = "hello\nworld"
+
+        assertEquals(text, TmuxText.decodeSnapshot(hex(text)))
+        assertEquals("", TmuxText.decodeSnapshot(""))
+    }
+
+    @Test
+    fun packedSnapshotKeepsMultiByteText() {
+        val text = "café 日本語 🚀 done\n" + "─".repeat(5000)
+
+        assertEquals(text, TmuxText.decodeSnapshot(TmuxCommands.SNAPSHOT_PACKED_MARKER + pack(text)))
+        assertEquals(text, TmuxText.decodeSnapshot(hex(text)))
+    }
+
+    @Test
+    fun malformedPackedSnapshotDecodesToEmpty() {
+        val marker = TmuxCommands.SNAPSHOT_PACKED_MARKER
+        val valid = Base64.getDecoder().decode(pack("some terminal text\n".repeat(50)))
+        val truncated = valid.copyOfRange(0, valid.size / 2)
+        val corrupted = valid.copyOf().also { it[it.size - 6] = (it[it.size - 6] + 1).toByte() }
+
+        assertEquals("", TmuxText.decodeSnapshot(marker))
+        assertEquals("", TmuxText.decodeSnapshot(marker + "not base64 !!!"))
+        assertEquals("", TmuxText.decodeSnapshot(marker + Base64.getEncoder().encodeToString("plain text, not gzip".toByteArray())))
+        assertEquals("", TmuxText.decodeSnapshot(marker + Base64.getEncoder().encodeToString(truncated)))
+        assertEquals("", TmuxText.decodeSnapshot(marker + Base64.getEncoder().encodeToString(corrupted)))
+    }
+
+    @Test
+    fun oversizePackedSnapshotDecodesToEmpty() {
+        val marker = TmuxCommands.SNAPSHOT_PACKED_MARKER
+        val atCap = "a".repeat(TmuxText.MAX_SNAPSHOT_BYTES)
+
+        assertEquals(atCap, TmuxText.decodeSnapshot(marker + pack(atCap)))
+        assertEquals("", TmuxText.decodeSnapshot(marker + pack(atCap + "a")))
+        assertEquals("", TmuxText.decodePacked(pack("0123456789"), maxBytes = 9))
+        assertEquals("0123456789", TmuxText.decodePacked(pack("0123456789"), maxBytes = 10))
     }
 
     @Test
