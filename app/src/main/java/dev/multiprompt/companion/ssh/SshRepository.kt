@@ -217,7 +217,7 @@ class SshRepository(private val secrets: SecretStorage) {
                         if (encoded.length > MAX_SNAPSHOT_HEX_CHARS) {
                             throw SshProblem.Connection("The tmux snapshot was unexpectedly large")
                         }
-                        val rawOutput = TmuxText.leftAligned(TmuxText.decodeHex(encoded))
+                        val rawOutput = TmuxText.leftAligned(TmuxText.decodeSnapshot(encoded))
                         val mobileOutput = TmuxText.withoutActiveComposer(
                             rawOutput,
                             agent,
