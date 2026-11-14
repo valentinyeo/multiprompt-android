@@ -3134,11 +3134,41 @@ internal fun ReaderScreen(
             connection.loadSkills(context.assets.open("native_skills.py").use { it.readBytes() })
         }
     }
+    val routeSlashCommand: (String) -> Boolean = { draftText ->
+        val route = if (replyTo != null || imageAttachments.isNotEmpty()) {
+            dev.multiprompt.companion.model.SlashCommand.Route.SEND
+        } else {
+            val command = dev.multiprompt.companion.model.SlashCommand.commandName(draftText)
+            dev.multiprompt.companion.model.SlashCommand.decide(
+                session.liveChat && session.agent == AgentKind.CLAUDE,
+                draftText,
+                command != null && reader.nativeSkills.any { it.name == command },
+            )
+        }
+        val pickerSection = when (route) {
+            dev.multiprompt.companion.model.SlashCommand.Route.MODEL -> HostChange.OPUS.section
+            dev.multiprompt.companion.model.SlashCommand.Route.PLAN,
+            dev.multiprompt.companion.model.SlashCommand.Route.PERMISSIONS -> HostChange.ASK.section
+            else -> null
+        }
+        if (pickerSection != null) {
+            if (HostChange.sections(connection.hostSettings() != null).any { it.first == pickerSection }) {
+                attachMenuSection = pickerSection
+                attachMenuExpanded = true
+            } else {
+                android.widget.Toast.makeText(context, "Chat settings are not ready", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        } else if (route == dev.multiprompt.companion.model.SlashCommand.Route.UNAVAILABLE) {
+            android.widget.Toast.makeText(context, "Not available in live chat", android.widget.Toast.LENGTH_SHORT).show()
+        }
+        route != dev.multiprompt.companion.model.SlashCommand.Route.SEND
+    }
     val sendDraft: (String) -> Unit = { draftText ->
         val composedPrompt = PromptComposer.composeMessage(ChatMention.annotate(draftText, mentionPicks, mentionChats), imageAttachments, replyTo, reader.nativeSkills)
         if (composedPrompt.isNotBlank() &&
             !reader.sending &&
-            pendingPromptAction == null && !recordingPrompt
+            pendingPromptAction == null && !recordingPrompt &&
+            !routeSlashCommand(draftText)
         ) {
             val actionCount = reader.completedActions
             val draft = SentDraft(draftText, imageAttachments, replyTo)

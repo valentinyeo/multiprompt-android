@@ -7,6 +7,7 @@ import { setTimeout } from 'node:timers/promises';
 
 export const requiredChecks = [
   'build',
+  'baseline-profile',
   'test',
   'unit-tests',
   'm3-unit-tests',

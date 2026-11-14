@@ -1,0 +1,13 @@
+HSPLdev/multiprompt/companion/MultipromptApplication;->**(**)**
+HSPLdev/multiprompt/companion/MainActivity;->**(**)**
+HSPLdev/multiprompt/companion/MainViewModel;->**(**)**
+HSPLdev/multiprompt/companion/ui/**->**(**)**
+HSPLdev/multiprompt/companion/reader/**->**(**)**
+HSPLdev/multiprompt/companion/ssh/**->**(**)**
+HSPLdev/multiprompt/companion/data/**->**(**)**
+HSPLdev/multiprompt/companion/model/**->**(**)**
+HSPLdev/multiprompt/companion/security/**->**(**)**
+HSPLdev/multiprompt/companion/account/**->**(**)**
+Ldev/multiprompt/companion/MultipromptApplication;
+Ldev/multiprompt/companion/MainActivity;
+Ldev/multiprompt/companion/MainViewModel;
