@@ -2878,6 +2878,7 @@ internal fun ReaderScreen(
     }
     val scrollState = rememberReaderScrollState(connection)
     var followRequest by remember(connection) { mutableStateOf(0) }
+    var newBelow by remember(connection) { mutableStateOf(0) }
     val scrollLive: () -> Unit = {
         onSessionInteraction()
         followRequest++
@@ -3383,8 +3384,12 @@ internal fun ReaderScreen(
         floatingActionButtonPosition = androidx.compose.material3.FabPosition.Center,
         floatingActionButton = {
             if (if (historyChat) chatListState.canScrollBackward else scrollState.canScrollForward) {
-                FloatingActionButton(onClick = scrollLive, modifier = Modifier.size(ReaderJumpSize), shape = CircleShape, containerColor = MaterialTheme.colorScheme.surfaceContainerHighest) {
-                    Icon(Icons.Default.KeyboardArrowDown, "Jump to newest")
+                val count = if (historyChat) newBelow else 0
+                FloatingActionButton(onClick = scrollLive, modifier = if (count > 0) Modifier.height(ReaderJumpSize) else Modifier.size(ReaderJumpSize), shape = CircleShape, containerColor = MaterialTheme.colorScheme.surfaceContainerHighest) {
+                    Row(Modifier.padding(horizontal = if (count > 0) 12.dp else 0.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.KeyboardArrowDown, if (count > 0) "Jump to newest, $count new" else "Jump to newest")
+                        if (count > 0) Text(jumpCountLabel(count))
+                    }
                 }
             }
         },
@@ -4078,6 +4083,7 @@ internal fun ReaderScreen(
                 onSessionUsed = { onSessionInteraction(); onSessionInput() },
                 listState = chatListState,
                 followRequest = followRequest,
+                onNewBelow = { newBelow = it },
                 bottomPadding = padding.calculateBottomPadding(),
                 modifier = Modifier.padding(horizontal = ReaderScreenPadding)
                     .transformable(state = transcriptTransform, canPan = { false })
