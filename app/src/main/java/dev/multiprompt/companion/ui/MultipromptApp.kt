@@ -601,6 +601,8 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onSetSessionListSetting = viewModel::setSessionListSetting,
                     onSetWorkspaceColor = viewModel::setAccountWorkspaceColor,
                     onRenameGroup = viewModel::renameAccountGroup,
+                    onSetChatGroup = { tab, name, favorites -> viewModel.editAccountLayout { it.setGroup(tab.identity, name, favorites) } },
+                    onUngroup = { name, favorites -> viewModel.editAccountLayout { it.ungroup(name, favorites) } },
                     appTheme = state.appTheme,
                     onSetAppTheme = viewModel::setAppTheme,
                     onClearSessionActionError = viewModel::clearSessionActionError,
@@ -1320,6 +1322,8 @@ internal fun SessionsScreen(
     dictation: DeepgramDictation? = null,
     material3: Boolean = LocalMaterial3.current,
     onSetUnreadOnly: (Boolean) -> Unit = {},
+    onSetChatGroup: (AccountTab, String?, Boolean) -> String? = { _, _, _ -> null },
+    onUngroup: (String, Boolean) -> String? = { _, _ -> null },
 ) = MultipromptTheme(
     sunlight = when (appTheme) {
         AppTheme.SYSTEM -> !isSystemInDarkTheme()
@@ -1343,6 +1347,8 @@ internal fun SessionsScreen(
     var renameGroupPrompt by remember { mutableStateOf<String?>(null) }
     var groupDraft by remember { mutableStateOf("") }
     var groupError by remember { mutableStateOf<String?>(null) }
+    var groupMoveTarget by remember { mutableStateOf<AccountTab?>(null) }
+    var newGroupTarget by remember { mutableStateOf<AccountTab?>(null) }
     var searchVisible by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var bucketMenuExpanded by remember { mutableStateOf(false) }
@@ -1429,9 +1435,80 @@ internal fun SessionsScreen(
                 renameGroupPrompt = null
                 groupError = null
             }, modifier = Modifier.fillMaxWidth())
+            KitSecondaryButton("Ungroup", onClick = {
+                groupError = onUngroup(group, state.selectedWorkspaceId == FAVORITES_SPLIT_ID)
+                if (groupError == null) renameGroupPrompt = null
+            }, modifier = Modifier.fillMaxWidth())
             KitPrimaryButton("Rename", onClick = {
                 groupError = onRenameGroup(group, groupDraft)
                 if (groupError == null) renameGroupPrompt = null
+            }, modifier = Modifier.fillMaxWidth())
+        }
+    }
+    groupMoveTarget?.let { tab ->
+        val favorites = state.selectedWorkspaceId == FAVORITES_SPLIT_ID
+        KitSheet(onDismiss = { groupMoveTarget = null }) {
+            Text("Move to group", style = Kit.Heading, color = Kit.Text)
+            state.accountLayout?.groupNames(favorites).orEmpty().forEach { name ->
+                KitMenuRow(
+                    label = name,
+                    trailingText = if (tab.groupIn(favorites) == name) "Current" else null,
+                    onClick = {
+                        groupMoveTarget = null
+                        onSetChatGroup(tab, name, favorites)
+                    },
+                )
+            }
+            KitMenuRow(
+                label = "New group",
+                onClick = {
+                    groupMoveTarget = null
+                    groupDraft = ""
+                    groupError = null
+                    newGroupTarget = tab
+                },
+            )
+            KitMenuRow(
+                label = "No group",
+                onClick = {
+                    groupMoveTarget = null
+                    onSetChatGroup(tab, null, favorites)
+                },
+            )
+            KitSecondaryButton("Cancel", onClick = { groupMoveTarget = null }, modifier = Modifier.fillMaxWidth())
+        }
+    }
+    newGroupTarget?.let { tab ->
+        val favorites = state.selectedWorkspaceId == FAVORITES_SPLIT_ID
+        KitSheet(onDismiss = {
+            newGroupTarget = null
+            groupError = null
+        }) {
+            Text("New group", style = Kit.Heading, color = Kit.Text)
+            OutlinedTextField(
+                value = groupDraft,
+                onValueChange = {
+                    groupDraft = it
+                    groupError = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Name") },
+                supportingText = groupError?.let { message -> { Text(message) } },
+                isError = groupError != null,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = {
+                    groupError = onSetChatGroup(tab, groupDraft.trim(), favorites)
+                    if (groupError == null) newGroupTarget = null
+                }),
+            )
+            KitSecondaryButton("Cancel", onClick = {
+                newGroupTarget = null
+                groupError = null
+            }, modifier = Modifier.fillMaxWidth())
+            KitPrimaryButton("Create", onClick = {
+                groupError = onSetChatGroup(tab, groupDraft.trim(), favorites)
+                if (groupError == null) newGroupTarget = null
             }, modifier = Modifier.fillMaxWidth())
         }
     }
@@ -2211,6 +2288,7 @@ internal fun SessionsScreen(
                             onDissolve = { onDissolve(session) },
                             onEnd = { endPromptSession = session },
                             onForget = { onForgetSession(session) },
+                            onMoveToGroup = if (tab != null && state.signedIn) ({ groupMoveTarget = tab }) else null,
                         )
                     }
                 }
@@ -2435,6 +2513,7 @@ private fun SessionCard(
     onForget: () -> Unit,
     muted: Boolean = false,
     onToggleMute: (() -> Unit)? = null,
+    onMoveToGroup: (() -> Unit)? = null,
 ) {
     var menuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     val dismissState = rememberSwipeToDismissBoxState(
@@ -2580,6 +2659,17 @@ private fun SessionCard(
                                 onMove()
                             },
                         )
+                    }
+                    if (!archived) {
+                        onMoveToGroup?.let { moveToGroup ->
+                            KitMenuRow(
+                                label = "Move to group",
+                                onClick = {
+                                    menuExpanded = false
+                                    moveToGroup()
+                                },
+                            )
+                        }
                     }
                     if (!unread && !archived) {
                         KitMenuRow(
