@@ -56,6 +56,12 @@ start = 'private fun SessionCard('
 end = '@Composable\nprivate fun DissolvedSessionCard('
 original = old[old.index(start):old.index(end)]
 original = original.replace('workspaceName: String?,', 'workspaceName: String? = null,').replace('etaLabel: String?,', 'etaLabel: String? = null,')
+close = ') {'
+live = current[current.index(start):current.index(close, current.index(start))]
+cut = original.index(close)
+known = {line.split(':')[0].strip() for line in original[:cut].splitlines()}
+added = [line for line in live.splitlines() if ' = ' in line and line.split(':')[0].strip() not in known]
+original = original[:cut] + ''.join(line + '\n' for line in added) + original[cut:]
 assert original.count('DropdownMenu(') == 1, "Expected exactly one original popup call"
 original = original.replace('DropdownMenu(', 'androidx.compose.material3.DropdownMenu(')
 original = original.replace('DropdownMenuItem(', 'androidx.compose.material3.DropdownMenuItem(')
