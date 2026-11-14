@@ -247,10 +247,10 @@ class ReaderActionsMenuTest {
     @Test fun displayAndMoreSubPagesHoldTheRemainingOptions() {
         render(material3 = true)
         openMenu()
-        compose.onNodeWithText("Display ›").performScrollTo().performClick()
+        compose.onNodeWithText("Display").performScrollTo().performClick()
         listOf("Show terminal details", "Sunlight mode on", "Use default font size").forEach { compose.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
         compose.onNodeWithText("‹ Back").performScrollTo().performClick()
-        compose.onNodeWithText("More ›").performScrollTo().performClick()
+        compose.onNodeWithText("More").performScrollTo().performClick()
         listOf("Release notes", "Estimate accuracy", "Dictation API key", "Screencast2 upload key")
             .forEach { compose.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
         compose.onNodeWithText("Copy raw transcript", substring = true).performScrollTo().assertIsDisplayed()
@@ -259,7 +259,7 @@ class ReaderActionsMenuTest {
     @Test fun reopeningTheMenuAlwaysStartsOnTheMainPage() {
         render(material3 = true)
         openMenu()
-        compose.onNodeWithText("Display ›").performScrollTo().performClick()
+        compose.onNodeWithText("Display").performScrollTo().performClick()
         compose.onNodeWithText("Sunlight mode on").performScrollTo().performClick()
         openMenu()
         compose.onNodeWithText("Enter / approve").performScrollTo().assertIsDisplayed()
