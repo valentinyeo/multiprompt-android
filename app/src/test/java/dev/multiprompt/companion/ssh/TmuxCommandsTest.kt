@@ -91,6 +91,11 @@ class TmuxCommandsTest {
 
         assertTrue(command.contains("-t ${TmuxParser.shellQuote("=$hostile")} "))
         assertTrue(command.contains("-t ${TmuxParser.shellQuote("=$hostile:")} "))
+        val unquoted = command
+            .replace(TmuxParser.shellQuote("=$hostile:"), "")
+            .replace(TmuxParser.shellQuote("=$hostile"), "")
+            .replace(TmuxParser.shellQuote(hostile), "")
+        assertFalse(unquoted.contains("touch /bad"))
         assertEquals(
             TmuxCommands.stream("qxfirstqx").replace("qxfirstqx", "@"),
             TmuxCommands.stream("qxsecondqx").replace("qxsecondqx", "@"),
