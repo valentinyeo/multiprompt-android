@@ -18,4 +18,11 @@ class SessionGroupsTest {
         assertEquals(listOf(SessionGroup(null, listOf("a", "b"))), SessionGroups.split(listOf("a", "b")) { null })
         assertEquals(emptyList<SessionGroup<String>>(), SessionGroups.split(emptyList<String>()) { null })
     }
+
+    @Test fun recentsHeadingAppearsOnLooseChatsOnlyWhenNamedGroupsExist() {
+        val withGroups = SessionGroups.split(listOf("r1", "lead", "d1")) { groups[it] }
+        assertEquals(listOf("Recents", "Runners", "Design"), withGroups.map { SessionGroups.heading(it, withGroups) })
+        val flat = SessionGroups.split(listOf("a", "b")) { null }
+        assertEquals(listOf(null), flat.map { SessionGroups.heading(it, flat) })
+    }
 }

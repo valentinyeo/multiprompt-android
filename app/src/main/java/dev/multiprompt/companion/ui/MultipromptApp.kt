@@ -564,6 +564,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onSetAllSplitOnRight = viewModel::setAllSplitOnRight,
                     onSetSessionListSetting = viewModel::setSessionListSetting,
                     onSetWorkspaceColor = viewModel::setAccountWorkspaceColor,
+                    onRenameGroup = viewModel::renameAccountGroup,
                     appTheme = state.appTheme,
                     onSetAppTheme = viewModel::setAppTheme,
                     onClearSessionActionError = viewModel::clearSessionActionError,
@@ -1231,6 +1232,7 @@ internal fun SessionsScreen(
     nowMillis: () -> Long = System::currentTimeMillis,
     onSetSessionListSetting: (String, Boolean) -> Unit = { _, _ -> },
     onSetWorkspaceColor: (String, Int?) -> Unit = { _, _ -> },
+    onRenameGroup: (String, String) -> String? = { _, _ -> null },
     dictation: DeepgramDictation? = null,
     material3: Boolean = LocalMaterial3.current,
 ) = MultipromptTheme(
@@ -1253,6 +1255,9 @@ internal fun SessionsScreen(
     var renamePromptSession by remember { mutableStateOf<TmuxSession?>(null) }
     var renameDraft by remember { mutableStateOf("") }
     var renameError by remember { mutableStateOf<String?>(null) }
+    var renameGroupPrompt by remember { mutableStateOf<String?>(null) }
+    var groupDraft by remember { mutableStateOf("") }
+    var groupError by remember { mutableStateOf<String?>(null) }
     var searchVisible by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var bucketMenuExpanded by remember { mutableStateOf(false) }
@@ -1309,6 +1314,39 @@ internal fun SessionsScreen(
             KitPrimaryButton("Rename", onClick = {
                 renameError = onRenameSession(session, renameDraft)
                 if (renameError == null) renamePromptSession = null
+            }, modifier = Modifier.fillMaxWidth())
+        }
+    }
+    renameGroupPrompt?.let { group ->
+        KitSheet(onDismiss = {
+            renameGroupPrompt = null
+            groupError = null
+        }) {
+            Text("Rename group", style = Kit.Heading, color = Kit.Text)
+            OutlinedTextField(
+                value = groupDraft,
+                onValueChange = {
+                    groupDraft = it
+                    groupError = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Name") },
+                supportingText = groupError?.let { message -> { Text(message) } },
+                isError = groupError != null,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = {
+                    groupError = onRenameGroup(group, groupDraft)
+                    if (groupError == null) renameGroupPrompt = null
+                }),
+            )
+            KitSecondaryButton("Cancel", onClick = {
+                renameGroupPrompt = null
+                groupError = null
+            }, modifier = Modifier.fillMaxWidth())
+            KitPrimaryButton("Rename", onClick = {
+                groupError = onRenameGroup(group, groupDraft)
+                if (groupError == null) renameGroupPrompt = null
             }, modifier = Modifier.fillMaxWidth())
         }
     }
@@ -2003,10 +2041,30 @@ internal fun SessionsScreen(
                     item(key = "error-$hostId") { InlineError(error) }
                 }
             }
-            SessionGroups.split(visibleSessions) { session ->
+            val sessionGroups = SessionGroups.split(visibleSessions) { session ->
                 state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }?.group
-            }.forEach { group ->
-                val heading: () -> Unit = { group.name?.let { name -> item(key = "group:$name") { KitSectionLabel(name) } } }
+            }
+            sessionGroups.forEach { group ->
+                val heading: () -> Unit = {
+                    val title = SessionGroups.heading(group, sessionGroups)
+                    if (title != null) {
+                        item(key = group.name?.let { "group:$it" } ?: "recents") {
+                            val name = group.name
+                            KitSectionLabel(
+                                title,
+                                if (name == null) Modifier else Modifier.combinedClickable(
+                                    onClick = {},
+                                    onLongClickLabel = "Rename group",
+                                    onLongClick = {
+                                        groupDraft = name
+                                        groupError = null
+                                        renameGroupPrompt = name
+                                    },
+                                ),
+                            )
+                        }
+                    }
+                }
                 if (!reversedSessions) heading()
                 items(group.items, key = { "${it.hostId}:${it.name}" }) { session ->
                     val key = SessionReadStore.key(session.hostId, session.name)

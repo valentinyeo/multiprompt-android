@@ -43,5 +43,6 @@
   "IGSH-2284": "Android: start Codex, Pi, Hax and Cursor as live chats",
   "IGSH-2312": "Multi Bot Android release check fails after a cancelled release run",
   "IGSH-1840": "Android: Frequent split after Favorites, and reorder splits",
-  "IGSH-2300": "Android: pause updates for chats that are not on screen"
+  "IGSH-2300": "Android: pause updates for chats that are not on screen",
+  "IGSH-2291": "Android: rename a group and a Recents heading in the list"
 }

@@ -109,6 +109,12 @@ data class AccountLayout(
         tabs = tabs.map { if (it.workspace == old) it.copy(workspace = name) else it },
     ).validate()
 
+    fun renameGroup(old: String, name: String): AccountLayout {
+        require(name.isNotBlank() && validText(name, 64)) { "Group name must be 1 to 64 characters" }
+        require(name == old || tabs.none { it.group == name }) { "A group named $name already exists" }
+        return copy(tabs = tabs.map { if (it.group == old) it.copy(group = name) else it }).validate()
+    }
+
     companion object {
         private fun validText(text: String, limit: Int): Boolean = text.isNotEmpty() && text.length <= limit &&
             text.none { it.code < 32 || it.code == 127 } &&
