@@ -29,6 +29,7 @@ object TmuxParser {
         return "printf '${START_MARKER}\\n'; " +
             "if command -v tmux >/dev/null 2>&1; then " +
             TmuxCommands.sessionRows(format) +
+            TmuxCommands.hostedRows() +
             "printf '${TmuxCommands.ETA_PREFIX}'; " +
             "{ ${TmuxCommands.etaRowsCommand()} ; } | od -An -v -tx1 | tr -d ' \\n'; " +
             "printf '\\n'; " +

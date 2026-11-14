@@ -45,7 +45,7 @@ The ★ Favorites split stays just after All and shows only starred account sess
 Android negotiates favorite metadata and preserves absent values without inventing stars.
 Optional boolean `muted` on a tab hides that session from every Inbox split and unread count; it stays in the workspace list. Android sends `muted` in `X-Layout-Features` and never drops it on push.
 
-Frequent is the first split. It includes sessions with input in the last 24 hours
+Frequent sits right after Favorites by default, or after All when Favorites is hidden. The synced `frequent_first` setting puts it first instead; an absent value means after Favorites. It includes sessions with input in the last 24 hours
 (inclusive), or at least three watch-only looks in the last six hours. Future
 values count. The order key is input when recent, otherwise the newest look.
 Like other splits it follows newest-at-bottom; with that setting on, the newest

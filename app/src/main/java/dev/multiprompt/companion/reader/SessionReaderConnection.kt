@@ -7,6 +7,7 @@ import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.ssh.SshRepository
 import dev.multiprompt.companion.ssh.TmuxAction
 import dev.multiprompt.companion.ssh.TmuxText
+import dev.multiprompt.companion.upload.DeviceFile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -406,6 +407,7 @@ class SessionReaderConnection(
                         connectedClient,
                         tmuxSessionName,
                         agent,
+                        hostSessionId.isNotBlank(),
                     ) { frame ->
                         confirmModelSwitchIfAsked(frame.confirmationVisible)
                         if (historyMode) {
@@ -514,6 +516,10 @@ class SessionReaderConnection(
         } finally {
             _state.update { it.copy(sending = false) }
         }
+    }
+
+    suspend fun sendFile(file: DeviceFile): String = withFreshClient { client ->
+        repository.uploadFile(client, tmuxSessionName, file)
     }
 
     private suspend fun <T> withFreshClient(block: suspend (SshClient) -> T): T {
