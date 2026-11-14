@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import android.text.format.DateUtils
 import androidx.compose.foundation.lazy.rememberLazyListState
-import dev.multiprompt.companion.reader.TranscriptProtocol
+import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import dev.multiprompt.companion.reader.ChatMention
 import dev.multiprompt.companion.reader.MentionChat
 import androidx.compose.foundation.layout.ColumnScope
@@ -102,6 +102,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Badge
@@ -217,6 +218,7 @@ import dev.multiprompt.companion.computer.ComputerStatus
 import dev.multiprompt.companion.computer.ComputerStore
 import dev.multiprompt.companion.computer.ComputerTarget
 import dev.multiprompt.companion.computer.ComputerViewer
+import dev.multiprompt.companion.computer.ComputerViewerPage
 import dev.multiprompt.companion.AppUiState
 import dev.multiprompt.companion.SessionBucket
 import dev.multiprompt.companion.BuildConfig
@@ -255,8 +257,11 @@ import dev.multiprompt.companion.terminal.TerminalConnection
 import dev.multiprompt.companion.terminal.TerminalStatus
 import dev.multiprompt.companion.update.UpdateRelease
 import dev.multiprompt.companion.update.UpdateState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import dev.multiprompt.companion.upload.DeviceFile
 import dev.multiprompt.companion.upload.ScreencastUploader
 import java.io.ByteArrayOutputStream
 import java.time.ZonedDateTime
@@ -432,6 +437,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             onReleaseNotes = viewModel::openReleaseNotes,
             onMarkRead = viewModel::markReaderRead,
             unreadMessageKey = state.readerUnreadMessageKey,
+            unreadSinceEpochSeconds = state.readerUnreadSince,
             onMarkUnreadFrom = viewModel::markReaderUnreadFrom,
             onArchiveToggle = {
                 if (SessionReadStore.key(readerSession.hostId, readerSession.name) in
@@ -564,6 +570,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onSetAllSplitOnRight = viewModel::setAllSplitOnRight,
                     onSetSessionListSetting = viewModel::setSessionListSetting,
                     onSetWorkspaceColor = viewModel::setAccountWorkspaceColor,
+                    onRenameGroup = viewModel::renameAccountGroup,
                     appTheme = state.appTheme,
                     onSetAppTheme = viewModel::setAppTheme,
                     onClearSessionActionError = viewModel::clearSessionActionError,
@@ -1231,6 +1238,7 @@ internal fun SessionsScreen(
     nowMillis: () -> Long = System::currentTimeMillis,
     onSetSessionListSetting: (String, Boolean) -> Unit = { _, _ -> },
     onSetWorkspaceColor: (String, Int?) -> Unit = { _, _ -> },
+    onRenameGroup: (String, String) -> String? = { _, _ -> null },
     dictation: DeepgramDictation? = null,
     material3: Boolean = LocalMaterial3.current,
 ) = MultipromptTheme(
@@ -1253,6 +1261,9 @@ internal fun SessionsScreen(
     var renamePromptSession by remember { mutableStateOf<TmuxSession?>(null) }
     var renameDraft by remember { mutableStateOf("") }
     var renameError by remember { mutableStateOf<String?>(null) }
+    var renameGroupPrompt by remember { mutableStateOf<String?>(null) }
+    var groupDraft by remember { mutableStateOf("") }
+    var groupError by remember { mutableStateOf<String?>(null) }
     var searchVisible by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var bucketMenuExpanded by remember { mutableStateOf(false) }
@@ -1309,6 +1320,39 @@ internal fun SessionsScreen(
             KitPrimaryButton("Rename", onClick = {
                 renameError = onRenameSession(session, renameDraft)
                 if (renameError == null) renamePromptSession = null
+            }, modifier = Modifier.fillMaxWidth())
+        }
+    }
+    renameGroupPrompt?.let { group ->
+        KitSheet(onDismiss = {
+            renameGroupPrompt = null
+            groupError = null
+        }) {
+            Text("Rename group", style = Kit.Heading, color = Kit.Text)
+            OutlinedTextField(
+                value = groupDraft,
+                onValueChange = {
+                    groupDraft = it
+                    groupError = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Name") },
+                supportingText = groupError?.let { message -> { Text(message) } },
+                isError = groupError != null,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = {
+                    groupError = onRenameGroup(group, groupDraft)
+                    if (groupError == null) renameGroupPrompt = null
+                }),
+            )
+            KitSecondaryButton("Cancel", onClick = {
+                renameGroupPrompt = null
+                groupError = null
+            }, modifier = Modifier.fillMaxWidth())
+            KitPrimaryButton("Rename", onClick = {
+                groupError = onRenameGroup(group, groupDraft)
+                if (groupError == null) renameGroupPrompt = null
             }, modifier = Modifier.fillMaxWidth())
         }
     }
@@ -1720,7 +1764,7 @@ internal fun SessionsScreen(
         }
     val visibleSessions = if (state.selectedWorkspaceId == FREQUENT_SPLIT_ID) {
         frequentSessions(matchingSessions, state.accountLayout, state.accountHosts, etaNowMillis)
-    } else SessionSearch.newestFirst(matchingSessions, state.sessionInteractionEpochSeconds)
+    } else SessionSearch.newestFirst(matchingSessions, state.sessionInteractionEpochSeconds, state.accountLayout, state.accountHosts)
     val visibleDissolvedSessions = if (state.sessionBucket == SessionBucket.ARCHIVE && state.selectedWorkspaceId != FAVORITES_SPLIT_ID && state.selectedWorkspaceId != FREQUENT_SPLIT_ID) {
         state.dissolvedSessions.filter { session ->
             normalizedQuery.isBlank() ||
@@ -2003,10 +2047,31 @@ internal fun SessionsScreen(
                     item(key = "error-$hostId") { InlineError(error) }
                 }
             }
-            SessionGroups.split(visibleSessions) { session ->
-                state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }?.group
-            }.forEach { group ->
-                val heading: () -> Unit = { group.name?.let { name -> item(key = "group:$name") { KitSectionLabel(name) } } }
+            val sessionGroups = SessionGroups.split(visibleSessions, state.accountLayout?.groupOrder?.let { if (reversedSessions) it.asReversed() else it }) { session ->
+                val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
+                tab?.groupIn(state.selectedWorkspaceId == FAVORITES_SPLIT_ID)
+            }
+            sessionGroups.forEach { group ->
+                val heading: () -> Unit = {
+                    val title = SessionGroups.heading(group, sessionGroups)
+                    if (title != null) {
+                        item(key = group.name?.let { "group:$it" } ?: "recents") {
+                            val name = group.name
+                            KitSectionLabel(
+                                title,
+                                if (name == null) Modifier else Modifier.combinedClickable(
+                                    onClick = {},
+                                    onLongClickLabel = "Rename group",
+                                    onLongClick = {
+                                        groupDraft = name
+                                        groupError = null
+                                        renameGroupPrompt = name
+                                    },
+                                ),
+                            )
+                        }
+                    }
+                }
                 if (!reversedSessions) heading()
                 items(group.items, key = { "${it.hostId}:${it.name}" }) { session ->
                     val key = SessionReadStore.key(session.hostId, session.name)
@@ -2739,6 +2804,7 @@ internal fun ReaderScreen(
     unreadMessageKey: String? = null,
     onMarkUnreadFrom: (String) -> Unit = {},
     mentionChats: List<MentionChat> = emptyList(),
+    unreadSinceEpochSeconds: Long? = null,
 ) = key(connection) {
     MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
     val reader by connection.state.collectAsState()
@@ -2748,7 +2814,7 @@ internal fun ReaderScreen(
         android.util.Log.i("SessionWorking", "session=${session.name} visible=$working hook=${reader.hookState?.active} status=${reader.status} sending=${reader.sending}")
     }
     val transcript = reader.transcript.takeUnless { technicalMode }
-    val historyAgent = TranscriptProtocol.supports(session.agent)
+    val historyAgent = ChatHistoryProtocol.supports(session.agent, session.hostSessionId)
     val historyChat = historyAgent && !technicalMode
     val chatListState = key(connection) { rememberLazyListState() }
     var etaNowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -2870,6 +2936,7 @@ internal fun ReaderScreen(
     }
     val scrollState = rememberReaderScrollState(connection)
     var followRequest by remember(connection) { mutableStateOf(0) }
+    var newBelow by remember(connection) { mutableStateOf(0) }
     val scrollLive: () -> Unit = {
         onSessionInteraction()
         followRequest++
@@ -2961,6 +3028,31 @@ internal fun ReaderScreen(
                 }
                 if (uploadedUrls.isNotEmpty()) {
                     imageAttachments = imageAttachments + uploadedUrls
+                }
+                imageUploading = false
+            }
+        }
+    }
+    val filePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            imageUploading = true
+            imageUploadError = null
+            readerScope.launch {
+                val serverPaths = buildList {
+                    uris.take(MAX_IMAGE_SELECTION).forEach { uri ->
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                connection.sendFile(DeviceFile.from(draftContext.contentResolver, uri))
+                            }
+                        }
+                            .onSuccess(::add)
+                            .onFailure { imageUploadError = it.message ?: "Could not send the file to the server" }
+                    }
+                }
+                if (serverPaths.isNotEmpty()) {
+                    imageAttachments = imageAttachments + serverPaths
                 }
                 imageUploading = false
             }
@@ -3350,8 +3442,12 @@ internal fun ReaderScreen(
         floatingActionButtonPosition = androidx.compose.material3.FabPosition.Center,
         floatingActionButton = {
             if (if (historyChat) chatListState.canScrollBackward else scrollState.canScrollForward) {
-                FloatingActionButton(onClick = scrollLive, modifier = Modifier.size(ReaderJumpSize), shape = CircleShape, containerColor = MaterialTheme.colorScheme.surfaceContainerHighest) {
-                    Icon(Icons.Default.KeyboardArrowDown, "Jump to newest")
+                val count = if (historyChat) newBelow else 0
+                FloatingActionButton(onClick = scrollLive, modifier = if (count > 0) Modifier.height(ReaderJumpSize) else Modifier.size(ReaderJumpSize), shape = CircleShape, containerColor = MaterialTheme.colorScheme.surfaceContainerHighest) {
+                    Row(Modifier.padding(horizontal = if (count > 0) 12.dp else 0.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.KeyboardArrowDown, if (count > 0) "Jump to newest, $count new" else "Jump to newest")
+                        if (count > 0) Text(jumpCountLabel(count))
+                    }
                 }
             }
         },
@@ -3383,17 +3479,23 @@ internal fun ReaderScreen(
                         }
                         when (menuPage) {
                             ReaderMenuPage.MAIN -> {
+                                if (reader.status != dev.multiprompt.companion.reader.ReaderStatus.Live) {
+                                    KitSectionLabel("Reconnect")
+                                    KitMenuRow(
+                                        label = "Reattach session",
+                                        trailingText = if (reader.status == dev.multiprompt.companion.reader.ReaderStatus.Connecting) "Connecting" else "Disconnected",
+                                        onClick = {
+                                            menuExpanded = false
+                                            onReattach()
+                                        },
+                                    )
+                                    KitDivider()
+                                }
+                                KitSectionLabel("Chat")
                                 KitMenuRow(
                                     label = listOfNotNull(runtimeDetails.label, statusLabel).joinToString(" · ").ifEmpty { "Model / effort" },
-                                    enabled = false,
-                                    onClick = {},
-                                )
-                                KitMenuRow(
-                                    label = "Computer",
-                                    onClick = {
-                                        menuExpanded = false
-                                        setComputerOpen(true)
-                                    },
+                                    trailingText = "Change ›",
+                                    onClick = { menuPage = ReaderMenuPage.MODEL },
                                 )
                                 KitMenuRow(
                                     label = "Enter / approve",
@@ -3426,13 +3528,26 @@ internal fun ReaderScreen(
                                     )
                                 }
                                 KitMenuRow(
-                                    label = "Open live terminal",
+                                    label = if (reading) "Stop reading" else "Read reply",
                                     onClick = {
                                         menuExpanded = false
-                                        onOpenTerminal()
+                                        if (reading) {
+                                            speech.stop()
+                                            reading = false
+                                            speakingKey = null
+                                        } else {
+                                            val next = dev.multiprompt.companion.reader.ReadAloud.next(speakableReplies, replyCursor)
+                                            if (next != null) {
+                                                speech.speak(next.first.text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "reply")
+                                                speakingKey = next.first.key
+                                                replyCursor = next.second
+                                                reading = true
+                                            } else {
+                                                android.widget.Toast.makeText(context, "No reply to read yet", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
                                     },
                                 )
-                                KitDivider()
                                 if (unread) {
                                     KitMenuRow(
                                         label = "Mark read",
@@ -3442,43 +3557,6 @@ internal fun ReaderScreen(
                                         },
                                     )
                                 }
-                                if (session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {
-                                    KitMenuRow(
-                                        label = "Rename",
-                                        onClick = {
-                                            menuExpanded = false
-                                            renameDraft = session.displayName
-                                            renameError = null
-                                            renameDialogVisible = true
-                                        },
-                                    )
-                                }
-                                KitMenuRow(
-                                    label = "Remind Me…",
-                                    onClick = { menuExpanded = false; reminderDialogVisible = true },
-                                )
-                                KitMenuRow(
-                                    label = if (archived) "Return to open" else "Waiting",
-                                    onClick = { menuExpanded = false; onArchiveToggle() },
-                                )
-                                KitMenuRow(
-                                    label = "Delete",
-                                    destructive = true,
-                                    onClick = { menuExpanded = false; onDissolve() },
-                                )
-                                KitDivider()
-                                KitMenuRow(
-                                    label = "Model and effort ›",
-                                    onClick = { menuPage = ReaderMenuPage.MODEL },
-                                )
-                                KitMenuRow(
-                                    label = "Display ›",
-                                    onClick = { menuPage = ReaderMenuPage.DISPLAY },
-                                )
-                                KitMenuRow(
-                                    label = "More ›",
-                                    onClick = { menuPage = ReaderMenuPage.MORE },
-                                )
                                 KitMenuRow(
                                     label = "Reset this chat",
                                     onClick = {
@@ -3502,35 +3580,38 @@ internal fun ReaderScreen(
                                         }
                                     },
                                 )
-                                if (reader.status != dev.multiprompt.companion.reader.ReaderStatus.Live) {
+                                KitDivider()
+                                KitSectionLabel("Session")
+                                if (session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {
                                     KitMenuRow(
-                                        label = "Reattach session",
+                                        label = "Rename",
                                         onClick = {
                                             menuExpanded = false
-                                            onReattach()
+                                            renameDraft = session.displayName
+                                            renameError = null
+                                            renameDialogVisible = true
                                         },
                                     )
                                 }
                                 KitMenuRow(
-                                    label = if (reading) "Stop reading" else "Read reply",
+                                    label = "Remind Me…",
+                                    onClick = { menuExpanded = false; reminderDialogVisible = true },
+                                )
+                                KitMenuRow(
+                                    label = if (archived) "Return to open" else "Waiting",
+                                    onClick = { menuExpanded = false; onArchiveToggle() },
+                                )
+                                KitMenuRow(
+                                    label = if (pinnedPage == null) "Pin a page…" else "Change pinned page…",
                                     onClick = {
                                         menuExpanded = false
-                                        if (reading) {
-                                            speech.stop()
-                                            reading = false
-                                            speakingKey = null
-                                        } else {
-                                            val next = dev.multiprompt.companion.reader.ReadAloud.next(speakableReplies, replyCursor)
-                                            if (next != null) {
-                                                speech.speak(next.first.text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "reply")
-                                                speakingKey = next.first.key
-                                                replyCursor = next.second
-                                                reading = true
-                                            } else {
-                                                android.widget.Toast.makeText(context, "No reply to read yet", android.widget.Toast.LENGTH_SHORT).show()
-                                            }
-                                        }
+                                        pinPageOpen = true
                                     },
+                                )
+                                KitMenuRow(
+                                    label = "Display",
+                                    trailingText = "›",
+                                    onClick = { menuPage = ReaderMenuPage.DISPLAY },
                                 )
                                 KitMenuRow(
                                     label = "Bot look",
@@ -3540,18 +3621,17 @@ internal fun ReaderScreen(
                                     },
                                 )
                                 KitMenuRow(
-                                    label = if (pinnedPage == null) "Pin a page…" else "Change pinned page…",
+                                    label = "Computer",
                                     onClick = {
                                         menuExpanded = false
-                                        pinPageOpen = true
+                                        setComputerOpen(true)
                                     },
                                 )
-                                KitDivider()
                                 KitMenuRow(
-                                    label = "End tmux session",
+                                    label = "Open live terminal",
                                     onClick = {
                                         menuExpanded = false
-                                        endDialogVisible = true
+                                        onOpenTerminal()
                                     },
                                 )
                                 KitMenuRow(
@@ -3560,6 +3640,26 @@ internal fun ReaderScreen(
                                         menuExpanded = false
                                         onForget()
                                     },
+                                )
+                                KitMenuRow(
+                                    label = "More",
+                                    trailingText = "›",
+                                    onClick = { menuPage = ReaderMenuPage.MORE },
+                                )
+                                KitDivider()
+                                KitSectionLabel("Danger")
+                                KitMenuRow(
+                                    label = "End tmux session",
+                                    destructive = true,
+                                    onClick = {
+                                        menuExpanded = false
+                                        endDialogVisible = true
+                                    },
+                                )
+                                KitMenuRow(
+                                    label = "Delete",
+                                    destructive = true,
+                                    onClick = { menuExpanded = false; onDissolve() },
                                 )
                             }
                             ReaderMenuPage.MODEL -> {
@@ -3710,12 +3810,18 @@ internal fun ReaderScreen(
                                     Modifier.padding(start = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    Icon(Icons.Default.Image, "Image attachment", Modifier.size(if (LocalMaterial3.current) 20.dp else 18.dp))
+                                    val serverFile = PromptComposer.isServerFile(url)
+                                    Icon(
+                                        if (serverFile) Icons.Outlined.AttachFile else Icons.Default.Image,
+                                        if (serverFile) "File attachment" else "Image attachment",
+                                        Modifier.size(if (LocalMaterial3.current) 20.dp else 18.dp),
+                                    )
                                     Text(
-                                        "Image ${index + 1}",
-                                        modifier = Modifier.padding(horizontal = 5.dp),
+                                        PromptComposer.attachmentLabel(url, index),
+                                        modifier = Modifier.widthIn(max = 160.dp).padding(horizontal = 5.dp),
                                         style = MaterialTheme.typography.labelMedium,
                                         maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
                                     IconButton(
                                         onClick = {
@@ -3723,7 +3829,7 @@ internal fun ReaderScreen(
                                         },
                                         modifier = Modifier.size(if (LocalMaterial3.current) 48.dp else 30.dp),
                                     ) {
-                                        Icon(Icons.Default.Close, "Remove image ${index + 1}")
+                                        Icon(Icons.Default.Close, if (serverFile) "Remove file ${PromptComposer.attachmentLabel(url, index)}" else "Remove image ${index + 1}")
                                     }
                                 }
                             }
@@ -3817,6 +3923,14 @@ internal fun ReaderScreen(
                                             attachMenuExpanded = false
                                             if (screencast.configured) imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                                             else imageKeyDialogVisible = true
+                                        },
+                                    )
+                                    KitMenuRow(
+                                        label = "Add file",
+                                        icon = Icons.Outlined.AttachFile,
+                                        onClick = {
+                                            attachMenuExpanded = false
+                                            filePicker.launch(arrayOf("*/*"))
                                         },
                                     )
                                     if (session.agent == AgentKind.CLAUDE) {
@@ -3990,7 +4104,7 @@ internal fun ReaderScreen(
                 screen = { modifier ->
                     computerState.localPort?.takeIf { computerState.status == ComputerStatus.Live }?.let { port ->
                         ComputerScreen(
-                            url = "http://${ComputerTarget.DEFAULT_HOST}:$port/",
+                            url = ComputerViewerPage.url(port),
                             onPicture = { computerStore.saveLastPicture(session, it) },
                             modifier = modifier,
                             onUnreachable = { computerViewer.fail("Cannot reach the VPS") },
@@ -4022,10 +4136,12 @@ internal fun ReaderScreen(
                 },
                 sessionName = session.displayName,
                 unreadMessageKey = unreadMessageKey,
+                unreadSinceEpochSeconds = unreadSinceEpochSeconds,
                 onMarkUnread = onMarkUnreadFrom,
                 onSessionUsed = { onSessionInteraction(); onSessionInput() },
                 listState = chatListState,
                 followRequest = followRequest,
+                onNewBelow = { newBelow = it },
                 bottomPadding = padding.calculateBottomPadding(),
                 modifier = Modifier.padding(horizontal = ReaderScreenPadding)
                     .transformable(state = transcriptTransform, canPan = { false })
