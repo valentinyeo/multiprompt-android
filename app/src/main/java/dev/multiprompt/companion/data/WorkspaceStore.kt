@@ -22,6 +22,21 @@ class WorkspaceStore(context: Context) {
         preferences.edit().putString(KEY_SELECTED_SPLIT, JSONArray().put(id).toString()).apply()
     }
 
+    fun archivedIds(): Set<String> = runCatching {
+        val saved = JSONArray(preferences.getString(KEY_ARCHIVED, null) ?: return emptySet())
+        buildSet { for (index in 0 until saved.length()) add(saved.getString(index)) }
+    }.getOrDefault(emptySet())
+
+    fun archive(id: String): Set<String> = saveArchived(archivedIds() + id)
+
+    fun restore(id: String): Set<String> = saveArchived(archivedIds() - id)
+
+    private fun saveArchived(ids: Set<String>): Set<String> {
+        val kept = ids.filter { it.isNotEmpty() }.toSet()
+        preferences.edit().putString(KEY_ARCHIVED, encodeIds(kept.toList())).apply()
+        return kept
+    }
+
     fun load(): List<Workspace> {
         val raw = preferences.getString(KEY_WORKSPACES, null) ?: return emptyList()
         return runCatching {
@@ -212,6 +227,7 @@ class WorkspaceStore(context: Context) {
     companion object {
         private const val KEY_SELECTED_SPLIT = "selected_split_json"
         private const val KEY_WORKSPACES = "workspaces_json"
+        private const val KEY_ARCHIVED = "archived_workspace_ids_json"
         private const val KEY_SPLIT_ORDER = "split_order_json"
         private const val KEY_PATH_USAGE = "path_usage_json"
         private const val ASSIGNMENT_PREFIX = "assignment::"

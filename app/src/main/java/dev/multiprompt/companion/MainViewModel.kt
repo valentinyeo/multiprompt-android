@@ -140,6 +140,7 @@ data class AppUiState(
     val deviceApprovalError: String? = null,
     val workspaces: List<Workspace> = emptyList(),
     val workspaceSplitIds: List<String?> = listOf(null),
+    val archivedWorkspaceIds: Set<String> = emptySet(),
     val selectedWorkspaceId: String? = null,
     val workspaceSelectionInitialized: Boolean = false,
     val sessionWorkspaceIds: Map<String, String> = emptyMap(),
@@ -166,9 +167,16 @@ data class AppUiState(
     val showFavoritesSplit: Boolean get() = accountLayout?.settings?.get("favorites") ?: true
     val showAllSplit: Boolean get() = accountLayout?.settings?.get("all") ?: true
     val frequentFirst: Boolean get() = accountLayout?.settings?.get("frequent_first") ?: false
+    val activeWorkspaces: List<Workspace> get() = workspaces.filterNot { it.id in archivedWorkspaceIds }
+    val archivedWorkspaces: List<Workspace> get() = workspaces.filter { it.id in archivedWorkspaceIds }
     val visibleWorkspaceSplitIds: List<String?> get() = inboxSplitIds(
-        workspaceSplitIds, allSplitOnRight, showFrequentSplit, showFavoritesSplit, showAllSplit, frequentFirst,
+        workspaceSplitIds.filter { it == null || it !in archivedWorkspaceIds }, allSplitOnRight, showFrequentSplit, showFavoritesSplit, showAllSplit, frequentFirst,
     )
+
+    fun withArchivedWorkspaceIds(ids: Set<String>): AppUiState = copy(archivedWorkspaceIds = ids).let { next ->
+        val visible = next.visibleWorkspaceSplitIds
+        next.copy(selectedWorkspaceId = if (next.selectedWorkspaceId in visible) next.selectedWorkspaceId else visible.first())
+    }
 }
 
 enum class NewSessionStep { HOST, PATH, HARNESS, EXISTING }
@@ -251,6 +259,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             hosts = hosts.load(),
             workspaces = initialWorkspaces,
             workspaceSplitIds = listOf(null) + initialWorkspaces.map { it.id },
+            archivedWorkspaceIds = workspaceStore.archivedIds(),
             signedIn = syncAuth.hasSession(),
             accountLayout = pendingLayout?.edited,
             accountPending = pendingLayout?.dirty == true,
@@ -1204,6 +1213,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             it.copy(selectedWorkspaceId = if (workspaceId in it.visibleWorkspaceSplitIds) workspaceId else it.visibleWorkspaceSplitIds.first(), workspaceSelectionInitialized = true)
         }
         workspaceStore.saveSelectedSplitId(_state.value.selectedWorkspaceId)
+    }
+
+    fun archiveWorkspace(workspaceId: String) {
+        if (_state.value.workspaces.none { it.id == workspaceId }) return
+        val archived = workspaceStore.archive(workspaceId)
+        _state.update { it.withArchivedWorkspaceIds(archived) }
+        workspaceStore.saveSelectedSplitId(_state.value.selectedWorkspaceId)
+    }
+
+    fun restoreWorkspace(workspaceId: String) {
+        val archived = workspaceStore.restore(workspaceId)
+        _state.update { it.withArchivedWorkspaceIds(archived) }
     }
 
     fun noteSessionInteraction(session: TmuxSession) {

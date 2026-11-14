@@ -580,6 +580,8 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onSwitchWorkspace = viewModel::openAdjacentWorkspace,
                     onMoveWorkspaceSplit = viewModel::moveWorkspaceSplit,
                     onResetWorkspaceSplitOrder = viewModel::resetWorkspaceSplitOrder,
+                    onArchiveWorkspace = viewModel::archiveWorkspace,
+                    onRestoreWorkspace = viewModel::restoreWorkspace,
                     onCreateWorkspace = viewModel::createWorkspace,
                     onMoveSession = viewModel::moveSession,
                     onRenameSession = viewModel::renameSession,
@@ -1296,6 +1298,8 @@ internal fun SessionsScreen(
     onSelectSection: (AppSection) -> Unit,
     onReleaseNotes: () -> Unit = { onSelectSection(AppSection.UPDATE) },
     onSetMuted: (AccountTab, Boolean) -> Unit = { _, _ -> },
+    onArchiveWorkspace: (String) -> Unit = {},
+    onRestoreWorkspace: (String) -> Unit = {},
     onOpenRoom: (String) -> Unit = {},
     onCloseRoom: () -> Unit = {},
     onLoadOlderRoomEvents: () -> Unit = {},
@@ -1530,7 +1534,7 @@ internal fun SessionsScreen(
                             KitToggle(state.allSplitOnRight, onSetAllSplitOnRight)
                         }
                     }
-                    if (state.workspaces.isNotEmpty()) {
+                    if (state.activeWorkspaces.isNotEmpty()) {
                         KitListGroup {
                             Text(
                                 "Workspace colors",
@@ -1538,7 +1542,7 @@ internal fun SessionsScreen(
                                 style = Kit.Label,
                                 color = Kit.TextMuted,
                             )
-                            state.workspaces.forEach { workspace ->
+                            state.activeWorkspaces.forEach { workspace ->
                                 val picked = state.accountLayout?.workspaceColors?.get(workspace.name)
                                 val shown = state.accountLayout?.workspaceColor(workspace.name) ?: 0
                                 Column(
@@ -1630,7 +1634,7 @@ internal fun SessionsScreen(
     if (moveSelectionOpen) {
         KitSheet(onDismiss = { moveSelectionOpen = false }) {
             Text("Move to", style = Kit.Heading, color = Kit.Text)
-            state.workspaces.forEach { workspace ->
+            state.activeWorkspaces.forEach { workspace ->
                 KitMenuRow(
                     label = workspace.name,
                     onClick = {
@@ -1709,7 +1713,7 @@ internal fun SessionsScreen(
     moveSessionTarget?.let { session ->
         KitSheet(onDismiss = { moveSessionTarget = null }) {
             Text("Move to", style = Kit.Heading, color = Kit.Text)
-            state.workspaces.forEach { workspace ->
+            state.activeWorkspaces.forEach { workspace ->
                 KitMenuRow(
                     label = workspace.name,
                     onClick = {
@@ -1769,6 +1773,14 @@ internal fun SessionsScreen(
                             style = Kit.Label,
                             color = Kit.TextMuted,
                         )
+                        if (workspace != null) {
+                            Text(
+                                "Archive",
+                                modifier = Modifier.clickable { onArchiveWorkspace(workspace.id) }.padding(horizontal = 8.dp, vertical = 12.dp),
+                                style = Kit.Label,
+                                color = Kit.Text,
+                            )
+                        }
                         IconButton(
                             onClick = {
                                 onMoveWorkspaceSplit(splitId, if (state.allSplitOnRight) 1 else -1)
@@ -1781,6 +1793,23 @@ internal fun SessionsScreen(
                             },
                             enabled = index < arrangedWorkspaceSplitIds.lastIndex,
                         ) { Text("↓", color = Kit.Text) }
+                    }
+                }
+                if (state.archivedWorkspaces.isNotEmpty()) {
+                    KitSectionLabel("Archived workspaces")
+                    state.archivedWorkspaces.forEach { archived ->
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(archived.name, style = Kit.Body, color = Kit.Text, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                "Restore",
+                                modifier = Modifier.clickable { onRestoreWorkspace(archived.id) }.padding(horizontal = 8.dp, vertical = 12.dp),
+                                style = Kit.Label,
+                                color = Kit.Text,
+                            )
+                        }
                     }
                 }
             }
@@ -2181,7 +2210,7 @@ internal fun SessionsScreen(
                     ) {
                         SessionCard(
                             session = session,
-                            workspaces = state.workspaces,
+                            workspaces = state.activeWorkspaces,
                             unread = key in state.unreadSessionKeys,
                             unreadCount = state.unreadCounts[key] ?: 1,
                             archived = key in state.archivedSessionKeys,
