@@ -1,0 +1,152 @@
+package dev.multiprompt.companion.ssh
+
+import dev.multiprompt.companion.model.HostProfile
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+
+object LinkPolicy {
+    const val IDLE_MS = 60_000L
+    const val KEEPALIVE_MS = 15_000L
+    const val REUSED_ATTEMPT_TIMEOUT_MS = 10_000L
+
+    data class Identity(
+        val hostname: String,
+        val port: Int,
+        val username: String,
+        val keySecretId: String,
+        val passphraseSecretId: String?,
+        val hostKeyType: String?,
+        val hostKeyFingerprint: String?,
+        val hostKeys: List<String>,
+    )
+
+    enum class Acquire { REUSE, OPEN }
+
+    enum class Failure { NOT_SENT, LINK_LOST, COMMAND }
+
+    class Stalled : Exception("The server link stopped answering. Refresh to retry.")
+
+    fun identity(host: HostProfile) = Identity(
+        hostname = host.hostname,
+        port = host.port,
+        username = host.username,
+        keySecretId = host.keySecretId,
+        passphraseSecretId = host.passphraseSecretId,
+        hostKeyType = host.hostKeyType,
+        hostKeyFingerprint = host.hostKeyFingerprint,
+        hostKeys = host.hostKeys,
+    )
+
+    fun acquire(held: Identity?, wanted: Identity, heldAlive: Boolean): Acquire =
+        if (held == wanted && heldAlive) Acquire.REUSE else Acquire.OPEN
+
+    fun failure(error: Throwable, linkAlive: Boolean): Failure = when {
+        error is SshProblem.LinkUnavailable -> Failure.NOT_SENT
+        error is Stalled || !linkAlive -> Failure.LINK_LOST
+        else -> Failure.COMMAND
+    }
+
+    fun evict(failure: Failure) = failure != Failure.COMMAND
+
+    fun retry(attempt: Int, reused: Boolean, repeatable: Boolean, failure: Failure): Boolean =
+        attempt == 0 && reused &&
+            (failure == Failure.NOT_SENT || (failure == Failure.LINK_LOST && repeatable))
+
+    fun expired(inUse: Int, lastUsedAtMillis: Long, now: Long, idleMs: Long = IDLE_MS): Boolean =
+        inUse == 0 && now - lastUsedAtMillis >= idleMs
+}
+
+class LinkPool<L : Any>(
+    private val isAlive: (L) -> Boolean,
+    private val close: suspend (L) -> Unit,
+    private val now: () -> Long = System::currentTimeMillis,
+    private val reusedAttemptTimeoutMs: Long = LinkPolicy.REUSED_ATTEMPT_TIMEOUT_MS,
+) {
+    private class Held<L>(val identity: LinkPolicy.Identity, val link: L, var inUse: Int, var lastUsedAtMillis: Long)
+
+    private val locks = ConcurrentHashMap<String, Mutex>()
+    private val held = ConcurrentHashMap<String, Held<L>>()
+
+    suspend fun <T> use(
+        hostId: String,
+        identity: LinkPolicy.Identity,
+        repeatable: Boolean,
+        open: suspend () -> L,
+        block: suspend (L) -> T,
+    ): T {
+        var attempt = 0
+        while (true) {
+            val (entry, reused) = acquire(hostId, identity, open)
+            try {
+                return if (reused) onReused(entry.link, block) else block(entry.link)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                val failure = LinkPolicy.failure(error, isAlive(entry.link))
+                if (LinkPolicy.evict(failure)) evict(hostId, entry)
+                if (!LinkPolicy.retry(attempt, reused, repeatable, failure)) throw error
+                attempt++
+            } finally {
+                withContext(NonCancellable) {
+                    lock(hostId).withLock {
+                        entry.inUse--
+                        entry.lastUsedAtMillis = now()
+                    }
+                }
+            }
+        }
+    }
+
+    suspend fun sweep(idleMs: Long = LinkPolicy.IDLE_MS) {
+        held.keys.toList().forEach { hostId ->
+            val expired = lock(hostId).withLock {
+                held[hostId]?.takeIf { LinkPolicy.expired(it.inUse, it.lastUsedAtMillis, now(), idleMs) }
+                    ?.also { held.remove(hostId, it) }
+            }
+            expired?.let { runCatching { close(it.link) } }
+        }
+    }
+
+    private fun lock(hostId: String): Mutex = locks.computeIfAbsent(hostId) { Mutex() }
+
+    private suspend fun acquire(
+        hostId: String,
+        identity: LinkPolicy.Identity,
+        open: suspend () -> L,
+    ): Pair<Held<L>, Boolean> = lock(hostId).withLock {
+        val current = held[hostId]
+        val decision = LinkPolicy.acquire(current?.identity, identity, current?.let { isAlive(it.link) } ?: false)
+        val chosen = if (decision == LinkPolicy.Acquire.REUSE && current != null) {
+            current to true
+        } else {
+            current?.let {
+                held.remove(hostId, it)
+                runCatching { close(it.link) }
+            }
+            Held(identity, open(), inUse = 0, lastUsedAtMillis = now()).also { held[hostId] = it } to false
+        }
+        chosen.first.inUse++
+        chosen.first.lastUsedAtMillis = now()
+        chosen
+    }
+
+    private suspend fun <T> onReused(link: L, block: suspend (L) -> T): T = try {
+        withTimeout(reusedAttemptTimeoutMs) { block(link) }
+    } catch (timeout: TimeoutCancellationException) {
+        currentCoroutineContext().ensureActive()
+        throw LinkPolicy.Stalled()
+    }
+
+    private suspend fun evict(hostId: String, entry: Held<L>) {
+        held.remove(hostId, entry)
+        runCatching { close(entry.link) }
+    }
+}

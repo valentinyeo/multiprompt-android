@@ -349,13 +349,13 @@ class SessionReaderConnection(
         true
     }
 
-    private suspend fun pageBackOnce() = withFreshClient { client ->
+    private suspend fun pageBackOnce() = withServerLink { client ->
         repository.performAction(client, tmuxSessionName, TmuxAction.SCROLL_UP)
     }
 
     private suspend fun scrollLiveDirect() {
         runCatching {
-            withFreshClient { client ->
+            withServerLink { client ->
                 repository.performAction(client, tmuxSessionName, TmuxAction.SCROLL_BOTTOM)
             }
         }
@@ -460,9 +460,9 @@ class SessionReaderConnection(
         try {
             withTimeout(REQUEST_TIMEOUT_MS) {
                 val questionScreen = if (request is Request.QuestionAnswer) {
-                    withFreshClient { repository.captureSession(it, tmuxSessionName) }
+                    withServerLink(repeatable = true) { repository.captureSession(it, tmuxSessionName) }
                 } else null
-                withFreshClient { client ->
+                withServerLink { client ->
                     when (request) {
                         is Request.RuntimeCommand -> repository.sendPrompt(client, tmuxSessionName, request.text)
                         is Request.Prompt -> repository.sendPrompt(
@@ -514,14 +514,8 @@ class SessionReaderConnection(
         }
     }
 
-    private suspend fun <T> withFreshClient(block: suspend (SshClient) -> T): T {
-        val client = repository.connect(host)
-        return try {
-            block(client)
-        } finally {
-            runCatching { client.disconnect() }
-        }
-    }
+    private suspend fun <T> withServerLink(repeatable: Boolean = false, block: suspend (SshClient) -> T): T =
+        repository.withServerLink(host, repeatable, block)
 
     override fun close() {
         _state.update { it.copy(status = ReaderStatus.Closed) }
