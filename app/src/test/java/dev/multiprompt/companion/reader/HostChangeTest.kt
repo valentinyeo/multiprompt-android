@@ -24,11 +24,22 @@ class HostChangeTest {
     @Test fun theMenuMatchesTheDesktopPlusMenu() {
         val host = HostChange.sections(true).map { (title, changes) -> title to changes.map { it.label } }
         assertEquals(listOf(
-            "Model" to listOf("Opus", "Sonnet", "Haiku"),
+            "Model" to listOf("Opus", "Sonnet", "Haiku", "Fable"),
             "Effort" to listOf("Low", "Medium", "High"),
             "Permission level" to listOf("Ask", "Accept edits", "Plan", "Bypass"),
         ), host)
         assertEquals(listOf("Model", "Effort"), HostChange.sections(false).map { it.first })
+    }
+
+    @Test fun fableIsPickableAndShownAsCurrent() {
+        assertEquals("fable", JSONObject(HostChange.FABLE.line(11, sid)).getString("model"))
+        assertEquals("/model fable", HostChange.FABLE.command)
+        assertEquals("Model: Fable", HostChange.FABLE.notice)
+        assertEquals(listOf("Opus", "Sonnet", "Haiku", "Fable"), HostChange.sections(false).first { it.first == "Model" }.second.map { it.label })
+        assertEquals(listOf(HostChange.FABLE), HostChange.entries.filter { it.active(HostSettings("fable", "", "", true), null, null) })
+        assertTrue(HostChange.FABLE.active(null, "Fable 5.1", null))
+        assertTrue(HostChange.FABLE.active(null, "claude-fable-5-1", null))
+        assertFalse(HostChange.OPUS.active(HostSettings("fable", "", "", true), "Opus 4.1", null))
     }
 
     @Test fun noticesMatchTheDesktop() {

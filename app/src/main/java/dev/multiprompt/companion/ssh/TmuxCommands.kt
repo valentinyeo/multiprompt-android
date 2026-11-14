@@ -12,6 +12,7 @@ enum class TmuxAction {
 
 object TmuxCommands {
     const val SNAPSHOT_PREFIX = "__MP_TMUX_SNAPSHOT__"
+    const val SNAPSHOT_PACKED_MARKER = "gz:"
     const val ALT_PREFIX = "__MP_TMUX_ALT__"
     const val CREATED_PREFIX = "__MP_TMUX_CREATED__"
     private val LIVE_CHAT_SID = Regex("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
@@ -19,6 +20,10 @@ object TmuxCommands {
     private val LIVE_CHAT_FOLDER = Regex("[A-Za-z0-9/_.~-]{1,4096}")
 
     const val ETA_PREFIX = "__MP_TMUX_ETA__"
+
+    fun nativeSkills(sessionName: String, workingDirectory: String = ""): String =
+        "python3 - ${TmuxParser.shellQuote(sessionName)}" +
+            workingDirectory.takeIf { it.isNotBlank() }?.let { " ${TmuxParser.shellQuote(it)}" }.orEmpty()
 
     fun etaRowsCommand(sessionName: String? = null): String {
         val argument = sessionName?.let { " " + TmuxParser.shellQuote(it) } ?: ""
@@ -55,7 +60,16 @@ object TmuxCommands {
         "            continue\n" +
         "        if isinstance(t, str) and t and (t not in best or m > best[t][0]):\n" +
         "            best[t]=(m, a, 0 if s.get(\"inflight\") else 1)\n" +
-        "    sys.stdout.write(\"\".join(\"@reply\\t%s\\t%d\\t%d\\n\" % (t, a, w) for t, (m, a, w) in best.items()))"
+        "    sys.stdout.write(\"\".join(\"@reply\\t%s\\t%d\\t%d\\n\" % (t, a, w) for t, (m, a, w) in best.items()))\n" +
+        "    prov={}\n" +
+        "    for p in glob.glob(os.path.join(d,\"agent-host\",\"*.config.json\")):\n" +
+        "        try:\n" +
+        "            c=json.load(open(p)); m=os.path.getmtime(p); t=c.get(\"tmux\"); v=c.get(\"provider\")\n" +
+        "        except Exception:\n" +
+        "            continue\n" +
+        "        if c.get(\"enabled\") is True and isinstance(t, str) and t and isinstance(v, str) and (t not in prov or m > prov[t][0]):\n" +
+        "            prov[t]=(m, v)\n" +
+        "    sys.stdout.write(\"\".join(\"@provider\\t%s\\t%s\\n\" % (t, v) for t, (m, v) in prov.items()))"
 
     fun etaLogCommand(): String =
         "mp_dir=\"\${MULTIPROMPT_STATE_DIR:-\$HOME/.local/state/multiprompt}\"; " +
@@ -353,6 +367,8 @@ object TmuxCommands {
             "mp_snapshot=\$(mktemp) || exit 2; " +
             "trap 'rm -f \"\$mp_snapshot\"' EXIT HUP INT TERM; " +
             "mp_previous=''; " +
+            "if command -v gzip >/dev/null 2>&1 && command -v base64 >/dev/null 2>&1; " +
+            "then mp_packed=1; else mp_packed=0; fi; " +
             "while tmux has-session -t $session 2>/dev/null; do " +
             "mp_alternate=\$(tmux display-message -p -t $target '#{alternate_on}' 2>/dev/null); " +
             "printf '${ALT_PREFIX}%s\\n' \"\$mp_alternate\"; " +
@@ -365,7 +381,9 @@ object TmuxCommands {
             "if [ \"\$mp_current\" != \"\$mp_previous\" ]; then " +
             "printf '$ETA_PREFIX'; printf '%s' \"\$mp_eta\" | od -An -v -tx1 | tr -d ' \\n'; printf '\\n'; " +
             "printf '$SNAPSHOT_PREFIX'; " +
-            "od -An -v -tx1 < \"\$mp_snapshot\" | tr -d ' \\n'; " +
+            "if [ \"\$mp_packed\" = 1 ]; then printf '$SNAPSHOT_PACKED_MARKER'; " +
+            "gzip -c < \"\$mp_snapshot\" | base64 | tr -d '\\n'; " +
+            "else od -An -v -tx1 < \"\$mp_snapshot\" | tr -d ' \\n'; fi; " +
             "printf '\\n'; mp_previous=\$mp_current; fi; " +
             "sleep 1; done; " +
             "printf 'tmux session ended\\n' >&2; exit 1"
