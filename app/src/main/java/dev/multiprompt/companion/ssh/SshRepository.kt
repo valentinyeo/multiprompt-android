@@ -562,11 +562,11 @@ class SshRepository(private val secrets: SecretStorage) {
             }
         }
 
-    suspend fun nativeSkills(host: HostProfile, sessionName: String, script: ByteArray) =
+    suspend fun nativeSkills(host: HostProfile, sessionName: String, script: ByteArray, workingDirectory: String = "") =
         withContext(Dispatchers.IO) {
             withTimeout(CONNECTION_TIMEOUT_MS) {
                 withAuthenticatedClient(host) { client ->
-                    val result = execute(client, "python3 - ${TmuxParser.shellQuote(sessionName)}", stdin = script)
+                    val result = execute(client, TmuxCommands.nativeSkills(sessionName, workingDirectory), stdin = script)
                     result.requireSuccess("read this session’s native skills")
                     dev.multiprompt.companion.skills.NativeSkills.parse(result.stdout)
                 }
