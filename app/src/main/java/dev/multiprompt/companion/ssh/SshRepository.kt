@@ -10,6 +10,7 @@ import dev.multiprompt.companion.model.RemoteListing
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.model.DissolvedSession
 import dev.multiprompt.companion.security.SecretStorage
+import dev.multiprompt.companion.upload.DeviceFile
 import dev.multiprompt.companion.account.DeviceKeys
 import dev.multiprompt.companion.account.DeviceKeyStore
 import dev.multiprompt.companion.reader.TranscriptProtocol
@@ -171,12 +172,13 @@ class SshRepository(private val secrets: SecretStorage) {
         client: SshClient,
         sessionName: String,
         agent: AgentKind = AgentKind.OTHER,
+        hosted: Boolean = false,
         onSnapshot: (StreamSnapshot) -> Unit,
     ) = coroutineScope {
         val session = client.openSession()
             ?: throw SshProblem.Connection("The SSH server refused a reader channel")
         try {
-            if (!session.requestExec(TmuxCommands.stream(sessionName))) {
+            if (!session.requestExec(TmuxCommands.stream(sessionName, hosted))) {
                 throw SshProblem.Connection("The SSH server refused the tmux reader")
             }
             val err = async { session.stderr.drain() }
@@ -215,7 +217,7 @@ class SshRepository(private val secrets: SecretStorage) {
                         if (encoded.length > MAX_SNAPSHOT_HEX_CHARS) {
                             throw SshProblem.Connection("The tmux snapshot was unexpectedly large")
                         }
-                        val rawOutput = TmuxText.leftAligned(TmuxText.decodeHex(encoded))
+                        val rawOutput = TmuxText.leftAligned(TmuxText.decodeSnapshot(encoded))
                         val mobileOutput = TmuxText.withoutActiveComposer(
                             rawOutput,
                             agent,
@@ -393,6 +395,27 @@ class SshRepository(private val secrets: SecretStorage) {
         require(bytes.size <= MAX_PROMPT_BYTES) { "The prompt is too large" }
         execute(client, TmuxCommands.pastePrompt(sessionName), stdin = bytes)
             .requireSuccess("send the prompt")
+    }
+
+    suspend fun uploadFile(client: SshClient, sessionName: String, file: DeviceFile): String = withContext(Dispatchers.IO) {
+        val failure = "Could not send ${file.name} to the server"
+        if (file.size !in 0..FileUpload.MAX_BYTES) throw SshProblem.Connection("$failure: file is bigger than 200 MB")
+        val remoteName = FileUpload.remoteName(file.name)
+        val result = try {
+            file.open().use { input ->
+                execute(client, FileUpload.command(sessionName, remoteName, file.size), stdinStream = input)
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (problem: SshProblem) {
+            throw problem
+        } catch (_: Exception) {
+            throw SshProblem.Connection(failure)
+        }
+        val status = result.exit as? SessionExit.Status
+        if (status == null || status.code != 0L) throw SshProblem.Connection(failure)
+        FileUpload.parsePath(result.stdout, remoteName)
+            ?: throw SshProblem.Connection("$failure: the server did not say where it saved it")
     }
 
     suspend fun performAction(client: SshClient, sessionName: String, action: TmuxAction) {
@@ -605,6 +628,7 @@ class SshRepository(private val secrets: SecretStorage) {
         client: SshClient,
         command: String,
         stdin: ByteArray? = null,
+        stdinStream: java.io.InputStream? = null,
     ): CommandResult = coroutineScope {
         val session = client.openSession()
             ?: throw SshProblem.Connection("The SSH server refused a command channel")
@@ -616,6 +640,15 @@ class SshRepository(private val secrets: SecretStorage) {
             val err = async { session.stderr.drain() }
             if (stdin != null) {
                 session.write(stdin)
+                session.sendEof()
+            }
+            if (stdinStream != null) {
+                val buffer = ByteArray(FileUpload.CHUNK_BYTES)
+                while (true) {
+                    val count = stdinStream.read(buffer)
+                    if (count < 0) break
+                    session.write(buffer.copyOf(count))
+                }
                 session.sendEof()
             }
             CommandResult(
