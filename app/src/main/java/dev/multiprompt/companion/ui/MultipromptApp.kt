@@ -3895,6 +3895,20 @@ internal fun ReaderScreen(
                                         }
                                     },
                                 )
+                                if (dev.multiprompt.companion.reader.FreshStart.supported(ChatHistoryProtocol.hostedProvider(session.agent, session.hostSessionId), session.hostSessionId)) {
+                                    KitMenuRow(
+                                        label = dev.multiprompt.companion.reader.FreshStart.LABEL,
+                                        onClick = {
+                                            menuExpanded = false
+                                            val sent = connection.freshStart()
+                                            android.widget.Toast.makeText(
+                                                context,
+                                                if (sent) dev.multiprompt.companion.reader.FreshStart.REQUESTED else "Fresh start is unavailable",
+                                                android.widget.Toast.LENGTH_SHORT,
+                                            ).show()
+                                        },
+                                    )
+                                }
                                 KitDivider()
                                 KitSectionLabel("Session")
                                 if (session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {

@@ -102,6 +102,7 @@ class SessionReaderConnection(
         data class Cancel(val record: QueuedMessages.SentPrompt) : Request
         data class Action(val action: TmuxAction) : Request
         data class RestartAi(val sid: String, val cwd: String) : Request
+        data class FreshStart(val provider: String, val sid: String) : Request
         data class ModelPickerOption(val index: Int) : Request
         data class QuestionAnswer(val question: PendingQuestion, val choices: Set<Int>, val other: String) : Request
     }
@@ -271,6 +272,12 @@ class SessionReaderConnection(
         val sent = requests.trySend(Request.RestartAi(sid, cwd)).isSuccess
         if (sent) _state.update { it.copy(aiRestartRequestedAtMillis = System.currentTimeMillis()) }
         return sent
+    }
+
+    fun freshStart(): Boolean {
+        val provider = ChatHistoryProtocol.hostedProvider(agent, hostSessionId)
+        if (!dev.multiprompt.companion.reader.FreshStart.supported(provider, hostSessionId)) return false
+        return requests.trySend(Request.FreshStart(requireNotNull(provider), hostSessionId)).isSuccess
     }
 
     fun interrupt() {
@@ -517,6 +524,13 @@ class SessionReaderConnection(
                             val outcome = repository.restartAi(client, historyScript, tmuxSessionName, request.sid, request.cwd)
                             if (outcome is AiStopped.Outcome.Failed) {
                                 _state.update { it.copy(aiRestartRequestedAtMillis = 0) }
+                                throw dev.multiprompt.companion.ssh.SshProblem.Connection(outcome.message)
+                            }
+                            Unit
+                        }
+                        is Request.FreshStart -> {
+                            val outcome = repository.freshStart(client, historyScript, request.provider, request.sid)
+                            if (outcome is dev.multiprompt.companion.reader.FreshStart.Outcome.Failed) {
                                 throw dev.multiprompt.companion.ssh.SshProblem.Connection(outcome.message)
                             }
                             Unit
