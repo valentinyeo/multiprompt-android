@@ -1,5 +1,6 @@
 package dev.multiprompt.companion.account
 
+import dev.multiprompt.companion.AppUiState
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
 import java.math.BigDecimal
@@ -176,11 +177,15 @@ class FrequentSplitTest {
         assertFalse(throttle.shouldPush(PendingLayout(layout, layout.stampUsed(tab.identity, 0))))
     }
 
-    @Test fun frequentSplitIsFirstInEitherOrientation() {
+    @Test fun frequentFollowsFavoritesByDefaultAndLeadsOnlyWhenAsked() {
+        assertFalse(AppUiState().frequentFirst)
+        assertTrue(AppUiState(accountLayout = layout.copy(settings = mapOf("frequent_first" to true))).frequentFirst)
+        assertFalse(AppUiState(accountLayout = layout.copy(settings = mapOf("frequent" to true))).frequentFirst)
         val splits = listOf(null, "Other", "Frequent")
         for (right in listOf(false, true)) {
+            assertEquals(FREQUENT_SPLIT_ID, inboxSplitIds(splits, right, frequentFirst = true).first())
             val displayed = inboxSplitIds(splits, right)
-            assertEquals(FREQUENT_SPLIT_ID, displayed.first())
+            assertEquals(displayed.indexOf(FAVORITES_SPLIT_ID) + 1, displayed.indexOf(FREQUENT_SPLIT_ID))
             assertEquals(1, displayed.count { it == FREQUENT_SPLIT_ID })
             assertEquals(if (right) splits.asReversed() else splits,
                 displayed.filterNot { it == FAVORITES_SPLIT_ID || it == FREQUENT_SPLIT_ID })

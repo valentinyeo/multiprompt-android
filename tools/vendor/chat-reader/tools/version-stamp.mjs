@@ -185,7 +185,7 @@ function buildUnresolvedChangelog(files, tag, history = [], commits = []) {
         const lead = /^([A-Z][A-Z0-9]*-\d+(?:,\s*[A-Z][A-Z0-9]*-\d+)*)(?::|,|\s)/.exec(commit.subject)?.[1];
         const tickets = reviewedCommits[commit.sha] ? [reviewedCommits[commit.sha]].flat() : (lead?.split(/,\s*/) || []);
         if (!tickets.length) throw new Error(`${stepTag}: commit ${commit.sha} lacks a leading ticket ID; add reviewed attribution before releasing`);
-        for (const ticket of tickets) {
+        for (const ticket of tickets.map(id => id.replace(/^SOFT-/, 'IGSH-'))) {
           if (!notes.has(ticket)) notes.set(ticket, null);
         }
       }
