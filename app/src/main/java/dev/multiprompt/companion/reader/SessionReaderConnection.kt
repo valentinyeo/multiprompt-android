@@ -232,6 +232,9 @@ class SessionReaderConnection(
         return if (sent) PromptAdmission.LegacyEnqueued else PromptAdmission.Rejected("Could not send")
     }
 
+    suspend fun editWaiting(messageId: String, text: String): QueuedEdit.Outcome =
+        historyConnection?.editWaiting(messageId, text) ?: QueuedEdit.Outcome.TooLate
+
     fun sendRuntimeCommand(command: String): Boolean {
         val sent = requests.trySend(Request.RuntimeCommand(command)).isSuccess
         if (sent) awaitModelSwitchConfirmation(command)
