@@ -46,6 +46,7 @@ class UiWordsTest {
         "Reply",
         "Copy",
         "Copy request ID",
+        "Copy link",
         "Remove",
         "Cancel message",
         "Release notes",

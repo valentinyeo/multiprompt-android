@@ -6,7 +6,6 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import org.junit.After
-import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -256,14 +255,11 @@ class TmuxExactTargetBehaviorTest {
                 }
             }
             assertEquals(details, listOf("0", "1"), frames.map { it.first })
-            fun decode(hex: String): ByteArray {
-                assertEquals(details, 0, hex.length % 2)
-                return hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-            }
-            val first = decode(frames[0].second)
-            val second = decode(frames[1].second)
-            assertTrue(details, String(first, Charsets.UTF_8).contains("LIVE_1230"))
-            assertArrayEquals(details, first, second)
+            assertTrue(details, frames.all { it.second.startsWith(TmuxCommands.SNAPSHOT_PACKED_MARKER) })
+            val first = TmuxText.decodeSnapshot(frames[0].second)
+            val second = TmuxText.decodeSnapshot(frames[1].second)
+            assertTrue(details, first.contains("LIVE_1230"))
+            assertEquals(details, first, second)
             assertEquals(details, listOf("alt0", "eta", "snapshot", "alt1", "eta", "snapshot", "alt1", "alt1", "alt1"),
                 transcript.map { line ->
                     when {

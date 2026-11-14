@@ -437,6 +437,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             onReleaseNotes = viewModel::openReleaseNotes,
             onMarkRead = viewModel::markReaderRead,
             unreadMessageKey = state.readerUnreadMessageKey,
+            unreadSinceEpochSeconds = state.readerUnreadSince,
             onMarkUnreadFrom = viewModel::markReaderUnreadFrom,
             onArchiveToggle = {
                 if (SessionReadStore.key(readerSession.hostId, readerSession.name) in
@@ -556,7 +557,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onRenameSession = viewModel::renameSession,
                     onSetFavorite = { tab, value -> viewModel.editAccountLayout { it.setFavorite(tab.identity, value) } },
                     onRefresh = viewModel::refresh,
-                    onRefreshRooms = viewModel::refreshRooms,
+                    onRefreshRooms = { viewModel.refreshRooms() },
                     onSelectSection = viewModel::select,
                     onReleaseNotes = viewModel::openReleaseNotes,
                     onOpenRoom = viewModel::openRoom,
@@ -569,6 +570,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onSetAllSplitOnRight = viewModel::setAllSplitOnRight,
                     onSetSessionListSetting = viewModel::setSessionListSetting,
                     onSetWorkspaceColor = viewModel::setAccountWorkspaceColor,
+                    onRenameGroup = viewModel::renameAccountGroup,
                     appTheme = state.appTheme,
                     onSetAppTheme = viewModel::setAppTheme,
                     onClearSessionActionError = viewModel::clearSessionActionError,
@@ -1236,6 +1238,7 @@ internal fun SessionsScreen(
     nowMillis: () -> Long = System::currentTimeMillis,
     onSetSessionListSetting: (String, Boolean) -> Unit = { _, _ -> },
     onSetWorkspaceColor: (String, Int?) -> Unit = { _, _ -> },
+    onRenameGroup: (String, String) -> String? = { _, _ -> null },
     dictation: DeepgramDictation? = null,
     material3: Boolean = LocalMaterial3.current,
 ) = MultipromptTheme(
@@ -1258,6 +1261,9 @@ internal fun SessionsScreen(
     var renamePromptSession by remember { mutableStateOf<TmuxSession?>(null) }
     var renameDraft by remember { mutableStateOf("") }
     var renameError by remember { mutableStateOf<String?>(null) }
+    var renameGroupPrompt by remember { mutableStateOf<String?>(null) }
+    var groupDraft by remember { mutableStateOf("") }
+    var groupError by remember { mutableStateOf<String?>(null) }
     var searchVisible by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var bucketMenuExpanded by remember { mutableStateOf(false) }
@@ -1278,7 +1284,7 @@ internal fun SessionsScreen(
     LaunchedEffect(searchVisible) {
         if (searchVisible) searchFocusRequester.requestFocus()
     }
-    LaunchedEffect(Unit) { onRefreshRooms() }
+    LaunchedEffect(signedIn) { onRefreshRooms() }
     LaunchedEffect(state.allSplitOnRight, state.workspaceSplitIds) {
         snapshotFlow { splitScrollState.maxValue }.collect { maximum ->
             splitScrollState.scrollTo(if (state.allSplitOnRight) maximum else 0)
@@ -1314,6 +1320,39 @@ internal fun SessionsScreen(
             KitPrimaryButton("Rename", onClick = {
                 renameError = onRenameSession(session, renameDraft)
                 if (renameError == null) renamePromptSession = null
+            }, modifier = Modifier.fillMaxWidth())
+        }
+    }
+    renameGroupPrompt?.let { group ->
+        KitSheet(onDismiss = {
+            renameGroupPrompt = null
+            groupError = null
+        }) {
+            Text("Rename group", style = Kit.Heading, color = Kit.Text)
+            OutlinedTextField(
+                value = groupDraft,
+                onValueChange = {
+                    groupDraft = it
+                    groupError = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Name") },
+                supportingText = groupError?.let { message -> { Text(message) } },
+                isError = groupError != null,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = {
+                    groupError = onRenameGroup(group, groupDraft)
+                    if (groupError == null) renameGroupPrompt = null
+                }),
+            )
+            KitSecondaryButton("Cancel", onClick = {
+                renameGroupPrompt = null
+                groupError = null
+            }, modifier = Modifier.fillMaxWidth())
+            KitPrimaryButton("Rename", onClick = {
+                groupError = onRenameGroup(group, groupDraft)
+                if (groupError == null) renameGroupPrompt = null
             }, modifier = Modifier.fillMaxWidth())
         }
     }
@@ -1859,7 +1898,10 @@ internal fun SessionsScreen(
                                 workspaceError = null
                                 workspaceDialogVisible = true
                             },
-                            onRefresh = onRefresh,
+                            onRefresh = {
+                                onRefresh()
+                                onRefreshRooms()
+                            },
                             onReleaseNotes = onReleaseNotes,
                         )
                     }
@@ -2008,10 +2050,31 @@ internal fun SessionsScreen(
                     item(key = "error-$hostId") { InlineError(error) }
                 }
             }
-            SessionGroups.split(visibleSessions) { session ->
-                state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }?.group
-            }.forEach { group ->
-                val heading: () -> Unit = { group.name?.let { name -> item(key = "group:$name") { KitSectionLabel(name) } } }
+            val sessionGroups = SessionGroups.split(visibleSessions, state.accountLayout?.groupOrder?.let { if (reversedSessions) it.asReversed() else it }) { session ->
+                val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
+                tab?.groupIn(state.selectedWorkspaceId == FAVORITES_SPLIT_ID)
+            }
+            sessionGroups.forEach { group ->
+                val heading: () -> Unit = {
+                    val title = SessionGroups.heading(group, sessionGroups)
+                    if (title != null) {
+                        item(key = group.name?.let { "group:$it" } ?: "recents") {
+                            val name = group.name
+                            KitSectionLabel(
+                                title,
+                                if (name == null) Modifier else Modifier.combinedClickable(
+                                    onClick = {},
+                                    onLongClickLabel = "Rename group",
+                                    onLongClick = {
+                                        groupDraft = name
+                                        groupError = null
+                                        renameGroupPrompt = name
+                                    },
+                                ),
+                            )
+                        }
+                    }
+                }
                 if (!reversedSessions) heading()
                 items(group.items, key = { "${it.hostId}:${it.name}" }) { session ->
                     val key = SessionReadStore.key(session.hostId, session.name)
@@ -2744,6 +2807,7 @@ internal fun ReaderScreen(
     unreadMessageKey: String? = null,
     onMarkUnreadFrom: (String) -> Unit = {},
     mentionChats: List<MentionChat> = emptyList(),
+    unreadSinceEpochSeconds: Long? = null,
 ) = key(connection) {
     MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
     val reader by connection.state.collectAsState()
@@ -2875,6 +2939,7 @@ internal fun ReaderScreen(
     }
     val scrollState = rememberReaderScrollState(connection)
     var followRequest by remember(connection) { mutableStateOf(0) }
+    var newBelow by remember(connection) { mutableStateOf(0) }
     val scrollLive: () -> Unit = {
         onSessionInteraction()
         followRequest++
@@ -3069,11 +3134,41 @@ internal fun ReaderScreen(
             connection.loadSkills(context.assets.open("native_skills.py").use { it.readBytes() })
         }
     }
+    val routeSlashCommand: (String) -> Boolean = { draftText ->
+        val route = if (replyTo != null || imageAttachments.isNotEmpty()) {
+            dev.multiprompt.companion.model.SlashCommand.Route.SEND
+        } else {
+            val command = dev.multiprompt.companion.model.SlashCommand.commandName(draftText)
+            dev.multiprompt.companion.model.SlashCommand.decide(
+                session.liveChat && session.agent == AgentKind.CLAUDE,
+                draftText,
+                command != null && reader.nativeSkills.any { it.name == command },
+            )
+        }
+        val pickerSection = when (route) {
+            dev.multiprompt.companion.model.SlashCommand.Route.MODEL -> HostChange.OPUS.section
+            dev.multiprompt.companion.model.SlashCommand.Route.PLAN,
+            dev.multiprompt.companion.model.SlashCommand.Route.PERMISSIONS -> HostChange.ASK.section
+            else -> null
+        }
+        if (pickerSection != null) {
+            if (HostChange.sections(connection.hostSettings() != null).any { it.first == pickerSection }) {
+                attachMenuSection = pickerSection
+                attachMenuExpanded = true
+            } else {
+                android.widget.Toast.makeText(context, "Chat settings are not ready", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        } else if (route == dev.multiprompt.companion.model.SlashCommand.Route.UNAVAILABLE) {
+            android.widget.Toast.makeText(context, "Not available in live chat", android.widget.Toast.LENGTH_SHORT).show()
+        }
+        route != dev.multiprompt.companion.model.SlashCommand.Route.SEND
+    }
     val sendDraft: (String) -> Unit = { draftText ->
         val composedPrompt = PromptComposer.composeMessage(ChatMention.annotate(draftText, mentionPicks, mentionChats), imageAttachments, replyTo, reader.nativeSkills)
         if (composedPrompt.isNotBlank() &&
             !reader.sending &&
-            pendingPromptAction == null && !recordingPrompt
+            pendingPromptAction == null && !recordingPrompt &&
+            !routeSlashCommand(draftText)
         ) {
             val actionCount = reader.completedActions
             val draft = SentDraft(draftText, imageAttachments, replyTo)
@@ -3380,8 +3475,12 @@ internal fun ReaderScreen(
         floatingActionButtonPosition = androidx.compose.material3.FabPosition.Center,
         floatingActionButton = {
             if (if (historyChat) chatListState.canScrollBackward else scrollState.canScrollForward) {
-                FloatingActionButton(onClick = scrollLive, modifier = Modifier.size(ReaderJumpSize), shape = CircleShape, containerColor = MaterialTheme.colorScheme.surfaceContainerHighest) {
-                    Icon(Icons.Default.KeyboardArrowDown, "Jump to newest")
+                val count = if (historyChat) newBelow else 0
+                FloatingActionButton(onClick = scrollLive, modifier = if (count > 0) Modifier.height(ReaderJumpSize) else Modifier.size(ReaderJumpSize), shape = CircleShape, containerColor = MaterialTheme.colorScheme.surfaceContainerHighest) {
+                    Row(Modifier.padding(horizontal = if (count > 0) 12.dp else 0.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.KeyboardArrowDown, if (count > 0) "Jump to newest, $count new" else "Jump to newest")
+                        if (count > 0) Text(jumpCountLabel(count))
+                    }
                 }
             }
         },
@@ -3823,8 +3922,9 @@ internal fun ReaderScreen(
                                 onDismissRequest = { attachMenuExpanded = false },
                                 contentResetKey = attachMenuSection.orEmpty(),
                             ) {
-                                val openSection = if (session.agent == AgentKind.CLAUDE) {
-                                    HostChange.sections(connection.hostSettings() != null).firstOrNull { it.first == attachMenuSection }
+                                val settingsProvider = HostChange.providerOf(session.agent)
+                                val openSection = if (settingsProvider != null) {
+                                    HostChange.sections(connection.hostSettings() != null, settingsProvider).firstOrNull { it.first == attachMenuSection }
                                 } else null
                                 if (openSection != null) {
                                     val hostSettings = connection.hostSettings()
@@ -3877,9 +3977,11 @@ internal fun ReaderScreen(
                                                 promptFocusRequester.requestFocus()
                                             },
                                         )
+                                    }
+                                    if (settingsProvider != null) {
                                         val hostSettings = connection.hostSettings()
-                                        val sections = HostChange.sections(hostSettings != null)
-                                        KitDivider()
+                                        val sections = HostChange.sections(hostSettings != null, settingsProvider)
+                                        if (sections.isNotEmpty()) KitDivider()
                                         sections.forEach { (title, changes) ->
                                             val current = changes.firstOrNull { it.active(hostSettings, runtimeDetails.model, runtimeDetails.effort) }?.label
                                             KitMenuRow(
@@ -4070,10 +4172,12 @@ internal fun ReaderScreen(
                 },
                 sessionName = session.displayName,
                 unreadMessageKey = unreadMessageKey,
+                unreadSinceEpochSeconds = unreadSinceEpochSeconds,
                 onMarkUnread = onMarkUnreadFrom,
                 onSessionUsed = { onSessionInteraction(); onSessionInput() },
                 listState = chatListState,
                 followRequest = followRequest,
+                onNewBelow = { newBelow = it },
                 bottomPadding = padding.calculateBottomPadding(),
                 modifier = Modifier.padding(horizontal = ReaderScreenPadding)
                     .transformable(state = transcriptTransform, canPan = { false })

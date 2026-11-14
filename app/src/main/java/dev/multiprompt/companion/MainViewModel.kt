@@ -19,6 +19,8 @@ import dev.multiprompt.companion.model.RefreshMerge
 import dev.multiprompt.companion.data.UnreadCount
 import dev.multiprompt.companion.room.roomRecipients
 import dev.multiprompt.companion.room.RoomHosts
+import dev.multiprompt.companion.room.RoomLoadPolicy
+import dev.multiprompt.companion.room.RoomLoadTrigger
 import dev.multiprompt.companion.notify.ReplyNotificationPolicy
 import dev.multiprompt.companion.notify.ReplyNotifier
 import dev.multiprompt.companion.data.SessionReadStore
@@ -104,6 +106,7 @@ data class AppUiState(
     val reader: SessionReaderConnection? = null,
     val readerSession: TmuxSession? = null,
     val readerUnreadMessageKey: String? = null,
+    val readerUnreadSince: Long? = null,
     val unreadSessionKeys: Set<String> = emptySet(),
     val unreadCounts: Map<String, Int> = emptyMap(),
     val repliedSessionKeys: Set<String> = emptySet(),
@@ -229,6 +232,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var replyNotificationsBaselined = false
     private var pendingNotificationKey: String? = null
     private var trustRefreshQueued = false
+    private var roomsLoading = false
     private var accountRequestRunning = false
     private var lastRemoteRevision: Long? = null
     private var accountGeneration = 0
@@ -319,7 +323,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onResume() {
         foreground.value = true
+        updates.check()
         refresh()
+        refreshRooms(RoomLoadTrigger.APP_RESUMED)
         syncAccount()
     }
 
@@ -618,16 +624,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun refreshRooms() {
-        val accountId = syncAuth.accountId() ?: return
+    fun refreshRooms(trigger: RoomLoadTrigger = RoomLoadTrigger.ROOMS_SCREEN) {
+        val accountId = syncAuth.accountId()
         val hosts = RoomHosts.candidates(_state.value.accountHosts.values, _state.value.hosts)
-        if (hosts.isEmpty()) return
+        if (!RoomLoadPolicy.shouldLoad(trigger, accountId != null, hosts.size, roomsLoading) || accountId == null) return
+        roomsLoading = true
         viewModelScope.launch {
-            val loaded = hosts.map { host ->
-                async { runCatching { roomService.load(host, accountId) }.getOrNull()?.let { host.id to it } }
-            }.awaitAll().filterNotNull()
-            if (loaded.isEmpty()) return@launch
-            _state.update { it.copy(rooms = RoomHosts.merge(loaded)) }
+            try {
+                val loaded = hosts.map { host ->
+                    async { runCatching { roomService.load(host, accountId) }.getOrNull()?.let { host.id to it } }
+                }.awaitAll().filterNotNull()
+                if (loaded.isEmpty()) return@launch
+                _state.update { it.copy(rooms = RoomHosts.merge(loaded)) }
+            } finally {
+                roomsLoading = false
+            }
         }
     }
 
@@ -733,7 +744,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (snapshot.isEmpty()) return
         viewModelScope.launch {
             _state.update { it.copy(refreshing = true) }
-            val cachedByHost = snapshot.associate { host -> host.id to sessionCache.load(host.id) }
+            val cachedByHost = withContext(Dispatchers.IO) { snapshot.associate { host -> host.id to sessionCache.load(host.id) } }
             val results = mutableMapOf<String, HostRefresh>()
             _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = false) }
             openPendingNotificationSession()
@@ -761,7 +772,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             openPendingNotificationSession()
             pendingNotificationKey = null
             syncReplyNotifications()
-            refreshRooms()
             prefetchRecentHistories()
             if (trustRefreshQueued) {
                 trustRefreshQueued = false
@@ -1045,6 +1055,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         noteSessionInteraction(session)
         val unreadMessageKey = sessionReads.unreadMessageKey(session)
+        val unreadSince = if (unreadMessageKey == null && sessionReads.isUnread(session)) sessionReads.readAt(session).takeIf { it > 0L } else null
         sessionReads.markRead(session)
         val key = SessionReadStore.key(session.hostId, session.name)
         ReplyNotifier.cancel(app, key)
@@ -1081,6 +1092,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 reader = reader,
                 readerSession = session,
                 readerUnreadMessageKey = unreadMessageKey,
+                readerUnreadSince = unreadSince,
                 userSelectedSessionKey = key.takeIf { userInitiated },
                 readerSwipeOrder = swipeOrder,
                 unreadSessionKeys = it.unreadSessionKeys - key,
@@ -1094,14 +1106,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         sessionReads.markRead(session)
         val key = SessionReadStore.key(session.hostId, session.name)
         ReplyNotifier.cancel(app, key)
-        _state.update { it.copy(readerUnreadMessageKey = null, unreadSessionKeys = it.unreadSessionKeys - key, unreadCounts = it.unreadCounts - key) }
+        _state.update { it.copy(readerUnreadMessageKey = null, readerUnreadSince = null, unreadSessionKeys = it.unreadSessionKeys - key, unreadCounts = it.unreadCounts - key) }
     }
 
     fun markReaderUnreadFrom(messageKey: String) {
         val session = _state.value.readerSession ?: return
         sessionReads.markUnreadFrom(session, messageKey)
         markSessionUnread(session)
-        _state.update { it.copy(readerUnreadMessageKey = messageKey) }
+        _state.update { it.copy(readerUnreadMessageKey = messageKey, readerUnreadSince = null) }
     }
 
     fun markSessionUnread(session: TmuxSession) {
@@ -1868,6 +1880,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             null
         } catch (e: Exception) { e.message ?: "Could not save account edit" }
     }
+
+    fun renameAccountGroup(old: String, name: String): String? = editAccountLayout { it.renameGroup(old, name.trim()) }
 
     fun addAccountSession(session: TmuxSession, workspace: String): String? {
         val slot = _state.value.accountHosts.entries.firstOrNull { it.value.id == session.hostId }?.key
