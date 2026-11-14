@@ -48,6 +48,7 @@ internal object SessionCacheCodec {
                         outputActivityEpochSeconds = item.optLong("outputActivityEpochSeconds"),
                         replyAtEpochSeconds = if (item.has("replyAtEpochSeconds")) item.optLong("replyAtEpochSeconds") else null,
                         replyWaiting = if (item.has("replyWaiting")) item.optBoolean("replyWaiting") else null,
+                        hostProvider = item.optString("hostProvider"),
                     ),
                 )
             }
@@ -73,7 +74,8 @@ internal object SessionCacheCodec {
                     .put("hostSessionId", session.hostSessionId)
                     .put("outputActivityEpochSeconds", session.outputActivityEpochSeconds)
                     .put("replyAtEpochSeconds", session.replyAtEpochSeconds)
-                    .put("replyWaiting", session.replyWaiting),
+                    .put("replyWaiting", session.replyWaiting)
+                    .put("hostProvider", session.hostProvider),
             )
         }
         return array.toString()

@@ -1,6 +1,7 @@
 package dev.multiprompt.companion
 
 import android.app.Application
+import android.net.ConnectivityManager
 import android.os.SystemClock
 import android.util.Log
 import dev.multiprompt.companion.account.DWELL
@@ -8,12 +9,15 @@ import dev.multiprompt.companion.account.VisitDwell
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.multiprompt.companion.model.HostDraft
+import dev.multiprompt.companion.network.NetworkReturnWatcher
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.AgentHarness
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.model.createdSession
 import dev.multiprompt.companion.model.DissolvedSession
+import dev.multiprompt.companion.model.RecentFolder
+import dev.multiprompt.companion.model.RecentFolders
 import dev.multiprompt.companion.model.RemoteDirectory
 import dev.multiprompt.companion.model.RefreshMerge
 import dev.multiprompt.companion.data.UnreadCount
@@ -112,6 +116,7 @@ data class AppUiState(
     val repliedSessionKeys: Set<String> = emptySet(),
     val archivedSessionKeys: Set<String> = emptySet(),
     val sessionBucket: SessionBucket = SessionBucket.OPEN,
+    val unreadOnly: Boolean = false,
     val dissolvedSessions: List<DissolvedSession> = emptyList(),
     val crashReport: CrashReport? = null,
     val signedIn: Boolean = false,
@@ -183,6 +188,7 @@ data class NewSessionPicker(
     val loading: Boolean = false,
     val error: String? = null,
     val chosenPath: String? = null,
+    val recentFolders: List<RecentFolder> = emptyList(),
 ) {
     val step: NewSessionStep
         get() = when {
@@ -256,6 +262,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             shellFontSize = sessionReads.shellFontSize(),
             appTheme = sessionReads.appTheme(),
             sessionBucket = SessionBucket.entries.firstOrNull { it.name == sessionReads.sessionBucket() } ?: SessionBucket.OPEN,
+            unreadOnly = sessionReads.unreadOnly(),
             dissolvedSessions = dissolvedStore.load(),
             crashReport = crashReportStore.loadForDisplay(),
         ).let { initial ->
@@ -272,6 +279,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val warmReaders = LinkedHashMap<String, SessionReaderConnection>()
     private val warmReaderTouchedAt = mutableMapOf<String, Long>()
+    private val networkReturn = NetworkReturnWatcher(app.getSystemService(ConnectivityManager::class.java)) {
+        viewModelScope.launch {
+            nudgeWarmReaders()
+            refresh()
+        }
+    }
 
     init {
         viewModelScope.launch {
@@ -323,12 +336,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onResume() {
         foreground.value = true
+        networkReturn.start()
+        if (networkReturn.resumed()) nudgeWarmReaders()
+        updates.check()
         refresh()
         refreshRooms(RoomLoadTrigger.APP_RESUMED)
         syncAccount()
     }
 
-    fun onPause() { foreground.value = false }
+    fun onPause() {
+        foreground.value = false
+        networkReturn.stop()
+    }
+
+    private fun nudgeWarmReaders() = warmReaders.values.forEach { it.nudge() }
 
     fun onStop() { dictation.onAppBackgrounded() }
 
@@ -1168,6 +1189,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setUnreadOnly(enabled: Boolean) {
+        sessionReads.setUnreadOnly(enabled)
+        _state.update { it.copy(unreadOnly = enabled) }
+    }
+
     fun selectSessionBucket(bucket: SessionBucket) {
         sessionReads.setSessionBucket(bucket.name)
         _state.update { it.copy(sessionBucket = bucket) }
@@ -1487,7 +1513,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startNewSession() {
-        _state.update { it.copy(newSession = NewSessionPicker(accountWorkspace = it.selectedWorkspaceId?.takeUnless { id -> id == FAVORITES_SPLIT_ID || id == FREQUENT_SPLIT_ID }), sessionActionError = null) }
+        val recent = _state.value.let { current ->
+            RecentFolders.collect(
+                hosts = current.hosts,
+                sessions = current.sessions,
+                dissolved = current.dissolvedSessions,
+                usageByHost = current.hosts.associate { host -> host.id to workspaceStore.pathUsage(host.id) },
+            )
+        }
+        _state.update { it.copy(newSession = NewSessionPicker(accountWorkspace = it.selectedWorkspaceId?.takeUnless { id -> id == FAVORITES_SPLIT_ID || id == FREQUENT_SPLIT_ID }, recentFolders = recent), sessionActionError = null) }
         _state.value.hosts.singleOrNull()?.let { host -> chooseNewSessionHost(host.id) }
     }
 
@@ -1501,6 +1535,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         loadNewSessionDirectory(hostId, null)
     }
 
+    fun chooseNewSessionRecentFolder(folder: RecentFolder) {
+        if (_state.value.hosts.none { it.id == folder.hostId }) return
+        _state.update {
+            it.copy(
+                newSession = NewSessionPicker(
+                    hostId = folder.hostId,
+                    accountWorkspace = it.newSession?.accountWorkspace,
+                    chosenPath = folder.path,
+                    recentFolders = it.newSession?.recentFolders.orEmpty(),
+                ),
+                sessionActionError = null,
+            )
+        }
+    }
+
     fun browseNewSessionDirectory(path: String) {
         val hostId = _state.value.newSession?.hostId ?: return
         loadNewSessionDirectory(hostId, path)
@@ -1511,6 +1560,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun backToNewSessionFolder() {
+        val picker = _state.value.newSession ?: return
+        if (picker.path.isBlank() && picker.recentFolders.isNotEmpty()) {
+            _state.update {
+                it.copy(newSession = NewSessionPicker(accountWorkspace = picker.accountWorkspace, recentFolders = picker.recentFolders), sessionActionError = null)
+            }
+            return
+        }
         _state.update { it.copy(newSession = it.newSession?.copy(chosenPath = null)) }
     }
 
@@ -2072,6 +2128,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        networkReturn.stop()
         _state.value.terminal?.close()
         closeWarmReaders()
         super.onCleared()

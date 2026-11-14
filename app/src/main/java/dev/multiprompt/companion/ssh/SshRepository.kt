@@ -217,7 +217,7 @@ class SshRepository(private val secrets: SecretStorage) {
                         if (encoded.length > MAX_SNAPSHOT_HEX_CHARS) {
                             throw SshProblem.Connection("The tmux snapshot was unexpectedly large")
                         }
-                        val rawOutput = TmuxText.leftAligned(TmuxText.decodeHex(encoded))
+                        val rawOutput = TmuxText.leftAligned(TmuxText.decodeSnapshot(encoded))
                         val mobileOutput = TmuxText.withoutActiveComposer(
                             rawOutput,
                             agent,
@@ -579,11 +579,11 @@ class SshRepository(private val secrets: SecretStorage) {
             }
         }
 
-    suspend fun nativeSkills(host: HostProfile, sessionName: String, script: ByteArray) =
+    suspend fun nativeSkills(host: HostProfile, sessionName: String, script: ByteArray, workingDirectory: String = "") =
         withContext(Dispatchers.IO) {
             withTimeout(CONNECTION_TIMEOUT_MS) {
                 withAuthenticatedClient(host) { client ->
-                    val result = execute(client, "python3 - ${TmuxParser.shellQuote(sessionName)}", stdin = script)
+                    val result = execute(client, TmuxCommands.nativeSkills(sessionName, workingDirectory), stdin = script)
                     result.requireSuccess("read this session’s native skills")
                     dev.multiprompt.companion.skills.NativeSkills.parse(result.stdout)
                 }
