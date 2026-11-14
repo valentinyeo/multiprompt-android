@@ -73,5 +73,6 @@
   "IGSH-2339": "Android: mute and unmute a chat",
   "IGSH-2319": "Android: Later button on the update banner",
   "IGSH-2299": "Android: reconnect chats right away when the network returns",
-  "IGSH-2340": "Android: show only unread chats in the list"
+  "IGSH-2340": "Android: show only unread chats in the list",
+  "IGSH-2352": "Android: skills list fails with no reason shown"
 }

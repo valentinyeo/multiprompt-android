@@ -188,6 +188,41 @@ wait_for_text() { test "$1" = "$expected_screen"; }
         result = subprocess.run([sys.executable, str(SCRIPT), name], env=env, capture_output=True, text=True, check=True)
         self.assertEqual(json.loads(result.stdout), [dict(name="local", description="Description")])
 
+    def test_cli_prefers_an_existing_absolute_working_directory_over_the_tmux_pane(self):
+        self.skill(self.cwd, "project-only")
+        binary = self.write(self.home / "bin/tmux", "#!/usr/bin/env python3\nraise SystemExit(1)\n")
+        binary.chmod(0o700)
+        env = dict(os.environ, HOME=str(self.home), PATH=str(binary.parent) + os.pathsep + os.environ["PATH"])
+        result = subprocess.run([sys.executable, str(SCRIPT), "live-abc", str(self.cwd)], env=env, capture_output=True, text=True, check=True)
+        self.assertEqual([row["name"] for row in json.loads(result.stdout)], ["project-only"])
+
+    def test_cli_expands_a_home_relative_working_directory(self):
+        self.skill(self.cwd, "tilde-skill")
+        binary = self.write(self.home / "bin/tmux", "#!/usr/bin/env python3\nraise SystemExit(1)\n")
+        binary.chmod(0o700)
+        env = dict(os.environ, HOME=str(self.home), PATH=str(binary.parent) + os.pathsep + os.environ["PATH"])
+        result = subprocess.run([sys.executable, str(SCRIPT), "live-abc", "~/projects/one/nested"], env=env, capture_output=True, text=True, check=True)
+        self.assertEqual([row["name"] for row in json.loads(result.stdout)], ["tilde-skill"])
+
+    def test_cli_falls_back_to_the_tmux_pane_when_the_working_directory_is_unusable(self):
+        self.skill(self.cwd, "pane-skill")
+        binary = self.write(self.home / "bin/tmux", "#!/usr/bin/env python3\nprint(" + repr(str(self.cwd)) + ")\n")
+        binary.chmod(0o700)
+        env = dict(os.environ, HOME=str(self.home), PATH=str(binary.parent) + os.pathsep + os.environ["PATH"])
+        for requested in ("relative/dir", "~/missing", str(self.home / "missing"), ""):
+            with self.subTest(requested=requested):
+                result = subprocess.run([sys.executable, str(SCRIPT), "live-abc", requested], env=env, capture_output=True, text=True, check=True)
+                self.assertEqual([row["name"] for row in json.loads(result.stdout)], ["pane-skill"])
+
+    def test_cli_failure_is_one_plain_stderr_line_not_a_traceback(self):
+        binary = self.write(self.home / "bin/tmux", "#!/usr/bin/env python3\nraise SystemExit(1)\n")
+        binary.chmod(0o700)
+        env = dict(os.environ, HOME=str(self.home), PATH=str(binary.parent) + os.pathsep + os.environ["PATH"])
+        result = subprocess.run([sys.executable, str(SCRIPT), "live-abc"], env=env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertEqual(len(result.stderr.strip().splitlines()), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,6 +4,8 @@ import dev.multiprompt.companion.computer.ComputerTarget
 import dev.multiprompt.companion.computer.ComputerTunnel
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.AgentKind
+import dev.multiprompt.companion.skills.NativeSkill
+import dev.multiprompt.companion.skills.SkillsLoader
 import dev.multiprompt.companion.ssh.SshRepository
 import dev.multiprompt.companion.ssh.TmuxAction
 import dev.multiprompt.companion.ssh.TmuxText
@@ -28,6 +30,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.connectbot.sshlib.SshClient
+import java.util.concurrent.atomic.AtomicBoolean
 
 sealed interface ReaderStatus {
     data object Connecting : ReaderStatus
@@ -110,6 +113,7 @@ class SessionReaderConnection(
     private var streamClient: SshClient? = null
     private var streamJob: Job? = null
     private var actionJob: Job? = null
+    private val skillsRunning = AtomicBoolean(false)
 
     private var historyConnection: ChatHistoryConnection? = null
     private var historyIdentity: ChatHistoryProtocol.Identity? = null
@@ -196,16 +200,27 @@ class SessionReaderConnection(
     }
 
     fun loadSkills(script: ByteArray) {
-        if (agent != AgentKind.CLAUDE) return
+        val workingDirectory = historyIdentity?.cwd.orEmpty()
+        loadSkills { repository.nativeSkills(host, tmuxSessionName, script, workingDirectory) }
+    }
+
+    internal fun loadSkills(
+        retryDelayMillis: Long = SkillsLoader.RETRY_DELAY_MILLIS,
+        fetch: suspend () -> List<NativeSkill>,
+    ) {
+        if (agent != AgentKind.CLAUDE || !skillsRunning.compareAndSet(false, true)) return
         _state.update { it.copy(skillsLoading = true, skillsError = null) }
         scope.launch {
-            try {
-                val skills = repository.nativeSkills(host, tmuxSessionName, script)
-                _state.update { it.copy(nativeSkills = skills, skillsLoading = false) }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                _state.update { it.copy(skillsLoading = false, skillsError = "Could not load this session’s skills") }
+            val outcome = try {
+                SkillsLoader.load(retryDelayMillis, fetch)
+            } finally {
+                skillsRunning.set(false)
+            }
+            when (outcome) {
+                is SkillsLoader.Outcome.Loaded ->
+                    _state.update { it.copy(nativeSkills = outcome.skills, skillsLoading = false) }
+                is SkillsLoader.Outcome.Failed ->
+                    _state.update { it.copy(skillsLoading = false, skillsError = outcome.message) }
             }
         }
     }

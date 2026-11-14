@@ -13,6 +13,14 @@ import java.security.MessageDigest
 
 class TmuxCommandsTest {
     @Test
+    fun nativeSkillsQuotesTheSessionAndTheWorkingDirectory() {
+        assertEquals("python3 - 'live-abc'", TmuxCommands.nativeSkills("live-abc"))
+        assertEquals("python3 - 'live-abc'", TmuxCommands.nativeSkills("live-abc", "  "))
+        val command = TmuxCommands.nativeSkills("live-abc", "/home/me/it's here; reboot")
+        assertEquals("python3 - 'live-abc' '/home/me/it'\"'\"'s here; reboot'", command)
+    }
+
+    @Test
     fun captureQuotesTheCompleteTarget() {
         val command = TmuxCommands.capture("a'; reboot")
 

@@ -88,11 +88,26 @@ def discover(home, cwd, config=None):
     return sorted(result.values(), key=lambda row: row["name"].lower())
 
 
-if __name__ == "__main__":
-    session = sys.argv[1]
+def project_directory(session, requested):
+    if requested:
+        path = Path(requested).expanduser()
+        if path.is_absolute() and path.is_dir():
+            return path
     target = "=" + session + ":"
-    cwd = Path(subprocess.check_output(["tmux", "display-message", "-p", "-t", target, "#{pane_current_path}"], text=True).strip())
-    if not cwd.is_absolute() or not cwd.is_dir():
+    path = Path(subprocess.check_output(["tmux", "display-message", "-p", "-t", target, "#{pane_current_path}"], text=True).strip())
+    if not path.is_absolute() or not path.is_dir():
         raise SystemExit("The session project directory is unavailable")
+    return path
+
+
+def main():
+    cwd = project_directory(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "")
     config = Path(os.environ["CLAUDE_CONFIG_DIR"]).expanduser() if os.environ.get("CLAUDE_CONFIG_DIR") else None
     print(json.dumps(discover(Path.home(), cwd, config), ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as error:
+        raise SystemExit(f"{type(error).__name__}: {error}")
