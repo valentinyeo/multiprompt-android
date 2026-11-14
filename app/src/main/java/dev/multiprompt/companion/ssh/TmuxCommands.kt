@@ -12,6 +12,7 @@ enum class TmuxAction {
 
 object TmuxCommands {
     const val SNAPSHOT_PREFIX = "__MP_TMUX_SNAPSHOT__"
+    const val SNAPSHOT_PACKED_MARKER = "gz:"
     const val ALT_PREFIX = "__MP_TMUX_ALT__"
     const val CREATED_PREFIX = "__MP_TMUX_CREATED__"
     private val LIVE_CHAT_SID = Regex("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
@@ -311,14 +312,50 @@ object TmuxCommands {
             "printf '\\n'; done; "
     }
 
-    fun stream(sessionName: String): String {
+    internal fun hostedRows(): String =
+        "if [ -f ~/.multiprompt-runtime/reader.py ]; then " +
+            "python3 ~/.multiprompt-runtime/reader.py host list 2>/dev/null | python3 -c '$HOSTED_PYTHON' 2>/dev/null; fi; "
+
+    private const val HOSTED_PYTHON = "import json,re,subprocess,sys\n" +
+        "sep=\"${TmuxParser.FIELD_SEPARATOR}\"\n" +
+        "try:\n" +
+        "    chats=json.load(sys.stdin).get(\"chats\") or []\n" +
+        "except Exception:\n" +
+        "    chats=[]\n" +
+        "try:\n" +
+        "    physical=set(subprocess.run([\"tmux\",\"list-sessions\",\"-F\",\"#{session_name}\"],capture_output=True,text=True,timeout=5).stdout.splitlines())\n" +
+        "except Exception:\n" +
+        "    physical=set()\n" +
+        "for c in chats:\n" +
+        "    if not isinstance(c, dict) or c.get(\"visible\") is False:\n" +
+        "        continue\n" +
+        "    n=c.get(\"name\"); s=c.get(\"sid\"); p=c.get(\"cwd\"); a=c.get(\"activity\")\n" +
+        "    if not isinstance(n, str) or not isinstance(s, str) or n in physical:\n" +
+        "        continue\n" +
+        "    if not re.fullmatch(r\"live-[A-Za-z0-9_.:-]{1,59}\", n) or not re.fullmatch(r\"[A-Za-z0-9_-]{1,80}\", s):\n" +
+        "        continue\n" +
+        "    if not isinstance(p, str) or sep in p or \"\\n\" in p or \"\\r\" in p:\n" +
+        "        p=\"\"\n" +
+        "    if not isinstance(a, int):\n" +
+        "        a=0\n" +
+        "    print(sep.join([n, \"1\", \"0\", str(a), \"0\", \"0\", p, \"\", \"sleep\", \"\", s, str(a), \"\"]))"
+
+    fun stream(sessionName: String, hosted: Boolean = false): String {
         val target = target(sessionName)
         val session = sessionTarget(sessionName)
+        val missing = if (hosted) {
+            "printf '${ALT_PREFIX}0\\n'; printf '$ETA_PREFIX\\n'; printf '$SNAPSHOT_PREFIX\\n'; " +
+                "while true; do sleep 30; printf '\\n'; done; "
+        } else {
+            "printf 'tmux session is no longer available\\n' >&2; exit 1; "
+        }
         return "if ! tmux has-session -t $session 2>/dev/null; then " +
-            "printf 'tmux session is no longer available\\n' >&2; exit 1; fi; " +
+            missing + "fi; " +
             "mp_snapshot=\$(mktemp) || exit 2; " +
             "trap 'rm -f \"\$mp_snapshot\"' EXIT HUP INT TERM; " +
             "mp_previous=''; " +
+            "if command -v gzip >/dev/null 2>&1 && command -v base64 >/dev/null 2>&1; " +
+            "then mp_packed=1; else mp_packed=0; fi; " +
             "while tmux has-session -t $session 2>/dev/null; do " +
             "mp_alternate=\$(tmux display-message -p -t $target '#{alternate_on}' 2>/dev/null); " +
             "printf '${ALT_PREFIX}%s\\n' \"\$mp_alternate\"; " +
@@ -331,7 +368,9 @@ object TmuxCommands {
             "if [ \"\$mp_current\" != \"\$mp_previous\" ]; then " +
             "printf '$ETA_PREFIX'; printf '%s' \"\$mp_eta\" | od -An -v -tx1 | tr -d ' \\n'; printf '\\n'; " +
             "printf '$SNAPSHOT_PREFIX'; " +
-            "od -An -v -tx1 < \"\$mp_snapshot\" | tr -d ' \\n'; " +
+            "if [ \"\$mp_packed\" = 1 ]; then printf '$SNAPSHOT_PACKED_MARKER'; " +
+            "gzip -c < \"\$mp_snapshot\" | base64 | tr -d '\\n'; " +
+            "else od -An -v -tx1 < \"\$mp_snapshot\" | tr -d ' \\n'; fi; " +
             "printf '\\n'; mp_previous=\$mp_current; fi; " +
             "sleep 1; done; " +
             "printf 'tmux session ended\\n' >&2; exit 1"
