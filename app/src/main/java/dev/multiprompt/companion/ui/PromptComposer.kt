@@ -12,6 +12,11 @@ internal object PromptComposer {
         return if (text.isBlank()) "" else "$text "
     }
 
+    fun isServerFile(attachment: String): Boolean = attachment.startsWith("/")
+
+    fun attachmentLabel(attachment: String, index: Int): String =
+        if (isServerFile(attachment)) attachment.substringAfterLast('/') else "Image ${index + 1}"
+
     fun appendDictation(prompt: String, transcript: String): String = listOf(
         prompt.trimEnd(),
         transcript.trim(),

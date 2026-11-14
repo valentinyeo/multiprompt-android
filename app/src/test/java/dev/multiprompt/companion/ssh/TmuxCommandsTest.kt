@@ -253,6 +253,16 @@ class TmuxCommandsTest {
     }
 
     @Test
+    fun hostedStreamWaitsQuietlyWhenTheChatHasNoTerminal() {
+        val hosted = TmuxCommands.stream("live-desk", hosted = true)
+
+        assertTrue(hosted.contains("while true; do sleep 30"))
+        assertTrue(hosted.contains(TmuxCommands.SNAPSHOT_PREFIX))
+        assertFalse(hosted.contains("tmux session is no longer available"))
+        assertTrue(TmuxCommands.stream("live-desk").contains("tmux session is no longer available"))
+    }
+
+    @Test
     fun theStreamCarriesTheAlternateScreenMarker() {
         val stream = TmuxCommands.stream("work")
 
@@ -324,6 +334,7 @@ class TmuxCommandsTest {
         assertEquals("codex", pickedAssistant(sid, "codex"))
         assertEquals("pi", pickedAssistant(sid, "pi"))
         assertEquals("hax", pickedAssistant(sid, "hax"))
+        assertEquals("cursor", pickedAssistant(sid, "cursor"))
     }
 
     private fun pickedAssistant(sid: String, saved: String?): String {

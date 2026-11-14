@@ -3,6 +3,7 @@ package dev.multiprompt.companion.ui
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.view.inputmethod.InputMethodManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.Image
@@ -29,10 +30,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -44,7 +48,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import dev.multiprompt.companion.computer.ComputerControl
 import dev.multiprompt.companion.computer.ComputerState
+import dev.multiprompt.companion.computer.ComputerViewerPage
 import dev.multiprompt.companion.computer.ComputerStatus
 import dev.multiprompt.companion.computer.ComputerTarget
 import java.io.File
@@ -64,7 +70,10 @@ internal fun ComputerPane(
 ) {
     var fullScreen by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
+    var control by remember { mutableStateOf(ComputerControl()) }
     val live = state.status == ComputerStatus.Live
+    LaunchedEffect(live) { if (!live) control = ComputerControl() }
+    val controlling = live && control.enabled
     Column(
         modifier.fillMaxSize().statusBarsPadding().padding(horizontal = ReaderScreenPadding).padding(top = ReaderControlSpacing),
         verticalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
@@ -106,7 +115,9 @@ internal fun ComputerPane(
                 .testTag("computer-screen"),
         ) {
             when (state.status) {
-                ComputerStatus.Live -> screen(Modifier.fillMaxSize())
+                ComputerStatus.Live -> CompositionLocalProvider(LocalComputerControl provides control.copy(enabled = controlling)) {
+                    screen(Modifier.fillMaxSize())
+                }
                 else -> ScreenPicture(picture, dimmed = state.status == ComputerStatus.Sleeping)
             }
             when (state.status) {
@@ -133,17 +144,11 @@ internal fun ComputerPane(
                 ComputerStatus.Live -> Unit
             }
             if (fullScreen) {
-                Box(
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                        .background(MaterialTheme.colorScheme.surface, CircleShape)
-                        .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                        .clickable { fullScreen = false }
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("Exit full screen", style = MaterialTheme.typography.labelMedium)
+                Row(Modifier.align(Alignment.TopEnd).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (controlling) {
+                        CornerPill("Give back") { control = control.copy(enabled = false) }
+                    }
+                    CornerPill("Exit full screen") { fullScreen = false }
                 }
             }
         }
@@ -154,17 +159,49 @@ internal fun ComputerPane(
                 )
                 Text(statusLabel(state.status), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onBackground)
             }
-            Text("View only", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
             Text(
-                "Agents keep working. Taking control is on the desktop app.",
+                if (controlling) "In control" else "View only",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Text(
+                if (controlling) "A tap clicks on the VPS. Keyboard types there." else "Agents keep working. Take control to click and type.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            KitSecondaryButton(
+                if (controlling) "Give back" else "Take control",
+                onClick = { control = control.copy(enabled = !controlling) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = live,
+            )
+            if (controlling) {
+                KitSecondaryButton(
+                    "Keyboard",
+                    onClick = { control = control.copy(keyboardRequests = control.keyboardRequests + 1) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             KitSecondaryButton("Open full screen", onClick = { fullScreen = true }, modifier = Modifier.fillMaxWidth())
             if (live) {
                 KitSecondaryButton("Sleep", onClick = onSleep, modifier = Modifier.fillMaxWidth())
             }
         }
+    }
+}
+
+@Composable
+private fun CornerPill(label: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .background(MaterialTheme.colorScheme.surface, CircleShape)
+            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, style = MaterialTheme.typography.labelMedium)
     }
 }
 
@@ -257,17 +294,21 @@ private fun statusColor(status: ComputerStatus): Color = when (status) {
     ComputerStatus.Lost -> MaterialTheme.colorScheme.error
 }
 
+internal val LocalComputerControl = staticCompositionLocalOf { ComputerControl() }
+
 @Composable
 internal fun ComputerScreen(
     url: String,
     onPicture: (Bitmap) -> Unit,
     modifier: Modifier = Modifier,
     onUnreachable: () -> Unit = {},
+    control: ComputerControl = LocalComputerControl.current,
 ) {
     AndroidView(
         modifier = modifier,
         factory = { context ->
             WebView(context).apply {
+                tag = AppliedControl(keyboardRequests = control.keyboardRequests)
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 settings.mediaPlaybackRequiresUserGesture = false
@@ -275,8 +316,26 @@ internal fun ComputerScreen(
                     override fun onReceivedError(view: WebView, request: android.webkit.WebResourceRequest, error: android.webkit.WebResourceError) {
                         if (request.isForMainFrame) onUnreachable()
                     }
+
+                    override fun onPageFinished(view: WebView, url: String?) {
+                        val applied = view.tag as? AppliedControl ?: return
+                        view.evaluateJavascript(ComputerViewerPage.controlScript(applied.enabled == true), null)
+                    }
                 }
                 loadUrl(url)
+            }
+        },
+        update = { view ->
+            val applied = view.tag as? AppliedControl
+            if (applied != null) {
+                if (applied.enabled != control.enabled) {
+                    applied.enabled = control.enabled
+                    view.evaluateJavascript(ComputerViewerPage.controlScript(control.enabled), null)
+                }
+                if (applied.keyboardRequests != control.keyboardRequests) {
+                    applied.keyboardRequests = control.keyboardRequests
+                    if (control.enabled) view.showServerKeyboard()
+                }
             }
         },
         onRelease = { view ->
@@ -284,6 +343,15 @@ internal fun ComputerScreen(
             runCatching { view.destroy() }
         },
     )
+}
+
+private class AppliedControl(var enabled: Boolean? = null, var keyboardRequests: Int = 0)
+
+private fun WebView.showServerKeyboard() {
+    requestFocus()
+    evaluateJavascript(ComputerViewerPage.KEYBOARD_SCRIPT) {
+        context.getSystemService(InputMethodManager::class.java)?.showSoftInput(this, 0)
+    }
 }
 
 private fun WebView.snapshot(): Bitmap? {

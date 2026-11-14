@@ -142,20 +142,27 @@ object TmuxCommands {
     fun createClaudeSession(sessionName: String, remotePath: String): String =
         createAgentSession(sessionName, remotePath, AgentHarness.CLAUDE)
 
-    fun createLiveChat(sessionName: String, remotePath: String, sid: String): String {
+    fun createLiveChat(
+        sessionName: String,
+        remotePath: String,
+        sid: String,
+        harness: AgentHarness = AgentHarness.CLAUDE,
+    ): String {
         require(LIVE_CHAT_SID.matches(sid)) { "Invalid live chat id" }
         require(LIVE_CHAT_NAME.matches(sessionName)) { "Invalid live chat name" }
         require(LIVE_CHAT_FOLDER.matches(remotePath)) { "Live chat needs a folder name without spaces or symbols" }
+        val provider = requireNotNull(harness.agent?.hostProvider) { "${harness.label} cannot start a live chat" }
         val path = TmuxParser.shellQuote(remotePath)
         val name = TmuxParser.shellQuote(sessionName)
         val reader = "python3 ~/.multiprompt-runtime/reader.py"
-        val host = "$reader host enable claude $sid --tmux $sessionName --cwd $remotePath " +
-            "--permission-mode bypassPermissions >/dev/null 2>&1; " +
-            "$reader host start claude $sid >/dev/null 2>&1; exec sleep infinity"
+        val mode = if (harness == AgentHarness.CLAUDE) " --permission-mode bypassPermissions" else ""
+        val host = "$reader host enable $provider $sid --tmux $sessionName --cwd $remotePath" +
+            "$mode >/dev/null 2>&1; " +
+            "$reader host start $provider $sid >/dev/null 2>&1; exec sleep infinity"
         return "if [ ! -d $path ]; then printf 'Project directory not found\\n' >&2; exit 2; fi; " +
-            "if ! bash -lc 'command -v claude >/dev/null 2>&1'; then " +
-            "printf 'claude was not found on the VPS PATH\\n' >&2; exit 3; fi; " +
-            "python3 - host status claude $sid >/dev/null 2>&1; " +
+            "if ! bash -lc 'command -v ${harness.binary} >/dev/null 2>&1'; then " +
+            "printf '${harness.binary} was not found on the VPS PATH\\n' >&2; exit 3; fi; " +
+            "python3 - host status $provider $sid >/dev/null 2>&1; " +
             "if [ ! -f ~/.multiprompt-runtime/reader.py ]; then " +
             "printf 'Live chat reader could not be installed\\n' >&2; exit 4; fi; " +
             "tmux new-session -d -s $name -c $path ${TmuxParser.shellQuote(host)} && " +
@@ -263,7 +270,7 @@ object TmuxCommands {
 
     fun liveChatProvider(sid: String): String {
         require(LIVE_CHAT_SID.matches(sid)) { "Invalid live chat id" }
-        return "mp_p=claude; for mp_c in claude codex pi hax; do " +
+        return "mp_p=claude; for mp_c in claude codex pi hax cursor; do " +
             "mp_k=\$(printf '%s' \"\$mp_c:$sid\" | sha256sum | cut -c1-32); " +
             "if [ -f \"\$HOME/.local/state/multiprompt/agent-host/\$mp_k.config.json\" ]; then mp_p=\$mp_c; break; fi; done"
     }
@@ -305,11 +312,45 @@ object TmuxCommands {
             "printf '\\n'; done; "
     }
 
-    fun stream(sessionName: String): String {
+    internal fun hostedRows(): String =
+        "if [ -f ~/.multiprompt-runtime/reader.py ]; then " +
+            "python3 ~/.multiprompt-runtime/reader.py host list 2>/dev/null | python3 -c '$HOSTED_PYTHON' 2>/dev/null; fi; "
+
+    private const val HOSTED_PYTHON = "import json,re,subprocess,sys\n" +
+        "sep=\"${TmuxParser.FIELD_SEPARATOR}\"\n" +
+        "try:\n" +
+        "    chats=json.load(sys.stdin).get(\"chats\") or []\n" +
+        "except Exception:\n" +
+        "    chats=[]\n" +
+        "try:\n" +
+        "    physical=set(subprocess.run([\"tmux\",\"list-sessions\",\"-F\",\"#{session_name}\"],capture_output=True,text=True,timeout=5).stdout.splitlines())\n" +
+        "except Exception:\n" +
+        "    physical=set()\n" +
+        "for c in chats:\n" +
+        "    if not isinstance(c, dict) or c.get(\"visible\") is False:\n" +
+        "        continue\n" +
+        "    n=c.get(\"name\"); s=c.get(\"sid\"); p=c.get(\"cwd\"); a=c.get(\"activity\")\n" +
+        "    if not isinstance(n, str) or not isinstance(s, str) or n in physical:\n" +
+        "        continue\n" +
+        "    if not re.fullmatch(r\"live-[A-Za-z0-9_.:-]{1,59}\", n) or not re.fullmatch(r\"[A-Za-z0-9_-]{1,80}\", s):\n" +
+        "        continue\n" +
+        "    if not isinstance(p, str) or sep in p or \"\\n\" in p or \"\\r\" in p:\n" +
+        "        p=\"\"\n" +
+        "    if not isinstance(a, int):\n" +
+        "        a=0\n" +
+        "    print(sep.join([n, \"1\", \"0\", str(a), \"0\", \"0\", p, \"\", \"sleep\", \"\", s, str(a), \"\"]))"
+
+    fun stream(sessionName: String, hosted: Boolean = false): String {
         val target = target(sessionName)
         val session = sessionTarget(sessionName)
+        val missing = if (hosted) {
+            "printf '${ALT_PREFIX}0\\n'; printf '$ETA_PREFIX\\n'; printf '$SNAPSHOT_PREFIX\\n'; " +
+                "while true; do sleep 30; printf '\\n'; done; "
+        } else {
+            "printf 'tmux session is no longer available\\n' >&2; exit 1; "
+        }
         return "if ! tmux has-session -t $session 2>/dev/null; then " +
-            "printf 'tmux session is no longer available\\n' >&2; exit 1; fi; " +
+            missing + "fi; " +
             "mp_snapshot=\$(mktemp) || exit 2; " +
             "trap 'rm -f \"\$mp_snapshot\"' EXIT HUP INT TERM; " +
             "mp_previous=''; " +
