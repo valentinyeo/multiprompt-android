@@ -397,7 +397,7 @@ class SessionReaderConnection(
             ReaderStreamPump<SshClient>(
                 selected = selectedFlow,
                 connect = { withTimeout(CONNECT_TIMEOUT_MS) { repository.connect(host) } },
-                stream = { client -> streamFrames(client) },
+                stream = { client, framed -> streamFrames(client, framed) },
                 release = { client -> runCatching { client.disconnect() } },
                 onClient = { streamClient = it },
                 onConnecting = { _state.update { it.copy(status = ReaderStatus.Connecting) } },
@@ -406,12 +406,14 @@ class SessionReaderConnection(
                     _state.update { it.copy(status = ReaderStatus.Failed(message), lastFailure = message) }
                 },
                 reconnectDelayMillis = RECONNECT_DELAY_MS,
+                reuseFirstFrameMillis = REUSE_FIRST_FRAME_MS,
             ).run()
         }
     }
 
-    private suspend fun streamFrames(client: SshClient) {
+    private suspend fun streamFrames(client: SshClient, framed: () -> Unit) {
         repository.streamSession(client, tmuxSessionName, agent) { frame ->
+            framed()
             confirmModelSwitchIfAsked(frame.confirmationVisible)
             if (historyMode) {
                 _historyPage.value = frame.output
@@ -533,6 +535,7 @@ class SessionReaderConnection(
         const val CONNECT_TIMEOUT_MS = 20_000L
         const val REQUEST_TIMEOUT_MS = 20_000L
         const val RECONNECT_DELAY_MS = 3_000L
+        const val REUSE_FIRST_FRAME_MS = 2_000L
         const val SENT_PROMPT_MEMORY = 3
         const val MODEL_CONFIRM_TIMEOUT_MS = 25_000L
         const val HISTORY_FIRST_PAGE_MS = 6_000L

@@ -22,25 +22,31 @@ class ReaderStreamPumpTest {
         var snapshots = 0
         var openedAt = -1L
         var failNextStream: Throwable? = null
+        var silentNextReuse = false
         val clients = mutableListOf<Int>()
         val streamedBy = mutableListOf<Int>()
     }
 
     private fun TestScope.pump(selected: MutableStateFlow<Boolean>, host: FakeHost, failures: MutableList<Throwable> = mutableListOf()) {
-        val pump = ReaderStreamPump(
+        val pump = ReaderStreamPump<Int>(
             selected = selected,
             connect = {
                 host.connects++
                 host.connects
             },
-            stream = { client ->
+            stream = { client, framed ->
                 host.streamedBy += client
+                if (host.silentNextReuse && host.streamedBy.count { it == client } > 1) {
+                    host.silentNextReuse = false
+                    delay(Long.MAX_VALUE / 4)
+                }
                 host.failNextStream?.let {
                     host.failNextStream = null
                     throw it
                 }
                 while (true) {
                     host.snapshots++
+                    framed()
                     delay(1_000L)
                 }
             },
@@ -49,6 +55,7 @@ class ReaderStreamPumpTest {
             onConnecting = {},
             onFailure = { failures += it },
             reconnectDelayMillis = 3_000L,
+            reuseFirstFrameMillis = 2_000L,
         )
         backgroundScope.launch { pump.run() }
     }
@@ -146,14 +153,14 @@ class ReaderStreamPumpTest {
         var attempts = 0
         var streamed = 0
         val failures = mutableListOf<Throwable>()
-        val pump = ReaderStreamPump(
+        val pump = ReaderStreamPump<Int>(
             selected = MutableStateFlow(true),
             connect = {
                 attempts++
                 if (attempts == 1) withTimeout(1L) { delay(10L) }
                 attempts
             },
-            stream = {
+            stream = { _, _ ->
                 streamed++
                 delay(Long.MAX_VALUE / 4)
             },
@@ -162,6 +169,7 @@ class ReaderStreamPumpTest {
             onConnecting = {},
             onFailure = { failures += it },
             reconnectDelayMillis = 3_000L,
+            reuseFirstFrameMillis = 2_000L,
         )
         backgroundScope.launch { pump.run() }
         advanceTimeBy(2L)
@@ -172,5 +180,30 @@ class ReaderStreamPumpTest {
         runCurrent()
         assertEquals(2, attempts)
         assertEquals(1, streamed)
+    }
+
+    @Test
+    fun silentWarmConnectionIsReplacedWithinTwoSecondsOfOpening() = runTest {
+        val host = FakeHost()
+        val failures = mutableListOf<Throwable>()
+        val selected = MutableStateFlow(true)
+        pump(selected, host, failures)
+        runCurrent()
+        selected.value = false
+        runCurrent()
+        host.silentNextReuse = true
+        val reopenedAt = currentTime
+        selected.value = true
+        runCurrent()
+        assertEquals(0, host.releases)
+        advanceTimeBy(1_999L)
+        runCurrent()
+        assertEquals(0, host.releases)
+        advanceTimeBy(1L)
+        runCurrent()
+        assertEquals(1, host.releases)
+        assertEquals(2, host.connects)
+        assertTrue("reconnected after ${currentTime - reopenedAt} ms", currentTime - reopenedAt <= 2_000L)
+        assertTrue(failures.isEmpty())
     }
 }
