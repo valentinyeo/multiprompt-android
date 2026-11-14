@@ -5,6 +5,8 @@ import dev.multiprompt.companion.ui.botPaletteColor
 import org.json.JSONArray
 import org.json.JSONObject
 
+const val MAX_GROUPS = 16
+
 data class AccountTab(
     val name: String,
     val session: String,
@@ -20,11 +22,13 @@ data class AccountTab(
     val color: Int? = null,
     val photo: Long? = null,
     val group: String? = null,
+    val starredGroup: String? = null,
 ) {
     val identity: String get() = "$host:${session.lowercase(java.util.Locale.ROOT)}"
+    fun groupIn(favoritesSplit: Boolean): String? = if (favoritesSplit) starredGroup else group
     fun json(): JSONObject = JSONObject().put("kind", "tmux").put("name", name)
         .put("tmux_session", session).put("tmux_host", host).put("workspace", workspace).put("manual", manual)
-        .apply { favorite?.let { put("favorite", it) }; muted?.let { put("muted", it) }; used?.let { put("used", it) }; input?.let { put("input", it) }; visits?.let { put("visits", JSONArray(it)) }; face?.let { put("face", it) }; color?.let { put("color", it) }; photo?.let { put("photo", it) }; group?.let { put("group", it) } }
+        .apply { favorite?.let { put("favorite", it) }; muted?.let { put("muted", it) }; used?.let { put("used", it) }; input?.let { put("input", it) }; visits?.let { put("visits", JSONArray(it)) }; face?.let { put("face", it) }; color?.let { put("color", it) }; photo?.let { put("photo", it) }; group?.let { put("group", it) }; starredGroup?.let { put("starred_group", it) } }
 }
 
 data class AccountLayout(
@@ -35,11 +39,13 @@ data class AccountLayout(
     val hosts: List<AccountHost>? = null,
     val removedHosts: List<Int> = emptyList(),
     val workspaceColors: Map<String, Int> = emptyMap(),
+    val groupOrder: List<String>? = null,
 ) {
     fun validate(): AccountLayout {
         require(workspaceColors.all { (name, color) -> name in workspaces && color in 0 until BOT_COLORS }) { "Invalid workspace color" }
         require(hosts == null || AccountHosts.parse(JSONArray(hosts.map { it.json() })) == hosts) { "Invalid layout hosts" }
         require(removedHosts.size <= 3 && removedHosts.distinct().size == removedHosts.size && removedHosts.all { it in 0..2 }) { "Invalid removed hosts" }
+        require(groupOrder == null || groupOrder.size <= MAX_GROUPS && groupOrder.distinct().size == groupOrder.size && groupOrder.all { validText(it, 64) }) { "Invalid group order" }
         require(settings == null || settings.keys.all { it in setOf("frequent", "favorites", "all", "frequent_first") }) { "Invalid layout settings" }
         require(revision >= 0 && workspaces.size <= 9 && tabs.size <= 256) { "Invalid layout capacity or revision" }
         require(workspaces.distinct().size == workspaces.size && workspaces.all {
@@ -51,6 +57,7 @@ data class AccountLayout(
                 (it.input == null || it.input in 0..9_007_199_254_740_991L) &&
                 (it.photo == null || it.photo in 1..9_007_199_254_740_991L) &&
                 (it.group == null || it.group.isEmpty() || validText(it.group, 64)) &&
+                (it.starredGroup == null || it.starredGroup.isEmpty() || validText(it.starredGroup, 64)) &&
                 (it.visits == null || it.visits.size <= MAX_VISITS && it.visits.all { v -> v in 0..9_007_199_254_740_991L } &&
                     it.visits.zipWithNext().all { (a, b) -> a < b })
         }) { "Invalid or duplicate account tab" }
@@ -64,9 +71,10 @@ data class AccountLayout(
             settings?.let { put("settings", JSONObject(it)) }
             hosts?.let { put("hosts", JSONArray(it.map { host -> host.json() })) }
             if (removedHosts.isNotEmpty()) put("removed_hosts", JSONArray(removedHosts))
+            groupOrder?.let { put("group_order", JSONArray(it)) }
         }
 
-    fun sameContent(other: AccountLayout): Boolean = workspaces == other.workspaces && workspaceColors == other.workspaceColors && tabs == other.tabs && settings == other.settings && hosts.orEmpty() == other.hosts.orEmpty() && removedHosts == other.removedHosts
+    fun sameContent(other: AccountLayout): Boolean = workspaces == other.workspaces && workspaceColors == other.workspaceColors && tabs == other.tabs && settings == other.settings && hosts.orEmpty() == other.hosts.orEmpty() && removedHosts == other.removedHosts && groupOrder.orEmpty() == other.groupOrder.orEmpty()
 
     fun workspaceColor(name: String): Int = workspaceColors[name] ?: workspaces.indexOf(name).coerceAtLeast(0) % BOT_COLORS
 
@@ -111,8 +119,16 @@ data class AccountLayout(
 
     fun renameGroup(old: String, name: String): AccountLayout {
         require(name.isNotBlank() && validText(name, 64)) { "Group name must be 1 to 64 characters" }
-        require(name == old || tabs.none { it.group == name }) { "A group named $name already exists" }
-        return copy(tabs = tabs.map { if (it.group == old) it.copy(group = name) else it }).validate()
+        require(name == old || tabs.none { it.group == name || it.starredGroup == name }) { "A group named $name already exists" }
+        return copy(
+            tabs = tabs.map {
+                it.copy(
+                    group = if (it.group == old) name else it.group,
+                    starredGroup = if (it.starredGroup == old) name else it.starredGroup,
+                )
+            },
+            groupOrder = groupOrder?.map { if (it == old) name else it }?.distinct(),
+        ).validate()
     }
 
     companion object {
@@ -123,7 +139,7 @@ data class AccountLayout(
         fun parse(json: JSONObject): AccountLayout {
             val required = setOf("schema", "revision", "workspaces", "tabs")
             val keys = json.keys().asSequence().toSet()
-            require(keys.containsAll(required) && (keys - required).all { it in setOf("settings", "hosts", "removed_hosts") } && json.get("schema") == 1)
+            require(keys.containsAll(required) && (keys - required).all { it in setOf("settings", "hosts", "removed_hosts", "group_order") } && json.get("schema") == 1)
             val settings = if (json.has("settings")) {
                 val value = json.get("settings")
                 require(value is JSONObject)
@@ -149,7 +165,7 @@ data class AccountLayout(
                 val t = tabs.getJSONObject(it)
                 val required = setOf("kind", "name", "tmux_session", "tmux_host", "workspace")
                 val keys = t.keys().asSequence().toSet()
-                require(keys.containsAll(required) && (keys - required).all { it in setOf("manual", "favorite", "muted", "used", "visits", "input", "face", "color", "photo", "group") } && t.get("kind") == "tmux")
+                require(keys.containsAll(required) && (keys - required).all { it in setOf("manual", "favorite", "muted", "used", "visits", "input", "face", "color", "photo", "group", "starred_group") } && t.get("kind") == "tmux")
                 require(listOf("name", "tmux_session", "workspace").all { key -> t.get(key) is String })
                 val host = t.get("tmux_host")
                 require(host is Number && host.toDouble() == host.toInt().toDouble())
@@ -180,9 +196,11 @@ data class AccountLayout(
                 require(!t.has("photo") || photo is Number && photo !is Double && photo !is Float && photo.toLong() in 1..9_007_199_254_740_991L)
                 val group = if (t.has("group")) t.get("group") else null
                 require(group == null || group is String && (group.isEmpty() || validText(group, 64)))
+                val starredGroup = if (t.has("starred_group")) t.get("starred_group") else null
+                require(starredGroup == null || starredGroup is String && (starredGroup.isEmpty() || validText(starredGroup, 64)))
                 AccountTab(t.getString("name"), t.getString("tmux_session"), host.toInt(), t.getString("workspace"),
                     t.optBoolean("manual", false), if (t.has("favorite")) t.getBoolean("favorite") else null, (used as? Number)?.toLong(), visits, (input as? Number)?.toLong(),
-                    if (t.has("muted")) t.getBoolean("muted") else null, face, botPaletteColor(color), (photo as? Number)?.toLong(), group as String?)
+                    if (t.has("muted")) t.getBoolean("muted") else null, face, botPaletteColor(color), (photo as? Number)?.toLong(), group as String?, starredGroup as String?)
             }, settings, if (json.has("hosts")) AccountHosts.parse(json.opt("hosts")) else null,
                 if (json.has("removed_hosts")) {
                     val values = json.getJSONArray("removed_hosts")
@@ -193,7 +211,15 @@ data class AccountLayout(
                     }
                 } else emptyList(),
                 (0 until ws.length()).map { ws.getJSONObject(it) }.filter { it.has("color") && botPaletteColor(it.getInt("color")) != null }
-                    .associate { it.getString("name") to it.getInt("color") }).validate()
+                    .associate { it.getString("name") to it.getInt("color") },
+                if (json.has("group_order")) {
+                    val names = json.get("group_order")
+                    require(names is JSONArray && names.length() <= MAX_GROUPS)
+                    (0 until names.length()).map { index ->
+                        require(names.get(index) is String)
+                        names.getString(index)
+                    }
+                } else null).validate()
         }
 
         fun response(json: JSONObject): AccountLayout {
@@ -224,6 +250,7 @@ data class AccountLayout(
                     color = if (e.color != b.color) e.color else r.color,
                     photo = r.photo,
                     group = if (e.group != b.group) e.group else r.group,
+                    starredGroup = if (e.starredGroup != b.starredGroup) e.starredGroup else r.starredGroup,
                     used = listOfNotNull(b.used, e.used, r.used).maxOrNull(),
                     input = listOfNotNull(b.input, e.input, r.input).maxOrNull(),
                     visits = mergeVisits(b.visits, e.visits, r.visits),
@@ -260,7 +287,14 @@ data class AccountLayout(
                 }
             }
             return remote.copy(workspaces = orderedWorkspaces, tabs = orderedTabs, settings = settings,
-                workspaceColors = colors.filterKeys { it in orderedWorkspaces }).validate()
+                workspaceColors = colors.filterKeys { it in orderedWorkspaces },
+                groupOrder = rebaseGroupOrder(base.groupOrder.orEmpty(), edited.groupOrder.orEmpty(), remote.groupOrder)).validate()
+        }
+
+        private fun rebaseGroupOrder(base: List<String>, edited: List<String>, remote: List<String>?): List<String>? {
+            if (base == edited) return remote
+            val merged = (edited + remote.orEmpty().filter { it !in base }).distinct().take(MAX_GROUPS)
+            return merged.takeIf { it.isNotEmpty() }
         }
     }
 }
