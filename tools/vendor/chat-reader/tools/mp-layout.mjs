@@ -302,14 +302,6 @@ async function spawnSession(ctx, flags) {
         renameSync(temporary, target);
       } catch { try { unlinkSync(temporary); } catch {} throw new Failure('cannot write host state'); }
     }
-    if (mode === 'visible') {
-      if (!parked) {
-        const created = ctx.tmux(['new-session', '-d', '-s', session, '-c', folder, 'sleep', 'infinity', ';', 'set-option', '-t', '=' + session + ':', '@mp_spawn_sid', sid, ';', 'set-option', '-t', '=' + session + ':', '@mp_host_sid', sid]);
-        if (created.status !== 0 && ctx.tmux(['has-session', '-t', '=' + session]).status !== 0) throw new Failure('could not start parking session');
-      }
-      const pane = ctx.tmux(['display-message', '-p', '-t', '=' + session + ':', '#{pane_current_command}|#{pane_current_path}|#{@mp_spawn_sid}']);
-      if (pane.status !== 0 || String(pane.stdout || '').trim() !== `sleep|${folder}|${sid}`) throw new Failure('terminal collision');
-    }
     const runtime = (args, input) => {
       let result;
       try { result = ctx.runtime(args, input); } catch { throw new Failure('host operation failed'); }

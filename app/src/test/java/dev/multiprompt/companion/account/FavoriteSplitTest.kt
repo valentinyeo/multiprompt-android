@@ -114,7 +114,8 @@ class FavoriteSplitTest {
             assertEquals(if (allOnRight) splits.asReversed() else splits, displayed.filterNot { it == FAVORITES_SPLIT_ID || it == FREQUENT_SPLIT_ID })
             assertEquals(displayed.size, displayed.distinct().size)
         }
-        assertEquals(listOf(FREQUENT_SPLIT_ID, null, FAVORITES_SPLIT_ID), inboxSplitIds(listOf(null), true))
+        assertEquals(listOf(null, FAVORITES_SPLIT_ID, FREQUENT_SPLIT_ID), inboxSplitIds(listOf(null), true))
+        assertEquals(listOf(FREQUENT_SPLIT_ID, null, FAVORITES_SPLIT_ID), inboxSplitIds(listOf(null), true, frequentFirst = true))
         assertThrows(IllegalArgumentException::class.java) { layout.copy(workspaces = listOf(FAVORITES_SPLIT_ID)).validate() }
     }
 
@@ -134,7 +135,7 @@ class FavoriteSplitTest {
             http.request("POST", "/oauth/revoke", "token", JSONObject())
             assertEquals(listOf("GET", "PUT", "POST", "POST"), requests.map { it.method })
             requests.forEach {
-                assertEquals(listOf("favorite,muted,used,visits,input,settings,hosts,workspace_color,bot_appearance,bot_photo,bot_palette8,groups"), it.headers.values("X-Layout-Features"))
+                assertEquals(listOf("favorite,muted,used,visits,input,settings,hosts,workspace_color,bot_appearance,bot_photo,bot_palette8,groups,starred_groups,group_order"), it.headers.values("X-Layout-Features"))
                 assertEquals("application/json", it.header("Accept"))
                 assertEquals("account.multiprompt.dev", it.url.host)
             }
