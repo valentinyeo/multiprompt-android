@@ -26,6 +26,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.connectbot.sshlib.SshClient
 
 sealed interface ReaderStatus {
@@ -102,6 +103,7 @@ class SessionReaderConnection(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val requests = Channel<Request>(Channel.UNLIMITED)
+    private val streamNudge = Channel<Unit>(Channel.CONFLATED)
     private val _state = MutableStateFlow(ReaderState())
     val state: StateFlow<ReaderState> = _state.asStateFlow()
 
@@ -131,6 +133,11 @@ class SessionReaderConnection(
     fun select(value: Boolean) {
         selected = value
         historyConnection?.select(value)
+    }
+
+    fun nudge() {
+        if (ReconnectBackoff.shouldNudge(_state.value.status is ReaderStatus.Failed)) streamNudge.trySend(Unit)
+        historyConnection?.nudge()
     }
 
     fun hostSettings(): HostSettings? = historyConnection?.state?.value?.replica?.host?.settings
@@ -454,7 +461,7 @@ class SessionReaderConnection(
                     streamClient = null
                     runCatching { oldClient?.disconnect() }
                 }
-                delay(RECONNECT_DELAY_MS)
+                withTimeoutOrNull(RECONNECT_DELAY_MS) { streamNudge.receive() }
             }
         }
     }
