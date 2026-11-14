@@ -65,6 +65,7 @@ class ChatHistoryConnection(
     private val _state = MutableStateFlow(ChatHistoryState())
     val state: StateFlow<ChatHistoryState> = _state.asStateFlow()
     private val wake = Channel<Unit>(Channel.CONFLATED)
+    private val retryNudge = Channel<Unit>(Channel.CONFLATED)
     private val resyncs = Channel<CompletableDeferred<Unit>>(Channel.UNLIMITED)
     private val commands = Channel<Command>(Channel.UNLIMITED)
     private val token = Any()
@@ -161,6 +162,9 @@ class ChatHistoryConnection(
         wake.trySend(Unit)
         return result.await()
     }
+
+    fun nudge(): Boolean =
+        ReconnectBackoff.shouldNudge(_state.value.retrying) && retryNudge.trySend(Unit).isSuccess
 
     fun actionToken(): Long = generation
     suspend fun checkStatus(id: String, observed: Long = generation) = action("status", id, observed = observed)
@@ -317,7 +321,7 @@ class ChatHistoryConnection(
                     }
                 }
             }
-            var retryDelay = 2_000L
+            var retryDelay = ReconnectBackoff.INITIAL_MS
             var requestId = 0L
             val deferredCommands = java.util.ArrayDeque<Command>()
             var activeCommand: Command? = null
@@ -506,7 +510,8 @@ class ChatHistoryConnection(
                                 if (!published) { replica = null; continue@poll }
                                 resyncing?.complete(Unit)
                                 resyncing = null
-                                retryDelay = 2_000L
+                                retryDelay = ReconnectBackoff.INITIAL_MS
+                                retryNudge.tryReceive()
                                 wasOlder = page.mode == "older"
                                 while (true) {
                                     if (!caughtUp) {
@@ -655,8 +660,8 @@ class ChatHistoryConnection(
                     }
                     if (failure is CancellationException && !isActive) throw failure
                 }
-                delay(retryDelay)
-                retryDelay = (retryDelay * 2).coerceAtMost(30_000L)
+                val nudged = withTimeoutOrNull(retryDelay) { retryNudge.receive() } != null
+                retryDelay = ReconnectBackoff.afterWait(retryDelay, nudged)
             }
         }
     }
