@@ -186,7 +186,7 @@ class ReaderActionsMenuTest {
         compose.onNodeWithText("Reattach session").assertDoesNotExist()
         val top = labels.map { compose.onNodeWithText(it).fetchSemanticsNode().positionInRoot.y }
         assertEquals(top.sorted(), top)
-        val chatRows = listOf("Enter / approve", "Interrupt session", "Read reply", "Reset this chat")
+        val chatRows = listOf("Enter / approve", "Interrupt session", "Read reply", "Voice Mode", "Reset this chat")
         val sessionRows = listOf("Rename", "Remind Me…", "Waiting", "Pin a page…", "Bot look", "Computer", "Open live terminal", "Hide from sidebar")
         val dangerRows = listOf("End tmux session", "Delete")
         val y = { text: String -> compose.onNodeWithText(text).fetchSemanticsNode().positionInRoot.y }

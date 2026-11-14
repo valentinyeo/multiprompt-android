@@ -3034,7 +3034,9 @@ def host_reply(query):
     provider, sid = query.get("provider"), query.get("sid")
     if not host_identity(provider, sid):
         return dict(status="refused", reason="unsupported_provider")
-    if query.get("op") in ("set_model", "set_effort") and provider != "claude":
+    if query.get("op") == "set_effort" and provider != "claude":
+        return dict(status="refused", reason="unsupported_provider")
+    if query.get("op") == "set_model" and provider not in HOST_MODEL_CHOICES:
         return dict(status="refused", reason="unsupported_provider")
     if query.get("op") == "set_permission_mode" and provider not in ("claude", "codex"):
         return dict(status="refused", reason="unsupported_provider")
@@ -3050,7 +3052,7 @@ def host_reply(query):
             value = mode
         else:
             key = "model" if operation == "set_model" else "effort"
-            allowed = ("opus", "sonnet", "haiku", "fable") if key == "model" else ("low", "medium", "high")
+            allowed = tuple(HOST_MODEL_CHOICES[provider]) if key == "model" else ("low", "medium", "high")
             value = query.get(key)
             if value not in allowed:
                 return dict(status="refused", reason="invalid_" + key)
@@ -3484,8 +3486,22 @@ def host_permission_mode(provider, sid, state=None):
     return HOST_MODE_NAMES.get(mode if mode is not None else "default", "")
 
 
+HOST_MODEL_CHOICES = dict(
+    claude=dict(opus="opus", sonnet="sonnet", haiku="haiku", fable="fable"),
+    codex=dict(sol="gpt-6.1-sol", terra="gpt-6.1-terra", luna="gpt-6-luna", astra="gpt-6-astra"),
+)
+
+
+def host_codex_model(provider, sid):
+    config = host_config(provider, sid) or {}
+    return HOST_MODEL_CHOICES["codex"].get(config.get("model"))
+
+
 def host_settings(provider, sid):
     config = host_config(provider, sid) or {}
+    if provider == "codex":
+        choice = config.get("model")
+        return dict(model=choice if choice in HOST_MODEL_CHOICES["codex"] else "", effort="")
     args = config.get("args") if isinstance(config.get("args"), list) else []
     command = config.get("command") if isinstance(config.get("command"), list) else []
     parts = command + args
@@ -4190,10 +4206,10 @@ def host_handle_request(provider, sid, tmux, session, request):
     if operation == "interrupt":
         return adapter["interrupt"](provider, sid, session)
     if operation in ("set_model", "set_effort"):
-        if provider != "claude":
+        if operation == "set_effort" and provider != "claude" or provider not in HOST_MODEL_CHOICES:
             return host_refuse("unsupported_provider")
         key = "model" if operation == "set_model" else "effort"
-        allowed = ("opus", "sonnet", "haiku", "fable") if key == "model" else ("low", "medium", "high")
+        allowed = tuple(HOST_MODEL_CHOICES[provider]) if key == "model" else ("low", "medium", "high")
         value = request.get(key)
         if value not in allowed:
             return host_refuse("invalid_" + key)
@@ -4202,8 +4218,9 @@ def host_handle_request(provider, sid, tmux, session, request):
             return host_refuse("host_disabled")
         config[key] = value
         host_write(host_paths(provider, sid)["config"], config)
-        session["settings"][key] = value
-        host_settings_event(provider, sid, tmux, session)
+        if "settings" in session:
+            session["settings"][key] = value
+            host_settings_event(provider, sid, tmux, session)
         return dict(status="ok")
     if operation == "recall":
         token, attempt = request.get("id"), request.get("attempt")
@@ -4523,6 +4540,9 @@ def host_codex_thread(provider, sid, session, resume):
     approval, sandbox = host_codex_policy(session)
     cwd = host_cwd(provider, sid)
     params = dict(cwd=cwd, approvalPolicy=approval, sandbox=sandbox, developerInstructions=HOST_APPEND_PROMPT)
+    chosen = host_codex_model(provider, sid)
+    if chosen:
+        params["model"] = chosen
     native = state.get("native_session")
     try:
         found = isinstance(native, str) and conversation_path(provider, native, cwd) is not None
@@ -4543,8 +4563,12 @@ def host_codex_write(provider, sid, session, token, text):
                                                            input=content), "steer")
     else:
         approval, sandbox = host_codex_policy(session)
-        sent = host_codex_call(session, "turn/start", dict(threadId=session["thread"], approvalPolicy=approval,
-                                                           sandboxPolicy=HOST_CODEX_SANDBOXES[sandbox], input=content), "turn")
+        params = dict(threadId=session["thread"], approvalPolicy=approval,
+                      sandboxPolicy=HOST_CODEX_SANDBOXES[sandbox], input=content)
+        chosen = host_codex_model(provider, sid)
+        if chosen:
+            params["model"] = chosen
+        sent = host_codex_call(session, "turn/start", params, "turn")
     if sent:
         session["codex_tokens"][session["seq"]] = token
     return sent
@@ -5054,7 +5078,7 @@ def host_loop(provider, sid, tmux, session, server, agent):
     import selectors
     host_session_reset(session, agent)
     host_nightly_mark(provider, sid, session)
-    if provider == "claude":
+    if provider in ("claude", "codex"):
         session["settings"] = host_settings(provider, sid)
         session["starting_settings"] = dict(session["settings"])
         session["applied_settings"] = None
@@ -5879,14 +5903,14 @@ def message_store_transaction(q):
                 items = [dict(message=message_row(row)) for row in db.execute('SELECT * FROM shared_messages WHERE provider=? AND sid=? ORDER BY position', (provider, sid))]
                 items.extend(dict(native_message=json.loads(body)) for (body,) in db.execute("SELECT body FROM connector_facts WHERE provider=? AND sid=? AND json_extract(body,'$.kind')='message' ORDER BY rowid", (provider, sid)))
                 items.extend(dict(attempt_receipt=json.loads(body)) for (body,) in db.execute("SELECT body FROM connector_facts WHERE provider=? AND sid=? AND json_extract(body,'$.kind') IN ('accepted','started') ORDER BY rowid", (provider, sid)))
-                if provider == "claude" and host_enabled(provider, sid):
+                if provider in ("claude", "codex") and host_enabled(provider, sid):
                     settings = host_settings(provider, sid)
                     last = db.execute("SELECT body FROM message_events WHERE provider=? AND sid=? AND json_extract(body,'$.kind')='host.settings' ORDER BY seq DESC LIMIT 1", (provider, sid)).fetchone()
                     payload = json.loads(last[0]).get("payload", {}) if last else {}
                     applied = (host_owned(provider, sid) and payload.get("applied") is True
                                and payload.get("effort") == settings["effort"]
                                and (not settings["model"] or payload.get("model") == settings["model"]))
-                    if applied and not settings["model"]:
+                    if applied and not settings["model"] and provider == "claude":
                         settings["model"] = host_model_name(payload.get("model"))
                     items.append(dict(host_settings=dict(settings, applied=applied, mode=host_permission_mode(provider, sid))))
                 db.execute('INSERT INTO message_snapshots VALUES (?,?,?,?,?,?,?)', (snapshot, provider, sid, epoch, seq, time.time(), json.dumps(items, separators=(',', ':'))))
@@ -7347,7 +7371,7 @@ elif __name__ == "__main__":
 
 '''
 READER_SOURCE = 'CONNECTOR_SOURCES = ' + repr(globals().get('CONNECTOR_SOURCES', {})) + '\n' + READER_SOURCE
-RUNTIME_GENERATION = 115
+RUNTIME_GENERATION = 116
 
 if __name__ == '__main__':
     import base64 as _base64
