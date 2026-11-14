@@ -406,6 +406,7 @@ class SessionReaderConnection(
                         connectedClient,
                         tmuxSessionName,
                         agent,
+                        hostSessionId.isNotBlank(),
                     ) { frame ->
                         confirmModelSwitchIfAsked(frame.confirmationVisible)
                         if (historyMode) {
