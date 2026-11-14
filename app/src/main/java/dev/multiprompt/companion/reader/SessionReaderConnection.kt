@@ -504,7 +504,7 @@ class SessionReaderConnection(
         try {
             withTimeout(REQUEST_TIMEOUT_MS) {
                 val questionScreen = if (request is Request.QuestionAnswer) {
-                    withFreshClient { repository.captureSession(it, tmuxSessionName) }
+                    withServerLink { repository.captureSession(it, tmuxSessionName) }
                 } else null
                 withFreshClient { client ->
                     when (request) {
@@ -579,6 +579,9 @@ class SessionReaderConnection(
             _state.update { it.copy(sending = false) }
         }
     }
+
+    private suspend fun <T> withServerLink(block: suspend (SshClient) -> T): T =
+        repository.withServerLink(host, block = block)
 
     suspend fun sendFile(file: DeviceFile): String = withFreshClient { client ->
         repository.uploadFile(client, tmuxSessionName, file)
