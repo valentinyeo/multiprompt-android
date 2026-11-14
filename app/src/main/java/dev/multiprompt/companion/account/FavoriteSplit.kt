@@ -14,7 +14,7 @@ fun inboxSplitIds(
     frequent: Boolean = true,
     favorites: Boolean = true,
     all: Boolean = true,
-    frequentFirst: Boolean = true,
+    frequentFirst: Boolean = false,
 ): List<String?> = buildList {
     if (frequent && frequentFirst) add(FREQUENT_SPLIT_ID)
     (if (allOnRight) workspaceSplitIds.asReversed() else workspaceSplitIds).forEach {
