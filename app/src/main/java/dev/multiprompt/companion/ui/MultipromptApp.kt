@@ -1213,11 +1213,11 @@ internal fun NewSessionRecentScreen(
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             if (query.isBlank()) {
-                item(key = "browse-title") { PickerSectionTitle("Browse by server") }
+                item(key = "browse-title") { KitSectionLabel("Browse by server") }
                 items(hosts, key = { "host-${it.id}" }) { host ->
                     PickerRow(title = host.label, subtitle = "Browse its folders", onClick = { onBrowseHost(host.id) })
                 }
-                item(key = "recent-title") { PickerSectionTitle("Recent folders from every server") }
+                item(key = "recent-title") { KitSectionLabel("Recent folders from every server") }
             }
             if (matches.isEmpty()) {
                 item(key = "recent-empty") {
@@ -1229,7 +1229,7 @@ internal fun NewSessionRecentScreen(
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                     )
                 }
             }
@@ -1242,16 +1242,6 @@ internal fun NewSessionRecentScreen(
             }
         }
     }
-}
-
-@Composable
-private fun PickerSectionTitle(text: String) {
-    Text(
-        text,
-        fontSize = 12.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 2.dp),
-    )
 }
 
 private enum class SettingsPage { HIDDEN, PREFERENCES, MAPPING }

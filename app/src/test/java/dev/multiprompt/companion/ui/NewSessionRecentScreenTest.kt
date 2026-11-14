@@ -69,13 +69,13 @@ class NewSessionRecentScreenTest {
         compose.onNode(hasSetTextAction()).performTextInput("note")
         compose.onAllNodesWithText("funeralprints").assertCountEquals(0)
         compose.onNodeWithText("notes").assertExists()
-        compose.onAllNodesWithText("Browse by server").assertCountEquals(0)
+        compose.onAllNodesWithText("BROWSE BY SERVER").assertCountEquals(0)
     }
 
     @Test
     fun browsingByServerStaysAvailable() {
         show()
-        compose.onNodeWithText("Browse by server").assertExists()
+        compose.onNodeWithText("BROWSE BY SERVER").assertExists()
         compose.onAllNodesWithText("Hetzner")[0].performClick()
         assertEquals("hz", browsed)
     }
