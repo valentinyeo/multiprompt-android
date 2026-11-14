@@ -3783,8 +3783,9 @@ internal fun ReaderScreen(
                                 onDismissRequest = { attachMenuExpanded = false },
                                 contentResetKey = attachMenuSection.orEmpty(),
                             ) {
-                                val openSection = if (session.agent == AgentKind.CLAUDE) {
-                                    HostChange.sections(connection.hostSettings() != null).firstOrNull { it.first == attachMenuSection }
+                                val settingsProvider = HostChange.providerOf(session.agent)
+                                val openSection = if (settingsProvider != null) {
+                                    HostChange.sections(connection.hostSettings() != null, settingsProvider).firstOrNull { it.first == attachMenuSection }
                                 } else null
                                 if (openSection != null) {
                                     val hostSettings = connection.hostSettings()
@@ -3829,9 +3830,11 @@ internal fun ReaderScreen(
                                                 promptFocusRequester.requestFocus()
                                             },
                                         )
+                                    }
+                                    if (settingsProvider != null) {
                                         val hostSettings = connection.hostSettings()
-                                        val sections = HostChange.sections(hostSettings != null)
-                                        KitDivider()
+                                        val sections = HostChange.sections(hostSettings != null, settingsProvider)
+                                        if (sections.isNotEmpty()) KitDivider()
                                         sections.forEach { (title, changes) ->
                                             val current = changes.firstOrNull { it.active(hostSettings, runtimeDetails.model, runtimeDetails.effort) }?.label
                                             KitMenuRow(
