@@ -7,7 +7,7 @@ object QueuedEdit {
         data class Lost(val reason: String) : Outcome
     }
 
-    const val TOO_LATE_NOTICE = "Could not edit. Your agent already read it"
+    const val TOO_LATE_NOTICE = "Could not edit. It may already be with your agent"
 
     fun shows(message: ChatHistoryMessage): Boolean =
         message.role == "user" && message.cancellable && message.requestId.isNotEmpty()
