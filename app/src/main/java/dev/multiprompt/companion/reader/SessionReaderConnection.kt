@@ -115,6 +115,8 @@ class SessionReaderConnection(
 
     fun matches(host: HostProfile, agent: AgentKind): Boolean = this.host == host && this.agent == agent
 
+    val sharedMessages: Boolean get() = ChatHistoryProtocol.messageProvider(agent, hostSessionId) != null
+
     suspend fun openComputerTunnel(target: ComputerTarget): ComputerTunnel? {
         val client = streamClient ?: return null
         val forwarder = client.localPortForward(0, target.host, target.port) ?: return null
@@ -139,7 +141,7 @@ class SessionReaderConnection(
     fun interruptHost(): Boolean = historyConnection?.interruptHost { requests.trySend(Request.Action(TmuxAction.ESCAPE)) } == true
 
     fun chatHistory(agent: AgentKind, cwd: String): ChatHistoryConnection {
-        require(TranscriptProtocol.supports(agent))
+        require(ChatHistoryProtocol.supports(agent, hostSessionId))
         val identity = ChatHistoryProtocol.Identity(agent, tmuxSessionName, cwd, hostSessionId)
         if (historyIdentity == identity) return requireNotNull(historyConnection)
         historyConnection?.close()
@@ -202,7 +204,7 @@ class SessionReaderConnection(
     }
 
     suspend fun sendPrompt(text: String): PromptAdmission {
-        if (agent == AgentKind.CLAUDE || agent == AgentKind.CODEX || agent == AgentKind.PI) {
+        if (sharedMessages) {
             return historyConnection?.submit(text) ?: PromptAdmission.Rejected("Chat is not ready")
         }
         val origin = historyConnection?.state?.value?.takeIf { it.loaded }?.history
@@ -328,7 +330,7 @@ class SessionReaderConnection(
     }
 
     suspend fun loadOlderIntoTranscript(): Boolean = historyMutex.withLock {
-        if (TranscriptProtocol.supports(agent) || historyMode) return@withLock false
+        if (ChatHistoryProtocol.supports(agent, hostSessionId) || historyMode) return@withLock false
         if (!_state.value.alternateOn) return@withLock false
         val targetDepth = transcriptHistoryDepth + 1
         historyMode = true
@@ -405,6 +407,7 @@ class SessionReaderConnection(
                         connectedClient,
                         tmuxSessionName,
                         agent,
+                        hostSessionId.isNotBlank(),
                     ) { frame ->
                         confirmModelSwitchIfAsked(frame.confirmationVisible)
                         if (historyMode) {

@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import android.text.format.DateUtils
 import androidx.compose.foundation.lazy.rememberLazyListState
-import dev.multiprompt.companion.reader.TranscriptProtocol
+import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import dev.multiprompt.companion.reader.ChatMention
 import dev.multiprompt.companion.reader.MentionChat
 import androidx.compose.foundation.layout.ColumnScope
@@ -2752,7 +2752,7 @@ internal fun ReaderScreen(
         android.util.Log.i("SessionWorking", "session=${session.name} visible=$working hook=${reader.hookState?.active} status=${reader.status} sending=${reader.sending}")
     }
     val transcript = reader.transcript.takeUnless { technicalMode }
-    val historyAgent = TranscriptProtocol.supports(session.agent)
+    val historyAgent = ChatHistoryProtocol.supports(session.agent, session.hostSessionId)
     val historyChat = historyAgent && !technicalMode
     val chatListState = key(connection) { rememberLazyListState() }
     var etaNowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
