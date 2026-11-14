@@ -61,4 +61,52 @@ class SessionSearchTest {
             ),
         )
     }
+
+    @Test
+    fun tieOnRecencyPutsWaitingForReplyFirst() {
+        val quiet = session.copy(name = "a", lastActivityEpochSeconds = 100, replyWaiting = false)
+        val waiting = session.copy(name = "b", lastActivityEpochSeconds = 100, replyWaiting = true)
+
+        assertEquals(listOf(waiting, quiet), SessionSearch.newestFirst(listOf(quiet, waiting)))
+    }
+
+    @Test
+    fun tieOnRecencyAndAttentionPutsNewerPaneActivityFirst() {
+        val viewedLater = session.copy(name = "a", lastActivityEpochSeconds = 100, replyWaiting = false)
+        val activeLater = session.copy(name = "b", lastActivityEpochSeconds = 300, replyWaiting = false)
+        val interaction = mapOf(
+            SessionReadStore.key("host-1", "a") to 300L,
+        )
+
+        assertEquals(
+            listOf(activeLater, viewedLater),
+            SessionSearch.newestFirst(listOf(viewedLater, activeLater), interaction),
+        )
+    }
+
+    @Test
+    fun fullTieFallsBackToWorkspaceThenSessionId() {
+        val base = session.copy(lastActivityEpochSeconds = 100, replyWaiting = false)
+        val wsB = base.copy(name = "x", workspaceName = "b", hostSessionId = "1")
+        val wsA2 = base.copy(name = "y", workspaceName = "a", hostSessionId = "10")
+        val wsA1 = base.copy(name = "z", workspaceName = "a", hostSessionId = "9")
+
+        assertEquals(
+            listOf(wsA1, wsA2, wsB),
+            SessionSearch.newestFirst(listOf(wsB, wsA2, wsA1)),
+        )
+    }
+
+    @Test
+    fun orderIsDeterministicForAnyInputOrder() {
+        val base = session.copy(lastActivityEpochSeconds = 100, replyWaiting = false, workspaceName = "w")
+        val a = base.copy(name = "a", hostSessionId = "1")
+        val b = base.copy(name = "b", hostSessionId = "1")
+        val c = base.copy(name = "c", hostSessionId = "2")
+        val expected = listOf(a, b, c)
+
+        assertEquals(expected, SessionSearch.newestFirst(listOf(c, b, a)))
+        assertEquals(expected, SessionSearch.newestFirst(listOf(b, c, a)))
+        assertEquals(expected, SessionSearch.newestFirst(listOf(a, c, b)))
+    }
 }
