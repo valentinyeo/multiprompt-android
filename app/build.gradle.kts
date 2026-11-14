@@ -141,6 +141,7 @@ dependencies {
     implementation(libs.coil.network.okhttp)
     implementation(libs.androidx.browser)
     implementation(libs.androidx.work)
+    implementation(libs.androidx.profileinstaller)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
