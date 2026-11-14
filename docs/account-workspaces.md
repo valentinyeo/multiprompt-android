@@ -40,6 +40,8 @@ All Sessions lists the existing SSH inventory on **every saved profile**, withou
 Inbox/Waiting/archive filtering, including sessions outside the account layout.
 Each row shows membership or “Not in a workspace”, with an Add/Move action.
 
+Arrange splits lists each workspace with Archive. An archived workspace leaves the split strip and the Move to and Workspace colors pickers, and shows under Archived workspaces with Restore. The archive flag lives only on this phone, in the `workspaces` preferences, and never touches the account layout, its chats or any network payload; the account service accepts only `name` and `color`. If the selected workspace is archived, selection moves to a visible split.
+
 Inbox shows gold stars synced with the laptop; signed-in account tabs offer Star/Unstar.
 The ★ Favorites split stays just after All and shows only starred account sessions.
 Android negotiates favorite metadata and preserves absent values without inventing stars.
