@@ -8,7 +8,7 @@ class RoomService(private val context: Context, private val repository: SshRepos
 
     suspend fun open(host: HostProfile, accountId: String): RoomClient {
         val client = repository.connect(host)
-        val wire = SshRoomWire(client, accountId, source(SERVICE), source(BRIDGE))
+        val wire = SshRoomWire(client, accountId, serviceSource, bridgeSource)
         return RoomClient(wire)
     }
 
@@ -36,6 +36,9 @@ class RoomService(private val context: Context, private val repository: SshRepos
             if (!client.capabilities().liveSend) throw RoomFailure("agents_offline")
             client.postHuman(roomId, client.revision(roomId), text, recipients, commandId)
         }
+
+    private val serviceSource by lazy { source(SERVICE) }
+    private val bridgeSource by lazy { source(BRIDGE) }
 
     private fun source(name: String): String =
         context.assets.open("rooms/$name").bufferedReader().use { it.readText() }

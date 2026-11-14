@@ -17,6 +17,7 @@ browser = "1.9.0"
 work = "2.11.2"
 material = "1.14.0"
 coil = "3.3.0"
+profileinstaller = "1.4.1"
 
 [libraries]
 androidx-test-rules = { module = "androidx.test:rules", version.ref = "androidxTestRunner" }
@@ -47,6 +48,7 @@ json = { module = "org.json:json", version.ref = "json" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 androidx-browser = { module = "androidx.browser:browser", version.ref = "browser" }
 androidx-work = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
+androidx-profileinstaller = { module = "androidx.profileinstaller:profileinstaller", version.ref = "profileinstaller" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

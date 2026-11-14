@@ -1,6 +1,5 @@
 package dev.multiprompt.companion.reader
 
-import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.ssh.SshRepository
 import java.util.concurrent.atomic.AtomicReference
@@ -66,12 +65,13 @@ class ChatHistoryConnection(
     private val _state = MutableStateFlow(ChatHistoryState())
     val state: StateFlow<ChatHistoryState> = _state.asStateFlow()
     private val wake = Channel<Unit>(Channel.CONFLATED)
+    private val retryNudge = Channel<Unit>(Channel.CONFLATED)
     private val resyncs = Channel<CompletableDeferred<Unit>>(Channel.UNLIMITED)
     private val commands = Channel<Command>(Channel.UNLIMITED)
     private val token = Any()
     private val account = listOf(host.id, host.hostname, host.port.toString(), host.username, host.hostKeyType.orEmpty(), host.hostKeyFingerprint.orEmpty(), host.hostKeys.joinToString(",")).joinToString("\u0000")
     private val cacheKey = cacheKey(host, identity)
-    private val provider = when (identity.agent) { AgentKind.CLAUDE -> "claude"; AgentKind.CODEX -> "codex"; AgentKind.PI -> "pi"; else -> null }
+    private val provider = ChatHistoryProtocol.messageProvider(identity.agent, identity.sid)
     @Volatile private var selected = false
     @Volatile private var lastReply = System.nanoTime()
     private class StalledChat : Exception("Chat stopped answering")
@@ -163,6 +163,9 @@ class ChatHistoryConnection(
         return result.await()
     }
 
+    fun nudge(): Boolean =
+        ReconnectBackoff.shouldNudge(_state.value.retrying) && retryNudge.trySend(Unit).isSuccess
+
     fun actionToken(): Long = generation
     suspend fun checkStatus(id: String, observed: Long = generation) = action("status", id, observed = observed)
     suspend fun replayUnknown(id: String, observed: Long = generation) = action("replay", id, observed = observed)
@@ -170,6 +173,8 @@ class ChatHistoryConnection(
         if (!confirmed) MessageActionResult.Rejected("Retry requires confirmation") else action("retry", row.id, row.epoch, row.attempt, observed)
     suspend fun dismiss(row: MessageProtocol.Row, observed: Long = generation) = action("dismiss", row.id, row.epoch, row.attempt, observed)
     suspend fun sendAgain(row: MessageProtocol.Row): PromptAdmission = submit(row.text, row.id)
+    suspend fun editWaiting(id: String, text: String): QueuedEdit.Outcome =
+        QueuedEdit.run(_state.value.replica?.messages?.get(id), text, { dismiss(it) }, { newText, replaces -> submit(newText, replaces) })
     suspend fun removeUnknown(id: String, observed: Long = generation) = action("removeUnknown", id, observed = observed)
     suspend fun recoverReset(observed: Long = generation) = action("reset", "", observed = observed)
 
@@ -318,7 +323,7 @@ class ChatHistoryConnection(
                     }
                 }
             }
-            var retryDelay = 2_000L
+            var retryDelay = ReconnectBackoff.INITIAL_MS
             var requestId = 0L
             val deferredCommands = java.util.ArrayDeque<Command>()
             var activeCommand: Command? = null
@@ -335,8 +340,8 @@ class ChatHistoryConnection(
                                 MessageProtocol.engine(exchange(JSONObject().put("id", requestId).put("op", "engine_info").toString() + "\n"), requestId)
                             }.getOrNull() else null
                             poll@ while (isActive) {
-                                if (provider != null && !selected) {
-                                    withTimeoutOrNull(2_000L) { wake.receive() }
+                                if (ChatPollGate.step(selected) == ChatPollGate.Step.WAIT_FOR_WAKE) {
+                                    wake.receive()
                                     continue@poll
                                 }
                                 if (provider != null && engine != null && freshSid?.let { owns(it) } == false) {
@@ -507,7 +512,8 @@ class ChatHistoryConnection(
                                 if (!published) { replica = null; continue@poll }
                                 resyncing?.complete(Unit)
                                 resyncing = null
-                                retryDelay = 2_000L
+                                retryDelay = ReconnectBackoff.INITIAL_MS
+                                retryNudge.tryReceive()
                                 wasOlder = page.mode == "older"
                                 while (true) {
                                     if (!caughtUp) {
@@ -656,8 +662,8 @@ class ChatHistoryConnection(
                     }
                     if (failure is CancellationException && !isActive) throw failure
                 }
-                delay(retryDelay)
-                retryDelay = (retryDelay * 2).coerceAtMost(30_000L)
+                val nudged = withTimeoutOrNull(retryDelay) { retryNudge.receive() } != null
+                retryDelay = ReconnectBackoff.afterWait(retryDelay, nudged)
             }
         }
     }

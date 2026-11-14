@@ -1,5 +1,6 @@
 package dev.multiprompt.companion.ui
 
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
@@ -61,6 +62,7 @@ import dev.multiprompt.companion.reader.ChatHistory
 import dev.multiprompt.companion.reader.MessageActionResult
 import dev.multiprompt.companion.reader.MessageProtocol
 import dev.multiprompt.companion.reader.PromptAdmission
+import dev.multiprompt.companion.reader.QueuedEdit
 
 private data class ReplyJump(val message: ChatHistoryMessage, val reply: ReplyQuote.Reply)
 
@@ -85,13 +87,16 @@ internal fun ChatHistoryView(
     onReaction: ((ChatHistoryMessage, ChatReactions.Emoji) -> Unit)? = null,
     onSpeakableReplies: (List<dev.multiprompt.companion.reader.ReadAloud.Spoken>) -> Unit = {},
     onChatReady: (Boolean) -> Unit = {},
+    onNewBelow: (Int) -> Unit = {},
     focusKey: String? = null,
     bottomPadding: Dp = 0.dp,
     modifier: Modifier = Modifier,
+    unreadSinceEpochSeconds: Long? = null,
+    onEditPending: ((ChatHistoryMessage) -> Unit)? = null,
 ) {
     val history = remember(connection, agent, workingDirectory) { connection.chatHistory(agent, workingDirectory) }
     val state by history.state.collectAsState()
-    val managed = agent == AgentKind.CLAUDE || agent == AgentKind.CODEX || agent == AgentKind.PI
+    val managed = connection.sharedMessages
     val waiting = state.replica?.messages?.values?.any { it.state == MessageProtocol.State.QUEUED || it.state == MessageProtocol.State.SENT } == true
     val now by produceState(System.currentTimeMillis() / 1000.0, waiting) {
         while (waiting) {
@@ -153,7 +158,13 @@ internal fun ChatHistoryView(
             unreadMessageKey = unreadMessageKey,
             onMarkUnread = onMarkUnread,
             onReaction = onReaction,
-            onCancelPending = if (!managed && !reader.sending && reader.status == ReaderStatus.Live) { target ->
+            onEditPending = if (managed) onEditPending else null,
+            onCancelPending = if (managed) { target ->
+                val row = state.replica?.messages?.get(target.requestId)
+                if (row != null) scope.launch {
+                    if (history.dismiss(row) != MessageActionResult.Applied) toast("Could not cancel yet. Try again")
+                }
+            } else if (!reader.sending && reader.status == ReaderStatus.Live) { target ->
                 connection.cancelQueued(target.requestId, state.history.held)
             } else null,
             onSendAgain = if (managed) { target, confirmed ->
@@ -181,8 +192,10 @@ internal fun ChatHistoryView(
             onNearTop = history::nearTop,
             listState = listState,
             followRequest = followRequest,
+            onNewBelow = onNewBelow,
             modifier = Modifier.weight(1f),
             bottomPadding = bottomPadding,
+            unreadSinceEpochSeconds = unreadSinceEpochSeconds,
         )
 
     }
@@ -206,6 +219,7 @@ internal fun ChatHistoryList(
     onNearTop: (Boolean) -> Unit = {},
     listState: LazyListState = rememberLazyListState(),
     followRequest: Int = 0,
+    onNewBelow: (Int) -> Unit = {},
     sessionName: String = "",
     unreadMessageKey: String? = null,
     onMarkUnread: (String) -> Unit = {},
@@ -217,12 +231,18 @@ internal fun ChatHistoryList(
     collapsePendingReactions: Boolean = true,
     working: Boolean = false,
     bottomPadding: Dp = 0.dp,
+    unreadSinceEpochSeconds: Long? = null,
+    onEditPending: ((ChatHistoryMessage) -> Unit)? = null,
 ) {
     val presentation = remember(messages, agent, collapsePendingReactions) {
         if (agent == AgentKind.CLAUDE) ChatReactions.present(messages, collapsePendingReactions)
         else ChatReactions.Presentation(messages, emptyMap())
     }
     val showDots = working || awaitingReply(presentation.messages, questions.size)
+    val firstUnreadKey = remember(presentation.messages, unreadMessageKey, unreadSinceEpochSeconds) {
+        ChatOpenAnchor.unreadKey(presentation.messages, unreadMessageKey, unreadSinceEpochSeconds)
+    }
+    var openHold by remember(listState) { mutableStateOf(unreadMessageKey != null || unreadSinceEpochSeconds != null) }
     val nearTop by rememberUpdatedState(onNearTop)
     var pendingJump by remember { mutableStateOf<ReplyJump?>(null) }
     var highlightedKey by remember { mutableStateOf<String?>(null) }
@@ -265,13 +285,45 @@ internal fun ChatHistoryList(
         }
     }
     val atBottom = !listState.canScrollBackward && pendingJump == null
+    val anchorPosition = ChatOpenAnchor.listIndex(presentation.messages, firstUnreadKey, questions.size, showDots)
+    val holdingForUnread = openHold && anchorPosition != null
     val newest = messages.lastOrNull()
     LaunchedEffect(newest?.key, newest?.text, newest?.pending, questions) {
-        if (atBottom) listState.scrollToItem(0)
+        if (atBottom && !holdingForUnread) listState.scrollToItem(0)
     }
     LaunchedEffect(followRequest) {
-        if (followRequest > 0) listState.scrollToItem(0)
+        if (followRequest > 0) {
+            openHold = false
+            listState.scrollToItem(0)
+        }
     }
+    LaunchedEffect(listState) {
+        listState.interactionSource.interactions.collect { if (it is DragInteraction.Start) openHold = false }
+    }
+    LaunchedEffect(openHold, anchorPosition, pendingJump != null) {
+        if (!openHold || pendingJump != null) return@LaunchedEffect
+        val position = anchorPosition ?: return@LaunchedEffect
+        listState.scrollToItem(position)
+        val info = listState.layoutInfo
+        val item = info.visibleItemsInfo.firstOrNull { it.index == position }
+        if (item != null) {
+            val viewport = info.viewportSize.height - info.beforeContentPadding - info.afterContentPadding
+            listState.scrollToItem(position, ChatOpenAnchor.scrollOffset(item.size, viewport))
+        }
+        openHold = false
+    }
+    var newBelow by remember { mutableStateOf(0) }
+    var previousMessages by remember { mutableStateOf<List<ChatHistoryMessage>?>(null) }
+    val scrolledUp = listState.canScrollBackward
+    LaunchedEffect(messages) {
+        val before = previousMessages
+        previousMessages = messages
+        if (scrolledUp && before != null) newBelow += newRepliesBetween(before, messages)
+    }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.canScrollBackward }.distinctUntilChanged().collect { if (!it) newBelow = 0 }
+    }
+    LaunchedEffect(newBelow) { onNewBelow(newBelow) }
     LaunchedEffect(listState) {
         snapshotFlow {
             val info = listState.layoutInfo
@@ -297,13 +349,13 @@ internal fun ChatHistoryList(
         }
         itemsIndexed(presentation.messages.asReversed(), key = { _, message -> message.key }, contentType = { _, message -> message.role }) { index, message ->
             Column {
-                if (message.key == unreadMessageKey) {
+                if (message.key == firstUnreadKey) {
                     Text("New", color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
                 }
                 val previous = presentation.messages.getOrNull(presentation.messages.lastIndex - index - 1)
                 if (LocalReaderStyle.current && previous != null && previous.role != message.role) Spacer(Modifier.height(10.dp))
                 HistoryBubble(if (message.role == "user") ChatMention.visible(message.text) else message.text, message.role, message.pending, fontScale, sunlight, replyGate, onReply,
-                    messageId = message.requestId, sessionName = sessionName, onMarkUnread = { onMarkUnread(message.key) },
+                    messageId = message.requestId, sessionName = sessionName, onMarkUnread = { openHold = false; onMarkUnread(message.key) },
                     key = message.key, highlighted = highlightedKey == message.key,
                     onJump = { pendingJump = ReplyJump(message, it) },
                     reactions = presentation.badges[message.key].orEmpty(),
@@ -311,9 +363,14 @@ internal fun ChatHistoryList(
                         { emoji -> onReaction(message, emoji) }
                     } else null,
                     delivery = message.delivery?.takeIf { it in FAILURE_LABELS },
-                    onCancel = if (message.role == "user" && message.delivery == "Queued" && message.requestId.isNotEmpty() && onCancelPending != null) {
+                    onCancel = if (message.role == "user" && (message.delivery == "Queued" || message.cancellable) && message.requestId.isNotEmpty() && onCancelPending != null) {
                         { onCancelPending(message) }
                     } else null)
+                if (onEditPending != null && QueuedEdit.shows(message)) {
+                    Row(Modifier.fillMaxWidth().padding(top = 6.dp).testTag("edit-waiting-${message.key}"), horizontalArrangement = Arrangement.End) {
+                        KitSecondaryButton("Edit", { onEditPending(message) })
+                    }
+                }
                 if (message.role == "user" && message.delivery == ChatHistory.NOT_SENT && (onSendAgain != null || onRemove != null)) {
                     Row(Modifier.fillMaxWidth().padding(top = 6.dp).testTag("not-sent-${message.key}"), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
                         if (onRemove != null) KitSecondaryButton("Remove", { onRemove(message) }, destructive = true)

@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MarkChatUnread
 import androidx.compose.material.icons.filled.Reply
 import androidx.compose.material.icons.filled.SelectAll
@@ -109,6 +110,7 @@ internal fun ReplyableBubble(
     val owner = remember { Any() }
     val currentReply by rememberUpdatedState { onReply(text) }
     val clipboard = LocalClipboardManager.current
+    val firstLink = remember(text) { MessageLinks.first(text) }
     val context = LocalContext.current
     val confirm: (String) -> Unit = { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
     DisposableEffect(gate, owner) {
@@ -229,6 +231,9 @@ internal fun ReplyableBubble(
                 }
                 group {
                     action("Copy", Icons.Default.ContentCopy) { clipboard.setText(AnnotatedString(text)); confirm("Copied") }
+                    if (firstLink != null) {
+                        action("Copy link", Icons.Default.Link) { clipboard.setText(AnnotatedString(firstLink)); confirm("Link copied") }
+                    }
                     action("Select Text", Icons.Default.SelectAll) { selectable = true; confirm("Select text to copy") }
                     action("Copy request ID", Icons.Default.Tag) {
                         if (messageId.isNotBlank()) {

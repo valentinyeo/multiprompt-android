@@ -12,6 +12,7 @@ enum class TmuxAction {
 
 object TmuxCommands {
     const val SNAPSHOT_PREFIX = "__MP_TMUX_SNAPSHOT__"
+    const val SNAPSHOT_PACKED_MARKER = "gz:"
     const val ALT_PREFIX = "__MP_TMUX_ALT__"
     const val CREATED_PREFIX = "__MP_TMUX_CREATED__"
     private val LIVE_CHAT_SID = Regex("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
@@ -19,6 +20,10 @@ object TmuxCommands {
     private val LIVE_CHAT_FOLDER = Regex("[A-Za-z0-9/_.~-]{1,4096}")
 
     const val ETA_PREFIX = "__MP_TMUX_ETA__"
+
+    fun nativeSkills(sessionName: String, workingDirectory: String = ""): String =
+        "python3 - ${TmuxParser.shellQuote(sessionName)}" +
+            workingDirectory.takeIf { it.isNotBlank() }?.let { " ${TmuxParser.shellQuote(it)}" }.orEmpty()
 
     fun etaRowsCommand(sessionName: String? = null): String {
         val argument = sessionName?.let { " " + TmuxParser.shellQuote(it) } ?: ""
@@ -55,7 +60,16 @@ object TmuxCommands {
         "            continue\n" +
         "        if isinstance(t, str) and t and (t not in best or m > best[t][0]):\n" +
         "            best[t]=(m, a, 0 if s.get(\"inflight\") else 1)\n" +
-        "    sys.stdout.write(\"\".join(\"@reply\\t%s\\t%d\\t%d\\n\" % (t, a, w) for t, (m, a, w) in best.items()))"
+        "    sys.stdout.write(\"\".join(\"@reply\\t%s\\t%d\\t%d\\n\" % (t, a, w) for t, (m, a, w) in best.items()))\n" +
+        "    prov={}\n" +
+        "    for p in glob.glob(os.path.join(d,\"agent-host\",\"*.config.json\")):\n" +
+        "        try:\n" +
+        "            c=json.load(open(p)); m=os.path.getmtime(p); t=c.get(\"tmux\"); v=c.get(\"provider\")\n" +
+        "        except Exception:\n" +
+        "            continue\n" +
+        "        if c.get(\"enabled\") is True and isinstance(t, str) and t and isinstance(v, str) and (t not in prov or m > prov[t][0]):\n" +
+        "            prov[t]=(m, v)\n" +
+        "    sys.stdout.write(\"\".join(\"@provider\\t%s\\t%s\\n\" % (t, v) for t, (m, v) in prov.items()))"
 
     fun etaLogCommand(): String =
         "mp_dir=\"\${MULTIPROMPT_STATE_DIR:-\$HOME/.local/state/multiprompt}\"; " +
@@ -141,20 +155,27 @@ object TmuxCommands {
     fun createClaudeSession(sessionName: String, remotePath: String): String =
         createAgentSession(sessionName, remotePath, AgentHarness.CLAUDE)
 
-    fun createLiveChat(sessionName: String, remotePath: String, sid: String): String {
+    fun createLiveChat(
+        sessionName: String,
+        remotePath: String,
+        sid: String,
+        harness: AgentHarness = AgentHarness.CLAUDE,
+    ): String {
         require(LIVE_CHAT_SID.matches(sid)) { "Invalid live chat id" }
         require(LIVE_CHAT_NAME.matches(sessionName)) { "Invalid live chat name" }
         require(LIVE_CHAT_FOLDER.matches(remotePath)) { "Live chat needs a folder name without spaces or symbols" }
+        val provider = requireNotNull(harness.agent?.hostProvider) { "${harness.label} cannot start a live chat" }
         val path = TmuxParser.shellQuote(remotePath)
         val name = TmuxParser.shellQuote(sessionName)
         val reader = "python3 ~/.multiprompt-runtime/reader.py"
-        val host = "$reader host enable claude $sid --tmux $sessionName --cwd $remotePath " +
-            "--permission-mode bypassPermissions >/dev/null 2>&1; " +
-            "$reader host start claude $sid >/dev/null 2>&1; exec sleep infinity"
+        val mode = if (harness == AgentHarness.CLAUDE) " --permission-mode bypassPermissions" else ""
+        val host = "$reader host enable $provider $sid --tmux $sessionName --cwd $remotePath" +
+            "$mode >/dev/null 2>&1; " +
+            "$reader host start $provider $sid >/dev/null 2>&1; exec sleep infinity"
         return "if [ ! -d $path ]; then printf 'Project directory not found\\n' >&2; exit 2; fi; " +
-            "if ! bash -lc 'command -v claude >/dev/null 2>&1'; then " +
-            "printf 'claude was not found on the VPS PATH\\n' >&2; exit 3; fi; " +
-            "python3 - host status claude $sid >/dev/null 2>&1; " +
+            "if ! bash -lc 'command -v ${harness.binary} >/dev/null 2>&1'; then " +
+            "printf '${harness.binary} was not found on the VPS PATH\\n' >&2; exit 3; fi; " +
+            "python3 - host status $provider $sid >/dev/null 2>&1; " +
             "if [ ! -f ~/.multiprompt-runtime/reader.py ]; then " +
             "printf 'Live chat reader could not be installed\\n' >&2; exit 4; fi; " +
             "tmux new-session -d -s $name -c $path ${TmuxParser.shellQuote(host)} && " +
@@ -262,7 +283,7 @@ object TmuxCommands {
 
     fun liveChatProvider(sid: String): String {
         require(LIVE_CHAT_SID.matches(sid)) { "Invalid live chat id" }
-        return "mp_p=claude; for mp_c in claude codex pi hax; do " +
+        return "mp_p=claude; for mp_c in claude codex pi hax cursor; do " +
             "mp_k=\$(printf '%s' \"\$mp_c:$sid\" | sha256sum | cut -c1-32); " +
             "if [ -f \"\$HOME/.local/state/multiprompt/agent-host/\$mp_k.config.json\" ]; then mp_p=\$mp_c; break; fi; done"
     }
@@ -304,14 +325,50 @@ object TmuxCommands {
             "printf '\\n'; done; "
     }
 
-    fun stream(sessionName: String): String {
+    internal fun hostedRows(): String =
+        "if [ -f ~/.multiprompt-runtime/reader.py ]; then " +
+            "python3 ~/.multiprompt-runtime/reader.py host list 2>/dev/null | python3 -c '$HOSTED_PYTHON' 2>/dev/null; fi; "
+
+    private const val HOSTED_PYTHON = "import json,re,subprocess,sys\n" +
+        "sep=\"${TmuxParser.FIELD_SEPARATOR}\"\n" +
+        "try:\n" +
+        "    chats=json.load(sys.stdin).get(\"chats\") or []\n" +
+        "except Exception:\n" +
+        "    chats=[]\n" +
+        "try:\n" +
+        "    physical=set(subprocess.run([\"tmux\",\"list-sessions\",\"-F\",\"#{session_name}\"],capture_output=True,text=True,timeout=5).stdout.splitlines())\n" +
+        "except Exception:\n" +
+        "    physical=set()\n" +
+        "for c in chats:\n" +
+        "    if not isinstance(c, dict) or c.get(\"visible\") is False:\n" +
+        "        continue\n" +
+        "    n=c.get(\"name\"); s=c.get(\"sid\"); p=c.get(\"cwd\"); a=c.get(\"activity\")\n" +
+        "    if not isinstance(n, str) or not isinstance(s, str) or n in physical:\n" +
+        "        continue\n" +
+        "    if not re.fullmatch(r\"live-[A-Za-z0-9_.:-]{1,59}\", n) or not re.fullmatch(r\"[A-Za-z0-9_-]{1,80}\", s):\n" +
+        "        continue\n" +
+        "    if not isinstance(p, str) or sep in p or \"\\n\" in p or \"\\r\" in p:\n" +
+        "        p=\"\"\n" +
+        "    if not isinstance(a, int):\n" +
+        "        a=0\n" +
+        "    print(sep.join([n, \"1\", \"0\", str(a), \"0\", \"0\", p, \"\", \"sleep\", \"\", s, str(a), \"\"]))"
+
+    fun stream(sessionName: String, hosted: Boolean = false): String {
         val target = target(sessionName)
         val session = sessionTarget(sessionName)
+        val missing = if (hosted) {
+            "printf '${ALT_PREFIX}0\\n'; printf '$ETA_PREFIX\\n'; printf '$SNAPSHOT_PREFIX\\n'; " +
+                "while true; do sleep 30; printf '\\n'; done; "
+        } else {
+            "printf 'tmux session is no longer available\\n' >&2; exit 1; "
+        }
         return "if ! tmux has-session -t $session 2>/dev/null; then " +
-            "printf 'tmux session is no longer available\\n' >&2; exit 1; fi; " +
+            missing + "fi; " +
             "mp_snapshot=\$(mktemp) || exit 2; " +
             "trap 'rm -f \"\$mp_snapshot\"' EXIT HUP INT TERM; " +
             "mp_previous=''; " +
+            "if command -v gzip >/dev/null 2>&1 && command -v base64 >/dev/null 2>&1; " +
+            "then mp_packed=1; else mp_packed=0; fi; " +
             "while tmux has-session -t $session 2>/dev/null; do " +
             "mp_alternate=\$(tmux display-message -p -t $target '#{alternate_on}' 2>/dev/null); " +
             "printf '${ALT_PREFIX}%s\\n' \"\$mp_alternate\"; " +
@@ -324,7 +381,9 @@ object TmuxCommands {
             "if [ \"\$mp_current\" != \"\$mp_previous\" ]; then " +
             "printf '$ETA_PREFIX'; printf '%s' \"\$mp_eta\" | od -An -v -tx1 | tr -d ' \\n'; printf '\\n'; " +
             "printf '$SNAPSHOT_PREFIX'; " +
-            "od -An -v -tx1 < \"\$mp_snapshot\" | tr -d ' \\n'; " +
+            "if [ \"\$mp_packed\" = 1 ]; then printf '$SNAPSHOT_PACKED_MARKER'; " +
+            "gzip -c < \"\$mp_snapshot\" | base64 | tr -d '\\n'; " +
+            "else od -An -v -tx1 < \"\$mp_snapshot\" | tr -d ' \\n'; fi; " +
             "printf '\\n'; mp_previous=\$mp_current; fi; " +
             "sleep 1; done; " +
             "printf 'tmux session ended\\n' >&2; exit 1"

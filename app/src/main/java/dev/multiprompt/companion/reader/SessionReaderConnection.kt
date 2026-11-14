@@ -4,9 +4,12 @@ import dev.multiprompt.companion.computer.ComputerTarget
 import dev.multiprompt.companion.computer.ComputerTunnel
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.AgentKind
+import dev.multiprompt.companion.skills.NativeSkill
+import dev.multiprompt.companion.skills.SkillsLoader
 import dev.multiprompt.companion.ssh.SshRepository
 import dev.multiprompt.companion.ssh.TmuxAction
 import dev.multiprompt.companion.ssh.TmuxText
+import dev.multiprompt.companion.upload.DeviceFile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,7 +28,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.connectbot.sshlib.SshClient
+import java.util.concurrent.atomic.AtomicBoolean
 
 sealed interface ReaderStatus {
     data object Connecting : ReaderStatus
@@ -101,18 +106,22 @@ class SessionReaderConnection(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val requests = Channel<Request>(Channel.UNLIMITED)
+    private val streamNudge = Channel<Unit>(Channel.CONFLATED)
     private val _state = MutableStateFlow(ReaderState())
     val state: StateFlow<ReaderState> = _state.asStateFlow()
 
     private var streamClient: SshClient? = null
     private var streamJob: Job? = null
     private var actionJob: Job? = null
+    private val skillsRunning = AtomicBoolean(false)
 
     private var historyConnection: ChatHistoryConnection? = null
     private var historyIdentity: ChatHistoryProtocol.Identity? = null
     @Volatile private var selected = false
 
     fun matches(host: HostProfile, agent: AgentKind): Boolean = this.host == host && this.agent == agent
+
+    val sharedMessages: Boolean get() = ChatHistoryProtocol.messageProvider(agent, hostSessionId) != null
 
     suspend fun openComputerTunnel(target: ComputerTarget): ComputerTunnel? {
         val client = streamClient ?: return null
@@ -130,6 +139,11 @@ class SessionReaderConnection(
         historyConnection?.select(value)
     }
 
+    fun nudge() {
+        if (ReconnectBackoff.shouldNudge(_state.value.status is ReaderStatus.Failed)) streamNudge.trySend(Unit)
+        historyConnection?.nudge()
+    }
+
     fun hostSettings(): HostSettings? = historyConnection?.state?.value?.replica?.host?.settings
 
     suspend fun changeHost(change: HostChange): MessageActionResult =
@@ -138,7 +152,7 @@ class SessionReaderConnection(
     fun interruptHost(): Boolean = historyConnection?.interruptHost { requests.trySend(Request.Action(TmuxAction.ESCAPE)) } == true
 
     fun chatHistory(agent: AgentKind, cwd: String): ChatHistoryConnection {
-        require(TranscriptProtocol.supports(agent))
+        require(ChatHistoryProtocol.supports(agent, hostSessionId))
         val identity = ChatHistoryProtocol.Identity(agent, tmuxSessionName, cwd, hostSessionId)
         if (historyIdentity == identity) return requireNotNull(historyConnection)
         historyConnection?.close()
@@ -185,23 +199,33 @@ class SessionReaderConnection(
         startStream()
     }
 
-    fun loadSkills(script: ByteArray) {
-        if (agent != AgentKind.CLAUDE) return
+    fun loadSkills(script: ByteArray, workingDirectory: String = historyIdentity?.cwd.orEmpty()) {
+        loadSkills { repository.nativeSkills(host, tmuxSessionName, script, workingDirectory) }
+    }
+
+    internal fun loadSkills(
+        retryDelayMillis: Long = SkillsLoader.RETRY_DELAY_MILLIS,
+        fetch: suspend () -> List<NativeSkill>,
+    ) {
+        if (agent != AgentKind.CLAUDE || !skillsRunning.compareAndSet(false, true)) return
         _state.update { it.copy(skillsLoading = true, skillsError = null) }
         scope.launch {
-            try {
-                val skills = repository.nativeSkills(host, tmuxSessionName, script)
-                _state.update { it.copy(nativeSkills = skills, skillsLoading = false) }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                _state.update { it.copy(skillsLoading = false, skillsError = "Could not load this session’s skills") }
+            val outcome = try {
+                SkillsLoader.load(retryDelayMillis, fetch)
+            } finally {
+                skillsRunning.set(false)
+            }
+            when (outcome) {
+                is SkillsLoader.Outcome.Loaded ->
+                    _state.update { it.copy(nativeSkills = outcome.skills, skillsLoading = false) }
+                is SkillsLoader.Outcome.Failed ->
+                    _state.update { it.copy(skillsLoading = false, skillsError = outcome.message) }
             }
         }
     }
 
     suspend fun sendPrompt(text: String): PromptAdmission {
-        if (agent == AgentKind.CLAUDE || agent == AgentKind.CODEX || agent == AgentKind.PI) {
+        if (sharedMessages) {
             return historyConnection?.submit(text) ?: PromptAdmission.Rejected("Chat is not ready")
         }
         val origin = historyConnection?.state?.value?.takeIf { it.loaded }?.history
@@ -221,6 +245,9 @@ class SessionReaderConnection(
         }
         return if (sent) PromptAdmission.LegacyEnqueued else PromptAdmission.Rejected("Could not send")
     }
+
+    suspend fun editWaiting(messageId: String, text: String): QueuedEdit.Outcome =
+        historyConnection?.editWaiting(messageId, text) ?: QueuedEdit.Outcome.TooLate
 
     fun sendRuntimeCommand(command: String): Boolean {
         val sent = requests.trySend(Request.RuntimeCommand(command)).isSuccess
@@ -327,7 +354,7 @@ class SessionReaderConnection(
     }
 
     suspend fun loadOlderIntoTranscript(): Boolean = historyMutex.withLock {
-        if (TranscriptProtocol.supports(agent) || historyMode) return@withLock false
+        if (ChatHistoryProtocol.supports(agent, hostSessionId) || historyMode) return@withLock false
         if (!_state.value.alternateOn) return@withLock false
         val targetDepth = transcriptHistoryDepth + 1
         historyMode = true
@@ -404,6 +431,7 @@ class SessionReaderConnection(
                         connectedClient,
                         tmuxSessionName,
                         agent,
+                        hostSessionId.isNotBlank(),
                     ) { frame ->
                         confirmModelSwitchIfAsked(frame.confirmationVisible)
                         if (historyMode) {
@@ -450,7 +478,7 @@ class SessionReaderConnection(
                     streamClient = null
                     runCatching { oldClient?.disconnect() }
                 }
-                delay(RECONNECT_DELAY_MS)
+                withTimeoutOrNull(RECONNECT_DELAY_MS) { streamNudge.receive() }
             }
         }
     }
@@ -516,6 +544,19 @@ class SessionReaderConnection(
 
     private suspend fun <T> withServerLink(repeatable: Boolean = false, block: suspend (SshClient) -> T): T =
         repository.withServerLink(host, repeatable, block = block)
+
+    suspend fun sendFile(file: DeviceFile): String = withFreshClient { client ->
+        repository.uploadFile(client, tmuxSessionName, file)
+    }
+
+    private suspend fun <T> withFreshClient(block: suspend (SshClient) -> T): T {
+        val client = repository.connect(host)
+        return try {
+            block(client)
+        } finally {
+            runCatching { client.disconnect() }
+        }
+    }
 
     override fun close() {
         _state.update { it.copy(status = ReaderStatus.Closed) }

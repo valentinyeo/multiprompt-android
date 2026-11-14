@@ -20,12 +20,14 @@ data class TmuxSession(
     val outputActivityEpochSeconds: Long = 0,
     val replyAtEpochSeconds: Long? = null,
     val replyWaiting: Boolean? = null,
+    val hostProvider: String = "",
 ) {
     val replyActivityEpochSeconds: Long
         get() = replyAtEpochSeconds ?: outputActivityEpochSeconds.takeIf { it > 0 } ?: lastActivityEpochSeconds
 
     val agent: AgentKind
-        get() = AgentKind.detect(name, title, preview, paneCommand)
+        get() = (if (liveChat) AgentKind.registered(hostProvider) else null)
+            ?: AgentKind.detect(name, title, preview, paneCommand)
 
     val liveChat: Boolean
         get() = AgentKind.liveChat(name, paneCommand)
@@ -53,19 +55,19 @@ data class TmuxSession(
     }
 }
 
-enum class AgentKind(val label: String) {
-    CLAUDE("Claude"),
-    CODEX("Codex"),
-    PI("Pi"),
+enum class AgentKind(val label: String, val hostProvider: String? = null) {
+    CLAUDE("Claude", "claude"),
+    CODEX("Codex", "codex"),
+    PI("Pi", "pi"),
     KIMI("Kimi"),
-    HAX("Hax"),
-    CURSOR("Cursor"),
+    HAX("Hax", "hax"),
+    CURSOR("Cursor", "cursor"),
     OTHER("Shell");
 
     companion object {
         fun detect(name: String, title: String = "", preview: String = "", paneCommand: String = ""): AgentKind {
             val command = paneCommand.lowercase().substringAfterLast('/').substringAfterLast('\\')
-            if (liveChat(name, paneCommand)) return CLAUDE
+            if (liveChat(name, paneCommand)) return liveAgent(name)
             when {
                 command == "codex" || command.startsWith("codex-") -> return CODEX
                 command == "claude" || command.startsWith("claude-") -> return CLAUDE
@@ -102,6 +104,19 @@ enum class AgentKind(val label: String) {
         fun liveChat(name: String, paneCommand: String): Boolean =
             paneCommand.lowercase().substringAfterLast('/').substringAfterLast('\\') == "sleep" &&
                 name.lowercase().startsWith(LIVE_CHAT_PREFIX)
+
+        fun liveChatName(agent: AgentKind, project: String, stamp: String): String {
+            val provider = requireNotNull(agent.hostProvider)
+            return if (agent == CLAUDE) "$LIVE_CHAT_PREFIX$project-$stamp" else "$LIVE_CHAT_PREFIX${provider}_$project-$stamp"
+        }
+
+        fun registered(provider: String): AgentKind? =
+            if (provider.isEmpty()) null else entries.firstOrNull { it.hostProvider == provider }
+
+        fun liveAgent(name: String): AgentKind {
+            val tag = name.lowercase().removePrefix(LIVE_CHAT_PREFIX).substringBefore('_', "")
+            return AgentKind.entries.firstOrNull { it != CLAUDE && it.hostProvider == tag } ?: CLAUDE
+        }
 
         private const val LIVE_CHAT_PREFIX = "live-"
         private val PI_NAME = Regex("(^|[-_])pi($|[-_])")

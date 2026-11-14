@@ -12,6 +12,8 @@ class SessionReadStore(context: Context) {
     fun isUnread(session: TmuxSession): Boolean =
         session.replyActivityEpochSeconds > preferences.getLong(key(session.hostId, session.name), 0L)
 
+    fun readAt(session: TmuxSession): Long = preferences.getLong(key(session.hostId, session.name), 0L)
+
     fun unreadCountState(session: TmuxSession): UnreadCount.State = runCatching {
         val stored = preferences.getString("$UNREAD_COUNT_PREFIX${key(session.hostId, session.name)}", null)
             ?: return UnreadCount.State()
@@ -289,6 +291,12 @@ class SessionReadStore(context: Context) {
         preferences.edit().putString(SESSION_BUCKET, bucket).apply()
     }
 
+    fun unreadOnly(): Boolean = preferences.getBoolean(UNREAD_ONLY, false)
+
+    fun setUnreadOnly(enabled: Boolean) {
+        preferences.edit().putBoolean(UNREAD_ONLY, enabled).apply()
+    }
+
     fun displayName(session: TmuxSession): String? =
         preferences.getString(displayNameKey(session.hostId, session.name), null)
             ?.takeIf(String::isNotBlank)
@@ -334,6 +342,7 @@ class SessionReadStore(context: Context) {
         private const val NEWEST_SESSIONS_ORDER_SETTLED = "newest_sessions_order_settled"
         private const val ALL_SPLIT_ON_RIGHT = "all_split_on_right"
         private const val SESSION_BUCKET = "session_bucket"
+        private const val UNREAD_ONLY = "unread_only"
         private const val DRAFT_PREFIX = "composer_draft::"
         private const val BOT_FACE_PREFIX = "bot_face::"
         private const val BOT_COLOR_PREFIX = "bot_color::"

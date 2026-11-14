@@ -14,7 +14,12 @@ class NativeSkillsTest {
 
     @Test fun parsesOnlyNativeCommandMetadata() {
         assertEquals(listOf(NativeSkill("review", "Check it")), NativeSkills.parse("""[{"name":"review","description":"Check it"}]"""))
-        assertThrows(Exception::class.java) { NativeSkills.parse("""[{"name":"bad command"}]""") }
+        assertThrows(Exception::class.java) { NativeSkills.parse("not json") }
+    }
+
+    @Test fun skipsRowsWithAnInvalidNameInsteadOfFailingTheWholeList() {
+        val json = """[{"name":"bad command"},{"name":"review","description":"Check it"},{"description":"no name"},"text",{"name":"-x"},{"name":"qa:test"}]"""
+        assertEquals(listOf(NativeSkill("qa:test", ""), NativeSkill("review", "Check it")), NativeSkills.parse(json))
     }
 
     @Test fun slashFiltersNameAndDescriptionWithoutChangingTheDraft() {
