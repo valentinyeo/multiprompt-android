@@ -26,6 +26,7 @@ source_checks() {
   python3 -B tools/emulator.test.py
   python3 -B tools/long-chat/check.test.py
   python3 -B tools/app-name/drive.test.py
+  python3 -B tools/app-name/select_run.test.py
   node tools/root-files.mjs
   node tools/strip-comments.mjs --check
 }

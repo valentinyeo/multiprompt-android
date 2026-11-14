@@ -1,4 +1,5 @@
 const boards = { IGSH: 2060, HYCI: 11514 };
+const aliases = { IGSH: 'SOFT' };
 
 export function ticketRecord(id, title) {
   if (typeof id !== 'string' || !/^(?:IGSH|HYCI)-[1-9]\d*$/.test(id)) throw new Error(`Invalid ticket ID: ${id}`);
@@ -37,7 +38,7 @@ export async function resolveTicketTitles(ids, catalog, token, request = fetch) 
     if (!response.ok) throw new Error(`Title lookup failed for ${id}`);
     const data = await response.json().catch(() => null);
     const task = data?.tasks?.[0];
-    if (data?.success !== true || !Array.isArray(data.tasks) || data.tasks.length !== 1 || task?.boardId !== boards[match[1]] || (task.ticketNumber == null && task.uniqueIndex == null) || (task.ticketNumber != null && task.ticketNumber !== id) || (task.uniqueIndex != null && String(task.uniqueIndex) !== match[2])) throw new Error(`Unresolved title for ${id}`);
+    if (data?.success !== true || !Array.isArray(data.tasks) || data.tasks.length !== 1 || task?.boardId !== boards[match[1]] || (task.ticketNumber == null && task.uniqueIndex == null) || (task.ticketNumber != null && task.ticketNumber !== id && task.ticketNumber !== `${aliases[match[1]] ?? ''}-${match[2]}`) || (task.uniqueIndex != null && String(task.uniqueIndex) !== match[2])) throw new Error(`Unresolved title for ${id}`);
     titles[id] = ticketRecord(id, task.title).title;
   }
   for (const id of ids) ticketRecord(id, titles[id]);

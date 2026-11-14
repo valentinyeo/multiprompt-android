@@ -5,11 +5,13 @@ enum class AgentHarness(
     val binary: String,
     val arguments: String,
     val namePrefix: String,
+    val agent: AgentKind? = null,
 ) {
-    CLAUDE("Claude Code", "claude", "--dangerously-skip-permissions", "claude"),
-    CODEX("Codex", "codex", "--dangerously-bypass-approvals-and-sandbox", "codex"),
-    PI("pi", "pi", "", "pi"),
-    HAX("Hax", "hax", "", "hax"),
+    CLAUDE("Claude Code", "claude", "--dangerously-skip-permissions", "claude", AgentKind.CLAUDE),
+    CODEX("Codex", "codex", "--dangerously-bypass-approvals-and-sandbox", "codex", AgentKind.CODEX),
+    PI("pi", "pi", "", "pi", AgentKind.PI),
+    HAX("Hax", "hax", "", "hax", AgentKind.HAX),
+    CURSOR("Cursor", "agent", "", "cursor", AgentKind.CURSOR),
     SHELL("Shell", "", "", "shell"),
     ;
 
