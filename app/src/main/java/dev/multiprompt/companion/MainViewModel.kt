@@ -1,6 +1,7 @@
 package dev.multiprompt.companion
 
 import android.app.Application
+import android.net.ConnectivityManager
 import android.os.SystemClock
 import android.util.Log
 import dev.multiprompt.companion.account.DWELL
@@ -8,6 +9,7 @@ import dev.multiprompt.companion.account.VisitDwell
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.multiprompt.companion.model.HostDraft
+import dev.multiprompt.companion.network.NetworkReturnWatcher
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.AgentHarness
 import dev.multiprompt.companion.model.AgentKind
@@ -269,6 +271,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val warmReaders = LinkedHashMap<String, SessionReaderConnection>()
     private val warmReaderTouchedAt = mutableMapOf<String, Long>()
+    private val networkReturn = NetworkReturnWatcher(app.getSystemService(ConnectivityManager::class.java)) {
+        viewModelScope.launch {
+            nudgeWarmReaders()
+            refresh()
+        }
+    }
 
     init {
         viewModelScope.launch {
@@ -320,11 +328,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onResume() {
         foreground.value = true
+        networkReturn.start()
+        if (networkReturn.resumed()) nudgeWarmReaders()
         refresh()
         syncAccount()
     }
 
-    fun onPause() { foreground.value = false }
+    fun onPause() {
+        foreground.value = false
+        networkReturn.stop()
+    }
+
+    private fun nudgeWarmReaders() = warmReaders.values.forEach { it.nudge() }
 
     fun onStop() { dictation.onAppBackgrounded() }
 
@@ -2051,6 +2066,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        networkReturn.stop()
         _state.value.terminal?.close()
         closeWarmReaders()
         super.onCleared()
