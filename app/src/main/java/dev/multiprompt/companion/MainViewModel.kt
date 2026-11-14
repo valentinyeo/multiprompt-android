@@ -2083,7 +2083,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .let { sessions ->
             if (state.selectedWorkspaceId == FREQUENT_SPLIT_ID) {
                 frequentSessions(sessions, state.accountLayout, state.accountHosts, System.currentTimeMillis())
-            } else SessionSearch.newestFirst(sessions, state.sessionInteractionEpochSeconds)
+            } else SessionSearch.newestFirst(sessions, state.sessionInteractionEpochSeconds, state.accountLayout, state.accountHosts)
         }
 
     private companion object {

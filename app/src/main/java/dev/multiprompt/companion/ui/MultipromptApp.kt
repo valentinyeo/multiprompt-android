@@ -1720,7 +1720,7 @@ internal fun SessionsScreen(
         }
     val visibleSessions = if (state.selectedWorkspaceId == FREQUENT_SPLIT_ID) {
         frequentSessions(matchingSessions, state.accountLayout, state.accountHosts, etaNowMillis)
-    } else SessionSearch.newestFirst(matchingSessions, state.sessionInteractionEpochSeconds)
+    } else SessionSearch.newestFirst(matchingSessions, state.sessionInteractionEpochSeconds, state.accountLayout, state.accountHosts)
     val visibleDissolvedSessions = if (state.sessionBucket == SessionBucket.ARCHIVE && state.selectedWorkspaceId != FAVORITES_SPLIT_ID && state.selectedWorkspaceId != FREQUENT_SPLIT_ID) {
         state.dissolvedSessions.filter { session ->
             normalizedQuery.isBlank() ||
