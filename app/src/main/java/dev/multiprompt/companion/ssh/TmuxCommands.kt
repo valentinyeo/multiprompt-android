@@ -91,7 +91,12 @@ object TmuxCommands {
             TmuxAction.SCROLL_BOTTOM -> "End"
             TmuxAction.SCROLL_UP -> "PageUp"
         }
-        return "tmux send-keys -t ${target(sessionName)} $key"
+        val send = "tmux send-keys -t ${target(sessionName)} $key"
+        return when (action) {
+            TmuxAction.SCROLL_BOTTOM, TmuxAction.SCROLL_UP ->
+                "if tmux has-session -t ${sessionTarget(sessionName)} 2>/dev/null; then $send; fi"
+            else -> send
+        }
     }
 
     fun questionAnswer(sessionName: String, question: dev.multiprompt.companion.reader.PendingQuestion,

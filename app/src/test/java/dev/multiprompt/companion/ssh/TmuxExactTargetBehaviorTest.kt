@@ -111,6 +111,8 @@ class TmuxExactTargetBehaviorTest {
     fun missingSessionControlsDoNotAffectNeighbor() {
         val receipt = neighbor("verify-session-neighbor")
         assertTrue(run(TmuxCommands.action("verify-session", TmuxAction.ENTER)).status != 0)
+        assertEquals(0, run(TmuxCommands.action("verify-session", TmuxAction.SCROLL_BOTTOM)).status)
+        assertEquals(0, run(TmuxCommands.action("verify-session", TmuxAction.SCROLL_UP)).status)
         assertTrue(run(TmuxCommands.renameWindow("verify-session", "wrong")).status != 0)
         assertTrue(run(TmuxCommands.stream("verify-session")).status != 0)
         assertEquals(0, run(TmuxCommands.dissolveSession("verify-session")).status)

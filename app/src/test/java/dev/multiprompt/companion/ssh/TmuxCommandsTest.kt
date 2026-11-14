@@ -60,6 +60,18 @@ class TmuxCommandsTest {
     }
 
     @Test
+    fun scrollKeysSkipAChatWithoutATmuxSession() {
+        assertEquals(
+            "if tmux has-session -t '=work' 2>/dev/null; then tmux send-keys -t '=work:' End; fi",
+            TmuxCommands.action("work", TmuxAction.SCROLL_BOTTOM),
+        )
+        assertEquals(
+            "if tmux has-session -t '=work' 2>/dev/null; then tmux send-keys -t '=work:' PageUp; fi",
+            TmuxCommands.action("work", TmuxAction.SCROLL_UP),
+        )
+    }
+
+    @Test
     fun modelPickerSelectionUsesOnlyAValidatedNumberKey() {
         assertEquals(
             "tmux send-keys -t '=work:' 3",
