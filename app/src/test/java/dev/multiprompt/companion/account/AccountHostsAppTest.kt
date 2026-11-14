@@ -132,6 +132,8 @@ class AccountHostsAppTest {
         }
     }
 
+    private fun layoutRequests() = synchronized(requests) { requests.filter { it.url.encodedPath != "/v1/secrets/deepgram" } }
+
     private fun sync() {
         compose.runOnIdle { model.syncAccount() }
         compose.waitUntil(15_000) {
@@ -281,7 +283,7 @@ class AccountHostsAppTest {
             assertEquals(local.copy(label = authoritative.name), app.hostStore.load().first { it.id == local.id })
             assertEquals(local.copy(label = authoritative.name), model.state.value.accountHosts[0])
             assertEquals(2, puts.size)
-            assertEquals(listOf("GET", "PUT", "GET", "PUT"), requests.map { it.method })
+            assertEquals(listOf("GET", "PUT", "GET", "PUT"), layoutRequests().map { it.method })
             puts.forEach { body ->
                 val outgoing = AccountHosts.parse(body.getJSONObject("layout").getJSONArray("hosts"))
                 assertEquals(authoritative, outgoing.single { it.slot == 0 })

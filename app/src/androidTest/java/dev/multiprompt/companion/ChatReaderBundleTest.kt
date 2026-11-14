@@ -16,7 +16,7 @@ class ChatReaderBundleTest {
         val bundle = full.copyOfRange(0, at) + full.copyOfRange(at + versionLine.size, full.size)
         val hash = MessageDigest.getInstance("SHA-256").digest(bundle)
             .joinToString("") { "%02x".format(it.toInt() and 0xff) }
-        assertEquals(418363, bundle.size)
-        assertEquals("5b16ad1b2999d88c013bc90d515409a8df1bb56304738f04b5622e1883149d07", hash)
+        assertEquals(456784, bundle.size)
+        assertEquals("53ab6329f27e6a255b04c052c575e1b9c8474af6570a11641b7b31975ec2d5d9", hash)
     }
 }

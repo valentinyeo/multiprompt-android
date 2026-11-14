@@ -12,6 +12,8 @@ class SessionReadStore(context: Context) {
     fun isUnread(session: TmuxSession): Boolean =
         session.replyActivityEpochSeconds > preferences.getLong(key(session.hostId, session.name), 0L)
 
+    fun readAt(session: TmuxSession): Long = preferences.getLong(key(session.hostId, session.name), 0L)
+
     fun unreadCountState(session: TmuxSession): UnreadCount.State = runCatching {
         val stored = preferences.getString("$UNREAD_COUNT_PREFIX${key(session.hostId, session.name)}", null)
             ?: return UnreadCount.State()
