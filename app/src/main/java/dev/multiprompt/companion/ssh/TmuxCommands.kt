@@ -55,7 +55,16 @@ object TmuxCommands {
         "            continue\n" +
         "        if isinstance(t, str) and t and (t not in best or m > best[t][0]):\n" +
         "            best[t]=(m, a, 0 if s.get(\"inflight\") else 1)\n" +
-        "    sys.stdout.write(\"\".join(\"@reply\\t%s\\t%d\\t%d\\n\" % (t, a, w) for t, (m, a, w) in best.items()))"
+        "    sys.stdout.write(\"\".join(\"@reply\\t%s\\t%d\\t%d\\n\" % (t, a, w) for t, (m, a, w) in best.items()))\n" +
+        "    prov={}\n" +
+        "    for p in glob.glob(os.path.join(d,\"agent-host\",\"*.config.json\")):\n" +
+        "        try:\n" +
+        "            c=json.load(open(p)); m=os.path.getmtime(p); t=c.get(\"tmux\"); v=c.get(\"provider\")\n" +
+        "        except Exception:\n" +
+        "            continue\n" +
+        "        if c.get(\"enabled\") is True and isinstance(t, str) and t and isinstance(v, str) and (t not in prov or m > prov[t][0]):\n" +
+        "            prov[t]=(m, v)\n" +
+        "    sys.stdout.write(\"\".join(\"@provider\\t%s\\t%s\\n\" % (t, v) for t, (m, v) in prov.items()))"
 
     fun etaLogCommand(): String =
         "mp_dir=\"\${MULTIPROMPT_STATE_DIR:-\$HOME/.local/state/multiprompt}\"; " +

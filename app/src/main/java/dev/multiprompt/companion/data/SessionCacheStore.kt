@@ -33,6 +33,7 @@ class SessionCacheStore(context: Context) {
                             outputActivityEpochSeconds = item.optLong("outputActivityEpochSeconds"),
                             replyAtEpochSeconds = if (item.has("replyAtEpochSeconds")) item.optLong("replyAtEpochSeconds") else null,
                             replyWaiting = if (item.has("replyWaiting")) item.optBoolean("replyWaiting") else null,
+                            hostProvider = item.optString("hostProvider"),
                         ),
                     )
                 }
@@ -59,7 +60,8 @@ class SessionCacheStore(context: Context) {
                     .put("hostSessionId", session.hostSessionId)
                     .put("outputActivityEpochSeconds", session.outputActivityEpochSeconds)
                     .put("replyAtEpochSeconds", session.replyAtEpochSeconds)
-                    .put("replyWaiting", session.replyWaiting),
+                    .put("replyWaiting", session.replyWaiting)
+                    .put("hostProvider", session.hostProvider),
             )
         }
         preferences.edit().putString(key(hostId), array.toString()).apply()

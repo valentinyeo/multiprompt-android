@@ -94,10 +94,13 @@ object TmuxParser {
             )
         }
         val replies = parseLiveReplies(output)
+        val providers = parseHostProviders(output)
         return sessions.map { session ->
-            replies[session.name]?.takeIf { session.liveChat }?.let {
-                session.copy(replyAtEpochSeconds = it.atEpochSeconds, replyWaiting = it.waiting)
-            } ?: session
+            val hosted = providers[session.name]?.takeIf { session.liveChat }
+                ?.let { session.copy(hostProvider = it) } ?: session
+            replies[hosted.name]?.takeIf { hosted.liveChat }?.let {
+                hosted.copy(replyAtEpochSeconds = it.atEpochSeconds, replyWaiting = it.waiting)
+            } ?: hosted
         }.sortedWith(
             compareByDescending<TmuxSession> { it.lastActivityEpochSeconds }.thenBy { it.name },
         )
@@ -107,6 +110,9 @@ object TmuxParser {
         etaPayload(output)?.let(TmuxText::parseLiveReplies).orEmpty()
 
     fun shellQuote(value: String): String = "'" + value.replace("'", "'\"'\"'") + "'"
+
+    fun parseHostProviders(output: String): Map<String, String> =
+        etaPayload(output)?.let(TmuxText::parseHostProviders).orEmpty()
 
     fun parseEtaStates(output: String): Map<String, TmuxText.SessionEtaState> =
         etaPayload(output)?.let(TmuxText::parseSessionEtaStates).orEmpty()
