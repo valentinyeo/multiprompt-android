@@ -731,7 +731,7 @@ PYINFO
     shot information-system-back
     select_node desc 'Session actions' >/dev/null
     tap_desc 'Session actions'
-    tap_text 'More ›'
+    tap_node text-containing 'More'
     tap_text 'Estimate accuracy'
     shot information-accuracy-opening
     wait_for_text 'No finished estimates yet. A finished turn counts when it ran two minutes or more, and an agent needs three of them.'
