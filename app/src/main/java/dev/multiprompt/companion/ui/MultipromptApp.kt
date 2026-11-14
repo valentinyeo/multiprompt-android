@@ -3415,17 +3415,23 @@ internal fun ReaderScreen(
                         }
                         when (menuPage) {
                             ReaderMenuPage.MAIN -> {
+                                if (reader.status != dev.multiprompt.companion.reader.ReaderStatus.Live) {
+                                    KitSectionLabel("Reconnect")
+                                    KitMenuRow(
+                                        label = "Reattach session",
+                                        trailingText = if (reader.status == dev.multiprompt.companion.reader.ReaderStatus.Connecting) "Connecting" else "Disconnected",
+                                        onClick = {
+                                            menuExpanded = false
+                                            onReattach()
+                                        },
+                                    )
+                                    KitDivider()
+                                }
+                                KitSectionLabel("Chat")
                                 KitMenuRow(
                                     label = listOfNotNull(runtimeDetails.label, statusLabel).joinToString(" · ").ifEmpty { "Model / effort" },
-                                    enabled = false,
-                                    onClick = {},
-                                )
-                                KitMenuRow(
-                                    label = "Computer",
-                                    onClick = {
-                                        menuExpanded = false
-                                        setComputerOpen(true)
-                                    },
+                                    trailingText = "Change ›",
+                                    onClick = { menuPage = ReaderMenuPage.MODEL },
                                 )
                                 KitMenuRow(
                                     label = "Enter / approve",
@@ -3458,13 +3464,26 @@ internal fun ReaderScreen(
                                     )
                                 }
                                 KitMenuRow(
-                                    label = "Open live terminal",
+                                    label = if (reading) "Stop reading" else "Read reply",
                                     onClick = {
                                         menuExpanded = false
-                                        onOpenTerminal()
+                                        if (reading) {
+                                            speech.stop()
+                                            reading = false
+                                            speakingKey = null
+                                        } else {
+                                            val next = dev.multiprompt.companion.reader.ReadAloud.next(speakableReplies, replyCursor)
+                                            if (next != null) {
+                                                speech.speak(next.first.text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "reply")
+                                                speakingKey = next.first.key
+                                                replyCursor = next.second
+                                                reading = true
+                                            } else {
+                                                android.widget.Toast.makeText(context, "No reply to read yet", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
                                     },
                                 )
-                                KitDivider()
                                 if (unread) {
                                     KitMenuRow(
                                         label = "Mark read",
@@ -3474,43 +3493,6 @@ internal fun ReaderScreen(
                                         },
                                     )
                                 }
-                                if (session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {
-                                    KitMenuRow(
-                                        label = "Rename",
-                                        onClick = {
-                                            menuExpanded = false
-                                            renameDraft = session.displayName
-                                            renameError = null
-                                            renameDialogVisible = true
-                                        },
-                                    )
-                                }
-                                KitMenuRow(
-                                    label = "Remind Me…",
-                                    onClick = { menuExpanded = false; reminderDialogVisible = true },
-                                )
-                                KitMenuRow(
-                                    label = if (archived) "Return to open" else "Waiting",
-                                    onClick = { menuExpanded = false; onArchiveToggle() },
-                                )
-                                KitMenuRow(
-                                    label = "Delete",
-                                    destructive = true,
-                                    onClick = { menuExpanded = false; onDissolve() },
-                                )
-                                KitDivider()
-                                KitMenuRow(
-                                    label = "Model and effort ›",
-                                    onClick = { menuPage = ReaderMenuPage.MODEL },
-                                )
-                                KitMenuRow(
-                                    label = "Display ›",
-                                    onClick = { menuPage = ReaderMenuPage.DISPLAY },
-                                )
-                                KitMenuRow(
-                                    label = "More ›",
-                                    onClick = { menuPage = ReaderMenuPage.MORE },
-                                )
                                 KitMenuRow(
                                     label = "Reset this chat",
                                     onClick = {
@@ -3534,35 +3516,38 @@ internal fun ReaderScreen(
                                         }
                                     },
                                 )
-                                if (reader.status != dev.multiprompt.companion.reader.ReaderStatus.Live) {
+                                KitDivider()
+                                KitSectionLabel("Session")
+                                if (session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {
                                     KitMenuRow(
-                                        label = "Reattach session",
+                                        label = "Rename",
                                         onClick = {
                                             menuExpanded = false
-                                            onReattach()
+                                            renameDraft = session.displayName
+                                            renameError = null
+                                            renameDialogVisible = true
                                         },
                                     )
                                 }
                                 KitMenuRow(
-                                    label = if (reading) "Stop reading" else "Read reply",
+                                    label = "Remind Me…",
+                                    onClick = { menuExpanded = false; reminderDialogVisible = true },
+                                )
+                                KitMenuRow(
+                                    label = if (archived) "Return to open" else "Waiting",
+                                    onClick = { menuExpanded = false; onArchiveToggle() },
+                                )
+                                KitMenuRow(
+                                    label = if (pinnedPage == null) "Pin a page…" else "Change pinned page…",
                                     onClick = {
                                         menuExpanded = false
-                                        if (reading) {
-                                            speech.stop()
-                                            reading = false
-                                            speakingKey = null
-                                        } else {
-                                            val next = dev.multiprompt.companion.reader.ReadAloud.next(speakableReplies, replyCursor)
-                                            if (next != null) {
-                                                speech.speak(next.first.text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "reply")
-                                                speakingKey = next.first.key
-                                                replyCursor = next.second
-                                                reading = true
-                                            } else {
-                                                android.widget.Toast.makeText(context, "No reply to read yet", android.widget.Toast.LENGTH_SHORT).show()
-                                            }
-                                        }
+                                        pinPageOpen = true
                                     },
+                                )
+                                KitMenuRow(
+                                    label = "Display",
+                                    trailingText = "›",
+                                    onClick = { menuPage = ReaderMenuPage.DISPLAY },
                                 )
                                 KitMenuRow(
                                     label = "Bot look",
@@ -3572,18 +3557,17 @@ internal fun ReaderScreen(
                                     },
                                 )
                                 KitMenuRow(
-                                    label = if (pinnedPage == null) "Pin a page…" else "Change pinned page…",
+                                    label = "Computer",
                                     onClick = {
                                         menuExpanded = false
-                                        pinPageOpen = true
+                                        setComputerOpen(true)
                                     },
                                 )
-                                KitDivider()
                                 KitMenuRow(
-                                    label = "End tmux session",
+                                    label = "Open live terminal",
                                     onClick = {
                                         menuExpanded = false
-                                        endDialogVisible = true
+                                        onOpenTerminal()
                                     },
                                 )
                                 KitMenuRow(
@@ -3592,6 +3576,26 @@ internal fun ReaderScreen(
                                         menuExpanded = false
                                         onForget()
                                     },
+                                )
+                                KitMenuRow(
+                                    label = "More",
+                                    trailingText = "›",
+                                    onClick = { menuPage = ReaderMenuPage.MORE },
+                                )
+                                KitDivider()
+                                KitSectionLabel("Danger")
+                                KitMenuRow(
+                                    label = "End tmux session",
+                                    destructive = true,
+                                    onClick = {
+                                        menuExpanded = false
+                                        endDialogVisible = true
+                                    },
+                                )
+                                KitMenuRow(
+                                    label = "Delete",
+                                    destructive = true,
+                                    onClick = { menuExpanded = false; onDissolve() },
                                 )
                             }
                             ReaderMenuPage.MODEL -> {
