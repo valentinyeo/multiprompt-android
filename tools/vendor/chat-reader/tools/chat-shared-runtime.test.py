@@ -125,7 +125,25 @@ class RuntimeTest(unittest.TestCase):
         source = "MP_SEND_SOURCE = '%s'\n%s" % (base64.b64encode(body.encode()).decode(), SOURCE)
         self.info(source)
         published = Path(self.home.name) / '.multiprompt-runtime' / 'mp-send'
+        self.assertTrue(published.is_symlink())
         self.assertEqual(published.read_text(), body)
+
+    def test_reader_tool_is_a_symlink(self):
+        info = self.info()
+        reader = Path(self.home.name) / '.multiprompt-runtime' / 'reader.py'
+        self.assertTrue(reader.is_symlink())
+        self.assertEqual(os.readlink(reader), info['sha256'] + '.py')
+
+    def test_hand_copied_reader_is_repaired(self):
+        info = self.info()
+        runtime = Path(self.home.name) / '.multiprompt-runtime'
+        reader = runtime / 'reader.py'
+        reader.unlink()
+        reader.write_text('broken hand copy')
+        self.assertFalse(reader.is_symlink())
+        self.assertEqual(self.info()['sha256'], info['sha256'])
+        self.assertTrue(reader.is_symlink())
+        self.assertEqual(reader.read_text(), (runtime / (info['sha256'] + '.py')).read_text())
 
     def test_mp_send_is_not_published_without_a_bundle(self):
         self.info()

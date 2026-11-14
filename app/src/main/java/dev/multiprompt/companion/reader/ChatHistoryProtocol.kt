@@ -88,9 +88,25 @@ object ChatHistoryProtocol {
         val pendingQuestions: List<PendingQuestion> = emptyList(),
     )
 
+    fun hostedProvider(agent: AgentKind, sid: String): String? = if (sid.isEmpty()) null else agent.hostProvider
+
+    fun messageProvider(agent: AgentKind, sid: String): String? = hostedProvider(agent, sid) ?: when (agent) {
+        AgentKind.CLAUDE -> "claude"
+        AgentKind.CODEX -> "codex"
+        AgentKind.PI -> "pi"
+        else -> null
+    }
+
+    fun supports(agent: AgentKind, sid: String): Boolean =
+        TranscriptProtocol.supports(agent) || hostedProvider(agent, sid) != null
+
+    fun wire(identity: Identity): String =
+        hostedProvider(identity.agent, identity.sid) ?: TranscriptProtocol.wireAgent(identity.agent)
+
     fun request(id: Long, identity: Identity, history: ChatHistory, before: Long = 0, deliveryIds: List<String> = emptyList(), held: Boolean = true): String {
-        require(id > 0 && TranscriptProtocol.supports(identity.agent))
-        return JSONObject().put("id", id).put("codex", TranscriptProtocol.wireAgent(identity.agent) == "codex")
+        require(id > 0 && supports(identity.agent, identity.sid))
+        return JSONObject().put("id", id).put("codex", wire(identity) == "codex")
+            .also { query -> hostedProvider(identity.agent, identity.sid)?.let { query.put("provider", it) } }
             .put("sid", identity.sid).put("tmux", identity.tmux).put("cwd", identity.cwd).put("follow", identity.tmux.isNotEmpty())
             .put("questions", true).put("held", held).put("delivery_ids", org.json.JSONArray(deliveryIds)).put("source_offsets", true).put("no_jump", true).put("settlement", true)
             .put("cached_sid", history.sid).put("inode", history.inode).put("offset", history.offset)
@@ -106,10 +122,11 @@ object ChatHistoryProtocol {
         val fields = lines.first().split('\t')
         require(fields.size >= 4 && fields.take(3) == listOf("@mp", id.toString(), "history"))
         require(lines.last() == TranscriptProtocol.END)
+        if (fields[3] == "missing" && hostedProvider(identity.agent, identity.sid) == "cursor") return newHostedChat(identity.sid)
         if (fields[3] in setOf("missing", "error")) return null
         require(fields.size == 15 && fields[3] == "ok")
         require(fields[4].matches(Regex("[A-Za-z0-9_-]{1,80}")))
-        require(fields[9] == TranscriptProtocol.wireAgent(identity.agent) && fields[10] == identity.tmux.ifEmpty { "-" })
+        require(fields[9] == wire(identity) && fields[10] == identity.tmux.ifEmpty { "-" })
         if (identity.tmux.isEmpty() && identity.sid.isNotEmpty()) require(fields[4] == identity.sid)
         require(fields[8] in setOf("0", "1") && fields[13] in setOf("tail", "delta", "older"))
         require(fields[12].matches(Regex("[0-9a-f]{64}")))
@@ -148,11 +165,17 @@ object ChatHistoryProtocol {
             fields[12], fields[13], oldest, rows, deliveries, held, pendingQuestions)
     }
 
+    private fun newHostedChat(sid: String): Page {
+        val probe = java.security.MessageDigest.getInstance("SHA-256").digest("empty:$sid".toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        return Page(sid, 0, 0, 0, false, 0, probe, "delta", 0, emptyList())
+    }
+
     private fun parseQuestionSnapshot(request: JSONObject?, agent: String): List<PendingQuestion> = runCatching {
         if (request == null) return@runCatching emptyList()
         val id = request.get("id") as? String ?: return@runCatching emptyList()
         val provider = (if (request.has("provider")) request.get("provider") as? String else "claude") ?: return@runCatching emptyList()
-        if (id.isBlank() || provider != agent || provider !in setOf("claude", "codex", "pi")) return@runCatching emptyList()
+        if (id.isBlank() || provider != agent || provider !in setOf("claude", "codex", "pi", "hax", "cursor")) return@runCatching emptyList()
         val questions = request.get("questions") as? org.json.JSONArray ?: return@runCatching emptyList()
         require(questions.length() > 0)
         (0 until questions.length()).map { index ->

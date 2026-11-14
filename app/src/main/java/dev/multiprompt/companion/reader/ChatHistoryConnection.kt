@@ -1,6 +1,5 @@
 package dev.multiprompt.companion.reader
 
-import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.ssh.SshRepository
 import java.util.concurrent.atomic.AtomicReference
@@ -71,7 +70,7 @@ class ChatHistoryConnection(
     private val token = Any()
     private val account = listOf(host.id, host.hostname, host.port.toString(), host.username, host.hostKeyType.orEmpty(), host.hostKeyFingerprint.orEmpty(), host.hostKeys.joinToString(",")).joinToString("\u0000")
     private val cacheKey = cacheKey(host, identity)
-    private val provider = when (identity.agent) { AgentKind.CLAUDE -> "claude"; AgentKind.CODEX -> "codex"; AgentKind.PI -> "pi"; else -> null }
+    private val provider = ChatHistoryProtocol.messageProvider(identity.agent, identity.sid)
     @Volatile private var selected = false
     @Volatile private var lastReply = System.nanoTime()
     private class StalledChat : Exception("Chat stopped answering")
