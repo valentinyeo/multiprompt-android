@@ -5,13 +5,15 @@ import org.json.JSONArray
 data class NativeSkill(val name: String, val description: String)
 
 object NativeSkills {
+    private val NAME = Regex("[A-Za-z0-9][A-Za-z0-9_./:-]*")
+
     fun parse(json: String): List<NativeSkill> {
         val rows = JSONArray(json)
         return buildList {
             for (index in 0 until rows.length()) {
-                val row = rows.getJSONObject(index)
-                val name = row.getString("name")
-                require(Regex("[A-Za-z0-9][A-Za-z0-9_./:-]*").matches(name))
+                val row = rows.optJSONObject(index) ?: continue
+                val name = row.optString("name")
+                if (!NAME.matches(name)) continue
                 add(NativeSkill(name, row.optString("description")))
             }
         }.distinctBy { it.name }.sortedBy { it.name.lowercase() }
