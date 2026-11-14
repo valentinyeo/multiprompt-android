@@ -20,12 +20,14 @@ data class TmuxSession(
     val outputActivityEpochSeconds: Long = 0,
     val replyAtEpochSeconds: Long? = null,
     val replyWaiting: Boolean? = null,
+    val hostProvider: String = "",
 ) {
     val replyActivityEpochSeconds: Long
         get() = replyAtEpochSeconds ?: outputActivityEpochSeconds.takeIf { it > 0 } ?: lastActivityEpochSeconds
 
     val agent: AgentKind
-        get() = AgentKind.detect(name, title, preview, paneCommand)
+        get() = (if (liveChat) AgentKind.registered(hostProvider) else null)
+            ?: AgentKind.detect(name, title, preview, paneCommand)
 
     val liveChat: Boolean
         get() = AgentKind.liveChat(name, paneCommand)
@@ -107,6 +109,9 @@ enum class AgentKind(val label: String, val hostProvider: String? = null) {
             val provider = requireNotNull(agent.hostProvider)
             return if (agent == CLAUDE) "$LIVE_CHAT_PREFIX$project-$stamp" else "$LIVE_CHAT_PREFIX${provider}_$project-$stamp"
         }
+
+        fun registered(provider: String): AgentKind? =
+            if (provider.isEmpty()) null else entries.firstOrNull { it.hostProvider == provider }
 
         fun liveAgent(name: String): AgentKind {
             val tag = name.lowercase().removePrefix(LIVE_CHAT_PREFIX).substringBefore('_', "")

@@ -55,6 +55,7 @@
   "IGSH-2304": "Android: pick Fable as the chat model",
   "IGSH-2305": "Android: pick the model in a Codex chat",
   "IGSH-2316": "Android: chat opens at the New line",
+  "IGSH-2303": "Android: chats made on desktop show their real AI name",
   "IGSH-2317": "Android: show who sent a message from another chat",
   "IGSH-1853": "Android: take back a waiting message the bot already received",
   "IGSH-2312": "Multi Bot Android release check fails after a cancelled release run",

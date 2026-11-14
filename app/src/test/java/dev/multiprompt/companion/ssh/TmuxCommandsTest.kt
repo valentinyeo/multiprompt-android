@@ -5,6 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.File
 import java.nio.file.Files
@@ -335,6 +336,30 @@ class TmuxCommandsTest {
         assertEquals("pi", pickedAssistant(sid, "pi"))
         assertEquals("hax", pickedAssistant(sid, "hax"))
         assertEquals("cursor", pickedAssistant(sid, "cursor"))
+    }
+
+    @Test
+    fun theChatListReadsTheProviderTheHostRegistryKeepsForEachChat() {
+        assumeTrue(runCatching { ProcessBuilder("python3", "--version").start().waitFor() == 0 }.getOrDefault(false))
+        val home = Files.createTempDirectory("mp-home").toFile()
+        try {
+            val folder = File(home, ".local/state/multiprompt/agent-host").apply { mkdirs() }
+            File(folder, "a.config.json").writeText("""{"enabled":true,"provider":"codex","sid":"s1","tmux":"live-one"}""")
+            File(folder, "b.config.json").writeText("""{"enabled":true,"provider":"pi","sid":"s2","tmux":"live-two"}""")
+            File(folder, "c.config.json").writeText("""{"enabled":false,"provider":"hax","sid":"s3","tmux":"live-off"}""")
+            File(folder, "d.config.json").writeText("not json")
+            File(folder, "e.config.json").writeText("""{"enabled":true,"provider":"claude","sid":"s4"}""")
+            val process = ProcessBuilder("sh", "-c", TmuxCommands.etaRowsCommand())
+                .apply { environment()["HOME"] = home.path; environment().remove("MULTIPROMPT_STATE_DIR") }
+                .redirectErrorStream(true)
+                .start()
+            val output = process.inputStream.bufferedReader().readText()
+            assertEquals(0, process.waitFor())
+            val providers = TmuxText.parseHostProviders(output)
+            assertEquals(mapOf("live-one" to "codex", "live-two" to "pi"), providers)
+        } finally {
+            home.deleteRecursively()
+        }
     }
 
     private fun pickedAssistant(sid: String, saved: String?): String {

@@ -128,6 +128,16 @@ object TmuxText {
         }
     }
 
+    fun parseHostProviders(value: String): Map<String, String> = buildMap {
+        value.lineSequence().forEach { line ->
+            val parts = line.split('\t')
+            if (parts.size < 3 || parts[0] != HOST_PROVIDER_PREFIX) return@forEach
+            val name = parts[1].trim()
+            val provider = parts[2].trim()
+            if (name.isNotBlank() && AgentKind.registered(provider) != null) put(name, provider)
+        }
+    }
+
     fun parseSessionEtaStates(value: String): Map<String, SessionEtaState> = buildMap {
         value.lineSequence().forEach { line ->
             val parts = line.split('\t')
@@ -748,6 +758,7 @@ object TmuxText {
     private val FENCE_LINE = Regex("^```[A-Za-z0-9_+.-]*$")
     private const val HOOK_STATE_PREFIX = "@state"
     private const val LIVE_REPLY_PREFIX = "@reply"
+    private const val HOST_PROVIDER_PREFIX = "@provider"
     private val HOOK_STATES = setOf("active", "done")
     private const val MIN_ACCURACY_ACTUAL_SECONDS = 120.0
     private const val MIN_ACCURACY_SAMPLES = 3
