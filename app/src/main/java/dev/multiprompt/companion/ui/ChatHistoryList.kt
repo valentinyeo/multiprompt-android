@@ -86,6 +86,7 @@ internal fun ChatHistoryView(
     onReaction: ((ChatHistoryMessage, ChatReactions.Emoji) -> Unit)? = null,
     onSpeakableReplies: (List<dev.multiprompt.companion.reader.ReadAloud.Spoken>) -> Unit = {},
     onChatReady: (Boolean) -> Unit = {},
+    onNewBelow: (Int) -> Unit = {},
     focusKey: String? = null,
     bottomPadding: Dp = 0.dp,
     modifier: Modifier = Modifier,
@@ -188,6 +189,7 @@ internal fun ChatHistoryView(
             onNearTop = history::nearTop,
             listState = listState,
             followRequest = followRequest,
+            onNewBelow = onNewBelow,
             modifier = Modifier.weight(1f),
             bottomPadding = bottomPadding,
             unreadSinceEpochSeconds = unreadSinceEpochSeconds,
@@ -214,6 +216,7 @@ internal fun ChatHistoryList(
     onNearTop: (Boolean) -> Unit = {},
     listState: LazyListState = rememberLazyListState(),
     followRequest: Int = 0,
+    onNewBelow: (Int) -> Unit = {},
     sessionName: String = "",
     unreadMessageKey: String? = null,
     onMarkUnread: (String) -> Unit = {},
@@ -305,6 +308,18 @@ internal fun ChatHistoryList(
         }
         openHold = false
     }
+    var newBelow by remember { mutableStateOf(0) }
+    var previousMessages by remember { mutableStateOf<List<ChatHistoryMessage>?>(null) }
+    val scrolledUp = listState.canScrollBackward
+    LaunchedEffect(messages) {
+        val before = previousMessages
+        previousMessages = messages
+        if (scrolledUp && before != null) newBelow += newRepliesBetween(before, messages)
+    }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.canScrollBackward }.distinctUntilChanged().collect { if (!it) newBelow = 0 }
+    }
+    LaunchedEffect(newBelow) { onNewBelow(newBelow) }
     LaunchedEffect(listState) {
         snapshotFlow {
             val info = listState.layoutInfo
