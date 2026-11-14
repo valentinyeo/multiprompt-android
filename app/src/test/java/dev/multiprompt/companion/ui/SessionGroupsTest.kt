@@ -18,4 +18,24 @@ class SessionGroupsTest {
         assertEquals(listOf(SessionGroup(null, listOf("a", "b"))), SessionGroups.split(listOf("a", "b")) { null })
         assertEquals(emptyList<SessionGroup<String>>(), SessionGroups.split(emptyList<String>()) { null })
     }
+
+    @Test fun groupOrderPutsListedGroupsFirstInThatOrderAndKeepsTheRestAfterThem() {
+        val items = listOf("a", "b", "c", "d", "e")
+        val of = mapOf("a" to "Design", "b" to "Runners", "c" to "Product", "d" to "Hypertask", "e" to null)
+        val split = SessionGroups.split(items, listOf("Hypertask", "Missing", "Runners")) { of[it] }
+        assertEquals(
+            listOf(
+                SessionGroup(null, listOf("e")), SessionGroup("Hypertask", listOf("d")), SessionGroup("Runners", listOf("b")),
+                SessionGroup("Design", listOf("a")), SessionGroup("Product", listOf("c")),
+            ),
+            split,
+        )
+    }
+
+    @Test fun absentOrEmptyGroupOrderKeepsListOrder() {
+        val of = mapOf("a" to "Z", "b" to "A")
+        val expected = listOf(SessionGroup("Z", listOf("a")), SessionGroup("A", listOf("b")))
+        assertEquals(expected, SessionGroups.split(listOf("a", "b"), null) { of[it] })
+        assertEquals(expected, SessionGroups.split(listOf("a", "b"), emptyList()) { of[it] })
+    }
 }
