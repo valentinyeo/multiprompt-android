@@ -10,7 +10,7 @@ data class HostSettings(val model: String, val effort: String, val mode: String,
 
         fun family(name: String?): String? {
             val lower = name?.trim()?.lowercase()?.removePrefix("claude ")?.removePrefix("claude-") ?: return null
-            return listOf("opus", "sonnet", "haiku").firstOrNull { lower == it || lower.startsWith("$it ") || lower.startsWith("$it-") }
+            return listOf("opus", "sonnet", "haiku", "fable").firstOrNull { lower == it || lower.startsWith("$it ") || lower.startsWith("$it-") }
         }
     }
 }
@@ -19,6 +19,7 @@ enum class HostChange(val section: String, val label: String, val op: String, va
     OPUS("Model", "Opus", "set_model", "model", "opus", "Model: Opus"),
     SONNET("Model", "Sonnet", "set_model", "model", "sonnet", "Model: Sonnet"),
     HAIKU("Model", "Haiku", "set_model", "model", "haiku", "Model: Haiku"),
+    FABLE("Model", "Fable", "set_model", "model", "fable", "Model: Fable"),
     LOW("Effort", "Low", "set_effort", "effort", "low", "Effort: Low"),
     MEDIUM("Effort", "Medium", "set_effort", "effort", "medium", "Effort: Medium"),
     HIGH("Effort", "High", "set_effort", "effort", "high", "Effort: High"),

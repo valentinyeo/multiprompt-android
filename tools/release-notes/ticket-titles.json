@@ -41,5 +41,6 @@
   "IGSH-2274": "Android keeps the same chat after Fresh start",
   "IGSH-2287": "Android: phone chat engine catches up with desktop",
   "IGSH-2287": "Android: phone chat engine catches up with desktop",
-  "IGSH-2284": "Android: start Codex, Pi, Hax and Cursor as live chats"
+  "IGSH-2284": "Android: start Codex, Pi, Hax and Cursor as live chats",
+  "IGSH-2304": "Android: pick Fable as the chat model"
 }
