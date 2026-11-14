@@ -114,6 +114,7 @@ data class AppUiState(
     val repliedSessionKeys: Set<String> = emptySet(),
     val archivedSessionKeys: Set<String> = emptySet(),
     val sessionBucket: SessionBucket = SessionBucket.OPEN,
+    val unreadOnly: Boolean = false,
     val dissolvedSessions: List<DissolvedSession> = emptyList(),
     val crashReport: CrashReport? = null,
     val signedIn: Boolean = false,
@@ -258,6 +259,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             shellFontSize = sessionReads.shellFontSize(),
             appTheme = sessionReads.appTheme(),
             sessionBucket = SessionBucket.entries.firstOrNull { it.name == sessionReads.sessionBucket() } ?: SessionBucket.OPEN,
+            unreadOnly = sessionReads.unreadOnly(),
             dissolvedSessions = dissolvedStore.load(),
             crashReport = crashReportStore.loadForDisplay(),
         ).let { initial ->
@@ -1182,6 +1184,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 },
             )
         }
+    }
+
+    fun setUnreadOnly(enabled: Boolean) {
+        sessionReads.setUnreadOnly(enabled)
+        _state.update { it.copy(unreadOnly = enabled) }
     }
 
     fun selectSessionBucket(bucket: SessionBucket) {

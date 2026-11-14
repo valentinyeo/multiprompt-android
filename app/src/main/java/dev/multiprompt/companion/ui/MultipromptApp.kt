@@ -248,6 +248,7 @@ import dev.multiprompt.companion.skills.NativeSkill
 import dev.multiprompt.companion.skills.NativeSkills
 import dev.multiprompt.companion.data.ReminderTimeParser
 import dev.multiprompt.companion.data.UnreadCount
+import dev.multiprompt.companion.data.UnreadOnlyFilter
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.SessionSearch
 import dev.multiprompt.companion.ssh.HostKeyWarning
@@ -562,6 +563,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onMarkUnread = viewModel::markSessionUnread,
                     onToggleArchived = viewModel::toggleArchivedSessions,
                     onSelectSessionBucket = viewModel::selectSessionBucket,
+                    onSetUnreadOnly = viewModel::setUnreadOnly,
                     onSelectWorkspace = viewModel::selectWorkspace,
                     onSwitchWorkspace = viewModel::openAdjacentWorkspace,
                     onMoveWorkspaceSplit = viewModel::moveWorkspaceSplit,
@@ -1258,6 +1260,7 @@ internal fun SessionsScreen(
     onRenameGroup: (String, String) -> String? = { _, _ -> null },
     dictation: DeepgramDictation? = null,
     material3: Boolean = LocalMaterial3.current,
+    onSetUnreadOnly: (Boolean) -> Unit = {},
 ) = MultipromptTheme(
     sunlight = when (appTheme) {
         AppTheme.SYSTEM -> !isSystemInDarkTheme()
@@ -1758,7 +1761,7 @@ internal fun SessionsScreen(
     }
     val normalizedQuery = searchQuery.trim()
     val workspaceNames = state.workspaces.associate { it.id to it.name }
-    val matchingSessions = state.inboxSessions
+    val matchingSessions = UnreadOnlyFilter.visible(state.inboxSessions, state.unreadSessionKeys, state.unreadOnly, normalizedQuery.isNotBlank())
         .filterNot { isHiddenAsMuted(it, state.accountLayout, state.accountHosts, state.selectedWorkspaceId, normalizedQuery.isNotBlank()) }
         .filter { session ->
             val key = SessionReadStore.key(session.hostId, session.name)
@@ -1848,7 +1851,7 @@ internal fun SessionsScreen(
                                     SessionBucket.OPEN -> "Inbox"
                                     SessionBucket.WAITING -> "Waiting"
                                     SessionBucket.ARCHIVE -> "Archive"
-                                },
+                                } + if (state.unreadOnly) " · Unread" else "",
                                 color = MaterialTheme.colorScheme.onSurface,
                                 style = if (LocalMaterial3.current) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
                                 fontWeight = if (LocalMaterial3.current) FontWeight.Normal else FontWeight.SemiBold,
@@ -1872,6 +1875,14 @@ internal fun SessionsScreen(
                                     },
                                 )
                             }
+                            KitMenuRow(
+                                label = "Unread only",
+                                trailingText = if (state.unreadOnly) "On" else "Off",
+                                onClick = {
+                                    bucketMenuExpanded = false
+                                    onSetUnreadOnly(!state.unreadOnly)
+                                },
+                            )
                         }
                     }
                     Row(
@@ -2162,6 +2173,7 @@ internal fun SessionsScreen(
                             state.selectedWorkspaceId == FREQUENT_SPLIT_ID -> "No frequent sessions"
                             state.sessionBucket == SessionBucket.ARCHIVE -> "No archived sessions"
                             state.sessionBucket == SessionBucket.WAITING -> "No waiting sessions"
+                            state.unreadOnly -> "No unread sessions"
                             else -> "This split is clear"
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
