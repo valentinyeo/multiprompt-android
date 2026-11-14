@@ -18,8 +18,8 @@ esac
 case "$warmup" in
   ''|*[!0-9]*) echo "STARTUP_WARMUP must be a whole number, got: $warmup" >&2; exit 2 ;;
 esac
-if [ "$runs" -lt 3 ] || [ "$runs" -gt 100 ]; then
-  echo "STARTUP_RUNS must be between 3 and 100, got: $runs" >&2
+if [ "$runs" -lt 3 ] || [ "$runs" -gt 20 ]; then
+  echo "STARTUP_RUNS must be between 3 and 20, got: $runs" >&2
   exit 2
 fi
 test -s "$apk" || { echo "APK not found: $apk" >&2; exit 2; }
@@ -60,7 +60,7 @@ prepare_without() {
 }
 
 prepare_with() {
-  adb shell am broadcast -a androidx.profileinstaller.action.INSTALL_PROFILE "$package/$receiver" > "$out/profile-install-$label.txt" 2>&1 || true
+  adb shell am broadcast --include-stopped-packages -a androidx.profileinstaller.action.INSTALL_PROFILE "$package/$receiver" > "$out/profile-install-$label.txt" 2>&1 || true
   profile_result=$(python3 -B "$helper" broadcast-result "$out/profile-install-$label.txt")
   if [ "$profile_result" != 1 ]; then
     cat "$out/profile-install-$label.txt" >&2

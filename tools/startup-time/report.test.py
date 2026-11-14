@@ -151,7 +151,7 @@ class MeasureScriptTest(unittest.TestCase):
         self.assertIsNone(text)
 
     def test_rejects_bad_run_counts(self):
-        for value in ('2', '101', 'x'):
+        for value in ('2', '21', 'x'):
             result, text, document = self.run_measure(STARTUP_RUNS=value)
             self.assertNotEqual(result.returncode, 0, value)
             self.assertIsNone(text)
