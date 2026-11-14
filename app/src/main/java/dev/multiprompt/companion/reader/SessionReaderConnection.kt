@@ -199,8 +199,7 @@ class SessionReaderConnection(
         startStream()
     }
 
-    fun loadSkills(script: ByteArray) {
-        val workingDirectory = historyIdentity?.cwd.orEmpty()
+    fun loadSkills(script: ByteArray, workingDirectory: String = historyIdentity?.cwd.orEmpty()) {
         loadSkills { repository.nativeSkills(host, tmuxSessionName, script, workingDirectory) }
     }
 

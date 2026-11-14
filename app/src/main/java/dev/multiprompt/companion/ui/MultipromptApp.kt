@@ -3286,7 +3286,7 @@ internal fun ReaderScreen(
             }
         }
     }
-    val loadSkills = { connection.loadSkills(context.assets.open("native_skills.py").use { it.readBytes() }) }
+    val loadSkills = { connection.loadSkills(context.assets.open("native_skills.py").use { it.readBytes() }, session.workingDirectory) }
     LaunchedEffect(connection, skillQuery != null) {
         if (skillQuery != null) loadSkills()
     }
