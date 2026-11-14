@@ -69,8 +69,8 @@ class ChatOpenAnchorTest {
     @Test
     fun listIndexSkipsQuestionsAndWorkingDots() {
         val messages = listOf(message("assistant", "a"), message("assistant", "b"))
-        assertEquals(3, ChatOpenAnchor.listIndex(messages, "b", 2, false))
-        assertEquals(4, ChatOpenAnchor.listIndex(messages, "b", 2, true))
+        assertEquals(3, ChatOpenAnchor.listIndex(messages, "a", 2, false))
+        assertEquals(4, ChatOpenAnchor.listIndex(messages, "a", 2, true))
     }
 
     @Test
