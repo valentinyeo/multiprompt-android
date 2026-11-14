@@ -54,7 +54,7 @@
   "IGSH-2284": "Android: start Codex, Pi, Hax and Cursor as live chats",
   "IGSH-2304": "Android: pick Fable as the chat model",
   "IGSH-2305": "Android: pick the model in a Codex chat",
-  "IGSH-2316": "Android: chat opens at the New line",,
+  "IGSH-2316": "Android: chat opens at the New line",
   "IGSH-2303": "Android: chats made on desktop show their real AI name",
   "IGSH-2317": "Android: show who sent a message from another chat",
   "IGSH-1853": "Android: take back a waiting message the bot already received",
