@@ -89,7 +89,7 @@ class UpdateManager(private val context: Context) {
 
     private fun checkIsDue(): Boolean {
         val last = preferences.getLong(KEY_LAST_CHECK, 0)
-        return System.currentTimeMillis() - last >= CHECK_INTERVAL_MS
+        return UpdateSchedule.shouldCheckNow(last, System.currentTimeMillis())
     }
 
     private fun fetchManifest(): UpdateRelease {
@@ -289,7 +289,6 @@ class UpdateManager(private val context: Context) {
         const val TAG = "MultipromptUpdate"
         const val KEY_LAST_CHECK = "last_check_ms"
         const val KEY_BANNER_DISMISSED = "banner_dismissed_version"
-        const val CHECK_INTERVAL_MS = 15 * 60 * 1000L
         const val NETWORK_TIMEOUT_MS = 30_000
         const val MAX_MANIFEST_BYTES = 64 * 1024
     }

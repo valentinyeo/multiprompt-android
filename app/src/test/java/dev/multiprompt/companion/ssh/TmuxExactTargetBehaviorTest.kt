@@ -6,7 +6,6 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import org.junit.After
-import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -39,9 +38,10 @@ class TmuxExactTargetBehaviorTest {
         Files.walk(dir).use { paths -> paths.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) } }
     }
 
-    private fun run(command: String, input: String = ""): Result {
+    private fun run(command: String, input: String = "", home: Path? = null): Result {
         val process = ProcessBuilder("bash", "-c", command).redirectErrorStream(true).apply {
             environment()["PATH"] = "$bin:/usr/bin:/bin"
+            if (home != null) environment()["HOME"] = home.toString()
         }.start()
         process.outputStream.bufferedWriter().use { it.write(input) }
         assertTrue("Command timed out: $command", process.waitFor(15, TimeUnit.SECONDS))
@@ -255,14 +255,11 @@ class TmuxExactTargetBehaviorTest {
                 }
             }
             assertEquals(details, listOf("0", "1"), frames.map { it.first })
-            fun decode(hex: String): ByteArray {
-                assertEquals(details, 0, hex.length % 2)
-                return hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-            }
-            val first = decode(frames[0].second)
-            val second = decode(frames[1].second)
-            assertTrue(details, String(first, Charsets.UTF_8).contains("LIVE_1230"))
-            assertArrayEquals(details, first, second)
+            assertTrue(details, frames.all { it.second.startsWith(TmuxCommands.SNAPSHOT_PACKED_MARKER) })
+            val first = TmuxText.decodeSnapshot(frames[0].second)
+            val second = TmuxText.decodeSnapshot(frames[1].second)
+            assertTrue(details, first.contains("LIVE_1230"))
+            assertEquals(details, first, second)
             assertEquals(details, listOf("alt0", "eta", "snapshot", "alt1", "eta", "snapshot", "alt1", "alt1", "alt1"),
                 transcript.map { line ->
                     when {
@@ -341,5 +338,33 @@ class TmuxExactTargetBehaviorTest {
         assertEquals(details, setOf("a-stable", "b-vanished-neighbor"), sessions.keys)
         assertTrue(details, sessions.getValue("a-stable").preview.contains("STABLE_SCREEN_1230"))
         assertTrue(details, sessions.getValue("b-vanished-neighbor").preview.contains("NEIGHBOR_SCREEN_1230"))
+    }
+
+    @Test
+    fun registryChatsWithoutATerminalAppearOnceNextToTerminalChats() {
+        val sid = "721fb507-2781-4e48-8b6d-debd6e2da3f3"
+        neighbor("live-has-terminal")
+        val home = Files.createDirectories(dir.resolve("home"))
+        val runtime = Files.createDirectories(home.resolve(".multiprompt-runtime"))
+        Files.write(runtime.resolve("reader.py"), """
+            import json
+            print(json.dumps(dict(chats=[
+                dict(provider="claude", sid="$sid", name="live-desktop-new", cwd="/srv/work", activity=1700, visible=True),
+                dict(provider="claude", sid="0a1b2c3d-2781-4e48-8b6d-debd6e2da3f3", name="live-has-terminal", cwd="/srv/work", activity=1800, visible=True),
+                dict(provider="claude", sid="1a1b2c3d-2781-4e48-8b6d-debd6e2da3f3", name="live-headless", cwd="/srv/work", activity=1900, visible=False),
+                dict(provider="claude", sid="2a1b2c3d-2781-4e48-8b6d-debd6e2da3f3", name="not-live", cwd="/srv/work", activity=2000, visible=True),
+            ])))
+        """.trimIndent().toByteArray(Charsets.UTF_8))
+        val result = run(TmuxParser.command(), home = home)
+        val sessions = TmuxParser.parse("fixture", result.output)
+        val details = describe("production listing", result)
+
+        assertEquals(details, 0, result.status)
+        assertEquals(details, listOf("live-desktop-new", "live-has-terminal"), sessions.map { it.name }.sorted())
+        val created = sessions.first { it.name == "live-desktop-new" }
+        assertTrue(details, created.liveChat)
+        assertEquals(details, sid, created.hostSessionId)
+        assertEquals(details, "/srv/work", created.workingDirectory)
+        assertEquals(details, "", sessions.first { it.name == "live-has-terminal" }.hostSessionId)
     }
 }
