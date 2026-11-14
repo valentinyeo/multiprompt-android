@@ -374,6 +374,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(sessionActionError = null) }
     }
 
+    private fun syncDictationKey(generation: Int) {
+        if (dictation.state.value.configured) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val key = syncAuth.deepgramKey() ?: return@launch
+            if (generation == accountGeneration && syncAuth.hasSession()) dictation.adoptAccountKey(key)
+        }
+    }
+
     private fun uploadCrashReport() {
         viewModelScope.launch(Dispatchers.IO) {
             crashReportStore.loadPending().forEach { report ->
@@ -2005,6 +2013,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 if (!syncAuth.hasSession()) return@launch
                 uploadCrashReport()
+                syncDictationKey(generation)
                 _state.update { it.copy(signedIn = true) }
                 syncDeviceKeys()
                 var remote = AccountLayout.response(syncAuth.request("GET", "/v1/layout").json)
@@ -2083,7 +2092,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .let { sessions ->
             if (state.selectedWorkspaceId == FREQUENT_SPLIT_ID) {
                 frequentSessions(sessions, state.accountLayout, state.accountHosts, System.currentTimeMillis())
-            } else SessionSearch.newestFirst(sessions, state.sessionInteractionEpochSeconds)
+            } else SessionSearch.newestFirst(sessions, state.sessionInteractionEpochSeconds, state.accountLayout, state.accountHosts)
         }
 
     private companion object {
