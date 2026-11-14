@@ -84,44 +84,7 @@ target_run=
 while :; do
     gh api "repos/$repo/actions/workflows/release.yml/runs?branch=main&per_page=10" \
         > "$EVIDENCE/target-run-poll.json"
-    lookup=$(
-        python3 - "$EVIDENCE/target-run-poll.json" "$EXPECTED_COMMIT" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], encoding="utf-8") as stream:
-    payload = json.load(stream)
-runs = payload.get("workflow_runs")
-assert isinstance(runs, list) and len(runs) <= 10
-matches = []
-for run in runs:
-    assert isinstance(run, dict)
-    if (
-        run.get("path") == ".github/workflows/release.yml"
-        and run.get("head_branch") == "main"
-        and run.get("head_sha") == sys.argv[2]
-    ):
-        assert type(run.get("id")) is int and run["id"] > 0
-        assert isinstance(run.get("status"), str)
-        matches.append(run)
-assert len(matches) <= 1, "Ambiguous target release runs"
-if not matches:
-    print("waiting")
-else:
-    run = matches[0]
-    if run["status"] == "completed":
-        if run.get("conclusion") != "success":
-            print("failed")
-        else:
-            print("success", run["id"])
-    else:
-        assert run["status"] in (
-            "queued", "in_progress", "requested", "waiting", "pending"
-        ), "Unexpected target run status"
-        assert run.get("conclusion") is None
-        print("waiting")
-PY
-    )
+    lookup=$(python3 tools/app-name/select_run.py "$EVIDENCE/target-run-poll.json" "$EXPECTED_COMMIT")
     case "$lookup" in
         "success "*)
             target_run=${lookup#success }

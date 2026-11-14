@@ -334,8 +334,8 @@ class ChatHistoryConnection(
                                 MessageProtocol.engine(exchange(JSONObject().put("id", requestId).put("op", "engine_info").toString() + "\n"), requestId)
                             }.getOrNull() else null
                             poll@ while (isActive) {
-                                if (provider != null && !selected) {
-                                    withTimeoutOrNull(2_000L) { wake.receive() }
+                                if (ChatPollGate.step(selected) == ChatPollGate.Step.WAIT_FOR_WAKE) {
+                                    wake.receive()
                                     continue@poll
                                 }
                                 if (provider != null && engine != null && freshSid?.let { owns(it) } == false) {

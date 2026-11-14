@@ -291,7 +291,7 @@ class SessionListSettingsTest {
             compose.onNodeWithContentDescription("Frequent as first tab")
                 .assertIsNotEnabled()
                 .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch))
-                .assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.On))
+                .assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
                 .assert(!hasClickAction())
         }
         closeSettings()
@@ -309,8 +309,16 @@ class SessionListSettingsTest {
 
     @Test fun allSwitchHidesAndRestoresAll() = toggleSplit("all", "Show All split", "All", null)
 
-    @Test fun frequentFirstOffMovesFrequentImmediatelyAfterFavoritesOrAll() {
+    @Test fun frequentFollowsFavoritesByDefaultAndFirstTabSwitchMovesItAndBackAfterFavoritesOrAll() {
         render()
+        compose.runOnIdle {
+            val splits = fixture.model.state.value.visibleWorkspaceSplitIds
+            assertEquals(splits.indexOf(FAVORITES_SPLIT_ID) + 1, splits.indexOf(FREQUENT_SPLIT_ID))
+        }
+        openSettings()
+        compose.onNodeWithContentDescription("Frequent as first tab").performClick()
+        closeSettings()
+        compose.runOnIdle { assertEquals(FREQUENT_SPLIT_ID, fixture.model.state.value.visibleWorkspaceSplitIds.first()) }
         openSettings()
         compose.onNodeWithContentDescription("Frequent as first tab").performClick()
         closeSettings()

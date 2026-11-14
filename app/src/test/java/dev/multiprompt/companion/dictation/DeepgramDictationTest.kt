@@ -229,6 +229,30 @@ class DeepgramDictationTest {
         }
     }
 
+    @Test
+    fun accountKeyFillsAnEmptyPhoneButNeverReplacesAHandTypedKey() {
+        val stored = mutableMapOf<String, ByteArray>()
+        val dictation = DeepgramDictation(RuntimeEnvironment.getApplication(), object : SecretStorage {
+            override fun get(id: String): ByteArray? = stored[id]
+            override fun put(id: String, value: ByteArray) { stored[id] = value }
+            override fun remove(id: String?) { stored.remove(id) }
+        })
+        dictation.use {
+            val account = (0 until 40).joinToString("") { (it % 16).toString(16) }
+            val typed = "f".repeat(40)
+            assertFalse(it.state.value.configured)
+            assertFalse(it.adoptAccountKey("too short"))
+            assertTrue(stored.isEmpty())
+            assertTrue(it.adoptAccountKey(account))
+            assertEquals(account, stored.values.single().toString(Charsets.UTF_8))
+            assertTrue(it.state.value.configured)
+            assertTrue(it.saveApiKey(typed))
+            assertFalse(it.adoptAccountKey(account))
+            assertEquals(typed, stored.values.single().toString(Charsets.UTF_8))
+            assertEquals(1, stored.size)
+        }
+    }
+
     private class Fixture {
         val mic = FakeMic()
         val sockets = CopyOnWriteArrayList<FakeSocket>()

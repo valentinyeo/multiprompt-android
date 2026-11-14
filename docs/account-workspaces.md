@@ -45,7 +45,18 @@ The ★ Favorites split stays just after All and shows only starred account sess
 Android negotiates favorite metadata and preserves absent values without inventing stars.
 Optional boolean `muted` on a tab hides that session from every Inbox split and unread count; it stays in the workspace list. Android sends `muted` in `X-Layout-Features` and never drops it on push.
 
-Frequent is the first split. It includes sessions with input in the last 24 hours
+Android declares the `groups`, `starred_groups` and `group_order` layout features. Optional per-tab
+`group` is the desktop's regular group name; optional per-tab `starred_group` is its Favorites group name
+(empty string for none, otherwise 1 to 64 UTF-16 units). Optional layout-level `group_order` is a unique
+array of at most 16 group names in desktop sidebar order. The phone shows each desktop Favorites group as
+a heading in the Favorites split and each regular group in the other splits, with groups sorted by
+`group_order` (unlisted groups follow in list order). Android never edits these fields. A phone edit
+replays only its own changes over the server layout, so `group`, `starred_group` and `group_order` keep
+the desktop values; an absent field stays absent and is never sent as empty. `group_order` merges like
+the desktop: the server order wins unless this device changed it, and then names the device did not know
+are appended.
+
+Frequent sits right after Favorites by default, or after All when Favorites is hidden. The synced `frequent_first` setting puts it first instead; an absent value means after Favorites. It includes sessions with input in the last 24 hours
 (inclusive), or at least three watch-only looks in the last six hours. Future
 values count. The order key is input when recent, otherwise the newest look.
 Like other splits it follows newest-at-bottom; with that setting on, the newest
