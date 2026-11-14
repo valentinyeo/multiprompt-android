@@ -14,7 +14,7 @@ class RoomService(private val context: Context, private val repository: SshRepos
 
     private suspend fun <T> onServerLink(host: HostProfile, accountId: String, block: suspend (RoomClient) -> T): T =
         repository.withServerLink(host, repeatable = true) { link ->
-            RoomClient(SshRoomWire(link, accountId, source(SERVICE), source(BRIDGE))).use { block(it) }
+            RoomClient(SshRoomWire(link, accountId, serviceSource, bridgeSource)).use { block(it) }
         }
 
     suspend fun load(host: HostProfile, accountId: String, limit: Int = 20): List<RoomEntry> =
