@@ -623,7 +623,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun refreshRooms(trigger: RoomLoadTrigger) {
+    fun refreshRooms(trigger: RoomLoadTrigger = RoomLoadTrigger.ROOMS_SCREEN) {
         val accountId = syncAuth.accountId()
         val hosts = RoomHosts.candidates(_state.value.accountHosts.values, _state.value.hosts)
         if (!RoomLoadPolicy.shouldLoad(trigger, accountId != null, hosts.size, roomsLoading) || accountId == null) return

@@ -557,7 +557,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onRenameSession = viewModel::renameSession,
                     onSetFavorite = { tab, value -> viewModel.editAccountLayout { it.setFavorite(tab.identity, value) } },
                     onRefresh = viewModel::refresh,
-                    onRefreshRooms = { viewModel.refreshRooms(dev.multiprompt.companion.room.RoomLoadTrigger.ROOMS_SCREEN) },
+                    onRefreshRooms = { viewModel.refreshRooms() },
                     onSelectSection = viewModel::select,
                     onReleaseNotes = viewModel::openReleaseNotes,
                     onOpenRoom = viewModel::openRoom,
