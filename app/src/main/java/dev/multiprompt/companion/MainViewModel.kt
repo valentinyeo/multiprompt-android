@@ -32,7 +32,6 @@ import dev.multiprompt.companion.reader.ChatHistoryPrefetch
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
-import dev.multiprompt.companion.reader.TranscriptProtocol
 import dev.multiprompt.companion.auth.SyncAuthManager
 import android.content.Intent
 import dev.multiprompt.companion.account.AccountHosts
@@ -768,7 +767,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val state = _state.value
         val open = warmReaders.keys + listOfNotNull(state.readerSession?.let { SessionReadStore.key(it.hostId, it.name) })
         val recent = state.sessions
-            .filter { TranscriptProtocol.supports(it.agent) && SessionReadStore.key(it.hostId, it.name) !in open }
+            .filter { ChatHistoryProtocol.supports(it.agent, it.hostSessionId) && SessionReadStore.key(it.hostId, it.name) !in open }
             .sortedByDescending { maxOf(state.sessionInteractionEpochSeconds[SessionReadStore.key(it.hostId, it.name)] ?: 0L, it.lastActivityEpochSeconds) }
             .take(PREFETCH_SESSIONS)
         if (recent.isEmpty()) return
@@ -824,7 +823,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         ReplyNotifier.cancel(app, plan.cancel)
         plan.notify.forEach { key ->
             val session = state.sessions.firstOrNull { SessionReadStore.key(it.hostId, it.name) == key } ?: return@forEach
-            if (!TranscriptProtocol.supports(session.agent)) return@forEach
+            if (!ChatHistoryProtocol.supports(session.agent, session.hostSessionId)) return@forEach
             val host = state.hosts.firstOrNull { it.id == session.hostId } ?: return@forEach
             viewModelScope.launch {
                 val history = try {
@@ -1059,12 +1058,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 messageGate = app.messageGate,
                 hostSessionId = session.hostSessionId,
             ).also { connection ->
-                if (TranscriptProtocol.supports(session.agent)) {
+                if (ChatHistoryProtocol.supports(session.agent, session.hostSessionId)) {
                     connection.chatHistory(session.agent, session.workingDirectory)
                 }
             }
         }
-        if (TranscriptProtocol.supports(session.agent)) reader.chatHistory(session.agent, session.workingDirectory)
+        if (ChatHistoryProtocol.supports(session.agent, session.hostSessionId)) reader.chatHistory(session.agent, session.workingDirectory)
         _state.value.reader?.takeIf { it !== reader }?.select(false)
         reader.select(true)
         _state.update {
