@@ -1675,6 +1675,29 @@ class HistoryReaderTest(unittest.TestCase):
                 with patch.object(reader, 'ISSUE_631_TAIL_FILLS_SHOWN_BUDGET', False):
                     self.assertNotIn('REPLY-631-b', reader.response(dict(self.query)))
 
+    def test_igsh1940_first_page_carries_recent_turns_behind_a_metadata_block(self):
+        turns = [row for i in range(40) for row in (
+            dict(type='user', message=dict(role='user', content=f'QUESTION-1940-{i}')),
+            self.event(f'ANSWER-1940-{i}'))]
+        metadata = dict(type='attachment', attachment=dict(type='file', content='m' * (reader.TAIL_BYTES + 90000)))
+        self.write(*turns[:-2], metadata, *turns[-2:])
+        self.assertGreater(self.path.stat().st_size, reader.TAIL_BYTES)
+        cold = dict(self.query)
+        wire = reader.response(dict(cold))
+        fields = wire.splitlines()[0].split('\t')
+        rows = [json.loads(line) for line in wire.splitlines()[1:-1]]
+        self.assertEqual(fields[13], 'tail')
+        texts = [row['text'] for row in rows if row['role'] in ('user', 'assistant')]
+        self.assertEqual(texts[-1], 'ANSWER-1940-39')
+        self.assertIn('QUESTION-1940-0', texts)
+        self.assertGreaterEqual(len(texts), 40)
+        costs = [len(row.encode('utf-8')) + 1 for row in wire.splitlines()[1:-1]]
+        self.assertLessEqual(sum(costs), reader.TAIL_BYTES + max(costs))
+        with patch.object(reader, 'ISSUE_631_TAIL_FILLS_SHOWN_BUDGET', False):
+            control = reader.response(dict(cold))
+            self.assertNotIn('QUESTION-1940-0', control)
+            self.assertIn('ANSWER-1940-39', control)
+
     def test_shrunken_source_during_scroll_resets_to_tail_instead_of_retrying_stale_page_forever(self):
         self.write(self.event('x' * (reader.TAIL_BYTES + 100)), self.event('old latest'))
         self.read()
@@ -7909,6 +7932,71 @@ class IGSH_1905_HostScopeTest(unittest.TestCase):
 
     def test_no_scope_when_the_cgroup_is_unreadable(self):
         self.assertEqual(self.spawn_argv(None)[0], sys.executable)
+
+
+class SOFT2272HostedClearTest(unittest.TestCase):
+    host_sid = '11111111-2222-4333-8444-555555555555'
+    native_sid = '66666666-7777-4888-8999-aaaaaaaaaaaa'
+    tmux = 'live-clear'
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.addCleanup(patch.stopall)
+        self.home = Path(self.temp.name)
+        patch.object(reader, 'HOME', self.home).start()
+        self.cwd = str(self.home / 'work')
+        Path(self.cwd).mkdir()
+        self.before = self.transcript(self.host_sid, 'Remember the secret word PINEAPPLE', 'ok')
+        self.after = self.transcript(self.native_sid, 'What was the secret word I told you earlier?', 'unknown')
+        paths = reader.host_paths('claude', self.host_sid)
+        reader.host_write(paths['config'], dict(enabled=True, tmux=self.tmux, cwd=self.cwd))
+        reader.host_write(paths['state'], dict(provider='claude', sid=self.host_sid, native_session=self.native_sid))
+        self.query = dict(id=7, codex=False, provider='claude', sid=self.host_sid, tmux=self.tmux, cwd=self.cwd,
+                          follow=True, cached_sid=self.host_sid, inode=0, offset=0, start=0)
+
+    def transcript(self, sid, question, answer):
+        folder = self.home / '.claude/projects' / reader.claude_project_folder(self.cwd)
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / (sid + '.jsonl')
+        path.write_text(json.dumps(dict(type='user', message=dict(role='user', content=question))) + '\n' +
+                        json.dumps(dict(type='assistant', message=dict(role='assistant', content=[dict(type='text', text=answer)]))) + '\n')
+        return path
+
+    def wire(self):
+        return reader.response(dict(self.query))
+
+    def test_clear_reads_the_new_native_session_and_keeps_the_chat_identity(self):
+        wire = self.wire()
+        self.assertIn('\thistory\tok\t' + self.host_sid + '\t', wire)
+        self.assertIn('unknown', wire)
+        self.assertNotIn('PINEAPPLE', wire)
+
+    def test_no_clear_keeps_reading_the_pinned_transcript(self):
+        reader.host_write(reader.host_paths('claude', self.host_sid)['state'],
+                          dict(provider='claude', sid=self.host_sid, native_session=self.host_sid))
+        wire = self.wire()
+        self.assertIn('PINEAPPLE', wire)
+        self.assertNotIn('unknown', wire)
+
+    def test_a_chat_without_a_live_host_keeps_the_pinned_file(self):
+        reader.host_write(reader.host_paths('claude', self.host_sid)['config'],
+                          dict(enabled=False, tmux=self.tmux, cwd=self.cwd))
+        self.query['follow'] = False
+        wire = self.wire()
+        self.assertIn('PINEAPPLE', wire)
+        self.assertNotIn('unknown', wire)
+
+    def test_a_missing_native_transcript_keeps_the_pinned_file(self):
+        self.after.unlink()
+        wire = self.wire()
+        self.assertIn('PINEAPPLE', wire)
+        self.assertNotIn('history\tmissing', wire)
+
+    def test_an_owner_read_never_switches_session(self):
+        wire = reader.response(dict(self.query), reader.READER_SOURCE, as_owner=True)
+        self.assertIn('PINEAPPLE', wire)
+
 
 def load_tests(loader, tests, pattern):
     shard = os.environ.get('HISTORY_READER_SHARD')
