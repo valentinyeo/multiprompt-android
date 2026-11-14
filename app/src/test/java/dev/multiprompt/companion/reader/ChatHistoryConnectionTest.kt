@@ -149,8 +149,9 @@ class ChatHistoryConnectionTest {
         }
     }
 
-    private class FakeHost {
+    private class FakeHost(private val wireAgent: String = "claude") {
         val calls = java.util.concurrent.atomic.AtomicInteger()
+        val polls = java.util.concurrent.atomic.AtomicInteger()
         @Volatile var answered = false
         @Volatile var events: List<JSONObject> = emptyList()
         private val head get() = events.size.toLong()
@@ -167,7 +168,7 @@ class ChatHistoryConnectionTest {
         private fun history(id: Long): String {
             val rows = listOf(row("user", "question", 0, 10)) + if (answered) listOf(row("assistant", "answer", 10, 20)) else emptyList()
             val end = if (answered) 20 else 10
-            val header = listOf("@mp", id, "history", "ok", "sid1", 0, end, 1, 0, "claude", "tmux", 1, "a".repeat(64), "tail", 0).joinToString("\t")
+            val header = listOf("@mp", id, "history", "ok", "sid1", 0, end, 1, 0, wireAgent, "tmux", 1, "a".repeat(64), "tail", 0).joinToString("\t")
             return JSONObject().put("id", id).put("wire", (listOf(header) + rows + TranscriptProtocol.END).joinToString("\n") + "\n").toString()
         }
 
@@ -194,7 +195,7 @@ class ChatHistoryConnectionTest {
                         result(id, JSONObject().put("epoch", 1).put("seq", head).put("events", rows).put("next_after", head))
                     }
                     "interrupt", "approval_reply" -> { stops.add(line.trim()); result(id, JSONObject().put("status", "ok")) }
-                    "" -> history(id)
+                    "" -> { polls.incrementAndGet(); history(id) }
                     else -> error("Unexpected request")
                 }
             }
@@ -312,5 +313,33 @@ class ChatHistoryConnectionTest {
             assertEquals(listOf("question", "answer"), shown!!.history.rows.map { it.text })
         }
     }
+
+    private fun hiddenThenOpened(agent: AgentKind, wireAgent: String): Unit = runBlocking {
+        val identity = ChatHistoryProtocol.Identity(agent, "tmux", "/cwd")
+        val fake = FakeHost(wireAgent)
+        val chat = ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()),
+            gate = MessageGate(), connectedExchange = { block -> fake.connect(block) })
+        chat.use {
+            chat.start()
+            delay(10_000L)
+            assertEquals("hidden $agent chat polled", 0, fake.polls.get())
+            val opened = System.nanoTime()
+            chat.select(true)
+            withTimeout(5_000L) { while (fake.polls.get() == 0) delay(5L) }
+            val waitedMillis = (System.nanoTime() - opened) / 1_000_000L
+            assertTrue("opened $agent chat polled after $waitedMillis ms", waitedMillis <= 250L)
+            chat.select(false)
+            delay(300L)
+            val settled = fake.polls.get()
+            delay(3_000L)
+            assertEquals("hidden $agent chat kept polling", settled, fake.polls.get())
+        }
+    }
+
+    @Test
+    fun hiddenClaudeChatStopsPollingAndPollsAgainAtOnceWhenOpened() = hiddenThenOpened(AgentKind.CLAUDE, "claude")
+
+    @Test
+    fun hiddenHaxChatStopsPollingAndPollsAgainAtOnceWhenOpened() = hiddenThenOpened(AgentKind.HAX, "codex")
 
 }

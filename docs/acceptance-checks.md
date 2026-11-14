@@ -58,6 +58,9 @@ One line per behaviour Valentin asked for, the check that proves it, and the rel
 | A viewer that cannot be reached offers one retry | `ComputerViewerTest.aViewerThatNeverAnswersEndsLostWithAReason` | next |
 | The screen is read through the chat's own connection, never the internet | `SessionReaderConnection.openComputerTunnel` plus the loopback-only cleartext rule | next |
 | Each server keeps its own viewer address | `ComputerStoreTest.eachServerKeepsItsOwnViewerAddress` | next |
+| The VPS screen opens view only | `ComputerViewerPageTest.theViewerOpensViewOnlyThroughTheLocalTunnel` | next |
+| Take control lets a tap click and the keyboard type; Give back ends it | `ComputerPaneTest.takeControlHandsTapsAndKeysToTheServerAndGiveBackEndsIt` | next |
+| Control ends when the screen sleeps | `ComputerPaneTest.controlEndsWhenTheScreenSleepsAndViewOnlyComesBack` | next |
 
 ## Releases
 
