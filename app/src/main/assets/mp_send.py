@@ -14,12 +14,20 @@ from pathlib import Path
 TERMINAL_STATES = ("accepted", "started", "failed", "cancelled")
 HANDOFF_STATES = ("sent", "accepted", "started", "failed", "cancelled")
 HANDOFF_TIMEOUT = 15.0
-PROVIDERS = ("claude", "codex")
+PROVIDERS = ("claude", "codex", "pi", "hax", "cursor")
+TARGET_PER_MINUTE = 6
+SENDER_PER_MINUTE = 12
+ANSWER_TAIL_BYTES = 4 * 1024 * 1024
+ANSWER_CHARS = 20000
 SESSION_ID = re.compile(r"[A-Za-z0-9_-]{1,80}\Z")
 MESSAGE_ID = re.compile(r"[A-Za-z0-9_-]{16,80}\Z")
 TMUX_NAME = re.compile(r"[A-Za-z0-9_.:-]{1,64}\Z")
 MENTION = re.compile(r"@?(.*?)\{([A-Za-z0-9_.:-]{1,64})\}\Z", re.S)
 _reader = None
+
+
+class RateLimited(ValueError):
+    pass
 
 
 def runtime_dir():
@@ -197,6 +205,86 @@ def live_chats():
     return rows
 
 
+def recent_agent_messages(reader, provider=None, sid=None, sender=None, window=60.0):
+    locate = getattr(reader, "message_store_path", None)
+    if locate is None:
+        return 0
+    path = locate()
+    if not path.is_file():
+        return 0
+    since = time.time() - window
+    sql = "SELECT COUNT(*) FROM shared_messages WHERE origin='agent' AND created>?"
+    args = [since]
+    if provider is not None:
+        sql += " AND provider=? AND sid=?"
+        args += [provider, sid]
+    if sender is not None:
+        escaped = sender.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        sql += " AND text LIKE ? ESCAPE '\\'"
+        args.append("From " + escaped + ": %")
+    try:
+        with sqlite3.connect(path.as_uri() + "?mode=ro", uri=True) as db:
+            return db.execute(sql, args).fetchone()[0]
+    except sqlite3.Error:
+        return 0
+
+
+def check_rate(reader, provider, sid, sender=None):
+    if recent_agent_messages(reader, provider, sid) >= TARGET_PER_MINUTE:
+        raise RateLimited("slow down: this chat already got " + str(TARGET_PER_MINUTE) + " messages from chats in the last minute; wait and try again")
+    if sender is not None and recent_agent_messages(reader, sender=sender) >= SENDER_PER_MINUTE:
+        raise RateLimited("slow down: you already sent " + str(SENDER_PER_MINUTE) + " messages to chats in the last minute; wait and try again")
+
+
+def tail_lines(path, limit=ANSWER_TAIL_BYTES):
+    with open(path, "rb") as source:
+        source.seek(0, 2)
+        size = source.tell()
+        source.seek(max(0, size - limit))
+        data = source.read()
+    lines = data.split(b"\n")
+    if size > limit:
+        lines = lines[1:]
+    return lines
+
+
+def transcript_path(reader, chat):
+    provider, sid, cwd = chat["provider"], chat["sid"], chat["cwd"] or ""
+    names = [sid]
+    try:
+        if reader.host_dispatch_switch(provider, sid):
+            native = reader.host_session_state(provider, sid).get("native_session")
+            if isinstance(native, str) and SESSION_ID.match(native):
+                names.insert(0, native)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        pass
+    for name in names:
+        try:
+            path = reader.conversation_path(provider, name, cwd)
+        except PermissionError:
+            continue
+        if path is not None:
+            return path
+    return None
+
+
+def last_answer(reader, chat):
+    if chat["provider"] in ("hax", "cursor"):
+        raise ValueError("reading answers is not available for " + chat["provider"] + " chats")
+    path = transcript_path(reader, chat)
+    if path is None:
+        return None
+    for raw in reversed(tail_lines(path)):
+        try:
+            event = json.loads(raw)
+        except (ValueError, UnicodeError):
+            continue
+        row = reader.conversation_event(event, chat["provider"])
+        if row and row["role"] == "assistant":
+            return row["text"]
+    return None
+
+
 def label(chat):
     return chat["name"] or chat["tmux"]
 
@@ -303,8 +391,9 @@ def read_text(text):
     return text
 
 
-def deliver(args, provider, sid, tmux, text):
+def deliver(args, provider, sid, tmux, text, sender=None):
     reader = reader_module(args.reader)
+    check_rate(reader, provider, sid, sender)
     if not tmux:
         tmux = args.tmux or reader.host_chat_name(provider, sid) or locator_tmux(reader, provider, sid)
         if not tmux:
@@ -351,15 +440,59 @@ def run_named(args):
     sender = sender_label(chats, args.sender)
     if own_tmux() == target["tmux"] and not args.sender:
         raise ValueError("that is this chat; pick another chat")
-    return deliver(args, target["provider"], target["sid"], target["tmux"], "From " + sender + ": " + text)
+    return deliver(args, target["provider"], target["sid"], target["tmux"], "From " + sender + ": " + text, sender)
+
+
+def run_list(argv):
+    parser = argparse.ArgumentParser(prog="mp-send list", description="List the live chats, every AI, by the name shown in the desktop app.")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    chats = live_chats()
+    if args.json:
+        print(json.dumps(chats, separators=(",", ":")))
+    else:
+        print(table(chats))
+    return 0
+
+
+def run_read(argv):
+    parser = argparse.ArgumentParser(prog="mp-send read", description="Print the last answer of a live chat.")
+    parser.add_argument("target")
+    parser.add_argument("--reader", default=None)
+    parser.add_argument("--chars", type=int, default=ANSWER_CHARS)
+    args = parser.parse_args(argv)
+    chat = resolve_chat(args.target, live_chats())
+    answer = last_answer(reader_module(args.reader), chat)
+    if answer is None:
+        print("mp-send: " + label(chat) + " has no answer yet", file=sys.stderr)
+        return 3
+    print(answer if len(answer) <= args.chars else answer[-args.chars:])
+    return 0
+
+
+def table(chats):
+    rows = [("NAME", "AI", "STATE", "TMUX", "SID", "FOLDER")]
+    for chat in chats:
+        rows.append((chat["name"] or "(no name yet)", chat["provider"], chat["state"], chat["tmux"], chat["sid"], chat["cwd"] or ""))
+    widths = [max(len(row[i]) for row in rows) for i in range(5)]
+    return "\n".join("  ".join(row[i].ljust(widths[i]) for i in range(5)) + "  " + row[5] for row in rows)
 
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] in ("list", "read"):
+        try:
+            return run_list(argv[1:]) if argv[0] == "list" else run_read(argv[1:])
+        except (OSError, ValueError, KeyError, TypeError, sqlite3.Error) as error:
+            print("mp-send: " + str(error), file=sys.stderr)
+            return 2
     named = named_mode(argv)
     args = parse_named(argv) if named else parse(argv)
     try:
         return run_named(args) if named else run(args)
+    except RateLimited as error:
+        print("mp-send: " + str(error), file=sys.stderr)
+        return 5
     except (OSError, ValueError, KeyError, TypeError, sqlite3.Error) as error:
         print("mp-send: " + str(error), file=sys.stderr)
         return 2

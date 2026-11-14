@@ -1,4 +1,5 @@
 {
+  "IGSH-2345": "Android: show when a chat's AI has stopped, with Restart",
   "HYCI-169": "Multiprompt Android runs phone checks for unrelated changes",
   "HYCI-202": "Chat engine test fails at random when engines start together",
   "IGSH-1753": "Android chat: one height for every control, smaller send button",
@@ -68,6 +69,7 @@
   "IGSH-1506": "Android: design the session menu",
   "IGSH-2320": "Android: bot replies no longer reorder the chat list",
   "IGSH-2318": "Android: chat list ties sort like desktop",
+  "IGSH-2346": "Android: Fresh start from the chat menu",
   "IGSH-2341": "Android: edit a queued message",
   "IGSH-2344": "Android: new chat picks a folder from every server in one list",
   "IGSH-2343": "Android: read new replies aloud by themselves",
@@ -77,5 +79,6 @@
   "IGSH-2340": "Android: show only unread chats in the list",
   "IGSH-2342": "Android: add a chat to a group and remove it",
   "IGSH-2352": "Android: skills list fails with no reason shown",
-  "IGSH-2311": "Android: hidden warm chats stop pulling screen updates"
+  "IGSH-2311": "Android: hidden warm chats stop pulling screen updates",
+  "IGSH-2313": "Android: measure app start time with and without startup profile"
 }
