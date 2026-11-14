@@ -4,6 +4,8 @@ import dev.multiprompt.companion.computer.ComputerTarget
 import dev.multiprompt.companion.computer.ComputerTunnel
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.AgentKind
+import dev.multiprompt.companion.skills.NativeSkill
+import dev.multiprompt.companion.skills.SkillsLoader
 import dev.multiprompt.companion.ssh.SshRepository
 import dev.multiprompt.companion.ssh.TmuxAction
 import dev.multiprompt.companion.ssh.TmuxText
@@ -28,6 +30,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.connectbot.sshlib.SshClient
+import java.util.concurrent.atomic.AtomicBoolean
 
 sealed interface ReaderStatus {
     data object Connecting : ReaderStatus
@@ -58,6 +61,7 @@ data class ReaderState(
     val sentRecord: List<QueuedMessages.SentPrompt> = emptyList(),
     val alternateOn: Boolean = false,
     val transcript: List<TranscriptMessage>? = null,
+    val aiRestartRequestedAtMillis: Long = 0,
 )
 
 internal fun transcriptAfterUpdate(
@@ -85,7 +89,7 @@ class SessionReaderConnection(
     private val repository: SshRepository,
     private val host: HostProfile,
     val tmuxSessionName: String,
-    private val agent: AgentKind = AgentKind.OTHER,
+    val agent: AgentKind = AgentKind.OTHER,
     private val historyScript: ByteArray,
     private val historyCache: ChatHistoryCache,
     private val messageJournal: MessageJournal? = null,
@@ -97,6 +101,8 @@ class SessionReaderConnection(
         data class RuntimeCommand(val text: String) : Request
         data class Cancel(val record: QueuedMessages.SentPrompt) : Request
         data class Action(val action: TmuxAction) : Request
+        data class RestartAi(val sid: String, val cwd: String) : Request
+        data class FreshStart(val provider: String, val sid: String) : Request
         data class ModelPickerOption(val index: Int) : Request
         data class QuestionAnswer(val question: PendingQuestion, val choices: Set<Int>, val other: String) : Request
     }
@@ -110,6 +116,7 @@ class SessionReaderConnection(
     private var streamClient: SshClient? = null
     private var streamJob: Job? = null
     private var actionJob: Job? = null
+    private val skillsRunning = AtomicBoolean(false)
 
     private var historyConnection: ChatHistoryConnection? = null
     private var historyIdentity: ChatHistoryProtocol.Identity? = null
@@ -195,17 +202,27 @@ class SessionReaderConnection(
         startStream()
     }
 
-    fun loadSkills(script: ByteArray) {
-        if (agent != AgentKind.CLAUDE) return
+    fun loadSkills(script: ByteArray, workingDirectory: String = historyIdentity?.cwd.orEmpty()) {
+        loadSkills { repository.nativeSkills(host, tmuxSessionName, script, workingDirectory) }
+    }
+
+    internal fun loadSkills(
+        retryDelayMillis: Long = SkillsLoader.RETRY_DELAY_MILLIS,
+        fetch: suspend () -> List<NativeSkill>,
+    ) {
+        if (agent != AgentKind.CLAUDE || !skillsRunning.compareAndSet(false, true)) return
         _state.update { it.copy(skillsLoading = true, skillsError = null) }
         scope.launch {
-            try {
-                val skills = repository.nativeSkills(host, tmuxSessionName, script)
-                _state.update { it.copy(nativeSkills = skills, skillsLoading = false) }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                _state.update { it.copy(skillsLoading = false, skillsError = "Could not load this session’s skills") }
+            val outcome = try {
+                SkillsLoader.load(retryDelayMillis, fetch)
+            } finally {
+                skillsRunning.set(false)
+            }
+            when (outcome) {
+                is SkillsLoader.Outcome.Loaded ->
+                    _state.update { it.copy(nativeSkills = outcome.skills, skillsLoading = false) }
+                is SkillsLoader.Outcome.Failed ->
+                    _state.update { it.copy(skillsLoading = false, skillsError = outcome.message) }
             }
         }
     }
@@ -232,6 +249,9 @@ class SessionReaderConnection(
         return if (sent) PromptAdmission.LegacyEnqueued else PromptAdmission.Rejected("Could not send")
     }
 
+    suspend fun editWaiting(messageId: String, text: String): QueuedEdit.Outcome =
+        historyConnection?.editWaiting(messageId, text) ?: QueuedEdit.Outcome.TooLate
+
     fun sendRuntimeCommand(command: String): Boolean {
         val sent = requests.trySend(Request.RuntimeCommand(command)).isSuccess
         if (sent) awaitModelSwitchConfirmation(command)
@@ -245,6 +265,19 @@ class SessionReaderConnection(
 
     fun sendEnter() {
         requests.trySend(Request.Action(TmuxAction.ENTER))
+    }
+
+    fun restartAi(cwd: String): Boolean {
+        val sid = historyConnection?.state?.value?.history?.sid.orEmpty()
+        val sent = requests.trySend(Request.RestartAi(sid, cwd)).isSuccess
+        if (sent) _state.update { it.copy(aiRestartRequestedAtMillis = System.currentTimeMillis()) }
+        return sent
+    }
+
+    fun freshStart(): Boolean {
+        val provider = ChatHistoryProtocol.hostedProvider(agent, hostSessionId)
+        if (!dev.multiprompt.companion.reader.FreshStart.supported(provider, hostSessionId)) return false
+        return requests.trySend(Request.FreshStart(requireNotNull(provider), hostSessionId)).isSuccess
     }
 
     fun interrupt() {
@@ -487,6 +520,21 @@ class SessionReaderConnection(
                                 it.messageId == request.record.messageId
                             } + request.record.copy(delivery = QueuedMessages.Delivery.CANCELLED)) }
                         }
+                        is Request.RestartAi -> {
+                            val outcome = repository.restartAi(client, historyScript, tmuxSessionName, request.sid, request.cwd)
+                            if (outcome is AiStopped.Outcome.Failed) {
+                                _state.update { it.copy(aiRestartRequestedAtMillis = 0) }
+                                throw dev.multiprompt.companion.ssh.SshProblem.Connection(outcome.message)
+                            }
+                            Unit
+                        }
+                        is Request.FreshStart -> {
+                            val outcome = repository.freshStart(client, historyScript, request.provider, request.sid)
+                            if (outcome is dev.multiprompt.companion.reader.FreshStart.Outcome.Failed) {
+                                throw dev.multiprompt.companion.ssh.SshProblem.Connection(outcome.message)
+                            }
+                            Unit
+                        }
                         is Request.Action -> repository.performAction(
                             client,
                             tmuxSessionName,
@@ -510,7 +558,13 @@ class SessionReaderConnection(
             }
             _state.update { it.copy(completedActions = it.completedActions + 1) }
         } catch (timeout: TimeoutCancellationException) {
-            _state.update { it.copy(actionError = "The send timed out", failedActions = it.failedActions + 1) }
+            _state.update {
+                it.copy(
+                    actionError = "The send timed out",
+                    failedActions = it.failedActions + 1,
+                    aiRestartRequestedAtMillis = if (request is Request.RestartAi) 0 else it.aiRestartRequestedAtMillis,
+                )
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (throwable: Throwable) {
@@ -518,6 +572,7 @@ class SessionReaderConnection(
                 it.copy(
                     actionError = throwable.message ?: throwable::class.java.simpleName,
                     failedActions = it.failedActions + 1,
+                    aiRestartRequestedAtMillis = if (request is Request.RestartAi) 0 else it.aiRestartRequestedAtMillis,
                 )
             }
         } finally {

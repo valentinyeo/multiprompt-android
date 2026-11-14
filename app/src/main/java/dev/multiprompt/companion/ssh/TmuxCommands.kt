@@ -21,6 +21,10 @@ object TmuxCommands {
 
     const val ETA_PREFIX = "__MP_TMUX_ETA__"
 
+    fun nativeSkills(sessionName: String, workingDirectory: String = ""): String =
+        "python3 - ${TmuxParser.shellQuote(sessionName)}" +
+            workingDirectory.takeIf { it.isNotBlank() }?.let { " ${TmuxParser.shellQuote(it)}" }.orEmpty()
+
     fun etaRowsCommand(sessionName: String? = null): String {
         val argument = sessionName?.let { " " + TmuxParser.shellQuote(it) } ?: ""
         return "python3 -c '$ETA_PYTHON'$argument 2>/dev/null || true"

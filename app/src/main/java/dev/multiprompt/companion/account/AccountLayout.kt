@@ -134,6 +134,59 @@ data class AccountLayout(
         ).validate()
     }
 
+    fun groupNames(favoritesSplit: Boolean): List<String> {
+        val position = groupOrder.orEmpty().withIndex().associate { (index, name) -> name to index }
+        return tabs.mapNotNull { it.groupIn(favoritesSplit)?.takeIf(String::isNotEmpty) }.distinct()
+            .sortedBy { position[it] ?: Int.MAX_VALUE }
+    }
+
+    fun setGroup(identity: String, name: String?, favoritesSplit: Boolean): AccountLayout {
+        val tab = tabs.firstOrNull { it.identity == identity } ?: return this
+        val value = name.orEmpty()
+        if (name != null) {
+            require(name.isNotBlank() && validText(name, 64)) { "Group name must be 1 to 64 characters" }
+            val inView = tabs.any { it.groupIn(favoritesSplit) == name }
+            val inOtherView = tabs.any { it.groupIn(!favoritesSplit) == name }
+            require(inView || !inOtherView) { "A group named $name already exists" }
+            require(inView || inOtherView || heldGroups().size < MAX_GROUPS) { "At most $MAX_GROUPS groups" }
+        }
+        val left = tab.groupIn(favoritesSplit).orEmpty()
+        if (left == value) return this
+        val moved = copy(tabs = tabs.map {
+            when {
+                it.identity != identity -> it
+                favoritesSplit -> it.copy(starredGroup = value)
+                else -> it.copy(group = value)
+            }
+        })
+        return moved.copy(groupOrder = moved.groupOrderAfter(this, joined = name, left = left)).validate()
+    }
+
+    fun ungroup(name: String, favoritesSplit: Boolean): AccountLayout {
+        if (tabs.none { it.groupIn(favoritesSplit) == name }) return this
+        val loosened = copy(tabs = tabs.map {
+            when {
+                it.groupIn(favoritesSplit) != name -> it
+                favoritesSplit -> it.copy(starredGroup = "")
+                else -> it.copy(group = "")
+            }
+        })
+        return loosened.copy(groupOrder = loosened.groupOrderAfter(this, joined = null, left = name)).validate()
+    }
+
+    private fun heldGroups(): Set<String> = tabs.flatMap { listOfNotNull(it.group, it.starredGroup) }
+        .filterTo(LinkedHashSet()) { it.isNotEmpty() }
+
+    private fun groupOrderAfter(previous: AccountLayout, joined: String?, left: String): List<String>? {
+        val held = heldGroups()
+        var order = groupOrder
+        if (left.isNotEmpty() && left !in held) order = order?.filter { it != left }
+        if (joined != null && joined !in previous.heldGroups() && order != null) {
+            order = order.filter { it in held && it != joined } + joined
+        }
+        return order?.takeIf { it.isNotEmpty() }
+    }
+
     companion object {
         private fun validText(text: String, limit: Int): Boolean = text.isNotEmpty() && text.length <= limit &&
             text.none { it.code < 32 || it.code == 127 } &&

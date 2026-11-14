@@ -101,7 +101,7 @@ class InboxConfirmationTest {
             .mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.joinToString("") }
         assertEquals("Delete", labels.last())
         assertTrue(labels.toString(), "Hide from sidebar" in labels)
-        val shared = listOf("Favorite", "Unfavorite", "Mute", "Unmute", "Move to workspace", "Mark as unread", "Rename", "Hide from sidebar")
+        val shared = listOf("Favorite", "Unfavorite", "Mute", "Unmute", "Move to workspace", "Move to group", "Mark as unread", "Rename", "Hide from sidebar")
         val present = labels.filter { it in shared }
         assertEquals(shared.filter { it in present }, present)
         assertTrue(labels.indexOf("Hide from sidebar") < labels.indexOf("End tmux session"))

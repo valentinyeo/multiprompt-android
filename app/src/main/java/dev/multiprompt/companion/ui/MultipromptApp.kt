@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import android.text.format.DateUtils
 import androidx.compose.foundation.lazy.rememberLazyListState
+import dev.multiprompt.companion.reader.AiStopped
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import dev.multiprompt.companion.reader.ChatMention
 import dev.multiprompt.companion.reader.MentionChat
@@ -244,6 +245,7 @@ import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.dictation.DictationState
 import dev.multiprompt.companion.reader.HostChange
 import dev.multiprompt.companion.reader.MessageActionResult
+import dev.multiprompt.companion.reader.QueuedEdit
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.skills.NativeSkill
@@ -602,6 +604,8 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onSetSessionListSetting = viewModel::setSessionListSetting,
                     onSetWorkspaceColor = viewModel::setAccountWorkspaceColor,
                     onRenameGroup = viewModel::renameAccountGroup,
+                    onSetChatGroup = { tab, name, favorites -> viewModel.editAccountLayout { it.setGroup(tab.identity, name, favorites) } },
+                    onUngroup = { name, favorites -> viewModel.editAccountLayout { it.ungroup(name, favorites) } },
                     appTheme = state.appTheme,
                     onSetAppTheme = viewModel::setAppTheme,
                     onClearSessionActionError = viewModel::clearSessionActionError,
@@ -1323,6 +1327,8 @@ internal fun SessionsScreen(
     dictation: DeepgramDictation? = null,
     material3: Boolean = LocalMaterial3.current,
     onSetUnreadOnly: (Boolean) -> Unit = {},
+    onSetChatGroup: (AccountTab, String?, Boolean) -> String? = { _, _, _ -> null },
+    onUngroup: (String, Boolean) -> String? = { _, _ -> null },
 ) = MultipromptTheme(
     sunlight = when (appTheme) {
         AppTheme.SYSTEM -> !isSystemInDarkTheme()
@@ -1346,6 +1352,8 @@ internal fun SessionsScreen(
     var renameGroupPrompt by remember { mutableStateOf<String?>(null) }
     var groupDraft by remember { mutableStateOf("") }
     var groupError by remember { mutableStateOf<String?>(null) }
+    var groupMoveTarget by remember { mutableStateOf<AccountTab?>(null) }
+    var newGroupTarget by remember { mutableStateOf<AccountTab?>(null) }
     var searchVisible by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var bucketMenuExpanded by remember { mutableStateOf(false) }
@@ -1432,9 +1440,80 @@ internal fun SessionsScreen(
                 renameGroupPrompt = null
                 groupError = null
             }, modifier = Modifier.fillMaxWidth())
+            KitSecondaryButton("Ungroup", onClick = {
+                groupError = onUngroup(group, state.selectedWorkspaceId == FAVORITES_SPLIT_ID)
+                if (groupError == null) renameGroupPrompt = null
+            }, modifier = Modifier.fillMaxWidth())
             KitPrimaryButton("Rename", onClick = {
                 groupError = onRenameGroup(group, groupDraft)
                 if (groupError == null) renameGroupPrompt = null
+            }, modifier = Modifier.fillMaxWidth())
+        }
+    }
+    groupMoveTarget?.let { tab ->
+        val favorites = state.selectedWorkspaceId == FAVORITES_SPLIT_ID
+        KitSheet(onDismiss = { groupMoveTarget = null }) {
+            Text("Move to group", style = Kit.Heading, color = Kit.Text)
+            state.accountLayout?.groupNames(favorites).orEmpty().forEach { name ->
+                KitMenuRow(
+                    label = name,
+                    trailingText = if (tab.groupIn(favorites) == name) "Current" else null,
+                    onClick = {
+                        groupMoveTarget = null
+                        onSetChatGroup(tab, name, favorites)
+                    },
+                )
+            }
+            KitMenuRow(
+                label = "New group",
+                onClick = {
+                    groupMoveTarget = null
+                    groupDraft = ""
+                    groupError = null
+                    newGroupTarget = tab
+                },
+            )
+            KitMenuRow(
+                label = "No group",
+                onClick = {
+                    groupMoveTarget = null
+                    onSetChatGroup(tab, null, favorites)
+                },
+            )
+            KitSecondaryButton("Cancel", onClick = { groupMoveTarget = null }, modifier = Modifier.fillMaxWidth())
+        }
+    }
+    newGroupTarget?.let { tab ->
+        val favorites = state.selectedWorkspaceId == FAVORITES_SPLIT_ID
+        KitSheet(onDismiss = {
+            newGroupTarget = null
+            groupError = null
+        }) {
+            Text("New group", style = Kit.Heading, color = Kit.Text)
+            OutlinedTextField(
+                value = groupDraft,
+                onValueChange = {
+                    groupDraft = it
+                    groupError = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Name") },
+                supportingText = groupError?.let { message -> { Text(message) } },
+                isError = groupError != null,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = {
+                    groupError = onSetChatGroup(tab, groupDraft.trim(), favorites)
+                    if (groupError == null) newGroupTarget = null
+                }),
+            )
+            KitSecondaryButton("Cancel", onClick = {
+                newGroupTarget = null
+                groupError = null
+            }, modifier = Modifier.fillMaxWidth())
+            KitPrimaryButton("Create", onClick = {
+                groupError = onSetChatGroup(tab, groupDraft.trim(), favorites)
+                if (groupError == null) newGroupTarget = null
             }, modifier = Modifier.fillMaxWidth())
         }
     }
@@ -2239,6 +2318,7 @@ internal fun SessionsScreen(
                             onDissolve = { onDissolve(session) },
                             onEnd = { endPromptSession = session },
                             onForget = { onForgetSession(session) },
+                            onMoveToGroup = if (tab != null && state.signedIn) ({ groupMoveTarget = tab }) else null,
                         )
                     }
                 }
@@ -2463,6 +2543,7 @@ private fun SessionCard(
     onForget: () -> Unit,
     muted: Boolean = false,
     onToggleMute: (() -> Unit)? = null,
+    onMoveToGroup: (() -> Unit)? = null,
 ) {
     var menuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     val dismissState = rememberSwipeToDismissBoxState(
@@ -2608,6 +2689,17 @@ private fun SessionCard(
                                 onMove()
                             },
                         )
+                    }
+                    if (!archived) {
+                        onMoveToGroup?.let { moveToGroup ->
+                            KitMenuRow(
+                                label = "Move to group",
+                                onClick = {
+                                    menuExpanded = false
+                                    moveToGroup()
+                                },
+                            )
+                        }
                     }
                     if (!unread && !archived) {
                         KitMenuRow(
@@ -2947,6 +3039,14 @@ internal fun ReaderScreen(
     LaunchedEffect(connection, working) {
         android.util.Log.i("SessionWorking", "session=${session.name} visible=$working hook=${reader.hookState?.active} status=${reader.status} sending=${reader.sending}")
     }
+    var aiClockMillis by remember(connection) { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(connection, reader.aiRestartRequestedAtMillis) {
+        if (reader.aiRestartRequestedAtMillis > 0) {
+            delay(AiStopped.RESTART_GRACE_MILLIS + 250)
+            aiClockMillis = System.currentTimeMillis()
+        }
+    }
+    val aiStopped = AiStopped.stopped(connection.agent, session.paneCommand, reader.aiRestartRequestedAtMillis, aiClockMillis)
     val transcript = reader.transcript.takeUnless { technicalMode }
     val historyAgent = ChatHistoryProtocol.supports(session.agent, session.hostSessionId)
     val historyChat = historyAgent && !technicalMode
@@ -2988,6 +3088,8 @@ internal fun ReaderScreen(
     val setPrompt: (String) -> Unit = { value ->
         promptField = TextFieldValue(value, selection = TextRange(value.length))
     }
+    var editingMessageId by remember(connection, session.hostId, session.name) { mutableStateOf<String?>(null) }
+    LaunchedEffect(promptField.text) { if (promptField.text.isBlank()) editingMessageId = null }
     var mentionPicks by remember(connection) { mutableStateOf(emptyList<MentionChat>()) }
     val mentionQuery = if (mentionChats.isNotEmpty() && skillQuery == null && promptField.selection.collapsed) {
         ChatMention.query(prompt, promptField.selection.start)
@@ -3315,10 +3417,9 @@ internal fun ReaderScreen(
             }
         }
     }
+    val loadSkills = { connection.loadSkills(context.assets.open("native_skills.py").use { it.readBytes() }, session.workingDirectory) }
     LaunchedEffect(connection, skillQuery != null) {
-        if (skillQuery != null) {
-            connection.loadSkills(context.assets.open("native_skills.py").use { it.readBytes() })
-        }
+        if (skillQuery != null) loadSkills()
     }
     val routeSlashCommand: (String) -> Boolean = { draftText ->
         val route = if (replyTo != null || imageAttachments.isNotEmpty()) {
@@ -3359,8 +3460,15 @@ internal fun ReaderScreen(
             val actionCount = reader.completedActions
             val draft = SentDraft(draftText, imageAttachments, replyTo)
             recordingPrompt = true
+            val editing = editingMessageId
             readerScope.launch {
-                when (val admission = connection.sendPrompt(composedPrompt)) {
+                val sent = if (editing == null) connection.sendPrompt(composedPrompt) else when (val edit = connection.editWaiting(editing, composedPrompt)) {
+                    is QueuedEdit.Outcome.Sent -> edit.admission
+                    is QueuedEdit.Outcome.TooLate -> dev.multiprompt.companion.reader.PromptAdmission.Rejected(QueuedEdit.TOO_LATE_NOTICE)
+                    is QueuedEdit.Outcome.Lost -> dev.multiprompt.companion.reader.PromptAdmission.Rejected(edit.reason)
+                }
+                if (editing != null) editingMessageId = null
+                when (val admission = sent) {
                     is dev.multiprompt.companion.reader.PromptAdmission.Rejected -> {
                         val reason = admission.reason
                         if (reason == "Chat is disconnected" || (reason == "Chat is not ready" && !chatReady)) {
@@ -3816,6 +3924,20 @@ internal fun ReaderScreen(
                                         }
                                     },
                                 )
+                                if (dev.multiprompt.companion.reader.FreshStart.supported(ChatHistoryProtocol.hostedProvider(session.agent, session.hostSessionId), session.hostSessionId)) {
+                                    KitMenuRow(
+                                        label = dev.multiprompt.companion.reader.FreshStart.LABEL,
+                                        onClick = {
+                                            menuExpanded = false
+                                            val sent = connection.freshStart()
+                                            android.widget.Toast.makeText(
+                                                context,
+                                                if (sent) dev.multiprompt.companion.reader.FreshStart.REQUESTED else "Fresh start is unavailable",
+                                                android.widget.Toast.LENGTH_SHORT,
+                                            ).show()
+                                        },
+                                    )
+                                }
                                 KitDivider()
                                 KitSectionLabel("Session")
                                 if (session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {
@@ -4011,6 +4133,7 @@ internal fun ReaderScreen(
                         skills = NativeSkills.matches(reader.nativeSkills, skillQuery),
                         loading = reader.skillsLoading,
                         error = reader.skillsError,
+                        onRetry = loadSkills,
                         onSelect = { skill ->
                             promptField = TextFieldValue(NativeSkills.insert(prompt, skill.name), selection = TextRange(skill.name.length + 2))
                             promptFocusRequester.requestFocus()
@@ -4027,6 +4150,16 @@ internal fun ReaderScreen(
                             promptFocusRequester.requestFocus()
                         },
                     )
+                }
+                if (aiStopped) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(AiStopped.NOTICE, Modifier.weight(1f), style = Kit.Body, color = Kit.Text)
+                        KitSecondaryButton("Restart", onClick = { connection.restartAi(session.workingDirectory) })
+                    }
                 }
                 if (imageAttachments.isNotEmpty()) {
                     Row(
@@ -4361,6 +4494,15 @@ internal fun ReaderScreen(
                 sunlight = sunlightMode,
                 replyGate = replyGate,
                 onReply = chooseReply,
+                onEditPending = { message ->
+                    if (promptField.text.isNotBlank()) {
+                        android.widget.Toast.makeText(context, "Send or clear your draft first", android.widget.Toast.LENGTH_SHORT).show()
+                    } else {
+                        setPrompt(dev.multiprompt.companion.reader.ChatMention.visible(message.text))
+                        editingMessageId = message.requestId
+                        promptFocusRequester.requestFocus()
+                    }
+                },
                 onSpeakableReplies = { speakableReplies = it; if (it.isEmpty()) { reading = false; replyCursor = 0 } },
                 onChatReady = { chatReady = it },
                 focusKey = speakingKey,
@@ -5438,12 +5580,13 @@ private fun NativeSkillPicker(
     skills: List<NativeSkill>,
     loading: Boolean,
     error: String?,
+    onRetry: () -> Unit = {},
     onSelect: (NativeSkill) -> Unit,
 ) {
     ComposerList {
         when {
             loading -> ComposerListNote("Loading session skills…")
-            error != null -> ComposerListNote(error)
+            error != null -> ComposerListNote(error, onClick = onRetry)
             skills.isEmpty() -> ComposerListNote("No matching session skills")
             else -> skills.forEach { skill ->
                 Column(
@@ -5489,8 +5632,15 @@ private fun ComposerList(content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-private fun ComposerListNote(text: String) {
-    Text(text, style = Kit.Hint, color = Kit.TextMuted, modifier = Modifier.fillMaxWidth().padding(horizontal = Kit.SideChange, vertical = 14.dp))
+private fun ComposerListNote(text: String, onClick: (() -> Unit)? = null) {
+    Text(
+        text,
+        style = Kit.Hint,
+        color = Kit.TextMuted,
+        modifier = Modifier.fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+            .padding(horizontal = Kit.SideChange, vertical = 14.dp),
+    )
 }
 
 @Composable

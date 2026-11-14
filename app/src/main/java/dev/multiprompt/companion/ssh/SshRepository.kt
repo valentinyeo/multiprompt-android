@@ -389,6 +389,38 @@ class SshRepository(private val secrets: SecretStorage) {
         return receipt
     }
 
+    suspend fun restartAi(
+        client: SshClient,
+        script: ByteArray,
+        sessionName: String,
+        sid: String,
+        cwd: String,
+    ): dev.multiprompt.companion.reader.AiStopped.Outcome {
+        val query = dev.multiprompt.companion.reader.AiStopped.query(1, sessionName, sid, cwd)
+        var outcome: dev.multiprompt.companion.reader.AiStopped.Outcome =
+            dev.multiprompt.companion.reader.AiStopped.Outcome.Failed("The host did not answer the restart")
+        streamChatHistory(client, script) { exchange ->
+            val wire = org.json.JSONObject(exchange(query)).getString("wire")
+            outcome = dev.multiprompt.companion.reader.AiStopped.outcome(wire, 1)
+        }
+        return outcome
+    }
+
+    suspend fun freshStart(
+        client: SshClient,
+        script: ByteArray,
+        provider: String,
+        sid: String,
+    ): dev.multiprompt.companion.reader.FreshStart.Outcome {
+        val query = dev.multiprompt.companion.reader.FreshStart.query(1, provider, sid)
+        var outcome: dev.multiprompt.companion.reader.FreshStart.Outcome =
+            dev.multiprompt.companion.reader.FreshStart.Outcome.Failed(dev.multiprompt.companion.reader.FreshStart.NO_ANSWER)
+        streamChatHistory(client, script) { exchange ->
+            outcome = dev.multiprompt.companion.reader.FreshStart.outcome(exchange(query), 1)
+        }
+        return outcome
+    }
+
     suspend fun sendPrompt(client: SshClient, sessionName: String, prompt: String) {
         require(prompt.isNotBlank()) { "Enter a prompt first" }
         val bytes = prompt.toByteArray(Charsets.UTF_8)
@@ -562,11 +594,11 @@ class SshRepository(private val secrets: SecretStorage) {
             }
         }
 
-    suspend fun nativeSkills(host: HostProfile, sessionName: String, script: ByteArray) =
+    suspend fun nativeSkills(host: HostProfile, sessionName: String, script: ByteArray, workingDirectory: String = "") =
         withContext(Dispatchers.IO) {
             withTimeout(CONNECTION_TIMEOUT_MS) {
                 withAuthenticatedClient(host) { client ->
-                    val result = execute(client, "python3 - ${TmuxParser.shellQuote(sessionName)}", stdin = script)
+                    val result = execute(client, TmuxCommands.nativeSkills(sessionName, workingDirectory), stdin = script)
                     result.requireSuccess("read this session’s native skills")
                     dev.multiprompt.companion.skills.NativeSkills.parse(result.stdout)
                 }
