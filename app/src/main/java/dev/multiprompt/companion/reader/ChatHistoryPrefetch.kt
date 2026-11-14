@@ -1,12 +1,9 @@
 package dev.multiprompt.companion.reader
 
-import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.model.HostProfile
 import kotlinx.coroutines.CancellationException
 
 object ChatHistoryPrefetch {
-    private val managed = setOf(AgentKind.CLAUDE, AgentKind.CODEX, AgentKind.PI)
-
     fun warm(cache: ChatHistoryCache, host: HostProfile, identities: List<ChatHistoryProtocol.Identity>) {
         identities.forEach { identity ->
             val key = ChatHistoryConnection.cacheKey(host, identity)
@@ -22,7 +19,7 @@ object ChatHistoryPrefetch {
     ) {
         var id = 0L
         for (identity in identities) {
-            if (!TranscriptProtocol.supports(identity.agent)) continue
+            if (!ChatHistoryProtocol.supports(identity.agent, identity.sid)) continue
             val key = ChatHistoryConnection.cacheKey(host, identity)
             val cached = cache.peek(key) ?: runCatching { cache.restore(key) }.getOrNull() ?: ChatHistory()
             val next = (try {
@@ -36,5 +33,5 @@ object ChatHistoryPrefetch {
     }
 
     private suspend fun fetch(id: Long, identity: ChatHistoryProtocol.Identity, base: ChatHistory, exchange: suspend (String) -> String): ChatHistory? =
-        ChatHistoryProtocol.parse(exchange(ChatHistoryProtocol.request(id, identity, base, held = identity.agent !in managed)), id, identity)?.let { base.apply(it) }
+        ChatHistoryProtocol.parse(exchange(ChatHistoryProtocol.request(id, identity, base, held = ChatHistoryProtocol.messageProvider(identity.agent, identity.sid) == null)), id, identity)?.let { base.apply(it) }
 }
