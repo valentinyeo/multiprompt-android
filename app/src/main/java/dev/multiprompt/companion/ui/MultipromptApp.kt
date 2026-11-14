@@ -1706,7 +1706,7 @@ internal fun SessionsScreen(
     val normalizedQuery = searchQuery.trim()
     val workspaceNames = state.workspaces.associate { it.id to it.name }
     val matchingSessions = state.inboxSessions
-        .filterNot { isHiddenAsMuted(it, state.accountLayout, state.accountHosts, state.selectedWorkspaceId) }
+        .filterNot { isHiddenAsMuted(it, state.accountLayout, state.accountHosts, state.selectedWorkspaceId, normalizedQuery.isNotBlank()) }
         .filter { session ->
             val key = SessionReadStore.key(session.hostId, session.name)
             state.sessionBucket != SessionBucket.ARCHIVE &&
