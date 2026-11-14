@@ -110,6 +110,13 @@ class LinkPool<L : Any>(
         }
     }
 
+    suspend fun dropAll() {
+        held.keys.toList().forEach { hostId ->
+            val dropped = lock(hostId).withLock { held.remove(hostId) }
+            dropped?.let { runCatching { close(it.link) } }
+        }
+    }
+
     private fun lock(hostId: String): Mutex = locks.computeIfAbsent(hostId) { Mutex() }
 
     private suspend fun acquire(

@@ -115,6 +115,8 @@ class SshRepository(private val secrets: SecretStorage) {
         linkScope.launch { links.sweep(idleMs = 0L) }
     }
 
+    suspend fun dropServerLinks() = withContext(Dispatchers.IO) { links.dropAll() }
+
     suspend fun listSessions(host: HostProfile): HostSessions = withContext(Dispatchers.IO) {
         withTimeout(CONNECTION_TIMEOUT_MS) {
             withServerLink(host, repeatable = true, stallMs = LinkPolicy.LIST_STALL_MS) { client ->

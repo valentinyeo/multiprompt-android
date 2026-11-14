@@ -266,6 +266,16 @@ class LinkPoolTest {
     }
 
     @Test
+    fun networkReturnDropsEvenALinkInUseAndTheNextRefreshReconnects() = runBlocking {
+        val server = Server()
+        val pool = pool()
+        pool.refresh(server) { pool.dropAll() }
+        assertTrue(server.opened.single().closed)
+        assertEquals(2, pool.refresh(server) { link -> link.number })
+        assertEquals(2, server.opened.size)
+    }
+
+    @Test
     fun refusedChannelOnAHealthyLinkKeepsTheSharedLink() = runBlocking {
         val server = Server()
         val pool = pool()

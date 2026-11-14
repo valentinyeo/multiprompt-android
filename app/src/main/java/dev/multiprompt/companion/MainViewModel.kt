@@ -281,6 +281,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val warmReaderTouchedAt = mutableMapOf<String, Long>()
     private val networkReturn = NetworkReturnWatcher(app.getSystemService(ConnectivityManager::class.java)) {
         viewModelScope.launch {
+            ssh.dropServerLinks()
             nudgeWarmReaders()
             refresh()
         }
