@@ -290,6 +290,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val warmReaderTouchedAt = mutableMapOf<String, Long>()
     private val networkReturn = NetworkReturnWatcher(app.getSystemService(ConnectivityManager::class.java)) {
         viewModelScope.launch {
+            ssh.dropServerLinks()
             nudgeWarmReaders()
             refresh()
         }
@@ -360,7 +361,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun nudgeWarmReaders() = warmReaders.values.forEach { it.nudge() }
 
-    fun onStop() { dictation.onAppBackgrounded() }
+    fun onStop() {
+        dictation.onAppBackgrounded()
+        ssh.closeServerLinks()
+    }
 
     fun select(section: AppSection) {
         _state.update { it.copy(section = section) }

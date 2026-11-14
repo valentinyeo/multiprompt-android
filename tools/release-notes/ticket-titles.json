@@ -80,5 +80,6 @@
   "IGSH-2288": "Android: archive and delete workspaces",
   "IGSH-2342": "Android: add a chat to a group and remove it",
   "IGSH-2352": "Android: skills list fails with no reason shown",
+  "IGSH-2296": "Android: keep one server link open for the chat list",
   "IGSH-2313": "Android: measure app start time with and without startup profile"
 }

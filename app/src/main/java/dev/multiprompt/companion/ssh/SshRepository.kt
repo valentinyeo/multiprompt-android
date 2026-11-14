@@ -21,7 +21,9 @@ import dev.multiprompt.companion.reader.ChatHistoryPrefetch
 import java.util.Base64
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.coroutineScope
@@ -60,6 +62,7 @@ sealed class SshProblem(message: String) : Exception(message) {
 
     class Connection(message: String) : SshProblem(message)
     class Authentication(message: String) : SshProblem(message)
+    class LinkUnavailable(message: String) : SshProblem(message)
 
     companion object {
         private const val KEY_REJECTED = " does not accept this phone's login key."
@@ -86,9 +89,36 @@ class SshRepository(private val secrets: SecretStorage) {
         val etaStates: Map<String, TmuxText.SessionEtaState> = emptyMap(),
     )
 
+    private val linkScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val links = LinkPool<SshClient>(
+        isAlive = { it.isAuthenticated },
+        close = { client -> withTimeoutOrNull(LINK_CLOSE_TIMEOUT_MS) { runCatching { client.disconnect() } } },
+    )
+
+    suspend fun <T> withServerLink(
+        host: HostProfile,
+        stallMs: Long? = null,
+        block: suspend (SshClient) -> T,
+    ): T = withContext(Dispatchers.IO) {
+        try {
+            links.use(host.id, LinkPolicy.identity(host), stallMs, { openClient(host, pooled = true) }, block)
+        } finally {
+            linkScope.launch {
+                delay(LinkPolicy.IDLE_MS)
+                links.sweep()
+            }
+        }
+    }
+
+    fun closeServerLinks() {
+        linkScope.launch { links.sweep(idleMs = 0L) }
+    }
+
+    suspend fun dropServerLinks() = withContext(Dispatchers.IO) { links.dropAll() }
+
     suspend fun listSessions(host: HostProfile): HostSessions = withContext(Dispatchers.IO) {
         withTimeout(CONNECTION_TIMEOUT_MS) {
-            withAuthenticatedClient(host) { client ->
+            withServerLink(host, stallMs = LinkPolicy.LIST_STALL_MS) { client ->
                 val result = execute(client, TmuxParser.command())
                 val sessions = TmuxParser.parse(host.id, result.stdout)
                 val etaStates = TmuxParser.parseEtaStates(result.stdout)
@@ -117,7 +147,9 @@ class SshRepository(private val secrets: SecretStorage) {
 
     internal fun deviceLoginKey(): ByteArray? = runCatching { DeviceKeyStore(secrets).privateKey() }.getOrNull()
 
-    suspend fun connect(host: HostProfile): SshClient = withContext(Dispatchers.IO) {
+    suspend fun connect(host: HostProfile): SshClient = openClient(host, pooled = false)
+
+    private suspend fun openClient(host: HostProfile, pooled: Boolean): SshClient = withContext(Dispatchers.IO) {
         val probe = PinningHostKeyVerifier(host.hostKeyType, host.hostKeyFingerprint, host.hostKeys)
         val client = SshClient(
             SshClientConfig {
@@ -125,6 +157,10 @@ class SshRepository(private val secrets: SecretStorage) {
                 this.port = host.port
                 hostKeyVerifier = probe
                 clientVersion = "SSH-2.0-multiprompt_android_1"
+                if (pooled) {
+                    autoDisconnectOnLastChannelClose = false
+                    keepAliveIntervalMs = LinkPolicy.KEEPALIVE_MS
+                }
             },
         )
         val result = client.connect()
@@ -253,7 +289,7 @@ class SshRepository(private val secrets: SecretStorage) {
 
     suspend fun prefetchChatHistories(host: HostProfile, sessions: List<TmuxSession>, script: ByteArray, cache: ChatHistoryCache) =
         withContext(Dispatchers.IO) {
-            withAuthenticatedClient(host) { client ->
+            withServerLink(host) { client ->
                 val identities = sessions.map { ChatHistoryProtocol.Identity(it.agent, it.name, it.workingDirectory, it.hostSessionId) }
                 streamChatHistory(client, script) { exchange -> ChatHistoryPrefetch.refresh(cache, host, identities, exchange) }
             }
@@ -261,7 +297,7 @@ class SshRepository(private val secrets: SecretStorage) {
 
     suspend fun readChatHistory(host: HostProfile, session: TmuxSession, script: ByteArray): ChatHistory? =
         withContext(Dispatchers.IO) {
-            withAuthenticatedClient(host) { client ->
+            withServerLink(host) { client ->
                 val identity = ChatHistoryProtocol.Identity(session.agent, session.name, session.workingDirectory, session.hostSessionId)
                 var history: ChatHistory? = null
                 streamChatHistory(client, script) { exchange ->
@@ -279,7 +315,7 @@ class SshRepository(private val secrets: SecretStorage) {
     ) = withContext(Dispatchers.IO) {
         coroutineScope {
             val session = client.openSession()
-                ?: throw SshProblem.Connection("The SSH server refused a history channel")
+                ?: throw SshProblem.LinkUnavailable("The SSH server refused a history channel")
             try {
                 check(session.requestExec(ChatHistoryProtocol.command(script)))
                 launch { for (chunk in session.stderr) { } }
@@ -663,10 +699,10 @@ class SshRepository(private val secrets: SecretStorage) {
         stdinStream: java.io.InputStream? = null,
     ): CommandResult = coroutineScope {
         val session = client.openSession()
-            ?: throw SshProblem.Connection("The SSH server refused a command channel")
+            ?: throw SshProblem.LinkUnavailable("The SSH server refused a command channel")
         try {
             if (!session.requestExec(command)) {
-                throw SshProblem.Connection("The SSH server refused the tmux query")
+                throw SshProblem.LinkUnavailable("The SSH server refused the tmux query")
             }
             val out = async { session.stdout.drain() }
             val err = async { session.stderr.drain() }
@@ -737,6 +773,7 @@ class SshRepository(private val secrets: SecretStorage) {
     private companion object {
         const val LOG_TAG = "MultipromptSSH"
         const val CONNECTION_TIMEOUT_MS = 20_000L
+        const val LINK_CLOSE_TIMEOUT_MS = 2_000L
         const val MAX_COMMAND_OUTPUT = 2 * 1024 * 1024
         const val MAX_PROMPT_BYTES = 64 * 1024
         const val MAX_SNAPSHOT_HEX_CHARS = 1024 * 1024
