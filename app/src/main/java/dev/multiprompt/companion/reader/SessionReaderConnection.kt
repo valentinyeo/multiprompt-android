@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -120,7 +119,7 @@ class SessionReaderConnection(
 
     private var historyConnection: ChatHistoryConnection? = null
     private var historyIdentity: ChatHistoryProtocol.Identity? = null
-    @Volatile private var selected = false
+    private val selectedFlow = MutableStateFlow(false)
 
     fun matches(host: HostProfile, agent: AgentKind): Boolean = this.host == host && this.agent == agent
 
@@ -138,7 +137,7 @@ class SessionReaderConnection(
     }
 
     fun select(value: Boolean) {
-        selected = value
+        selectedFlow.value = value
         historyConnection?.select(value)
     }
 
@@ -163,7 +162,7 @@ class SessionReaderConnection(
             .also {
                 historyIdentity = identity
                 historyConnection = it
-                it.select(selected)
+                it.select(selectedFlow.value)
                 it.start()
             }
     }
@@ -288,27 +287,20 @@ class SessionReaderConnection(
         requests.trySend(Request.Action(TmuxAction.SCROLL_UP))
     }
 
-    @Volatile
-    private var modelSwitchConfirmDeadline = 0L
-
-    @Volatile
-    private var modelSwitchConfirmed = true
+    private val confirmation = ModelSwitchConfirmation({ System.currentTimeMillis() }, MODEL_CONFIRM_TIMEOUT_MS)
 
     private fun awaitModelSwitchConfirmation(command: String) {
         val trimmed = command.trimStart()
         if (!trimmed.startsWith("/model") && !trimmed.startsWith("/effort")) return
-        modelSwitchConfirmed = false
-        modelSwitchConfirmDeadline = System.currentTimeMillis() + MODEL_CONFIRM_TIMEOUT_MS
+        confirmation.begin()
+        scope.launch {
+            delay(MODEL_CONFIRM_TIMEOUT_MS + 1)
+            confirmation.expire()
+        }
     }
 
     private fun confirmModelSwitchIfAsked(visible: Boolean) {
-        if (modelSwitchConfirmed || !visible) return
-        if (System.currentTimeMillis() > modelSwitchConfirmDeadline) {
-            modelSwitchConfirmed = true
-            return
-        }
-        modelSwitchConfirmed = true
-        requests.trySend(Request.Action(TmuxAction.ENTER))
+        if (confirmation.shouldPress(visible)) requests.trySend(Request.Action(TmuxAction.ENTER))
     }
 
     fun scrollLive() {
@@ -436,65 +428,63 @@ class SessionReaderConnection(
     private fun startStream() {
         if (streamJob?.isActive == true) return
         streamJob = scope.launch {
-            while (isActive) {
-                _state.update { it.copy(status = ReaderStatus.Connecting) }
-                try {
-                    val connectedClient = withTimeout(CONNECT_TIMEOUT_MS) {
-                        repository.connect(host)
-                    }
-                    streamClient = connectedClient
-                    repository.streamSession(
-                        connectedClient,
-                        tmuxSessionName,
-                        agent,
-                        hostSessionId.isNotBlank(),
-                    ) { frame ->
-                        confirmModelSwitchIfAsked(frame.confirmationVisible)
-                        if (historyMode) {
-                            _historyPage.value = frame.output
-                            _state.update { current ->
-                                current.copy(
-                                    status = ReaderStatus.Live,
-                                    alternateOn = frame.alternateOn,
-                                )
-                            }
-                            return@streamSession
-                        }
-                        _state.update { current ->
-                            val liveDetails = if (frame.details.model != null) {
-                                frame.details
-                            } else {
-                                current.runtimeDetails
-                            }
-                            val merged = TmuxText.mergeSnapshot(current.output, frame.output)
-                            current.copy(
-                                output = merged,
-                                screenOutput = frame.screenOutput,
-                                runtimeDetails = liveDetails,
-                                modelPickerOptions = frame.pickerOptions,
-                                status = ReaderStatus.Live,
-                                lastFailure = null,
-                                lastUpdatedAtMillis = System.currentTimeMillis(),
-                                waitingForInput = frame.waitingForInput,
-                                alternateOn = frame.alternateOn,
-                                eta = frame.eta?.toEta(System.currentTimeMillis()),
-                                hookState = frame.hookState,
-                            )
-                        }
-                    }
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (throwable: Throwable) {
+            ReaderStreamPump<SshClient>(
+                wanted = streamWanted(selectedFlow, confirmation.pending),
+                connect = { withTimeout(CONNECT_TIMEOUT_MS) { repository.connect(host) } },
+                stream = { client, heard -> streamFrames(client, heard) },
+                release = { client -> runCatching { client.disconnect() } },
+                onClient = { streamClient = it },
+                onConnecting = { _state.update { it.copy(status = ReaderStatus.Connecting) } },
+                onFailure = { throwable ->
                     val message = throwable.message ?: throwable::class.java.simpleName
-                    _state.update {
-                        it.copy(status = ReaderStatus.Failed(message), lastFailure = message)
-                    }
-                } finally {
-                    val oldClient = streamClient
-                    streamClient = null
-                    runCatching { oldClient?.disconnect() }
+                    _state.update { it.copy(status = ReaderStatus.Failed(message), lastFailure = message) }
+                },
+                reconnectDelayMillis = RECONNECT_DELAY_MS,
+                reconnectWait = { millis -> withTimeoutOrNull(millis) { streamNudge.receive() } },
+                reuseFirstBytesMillis = REUSE_FIRST_BYTES_MS,
+            ).pump()
+        }
+    }
+
+    private suspend fun streamFrames(client: SshClient, heard: () -> Unit) {
+        repository.streamSession(
+            client,
+            tmuxSessionName,
+            agent,
+            onBytes = heard,
+            hosted = hostSessionId.isNotBlank(),
+        ) { frame ->
+            confirmModelSwitchIfAsked(frame.confirmationVisible)
+            if (historyMode) {
+                _historyPage.value = frame.output
+                _state.update { current ->
+                    current.copy(
+                        status = ReaderStatus.Live,
+                        alternateOn = frame.alternateOn,
+                    )
                 }
-                withTimeoutOrNull(RECONNECT_DELAY_MS) { streamNudge.receive() }
+                return@streamSession
+            }
+            _state.update { current ->
+                val liveDetails = if (frame.details.model != null) {
+                    frame.details
+                } else {
+                    current.runtimeDetails
+                }
+                val merged = TmuxText.mergeSnapshot(current.output, frame.output)
+                current.copy(
+                    output = merged,
+                    screenOutput = frame.screenOutput,
+                    runtimeDetails = liveDetails,
+                    modelPickerOptions = frame.pickerOptions,
+                    status = ReaderStatus.Live,
+                    lastFailure = null,
+                    lastUpdatedAtMillis = System.currentTimeMillis(),
+                    waitingForInput = frame.waitingForInput,
+                    alternateOn = frame.alternateOn,
+                    eta = frame.eta?.toEta(System.currentTimeMillis()),
+                    hookState = frame.hookState,
+                )
             }
         }
     }
@@ -614,6 +604,7 @@ class SessionReaderConnection(
         const val CONNECT_TIMEOUT_MS = 20_000L
         const val REQUEST_TIMEOUT_MS = 20_000L
         const val RECONNECT_DELAY_MS = 3_000L
+        const val REUSE_FIRST_BYTES_MS = 2_000L
         const val SENT_PROMPT_MEMORY = 3
         const val MODEL_CONFIRM_TIMEOUT_MS = 25_000L
         const val HISTORY_FIRST_PAGE_MS = 6_000L
