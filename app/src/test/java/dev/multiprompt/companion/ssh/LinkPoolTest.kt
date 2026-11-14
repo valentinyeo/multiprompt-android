@@ -46,10 +46,9 @@ class LinkPoolTest {
     private suspend fun <T> LinkPool<FakeLink>.refresh(
         server: Server,
         profile: HostProfile = host,
-        repeatable: Boolean = true,
         stallMs: Long? = LinkPolicy.LIST_STALL_MS,
         block: suspend (FakeLink) -> T,
-    ): T = use(profile.id, LinkPolicy.identity(profile), repeatable, stallMs, { server.open() }, block)
+    ): T = use(profile.id, LinkPolicy.identity(profile), stallMs, { server.open() }, block)
 
     @Test
     fun tenListRefreshesUseOneLogin() = runBlocking {
@@ -166,42 +165,6 @@ class LinkPoolTest {
     }
 
     @Test
-    fun sentActionIsNeverRepeatedAfterTheLinkDrops() = runBlocking {
-        val server = Server()
-        val pool = pool()
-        pool.refresh(server) { }
-        var sends = 0
-        try {
-            pool.refresh(server, repeatable = false) { link ->
-                sends++
-                link.alive = false
-                throw SshProblem.Connection("Could not send the prompt")
-            }
-            fail("expected the send failure to surface")
-        } catch (error: SshProblem.Connection) {
-            assertEquals("Could not send the prompt", error.message)
-        }
-        assertEquals(1, sends)
-        assertEquals(2, pool.refresh(server) { link -> link.number })
-    }
-
-    @Test
-    fun unsentActionRetriesOnceOnAFreshLink() = runBlocking {
-        val server = Server()
-        val pool = pool()
-        pool.refresh(server) { }
-        val sentOn = pool.refresh(server, repeatable = false) { link ->
-            if (link.number == 1) {
-                link.alive = false
-                throw SshProblem.LinkUnavailable("The SSH server refused a command channel")
-            }
-            link.number
-        }
-        assertEquals(2, sentOn)
-        assertTrue(server.opened.first().closed)
-    }
-
-    @Test
     fun commandErrorKeepsAHealthyLink() = runBlocking {
         val server = Server()
         val pool = pool()
@@ -234,7 +197,7 @@ class LinkPoolTest {
         val pool = pool()
         pool.refresh(server) { }
         val timedOut = withTimeoutOrNull(50L) {
-            pool.refresh(server, repeatable = false, stallMs = null) { delay(5_000L) }
+            pool.refresh(server, stallMs = null) { delay(5_000L) }
         }
         assertNull(timedOut)
         assertTrue(server.opened.single().closed)
@@ -281,12 +244,12 @@ class LinkPoolTest {
         val pool = pool()
         pool.refresh(server) { }
         var tries = 0
-        val sentOn = pool.refresh(server, repeatable = false) { link ->
+        val answeredOn = pool.refresh(server) { link ->
             tries++
             if (tries == 1) throw SshProblem.LinkUnavailable("The SSH server refused a command channel")
             link.number
         }
-        assertEquals(1, sentOn)
+        assertEquals(1, answeredOn)
         assertEquals(2, tries)
         assertEquals(1, server.opened.size)
         assertFalse(server.opened.single().closed)
@@ -296,15 +259,13 @@ class LinkPoolTest {
     fun failurePolicyTable() {
         val unsent = SshProblem.LinkUnavailable("refused")
         val command = SshProblem.Connection("tmux failed")
-        fun outcome(error: Throwable, alive: Boolean, attempt: Int = 0, reused: Boolean = true, repeatable: Boolean) =
-            LinkPolicy.afterFailure(error, alive, attempt, reused, repeatable)
-        assertEquals(LinkPolicy.Outcome(evict = true, retry = true), outcome(command, alive = false, repeatable = true))
-        assertEquals(LinkPolicy.Outcome(evict = true, retry = false), outcome(command, alive = false, repeatable = false))
-        assertEquals(LinkPolicy.Outcome(evict = true, retry = true), outcome(unsent, alive = false, repeatable = false))
-        assertEquals(LinkPolicy.Outcome(evict = false, retry = true), outcome(unsent, alive = true, repeatable = false))
-        assertEquals(LinkPolicy.Outcome(evict = false, retry = false), outcome(command, alive = true, repeatable = true))
-        assertEquals(LinkPolicy.Outcome(evict = true, retry = true), outcome(LinkPolicy.Stalled(), alive = true, repeatable = true))
-        assertEquals(LinkPolicy.Outcome(evict = true, retry = false), outcome(command, alive = false, reused = false, repeatable = true))
-        assertEquals(LinkPolicy.Outcome(evict = false, retry = false), outcome(unsent, alive = true, attempt = 1, repeatable = true))
+        fun outcome(error: Throwable, alive: Boolean, attempt: Int = 0, reused: Boolean = true) =
+            LinkPolicy.afterFailure(error, alive, attempt, reused)
+        assertEquals(LinkPolicy.Outcome(evict = true, retry = true), outcome(command, alive = false))
+        assertEquals(LinkPolicy.Outcome(evict = false, retry = true), outcome(unsent, alive = true))
+        assertEquals(LinkPolicy.Outcome(evict = false, retry = false), outcome(command, alive = true))
+        assertEquals(LinkPolicy.Outcome(evict = true, retry = true), outcome(LinkPolicy.Stalled(), alive = true))
+        assertEquals(LinkPolicy.Outcome(evict = true, retry = false), outcome(command, alive = false, reused = false))
+        assertEquals(LinkPolicy.Outcome(evict = false, retry = false), outcome(unsent, alive = true, attempt = 1))
     }
 }

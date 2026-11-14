@@ -2,6 +2,7 @@ package dev.multiprompt.companion.room
 
 import android.content.Context
 import dev.multiprompt.companion.model.HostProfile
+import dev.multiprompt.companion.ssh.LinkPolicy
 import dev.multiprompt.companion.ssh.SshRepository
 
 class RoomService(private val context: Context, private val repository: SshRepository) {
@@ -13,7 +14,7 @@ class RoomService(private val context: Context, private val repository: SshRepos
     }
 
     private suspend fun <T> onServerLink(host: HostProfile, accountId: String, block: suspend (RoomClient) -> T): T =
-        repository.withServerLink(host, repeatable = true) { link ->
+        repository.withServerLink(host, stallMs = LinkPolicy.LIST_STALL_MS) { link ->
             RoomClient(SshRoomWire(link, accountId, serviceSource, bridgeSource)).use { block(it) }
         }
 

@@ -48,10 +48,10 @@ object LinkPolicy {
     fun acquire(held: Identity?, wanted: Identity, heldAlive: Boolean): Acquire =
         if (held == wanted && heldAlive) Acquire.REUSE else Acquire.OPEN
 
-    fun afterFailure(error: Throwable, linkAlive: Boolean, attempt: Int, reused: Boolean, repeatable: Boolean): Outcome {
+    fun afterFailure(error: Throwable, linkAlive: Boolean, attempt: Int, reused: Boolean): Outcome {
         val lost = error is Stalled || !linkAlive
         val unsent = error is SshProblem.LinkUnavailable
-        return Outcome(evict = lost, retry = attempt == 0 && reused && (unsent || (lost && repeatable)))
+        return Outcome(evict = lost, retry = attempt == 0 && reused && (unsent || lost))
     }
 
     fun expired(inUse: Int, lastUsedAtMillis: Long, now: Long, idleMs: Long = IDLE_MS): Boolean =
@@ -71,7 +71,6 @@ class LinkPool<L : Any>(
     suspend fun <T> use(
         hostId: String,
         identity: LinkPolicy.Identity,
-        repeatable: Boolean,
         stallMs: Long?,
         open: suspend () -> L,
         block: suspend (L) -> T,
@@ -85,7 +84,7 @@ class LinkPool<L : Any>(
                 withContext(NonCancellable) { evict(hostId, entry) }
                 throw cancelled
             } catch (error: Throwable) {
-                val outcome = LinkPolicy.afterFailure(error, isAlive(entry.link), attempt, reused, repeatable)
+                val outcome = LinkPolicy.afterFailure(error, isAlive(entry.link), attempt, reused)
                 if (outcome.evict) evict(hostId, entry)
                 if (!outcome.retry) throw error
                 attempt++

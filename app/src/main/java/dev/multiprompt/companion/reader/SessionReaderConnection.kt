@@ -376,13 +376,13 @@ class SessionReaderConnection(
         true
     }
 
-    private suspend fun pageBackOnce() = withServerLink { client ->
+    private suspend fun pageBackOnce() = withFreshClient { client ->
         repository.performAction(client, tmuxSessionName, TmuxAction.SCROLL_UP)
     }
 
     private suspend fun scrollLiveDirect() {
         runCatching {
-            withServerLink { client ->
+            withFreshClient { client ->
                 repository.performAction(client, tmuxSessionName, TmuxAction.SCROLL_BOTTOM)
             }
         }
@@ -488,9 +488,9 @@ class SessionReaderConnection(
         try {
             withTimeout(REQUEST_TIMEOUT_MS) {
                 val questionScreen = if (request is Request.QuestionAnswer) {
-                    withServerLink(repeatable = true) { repository.captureSession(it, tmuxSessionName) }
+                    withServerLink { repository.captureSession(it, tmuxSessionName) }
                 } else null
-                withServerLink { client ->
+                withFreshClient { client ->
                     when (request) {
                         is Request.RuntimeCommand -> repository.sendPrompt(client, tmuxSessionName, request.text)
                         is Request.Prompt -> repository.sendPrompt(
@@ -542,8 +542,8 @@ class SessionReaderConnection(
         }
     }
 
-    private suspend fun <T> withServerLink(repeatable: Boolean = false, block: suspend (SshClient) -> T): T =
-        repository.withServerLink(host, repeatable, block = block)
+    private suspend fun <T> withServerLink(block: suspend (SshClient) -> T): T =
+        repository.withServerLink(host, block = block)
 
     suspend fun sendFile(file: DeviceFile): String = withFreshClient { client ->
         repository.uploadFile(client, tmuxSessionName, file)
