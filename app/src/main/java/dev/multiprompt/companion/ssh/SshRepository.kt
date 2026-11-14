@@ -406,6 +406,21 @@ class SshRepository(private val secrets: SecretStorage) {
         return outcome
     }
 
+    suspend fun freshStart(
+        client: SshClient,
+        script: ByteArray,
+        provider: String,
+        sid: String,
+    ): dev.multiprompt.companion.reader.FreshStart.Outcome {
+        val query = dev.multiprompt.companion.reader.FreshStart.query(1, provider, sid)
+        var outcome: dev.multiprompt.companion.reader.FreshStart.Outcome =
+            dev.multiprompt.companion.reader.FreshStart.Outcome.Failed(dev.multiprompt.companion.reader.FreshStart.NO_ANSWER)
+        streamChatHistory(client, script) { exchange ->
+            outcome = dev.multiprompt.companion.reader.FreshStart.outcome(exchange(query), 1)
+        }
+        return outcome
+    }
+
     suspend fun sendPrompt(client: SshClient, sessionName: String, prompt: String) {
         require(prompt.isNotBlank()) { "Enter a prompt first" }
         val bytes = prompt.toByteArray(Charsets.UTF_8)
