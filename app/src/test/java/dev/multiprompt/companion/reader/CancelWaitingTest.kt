@@ -30,7 +30,7 @@ class CancelWaitingTest {
 
     @Test fun aMessageTheBotAlreadyReadCannotBeCancelled() {
         for (state in listOf(MessageProtocol.State.ACCEPTED, MessageProtocol.State.STARTED, MessageProtocol.State.CANCELLED)) {
-            assertFalse(state.name, drawn(row("readmessage00000001", state)).single().cancellable)
+            assertTrue(state.name, drawn(row("readmessage00000001", state)).none { it.cancellable })
         }
     }
 
