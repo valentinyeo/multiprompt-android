@@ -323,6 +323,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onResume() {
         foreground.value = true
+        updates.check()
         refresh()
         refreshRooms(RoomLoadTrigger.APP_RESUMED)
         syncAccount()
