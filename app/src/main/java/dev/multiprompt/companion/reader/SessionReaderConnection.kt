@@ -515,7 +515,7 @@ class SessionReaderConnection(
     }
 
     private suspend fun <T> withServerLink(repeatable: Boolean = false, block: suspend (SshClient) -> T): T =
-        repository.withServerLink(host, repeatable, block)
+        repository.withServerLink(host, repeatable, block = block)
 
     override fun close() {
         _state.update { it.copy(status = ReaderStatus.Closed) }

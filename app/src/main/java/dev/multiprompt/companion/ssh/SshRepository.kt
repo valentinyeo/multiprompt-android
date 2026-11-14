@@ -97,10 +97,11 @@ class SshRepository(private val secrets: SecretStorage) {
     suspend fun <T> withServerLink(
         host: HostProfile,
         repeatable: Boolean,
+        stallMs: Long? = null,
         block: suspend (SshClient) -> T,
     ): T = withContext(Dispatchers.IO) {
         try {
-            links.use(host.id, LinkPolicy.identity(host), repeatable, { open(host, pooled = true) }, block)
+            links.use(host.id, LinkPolicy.identity(host), repeatable, stallMs, { openClient(host, pooled = true) }, block)
         } finally {
             linkScope.launch {
                 delay(LinkPolicy.IDLE_MS)
@@ -115,7 +116,7 @@ class SshRepository(private val secrets: SecretStorage) {
 
     suspend fun listSessions(host: HostProfile): HostSessions = withContext(Dispatchers.IO) {
         withTimeout(CONNECTION_TIMEOUT_MS) {
-            withServerLink(host, repeatable = true) { client ->
+            withServerLink(host, repeatable = true, stallMs = LinkPolicy.LIST_STALL_MS) { client ->
                 val result = execute(client, TmuxParser.command())
                 val sessions = TmuxParser.parse(host.id, result.stdout)
                 val etaStates = TmuxParser.parseEtaStates(result.stdout)
@@ -144,9 +145,9 @@ class SshRepository(private val secrets: SecretStorage) {
 
     internal fun deviceLoginKey(): ByteArray? = runCatching { DeviceKeyStore(secrets).privateKey() }.getOrNull()
 
-    suspend fun connect(host: HostProfile): SshClient = open(host, pooled = false)
+    suspend fun connect(host: HostProfile): SshClient = openClient(host, pooled = false)
 
-    private suspend fun open(host: HostProfile, pooled: Boolean): SshClient = withContext(Dispatchers.IO) {
+    private suspend fun openClient(host: HostProfile, pooled: Boolean): SshClient = withContext(Dispatchers.IO) {
         val probe = PinningHostKeyVerifier(host.hostKeyType, host.hostKeyFingerprint, host.hostKeys)
         val client = SshClient(
             SshClientConfig {
@@ -285,7 +286,7 @@ class SshRepository(private val secrets: SecretStorage) {
 
     suspend fun prefetchChatHistories(host: HostProfile, sessions: List<TmuxSession>, script: ByteArray, cache: ChatHistoryCache) =
         withContext(Dispatchers.IO) {
-            withAuthenticatedClient(host) { client ->
+            withServerLink(host, repeatable = true) { client ->
                 val identities = sessions.map { ChatHistoryProtocol.Identity(it.agent, it.name, it.workingDirectory, it.hostSessionId) }
                 streamChatHistory(client, script) { exchange -> ChatHistoryPrefetch.refresh(cache, host, identities, exchange) }
             }
@@ -293,7 +294,7 @@ class SshRepository(private val secrets: SecretStorage) {
 
     suspend fun readChatHistory(host: HostProfile, session: TmuxSession, script: ByteArray): ChatHistory? =
         withContext(Dispatchers.IO) {
-            withAuthenticatedClient(host) { client ->
+            withServerLink(host, repeatable = true) { client ->
                 val identity = ChatHistoryProtocol.Identity(session.agent, session.name, session.workingDirectory, session.hostSessionId)
                 var history: ChatHistory? = null
                 streamChatHistory(client, script) { exchange ->

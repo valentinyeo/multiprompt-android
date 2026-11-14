@@ -12,8 +12,13 @@ class RoomService(private val context: Context, private val repository: SshRepos
         return RoomClient(wire)
     }
 
+    private suspend fun <T> onServerLink(host: HostProfile, accountId: String, block: suspend (RoomClient) -> T): T =
+        repository.withServerLink(host, repeatable = true) { link ->
+            RoomClient(SshRoomWire(link, accountId, source(SERVICE), source(BRIDGE))).use { block(it) }
+        }
+
     suspend fun load(host: HostProfile, accountId: String, limit: Int = 20): List<RoomEntry> =
-        open(host, accountId).use { client ->
+        onServerLink(host, accountId) { client ->
             client.hostUuid()
             client.rooms(limit).map { room ->
                 runCatching { client.members(room.id) }.getOrElse { room }
@@ -21,7 +26,7 @@ class RoomService(private val context: Context, private val repository: SshRepos
         }
 
     suspend fun page(host: HostProfile, accountId: String, roomId: String, after: Long = 0L, limit: Int = 40): RoomPage =
-        open(host, accountId).use { client ->
+        onServerLink(host, accountId) { client ->
             client.hostUuid()
             client.events(roomId, after, limit)
         }

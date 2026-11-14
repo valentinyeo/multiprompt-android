@@ -3,8 +3,10 @@ package dev.multiprompt.companion.ssh
 import dev.multiprompt.companion.model.HostProfile
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -35,19 +37,19 @@ class LinkPoolTest {
 
     private var clock = 1_000L
 
-    private fun pool(reusedAttemptTimeoutMs: Long = LinkPolicy.REUSED_ATTEMPT_TIMEOUT_MS) = LinkPool<FakeLink>(
+    private fun pool() = LinkPool<FakeLink>(
         isAlive = { it.alive && !it.closed },
         close = { it.closed = true },
         now = { clock },
-        reusedAttemptTimeoutMs = reusedAttemptTimeoutMs,
     )
 
     private suspend fun <T> LinkPool<FakeLink>.refresh(
         server: Server,
         profile: HostProfile = host,
         repeatable: Boolean = true,
+        stallMs: Long? = LinkPolicy.LIST_STALL_MS,
         block: suspend (FakeLink) -> T,
-    ): T = use(profile.id, LinkPolicy.identity(profile), repeatable, { server.open() }, block)
+    ): T = use(profile.id, LinkPolicy.identity(profile), repeatable, stallMs, { server.open() }, block)
 
     @Test
     fun tenListRefreshesUseOneLogin() = runBlocking {
@@ -212,14 +214,27 @@ class LinkPoolTest {
     @Test
     fun stalledReusedLinkIsReplacedForARefresh() = runBlocking {
         val server = Server()
-        val pool = pool(reusedAttemptTimeoutMs = 50L)
+        val pool = pool()
         pool.refresh(server) { }
-        val number = pool.refresh(server) { link ->
+        val number = pool.refresh(server, stallMs = 50L) { link ->
             if (link.number == 1) delay(5_000L)
             link.number
         }
         assertEquals(2, number)
         assertTrue(server.opened.first().closed)
+    }
+
+    @Test
+    fun timedOutCommandDropsTheLinkSoTheNextRefreshReconnects() = runBlocking {
+        val server = Server()
+        val pool = pool()
+        pool.refresh(server) { }
+        val timedOut = withTimeoutOrNull(50L) {
+            pool.refresh(server, repeatable = false, stallMs = null) { delay(5_000L) }
+        }
+        assertNull(timedOut)
+        assertTrue(server.opened.single().closed)
+        assertEquals(2, pool.refresh(server) { link -> link.number })
     }
 
     @Test

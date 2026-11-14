@@ -15,7 +15,7 @@ import kotlinx.coroutines.withTimeout
 object LinkPolicy {
     const val IDLE_MS = 60_000L
     const val KEEPALIVE_MS = 15_000L
-    const val REUSED_ATTEMPT_TIMEOUT_MS = 10_000L
+    const val LIST_STALL_MS = 8_000L
 
     data class Identity(
         val hostname: String,
@@ -68,7 +68,6 @@ class LinkPool<L : Any>(
     private val isAlive: (L) -> Boolean,
     private val close: suspend (L) -> Unit,
     private val now: () -> Long = System::currentTimeMillis,
-    private val reusedAttemptTimeoutMs: Long = LinkPolicy.REUSED_ATTEMPT_TIMEOUT_MS,
 ) {
     private class Held<L>(val identity: LinkPolicy.Identity, val link: L, var inUse: Int, var lastUsedAtMillis: Long)
 
@@ -79,6 +78,7 @@ class LinkPool<L : Any>(
         hostId: String,
         identity: LinkPolicy.Identity,
         repeatable: Boolean,
+        stallMs: Long?,
         open: suspend () -> L,
         block: suspend (L) -> T,
     ): T {
@@ -86,8 +86,9 @@ class LinkPool<L : Any>(
         while (true) {
             val (entry, reused) = acquire(hostId, identity, open)
             try {
-                return if (reused) onReused(entry.link, block) else block(entry.link)
+                return if (reused && stallMs != null) onReused(entry.link, stallMs, block) else block(entry.link)
             } catch (cancelled: CancellationException) {
+                withContext(NonCancellable) { evict(hostId, entry) }
                 throw cancelled
             } catch (error: Throwable) {
                 val failure = LinkPolicy.failure(error, isAlive(entry.link))
@@ -138,8 +139,8 @@ class LinkPool<L : Any>(
         chosen
     }
 
-    private suspend fun <T> onReused(link: L, block: suspend (L) -> T): T = try {
-        withTimeout(reusedAttemptTimeoutMs) { block(link) }
+    private suspend fun <T> onReused(link: L, stallMs: Long, block: suspend (L) -> T): T = try {
+        withTimeout(stallMs) { block(link) }
     } catch (timeout: TimeoutCancellationException) {
         currentCoroutineContext().ensureActive()
         throw LinkPolicy.Stalled()
