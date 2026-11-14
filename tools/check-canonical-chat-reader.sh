@@ -13,3 +13,4 @@ cp app/src/main/assets/mp_send.py app/src/main/assets/multibot_feedback.py "$tmp
 python3 -B "$tmp/tools/chat-history-reader-test.py" -v
 python3 -B "$tmp/tools/chat-transcript-reconcile.test.py"
 python3 -B "$tmp/tools/chat-shared-runtime.test.py"
+python3 -B "$tmp/tools/restart-ai-test.py"

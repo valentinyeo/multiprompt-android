@@ -389,6 +389,23 @@ class SshRepository(private val secrets: SecretStorage) {
         return receipt
     }
 
+    suspend fun restartAi(
+        client: SshClient,
+        script: ByteArray,
+        sessionName: String,
+        sid: String,
+        cwd: String,
+    ): dev.multiprompt.companion.reader.AiStopped.Outcome {
+        val query = dev.multiprompt.companion.reader.AiStopped.query(1, sessionName, sid, cwd)
+        var outcome: dev.multiprompt.companion.reader.AiStopped.Outcome =
+            dev.multiprompt.companion.reader.AiStopped.Outcome.Failed("The host did not answer the restart")
+        streamChatHistory(client, script) { exchange ->
+            val wire = org.json.JSONObject(exchange(query)).getString("wire")
+            outcome = dev.multiprompt.companion.reader.AiStopped.outcome(wire, 1)
+        }
+        return outcome
+    }
+
     suspend fun sendPrompt(client: SshClient, sessionName: String, prompt: String) {
         require(prompt.isNotBlank()) { "Enter a prompt first" }
         val bytes = prompt.toByteArray(Charsets.UTF_8)

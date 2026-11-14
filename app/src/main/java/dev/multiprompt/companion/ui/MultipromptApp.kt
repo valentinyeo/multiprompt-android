@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import android.text.format.DateUtils
 import androidx.compose.foundation.lazy.rememberLazyListState
+import dev.multiprompt.companion.reader.AiStopped
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import dev.multiprompt.companion.reader.ChatMention
 import dev.multiprompt.companion.reader.MentionChat
@@ -3009,6 +3010,14 @@ internal fun ReaderScreen(
     LaunchedEffect(connection, working) {
         android.util.Log.i("SessionWorking", "session=${session.name} visible=$working hook=${reader.hookState?.active} status=${reader.status} sending=${reader.sending}")
     }
+    var aiClockMillis by remember(connection) { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(connection, reader.aiRestartRequestedAtMillis) {
+        if (reader.aiRestartRequestedAtMillis > 0) {
+            delay(AiStopped.RESTART_GRACE_MILLIS + 250)
+            aiClockMillis = System.currentTimeMillis()
+        }
+    }
+    val aiStopped = AiStopped.stopped(connection.agent, session.paneCommand, reader.aiRestartRequestedAtMillis, aiClockMillis)
     val transcript = reader.transcript.takeUnless { technicalMode }
     val historyAgent = ChatHistoryProtocol.supports(session.agent, session.hostSessionId)
     val historyChat = historyAgent && !technicalMode
@@ -4098,6 +4107,16 @@ internal fun ReaderScreen(
                             promptFocusRequester.requestFocus()
                         },
                     )
+                }
+                if (aiStopped) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(AiStopped.NOTICE, Modifier.weight(1f), style = Kit.Body, color = Kit.Text)
+                        KitSecondaryButton("Restart", onClick = { connection.restartAi(session.workingDirectory) })
+                    }
                 }
                 if (imageAttachments.isNotEmpty()) {
                     Row(
