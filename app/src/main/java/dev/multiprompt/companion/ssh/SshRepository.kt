@@ -171,6 +171,7 @@ class SshRepository(private val secrets: SecretStorage) {
         client: SshClient,
         sessionName: String,
         agent: AgentKind = AgentKind.OTHER,
+        onBytes: () -> Unit = {},
         onSnapshot: (StreamSnapshot) -> Unit,
     ) = coroutineScope {
         val session = client.openSession()
@@ -185,6 +186,7 @@ class SshRepository(private val secrets: SecretStorage) {
             var hookState: TmuxText.HookState? = null
             val pending = StringBuilder()
             for (chunk in session.stdout) {
+                onBytes()
                 pending.append(chunk.toString(Charsets.UTF_8))
                 while (true) {
                     val end = pending.indexOf("\n")

@@ -2,6 +2,7 @@ package dev.multiprompt.companion.reader
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
@@ -20,23 +21,25 @@ class ReaderStreamPumpTest {
         var connects = 0
         var releases = 0
         var snapshots = 0
-        var openedAt = -1L
         var failNextStream: Throwable? = null
         var silentNextReuse = false
+        var bytesThenQuietMillis = 0L
+        var dropAfterBytes: Throwable? = null
         val clients = mutableListOf<Int>()
         val streamedBy = mutableListOf<Int>()
     }
 
-    private fun TestScope.pump(selected: MutableStateFlow<Boolean>, host: FakeHost, failures: MutableList<Throwable> = mutableListOf()) {
+    private fun TestScope.pump(selected: Flow<Boolean>, host: FakeHost, failures: MutableList<Throwable> = mutableListOf()) {
         val pump = ReaderStreamPump<Int>(
-            selected = selected,
+            wanted = selected,
             connect = {
                 host.connects++
                 host.connects
             },
-            stream = { client, framed ->
+            stream = { client, heard ->
                 host.streamedBy += client
-                if (host.silentNextReuse && host.streamedBy.count { it == client } > 1) {
+                val reuse = host.streamedBy.count { it == client } > 1
+                if (host.silentNextReuse && reuse) {
                     host.silentNextReuse = false
                     delay(Long.MAX_VALUE / 4)
                 }
@@ -44,9 +47,21 @@ class ReaderStreamPumpTest {
                     host.failNextStream = null
                     throw it
                 }
-                while (true) {
+                if (host.bytesThenQuietMillis > 0L && reuse) {
+                    val quiet = host.bytesThenQuietMillis
+                    host.bytesThenQuietMillis = 0L
+                    heard()
+                    delay(quiet)
+                }
+                host.dropAfterBytes?.let {
+                    host.dropAfterBytes = null
+                    heard()
                     host.snapshots++
-                    framed()
+                    throw it
+                }
+                while (true) {
+                    heard()
+                    host.snapshots++
                     delay(1_000L)
                 }
             },
@@ -55,9 +70,9 @@ class ReaderStreamPumpTest {
             onConnecting = {},
             onFailure = { failures += it },
             reconnectDelayMillis = 3_000L,
-            reuseFirstFrameMillis = 2_000L,
+            reuseFirstBytesMillis = 2_000L,
         )
-        backgroundScope.launch { pump.run() }
+        backgroundScope.launch { pump.pump() }
     }
 
     @Test
@@ -154,7 +169,7 @@ class ReaderStreamPumpTest {
         var streamed = 0
         val failures = mutableListOf<Throwable>()
         val pump = ReaderStreamPump<Int>(
-            selected = MutableStateFlow(true),
+            wanted = MutableStateFlow(true),
             connect = {
                 attempts++
                 if (attempts == 1) withTimeout(1L) { delay(10L) }
@@ -169,9 +184,9 @@ class ReaderStreamPumpTest {
             onConnecting = {},
             onFailure = { failures += it },
             reconnectDelayMillis = 3_000L,
-            reuseFirstFrameMillis = 2_000L,
+            reuseFirstBytesMillis = 2_000L,
         )
-        backgroundScope.launch { pump.run() }
+        backgroundScope.launch { pump.pump() }
         advanceTimeBy(2L)
         runCurrent()
         assertEquals(1, failures.size)
@@ -205,5 +220,116 @@ class ReaderStreamPumpTest {
         assertEquals(2, host.connects)
         assertTrue("reconnected after ${currentTime - reopenedAt} ms", currentTime - reopenedAt <= 2_000L)
         assertTrue(failures.isEmpty())
+    }
+
+    @Test
+    fun firstFramePastTwoSecondsKeepsTheWarmConnectionWhenBytesArrivedEarly() = runTest {
+        val host = FakeHost()
+        val failures = mutableListOf<Throwable>()
+        val selected = MutableStateFlow(true)
+        pump(selected, host, failures)
+        runCurrent()
+        selected.value = false
+        runCurrent()
+        host.bytesThenQuietMillis = 6_000L
+        val before = host.snapshots
+        selected.value = true
+        advanceTimeBy(5_900L)
+        runCurrent()
+        assertEquals(0, host.releases)
+        assertEquals(1, host.connects)
+        assertEquals(before, host.snapshots)
+        advanceTimeBy(200L)
+        runCurrent()
+        assertEquals(before + 1, host.snapshots)
+        assertEquals(0, host.releases)
+        assertTrue(failures.isEmpty())
+    }
+
+    @Test
+    fun copyModeWithNoSnapshotKeepsTheWarmConnection() = runTest {
+        val host = FakeHost()
+        val failures = mutableListOf<Throwable>()
+        val selected = MutableStateFlow(true)
+        pump(selected, host, failures)
+        runCurrent()
+        selected.value = false
+        runCurrent()
+        host.bytesThenQuietMillis = Long.MAX_VALUE / 4
+        selected.value = true
+        advanceTimeBy(60_000L)
+        runCurrent()
+        assertEquals(0, host.releases)
+        assertEquals(1, host.connects)
+        assertTrue(failures.isEmpty())
+    }
+
+    @Test
+    fun reusedStreamThatDropsAfterItsFirstFrameShowsFailureAndWaitsBeforeReconnecting() = runTest {
+        val host = FakeHost()
+        val failures = mutableListOf<Throwable>()
+        val selected = MutableStateFlow(true)
+        pump(selected, host, failures)
+        runCurrent()
+        selected.value = false
+        runCurrent()
+        host.dropAfterBytes = IllegalStateException("tmux session ended")
+        selected.value = true
+        runCurrent()
+        assertEquals(1, failures.size)
+        assertEquals(1, host.releases)
+        assertEquals(1, host.connects)
+        advanceTimeBy(2_999L)
+        runCurrent()
+        assertEquals(1, host.connects)
+        advanceTimeBy(1L)
+        runCurrent()
+        assertEquals(2, host.connects)
+    }
+
+    @Test
+    fun pendingConfirmationKeepsTheStreamRunningWhileHiddenUntilItResolves() = runTest {
+        val host = FakeHost()
+        val confirmation = ModelSwitchConfirmation({ currentTime }, 25_000L)
+        val selected = MutableStateFlow(true)
+        pump(streamWanted(selected, confirmation.pending), host)
+        runCurrent()
+        confirmation.begin()
+        selected.value = false
+        runCurrent()
+        val hiddenAt = host.snapshots
+        advanceTimeBy(10_000L)
+        runCurrent()
+        assertTrue("stream stopped while confirmation pending", host.snapshots > hiddenAt)
+        assertTrue(confirmation.shouldPress(visible = true))
+        runCurrent()
+        val settled = host.snapshots
+        advanceTimeBy(10_000L)
+        runCurrent()
+        assertEquals(settled, host.snapshots)
+        assertEquals(0, host.releases)
+    }
+
+    @Test
+    fun unansweredConfirmationExpiresAndTheHiddenStreamStops() = runTest {
+        val host = FakeHost()
+        val confirmation = ModelSwitchConfirmation({ currentTime }, 25_000L)
+        val selected = MutableStateFlow(true)
+        pump(streamWanted(selected, confirmation.pending), host)
+        runCurrent()
+        confirmation.begin()
+        selected.value = false
+        advanceTimeBy(25_000L)
+        runCurrent()
+        assertTrue(!confirmation.expire())
+        advanceTimeBy(1L)
+        runCurrent()
+        assertTrue(confirmation.expire())
+        runCurrent()
+        val settled = host.snapshots
+        advanceTimeBy(10_000L)
+        runCurrent()
+        assertEquals(settled, host.snapshots)
+        assertTrue(!confirmation.shouldPress(visible = true))
     }
 }
