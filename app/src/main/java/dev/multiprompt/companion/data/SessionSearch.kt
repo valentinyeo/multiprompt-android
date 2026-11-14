@@ -14,8 +14,22 @@ object SessionSearch {
         mapping: Map<Int, HostProfile> = emptyMap(),
     ): List<TmuxSession> = sessions
         .map { session -> session to rank(session, interactionEpochSeconds, layout, mapping) }
-        .sortedWith(compareByDescending<Pair<TmuxSession, Rank>> { it.second.used }.thenBy { it.second.position })
+        .sortedWith(
+            compareByDescending<Pair<TmuxSession, Rank>> { it.second.used }
+                .thenBy { it.second.position }
+                .thenByDescending { SessionReadStore.waitingForReply(it.first) }
+                .thenBy { it.first.workspaceName }
+                .thenComparator { a, b -> compareHostSessionId(a.first, b.first) }
+                .thenBy { it.first.hostId }
+                .thenBy { it.first.name },
+        )
         .map { it.first }
+
+    private fun compareHostSessionId(a: TmuxSession, b: TmuxSession): Int {
+        val na = a.hostSessionId.toLongOrNull()
+        val nb = b.hostSessionId.toLongOrNull()
+        return if (na != null && nb != null) na.compareTo(nb) else a.hostSessionId.compareTo(b.hostSessionId)
+    }
 
     private data class Rank(val used: Long, val position: Int)
 
