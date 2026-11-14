@@ -101,6 +101,15 @@ class DeepgramDictation(
         return KeySave.SAVED
     }
 
+    @Synchronized
+    fun adoptAccountKey(value: String): Boolean {
+        if (secrets.get(API_KEY_SECRET_ID) != null) return false
+        val key = DeepgramKey.normalize(value) ?: return false
+        store(key)
+        return true
+    }
+
+    @Synchronized
     private fun store(key: String) {
         secrets.put(API_KEY_SECRET_ID, key.toByteArray(Charsets.UTF_8))
         _state.update { it.copy(configured = true, error = null) }

@@ -1868,6 +1868,7 @@ fi
 if [[ "$feature" == session-reader.md ]]; then
     tap_desc 'Attach'
     wait_for_text 'Add image'
+    wait_for_text 'Add file'
     shot attach-menu
     adb shell input keyevent KEYCODE_BACK
     wait_for_absence 'Add image'
