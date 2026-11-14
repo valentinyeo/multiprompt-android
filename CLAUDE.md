@@ -14,6 +14,8 @@ A single Android app (`dev.multiprompt.companion`) that SSHes straight into publ
 ./gradlew testDebugUnitTest --tests '*TmuxParserTest*'   # single test class
 ```
 
+Start time with and without the baseline profile: dispatch `startup-time.yml` (`gh workflow run startup-time.yml --ref <branch> -f runs=10`). One emulator job builds the release APK with a throwaway key, runs `tools/startup-time/measure.sh`, and writes the medians and the difference in milliseconds to the job summary and the `startup-time-report` artifact. It never runs on pull requests and is not a required check.
+
 Emulator scroll-under proof: `tools/top-fade-proof.sh`. GitHub runs it in `top-fade.yml`. Dispatch with `release_smoke=true` to verify the published APK.
 
 Requires JDK 17 and Android SDK 36. Before every push run `tools/check.sh`: it is exactly what CI runs on every pull request and push to `main` (`.github/workflows/test.yml`).
