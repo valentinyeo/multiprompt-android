@@ -27,6 +27,14 @@ class UpdateManager(private val context: Context) {
     private val preferences = context.getSharedPreferences("updates", Context.MODE_PRIVATE)
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state.asStateFlow()
+    private val _dismissedVersion = MutableStateFlow(preferences.getLong(KEY_BANNER_DISMISSED, 0L))
+    val dismissedVersion: StateFlow<Long> = _dismissedVersion.asStateFlow()
+
+    fun dismissBanner(versionCode: Long) {
+        val next = UpdateBannerPolicy.nextDismissed(_dismissedVersion.value, versionCode)
+        preferences.edit().putLong(KEY_BANNER_DISMISSED, next).apply()
+        _dismissedVersion.value = next
+    }
 
     fun check(force: Boolean = false) {
         if (BuildConfig.DEBUG) {
@@ -280,6 +288,7 @@ class UpdateManager(private val context: Context) {
     private companion object {
         const val TAG = "MultipromptUpdate"
         const val KEY_LAST_CHECK = "last_check_ms"
+        const val KEY_BANNER_DISMISSED = "banner_dismissed_version"
         const val CHECK_INTERVAL_MS = 15 * 60 * 1000L
         const val NETWORK_TIMEOUT_MS = 30_000
         const val MAX_MANIFEST_BYTES = 64 * 1024

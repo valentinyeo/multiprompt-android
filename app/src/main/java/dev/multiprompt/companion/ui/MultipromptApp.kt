@@ -253,6 +253,7 @@ import dev.multiprompt.companion.ssh.SshProblem
 import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.terminal.TerminalConnection
 import dev.multiprompt.companion.terminal.TerminalStatus
+import dev.multiprompt.companion.update.UpdateBannerPolicy
 import dev.multiprompt.companion.update.UpdateRelease
 import dev.multiprompt.companion.update.UpdateState
 import kotlinx.coroutines.delay
@@ -269,6 +270,7 @@ import dev.multiprompt.companion.terminal.TerminalInputTracker
 fun MultipromptApp(viewModel: MainViewModel) {
     val state by viewModel.state.collectAsState()
     val updateState by viewModel.updates.state.collectAsState()
+    val dismissedVersion by viewModel.updates.dismissedVersion.collectAsState()
     LaunchedEffect(Unit) {
         while (true) {
             viewModel.updates.check(force = true)
@@ -288,7 +290,9 @@ fun MultipromptApp(viewModel: MainViewModel) {
         }
         UpdateBanner(
             state = updateState,
+            dismissedVersion = dismissedVersion,
             onInstall = { release -> viewModel.updates.install(release) },
+            onLater = { release -> viewModel.updates.dismissBanner(release.versionCode) },
             modifier = Modifier.align(Alignment.TopCenter),
         )
     }
@@ -297,7 +301,9 @@ fun MultipromptApp(viewModel: MainViewModel) {
 @Composable
 private fun UpdateBanner(
     state: UpdateState,
+    dismissedVersion: Long,
     onInstall: (UpdateRelease) -> Unit,
+    onLater: (UpdateRelease) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val release = when (state) {
@@ -306,6 +312,7 @@ private fun UpdateBanner(
         is UpdateState.Downloading -> state.release
         else -> null
     } ?: return
+    if (state is UpdateState.Available && !UpdateBannerPolicy.shouldShow(release.versionCode, dismissedVersion)) return
     Surface(modifier = modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primaryContainer) {
         Row(
             Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 14.dp, vertical = 6.dp),
@@ -324,6 +331,7 @@ private fun UpdateBanner(
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
             if (state is UpdateState.Available) {
+                KitSecondaryButton("Later", onClick = { onLater(release) })
                 Button(
                     onClick = { onInstall(release) },
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
@@ -339,6 +347,9 @@ private fun UpdateBanner(
 private fun AppScreens(viewModel: MainViewModel) {
     val state by viewModel.state.collectAsState()
     val updateState by viewModel.updates.state.collectAsState()
+    val dismissedVersion by viewModel.updates.dismissedVersion.collectAsState()
+    val bannerRelease = (updateState as? UpdateState.Available)?.release
+        ?.takeIf { UpdateBannerPolicy.shouldShow(it.versionCode, dismissedVersion) }
     val context = LocalContext.current
     var useWithoutAccount by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val systemDark = isSystemInDarkTheme()
@@ -503,7 +514,7 @@ private fun AppScreens(viewModel: MainViewModel) {
         contentWindowInsets = if (state.section == AppSection.SESSIONS)
             WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
         topBar = {
-            Column(if (state.section == AppSection.SESSIONS && updateState !is UpdateState.Available) Modifier else Modifier.statusBarsPadding()) {
+            Column(if (state.section == AppSection.SESSIONS && bannerRelease == null) Modifier else Modifier.statusBarsPadding()) {
                 if (state.section != AppSection.SESSIONS) {
                     Header(
                         refreshing = state.refreshing,
@@ -513,9 +524,12 @@ private fun AppScreens(viewModel: MainViewModel) {
                         onReleaseNotes = viewModel::openReleaseNotes,
                     )
                 }
-                val available = updateState as? UpdateState.Available
-                if (available != null) {
-                    UpdateBanner(available.release) { viewModel.installUpdate(available.release) }
+                if (bannerRelease != null) {
+                    UpdateBanner(
+                        release = bannerRelease,
+                        onInstall = { viewModel.installUpdate(bannerRelease) },
+                        onLater = { viewModel.updates.dismissBanner(bannerRelease.versionCode) },
+                    )
                 }
             }
         },
@@ -786,13 +800,14 @@ internal fun Header(
 }
 
 @Composable
-private fun UpdateBanner(release: UpdateRelease, onInstall: () -> Unit) {
+private fun UpdateBanner(release: UpdateRelease, onInstall: () -> Unit, onLater: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer).padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("v${release.versionName} is ready", Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+        KitSecondaryButton("Later", onClick = onLater)
         FilledTonalButton(onClick = onInstall) { Text("Update now") }
     }
 }
