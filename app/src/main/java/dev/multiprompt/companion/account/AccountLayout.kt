@@ -90,6 +90,9 @@ data class AccountLayout(
     fun setFavorite(identity: String, value: Boolean): AccountLayout = copy(tabs = tabs.map {
         if (it.identity == identity) it.copy(favorite = value) else it
     }).validate()
+    fun setMuted(identity: String, value: Boolean): AccountLayout = copy(tabs = tabs.map {
+        if (it.identity == identity) it.copy(muted = value) else it
+    }).validate()
     fun stampUsed(identity: String, now: Long): AccountLayout = copy(tabs = tabs.map {
         if (it.identity == identity) it.copy(used = maxOf(it.used ?: 0, now)) else it
     }).validate()

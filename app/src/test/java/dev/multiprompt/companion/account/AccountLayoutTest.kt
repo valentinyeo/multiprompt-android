@@ -290,6 +290,31 @@ class AccountLayoutTest {
         assertEquals(true, acknowledged.base.json().getJSONArray("tabs").getJSONObject(0).get("muted"))
     }
 
+    @Test fun setMutedWritesAnExplicitFlagForOnlyThatChat() {
+        val muted = base.setMuted(one.identity, true)
+        assertEquals(true, muted.tabs[0].muted)
+        assertNull(muted.tabs[1].muted)
+        assertEquals(true, muted.json().getJSONArray("tabs").getJSONObject(0).get("muted"))
+        assertFalse(muted.json().getJSONArray("tabs").getJSONObject(1).has("muted"))
+        val unmuted = muted.setMuted(one.identity, false)
+        assertEquals(false, unmuted.tabs[0].muted)
+        assertEquals(false, unmuted.json().getJSONArray("tabs").getJSONObject(0).get("muted"))
+        assertEquals(unmuted, AccountLayout.parse(JSONObject(unmuted.json().toString())))
+        assertEquals(base, base.setMuted("0:missing", true))
+    }
+
+    @Test fun phoneMuteReachesDesktopAndDesktopMuteSurvivesAPhoneRename() {
+        val pulled = AccountLayout.parse(mutedLayout(null))
+        val identity = pulled.tabs[0].identity
+        val sent = AccountLayout.rebase(pulled, pulled.setMuted(identity, true), pulled)
+        assertEquals(true, sent.json().getJSONArray("tabs").getJSONObject(0).get("muted"))
+        val desktopMuted = AccountLayout.parse(mutedLayout(true, revision = 2))
+        val pendingUnmute = PendingLayout(desktopMuted, desktopMuted.setMuted(identity, false))
+        val remoteRename = AccountLayout.parse(mutedLayout(true, "Desktop rename", 3))
+        assertEquals(false, pendingUnmute.pull(remoteRename).edited.tabs[0].muted)
+        assertEquals("Desktop rename", pendingUnmute.pull(remoteRename).edited.tabs[0].name)
+    }
+
     @Test fun desktopGroupNameIsReadAndKeptWhenThePhoneSaves() {
         val json = JSONObject("""{"schema":1,"revision":5,"workspaces":[{"name":"Other"}],"tabs":[{"kind":"tmux","name":"One","tmux_session":"one","tmux_host":0,"workspace":"Other","group":"Runners"},{"kind":"tmux","name":"Two","tmux_session":"two","tmux_host":1,"workspace":"Other","group":""}]}""")
         val pulled = AccountLayout.parse(json)

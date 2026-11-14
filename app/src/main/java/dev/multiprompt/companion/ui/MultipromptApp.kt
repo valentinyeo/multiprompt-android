@@ -556,6 +556,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onMoveSession = viewModel::moveSession,
                     onRenameSession = viewModel::renameSession,
                     onSetFavorite = { tab, value -> viewModel.editAccountLayout { it.setFavorite(tab.identity, value) } },
+                    onSetMuted = { tab, value -> viewModel.editAccountLayout { it.setMuted(tab.identity, value) } },
                     onRefresh = viewModel::refresh,
                     onRefreshRooms = viewModel::refreshRooms,
                     onSelectSection = viewModel::select,
@@ -1218,6 +1219,7 @@ internal fun SessionsScreen(
     onRefresh: () -> Unit,
     onSelectSection: (AppSection) -> Unit,
     onReleaseNotes: () -> Unit = { onSelectSection(AppSection.UPDATE) },
+    onSetMuted: (AccountTab, Boolean) -> Unit = { _, _ -> },
     onOpenRoom: (String) -> Unit = {},
     onCloseRoom: () -> Unit = {},
     onLoadOlderRoomEvents: () -> Unit = {},
@@ -2042,6 +2044,10 @@ internal fun SessionsScreen(
                             onToggleFavorite = if (tab != null && state.signedIn) {
                                 { onSetFavorite(tab, !starred) }
                             } else null,
+                            muted = tab?.muted == true,
+                            onToggleMute = if (tab != null && state.signedIn) {
+                                { onSetMuted(tab, tab.muted != true) }
+                            } else null,
                             onClick = { onOpen(session) },
                             onOpenTerminal = { onOpenTerminal(session) },
                             onArchive = { onArchive(session) },
@@ -2280,6 +2286,8 @@ private fun SessionCard(
     onDissolve: () -> Unit,
     onEnd: () -> Unit,
     onForget: () -> Unit,
+    muted: Boolean = false,
+    onToggleMute: (() -> Unit)? = null,
 ) {
     var menuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     val dismissState = rememberSwipeToDismissBoxState(
@@ -2402,6 +2410,15 @@ private fun SessionCard(
                     onToggleFavorite?.let { toggle ->
                         KitMenuRow(
                             label = if (starred) "Unfavorite" else "Favorite",
+                            onClick = {
+                                menuExpanded = false
+                                toggle()
+                            },
+                        )
+                    }
+                    onToggleMute?.let { toggle ->
+                        KitMenuRow(
+                            label = if (muted) "Unmute" else "Mute",
                             onClick = {
                                 menuExpanded = false
                                 toggle()
