@@ -255,6 +255,7 @@ import dev.multiprompt.companion.ssh.SshProblem
 import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.terminal.TerminalConnection
 import dev.multiprompt.companion.terminal.TerminalStatus
+import dev.multiprompt.companion.update.UpdateBannerPolicy
 import dev.multiprompt.companion.update.UpdateRelease
 import dev.multiprompt.companion.update.UpdateState
 import kotlinx.coroutines.Dispatchers
@@ -274,6 +275,7 @@ import dev.multiprompt.companion.terminal.TerminalInputTracker
 fun MultipromptApp(viewModel: MainViewModel) {
     val state by viewModel.state.collectAsState()
     val updateState by viewModel.updates.state.collectAsState()
+    val dismissedVersion by viewModel.updates.dismissedVersion.collectAsState()
     LaunchedEffect(Unit) {
         while (true) {
             viewModel.updates.check(force = true)
@@ -293,7 +295,9 @@ fun MultipromptApp(viewModel: MainViewModel) {
         }
         UpdateBanner(
             state = updateState,
+            dismissedVersion = dismissedVersion,
             onInstall = { release -> viewModel.updates.install(release) },
+            onLater = { release -> viewModel.updates.dismissBanner(release.versionCode) },
             modifier = Modifier.align(Alignment.TopCenter),
         )
     }
@@ -302,7 +306,9 @@ fun MultipromptApp(viewModel: MainViewModel) {
 @Composable
 private fun UpdateBanner(
     state: UpdateState,
+    dismissedVersion: Long,
     onInstall: (UpdateRelease) -> Unit,
+    onLater: (UpdateRelease) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val release = when (state) {
@@ -311,6 +317,7 @@ private fun UpdateBanner(
         is UpdateState.Downloading -> state.release
         else -> null
     } ?: return
+    if (state is UpdateState.Available && !UpdateBannerPolicy.shouldShow(release.versionCode, dismissedVersion)) return
     Surface(modifier = modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primaryContainer) {
         Row(
             Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 14.dp, vertical = 6.dp),
@@ -329,6 +336,7 @@ private fun UpdateBanner(
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
             if (state is UpdateState.Available) {
+                KitSecondaryButton("Later", onClick = { onLater(release) })
                 Button(
                     onClick = { onInstall(release) },
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
@@ -344,6 +352,9 @@ private fun UpdateBanner(
 private fun AppScreens(viewModel: MainViewModel) {
     val state by viewModel.state.collectAsState()
     val updateState by viewModel.updates.state.collectAsState()
+    val dismissedVersion by viewModel.updates.dismissedVersion.collectAsState()
+    val bannerRelease = (updateState as? UpdateState.Available)?.release
+        ?.takeIf { UpdateBannerPolicy.shouldShow(it.versionCode, dismissedVersion) }
     val context = LocalContext.current
     var useWithoutAccount by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val systemDark = isSystemInDarkTheme()
@@ -509,7 +520,7 @@ private fun AppScreens(viewModel: MainViewModel) {
         contentWindowInsets = if (state.section == AppSection.SESSIONS)
             WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
         topBar = {
-            Column(if (state.section == AppSection.SESSIONS && updateState !is UpdateState.Available) Modifier else Modifier.statusBarsPadding()) {
+            Column(if (state.section == AppSection.SESSIONS && bannerRelease == null) Modifier else Modifier.statusBarsPadding()) {
                 if (state.section != AppSection.SESSIONS) {
                     Header(
                         refreshing = state.refreshing,
@@ -519,9 +530,12 @@ private fun AppScreens(viewModel: MainViewModel) {
                         onReleaseNotes = viewModel::openReleaseNotes,
                     )
                 }
-                val available = updateState as? UpdateState.Available
-                if (available != null) {
-                    UpdateBanner(available.release) { viewModel.installUpdate(available.release) }
+                if (bannerRelease != null) {
+                    UpdateBanner(
+                        release = bannerRelease,
+                        onInstall = { viewModel.installUpdate(bannerRelease) },
+                        onLater = { viewModel.updates.dismissBanner(bannerRelease.versionCode) },
+                    )
                 }
             }
         },
@@ -558,7 +572,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onSetFavorite = { tab, value -> viewModel.editAccountLayout { it.setFavorite(tab.identity, value) } },
                     onSetMuted = { tab, value -> viewModel.editAccountLayout { it.setMuted(tab.identity, value) } },
                     onRefresh = viewModel::refresh,
-                    onRefreshRooms = viewModel::refreshRooms,
+                    onRefreshRooms = { viewModel.refreshRooms() },
                     onSelectSection = viewModel::select,
                     onReleaseNotes = viewModel::openReleaseNotes,
                     onOpenRoom = viewModel::openRoom,
@@ -571,6 +585,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onSetAllSplitOnRight = viewModel::setAllSplitOnRight,
                     onSetSessionListSetting = viewModel::setSessionListSetting,
                     onSetWorkspaceColor = viewModel::setAccountWorkspaceColor,
+                    onRenameGroup = viewModel::renameAccountGroup,
                     appTheme = state.appTheme,
                     onSetAppTheme = viewModel::setAppTheme,
                     onClearSessionActionError = viewModel::clearSessionActionError,
@@ -793,13 +808,14 @@ internal fun Header(
 }
 
 @Composable
-private fun UpdateBanner(release: UpdateRelease, onInstall: () -> Unit) {
+private fun UpdateBanner(release: UpdateRelease, onInstall: () -> Unit, onLater: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer).padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("v${release.versionName} is ready", Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+        KitSecondaryButton("Later", onClick = onLater)
         FilledTonalButton(onClick = onInstall) { Text("Update now") }
     }
 }
@@ -1239,6 +1255,7 @@ internal fun SessionsScreen(
     nowMillis: () -> Long = System::currentTimeMillis,
     onSetSessionListSetting: (String, Boolean) -> Unit = { _, _ -> },
     onSetWorkspaceColor: (String, Int?) -> Unit = { _, _ -> },
+    onRenameGroup: (String, String) -> String? = { _, _ -> null },
     dictation: DeepgramDictation? = null,
     material3: Boolean = LocalMaterial3.current,
 ) = MultipromptTheme(
@@ -1261,6 +1278,9 @@ internal fun SessionsScreen(
     var renamePromptSession by remember { mutableStateOf<TmuxSession?>(null) }
     var renameDraft by remember { mutableStateOf("") }
     var renameError by remember { mutableStateOf<String?>(null) }
+    var renameGroupPrompt by remember { mutableStateOf<String?>(null) }
+    var groupDraft by remember { mutableStateOf("") }
+    var groupError by remember { mutableStateOf<String?>(null) }
     var searchVisible by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var bucketMenuExpanded by remember { mutableStateOf(false) }
@@ -1281,7 +1301,7 @@ internal fun SessionsScreen(
     LaunchedEffect(searchVisible) {
         if (searchVisible) searchFocusRequester.requestFocus()
     }
-    LaunchedEffect(Unit) { onRefreshRooms() }
+    LaunchedEffect(signedIn) { onRefreshRooms() }
     LaunchedEffect(state.allSplitOnRight, state.workspaceSplitIds) {
         snapshotFlow { splitScrollState.maxValue }.collect { maximum ->
             splitScrollState.scrollTo(if (state.allSplitOnRight) maximum else 0)
@@ -1317,6 +1337,39 @@ internal fun SessionsScreen(
             KitPrimaryButton("Rename", onClick = {
                 renameError = onRenameSession(session, renameDraft)
                 if (renameError == null) renamePromptSession = null
+            }, modifier = Modifier.fillMaxWidth())
+        }
+    }
+    renameGroupPrompt?.let { group ->
+        KitSheet(onDismiss = {
+            renameGroupPrompt = null
+            groupError = null
+        }) {
+            Text("Rename group", style = Kit.Heading, color = Kit.Text)
+            OutlinedTextField(
+                value = groupDraft,
+                onValueChange = {
+                    groupDraft = it
+                    groupError = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Name") },
+                supportingText = groupError?.let { message -> { Text(message) } },
+                isError = groupError != null,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = {
+                    groupError = onRenameGroup(group, groupDraft)
+                    if (groupError == null) renameGroupPrompt = null
+                }),
+            )
+            KitSecondaryButton("Cancel", onClick = {
+                renameGroupPrompt = null
+                groupError = null
+            }, modifier = Modifier.fillMaxWidth())
+            KitPrimaryButton("Rename", onClick = {
+                groupError = onRenameGroup(group, groupDraft)
+                if (groupError == null) renameGroupPrompt = null
             }, modifier = Modifier.fillMaxWidth())
         }
     }
@@ -1862,7 +1915,10 @@ internal fun SessionsScreen(
                                 workspaceError = null
                                 workspaceDialogVisible = true
                             },
-                            onRefresh = onRefresh,
+                            onRefresh = {
+                                onRefresh()
+                                onRefreshRooms()
+                            },
                             onReleaseNotes = onReleaseNotes,
                         )
                     }
@@ -2011,11 +2067,31 @@ internal fun SessionsScreen(
                     item(key = "error-$hostId") { InlineError(error) }
                 }
             }
-            SessionGroups.split(visibleSessions, state.accountLayout?.groupOrder?.let { if (reversedSessions) it.asReversed() else it }) { session ->
+            val sessionGroups = SessionGroups.split(visibleSessions, state.accountLayout?.groupOrder?.let { if (reversedSessions) it.asReversed() else it }) { session ->
                 val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
                 tab?.groupIn(state.selectedWorkspaceId == FAVORITES_SPLIT_ID)
-            }.forEach { group ->
-                val heading: () -> Unit = { group.name?.let { name -> item(key = "group:$name") { KitSectionLabel(name) } } }
+            }
+            sessionGroups.forEach { group ->
+                val heading: () -> Unit = {
+                    val title = SessionGroups.heading(group, sessionGroups)
+                    if (title != null) {
+                        item(key = group.name?.let { "group:$it" } ?: "recents") {
+                            val name = group.name
+                            KitSectionLabel(
+                                title,
+                                if (name == null) Modifier else Modifier.combinedClickable(
+                                    onClick = {},
+                                    onLongClickLabel = "Rename group",
+                                    onLongClick = {
+                                        groupDraft = name
+                                        groupError = null
+                                        renameGroupPrompt = name
+                                    },
+                                ),
+                            )
+                        }
+                    }
+                }
                 if (!reversedSessions) heading()
                 items(group.items, key = { "${it.hostId}:${it.name}" }) { session ->
                     val key = SessionReadStore.key(session.hostId, session.name)
@@ -3090,11 +3166,41 @@ internal fun ReaderScreen(
             connection.loadSkills(context.assets.open("native_skills.py").use { it.readBytes() })
         }
     }
+    val routeSlashCommand: (String) -> Boolean = { draftText ->
+        val route = if (replyTo != null || imageAttachments.isNotEmpty()) {
+            dev.multiprompt.companion.model.SlashCommand.Route.SEND
+        } else {
+            val command = dev.multiprompt.companion.model.SlashCommand.commandName(draftText)
+            dev.multiprompt.companion.model.SlashCommand.decide(
+                session.liveChat && session.agent == AgentKind.CLAUDE,
+                draftText,
+                command != null && reader.nativeSkills.any { it.name == command },
+            )
+        }
+        val pickerSection = when (route) {
+            dev.multiprompt.companion.model.SlashCommand.Route.MODEL -> HostChange.OPUS.section
+            dev.multiprompt.companion.model.SlashCommand.Route.PLAN,
+            dev.multiprompt.companion.model.SlashCommand.Route.PERMISSIONS -> HostChange.ASK.section
+            else -> null
+        }
+        if (pickerSection != null) {
+            if (HostChange.sections(connection.hostSettings() != null).any { it.first == pickerSection }) {
+                attachMenuSection = pickerSection
+                attachMenuExpanded = true
+            } else {
+                android.widget.Toast.makeText(context, "Chat settings are not ready", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        } else if (route == dev.multiprompt.companion.model.SlashCommand.Route.UNAVAILABLE) {
+            android.widget.Toast.makeText(context, "Not available in live chat", android.widget.Toast.LENGTH_SHORT).show()
+        }
+        route != dev.multiprompt.companion.model.SlashCommand.Route.SEND
+    }
     val sendDraft: (String) -> Unit = { draftText ->
         val composedPrompt = PromptComposer.composeMessage(ChatMention.annotate(draftText, mentionPicks, mentionChats), imageAttachments, replyTo, reader.nativeSkills)
         if (composedPrompt.isNotBlank() &&
             !reader.sending &&
-            pendingPromptAction == null && !recordingPrompt
+            pendingPromptAction == null && !recordingPrompt &&
+            !routeSlashCommand(draftText)
         ) {
             val actionCount = reader.completedActions
             val draft = SentDraft(draftText, imageAttachments, replyTo)
@@ -3848,8 +3954,9 @@ internal fun ReaderScreen(
                                 onDismissRequest = { attachMenuExpanded = false },
                                 contentResetKey = attachMenuSection.orEmpty(),
                             ) {
-                                val openSection = if (session.agent == AgentKind.CLAUDE) {
-                                    HostChange.sections(connection.hostSettings() != null).firstOrNull { it.first == attachMenuSection }
+                                val settingsProvider = HostChange.providerOf(session.agent)
+                                val openSection = if (settingsProvider != null) {
+                                    HostChange.sections(connection.hostSettings() != null, settingsProvider).firstOrNull { it.first == attachMenuSection }
                                 } else null
                                 if (openSection != null) {
                                     val hostSettings = connection.hostSettings()
@@ -3902,9 +4009,11 @@ internal fun ReaderScreen(
                                                 promptFocusRequester.requestFocus()
                                             },
                                         )
+                                    }
+                                    if (settingsProvider != null) {
                                         val hostSettings = connection.hostSettings()
-                                        val sections = HostChange.sections(hostSettings != null)
-                                        KitDivider()
+                                        val sections = HostChange.sections(hostSettings != null, settingsProvider)
+                                        if (sections.isNotEmpty()) KitDivider()
                                         sections.forEach { (title, changes) ->
                                             val current = changes.firstOrNull { it.active(hostSettings, runtimeDetails.model, runtimeDetails.effort) }?.label
                                             KitMenuRow(

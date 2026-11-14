@@ -48,4 +48,40 @@ class AgentKindTest {
         assertEquals(AgentKind.OTHER, AgentKind.detect("api-server"))
         assertEquals(AgentKind.OTHER, AgentKind.detect("work", preview = "Ask codex to review this"))
     }
+
+    @Test
+    fun aDesktopChatShowsTheAiTheHostRegistryNamesForIt() {
+        fun desktop(provider: String, command: String = "sleep") =
+            TmuxSession("h", "live-0123456789ab4def81230123456789ab", 1, 0, 0, paneCommand = command, hostProvider = provider)
+        assertEquals(AgentKind.CODEX, desktop("codex").agent)
+        assertEquals(AgentKind.PI, desktop("pi").agent)
+        assertEquals(AgentKind.HAX, desktop("hax").agent)
+        assertEquals(AgentKind.CURSOR, desktop("cursor").agent)
+        assertEquals(AgentKind.CLAUDE, desktop("claude").agent)
+        assertEquals("Codex", desktop("codex").agent.label)
+    }
+
+    @Test
+    fun aDesktopChatWithoutAnyRegistryAnswerStaysClaude() {
+        fun desktop(provider: String) =
+            TmuxSession("h", "live-0123456789ab4def81230123456789ab", 1, 0, 0, paneCommand = "sleep", hostProvider = provider)
+        assertEquals(AgentKind.CLAUDE, desktop("").agent)
+        assertEquals(AgentKind.CLAUDE, desktop("bogus").agent)
+        assertEquals(AgentKind.CLAUDE, desktop("shell").agent)
+    }
+
+    @Test
+    fun theRegistryNeverRelabelsATerminalSession() {
+        val terminal = TmuxSession("h", "cl-work", 1, 0, 0, paneCommand = "claude", hostProvider = "codex")
+        assertEquals(AgentKind.CLAUDE, terminal.agent)
+        val shell = TmuxSession("h", "work", 1, 0, 0, paneCommand = "bash", hostProvider = "pi")
+        assertEquals(AgentKind.OTHER, shell.agent)
+    }
+
+    @Test
+    fun aPhoneChatKeepsItsNameTagWhenTheRegistryAgrees() {
+        val name = AgentKind.liveChatName(AgentKind.PI, "api", "x1")
+        assertEquals(AgentKind.PI, TmuxSession("h", name, 1, 0, 0, paneCommand = "sleep").agent)
+        assertEquals(AgentKind.PI, TmuxSession("h", name, 1, 0, 0, paneCommand = "sleep", hostProvider = "pi").agent)
+    }
 }
