@@ -173,6 +173,8 @@ class ChatHistoryConnection(
         if (!confirmed) MessageActionResult.Rejected("Retry requires confirmation") else action("retry", row.id, row.epoch, row.attempt, observed)
     suspend fun dismiss(row: MessageProtocol.Row, observed: Long = generation) = action("dismiss", row.id, row.epoch, row.attempt, observed)
     suspend fun sendAgain(row: MessageProtocol.Row): PromptAdmission = submit(row.text, row.id)
+    suspend fun editWaiting(id: String, text: String): QueuedEdit.Outcome =
+        QueuedEdit.run(_state.value.replica?.messages?.get(id), text, { dismiss(it) }, { newText, replaces -> submit(newText, replaces) })
     suspend fun removeUnknown(id: String, observed: Long = generation) = action("removeUnknown", id, observed = observed)
     suspend fun recoverReset(observed: Long = generation) = action("reset", "", observed = observed)
 

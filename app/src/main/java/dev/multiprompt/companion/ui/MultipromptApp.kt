@@ -244,6 +244,7 @@ import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.dictation.DictationState
 import dev.multiprompt.companion.reader.HostChange
 import dev.multiprompt.companion.reader.MessageActionResult
+import dev.multiprompt.companion.reader.QueuedEdit
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.skills.NativeSkill
@@ -2959,6 +2960,8 @@ internal fun ReaderScreen(
     val setPrompt: (String) -> Unit = { value ->
         promptField = TextFieldValue(value, selection = TextRange(value.length))
     }
+    var editingMessageId by remember(connection, session.hostId, session.name) { mutableStateOf<String?>(null) }
+    LaunchedEffect(promptField.text) { if (promptField.text.isBlank()) editingMessageId = null }
     var mentionPicks by remember(connection) { mutableStateOf(emptyList<MentionChat>()) }
     val mentionQuery = if (mentionChats.isNotEmpty() && skillQuery == null && promptField.selection.collapsed) {
         ChatMention.query(prompt, promptField.selection.start)
@@ -3329,8 +3332,15 @@ internal fun ReaderScreen(
             val actionCount = reader.completedActions
             val draft = SentDraft(draftText, imageAttachments, replyTo)
             recordingPrompt = true
+            val editing = editingMessageId
             readerScope.launch {
-                when (val admission = connection.sendPrompt(composedPrompt)) {
+                val sent = if (editing == null) connection.sendPrompt(composedPrompt) else when (val edit = connection.editWaiting(editing, composedPrompt)) {
+                    is QueuedEdit.Outcome.Sent -> edit.admission
+                    is QueuedEdit.Outcome.TooLate -> dev.multiprompt.companion.reader.PromptAdmission.Rejected(QueuedEdit.TOO_LATE_NOTICE)
+                    is QueuedEdit.Outcome.Lost -> dev.multiprompt.companion.reader.PromptAdmission.Rejected(edit.reason)
+                }
+                if (editing != null) editingMessageId = null
+                when (val admission = sent) {
                     is dev.multiprompt.companion.reader.PromptAdmission.Rejected -> {
                         val reason = admission.reason
                         if (reason == "Chat is disconnected" || (reason == "Chat is not ready" && !chatReady)) {
@@ -4332,6 +4342,15 @@ internal fun ReaderScreen(
                 sunlight = sunlightMode,
                 replyGate = replyGate,
                 onReply = chooseReply,
+                onEditPending = { message ->
+                    if (promptField.text.isNotBlank()) {
+                        android.widget.Toast.makeText(context, "Send or clear your draft first", android.widget.Toast.LENGTH_SHORT).show()
+                    } else {
+                        setPrompt(dev.multiprompt.companion.reader.ChatMention.visible(message.text))
+                        editingMessageId = message.requestId
+                        promptFocusRequester.requestFocus()
+                    }
+                },
                 onSpeakableReplies = { speakableReplies = it; if (it.isEmpty()) { reading = false; replyCursor = 0 } },
                 onChatReady = { chatReady = it },
                 focusKey = speakingKey,
