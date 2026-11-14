@@ -38,5 +38,6 @@
   "IGSH-1532": "Android: show each live message once",
   "IGSH-1942": "Android: plus menu is short, model and effort open on tap",
   "IGSH-1850": "Android: show a named live chat mention as a name",
-  "IGSH-2274": "Android keeps the same chat after Fresh start"
+  "IGSH-2274": "Android keeps the same chat after Fresh start",
+  "IGSH-2301": "Android: make the app open faster after an update"
 }

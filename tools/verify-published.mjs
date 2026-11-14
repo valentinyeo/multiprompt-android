@@ -3,6 +3,7 @@ import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { apkProblems } from './baseline-profile.mjs';
 
 const CHANNEL = process.argv[2] ?? 'android-m3-latest';
 
@@ -55,6 +56,7 @@ async function main() {
     if (!find(manifest.versionName)) problems.push(`version ${manifest.versionName} not found inside the APK`);
     const resources = execFileSync('unzip', ['-p', file, 'resources.arsc'], { maxBuffer: 64 * 1024 * 1024 });
     if (resources.indexOf(Buffer.from('Multi Bot', 'latin1')) < 0) problems.push('app label Multi Bot not found inside the APK');
+    problems.push(...apkProblems(file));
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
