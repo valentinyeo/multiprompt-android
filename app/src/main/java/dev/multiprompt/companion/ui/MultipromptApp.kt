@@ -432,6 +432,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             onReleaseNotes = viewModel::openReleaseNotes,
             onMarkRead = viewModel::markReaderRead,
             unreadMessageKey = state.readerUnreadMessageKey,
+            unreadSinceEpochSeconds = state.readerUnreadSince,
             onMarkUnreadFrom = viewModel::markReaderUnreadFrom,
             onArchiveToggle = {
                 if (SessionReadStore.key(readerSession.hostId, readerSession.name) in
@@ -2739,6 +2740,7 @@ internal fun ReaderScreen(
     unreadMessageKey: String? = null,
     onMarkUnreadFrom: (String) -> Unit = {},
     mentionChats: List<MentionChat> = emptyList(),
+    unreadSinceEpochSeconds: Long? = null,
 ) = key(connection) {
     MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
     val reader by connection.state.collectAsState()
@@ -4022,6 +4024,7 @@ internal fun ReaderScreen(
                 },
                 sessionName = session.displayName,
                 unreadMessageKey = unreadMessageKey,
+                unreadSinceEpochSeconds = unreadSinceEpochSeconds,
                 onMarkUnread = onMarkUnreadFrom,
                 onSessionUsed = { onSessionInteraction(); onSessionInput() },
                 listState = chatListState,
