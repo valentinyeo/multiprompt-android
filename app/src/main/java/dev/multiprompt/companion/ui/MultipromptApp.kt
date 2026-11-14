@@ -230,6 +230,8 @@ import dev.multiprompt.companion.R
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.model.AgentHarness
 import dev.multiprompt.companion.model.DirectoryRanking
+import dev.multiprompt.companion.model.RecentFolder
+import dev.multiprompt.companion.model.RecentFolders
 import dev.multiprompt.companion.model.SessionFinder
 import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
@@ -478,6 +480,16 @@ private fun AppScreens(viewModel: MainViewModel) {
     }
 
     val newSession = state.newSession
+    if (newSession != null && newSession.step == NewSessionStep.HOST) {
+        MultipromptTheme(sunlight = sunlight, readerStyle = true) { NewSessionRecentScreen(
+            picker = newSession,
+            hosts = state.hosts,
+            onChooseFolder = viewModel::chooseNewSessionRecentFolder,
+            onBrowseHost = viewModel::chooseNewSessionHost,
+            onClose = viewModel::closeNewSession,
+        ) }
+        return
+    }
     if (newSession != null && newSession.step == NewSessionStep.PATH) {
         MultipromptTheme(sunlight = sunlight, readerStyle = true) { NewSessionFolderScreen(
             sunlight = sunlight,
@@ -592,29 +604,7 @@ private fun AppScreens(viewModel: MainViewModel) {
 
     state.newSession?.let { picker ->
         when (picker.step) {
-            NewSessionStep.HOST -> AlertDialog(
-                onDismissRequest = viewModel::closeNewSession,
-                title = { Text("New session · host") },
-                text = {
-                    Column(
-                        Modifier.verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        state.hosts.forEach { host ->
-                            TextButton(
-                                onClick = { viewModel.chooseNewSessionHost(host.id) },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text(host.label, Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
-                            }
-                        }
-                    }
-                },
-                confirmButton = {},
-                dismissButton = {
-                    TextButton(onClick = viewModel::closeNewSession) { Text("Cancel") }
-                },
-            )
+            NewSessionStep.HOST -> Unit
 
             NewSessionStep.PATH -> Unit
 
@@ -1184,6 +1174,84 @@ internal fun NewSessionFolderScreen(
             }
         }
     }
+}
+
+@Composable
+internal fun NewSessionRecentScreen(
+    picker: NewSessionPicker,
+    hosts: List<HostProfile>,
+    onChooseFolder: (RecentFolder) -> Unit,
+    onBrowseHost: (String) -> Unit,
+    onClose: () -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    val matches = remember(picker.recentFolders, query) { RecentFolders.filter(picker.recentFolders, query) }
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    BackHandler(onBack = onClose)
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+        delay(120)
+        keyboard?.show()
+    }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .windowInsetsPadding(WindowInsets.safeDrawing),
+    ) {
+        PickerSearchBar(
+            query = query,
+            onQueryChange = { query = it },
+            onSubmit = { matches.firstOrNull()?.let(onChooseFolder) },
+            focusRequester = focusRequester,
+            placeholder = "Find a project folder",
+            onClose = onClose,
+        )
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().weight(1f).testTag("new-session-folders"),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            if (query.isBlank()) {
+                item(key = "browse-title") { PickerSectionTitle("Browse by server") }
+                items(hosts, key = { "host-${it.id}" }) { host ->
+                    PickerRow(title = host.label, subtitle = "Browse its folders", onClick = { onBrowseHost(host.id) })
+                }
+                item(key = "recent-title") { PickerSectionTitle("Recent folders from every server") }
+            }
+            if (matches.isEmpty()) {
+                item(key = "recent-empty") {
+                    Text(
+                        when {
+                            hosts.isEmpty() -> "Add a server first."
+                            query.isBlank() -> "No recent folders yet. Pick a server to browse."
+                            else -> "No recent folder matches. Clear the search to browse a server."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    )
+                }
+            }
+            items(matches, key = { "folder-${it.hostId}\n${it.path}" }) { folder ->
+                PickerRow(
+                    title = folder.name,
+                    subtitle = folder.hostLabel,
+                    onClick = { onChooseFolder(folder) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PickerSectionTitle(text: String) {
+    Text(
+        text,
+        fontSize = 12.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 2.dp),
+    )
 }
 
 private enum class SettingsPage { HIDDEN, PREFERENCES, MAPPING }
