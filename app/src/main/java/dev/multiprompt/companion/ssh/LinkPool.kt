@@ -15,7 +15,7 @@ import kotlinx.coroutines.withTimeout
 object LinkPolicy {
     const val IDLE_MS = 60_000L
     const val KEEPALIVE_MS = 15_000L
-    const val LIST_STALL_MS = 8_000L
+    const val LIST_STALL_MS = 12_000L
 
     data class Identity(
         val hostname: String,
@@ -30,7 +30,7 @@ object LinkPolicy {
 
     enum class Acquire { REUSE, OPEN }
 
-    enum class Failure { NOT_SENT, LINK_LOST, COMMAND }
+    data class Outcome(val evict: Boolean, val retry: Boolean)
 
     class Stalled : Exception("The server link stopped answering. Refresh to retry.")
 
@@ -48,17 +48,11 @@ object LinkPolicy {
     fun acquire(held: Identity?, wanted: Identity, heldAlive: Boolean): Acquire =
         if (held == wanted && heldAlive) Acquire.REUSE else Acquire.OPEN
 
-    fun failure(error: Throwable, linkAlive: Boolean): Failure = when {
-        error is SshProblem.LinkUnavailable -> Failure.NOT_SENT
-        error is Stalled || !linkAlive -> Failure.LINK_LOST
-        else -> Failure.COMMAND
+    fun afterFailure(error: Throwable, linkAlive: Boolean, attempt: Int, reused: Boolean, repeatable: Boolean): Outcome {
+        val lost = error is Stalled || !linkAlive
+        val unsent = error is SshProblem.LinkUnavailable
+        return Outcome(evict = lost, retry = attempt == 0 && reused && (unsent || (lost && repeatable)))
     }
-
-    fun evict(failure: Failure) = failure != Failure.COMMAND
-
-    fun retry(attempt: Int, reused: Boolean, repeatable: Boolean, failure: Failure): Boolean =
-        attempt == 0 && reused &&
-            (failure == Failure.NOT_SENT || (failure == Failure.LINK_LOST && repeatable))
 
     fun expired(inUse: Int, lastUsedAtMillis: Long, now: Long, idleMs: Long = IDLE_MS): Boolean =
         inUse == 0 && now - lastUsedAtMillis >= idleMs
@@ -91,9 +85,9 @@ class LinkPool<L : Any>(
                 withContext(NonCancellable) { evict(hostId, entry) }
                 throw cancelled
             } catch (error: Throwable) {
-                val failure = LinkPolicy.failure(error, isAlive(entry.link))
-                if (LinkPolicy.evict(failure)) evict(hostId, entry)
-                if (!LinkPolicy.retry(attempt, reused, repeatable, failure)) throw error
+                val outcome = LinkPolicy.afterFailure(error, isAlive(entry.link), attempt, reused, repeatable)
+                if (outcome.evict) evict(hostId, entry)
+                if (!outcome.retry) throw error
                 attempt++
             } finally {
                 withContext(NonCancellable) {

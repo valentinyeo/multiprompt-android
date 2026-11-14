@@ -191,10 +191,14 @@ class LinkPoolTest {
         val pool = pool()
         pool.refresh(server) { }
         val sentOn = pool.refresh(server, repeatable = false) { link ->
-            if (link.number == 1) throw SshProblem.LinkUnavailable("The SSH server refused a command channel")
+            if (link.number == 1) {
+                link.alive = false
+                throw SshProblem.LinkUnavailable("The SSH server refused a command channel")
+            }
             link.number
         }
         assertEquals(2, sentOn)
+        assertTrue(server.opened.first().closed)
     }
 
     @Test
@@ -262,12 +266,35 @@ class LinkPoolTest {
     }
 
     @Test
-    fun retryPolicyTable() {
-        assertTrue(LinkPolicy.retry(0, reused = true, repeatable = true, failure = LinkPolicy.Failure.LINK_LOST))
-        assertTrue(LinkPolicy.retry(0, reused = true, repeatable = false, failure = LinkPolicy.Failure.NOT_SENT))
-        assertFalse(LinkPolicy.retry(0, reused = true, repeatable = false, failure = LinkPolicy.Failure.LINK_LOST))
-        assertFalse(LinkPolicy.retry(0, reused = true, repeatable = true, failure = LinkPolicy.Failure.COMMAND))
-        assertFalse(LinkPolicy.retry(0, reused = false, repeatable = true, failure = LinkPolicy.Failure.LINK_LOST))
-        assertFalse(LinkPolicy.retry(1, reused = true, repeatable = true, failure = LinkPolicy.Failure.NOT_SENT))
+    fun refusedChannelOnAHealthyLinkKeepsTheSharedLink() = runBlocking {
+        val server = Server()
+        val pool = pool()
+        pool.refresh(server) { }
+        var tries = 0
+        val sentOn = pool.refresh(server, repeatable = false) { link ->
+            tries++
+            if (tries == 1) throw SshProblem.LinkUnavailable("The SSH server refused a command channel")
+            link.number
+        }
+        assertEquals(1, sentOn)
+        assertEquals(2, tries)
+        assertEquals(1, server.opened.size)
+        assertFalse(server.opened.single().closed)
+    }
+
+    @Test
+    fun failurePolicyTable() {
+        val unsent = SshProblem.LinkUnavailable("refused")
+        val command = SshProblem.Connection("tmux failed")
+        fun outcome(error: Throwable, alive: Boolean, attempt: Int = 0, reused: Boolean = true, repeatable: Boolean) =
+            LinkPolicy.afterFailure(error, alive, attempt, reused, repeatable)
+        assertEquals(LinkPolicy.Outcome(evict = true, retry = true), outcome(command, alive = false, repeatable = true))
+        assertEquals(LinkPolicy.Outcome(evict = true, retry = false), outcome(command, alive = false, repeatable = false))
+        assertEquals(LinkPolicy.Outcome(evict = true, retry = true), outcome(unsent, alive = false, repeatable = false))
+        assertEquals(LinkPolicy.Outcome(evict = false, retry = true), outcome(unsent, alive = true, repeatable = false))
+        assertEquals(LinkPolicy.Outcome(evict = false, retry = false), outcome(command, alive = true, repeatable = true))
+        assertEquals(LinkPolicy.Outcome(evict = true, retry = true), outcome(LinkPolicy.Stalled(), alive = true, repeatable = true))
+        assertEquals(LinkPolicy.Outcome(evict = true, retry = false), outcome(command, alive = false, reused = false, repeatable = true))
+        assertEquals(LinkPolicy.Outcome(evict = false, retry = false), outcome(unsent, alive = true, attempt = 1, repeatable = true))
     }
 }
