@@ -74,6 +74,35 @@ class TmuxCommandsTest {
     }
 
     @Test
+    fun streamPacksTheSnapshotWhenGzipAndBase64ExistAndKeepsHexOtherwise() {
+        val command = TmuxCommands.stream("work")
+
+        assertTrue(command.contains("command -v gzip >/dev/null 2>&1 && command -v base64 >/dev/null 2>&1"))
+        assertTrue(command.contains("then mp_packed=1; else mp_packed=0; fi"))
+        assertTrue(command.contains("if [ \"\$mp_packed\" = 1 ]; then printf '${TmuxCommands.SNAPSHOT_PACKED_MARKER}'; "))
+        assertTrue(command.contains("gzip -c < \"\$mp_snapshot\" | base64 | tr -d '\\n'"))
+        assertTrue(command.contains("else od -An -v -tx1 < \"\$mp_snapshot\" | tr -d ' \\n'; fi"))
+    }
+
+    @Test
+    fun streamScriptQuotesTheSessionNameAndHoldsNoOtherUserContent() {
+        val hostile = "a'; touch /bad; '"
+        val command = TmuxCommands.stream(hostile)
+
+        assertTrue(command.contains("-t ${TmuxParser.shellQuote("=$hostile")} "))
+        assertTrue(command.contains("-t ${TmuxParser.shellQuote("=$hostile:")} "))
+        val unquoted = command
+            .replace(TmuxParser.shellQuote("=$hostile:"), "")
+            .replace(TmuxParser.shellQuote("=$hostile"), "")
+            .replace(TmuxParser.shellQuote(hostile), "")
+        assertFalse(unquoted.contains("touch /bad"))
+        assertEquals(
+            TmuxCommands.stream("qxfirstqx").replace("qxfirstqx", "@"),
+            TmuxCommands.stream("qxsecondqx").replace("qxsecondqx", "@"),
+        )
+    }
+
+    @Test
     fun claudeSessionCreationQuotesWorkspaceAndSession() {
         val command = TmuxCommands.createClaudeSession("claude-work", "/tmp/a'; touch /bad")
 
