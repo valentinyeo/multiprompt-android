@@ -65,4 +65,17 @@ class PromptComposerTest {
             ),
         )
     }
+
+    @Test
+    fun serverFilesShowTheirNameAndImagesKeepTheirNumber() {
+        val path = "/home/v/.multiprompt/uploads/chat/report.pdf"
+        assertEquals(true, PromptComposer.isServerFile(path))
+        assertEquals(false, PromptComposer.isServerFile("https://screencast2.com/example.png"))
+        assertEquals("report.pdf", PromptComposer.attachmentLabel(path, 0))
+        assertEquals("Image 2", PromptComposer.attachmentLabel("https://screencast2.com/example.png", 1))
+        assertEquals(
+            "$path\nhttps://screencast2.com/example.png\nlook",
+            PromptComposer.composeMessage("look", listOf(path, "https://screencast2.com/example.png"), null, emptyList()),
+        )
+    }
 }

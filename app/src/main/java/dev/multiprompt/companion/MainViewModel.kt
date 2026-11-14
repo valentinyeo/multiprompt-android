@@ -104,6 +104,7 @@ data class AppUiState(
     val reader: SessionReaderConnection? = null,
     val readerSession: TmuxSession? = null,
     val readerUnreadMessageKey: String? = null,
+    val readerUnreadSince: Long? = null,
     val unreadSessionKeys: Set<String> = emptySet(),
     val unreadCounts: Map<String, Int> = emptyMap(),
     val repliedSessionKeys: Set<String> = emptySet(),
@@ -372,6 +373,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearSessionActionError() {
         _state.update { it.copy(sessionActionError = null) }
+    }
+
+    private fun syncDictationKey(generation: Int) {
+        if (dictation.state.value.configured) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val key = syncAuth.deepgramKey() ?: return@launch
+            if (generation == accountGeneration && syncAuth.hasSession()) dictation.adoptAccountKey(key)
+        }
     }
 
     private fun uploadCrashReport() {
@@ -1037,6 +1046,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         noteSessionInteraction(session)
         val unreadMessageKey = sessionReads.unreadMessageKey(session)
+        val unreadSince = if (unreadMessageKey == null && sessionReads.isUnread(session)) sessionReads.readAt(session).takeIf { it > 0L } else null
         sessionReads.markRead(session)
         val key = SessionReadStore.key(session.hostId, session.name)
         ReplyNotifier.cancel(app, key)
@@ -1073,6 +1083,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 reader = reader,
                 readerSession = session,
                 readerUnreadMessageKey = unreadMessageKey,
+                readerUnreadSince = unreadSince,
                 userSelectedSessionKey = key.takeIf { userInitiated },
                 readerSwipeOrder = swipeOrder,
                 unreadSessionKeys = it.unreadSessionKeys - key,
@@ -1086,14 +1097,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         sessionReads.markRead(session)
         val key = SessionReadStore.key(session.hostId, session.name)
         ReplyNotifier.cancel(app, key)
-        _state.update { it.copy(readerUnreadMessageKey = null, unreadSessionKeys = it.unreadSessionKeys - key, unreadCounts = it.unreadCounts - key) }
+        _state.update { it.copy(readerUnreadMessageKey = null, readerUnreadSince = null, unreadSessionKeys = it.unreadSessionKeys - key, unreadCounts = it.unreadCounts - key) }
     }
 
     fun markReaderUnreadFrom(messageKey: String) {
         val session = _state.value.readerSession ?: return
         sessionReads.markUnreadFrom(session, messageKey)
         markSessionUnread(session)
-        _state.update { it.copy(readerUnreadMessageKey = messageKey) }
+        _state.update { it.copy(readerUnreadMessageKey = messageKey, readerUnreadSince = null) }
     }
 
     fun markSessionUnread(session: TmuxSession) {
@@ -2005,6 +2016,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 if (!syncAuth.hasSession()) return@launch
                 uploadCrashReport()
+                syncDictationKey(generation)
                 _state.update { it.copy(signedIn = true) }
                 syncDeviceKeys()
                 var remote = AccountLayout.response(syncAuth.request("GET", "/v1/layout").json)
@@ -2083,7 +2095,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .let { sessions ->
             if (state.selectedWorkspaceId == FREQUENT_SPLIT_ID) {
                 frequentSessions(sessions, state.accountLayout, state.accountHosts, System.currentTimeMillis())
-            } else SessionSearch.newestFirst(sessions, state.sessionInteractionEpochSeconds)
+            } else SessionSearch.newestFirst(sessions, state.sessionInteractionEpochSeconds, state.accountLayout, state.accountHosts)
         }
 
     private companion object {
