@@ -55,5 +55,6 @@
   "IGSH-2300": "Android: pause updates for chats that are not on screen",
   "IGSH-1506": "Android: design the session menu",
   "IGSH-2320": "Android: bot replies no longer reorder the chat list",
-  "IGSH-2318": "Android: chat list ties sort like desktop"
+  "IGSH-2318": "Android: chat list ties sort like desktop",
+  "IGSH-2343": "Android: read new replies aloud by themselves"
 }

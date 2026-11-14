@@ -2894,15 +2894,70 @@ internal fun ReaderScreen(
     var reading by remember { mutableStateOf(false) }
     var speakingKey by remember { mutableStateOf<String?>(null) }
     val speech = remember { android.speech.tts.TextToSpeech(context.applicationContext) { } }
+    val voiceModeStore = remember(context) { dev.multiprompt.companion.data.VoiceModeStore(context.applicationContext) }
+    var voiceModeOn by remember { mutableStateOf(voiceModeStore.enabled()) }
+    val voiceTracker = remember(session.hostId, session.name) { dev.multiprompt.companion.reader.VoiceMode.Tracker() }
+    val playback = remember { dev.multiprompt.companion.reader.VoiceMode.Playback() }
+    val voiceLifecycle = remember(context) { context.findLifecycle() }
+    var appForeground by remember(voiceLifecycle) {
+        mutableStateOf(voiceLifecycle?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.STARTED) ?: true)
+    }
     LaunchedEffect(session.hostId, session.name) {
         speech.stop()
+        playback.clear()
         reading = false
         replyCursor = 0
     }
     DisposableEffect(speech) {
+        speech.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {}
+            override fun onDone(utteranceId: String?) {
+                if (playback.end(utteranceId.orEmpty())) reading = false
+            }
+            override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                if (playback.end(utteranceId.orEmpty())) reading = false
+            }
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) {
+                if (playback.end(utteranceId.orEmpty())) reading = false
+            }
+        })
         onDispose {
             speech.stop()
             speech.shutdown()
+        }
+    }
+    DisposableEffect(voiceLifecycle) {
+        if (voiceLifecycle == null) return@DisposableEffect onDispose {}
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> {
+                    appForeground = false
+                    speech.stop()
+                    playback.clear()
+                    reading = false
+                }
+                Lifecycle.Event.ON_START -> appForeground = true
+                else -> Unit
+            }
+        }
+        voiceLifecycle.lifecycle.addObserver(observer)
+        onDispose { voiceLifecycle.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(speakableReplies, chatReady, voiceModeOn, appForeground, session.hostId, session.name) {
+        val enabled = voiceModeOn && appForeground
+        voiceTracker.memory = dev.multiprompt.companion.reader.VoiceMode.observe(voiceTracker.memory, speakableReplies, chatReady, enabled, false).memory
+        if (!enabled || !chatReady) return@LaunchedEffect
+        delay(dev.multiprompt.companion.reader.VoiceMode.STABLE_MS)
+        val step = dev.multiprompt.companion.reader.VoiceMode.observe(voiceTracker.memory, speakableReplies, chatReady, enabled, true)
+        voiceTracker.memory = step.memory
+        step.speak.forEach { reply ->
+            val id = playback.begin(false)
+            if (speech.speak(reply.text, android.speech.tts.TextToSpeech.QUEUE_ADD, null, id) == android.speech.tts.TextToSpeech.SUCCESS) {
+                reading = true
+            } else {
+                playback.end(id)
+            }
         }
     }
     var loadingOlder by remember(connection) { mutableStateOf(false) }
@@ -3475,18 +3530,35 @@ internal fun ReaderScreen(
                                         menuExpanded = false
                                         if (reading) {
                                             speech.stop()
+                                            playback.clear()
                                             reading = false
                                             speakingKey = null
                                         } else {
                                             val next = dev.multiprompt.companion.reader.ReadAloud.next(speakableReplies, replyCursor)
                                             if (next != null) {
-                                                speech.speak(next.first.text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "reply")
+                                                speech.speak(next.first.text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, playback.begin(true))
                                                 speakingKey = next.first.key
                                                 replyCursor = next.second
                                                 reading = true
                                             } else {
                                                 android.widget.Toast.makeText(context, "No reply to read yet", android.widget.Toast.LENGTH_SHORT).show()
                                             }
+                                        }
+                                    },
+                                )
+                                KitMenuRow(
+                                    label = "Voice Mode",
+                                    trailingText = if (voiceModeOn) "✓" else null,
+                                    onClick = {
+                                        menuExpanded = false
+                                        val next = !voiceModeOn
+                                        voiceModeOn = next
+                                        voiceModeStore.setEnabled(next)
+                                        if (!next && reading) {
+                                            speech.stop()
+                                            playback.clear()
+                                            reading = false
+                                            speakingKey = null
                                         }
                                     },
                                 )
