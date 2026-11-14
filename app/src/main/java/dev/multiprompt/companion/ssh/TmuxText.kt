@@ -1,6 +1,11 @@
 package dev.multiprompt.companion.ssh
 
 import dev.multiprompt.companion.model.AgentKind
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.util.Base64
+import java.util.zip.GZIPInputStream
 
 object TmuxText {
     data class RuntimeDetails(
@@ -123,6 +128,16 @@ object TmuxText {
         }
     }
 
+    fun parseHostProviders(value: String): Map<String, String> = buildMap {
+        value.lineSequence().forEach { line ->
+            val parts = line.split('\t')
+            if (parts.size < 3 || parts[0] != HOST_PROVIDER_PREFIX) return@forEach
+            val name = parts[1].trim()
+            val provider = parts[2].trim()
+            if (name.isNotBlank() && AgentKind.registered(provider) != null) put(name, provider)
+        }
+    }
+
     fun parseSessionEtaStates(value: String): Map<String, SessionEtaState> = buildMap {
         value.lineSequence().forEach { line ->
             val parts = line.split('\t')
@@ -162,6 +177,36 @@ object TmuxText {
             value.substring(index * 2, index * 2 + 2).toInt(16).toByte()
         }
         return bytes.toString(Charsets.UTF_8)
+    }
+
+    fun decodeSnapshot(value: String): String =
+        if (value.startsWith(TmuxCommands.SNAPSHOT_PACKED_MARKER)) {
+            decodePacked(value.removePrefix(TmuxCommands.SNAPSHOT_PACKED_MARKER))
+        } else {
+            decodeHex(value)
+        }
+
+    fun decodePacked(value: String, maxBytes: Int = MAX_SNAPSHOT_BYTES): String {
+        val compressed = try {
+            Base64.getDecoder().decode(value)
+        } catch (_: IllegalArgumentException) {
+            return ""
+        }
+        val decoded = ByteArrayOutputStream()
+        try {
+            GZIPInputStream(ByteArrayInputStream(compressed)).use { input ->
+                val buffer = ByteArray(8192)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    if (decoded.size() + read > maxBytes) return ""
+                    decoded.write(buffer, 0, read)
+                }
+            }
+        } catch (_: IOException) {
+            return ""
+        }
+        return decoded.toByteArray().toString(Charsets.UTF_8)
     }
 
     fun containsLink(value: String): Boolean = WEB_LINK.containsMatchIn(value)
@@ -693,6 +738,7 @@ object TmuxText {
             line.endsWith(";")
     }
 
+    const val MAX_SNAPSHOT_BYTES: Int = 512 * 1024
     private const val COMPOSER_SEARCH_LINES = 18
     private const val MODEL_PICKER_SEARCH_LINES = 80
     private const val RUNTIME_SEARCH_LINES = 12
@@ -712,6 +758,7 @@ object TmuxText {
     private val FENCE_LINE = Regex("^```[A-Za-z0-9_+.-]*$")
     private const val HOOK_STATE_PREFIX = "@state"
     private const val LIVE_REPLY_PREFIX = "@reply"
+    private const val HOST_PROVIDER_PREFIX = "@provider"
     private val HOOK_STATES = setOf("active", "done")
     private const val MIN_ACCURACY_ACTUAL_SECONDS = 120.0
     private const val MIN_ACCURACY_SAMPLES = 3

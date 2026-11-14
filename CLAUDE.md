@@ -85,6 +85,8 @@ Release APKs must always be signed with the same key, or the self-update chain b
 
 The update manifest URL is baked in as a `BuildConfig.UPDATE_MANIFEST_URL` field in `app/build.gradle.kts` and points at the fixed `android-latest` release asset. Changing the repo or release tag means changing both that field and the workflow. Manifest shape is parsed strictly in `UpdateManifest.kt` — add fields there and in the workflow's `jq` block together.
 
+`app/src/main/baseline-prof.txt` is a hand-written baseline profile that AGP compiles into the release and m3 APKs; `androidx.profileinstaller` installs it on self-updated and sideloaded installs. `node tools/baseline-profile.mjs source` checks the rules and `node tools/baseline-profile.mjs apk <apk>` checks a built APK. Rules must use the documented form `HSPLdev/multiprompt/companion/ui/**->**(**)**` and name real packages.
+
 Debug builds use applicationId suffix `.debug`, so they are a different package with a different certificate and cannot receive release updates.
 
 ## Conventions

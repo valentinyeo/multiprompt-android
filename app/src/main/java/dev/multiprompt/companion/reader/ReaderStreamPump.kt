@@ -56,6 +56,7 @@ internal class ReaderStreamPump<C : Any>(
     private val onFailure: (Throwable) -> Unit,
     private val reconnectDelayMillis: Long,
     private val reuseFirstBytesMillis: Long,
+    private val reconnectWait: suspend (Long) -> Unit = { delay(it) },
 ) {
     suspend fun pump() {
         var warm: C? = null
@@ -93,7 +94,7 @@ internal class ReaderStreamPump<C : Any>(
                 warm = null
                 onClient(null)
                 dropped?.let { release(it) }
-                if (!reused) delay(reconnectDelayMillis)
+                if (!reused) reconnectWait(reconnectDelayMillis)
             }
         }
     }

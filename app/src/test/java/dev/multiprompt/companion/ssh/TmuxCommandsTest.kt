@@ -5,12 +5,21 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.File
 import java.nio.file.Files
 import java.security.MessageDigest
 
 class TmuxCommandsTest {
+    @Test
+    fun nativeSkillsQuotesTheSessionAndTheWorkingDirectory() {
+        assertEquals("python3 - 'live-abc'", TmuxCommands.nativeSkills("live-abc"))
+        assertEquals("python3 - 'live-abc'", TmuxCommands.nativeSkills("live-abc", "  "))
+        val command = TmuxCommands.nativeSkills("live-abc", "/home/me/it's here; reboot")
+        assertEquals("python3 - 'live-abc' '/home/me/it'\"'\"'s here; reboot'", command)
+    }
+
     @Test
     fun captureQuotesTheCompleteTarget() {
         val command = TmuxCommands.capture("a'; reboot")
@@ -71,6 +80,35 @@ class TmuxCommandsTest {
         assertTrue(command.contains("mp_previous=\$mp_current"))
         assertTrue(command.contains(TmuxCommands.SNAPSHOT_PREFIX))
         assertTrue(command.contains("sleep 1"))
+    }
+
+    @Test
+    fun streamPacksTheSnapshotWhenGzipAndBase64ExistAndKeepsHexOtherwise() {
+        val command = TmuxCommands.stream("work")
+
+        assertTrue(command.contains("command -v gzip >/dev/null 2>&1 && command -v base64 >/dev/null 2>&1"))
+        assertTrue(command.contains("then mp_packed=1; else mp_packed=0; fi"))
+        assertTrue(command.contains("if [ \"\$mp_packed\" = 1 ]; then printf '${TmuxCommands.SNAPSHOT_PACKED_MARKER}'; "))
+        assertTrue(command.contains("gzip -c < \"\$mp_snapshot\" | base64 | tr -d '\\n'"))
+        assertTrue(command.contains("else od -An -v -tx1 < \"\$mp_snapshot\" | tr -d ' \\n'; fi"))
+    }
+
+    @Test
+    fun streamScriptQuotesTheSessionNameAndHoldsNoOtherUserContent() {
+        val hostile = "a'; touch /bad; '"
+        val command = TmuxCommands.stream(hostile)
+
+        assertTrue(command.contains("-t ${TmuxParser.shellQuote("=$hostile")} "))
+        assertTrue(command.contains("-t ${TmuxParser.shellQuote("=$hostile:")} "))
+        val unquoted = command
+            .replace(TmuxParser.shellQuote("=$hostile:"), "")
+            .replace(TmuxParser.shellQuote("=$hostile"), "")
+            .replace(TmuxParser.shellQuote(hostile), "")
+        assertFalse(unquoted.contains("touch /bad"))
+        assertEquals(
+            TmuxCommands.stream("qxfirstqx").replace("qxfirstqx", "@"),
+            TmuxCommands.stream("qxsecondqx").replace("qxsecondqx", "@"),
+        )
     }
 
     @Test
@@ -224,6 +262,16 @@ class TmuxCommandsTest {
     }
 
     @Test
+    fun hostedStreamWaitsQuietlyWhenTheChatHasNoTerminal() {
+        val hosted = TmuxCommands.stream("live-desk", hosted = true)
+
+        assertTrue(hosted.contains("while true; do sleep 30"))
+        assertTrue(hosted.contains(TmuxCommands.SNAPSHOT_PREFIX))
+        assertFalse(hosted.contains("tmux session is no longer available"))
+        assertTrue(TmuxCommands.stream("live-desk").contains("tmux session is no longer available"))
+    }
+
+    @Test
     fun theStreamCarriesTheAlternateScreenMarker() {
         val stream = TmuxCommands.stream("work")
 
@@ -296,6 +344,30 @@ class TmuxCommandsTest {
         assertEquals("pi", pickedAssistant(sid, "pi"))
         assertEquals("hax", pickedAssistant(sid, "hax"))
         assertEquals("cursor", pickedAssistant(sid, "cursor"))
+    }
+
+    @Test
+    fun theChatListReadsTheProviderTheHostRegistryKeepsForEachChat() {
+        assumeTrue(runCatching { ProcessBuilder("python3", "--version").start().waitFor() == 0 }.getOrDefault(false))
+        val home = Files.createTempDirectory("mp-home").toFile()
+        try {
+            val folder = File(home, ".local/state/multiprompt/agent-host").apply { mkdirs() }
+            File(folder, "a.config.json").writeText("""{"enabled":true,"provider":"codex","sid":"s1","tmux":"live-one"}""")
+            File(folder, "b.config.json").writeText("""{"enabled":true,"provider":"pi","sid":"s2","tmux":"live-two"}""")
+            File(folder, "c.config.json").writeText("""{"enabled":false,"provider":"hax","sid":"s3","tmux":"live-off"}""")
+            File(folder, "d.config.json").writeText("not json")
+            File(folder, "e.config.json").writeText("""{"enabled":true,"provider":"claude","sid":"s4"}""")
+            val process = ProcessBuilder("sh", "-c", TmuxCommands.etaRowsCommand())
+                .apply { environment()["HOME"] = home.path; environment().remove("MULTIPROMPT_STATE_DIR") }
+                .redirectErrorStream(true)
+                .start()
+            val output = process.inputStream.bufferedReader().readText()
+            assertEquals(0, process.waitFor())
+            val providers = TmuxText.parseHostProviders(output)
+            assertEquals(mapOf("live-one" to "codex", "live-two" to "pi"), providers)
+        } finally {
+            home.deleteRecursively()
+        }
     }
 
     private fun pickedAssistant(sid: String, saved: String?): String {

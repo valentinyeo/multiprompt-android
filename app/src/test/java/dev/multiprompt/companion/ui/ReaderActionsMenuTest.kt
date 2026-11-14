@@ -177,12 +177,38 @@ class ReaderActionsMenuTest {
         }
     }
 
+    @Test fun menuGroupsRowsUnderChatSessionAndDangerHeadings() {
+        render(material3 = true)
+        openMenu()
+        val labels = listOf("CHAT", "SESSION", "DANGER")
+        labels.forEach { compose.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
+        compose.onNodeWithText("RECONNECT").assertDoesNotExist()
+        compose.onNodeWithText("Reattach session").assertDoesNotExist()
+        val top = labels.map { compose.onNodeWithText(it).fetchSemanticsNode().positionInRoot.y }
+        assertEquals(top.sorted(), top)
+        val chatRows = listOf("Enter / approve", "Interrupt session", "Read reply", "Voice Mode", "Reset this chat")
+        val sessionRows = listOf("Rename", "Remind Me…", "Waiting", "Pin a page…", "Bot look", "Computer", "Open live terminal", "Hide from sidebar")
+        val dangerRows = listOf("End tmux session", "Delete")
+        val y = { text: String -> compose.onNodeWithText(text).fetchSemanticsNode().positionInRoot.y }
+        chatRows.forEach { assertTrue(it, y("CHAT") < y(it) && y(it) < y("SESSION")) }
+        sessionRows.forEach { assertTrue(it, y("SESSION") < y(it) && y(it) < y("DANGER")) }
+        dangerRows.forEach { assertTrue(it, y("DANGER") < y(it)) }
+    }
+
+    @Test fun reconnectGroupShowsOnlyWhenTheChatIsDisconnected() {
+        render(material3 = true)
+        f.field<MutableStateFlow<ReaderState>>(connection, "_state").value = ReaderState(status = ReaderStatus.Closed)
+        openMenu()
+        compose.onNodeWithText("RECONNECT").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Reattach session").performScrollTo().assertIsDisplayed()
+    }
+
     @Test fun overflowMenuIsClusteredIntoShortGroupsWithSubPages() {
         render(material3 = true)
         openMenu()
         listOf(
             "Enter / approve", "Interrupt session", "Open live terminal", "Rename", "Remind Me…", "Waiting",
-            "Delete", "Model and effort ›", "Display ›", "More ›", "Reset this chat", "End tmux session", "Hide from sidebar",
+            "Delete", "Change ›", "Display", "More", "Reset this chat", "End tmux session", "Hide from sidebar",
         ).forEach { compose.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
         listOf(
             "Set effort: low", "Set effort: max", "Use Claude Opus", "Open model picker (/model)", "Sunlight mode on",
@@ -209,7 +235,7 @@ class ReaderActionsMenuTest {
     @Test fun modelAndEffortSubPageHoldsModelChoicesAndBackReturnsToTheMainMenu() {
         render(material3 = true)
         openMenu()
-        compose.onNodeWithText("Model and effort ›").performScrollTo().performClick()
+        compose.onNodeWithText("Change ›").performScrollTo().performClick()
         listOf("Open model picker (/model)", "Use Claude Opus", "Use Claude Sonnet", "Use Claude Fable", "Set effort: low", "Set effort: max")
             .forEach { compose.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
         compose.onNodeWithText("Enter / approve").assertDoesNotExist()
@@ -221,10 +247,10 @@ class ReaderActionsMenuTest {
     @Test fun displayAndMoreSubPagesHoldTheRemainingOptions() {
         render(material3 = true)
         openMenu()
-        compose.onNodeWithText("Display ›").performScrollTo().performClick()
+        compose.onNodeWithText("Display").performScrollTo().performClick()
         listOf("Show terminal details", "Sunlight mode on", "Use default font size").forEach { compose.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
         compose.onNodeWithText("‹ Back").performScrollTo().performClick()
-        compose.onNodeWithText("More ›").performScrollTo().performClick()
+        compose.onNodeWithText("More").performScrollTo().performClick()
         listOf("Release notes", "Estimate accuracy", "Dictation API key", "Screencast2 upload key")
             .forEach { compose.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
         compose.onNodeWithText("Copy raw transcript", substring = true).performScrollTo().assertIsDisplayed()
@@ -233,7 +259,7 @@ class ReaderActionsMenuTest {
     @Test fun reopeningTheMenuAlwaysStartsOnTheMainPage() {
         render(material3 = true)
         openMenu()
-        compose.onNodeWithText("Display ›").performScrollTo().performClick()
+        compose.onNodeWithText("Display").performScrollTo().performClick()
         compose.onNodeWithText("Sunlight mode on").performScrollTo().performClick()
         openMenu()
         compose.onNodeWithText("Enter / approve").performScrollTo().assertIsDisplayed()

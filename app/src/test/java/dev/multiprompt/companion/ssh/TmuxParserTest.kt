@@ -225,4 +225,53 @@ class TmuxParserTest {
         assertEquals(null, plain.replyWaiting)
         assertEquals(600, TmuxParser.parseEtaStates(output).getValue("strix").remainingSeconds)
     }
+
+    @Test
+    fun givesEachDesktopChatTheAiTheHostRegistryNamesForIt() {
+        val hex = ("@provider\tlive-cx\tcodex\n@provider\tlive-px\tpi\n@provider\tlive-hx\thax\n" +
+            "@provider\tlive-bad\tbogus\n@provider\tcl-1\tcodex\n@reply\tlive-cx\t1700\t1").toByteArray()
+            .joinToString("") { byte -> "%02x".format(byte) }
+        val output = row("live-cx", "1", "0", "200", "98", "51", "/tmp", "box", "sleep", "sleep", "", "300", "Live") +
+            row("live-px", "1", "0", "200", "98", "51", "/tmp", "box", "sleep", "sleep", "", "300", "Live") +
+            row("live-hx", "1", "0", "200", "98", "51", "/tmp", "box", "sleep", "sleep", "", "300", "Live") +
+            row("live-claude", "1", "0", "200", "98", "51", "/tmp", "box", "sleep", "sleep", "", "300", "Live") +
+            row("live-bad", "1", "0", "200", "98", "51", "/tmp", "box", "sleep", "sleep", "", "300", "Live") +
+            row("cl-1", "1", "0", "200", "98", "51", "/tmp", "box", "claude", "named", "", "400", "fix") +
+            "${TmuxCommands.ETA_PREFIX}$hex\n"
+
+        val sessions = TmuxParser.parse("de", output).associateBy { it.name }
+
+        assertEquals(AgentKind.CODEX, sessions.getValue("live-cx").agent)
+        assertEquals(AgentKind.PI, sessions.getValue("live-px").agent)
+        assertEquals(AgentKind.HAX, sessions.getValue("live-hx").agent)
+        assertEquals(AgentKind.CLAUDE, sessions.getValue("live-claude").agent)
+        assertEquals(AgentKind.CLAUDE, sessions.getValue("live-bad").agent)
+        assertEquals(AgentKind.CLAUDE, sessions.getValue("cl-1").agent)
+        assertEquals("", sessions.getValue("cl-1").hostProvider)
+        assertEquals(1700, sessions.getValue("live-cx").replyActivityEpochSeconds)
+        assertEquals(mapOf("live-cx" to "codex", "live-px" to "pi", "live-hx" to "hax", "cl-1" to "codex"), TmuxParser.parseHostProviders(output))
+    }
+
+    @Test
+    fun registryRowsWithoutATerminalParseAsLiveChatsWithTheirSessionId() {
+        val sid = "721fb507-2781-4e48-8b6d-debd6e2da3f3"
+        val output = row("live-desk", "1", "0", "1700", "0", "0", "/srv/work", "", "sleep", "", sid, "1700", "")
+
+        val session = TmuxParser.parse("de", output).single()
+
+        assertEquals(true, session.liveChat)
+        assertEquals(sid, session.hostSessionId)
+        assertEquals("/srv/work", session.workingDirectory)
+        assertEquals(1700, session.lastActivityEpochSeconds)
+        assertEquals(AgentKind.CLAUDE, session.agent)
+    }
+
+    @Test
+    fun commandListsRegistryChatsAfterTheTerminalsAndBeforeTheEstimates() {
+        val command = TmuxParser.command()
+        val registry = command.indexOf("reader.py host list")
+
+        assertTrue(registry > command.indexOf("tmux list-sessions"))
+        assertTrue(registry < command.indexOf(TmuxCommands.ETA_PREFIX))
+    }
 }
