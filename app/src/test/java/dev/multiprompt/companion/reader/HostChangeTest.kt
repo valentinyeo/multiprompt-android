@@ -1,8 +1,10 @@
 package dev.multiprompt.companion.reader
 
+import dev.multiprompt.companion.model.AgentKind
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -50,5 +52,45 @@ class HostChangeTest {
         assertTrue(HostChange.OPUS.active(null, "claude-opus-4-1", null))
         assertTrue(HostChange.MEDIUM.active(null, null, "Medium"))
         assertFalse(HostChange.PLAN.active(null, null, null))
+    }
+
+    @Test fun aCodexChatListsTheFourCodexModels() {
+        assertEquals(listOf("Model" to listOf("Sol", "Terra", "Luna", "Astra")),
+            HostChange.sections(true, "codex").map { (title, changes) -> title to changes.map { it.label } })
+        assertTrue(HostChange.sections(false, "codex").isEmpty())
+    }
+
+    @Test fun pickingACodexModelSendsTheDesktopRequest() {
+        listOf(HostChange.SOL to "sol", HostChange.TERRA to "terra", HostChange.LUNA to "luna", HostChange.ASTRA to "astra").forEach { (change, value) ->
+            val line = JSONObject(change.line(11, sid))
+            assertEquals(listOf("set_model", "codex", sid, value), listOf(line.getString("op"), line.getString("provider"), line.getString("sid"), line.getString("model")))
+            assertFalse(line.has("effort"))
+        }
+        assertEquals(listOf("Model: Sol", "Model: Terra", "Model: Luna", "Model: Astra"),
+            listOf(HostChange.SOL, HostChange.TERRA, HostChange.LUNA, HostChange.ASTRA).map { it.notice })
+        assertEquals("Could not change chat settings", HostChange.TERRA.failure)
+    }
+
+    @Test fun theActiveCodexModelFollowsTheHostSettings() {
+        val settings = HostSettings("luna", "", "", true)
+        assertEquals(listOf(HostChange.LUNA), HostChange.entries.filter { it.provider == "codex" && it.active(settings, "Sonnet 4.5", "low") })
+        assertTrue(HostChange.entries.filter { it.provider == "codex" }.none { it.active(HostSettings("", "", "", false), "Opus 4.7", null) })
+        assertTrue(HostChange.entries.filter { it.provider == "codex" }.none { it.active(null, null, null) })
+    }
+
+    @Test fun aClaudeChatKeepsOnlyItsOwnModels() {
+        val models = HostChange.sections(true).first { it.first == "Model" }.second
+        assertEquals(models, HostChange.sections(true, "claude").first { it.first == "Model" }.second)
+        assertTrue(models.all { it.provider == "claude" })
+        assertTrue(listOf("Sol", "Terra", "Luna", "Astra").none { name -> models.any { it.label == name } })
+        assertEquals("/model sonnet", HostChange.SONNET.command)
+        assertNull(HostChange.SOL.command)
+        assertEquals("claude", JSONObject(HostChange.OPUS.line(1, sid)).getString("provider"))
+    }
+
+    @Test fun onlyClaudeAndCodexChatsGetHostSettings() {
+        assertEquals("claude", HostChange.providerOf(AgentKind.CLAUDE))
+        assertEquals("codex", HostChange.providerOf(AgentKind.CODEX))
+        listOf(AgentKind.PI, AgentKind.HAX, AgentKind.CURSOR, AgentKind.KIMI, AgentKind.OTHER).forEach { assertNull(HostChange.providerOf(it)) }
     }
 }
