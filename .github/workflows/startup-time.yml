@@ -1,0 +1,76 @@
+name: Android start time
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: Measured cold starts per segment, 3 to 20 (four segments run)
+        type: string
+        required: false
+        default: '10'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: startup-time-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  startup-time:
+    name: startup-time
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check the run count
+        env:
+          STARTUP_RUNS: ${{ inputs.runs }}
+        run: |
+          runs="${STARTUP_RUNS:-10}"
+          if ! [[ "$runs" =~ ^[0-9]+$ ]] || [ "$runs" -lt 3 ] || [ "$runs" -gt 20 ]; then
+            echo "runs must be a whole number from 3 to 20, got: $runs" >&2
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.1'
+      - name: Build the release APK with a throwaway signing key
+        run: |
+          mkdir -p signing
+          key_password="$(openssl rand -hex 16)"
+          keytool -genkeypair -keystore signing/startup-time.jks -storepass "$key_password" -keypass "$key_password" -alias startup-time -keyalg RSA -keysize 2048 -validity 2 -dname 'CN=startup-time'
+          printf 'storeFile=signing/startup-time.jks\nstorePassword=%s\nkeyAlias=startup-time\nkeyPassword=%s\n' "$key_password" "$key_password" > keystore.properties
+          gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g assembleRelease
+      - name: Check the baseline profile is compiled into the APK
+        run: |
+          test -s app/build/outputs/apk/release/app-release.apk
+          node tools/baseline-profile.mjs apk app/build/outputs/apk/release/app-release.apk
+      - uses: ./.github/actions/android-proof
+        env:
+          STARTUP_RUNS: ${{ inputs.runs }}
+        with:
+          stage: startup-time
+          script: |
+            bash tools/startup-time/measure.sh
+      - name: Publish the report to the job summary
+        if: always()
+        run: |
+          if [ -s build/startup-time/report.md ]; then
+            cat build/startup-time/report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No start time report was produced. The emulator artifact holds the diagnostics.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: startup-time-report
+          path: build/startup-time/
+          if-no-files-found: warn
