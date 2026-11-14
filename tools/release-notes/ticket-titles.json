@@ -50,6 +50,7 @@
   "IGSH-2312": "Multi Bot Android release check fails after a cancelled release run",
   "IGSH-1840": "Android: Frequent split after Favorites, and reorder splits",
   "IGSH-2300": "Android: pause updates for chats that are not on screen",
+  "IGSH-1506": "Android: design the session menu",
   "IGSH-2320": "Android: bot replies no longer reorder the chat list",
   "IGSH-2318": "Android: chat list ties sort like desktop"
 }
