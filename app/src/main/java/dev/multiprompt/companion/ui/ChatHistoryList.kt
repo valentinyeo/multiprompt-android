@@ -62,6 +62,7 @@ import dev.multiprompt.companion.reader.ChatHistory
 import dev.multiprompt.companion.reader.MessageActionResult
 import dev.multiprompt.companion.reader.MessageProtocol
 import dev.multiprompt.companion.reader.PromptAdmission
+import dev.multiprompt.companion.reader.QueuedEdit
 
 private data class ReplyJump(val message: ChatHistoryMessage, val reply: ReplyQuote.Reply)
 
@@ -91,6 +92,7 @@ internal fun ChatHistoryView(
     bottomPadding: Dp = 0.dp,
     modifier: Modifier = Modifier,
     unreadSinceEpochSeconds: Long? = null,
+    onEditPending: ((ChatHistoryMessage) -> Unit)? = null,
 ) {
     val history = remember(connection, agent, workingDirectory) { connection.chatHistory(agent, workingDirectory) }
     val state by history.state.collectAsState()
@@ -156,6 +158,7 @@ internal fun ChatHistoryView(
             unreadMessageKey = unreadMessageKey,
             onMarkUnread = onMarkUnread,
             onReaction = onReaction,
+            onEditPending = if (managed) onEditPending else null,
             onCancelPending = if (managed) { target ->
                 val row = state.replica?.messages?.get(target.requestId)
                 if (row != null) scope.launch {
@@ -229,6 +232,7 @@ internal fun ChatHistoryList(
     working: Boolean = false,
     bottomPadding: Dp = 0.dp,
     unreadSinceEpochSeconds: Long? = null,
+    onEditPending: ((ChatHistoryMessage) -> Unit)? = null,
 ) {
     val presentation = remember(messages, agent, collapsePendingReactions) {
         if (agent == AgentKind.CLAUDE) ChatReactions.present(messages, collapsePendingReactions)
@@ -362,6 +366,11 @@ internal fun ChatHistoryList(
                     onCancel = if (message.role == "user" && (message.delivery == "Queued" || message.cancellable) && message.requestId.isNotEmpty() && onCancelPending != null) {
                         { onCancelPending(message) }
                     } else null)
+                if (onEditPending != null && QueuedEdit.shows(message)) {
+                    Row(Modifier.fillMaxWidth().padding(top = 6.dp).testTag("edit-waiting-${message.key}"), horizontalArrangement = Arrangement.End) {
+                        KitSecondaryButton("Edit", { onEditPending(message) })
+                    }
+                }
                 if (message.role == "user" && message.delivery == ChatHistory.NOT_SENT && (onSendAgain != null || onRemove != null)) {
                     Row(Modifier.fillMaxWidth().padding(top = 6.dp).testTag("not-sent-${message.key}"), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
                         if (onRemove != null) KitSecondaryButton("Remove", { onRemove(message) }, destructive = true)
