@@ -79,13 +79,13 @@ class FrequentInboxTest {
             split.top - gamma.bottom < gamma.top - alpha.top)
     }
 
-    @Test fun frequentIsFirstChipAndFixtureGammaIsBottomWithReverseLayout() {
+    @Test fun frequentIsAfterFavoritesAndFixtureGammaIsBottomWithReverseLayout() {
         render()
         assertGammaIsBottomRow()
         val frequent = compose.onNodeWithText("Frequent").fetchSemanticsNode().boundsInRoot
         val all = compose.onNodeWithText("All").fetchSemanticsNode().boundsInRoot
         val favorites = compose.onNodeWithText("Favorites").fetchSemanticsNode().boundsInRoot
-        assertTrue("Frequent must be the first chip", frequent.left < all.left && all.left < favorites.left)
+        assertTrue("Frequent must follow Favorites", all.left < favorites.left && favorites.left < frequent.left)
     }
 
     @Test fun settingOffPlacesNewestAtTopLikeOtherSplits() {
