@@ -102,6 +102,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Badge
@@ -255,8 +256,11 @@ import dev.multiprompt.companion.terminal.TerminalConnection
 import dev.multiprompt.companion.terminal.TerminalStatus
 import dev.multiprompt.companion.update.UpdateRelease
 import dev.multiprompt.companion.update.UpdateState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import dev.multiprompt.companion.upload.DeviceFile
 import dev.multiprompt.companion.upload.ScreencastUploader
 import java.io.ByteArrayOutputStream
 import java.time.ZonedDateTime
@@ -2966,6 +2970,31 @@ internal fun ReaderScreen(
             }
         }
     }
+    val filePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            imageUploading = true
+            imageUploadError = null
+            readerScope.launch {
+                val serverPaths = buildList {
+                    uris.take(MAX_IMAGE_SELECTION).forEach { uri ->
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                connection.sendFile(DeviceFile.from(draftContext.contentResolver, uri))
+                            }
+                        }
+                            .onSuccess(::add)
+                            .onFailure { imageUploadError = it.message ?: "Could not send the file to the server" }
+                    }
+                }
+                if (serverPaths.isNotEmpty()) {
+                    imageAttachments = imageAttachments + serverPaths
+                }
+                imageUploading = false
+            }
+        }
+    }
     val dictationActive = dictationState.status == DictationStatus.CONNECTING ||
         dictationState.status == DictationStatus.LISTENING ||
         dictationState.status == DictationStatus.FINISHING
@@ -3710,12 +3739,18 @@ internal fun ReaderScreen(
                                     Modifier.padding(start = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    Icon(Icons.Default.Image, "Image attachment", Modifier.size(if (LocalMaterial3.current) 20.dp else 18.dp))
+                                    val serverFile = PromptComposer.isServerFile(url)
+                                    Icon(
+                                        if (serverFile) Icons.Outlined.AttachFile else Icons.Default.Image,
+                                        if (serverFile) "File attachment" else "Image attachment",
+                                        Modifier.size(if (LocalMaterial3.current) 20.dp else 18.dp),
+                                    )
                                     Text(
-                                        "Image ${index + 1}",
-                                        modifier = Modifier.padding(horizontal = 5.dp),
+                                        PromptComposer.attachmentLabel(url, index),
+                                        modifier = Modifier.widthIn(max = 160.dp).padding(horizontal = 5.dp),
                                         style = MaterialTheme.typography.labelMedium,
                                         maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
                                     IconButton(
                                         onClick = {
@@ -3723,7 +3758,7 @@ internal fun ReaderScreen(
                                         },
                                         modifier = Modifier.size(if (LocalMaterial3.current) 48.dp else 30.dp),
                                     ) {
-                                        Icon(Icons.Default.Close, "Remove image ${index + 1}")
+                                        Icon(Icons.Default.Close, if (serverFile) "Remove file ${PromptComposer.attachmentLabel(url, index)}" else "Remove image ${index + 1}")
                                     }
                                 }
                             }
@@ -3817,6 +3852,14 @@ internal fun ReaderScreen(
                                             attachMenuExpanded = false
                                             if (screencast.configured) imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                                             else imageKeyDialogVisible = true
+                                        },
+                                    )
+                                    KitMenuRow(
+                                        label = "Add file",
+                                        icon = Icons.Outlined.AttachFile,
+                                        onClick = {
+                                            attachMenuExpanded = false
+                                            filePicker.launch(arrayOf("*/*"))
                                         },
                                     )
                                     if (session.agent == AgentKind.CLAUDE) {
