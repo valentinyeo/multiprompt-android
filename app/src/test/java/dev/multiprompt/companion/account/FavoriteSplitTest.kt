@@ -114,7 +114,8 @@ class FavoriteSplitTest {
             assertEquals(if (allOnRight) splits.asReversed() else splits, displayed.filterNot { it == FAVORITES_SPLIT_ID || it == FREQUENT_SPLIT_ID })
             assertEquals(displayed.size, displayed.distinct().size)
         }
-        assertEquals(listOf(FREQUENT_SPLIT_ID, null, FAVORITES_SPLIT_ID), inboxSplitIds(listOf(null), true))
+        assertEquals(listOf(null, FAVORITES_SPLIT_ID, FREQUENT_SPLIT_ID), inboxSplitIds(listOf(null), true))
+        assertEquals(listOf(FREQUENT_SPLIT_ID, null, FAVORITES_SPLIT_ID), inboxSplitIds(listOf(null), true, frequentFirst = true))
         assertThrows(IllegalArgumentException::class.java) { layout.copy(workspaces = listOf(FAVORITES_SPLIT_ID)).validate() }
     }
 

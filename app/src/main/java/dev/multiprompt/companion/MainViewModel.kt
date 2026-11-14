@@ -157,7 +157,7 @@ data class AppUiState(
     val showFrequentSplit: Boolean get() = accountLayout?.settings?.get("frequent") ?: true
     val showFavoritesSplit: Boolean get() = accountLayout?.settings?.get("favorites") ?: true
     val showAllSplit: Boolean get() = accountLayout?.settings?.get("all") ?: true
-    val frequentFirst: Boolean get() = accountLayout?.settings?.get("frequent_first") ?: true
+    val frequentFirst: Boolean get() = accountLayout?.settings?.get("frequent_first") ?: false
     val visibleWorkspaceSplitIds: List<String?> get() = inboxSplitIds(
         workspaceSplitIds, allSplitOnRight, showFrequentSplit, showFavoritesSplit, showAllSplit, frequentFirst,
     )
