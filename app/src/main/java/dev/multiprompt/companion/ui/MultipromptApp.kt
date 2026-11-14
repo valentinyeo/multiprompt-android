@@ -2003,7 +2003,7 @@ internal fun SessionsScreen(
                     item(key = "error-$hostId") { InlineError(error) }
                 }
             }
-            SessionGroups.split(visibleSessions, state.accountLayout?.groupOrder) { session ->
+            SessionGroups.split(visibleSessions, state.accountLayout?.groupOrder?.let { if (reversedSessions) it.asReversed() else it }) { session ->
                 val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
                 tab?.groupIn(state.selectedWorkspaceId == FAVORITES_SPLIT_ID)
             }.forEach { group ->
