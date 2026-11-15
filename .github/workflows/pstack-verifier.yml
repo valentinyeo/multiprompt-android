@@ -1,0 +1,45 @@
+name: pstack verifier
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
+concurrency:
+  group: pstack-verifier-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pstack-verifier:
+    name: pstack-verifier
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      BASE_REF: ${{ github.event.pull_request.base.ref }}
+      DEEPSEEK_MODEL: deepseek-flash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Gather the diff, ticket and check results
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/pstack-verifier/verify.mjs gather
+      - name: Ask DeepSeek for a verdict
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: node tools/pstack-verifier/verify.mjs judge
+      - name: Post the verdict on the pull request
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/pstack-verifier/verify.mjs post
