@@ -232,14 +232,11 @@ class ReaderChromeTest {
         compose.runOnIdle { assertTrue(!f.field<Boolean>(connection, "historyMode")) }
     }
 
-    @Test fun menuStatusJoinsOnlyAvailableModelEtaAndWaitingParts() {
+    @Test fun menuStatusJoinsOnlyAvailableModelAndWaitingParts() {
         render()
         compose.onNodeWithContentDescription("Session actions").performClick()
-        compose.runOnIdle {
-            reader.value = reader.value.copy(eta = TmuxText.SessionEta(System.currentTimeMillis() + 200_000, 240_000, ""))
-        }
-        compose.onNodeWithText("$modelLabel · ETA 3m · waiting for input", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
-        compose.runOnIdle { reader.value = reader.value.copy(eta = null, waitingForInput = false) }
+        compose.onNodeWithText("$modelLabel · waiting for input", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        compose.runOnIdle { reader.value = reader.value.copy(waitingForInput = false) }
         compose.onNodeWithText(modelLabel, useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         compose.runOnIdle { reader.value = reader.value.copy(runtimeDetails = TmuxText.RuntimeDetails()) }
         compose.onNodeWithText("Model / effort", useUnmergedTree = true).performScrollTo().assertIsDisplayed()

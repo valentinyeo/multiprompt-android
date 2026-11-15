@@ -3104,13 +3104,6 @@ internal fun ReaderScreen(
     val historyAgent = ChatHistoryProtocol.supports(session.agent, session.hostSessionId)
     val historyChat = historyAgent && !technicalMode
     val chatListState = key(connection) { rememberLazyListState() }
-    var etaNowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(reader.eta) {
-        while (reader.eta != null) {
-            etaNowMillis = System.currentTimeMillis()
-            delay(1_000)
-        }
-    }
     val sessionKey = SessionReadStore.key(session.hostId, session.name)
     val sharedDictationState by dictation.state.collectAsState()
     val dictationState = sharedDictationState.takeIf { it.sessionKey == sessionKey }
@@ -3829,10 +3822,7 @@ internal fun ReaderScreen(
             readerScope.launch { connection.exitHistory() }
         }
     }
-    val statusLabel = listOfNotNull(
-        reader.eta?.let { "ETA ${it.label(etaNowMillis)}" },
-        "waiting for input".takeIf { reader.waitingForInput },
-    ).joinToString(" · ").ifEmpty { null }
+    val statusLabel = "waiting for input".takeIf { reader.waitingForInput }
     val searchVisibleBlocks = remember(transcript, reader.output, reader.status, session.agent, reader.sentPrompts, technicalMode) {
         if (transcript != null) emptyList()
         else {

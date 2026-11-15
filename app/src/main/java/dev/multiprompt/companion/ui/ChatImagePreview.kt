@@ -100,6 +100,11 @@ internal fun ChatImagePreviews(runs: List<InlineRun>) {
 }
 
 @Composable
+internal fun ChatLinkText(text: String, content: @Composable (String) -> Unit) {
+    ChatLinkText(text) { line, _ -> content(line) }
+}
+
+@Composable
 internal fun ChatLinkText(text: String, content: @Composable (String, Int) -> Unit) {
     val shown = LiveMention.visible(text)
     val lines = remember(text) {
