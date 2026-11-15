@@ -254,6 +254,34 @@ class DesignKitTest {
     }
 
     @Test
+    fun usageBarFillsWithTextAndPlanBlockSitsOnTheSurface() {
+        compose.setContent {
+            Page {
+                KitUsageBar(0.5f, Modifier.testTag("usage"))
+                KitUsageBar(null, Modifier.testTag("usage-empty"))
+                KitPlanBlock(
+                    name = "Claude",
+                    percent = "35%",
+                    fraction = 0.35f,
+                    paceLine = "BEHIND | RESETS THU 21:13, IN 1D 23H",
+                    detailLine = "WEEK 35% | 5H 4% | EMPTY IN 40H",
+                    modifier = Modifier.testTag("plan"),
+                )
+            }
+        }
+        val bar = capture("usage")
+        assertPixel(bar, bar.width / 4, bar.height / 2, Kit.Text, "usage fill")
+        assertPixel(bar, bar.width * 3 / 4, bar.height / 2, Kit.Outline, "usage track")
+        val empty = capture("usage-empty")
+        assertPixel(empty, empty.width / 4, empty.height / 2, Kit.Outline, "empty usage track")
+        val plan = capture("plan")
+        assertPixel(plan, 20, plan.height - 6, Kit.Surface, "plan fill")
+        compose.onNodeWithText("Claude").assertExists()
+        compose.onNodeWithText("BEHIND | RESETS THU 21:13, IN 1D 23H").assertExists()
+        compose.onNodeWithText("AHEAD | RESETS THU 21:13, IN 1D 23H").assertDoesNotExist()
+    }
+
+    @Test
     fun kitFileUsesOnlyReaderTokens() {
         val source = File("src/main/java/dev/multiprompt/companion/ui/DesignKit.kt").readText()
         listOf("MaterialTheme", "colorScheme", "DropdownMenu", "AlertDialog", "Color(0x").forEach {

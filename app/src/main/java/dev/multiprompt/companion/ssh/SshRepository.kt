@@ -31,6 +31,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.connectbot.sshlib.AuthResult
@@ -621,6 +622,22 @@ class SshRepository(private val secrets: SecretStorage) {
                 throw cancelled
             } catch (throwable: Throwable) {
                 null
+            }
+        }
+
+    suspend fun readTokenLadderStatus(host: HostProfile): String =
+        withContext(Dispatchers.IO) {
+            try {
+                withTimeout(CONNECTION_TIMEOUT_MS) {
+                    withAuthenticatedClient(host) { client ->
+                        val result = execute(client, TmuxCommands.tokenLadderStatus())
+                        result.requireSuccess("read AI usage")
+                        result.stdout
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                if (cancelled is TimeoutCancellationException) throw SshProblem.Connection("Could not read AI usage")
+                throw cancelled
             }
         }
 
