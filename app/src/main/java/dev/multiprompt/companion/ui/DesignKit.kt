@@ -27,6 +27,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
@@ -103,6 +104,20 @@ internal fun KitRoundButton(
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, description, Modifier.size(20.dp), tint = tint)
+    }
+}
+
+@Composable
+internal fun KitExpandButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    description: String = "Expand table",
+) {
+    Box(
+        modifier.size(32.dp).kitSurface(CircleShape).clickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Default.OpenInFull, description, Modifier.size(16.dp), tint = Kit.Text)
     }
 }
 

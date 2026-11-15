@@ -4,11 +4,14 @@ import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,12 +21,18 @@ import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
@@ -39,7 +48,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.constrainWidth
@@ -58,6 +69,7 @@ fun MarkdownText(
     activeHit: ChatFind.Hit? = null,
 ) {
     val blocks = remember(text) { MarkdownParser.parse(LiveMention.visible(text)) }
+    var heading: String? = null
     val codeBg = color.copy(alpha = 0.10f)
     val codeFontFamily = if (LocalReaderStyle.current) FontFamily.SansSerif else FontFamily.Monospace
     val scale = if (LocalReaderStyle.current) fontSize.value / ReaderTextSize.value else if (LocalMaterial3.current) fontSize.value / 15f else 1f
@@ -81,6 +93,10 @@ fun MarkdownText(
         blocks.forEachIndexed { blockIndex, block ->
             val piece = MarkdownParser.blockText(block)
             val base = cursor
+            if (block is MdBlock.Heading) {
+                val title = block.runs.joinToString("") { it.text }.trim()
+                if (title.isNotEmpty()) heading = title
+            }
             when (block) {
                 is MdBlock.Paragraph -> if (matchHits.isEmpty()) {
                     if (imagePreviews) {
@@ -163,12 +179,13 @@ fun MarkdownText(
                         softWrap = false,
                     )
                 }
-                is MdBlock.Table -> MarkdownTable(
+                is MdBlock.Table -> ChatTable(
                     block,
                     fontSize,
                     color,
                     linkColor,
                     codeBg,
+                    heading,
                     modifier = Modifier.pin(base, piece.length),
                     matchHits = matchHits,
                     activeHit = activeHit,
@@ -222,6 +239,102 @@ private fun inlineMatchLines(runs: List<InlineRun>): List<Pair<Int, List<InlineR
 }
 
 @Composable
+private fun ChatTable(
+    table: MdBlock.Table,
+    fontSize: TextUnit,
+    color: Color,
+    linkColor: Color,
+    codeBg: Color,
+    title: String?,
+    modifier: Modifier = Modifier,
+    matchHits: List<ChatFind.Hit> = emptyList(),
+    activeHit: ChatFind.Hit? = null,
+    tableBase: Int = 0,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        MarkdownTable(
+            table,
+            fontSize,
+            color,
+            linkColor,
+            codeBg,
+            modifier = modifier,
+            matchHits = matchHits,
+            activeHit = activeHit,
+            tableBase = tableBase,
+        )
+        KitExpandButton(
+            onClick = { open = true },
+            modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).testTag("table-expand"),
+        )
+    }
+    if (open) {
+        KitSheet(onDismiss = { open = false }) {
+            ExpandedChatTable(table, fontSize, title, matchHits, activeHit, tableBase) { open = false }
+        }
+    }
+}
+
+@Composable
+private fun ExpandedChatTable(
+    table: MdBlock.Table,
+    fontSize: TextUnit,
+    title: String?,
+    matchHits: List<ChatFind.Hit>,
+    activeHit: ChatFind.Hit?,
+    tableBase: Int,
+    onClose: () -> Unit,
+) {
+    val vertical = rememberScrollState()
+    val horizontal = rememberScrollState()
+    BoxWithConstraints(Modifier.fillMaxWidth().testTag("table-sheet")) {
+        val target = if (maxHeight != Dp.Infinity && maxHeight != Dp.Unspecified) maxHeight * 0.92f else 520.dp
+        Column(Modifier.fillMaxWidth().height(target), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Kit.ControlGap),
+            ) {
+                if (!title.isNullOrBlank()) {
+                    Text(
+                        title,
+                        style = Kit.Heading,
+                        color = Kit.Text,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+                KitRoundButton(
+                    onClick = onClose,
+                    icon = Icons.Default.Close,
+                    description = "Close",
+                    modifier = Modifier.testTag("table-close"),
+                )
+            }
+            Column(Modifier.weight(1f).fillMaxWidth().testTag("table-sheet-scroll").verticalScroll(vertical)) {
+                Row(Modifier.horizontalScroll(horizontal)) {
+                    MarkdownTable(
+                        table,
+                        fontSize,
+                        Kit.Text,
+                        Kit.Text,
+                        Kit.Text.copy(alpha = 0.10f),
+                        matchHits = matchHits,
+                        activeHit = activeHit,
+                        tableBase = tableBase,
+                        expanded = true,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun MarkdownTable(
     table: MdBlock.Table,
     fontSize: TextUnit,
@@ -232,6 +345,7 @@ private fun MarkdownTable(
     matchHits: List<ChatFind.Hit> = emptyList(),
     activeHit: ChatFind.Hit? = null,
     tableBase: Int = 0,
+    expanded: Boolean = false,
 ) {
     val material3 = LocalMaterial3.current
     val columns = maxOf(table.header.size, table.rows.maxOfOrNull { it.size } ?: 0)
@@ -239,8 +353,10 @@ private fun MarkdownTable(
     val cellCount = rows.size * columns
     val dividerCount = if (material3) rows.size - 1 else 1
     var cellAt = tableBase
+    val horizontal = rememberScrollState()
     Layout(
-        modifier = modifier.testTag("md-table").horizontalScroll(rememberScrollState())
+        modifier = modifier.testTag(if (expanded) "md-table-expanded" else "md-table")
+            .then(if (expanded) Modifier else Modifier.horizontalScroll(horizontal))
             .then(if (material3) Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp)) else Modifier)
             .background(if (material3) MaterialTheme.colorScheme.surface else color.copy(alpha = 0.05f), chromeShape(RoundedCornerShape(4.dp))),
         content = {
@@ -271,7 +387,7 @@ private fun MarkdownTable(
     ) { measurables, constraints ->
         val widths = (0 until columns).map { column ->
             rows.indices.maxOf { row -> measurables[row * columns + column].maxIntrinsicWidth(Constraints.Infinity) }
-                .coerceAtMost(280.dp.roundToPx())
+                .coerceAtMost(if (expanded) Constraints.Infinity else 280.dp.roundToPx())
         }
         val cells = measurables.take(cellCount).mapIndexed { index, measurable ->
             measurable.measure(Constraints.fixedWidth(widths[index % columns]))
