@@ -83,5 +83,6 @@
   "IGSH-2311": "Android: hidden warm chats stop pulling screen updates",
   "IGSH-2296": "Android: keep one server link open for the chat list",
   "IGSH-2313": "Android: measure app start time with and without startup profile",
-  "IGSH-2354": "No false live view error in desktop hosted chats"
+  "IGSH-2354": "No false live view error in desktop hosted chats",
+  "IGSH-2371": "Android: copy the chat ID from the chat menu"
 }
