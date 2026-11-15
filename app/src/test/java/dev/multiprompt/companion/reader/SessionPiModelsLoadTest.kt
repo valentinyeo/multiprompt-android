@@ -89,7 +89,10 @@ class SessionPiModelsLoadTest {
             delay(50)
             assertEquals(PiModels.FAILED, failed.error)
             assertEquals(1, calls.get())
-            reader.loadPiModels { models }
+            reader.loadPiModels {
+                calls.incrementAndGet()
+                models
+            }
             val loaded = withTimeout(10_000) { reader.piModels.first { it.models.isNotEmpty() } }
             assertEquals(models, loaded.models)
             assertNull(loaded.error)
