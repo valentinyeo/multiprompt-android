@@ -79,7 +79,7 @@ class ChatHistoryPrefetchTest {
         val saved = ChatHistory("sid", 1, 100, 0, 1, "a".repeat(64), rows = listOf(ChatHistoryProtocol.Row("user", "kept", "id", "", 0, 100)))
         cache.save(key, saved)
         val failure = runCatching {
-            ChatHistoryPrefetch.refresh(cache, host, listOf(identity)) { throw java.io.IOException("offline") }
+            ChatHistoryPrefetch.refresh(cache, host, listOf(identity), exchange = { throw java.io.IOException("offline") })
         }
         assertTrue(failure.isFailure)
         assertEquals(saved, cache.peek(key))
