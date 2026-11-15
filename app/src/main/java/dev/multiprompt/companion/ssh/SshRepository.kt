@@ -459,6 +459,35 @@ class SshRepository(private val secrets: SecretStorage) {
         return outcome
     }
 
+    suspend fun restartHost(
+        client: SshClient,
+        script: ByteArray,
+        provider: String,
+        sid: String,
+    ): dev.multiprompt.companion.reader.HostRestart.Outcome {
+        val query = dev.multiprompt.companion.reader.HostRestart.query(1, provider, sid)
+        var outcome: dev.multiprompt.companion.reader.HostRestart.Outcome =
+            dev.multiprompt.companion.reader.HostRestart.Outcome.Failed(dev.multiprompt.companion.reader.HostRestart.NO_ANSWER)
+        streamChatHistory(client, script) { exchange ->
+            outcome = dev.multiprompt.companion.reader.HostRestart.outcome(exchange(query), 1)
+        }
+        return outcome
+    }
+
+    suspend fun restartIdleChats(host: HostProfile, script: ByteArray): dev.multiprompt.companion.reader.HostRestart.Counts =
+        withContext(Dispatchers.IO) {
+            withServerLink(host) { client ->
+                var counts = dev.multiprompt.companion.reader.HostRestart.Counts(unanswered = 1)
+                streamChatHistory(client, script) { exchange ->
+                    counts = dev.multiprompt.companion.reader.HostRestart.counts(
+                        exchange(dev.multiprompt.companion.reader.HostRestart.queryAll(1)),
+                        1,
+                    )
+                }
+                counts
+            }
+        }
+
     suspend fun sendPrompt(client: SshClient, sessionName: String, prompt: String) {
         require(prompt.isNotBlank()) { "Enter a prompt first" }
         val bytes = prompt.toByteArray(Charsets.UTF_8)

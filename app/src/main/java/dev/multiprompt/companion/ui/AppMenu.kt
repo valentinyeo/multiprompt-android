@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import dev.multiprompt.companion.BuildConfig
+import dev.multiprompt.companion.reader.HostRestart
 
 @Composable
 internal fun ColumnScope.AppMenuItems(
@@ -52,6 +53,7 @@ internal fun InboxOverflowMenu(
     onArrangeSplits: () -> Unit,
     onNewWorkspace: () -> Unit,
     onRefresh: () -> Unit,
+    onRestartIdleChats: (() -> Unit)? = null,
     onReleaseNotes: () -> Unit = {},
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -92,6 +94,15 @@ internal fun InboxOverflowMenu(
                     onRefresh()
                 },
             )
+            if (onRestartIdleChats != null) {
+                KitMenuRow(
+                    label = HostRestart.ALL_LABEL,
+                    onClick = {
+                        expanded = false
+                        onRestartIdleChats()
+                    },
+                )
+            }
             KitMenuRow(
                 label = BuildConfig.VERSION_NAME,
                 modifier = Modifier.testTag("app-version").semantics {

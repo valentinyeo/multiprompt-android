@@ -102,6 +102,7 @@ class SessionReaderConnection(
         data class Action(val action: TmuxAction) : Request
         data class RestartAi(val sid: String, val cwd: String) : Request
         data class FreshStart(val provider: String, val sid: String) : Request
+        data class RestartHost(val provider: String, val sid: String) : Request
         data class ModelPickerOption(val index: Int) : Request
         data class QuestionAnswer(val question: PendingQuestion, val choices: Set<Int>, val other: String) : Request
     }
@@ -277,6 +278,12 @@ class SessionReaderConnection(
         val provider = ChatHistoryProtocol.hostedProvider(agent, hostSessionId)
         if (!dev.multiprompt.companion.reader.FreshStart.supported(provider, hostSessionId)) return false
         return requests.trySend(Request.FreshStart(requireNotNull(provider), hostSessionId)).isSuccess
+    }
+
+    fun restartHost(): Boolean {
+        val provider = ChatHistoryProtocol.hostedProvider(agent, hostSessionId)
+        if (!HostRestart.supported(provider, hostSessionId)) return false
+        return requests.trySend(Request.RestartHost(requireNotNull(provider), hostSessionId)).isSuccess
     }
 
     fun interrupt() {
@@ -521,6 +528,13 @@ class SessionReaderConnection(
                         is Request.FreshStart -> {
                             val outcome = repository.freshStart(client, historyScript, request.provider, request.sid)
                             if (outcome is dev.multiprompt.companion.reader.FreshStart.Outcome.Failed) {
+                                throw dev.multiprompt.companion.ssh.SshProblem.Connection(outcome.message)
+                            }
+                            Unit
+                        }
+                        is Request.RestartHost -> {
+                            val outcome = repository.restartHost(client, historyScript, request.provider, request.sid)
+                            if (outcome is HostRestart.Outcome.Failed) {
                                 throw dev.multiprompt.companion.ssh.SshProblem.Connection(outcome.message)
                             }
                             Unit
