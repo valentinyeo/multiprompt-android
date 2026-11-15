@@ -146,7 +146,12 @@ object NativeSkills {
         return rows.mapNotNull { (skill, command) ->
             val rank = score(skill.name, skill.description, query) ?: return@mapNotNull null
             val nameMatch = if (rank <= NAME_MATCH) 1 else 0
-            Scored(rank, if (nameMatch == 1 && command) 0 else nameMatch, skill)
+            val group = when {
+                query.isEmpty() -> if (command) 1 else 0
+                nameMatch == 1 && command -> 0
+                else -> nameMatch
+            }
+            Scored(rank, group, skill)
         }.sortedWith { left, right ->
             val byRank = left.rank.compareTo(right.rank)
             if (byRank != 0) byRank else {

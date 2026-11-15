@@ -46,6 +46,12 @@ class NativeSkillsTest {
         assertEquals(emptyList<NativeSkill>(), NativeSkills.menu(emptyList(), "zzzz"))
     }
 
+    @Test fun bareSlashListsSessionSkillsBeforeClaudeCommands() {
+        val all = NativeSkills.menu(listOf(NativeSkill("review-native", "Review"), NativeSkill("personal-note", "Note")), "").map { it.name }
+        assertEquals(listOf("personal-note", "review-native"), all.take(2))
+        assertTrue("clear" in all)
+    }
+
     @Test fun slashFiltersNameAndDescriptionWithoutChangingTheDraft() {
         assertEquals("", NativeSkills.query("/", 1))
         assertEquals("rev", NativeSkills.query("/rev", 4))
