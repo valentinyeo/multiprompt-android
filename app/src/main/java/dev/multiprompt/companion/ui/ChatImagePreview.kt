@@ -100,15 +100,18 @@ internal fun ChatImagePreviews(runs: List<InlineRun>) {
 }
 
 @Composable
-internal fun ChatLinkText(text: String, content: @Composable (String) -> Unit) {
+internal fun ChatLinkText(text: String, content: @Composable (String, Int) -> Unit) {
+    val shown = LiveMention.visible(text)
     val lines = remember(text) {
-        val shown = LiveMention.visible(text)
         if (MarkdownParser.parseInline(shown).any { !it.code && it.url != null }) shown.split('\n') else listOf(shown)
     }
     Column {
-        lines.forEach { line ->
-            content(line)
+        var start = 0
+        lines.forEachIndexed { index, line ->
+            content(line, start)
             ChatImagePreviews(MarkdownParser.parseInline(line))
+            start += line.length
+            if (index < lines.lastIndex) start += 1
         }
     }
 }

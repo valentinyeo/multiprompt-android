@@ -254,6 +254,26 @@ class DesignKitTest {
     }
 
     @Test
+    fun searchBoxCountAndMatchMarkerUseKitColours() {
+        compose.setContent {
+            Page {
+                KitSearchBox("", {}, Modifier.fillMaxWidth().testTag("search-box"), placeholder = "Search")
+                KitMatchCount("2 of 4", Modifier.testTag("match-count"))
+                KitMatchMarker("match", current = false, Modifier.testTag("mark-other"))
+                KitMatchMarker("match", current = true, Modifier.testTag("mark-current"))
+            }
+        }
+        val box = capture("search-box")
+        assertPixel(box, 8, box.height / 2, Kit.Surface, "search fill")
+        assertPixel(box, box.width / 2, 0, Kit.Outline, "search outline")
+        compose.onNodeWithText("2 of 4").assertExists()
+        val other = capture("mark-other")
+        assertPixel(other, 2, other.height / 2, Kit.Outline, "other match")
+        val current = capture("mark-current")
+        assertPixel(current, 2, current.height / 2, Kit.Text, "current match")
+    }
+
+    @Test
     fun kitFileUsesOnlyReaderTokens() {
         val source = File("src/main/java/dev/multiprompt/companion/ui/DesignKit.kt").readText()
         listOf("MaterialTheme", "colorScheme", "DropdownMenu", "AlertDialog", "Color(0x").forEach {

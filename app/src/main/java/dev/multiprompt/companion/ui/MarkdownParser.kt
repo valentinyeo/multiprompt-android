@@ -134,6 +134,26 @@ object MarkdownParser {
         return out
     }
 
+    fun visibleText(source: String): String = parse(source).joinToString("\n", transform = ::blockText)
+
+    fun blockText(block: MdBlock): String = when (block) {
+        is MdBlock.Paragraph -> block.runs.joinToString("") { it.text }
+        is MdBlock.Heading -> block.runs.joinToString("") { it.text }
+        is MdBlock.Code -> block.text
+        is MdBlock.ListItem -> block.marker + block.runs.joinToString("") { it.text }
+        is MdBlock.Quote -> block.runs.joinToString("") { it.text }
+        is MdBlock.Table -> {
+            val columns = maxOf(block.header.size, block.rows.maxOfOrNull { it.size } ?: 0)
+            val rows = listOf(block.header) + block.rows
+            rows.joinToString("\n") { row ->
+                (0 until columns).joinToString("\t") { index ->
+                    row.getOrNull(index).orEmpty().joinToString("") { it.text }
+                }
+            }
+        }
+        MdBlock.Rule -> ""
+    }
+
     private fun parseBoxTable(lines: List<String>, start: Int): Pair<MdBlock.Table, Int>? {
         val top = lines[start].trim()
         if (!BOX_TOP.matches(top)) return null
