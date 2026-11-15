@@ -279,6 +279,26 @@ class SessionReaderConnection(
         return requests.trySend(Request.FreshStart(requireNotNull(provider), hostSessionId)).isSuccess
     }
 
+    suspend fun switchAi(to: String): SwitchAi.Outcome {
+        val provider = ChatHistoryProtocol.hostedProvider(agent, hostSessionId)
+        if (!SwitchAi.supported(provider, hostSessionId) || to == provider || SwitchAi.TARGETS.none { it.provider == to }) {
+            return SwitchAi.Outcome.Failed("Switch AI is not available for this chat")
+        }
+        return try {
+            withTimeout(SWITCH_TIMEOUT_MS) {
+                withFreshClient { client ->
+                    repository.switchAi(client, historyScript, requireNotNull(provider), hostSessionId, to)
+                }
+            }
+        } catch (timeout: TimeoutCancellationException) {
+            SwitchAi.Outcome.Unknown
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (throwable: Throwable) {
+            SwitchAi.Outcome.Failed(throwable.message ?: SwitchAi.NO_ANSWER)
+        }
+    }
+
     fun interrupt() {
         requests.trySend(Request.Action(TmuxAction.INTERRUPT))
     }
@@ -603,6 +623,7 @@ class SessionReaderConnection(
     private companion object {
         const val CONNECT_TIMEOUT_MS = 20_000L
         const val REQUEST_TIMEOUT_MS = 20_000L
+        const val SWITCH_TIMEOUT_MS = 75_000L
         const val RECONNECT_DELAY_MS = 3_000L
         const val REUSE_FIRST_BYTES_MS = 2_000L
         const val SENT_PROMPT_MEMORY = 3
