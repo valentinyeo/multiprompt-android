@@ -474,6 +474,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             onEnd = { viewModel.endSession(readerSession) },
             onBotAppearance = viewModel::setAccountBotAppearance,
             onReattach = { viewModel.reattachReader(readerSession) },
+            onSwitchAi = { to -> viewModel.switchAi(readerSession, to) },
             onSessionInteraction = { viewModel.noteSessionInteraction(readerSession) },
             onSessionInput = { viewModel.stampSessionInput(readerSession) },
             technicalMode = state.readerTechnicalMode,
@@ -2829,6 +2830,7 @@ internal enum class ReaderMenuPage(val title: String) {
     MODEL("Model and effort"),
     DISPLAY("Display"),
     MORE("More"),
+    SWITCH_AI("Switch AI"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -3016,6 +3018,7 @@ internal fun ReaderScreen(
     onEnd: () -> Unit,
     onBotAppearance: (String, Int?, Int?) -> Unit = { _, _, _ -> },
     onReattach: () -> Unit = {},
+    onSwitchAi: (String) -> Unit = {},
     onSessionInteraction: () -> Unit,
     onSessionInput: () -> Unit,
     technicalMode: Boolean,
@@ -3935,6 +3938,13 @@ internal fun ReaderScreen(
                                         }
                                     },
                                 )
+                                if (dev.multiprompt.companion.reader.SwitchAi.supported(ChatHistoryProtocol.hostedProvider(session.agent, session.hostSessionId), session.hostSessionId)) {
+                                    KitMenuRow(
+                                        label = dev.multiprompt.companion.reader.SwitchAi.LABEL,
+                                        trailingText = "›",
+                                        onClick = { menuPage = ReaderMenuPage.SWITCH_AI },
+                                    )
+                                }
                                 if (dev.multiprompt.companion.reader.FreshStart.supported(ChatHistoryProtocol.hostedProvider(session.agent, session.hostSessionId), session.hostSessionId)) {
                                     KitMenuRow(
                                         label = dev.multiprompt.companion.reader.FreshStart.LABEL,
@@ -4055,6 +4065,19 @@ internal fun ReaderScreen(
                                             onClick = { menuExpanded = false; sendModelCommand("/effort $level") },
                                         )
                                     }
+                                }
+                            }
+                            ReaderMenuPage.SWITCH_AI -> {
+                                dev.multiprompt.companion.reader.SwitchAi.targets(
+                                    ChatHistoryProtocol.hostedProvider(session.agent, session.hostSessionId),
+                                ).forEach { target ->
+                                    KitMenuRow(
+                                        label = target.label,
+                                        onClick = {
+                                            menuExpanded = false
+                                            onSwitchAi(target.provider)
+                                        },
+                                    )
                                 }
                             }
                             ReaderMenuPage.DISPLAY -> {
