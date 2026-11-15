@@ -1,5 +1,7 @@
 package dev.multiprompt.companion.ui
 
+import dev.multiprompt.companion.model.RowParts
+import dev.multiprompt.companion.model.TmuxSession
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -83,5 +85,67 @@ class SessionPreviewTest {
     fun emptyInputGivesEmptyPreview() {
         assertEquals("", SessionPreview.line(""))
         assertEquals("", SessionPreview.line("╭──╮\n│  │\n╰──╯"))
+    }
+
+    private fun session(
+        parts: RowParts? = RowParts("", "", "", 100, 90),
+        preview: String = "",
+        replyWaiting: Boolean? = true,
+        activity: Long = 100,
+    ) = TmuxSession("host", "live-1", 1, 0, activity, preview = preview, replyAtEpochSeconds = 90, replyWaiting = replyWaiting, rowParts = parts)
+
+    @Test
+    fun waitingQuestionWinsOverStepAndReply() {
+        val parts = RowParts("Ship it?", "Fix the bug", "Done.", 100, 90)
+        assertEquals("Ship it?", SessionPreview.line(session(parts, preview = "⏺ Old screen reply")))
+    }
+
+    @Test
+    fun workingChatShowsItsCurrentStep() {
+        val parts = RowParts("", "Fix the bug", "Done.", 100, 90)
+        assertEquals("Fix the bug", SessionPreview.line(session(parts, replyWaiting = false)))
+    }
+
+    @Test
+    fun liveScreenActivityBeatsTheStoredStep() {
+        val parts = RowParts("", "Fix the bug", "Done.", 100, 90)
+        val raw = "⏺ Previous reply.\n✻ Reading CI logs… (3s · esc to interrupt)"
+        assertEquals("Working: Reading CI logs", SessionPreview.line(session(parts, preview = raw)))
+    }
+
+    @Test
+    fun workingChatWithoutAStepShowsItsLastReply() {
+        val parts = RowParts("", "", "Done.", 100, 90)
+        assertEquals("Done.", SessionPreview.line(session(parts, replyWaiting = false)))
+    }
+
+    @Test
+    fun workingChatWithNothingStoredFallsBackToScreenText() {
+        val parts = RowParts("", "", "", 100, 90)
+        assertEquals("Old screen reply", SessionPreview.line(session(parts, preview = "⏺ Old screen reply", replyWaiting = false)))
+    }
+
+    @Test
+    fun idleChatShowsItsLastReply() {
+        val parts = RowParts("", "Fix the bug", "Done.", 100, 90)
+        assertEquals("Done.", SessionPreview.line(session(parts)))
+        assertEquals("Done.", SessionPreview.line(session(parts, replyWaiting = null)))
+    }
+
+    @Test
+    fun idleChatWithoutAReplyFallsBackToScreenText() {
+        assertEquals("Old screen reply", SessionPreview.line(session(preview = "⏺ Old screen reply")))
+    }
+
+    @Test
+    fun staleStoredPartsFallBackToScreenText() {
+        val parts = RowParts("Ship it?", "Fix the bug", "Done.", 100, 90)
+        assertEquals("Old screen reply", SessionPreview.line(session(parts, preview = "⏺ Old screen reply", activity = 150)))
+    }
+
+    @Test
+    fun plainTmuxChatKeepsTheScreenText() {
+        assertEquals("Old screen reply", SessionPreview.line(session(parts = null, preview = "⏺ Old screen reply")))
+        assertEquals("", SessionPreview.line(session(parts = null)))
     }
 }

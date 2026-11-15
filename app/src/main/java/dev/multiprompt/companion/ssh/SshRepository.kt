@@ -289,11 +289,17 @@ class SshRepository(private val secrets: SecretStorage) {
         }
     }
 
-    suspend fun prefetchChatHistories(host: HostProfile, sessions: List<TmuxSession>, script: ByteArray, cache: ChatHistoryCache) =
+    suspend fun prefetchChatHistories(
+        host: HostProfile,
+        sessions: List<TmuxSession>,
+        script: ByteArray,
+        cache: ChatHistoryCache,
+        onHistory: (ChatHistoryProtocol.Identity, ChatHistory) -> Unit = { _, _ -> },
+    ) =
         withContext(Dispatchers.IO) {
             withServerLink(host) { client ->
                 val identities = sessions.map { ChatHistoryProtocol.Identity(it.agent, it.name, it.workingDirectory, it.hostSessionId) }
-                streamChatHistory(client, script) { exchange -> ChatHistoryPrefetch.refresh(cache, host, identities, exchange) }
+                streamChatHistory(client, script) { exchange -> ChatHistoryPrefetch.refresh(cache, host, identities, exchange, onHistory) }
             }
         }
 

@@ -2629,7 +2629,7 @@ private fun SessionCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        SessionPreview.line(session.preview),
+                        SessionPreview.line(session),
                         modifier = Modifier.testTag("Session preview"),
                         fontSize = 14.sp,
                         lineHeight = 20.sp,

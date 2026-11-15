@@ -16,6 +16,7 @@ object ChatHistoryPrefetch {
         host: HostProfile,
         identities: List<ChatHistoryProtocol.Identity>,
         exchange: suspend (String) -> String,
+        onHistory: (ChatHistoryProtocol.Identity, ChatHistory) -> Unit = { _, _ -> },
     ) {
         var id = 0L
         for (identity in identities) {
@@ -28,6 +29,7 @@ object ChatHistoryPrefetch {
                 if (failure is CancellationException) throw failure
                 fetch(++id, identity, ChatHistory(), exchange)
             }) ?: continue
+            onHistory(identity, next)
             if (next.sid.isNotEmpty() && next != cached) runCatching { cache.save(key, next) }
         }
     }

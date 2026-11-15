@@ -21,6 +21,7 @@ data class TmuxSession(
     val replyAtEpochSeconds: Long? = null,
     val replyWaiting: Boolean? = null,
     val hostProvider: String = "",
+    val rowParts: RowParts? = null,
 ) {
     val replyActivityEpochSeconds: Long
         get() = replyAtEpochSeconds ?: outputActivityEpochSeconds.takeIf { it > 0 } ?: lastActivityEpochSeconds

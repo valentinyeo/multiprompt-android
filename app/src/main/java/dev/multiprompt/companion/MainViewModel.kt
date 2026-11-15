@@ -232,7 +232,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         ssh.readChatHistory(host, session, app.chatHistoryScript)
     }
     internal var historyPrefetcher: suspend (HostProfile, List<TmuxSession>) -> Unit = { host, sessions ->
-        ssh.prefetchChatHistories(host, sessions, app.chatHistoryScript, app.chatHistoryCache)
+        ssh.prefetchChatHistories(host, sessions, app.chatHistoryScript, app.chatHistoryCache) { identity, history ->
+            sessions.firstOrNull { it.name == identity.tmux }?.let { recordRowParts(it, history) }
+        }
     }
     internal var historyWarmer: suspend (HostProfile, List<TmuxSession>) -> Unit = { host, sessions ->
         withContext(Dispatchers.IO) {
@@ -240,7 +242,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 sessions.map { ChatHistoryProtocol.Identity(it.agent, it.name, it.workingDirectory, it.hostSessionId) })
         }
     }
-    private val prefetchedActivity = mutableMapOf<String, Long>()
+    private val prefetchedActivity = mutableMapOf<String, Triple<Long, Long, Boolean?>>()
     private val prefetchedHostAt = mutableMapOf<String, Long>()
     private var prefetchRunning = false
     private var replyNotificationsBaselined = false
@@ -824,10 +826,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (recent.isEmpty()) return
         val now = System.currentTimeMillis()
         val due = recent.filter { session ->
-            prefetchedActivity[SessionReadStore.key(session.hostId, session.name)] != session.lastActivityEpochSeconds &&
+            (prefetchedActivity[SessionReadStore.key(session.hostId, session.name)] != activityStamp(session) || session.replyWaiting == false) &&
                 now - (prefetchedHostAt[session.hostId] ?: 0L) >= PREFETCH_HOST_GAP_MS
         }
-        due.forEach { prefetchedActivity[SessionReadStore.key(it.hostId, it.name)] = it.lastActivityEpochSeconds }
+        due.forEach { prefetchedActivity[SessionReadStore.key(it.hostId, it.name)] = activityStamp(it) }
         due.mapTo(mutableSetOf()) { it.hostId }.forEach { prefetchedHostAt[it] = now }
         prefetchRunning = true
         viewModelScope.launch {
@@ -845,6 +847,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } finally {
                 prefetchRunning = false
             }
+        }
+    }
+
+    private fun activityStamp(session: TmuxSession) =
+        Triple(session.lastActivityEpochSeconds, session.replyActivityEpochSeconds, session.replyWaiting)
+
+    private fun recordRowParts(session: TmuxSession, history: dev.multiprompt.companion.reader.ChatHistory) {
+        val parts = dev.multiprompt.companion.reader.ChatRowParts.from(session, history)
+        val key = SessionReadStore.key(session.hostId, session.name)
+        _state.update { current ->
+            current.copy(sessions = current.sessions.map { candidate ->
+                if (SessionReadStore.key(candidate.hostId, candidate.name) == key) candidate.copy(rowParts = parts) else candidate
+            })
         }
     }
 
@@ -922,8 +937,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             final = final,
             currentUpdatingHostIds = current.updatingHostIds,
         )
+        val carriedParts = current.sessions.mapNotNull { session ->
+            session.rowParts?.let { SessionReadStore.key(session.hostId, session.name) to it }
+        }.toMap()
         val sessions = merged.sessions.map { session ->
-            sessionReads.displayName(session)?.let { session.copy(title = it) } ?: session
+            val named = sessionReads.displayName(session)?.let { session.copy(title = it) } ?: session
+            carriedParts[SessionReadStore.key(session.hostId, session.name)]
+                ?.takeIf { named.rowParts == null }
+                ?.let { named.copy(rowParts = it) } ?: named
         }
         val mapping = AccountHostMap.resolve(current.hosts, accountStore.hostOverrides())
         val sessionWorkspaceIds = AccountHostMap.workspaceAssignments(sessions, current.accountLayout, mapping)

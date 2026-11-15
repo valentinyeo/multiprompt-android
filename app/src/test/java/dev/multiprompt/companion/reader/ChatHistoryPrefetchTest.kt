@@ -63,6 +63,16 @@ class ChatHistoryPrefetchTest {
     }
 
     @Test
+    fun everyRefreshedHistoryIsHandedToTheCaller() = runBlocking {
+        val cache = ChatHistoryCache(temporary.newFolder())
+        val seen = mutableListOf<Pair<String, List<String>>>()
+        ChatHistoryPrefetch.refresh(cache, host, listOf(identity), { line -> reply(JSONObject(line).getLong("id"), true) }) { who, history ->
+            seen.add(who.tmux to history.rows.map { it.text })
+        }
+        assertEquals(listOf("tmux" to listOf("question", "answer")), seen)
+    }
+
+    @Test
     fun aFailedRefreshKeepsTheSavedMessages() = runBlocking {
         val cache = ChatHistoryCache(temporary.newFolder())
         val key = ChatHistoryConnection.cacheKey(host, identity)
