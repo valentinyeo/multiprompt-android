@@ -18,6 +18,8 @@ spec.loader.exec_module(skills)
 
 class NativeSkillsTest(unittest.TestCase):
     def setUp(self):
+        skills.tmux_directory.cache_clear()
+        skills.hosted_directory.cache_clear()
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.home = Path(self.tmp.name)
@@ -316,7 +318,9 @@ wait_for_text() { test "$1" = "$expected_screen"; }
     def test_chat_under_another_account_lists_that_accounts_skills(self):
         from unittest.mock import patch
         self.skill(self.home, "login-only")
-        owner_home = self.home / "owner"
+        other = tempfile.TemporaryDirectory()
+        self.addCleanup(other.cleanup)
+        owner_home = Path(other.name)
         project = owner_home / "projects/app"
         project.mkdir(parents=True)
         self.skill(owner_home, "owner-user")
@@ -343,6 +347,26 @@ wait_for_text() { test "$1" = "$expected_screen"; }
             self.assertIsNone(skills.answer_as_owner("live-abc", str(self.cwd)))
             self.assertIsNone(skills.answer_as_owner("live-abc", ""))
         run.assert_not_called()
+
+    def test_owner_is_found_through_the_desktop_reader_when_the_folder_is_unreadable(self):
+        from unittest.mock import patch
+        self.fake_reader([dict(name="live-abc", cwd="/home/inne/projects/app")])
+        answer = '[{"name": "x", "description": ""}]'
+        with patch.object(skills, "tmux_directory", return_value=None), \
+                patch.object(skills, "owner_for_cwd", return_value="inne") as owner, \
+                patch.object(skills, "owner_output", return_value=answer) as output, \
+                patch.dict(os.environ, {"HOME": str(self.home)}):
+            self.assertEqual(skills.answer_as_owner("live-abc", ""), answer)
+            owner.assert_called_once_with(Path("/home/inne/projects/app"), Path.home())
+        output.assert_called_once_with("inne", "live-abc", "")
+        self.assertIsNone(skills.usable("/home/inne/projects/app/definitely-missing"))
+
+    def test_login_chat_does_not_run_the_desktop_reader(self):
+        from unittest.mock import patch
+        with patch.object(skills, "tmux_directory", return_value=self.cwd), \
+                patch.object(skills, "hosted_directory") as hosted:
+            self.assertIsNone(skills.answer_as_owner("live-abc", str(self.cwd)))
+        hosted.assert_not_called()
 
     def test_refused_or_broken_owner_answer_falls_back_to_the_local_list(self):
         from unittest.mock import patch

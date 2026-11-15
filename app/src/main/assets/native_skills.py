@@ -137,12 +137,12 @@ def hosted_directory(session):
         return None
     for chat in chats if isinstance(chats, list) else []:
         if isinstance(chat, dict) and chat.get("name") == session:
-            return usable(chat.get("cwd"))
+            return chat.get("cwd")
     return None
 
 
 def project_directory(session, requested):
-    path = tmux_directory(session) or usable(requested) or hosted_directory(session)
+    path = tmux_directory(session) or usable(requested) or usable(hosted_directory(session))
     if path is None:
         raise SystemExit("The session project directory is unavailable")
     return path
@@ -199,12 +199,9 @@ def owner_output(user, session, requested):
 
 
 def answer_as_owner(session, requested):
-    for path in (tmux_directory(session), loose(requested), hosted_directory(session)):
-        if path is None:
-            continue
-        user = owner_for_cwd(path, Path.home())
-        return owner_output(user, session, requested) if user else None
-    return None
+    path = tmux_directory(session) or loose(requested) or loose(hosted_directory(session))
+    user = owner_for_cwd(path, Path.home()) if path else None
+    return owner_output(user, session, requested) if user else None
 
 
 def main():
