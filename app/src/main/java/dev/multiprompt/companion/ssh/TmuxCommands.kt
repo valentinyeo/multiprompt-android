@@ -21,8 +21,11 @@ object TmuxCommands {
 
     const val ETA_PREFIX = "__MP_TMUX_ETA__"
 
+    private const val NATIVE_SKILLS_PROGRAM = "import sys;s=sys.stdin.buffer.read().decode();" +
+        "exec(compile(s,\"<native-skills>\",\"exec\"),{\"__name__\":\"__main__\",\"NATIVE_SKILLS_SOURCE\":s})"
+
     fun nativeSkills(sessionName: String, workingDirectory: String = ""): String =
-        "python3 - ${TmuxParser.shellQuote(sessionName)}" +
+        "python3 -c '$NATIVE_SKILLS_PROGRAM' ${TmuxParser.shellQuote(sessionName)}" +
             workingDirectory.takeIf { it.isNotBlank() }?.let { " ${TmuxParser.shellQuote(it)}" }.orEmpty()
 
     fun etaRowsCommand(sessionName: String? = null): String {

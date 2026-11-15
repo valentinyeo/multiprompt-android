@@ -274,6 +274,127 @@ wait_for_text() { test "$1" = "$expected_screen"; }
         self.assertNotIn("Traceback", result.stderr)
         self.assertEqual(len(result.stderr.strip().splitlines()), 1)
 
+    def accounts(self, **users):
+        from types import SimpleNamespace
+
+        def lookup(name):
+            if name not in users:
+                raise KeyError(name)
+            uid, folder = users[name]
+            return SimpleNamespace(pw_name=name, pw_uid=uid, pw_dir=folder)
+        return lookup
+
+    def test_owner_is_the_account_whose_home_holds_the_chat_folder(self):
+        lookup = self.accounts(login=(1000, "/home/login"), inne=(1001, "/home/inne"), root=(0, "/home/root"),
+                               odd=(1002, "/srv/odd"))
+        owner = lambda path: skills.owner_for_cwd(path, "/home/login", lookup)
+        self.assertEqual(owner("/home/inne/projects/app"), "inne")
+        self.assertEqual(owner(Path("/home/inne")), "inne")
+        self.assertIsNone(owner("/home/login/projects/app"))
+        self.assertIsNone(owner("/home/root/projects"))
+        self.assertIsNone(owner("/home/odd/projects"))
+        self.assertIsNone(owner("/home/missing/projects"))
+        self.assertIsNone(owner("/home/inne/../root"))
+        self.assertIsNone(owner("/home/in ne/projects"))
+        self.assertIsNone(owner("/srv/inne/projects"))
+        self.assertIsNone(owner("/home"))
+        self.assertIsNone(owner(""))
+        self.assertIsNone(owner(None))
+
+    def run_as_owner(self, owner_home, calls):
+        real_run = subprocess.run
+
+        def run(command, **options):
+            calls.append((command, options))
+            separator = command.index("--")
+            env = dict(os.environ, HOME=str(owner_home))
+            env.pop("CLAUDE_CONFIG_DIR", None)
+            return real_run([sys.executable if part == "python3" else part for part in command[separator + 1:]],
+                                  input=options["input"], capture_output=True, text=True, env=env)
+        return run
+
+    def test_chat_under_another_account_lists_that_accounts_skills(self):
+        from unittest.mock import patch
+        self.skill(self.home, "login-only")
+        owner_home = self.home / "owner"
+        project = owner_home / "projects/app"
+        project.mkdir(parents=True)
+        self.skill(owner_home, "owner-user")
+        self.skill(project, "owner-project")
+        calls = []
+        with patch.object(skills, "owner_for_cwd", return_value="inne") as owner, \
+                patch.object(skills, "tmux_directory", return_value=None), \
+                patch.object(skills.subprocess, "run", side_effect=self.run_as_owner(owner_home, calls)):
+            answer = skills.answer_as_owner("live-abc", str(project))
+        self.assertEqual([row["name"] for row in json.loads(answer)], ["owner-project", "owner-user"])
+        owner.assert_called_once()
+        command, options = calls[0]
+        self.assertEqual(command[:7], ["sudo", "-n", "-H", "-u", "inne", "--", "python3"])
+        self.assertEqual(command[7], "-c")
+        self.assertEqual(command[8], skills.OWNER_PROGRAM)
+        self.assertEqual(command[9:], ["live-abc", str(project)])
+        self.assertEqual(options["input"], SCRIPT.read_text(encoding="utf-8"))
+
+    def test_chat_under_the_login_account_never_asks_sudo(self):
+        from unittest.mock import patch
+        with patch.object(skills, "tmux_directory", return_value=None), \
+                patch.object(skills, "hosted_directory", return_value=None), \
+                patch.object(skills.subprocess, "run") as run:
+            self.assertIsNone(skills.answer_as_owner("live-abc", str(self.cwd)))
+            self.assertIsNone(skills.answer_as_owner("live-abc", ""))
+        run.assert_not_called()
+
+    def test_refused_or_broken_owner_answer_falls_back_to_the_local_list(self):
+        from unittest.mock import patch
+        failures = [subprocess.CompletedProcess([], 1, stdout="[]", stderr="sudo: a password is required"),
+                    subprocess.CompletedProcess([], 0, stdout="not json", stderr=""),
+                    subprocess.CompletedProcess([], 0, stdout='{"name": "x"}', stderr=""),
+                    OSError("no sudo"), subprocess.TimeoutExpired("sudo", 8)]
+        for failure in failures:
+            with self.subTest(failure=repr(failure)):
+                with patch.object(skills, "owner_for_cwd", return_value="inne"), \
+                        patch.object(skills, "tmux_directory", return_value=None), \
+                        patch.object(skills.subprocess, "run", side_effect=[failure]):
+                    self.assertIsNone(skills.answer_as_owner("live-abc", "/home/inne/app"))
+
+    def test_owner_run_reads_its_own_home_and_never_asks_sudo_again(self):
+        self.skill(self.home, "own-home")
+        source = SCRIPT.read_text(encoding="utf-8")
+        program = ("import sys;s=sys.stdin.buffer.read().decode();"
+                   "exec(compile(s,'<native-skills>','exec'),{'__name__':'__main__','NATIVE_SKILLS_SOURCE':s,'NATIVE_SKILLS_OWNER':True})")
+        self.assertEqual(skills.OWNER_PROGRAM, program)
+        binary = self.write(self.home / "bin/sudo", "#!/bin/sh\necho unexpected sudo >&2\nexit 9\n")
+        binary.chmod(0o700)
+        env = dict(os.environ, HOME=str(self.home), CLAUDE_CONFIG_DIR=str(self.home / "login-config"),
+                   PATH=str(binary.parent) + os.pathsep + os.environ["PATH"])
+        self.write(self.home / "login-config/skills/login-config-skill/SKILL.md", "---\nname: login-config-skill\n---\nbody")
+        result = subprocess.run([sys.executable, "-c", program, "live-abc", str(self.cwd)],
+                                input=source, capture_output=True, text=True, env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([row["name"] for row in json.loads(result.stdout)], ["own-home"])
+
+    def test_login_launcher_reads_the_script_from_stdin_for_the_owner_hop(self):
+        self.skill(self.cwd, "local")
+        launcher = ("import sys;s=sys.stdin.buffer.read().decode();"
+                    "exec(compile(s,\"<native-skills>\",\"exec\"),{\"__name__\":\"__main__\",\"NATIVE_SKILLS_SOURCE\":s})")
+        env = dict(os.environ, HOME=str(self.home))
+        result = subprocess.run([sys.executable, "-c", launcher, "live-abc", str(self.cwd)],
+                                input=SCRIPT.read_text(encoding="utf-8"), capture_output=True, text=True, env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([row["name"] for row in json.loads(result.stdout)], ["local"])
+
+    def test_unreadable_chat_folder_is_not_a_crash(self):
+        locked = self.home / "locked"
+        locked.mkdir()
+        inside = locked / "project"
+        inside.mkdir()
+        locked.chmod(0)
+        self.addCleanup(locked.chmod, 0o700)
+        if os.access(inside, os.R_OK):
+            self.skipTest("running with privileges that ignore folder modes")
+        self.assertIsNone(skills.usable(str(inside)))
+        self.assertEqual(skills.loose(str(inside)), inside)
+
 
 if __name__ == "__main__":
     unittest.main()
