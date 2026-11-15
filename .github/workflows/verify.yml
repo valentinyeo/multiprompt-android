@@ -146,6 +146,7 @@ jobs:
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
       UPDATE_BASELINE_RUN: ${{ inputs.update_baseline_run }}
       APP_REF: ${{ inputs.app_ref }}
+      VERIFY_SIDE: ${{ inputs.side }}
       EXPECT_SHARED_MISSING: ${{ inputs.expect_shared_missing }}
       RELEASE_CHANNEL: ${{ inputs.channel || 'android-latest' }}
       PIN_SCROLL_PROOF: ${{ inputs.pins_scroll }}
@@ -393,14 +394,26 @@ jobs:
           stage: stage-1${{ inputs.side && format('-{0}-{1}', inputs.side, inputs.feature) || '' }}
           target: default
           script: |
-            adb install -r -g "$VERIFY_APK"
-            if [[ "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion || "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion.m3 ]]; then
-              if [ "$VERIFY_FEATURE" = launcher-icon.md ]; then .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; else bash tools/release-choices/run.sh; fi
+            proof() {
+              adb install -r -g "$VERIFY_APK"
+              if [[ "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion || "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion.m3 ]]; then
+                if [ "$VERIFY_FEATURE" = launcher-icon.md ]; then .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; else bash tools/release-choices/run.sh; fi
+              else
+                adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+                .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"
+              fi
+              if [ -n "$UPDATE_BASELINE_RUN" ]; then .claude/skills/verify-multiprompt-android/scripts/update-reaction-release.sh; fi
+            }
+            if [ "${VERIFY_SIDE:-}" = parent ]; then
+              set +e
+              (set -euo pipefail; proof)
+              code=$?
+              set -e
+              mkdir -p "$EVIDENCE"
+              printf '%s\n' "$code" > "$EVIDENCE/parent-driver-exit.txt"
             else
-              adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-              .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"
+              proof
             fi
-            if [ -n "$UPDATE_BASELINE_RUN" ]; then .claude/skills/verify-multiprompt-android/scripts/update-reaction-release.sh; fi
       - name: Compare desktop and Android transcript posts
         id: codex-parity
         continue-on-error: ${{ inputs.side == 'parent' }}
@@ -499,7 +512,9 @@ jobs:
           STEPS_JSON: ${{ toJSON(steps) }}
         run: |
           mkdir -p "$EVIDENCE"
-          jq -n --argjson steps "$STEPS_JSON" '{side: "parent", passed: (($steps["native-ui"].outcome == "success") and ([$steps[] | .outcome] | all(. == "success" or . == "skipped"))), steps: ($steps | map_values(.outcome))}' > "$EVIDENCE/side-result.json"
+          driver=$(cat "$EVIDENCE/parent-driver-exit.txt" 2>/dev/null || true)
+          [[ "$driver" =~ ^[0-9]+$ ]] || driver=-1
+          jq -n --argjson steps "$STEPS_JSON" --argjson driver "$driver" '{side: "parent", passed: (($driver == 0) and ($steps["native-ui"].outcome == "success") and ([$steps[] | .outcome] | all(. == "success" or . == "skipped"))), driverExit: $driver, steps: ($steps | map_values(.outcome))}' > "$EVIDENCE/side-result.json"
       - name: Upload evidence even on failure
         continue-on-error: ${{ inputs.side == 'parent' }}
         if: always()

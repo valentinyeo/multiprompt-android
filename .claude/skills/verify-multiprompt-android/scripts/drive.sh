@@ -1238,7 +1238,6 @@ if [[ "$feature" == chat-choices.md ]]; then
     wait_for_text 'Which route should we use?'
     shot structured-question-before
     tap_node text-containing 'Use the current account'
-    tap_text 'Submit answer'
     wait_receipt 'VERIFY_QUESTION_KEY:2'
     wait_for_text 'What should we keep?'
     shot multiple-question-before
