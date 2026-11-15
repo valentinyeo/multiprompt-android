@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -26,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -45,6 +47,7 @@ internal fun DictationBar(
     level: StateFlow<Float>,
     sending: Boolean,
     onStop: () -> Unit,
+    onCancel: () -> Unit,
     onSend: () -> Unit,
 ) {
     val dark = Color(0xFF2B2B2B)
@@ -54,6 +57,12 @@ internal fun DictationBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
     ) {
+        KitRoundButton(
+            onClick = { if (!sending) onCancel() },
+            icon = Icons.Default.Close,
+            description = "Cancel dictation",
+            modifier = Modifier.size(ReaderControlSize).alpha(if (sending) 0.45f else 1f).testTag("dictation-cancel"),
+        )
         Box(
             Modifier.weight(1f).height(ReaderControlSize).clip(ReaderComposerShape).background(dark)
                 .clickable(enabled = !sending, onClick = onStop)

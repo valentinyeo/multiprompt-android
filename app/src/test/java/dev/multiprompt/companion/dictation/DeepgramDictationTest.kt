@@ -100,6 +100,30 @@ class DeepgramDictationTest {
     }
 
     @Test
+    fun discardDropsTranscriptAndIgnoresLateResults() {
+        val fixture = Fixture()
+        fixture.dictation.use { dictation ->
+            dictation.start("test-session")
+            fixture.mic.feed(10, voiced = true)
+            val first = fixture.sockets.single()
+            first.open()
+            first.transcript("spoken words")
+            assertEquals("spoken words", dictation.state.value.transcript)
+            dictation.discard()
+            assertEquals(DictationStatus.IDLE, dictation.state.value.status)
+            assertEquals("", dictation.state.value.transcript)
+            assertNull(dictation.state.value.sessionKey)
+            assertEquals(1, fixture.mic.stops)
+            assertEquals(1, fixture.mic.releases)
+            assertEquals(0f, dictation.level.value, 0f)
+            first.transcript("late words")
+            first.listener.onClosed(first, 1000, "cancelled")
+            assertEquals("", dictation.state.value.transcript)
+            assertEquals(DictationStatus.IDLE, dictation.state.value.status)
+        }
+    }
+
+    @Test
     fun gateClosedFailureIsIgnoredEvenWithoutANewSocket() {
         val fixture = Fixture()
         fixture.dictation.use { dictation ->

@@ -3096,6 +3096,7 @@ internal fun ReaderScreen(
     } else null
     val mentionOptions = mentionQuery?.let { ChatMention.options(mentionChats, it.text) }.orEmpty()
     var dictationPrefix by remember(connection) { mutableStateOf("") }
+    var dictationStartField by remember(connection) { mutableStateOf(TextFieldValue("")) }
     val dictationSubmissionStarted = remember(connection) { AtomicBoolean(false) }
     var pendingPromptAction by remember(connection) { mutableStateOf<Long?>(null) }
     var recordingPrompt by remember(connection) { mutableStateOf(false) }
@@ -3372,6 +3373,7 @@ internal fun ReaderScreen(
     }
     val startDictation = {
         dictationPrefix = prompt.trimEnd()
+        dictationStartField = promptField
         dictationSubmissionStarted.set(false)
         microphoneError = null
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
@@ -4234,6 +4236,10 @@ internal fun ReaderScreen(
                         level = dictation.level,
                         sending = reader.sending || sendAfterDictation || pendingPromptAction != null || recordingPrompt,
                         onStop = { dictation.stop() },
+                        onCancel = {
+                            dictation.discard()
+                            promptField = dictationStartField
+                        },
                         onSend = submitPrompt,
                     )
                 } else {

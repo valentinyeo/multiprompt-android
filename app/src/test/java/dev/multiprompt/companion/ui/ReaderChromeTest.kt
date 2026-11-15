@@ -116,6 +116,24 @@ class ReaderChromeTest {
         }
     }
 
+    @Test fun cancelDropsTheRecordingAndItsTranscript() {
+        render()
+        val dictationState: MutableStateFlow<DictationState> = f.field(f.app.deepgramDictation, "_state")
+        compose.runOnIdle {
+            dictationState.value = DictationState(status = DictationStatus.LISTENING, configured = true,
+                transcript = "spoken words", sessionKey = "${f.host.id}::${f.session.name}")
+        }
+        compose.onNodeWithTag("dictation-cancel").assertIsDisplayed().performClick()
+        compose.runOnIdle {
+            val after = f.app.deepgramDictation.state.value
+            assertEquals(DictationStatus.IDLE, after.status)
+            assertEquals("", after.transcript)
+        }
+        compose.onNodeWithTag("dictation-cancel").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Start dictation").assertIsDisplayed()
+        compose.onNodeWithText("spoken words").assertDoesNotExist()
+    }
+
     @Test fun chatScrollsUnderFloatingControlsWithSessionHeadline() {
         render()
         compose.onNodeWithText("Conversation").assertDoesNotExist()
@@ -157,18 +175,20 @@ class ReaderChromeTest {
         }
         compose.onNodeWithText("Message ${f.session.displayName}").assertDoesNotExist()
         compose.onNodeWithContentDescription("Start dictation").assertDoesNotExist()
+        compose.onNodeWithTag("dictation-cancel").assertIsDisplayed()
         compose.onNodeWithTag("dictation-stop").assertIsDisplayed()
         compose.onNodeWithTag("dictation-send").assertIsDisplayed()
         compose.onNodeWithTag("dictation-timer").assertIsDisplayed()
         compose.onNodeWithText(f.session.displayName, useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithText("Messaging", substring = true).assertDoesNotExist()
+        val cancel = compose.onNodeWithTag("dictation-cancel").getUnclippedBoundsInRoot()
         val stop = compose.onNodeWithTag("dictation-stop").getUnclippedBoundsInRoot()
         val meter = compose.onNodeWithTag("dictation-meter").getUnclippedBoundsInRoot()
         val send = compose.onNodeWithTag("dictation-send").getUnclippedBoundsInRoot()
-        assertTrue("stop, meter, send read left to right on one row: $stop $meter $send",
-            stop.right <= meter.left && meter.right <= send.left && stop.top == meter.top && meter.top == send.top)
+        assertTrue("cancel, stop, meter, send read left to right on one row: $cancel $stop $meter $send",
+            cancel.right <= stop.left && cancel.top == stop.top && stop.right <= meter.left && meter.right <= send.left && stop.top == meter.top && meter.top == send.top)
         screenshot("dictation-during")
-        listOf(stop, meter, send).forEach { control ->
+        listOf(cancel, stop, meter, send).forEach { control ->
             assertEquals("dictation control matches message box height", before.bottom - before.top, control.bottom - control.top)
             assertEquals("bottom bar must not jump", before.top, control.top)
             assertEquals("bottom bar stays anchored", before.bottom, control.bottom)
