@@ -8,8 +8,7 @@ object SwitchAi {
     const val NO_ANSWER = "Switch AI failed: the server did not answer"
     const val UNKNOWN = "Switch AI: no answer yet; the chat will update if it went through"
     private const val BUSY = "Switch AI: wait for this reply to finish"
-    private const val UNAVAILABLE = "Switch AI is not available for this chat"
-    private const val FAILED = "Switch AI failed: the chat could not be moved"
+    private const val CANNOT = "Switch AI failed: this live chat cannot switch"
     private val SESSION_ID = Regex("[A-Za-z0-9_-]{1,80}")
 
     data class Target(val provider: String, val label: String)
@@ -29,6 +28,8 @@ object SwitchAi {
 
     fun label(provider: String): String = TARGETS.firstOrNull { it.provider == provider }?.label ?: provider
 
+    fun notice(provider: String): String = "Chat switched to ${label(provider)}"
+
     fun query(id: Long, provider: String, sid: String, to: String): String {
         require(id > 0 && supported(provider, sid) && to != provider && TARGETS.any { it.provider == to })
         return JSONObject().put("op", OP).put("id", id).put("provider", provider).put("sid", sid).put("to", to).toString() + "\n"
@@ -47,9 +48,7 @@ object SwitchAi {
                 if (provider == to && SESSION_ID.matches(sid)) Outcome.Switched(provider, sid) else Outcome.Unknown
             }
             "busy" -> Outcome.Failed(BUSY)
-            "refused" -> Outcome.Failed(UNAVAILABLE)
-            "unavailable" -> Outcome.Failed(UNAVAILABLE)
-            else -> Outcome.Failed(FAILED)
+            else -> Outcome.Failed(CANNOT)
         }
     }
 }

@@ -314,6 +314,13 @@ class SshRepository(private val secrets: SecretStorage) {
         client: SshClient,
         script: ByteArray,
         exchange: suspend (suspend (String) -> String) -> Unit,
+    ) = streamChatHistory(client, script, 45_000L, exchange)
+
+    suspend fun streamChatHistory(
+        client: SshClient,
+        script: ByteArray,
+        timeoutMs: Long,
+        exchange: suspend (suspend (String) -> String) -> Unit,
     ) = withContext(Dispatchers.IO) {
         coroutineScope {
             val session = client.openSession()
@@ -339,7 +346,7 @@ class SshRepository(private val secrets: SecretStorage) {
                     else -> throw SshProblem.Connection("The history reader did not start")
                 }
                 exchange { query ->
-                    withTimeout(45_000L) {
+                    withTimeout(timeoutMs) {
                         session.write(query.toByteArray(Charsets.UTF_8))
                         line()
                     }
@@ -469,7 +476,7 @@ class SshRepository(private val secrets: SecretStorage) {
         val query = dev.multiprompt.companion.reader.SwitchAi.query(1, provider, sid, to)
         var outcome: dev.multiprompt.companion.reader.SwitchAi.Outcome =
             dev.multiprompt.companion.reader.SwitchAi.Outcome.Failed(dev.multiprompt.companion.reader.SwitchAi.NO_ANSWER)
-        streamChatHistory(client, script) { exchange ->
+        streamChatHistory(client, script, timeoutMs = 60_000L) { exchange ->
             outcome = dev.multiprompt.companion.reader.SwitchAi.outcome(exchange(query), 1, to)
         }
         return outcome

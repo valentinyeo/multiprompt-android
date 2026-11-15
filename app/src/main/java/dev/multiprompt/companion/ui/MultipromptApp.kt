@@ -4064,7 +4064,6 @@ internal fun ReaderScreen(
                                         label = target.label,
                                         onClick = {
                                             menuExpanded = false
-                                            android.widget.Toast.makeText(context, "Switching to ${target.label}", android.widget.Toast.LENGTH_SHORT).show()
                                             onSwitchAi(target.provider)
                                         },
                                     )

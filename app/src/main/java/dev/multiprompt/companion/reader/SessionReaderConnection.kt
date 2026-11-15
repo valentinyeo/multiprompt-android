@@ -623,7 +623,7 @@ class SessionReaderConnection(
     private companion object {
         const val CONNECT_TIMEOUT_MS = 20_000L
         const val REQUEST_TIMEOUT_MS = 20_000L
-        const val SWITCH_TIMEOUT_MS = 60_000L
+        const val SWITCH_TIMEOUT_MS = 75_000L
         const val RECONNECT_DELAY_MS = 3_000L
         const val REUSE_FIRST_BYTES_MS = 2_000L
         const val SENT_PROMPT_MEMORY = 3

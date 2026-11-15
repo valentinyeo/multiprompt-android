@@ -64,10 +64,14 @@ class SwitchAiTest {
     @Test fun busyRefusedAndErrorAreFailures() {
         val busy = SwitchAi.outcome(reply("""{"status":"busy","reason":"chat_busy"}"""), 1, "codex")
         assertEquals("Switch AI: wait for this reply to finish", (busy as SwitchAi.Outcome.Failed).message)
-        listOf("""{"status":"refused","reason":"host_disabled"}""", """{"status":"unavailable","reason":"host_closed"}""").forEach {
-            assertEquals("Switch AI is not available for this chat", (SwitchAi.outcome(reply(it), 1, "codex") as SwitchAi.Outcome.Failed).message)
+        listOf(
+            """{"status":"refused","reason":"host_disabled"}""",
+            """{"status":"unavailable","reason":"host_closed"}""",
+            """{"status":"error","reason":"switch_failed"}""",
+        ).forEach {
+            assertEquals("Switch AI failed: this live chat cannot switch", (SwitchAi.outcome(reply(it), 1, "codex") as SwitchAi.Outcome.Failed).message)
         }
-        assertTrue(SwitchAi.outcome(reply("""{"status":"error","reason":"switch_failed"}"""), 1, "codex") is SwitchAi.Outcome.Failed)
+        assertEquals("Chat switched to Codex", SwitchAi.notice("codex"))
     }
 
     @Test fun wrongEnvelopesAreNotAnAnswer() {
