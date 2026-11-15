@@ -51,7 +51,6 @@
   "IGSH-2297": "Android: load rooms only when the rooms screen is open",
   "IGSH-2298": "Android: stop rereading the saved chat list every refresh",
   "IGSH-2287": "Android: phone chat engine catches up with desktop",
-  "IGSH-2287": "Android: phone chat engine catches up with desktop",
   "IGSH-2284": "Android: start Codex, Pi, Hax and Cursor as live chats",
   "IGSH-2304": "Android: pick Fable as the chat model",
   "IGSH-2305": "Android: pick the model in a Codex chat",
@@ -84,5 +83,6 @@
   "IGSH-2296": "Android: keep one server link open for the chat list",
   "IGSH-2313": "Android: measure app start time with and without startup profile",
   "IGSH-2354": "No false live view error in desktop hosted chats",
-  "IGSH-2366": "Android: agent messages in the new format show as a sender card"
+  "IGSH-2366": "Android: agent messages in the new format show as a sender card",
+  "IGSH-2377": "Claude reviews every Android change before merge"
 }

@@ -21,6 +21,7 @@ export const requiredChecks = [
   'approved-style-emulator',
   'secret-scan',
   'no-paid-ai',
+  'claude-review-request',
 ];
 export const intervalMs = 300_000;
 export const timeoutMs = 1_800_000;
