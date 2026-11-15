@@ -37,6 +37,7 @@ jobs:
       reason: ${{ steps.pick.outputs.reason }}
       number: ${{ steps.pick.outputs.number }}
       head_sha: ${{ steps.pick.outputs.head_sha }}
+      merge_base: ${{ steps.pick.outputs.merge_base }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -72,10 +73,27 @@ jobs:
       actions: read
     with:
       feature: ${{ matrix.feature }}
+      side: head
+
+  parents:
+    name: parent journey ${{ matrix.feature }}
+    needs: pick
+    strategy:
+      fail-fast: false
+      matrix:
+        feature: ${{ fromJSON(needs.pick.outputs.features) }}
+    uses: ./.github/workflows/verify.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      feature: ${{ matrix.feature }}
+      side: parent
+      app_ref: ${{ needs.pick.outputs.merge_base }}
 
   pstack-verifier:
     name: pstack-verifier
-    needs: [pick, journeys]
+    needs: [pick, journeys, parents]
     if: ${{ !cancelled() && needs.pick.result != 'skipped' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -99,6 +117,7 @@ jobs:
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ needs.pick.outputs.number }}
           HEAD_SHA: ${{ needs.pick.outputs.head_sha }}
+          MERGE_BASE: ${{ needs.pick.outputs.merge_base }}
           FEATURES: ${{ needs.pick.outputs.features }}
           SMOKE: ${{ needs.pick.outputs.smoke }}
           PICK_REASON: ${{ needs.pick.outputs.reason }}

@@ -125,15 +125,15 @@ test('the comment names the model, the runner, the journeys, the evidence and th
     sha,
     verdict: 'PASS',
     summary: 'Sent and received.',
-    journeys: [{ feature: 'session-reader.md', conclusion: 'success', passed: true }],
+    journeys: [{ feature: 'session-reader.md', conclusion: 'success', passed: true, parent: 'not passed' }],
     evidence: ['The receipt shows the sent text.'],
     notCovered: ['Dictation.'],
     notes: [],
     runUrl,
   });
-  assert.match(body, /DeepSeek \(deepseek-v4-pro\)/);
+  assert.match(body, /DeepSeek \(deepseek-flash\)/);
   assert.match(body, /GitHub-hosted runner/);
-  assert.match(body, /`session-reader\.md`: passed/);
+  assert.match(body, /`session-reader\.md` parent: not passed, head: passed/);
   assert.match(body, /- The receipt shows the sent text\./);
   assert.match(body, /Not covered:\n- Dictation\./);
   assert.match(body, new RegExp(`Run: ${runUrl}`));
@@ -194,7 +194,7 @@ test('the evidence sent to the model is text only, capped and keeps the transcri
     assert.match(text, /1 screenshots you cannot see/);
     assert.doesNotMatch(text, /LOGCAT_NOISE/);
     assert.doesNotMatch(text, /x{100}/);
-    assert.ok(text.length < 20_000);
+    assert.ok(text.length < 10_000);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
@@ -222,7 +222,7 @@ test('DeepSeek is called once with the JSON mode and retried once on 503 and 429
     assert.equal(calls.length, 2);
     const sent = JSON.parse(calls[0].init.body);
     assert.equal(calls[0].url, 'https://api.deepseek.com/chat/completions');
-    assert.equal(sent.model, 'deepseek-v4-pro');
+    assert.equal(sent.model, 'deepseek-flash');
     assert.deepEqual(sent.response_format, { type: 'json_object' });
     assert.equal(sent.tools, undefined);
     assert.equal(calls[0].init.headers.authorization, 'Bearer k');
@@ -285,6 +285,7 @@ test('the journeys job runs verify.yml with no secrets and no key', () => {
   const journeys = jobBlock(workflow, 'journeys');
   assert.match(journeys, /^ {4}uses: \.\/\.github\/workflows\/verify\.yml$/m);
   assert.match(journeys, /^ {6}feature: \$\{\{ matrix\.feature \}\}$/m);
+  assert.match(journeys, /^ {6}side: head$/m);
   assert.match(journeys, /fail-fast: false/);
   assert.doesNotMatch(journeys, /secrets/i);
   assert.doesNotMatch(journeys, /DEEPSEEK/);
@@ -315,7 +316,7 @@ test('the pick and judge jobs check out only the scripts and the journey maps, n
 test('the check is named pstack-verifier and the workflow skips forks, drafts and dependabot', () => {
   const workflow = read('.github/workflows/pstack-verifier.yml');
   assert.match(jobBlock(workflow, 'pstack-verifier'), /^ {4}name: pstack-verifier$/m);
-  assert.match(jobBlock(workflow, 'pstack-verifier'), /needs: \[pick, journeys\]/);
+  assert.match(jobBlock(workflow, 'pstack-verifier'), /needs: \[pick, journeys, parents\]/);
   assert.match(jobBlock(workflow, 'pstack-verifier'), /pull-requests: write/);
   const pick = jobBlock(workflow, 'pick');
   assert.match(pick, /head\.repo\.full_name == github\.repository/);
@@ -328,8 +329,10 @@ test('the check is named pstack-verifier and the workflow skips forks, drafts an
 test('the caller grants the permissions verify.yml asks for, and dispatch adds no input that verify.yml reads', () => {
   const verify = read('.github/workflows/verify.yml');
   const asked = topBlock(verify, 'permissions').slice(1).filter(Boolean).map(line => line.trim());
-  const granted = jobBlock(read('.github/workflows/pstack-verifier.yml'), 'journeys');
-  for (const permission of asked) assert.ok(granted.includes(permission), `journeys grants ${permission}`);
+  for (const job of ['journeys', 'parents']) {
+    const granted = jobBlock(read('.github/workflows/pstack-verifier.yml'), job);
+    for (const permission of asked) assert.ok(granted.includes(permission), `${job} grants ${permission}`);
+  }
   const caller = topBlock(read('.github/workflows/pstack-verifier.yml'), 'on').join('\n');
   const inputs = [...caller.matchAll(/^ {6}(\w+):$/gm)].map(match => match[1]);
   assert.deepEqual(inputs, ['pr']);
@@ -342,9 +345,11 @@ test('verify.yml can be called with one required feature and keeps its own trigg
     assert.match(triggers, new RegExp(`^ {2}${trigger}:`, 'm'), trigger);
   }
   const call = triggers.slice(triggers.indexOf('  workflow_call:'), triggers.indexOf('  workflow_dispatch:'));
-  assert.match(call, /^ {6}feature:\n {8}description: .+\n {8}required: true\n {8}type: string\n$/m);
-  assert.equal((call.match(/^ {6}\w+:$/gm) ?? []).length, 1);
-  assert.match(verify, /^ {2}group: verify-\$\{\{ github\.ref \}\}\$\{\{ inputs\.feature && inputs\.feature != github\.event\.inputs\.feature && format\('-\{0\}', inputs\.feature\) \|\| '' \}\}$/m);
+  assert.match(call, /^ {6}feature:\n {8}description: .+\n {8}required: true\n {8}type: string\n/m);
+  assert.deepEqual([...call.matchAll(/^ {6}(\w+):$/gm)].map(match => match[1]), ['feature', 'side', 'app_ref']);
+  assert.match(call, /^ {6}side:\n {8}description: .+\n {8}required: false\n {8}type: string\n/m);
+  assert.match(call, /^ {6}app_ref:\n {8}description: .+\n {8}required: false\n {8}type: string\n$/m);
+  assert.match(verify, /^ {2}group: verify-\$\{\{ github\.ref \}\}\$\{\{ inputs\.feature && inputs\.feature != github\.event\.inputs\.feature && format\('-\{0\}', inputs\.feature\) \|\| '' \}\}\$\{\{ inputs\.side == 'parent' && '-parent' \|\| '' \}\}$/m);
 });
 
 test('a change no journey fits still drives the smoke journey and never gets a plain PASS', () => {
@@ -355,6 +360,193 @@ test('a change no journey fits still drives the smoke journey and never gets a p
   const passed = verifier.applyRules({ modelVerdict: 'PASS', features: picked.features, conclusions: { [verifier.SMOKE_JOURNEY]: 'success' }, notDrivenReason: picked.reason, smoke: true });
   assert.equal(passed.verdict, 'PASS+NOTES');
   assert.match(passed.notes.join(' '), /Only the smoke journey was driven/);
-  const broken = verifier.applyRules({ modelVerdict: 'PASS', features: picked.features, conclusions: { [verifier.SMOKE_JOURNEY]: 'failure' }, smoke: true });
+  const broken = verifier.applyRules({ modelVerdict: 'PASS', features: picked.features, conclusions: { [verifier.SMOKE_JOURNEY]: 'failure' }, parents: { [verifier.SMOKE_JOURNEY]: 'passed' }, smoke: true });
   assert.equal(broken.verdict, 'FAIL');
+});
+
+function stepBlocks(source) {
+  const verify = jobBlock(source, 'verify');
+  const body = verify.slice(verify.indexOf('\n    steps:\n') + '\n    steps:\n'.length);
+  return body.split(/^ {6}- /m).slice(1).map(block => `- ${block}`);
+}
+
+test('the model is a flash model, never a pro one', () => {
+  assert.equal(verifier.MODEL, 'deepseek-flash');
+  assert.doesNotMatch(verifier.MODEL, /pro/i);
+  assert.doesNotMatch(read('.github/scripts/pstack-verifier/verifier.cjs'), /v4-pro/);
+});
+
+test('a parent that did not pass never changes the verdict', () => {
+  for (const parent of ['not passed', 'passed', 'no result']) {
+    for (const modelVerdict of ['PASS', 'PASS+NOTES', 'FAIL']) {
+      const ruled = verifier.applyRules({ modelVerdict, features: ['hosts.md'], conclusions: { 'hosts.md': 'success' }, parents: { 'hosts.md': parent } });
+      assert.equal(ruled.verdict, modelVerdict, `${parent} ${modelVerdict}`);
+      assert.equal(ruled.journeys[0].parent, parent);
+    }
+  }
+});
+
+test('a head journey that failed still forces FAIL whatever the parent did', () => {
+  for (const parent of ['passed', 'not passed', 'no result']) {
+    const ruled = verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' }, parents: { 'hosts.md': parent } });
+    assert.equal(ruled.verdict, 'FAIL', parent);
+  }
+});
+
+test('a missing parent result adds a pipeline note and nothing else', () => {
+  const missing = verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md', 'terminal.md'], conclusions: { 'hosts.md': 'success', 'terminal.md': 'success' }, parents: { 'hosts.md': 'passed' } });
+  assert.equal(missing.verdict, 'PASS');
+  assert.match(missing.notes.join(' '), /No parent result for terminal\.md/);
+  assert.doesNotMatch(missing.notes.join(' '), /hosts\.md/);
+  const present = verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'success' }, parents: { 'hosts.md': 'not passed' } });
+  assert.deepEqual(present.notes, []);
+});
+
+test('the parent result comes from the recorded result file, the job conclusion and the app source', () => {
+  const base = 'b'.repeat(40);
+  const result = parent => verifier.parentResult({ mergeBase: base, sourceSha: base, ...parent });
+  assert.equal(result({ conclusion: 'success', result: { passed: true } }), 'passed');
+  assert.equal(result({ conclusion: 'success', result: { passed: false } }), 'not passed');
+  assert.equal(result({ conclusion: 'failure', result: { passed: true } }), 'not passed');
+  assert.equal(result({ conclusion: 'cancelled', result: null }), 'not passed');
+  assert.equal(result({ conclusion: 'success', result: null }), 'no result');
+  assert.equal(result({ conclusion: null, result: { passed: true } }), 'no result');
+  assert.equal(result({ conclusion: null, result: null }), 'no result');
+  assert.equal(verifier.parentResult({ mergeBase: base, sourceSha: sha, conclusion: 'success', result: { passed: true } }), 'no result');
+  assert.equal(verifier.parentResult({ mergeBase: base, sourceSha: '', conclusion: 'success', result: { passed: false } }), 'not passed');
+});
+
+test('the result file and source sha are read from the parent artifact only when well formed', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-side-'));
+  try {
+    assert.deepEqual(verifier.readSideFiles(directory), { result: null, sourceSha: '' });
+    assert.deepEqual(verifier.readSideFiles(null), { result: null, sourceSha: '' });
+    fs.writeFileSync(path.join(directory, verifier.RESULT_FILE), '{"side":"parent","passed":false,"steps":{"native-ui":"failure"}}');
+    fs.writeFileSync(path.join(directory, 'app-source-sha.txt'), `${sha}\n`);
+    const files = verifier.readSideFiles(directory);
+    assert.equal(files.result.passed, false);
+    assert.equal(files.sourceSha, sha);
+    fs.writeFileSync(path.join(directory, verifier.RESULT_FILE), '{"passed":"yes"}');
+    assert.equal(verifier.readSideFiles(directory).result, null);
+    fs.writeFileSync(path.join(directory, verifier.RESULT_FILE), 'not json');
+    assert.equal(verifier.readSideFiles(directory).result, null);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('the comment lists the parent and the head result of every journey', () => {
+  const body = verifier.buildComment({
+    sha,
+    verdict: 'PASS',
+    summary: 'Fixed.',
+    journeys: [
+      { feature: 'hosts.md', conclusion: 'success', passed: true, parent: 'not passed' },
+      { feature: 'terminal.md', conclusion: 'failure', passed: false, parent: 'passed' },
+      { feature: 'sessions.md', conclusion: null, passed: false, parent: 'no result' },
+    ],
+    evidence: [],
+    notCovered: [],
+    notes: [],
+    runUrl,
+  });
+  assert.match(body, /^- `hosts\.md` parent: not passed, head: passed$/m);
+  assert.match(body, /^- `terminal\.md` parent: passed, head: not passed \(failure\)$/m);
+  assert.match(body, /^- `sessions\.md` parent: no result, head: no result$/m);
+  assert.equal(body.split('\n')[0], `pstack-verifier: PASS @ ${sha}`);
+});
+
+test('parent job names and artifact names never collide with the head side', () => {
+  const jobs = [
+    { name: 'journey hosts.md / verify', status: 'completed', conclusion: 'success' },
+    { name: 'parent journey hosts.md / verify', status: 'completed', conclusion: 'success' },
+    { name: 'parent journey terminal.md / verify', status: 'completed', conclusion: 'cancelled' },
+  ];
+  assert.deepEqual(verifier.jobConclusions(jobs, ['hosts.md', 'terminal.md']), { 'hosts.md': 'success', 'terminal.md': null });
+  assert.deepEqual(verifier.jobConclusions(jobs, ['hosts.md', 'terminal.md'], 'parent'), { 'hosts.md': 'success', 'terminal.md': 'cancelled' });
+  assert.equal(verifier.artifactName('hosts.md', '9', 'head'), 'verify-hosts.md-9');
+  assert.equal(verifier.artifactName('hosts.md', '9', 'parent'), 'verify-hosts.md-9-parent');
+  const verify = read('.github/workflows/verify.yml');
+  assert.match(verify, /name: verify-\$\{\{ env\.VERIFY_FEATURE \}\}-\$\{\{ github\.run_id \}\}\$\{\{ inputs\.side == 'parent' && '-parent' \|\| '' \}\}$/m);
+  assert.match(verify, /stage: stage-1\$\{\{ inputs\.side && format\('-\{0\}-\{1\}', inputs\.side, inputs\.feature\) \|\| '' \}\}$/m);
+});
+
+test('the merge base comes from the compare API and must be a full sha', () => {
+  const asked = [];
+  const base = 'c'.repeat(40);
+  const found = verifier.fetchMergeBase('o/r', 'main', sha, args => { asked.push(args); return JSON.stringify({ merge_base_commit: { sha: base } }); });
+  assert.equal(found, base);
+  assert.deepEqual(asked, [['api', `repos/o/r/compare/main...${sha}`]]);
+  for (const bad of [{}, { merge_base_commit: {} }, { merge_base_commit: { sha: 'abc' } }, { merge_base_commit: { sha: 'C'.repeat(40) } }]) {
+    assert.throws(() => verifier.fetchMergeBase('o/r', 'main', sha, () => JSON.stringify(bad)), /no merge base/);
+  }
+  const pick = jobBlock(read('.github/workflows/pstack-verifier.yml'), 'pick');
+  assert.match(pick, /merge_base: \$\{\{ steps\.pick\.outputs\.merge_base \}\}/);
+});
+
+test('the parents job drives the merge base with the head journey scripts and no secrets', () => {
+  const workflow = read('.github/workflows/pstack-verifier.yml');
+  const parents = jobBlock(workflow, 'parents');
+  assert.match(parents, /^ {4}name: parent journey \$\{\{ matrix\.feature \}\}$/m);
+  assert.match(parents, /^ {4}uses: \.\/\.github\/workflows\/verify\.yml$/m);
+  assert.match(parents, /^ {6}feature: \$\{\{ matrix\.feature \}\}$/m);
+  assert.match(parents, /^ {6}side: parent$/m);
+  assert.match(parents, /^ {6}app_ref: \$\{\{ needs\.pick\.outputs\.merge_base \}\}$/m);
+  assert.match(parents, /fail-fast: false/);
+  assert.doesNotMatch(parents, /^ {4}if:/m);
+  assert.doesNotMatch(parents, /secrets/i);
+  assert.doesNotMatch(parents, /DEEPSEEK/);
+  assert.match(jobBlock(workflow, 'pstack-verifier'), /MERGE_BASE: \$\{\{ needs\.pick\.outputs\.merge_base \}\}/);
+});
+
+test('every step of verify.yml cannot turn the parent run red, and the head run is unchanged', () => {
+  const verify = read('.github/workflows/verify.yml');
+  const steps = stepBlocks(verify);
+  assert.ok(steps.length > 20);
+  for (const step of steps) {
+    const name = step.match(/name: (.+)/)?.[1] ?? step.split('\n')[0];
+    assert.match(step, /^ {8}continue-on-error: (?:\$\{\{ inputs\.side == 'parent'(?: \|\| .+)? \}\}|true)$/m, name);
+  }
+  assert.doesNotMatch(jobBlock(verify, 'verify'), /^ {4}continue-on-error:/m);
+  const drive = steps.find(step => /id: native-ui/.test(step));
+  assert.match(drive, /continue-on-error: \$\{\{ inputs\.side == 'parent' \|\| github\.event_name == 'workflow_dispatch' && \(/);
+  assert.match(drive, /timeout-minutes: \$\{\{ inputs\.side == 'parent' && 20 \|\| 35 \}\}/);
+  assert.match(jobBlock(verify, 'verify'), /^ {4}timeout-minutes: \$\{\{ inputs\.side == 'parent' && 50 \|\| 35 \}\}$/m);
+  const ids = steps.map(step => step.match(/^ {8}id: (\S+)$/m)?.[1]).filter(Boolean);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.ok(ids.includes('native-ui'));
+});
+
+test('every step that can fail a head run has an id so the parent result counts it', () => {
+  const steps = stepBlocks(read('.github/workflows/verify.yml'));
+  for (const step of steps) {
+    const name = step.match(/name: (.+)/)?.[1] ?? step.split('\n')[0];
+    const condition = step.match(/^ {8}if: (.+)$/m)?.[1] ?? '';
+    if (condition.startsWith('always()')) continue;
+    assert.match(step, /^ {8}id: \S+$/m, name);
+  }
+});
+
+test('the parent result is written into the artifact by an always step before the upload', () => {
+  const verify = read('.github/workflows/verify.yml');
+  const steps = stepBlocks(verify);
+  const record = steps.findIndex(step => /Record the parent result for the judge/.test(step));
+  const upload = steps.findIndex(step => /actions\/upload-artifact/.test(step));
+  assert.ok(record > 0 && upload > record);
+  assert.match(steps[record], /if: always\(\) && inputs\.side == 'parent'/);
+  assert.match(steps[record], /STEPS_JSON: \$\{\{ toJSON\(steps\) \}\}/);
+  assert.match(steps[record], /\$EVIDENCE\/side-result\.json/);
+  assert.match(steps[record], /\$steps\["native-ui"\]\.outcome == "success"/);
+  assert.match(steps[upload], /if: always\(\)/);
+});
+
+test('verify.yml pins the parent app source to a full sha and takes it through app_ref', () => {
+  const verify = read('.github/workflows/verify.yml');
+  assert.match(verify, /^ {6}APP_REF: \$\{\{ inputs\.app_ref \}\}$/m);
+  assert.match(verify, /SIDE: \$\{\{ inputs\.side \}\}/);
+  assert.match(verify, /if \[\[ "\$SIDE" == parent \]\]; then\n\s+\[\[ "\$APP_REF" =~ \^\[0-9a-f\]\{40\}\$ \]\]/);
+  const checkout = stepBlocks(verify).find(step => /id: app-checkout/.test(step));
+  assert.match(checkout, /if: env\.APP_REF != ''/);
+  assert.match(checkout, /ref: \$\{\{ env\.APP_REF \}\}/);
+  assert.match(checkout, /path: app-source/);
 });
