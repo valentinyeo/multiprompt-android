@@ -16,6 +16,20 @@ on:
       - '.claude/skills/verify-multiprompt-android/**'
       - '.github/workflows/verify.yml'
       - '.github/actions/android-proof/**'
+  workflow_call:
+    inputs:
+      feature:
+        description: User journey from the verification feature map
+        required: true
+        type: string
+      side:
+        description: Which side of a pull request this run drives, head or parent
+        required: false
+        type: string
+      app_ref:
+        description: Optional pinned app source, the merge base for the parent side
+        required: false
+        type: string
   workflow_dispatch:
     inputs:
       released_terminal:
@@ -118,14 +132,14 @@ permissions:
   actions: read
 
 concurrency:
-  group: verify-${{ github.ref }}
+  group: verify-${{ github.ref }}${{ inputs.feature && inputs.feature != github.event.inputs.feature && format('-{0}', inputs.feature) || '' }}${{ inputs.side == 'parent' && '-parent' || '' }}
   cancel-in-progress: true
 
 jobs:
   verify:
     name: ${{ inputs.expect_shell_missing && 'original shell control' || inputs.expect_native_missing && 'original native-skill control' || 'verify' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: ${{ inputs.side == 'parent' && 50 || 35 }}
     env:
       EVIDENCE: ${{ github.workspace }}/verification-evidence
       VERIFY_FEATURE: ${{ inputs.feature || (github.ref == 'refs/heads/ceo/IGSH-1075' && 'chat-queued.md') || ((github.head_ref == 'ceo/IGSH-1076' || startsWith(github.ref, 'refs/heads/ceo/IGSH-1076')) && 'terminal.md') || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1069' && 'chat-choices.md') || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1012' && 'chat-reactions.md') || 'native-skills.md' }}
@@ -137,8 +151,13 @@ jobs:
       PIN_SCROLL_PROOF: ${{ inputs.pins_scroll }}
     steps:
       - uses: actions/checkout@v4
+        id: checkout
+        continue-on-error: ${{ inputs.side == 'parent' }}
       - name: Validate signed recovery channel
+        id: validate-channel
+        continue-on-error: ${{ inputs.side == 'parent' }}
         env:
+          SIDE: ${{ inputs.side }}
           RELEASED_CHAT: ${{ inputs.released_chat }}
           CANDIDATE: ${{ inputs.candidate }}
           EXPECT_SHELL_MISSING: ${{ inputs.expect_shell_missing }}
@@ -150,6 +169,9 @@ jobs:
           RELEASED_TERMINAL: ${{ inputs.released_terminal }}
           RELEASED_ROBOTS: ${{ inputs.released_robots }}
         run: |
+          if [[ "$SIDE" == parent ]]; then
+            [[ "$APP_REF" =~ ^[0-9a-f]{40}$ ]]
+          fi
           if [[ "$PIN_SCROLL_PROOF" == true ]]; then
             [[ "$VERIFY_FEATURE" == session-favorites.md && "$RELEASED_CHAT" == true && -z "$APP_REF" && -z "$UPDATE_BASELINE_RUN" ]]
             [[ "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true ]]
@@ -182,6 +204,8 @@ jobs:
             *) exit 1 ;;
           esac
       - name: Prove SSH fixture configuration on the supported host
+        id: ssh-proof
+        continue-on-error: ${{ inputs.side == 'parent' }}
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y openssh-server
@@ -199,25 +223,37 @@ jobs:
           node --test tools/fixture.test.js
           printf 'SSH_FIXTURE_RED_GREEN_OK\n'
       - name: Prepare verification paths
+        id: prepare-paths
+        continue-on-error: ${{ inputs.side == 'parent' }}
         run: |
           mkdir -p "$EVIDENCE"
           echo "FIXTURE=$RUNNER_TEMP/verify-ssh" >> "$GITHUB_ENV"
       - uses: actions/setup-java@v4
+        id: setup-java
+        continue-on-error: ${{ inputs.side == 'parent' }}
         with:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
+        id: setup-gradle
+        continue-on-error: ${{ inputs.side == 'parent' }}
         with:
           gradle-version: "9.5.1"
       - uses: android-actions/setup-android@v3
+        id: setup-android
+        continue-on-error: ${{ inputs.side == 'parent' }}
         with:
           packages: platform-tools
       - uses: actions/checkout@v4
+        id: app-checkout
+        continue-on-error: ${{ inputs.side == 'parent' }}
         if: env.APP_REF != ''
         with:
           ref: ${{ env.APP_REF }}
           path: app-source
       - name: Capture signed update baseline
+        id: update-baseline-capture
+        continue-on-error: ${{ inputs.side == 'parent' }}
         if: env.VERIFY_FEATURE == 'chat-reactions.md' && inputs.update_baseline_run == ''
         run: |
           mkdir -p "$EVIDENCE/signed-update-baseline"
@@ -225,6 +261,8 @@ jobs:
           curl -fsSL "$(jq -er '.apkUrl' "$EVIDENCE/signed-update-baseline/manifest.json")" -o "$EVIDENCE/signed-update-baseline/app.apk"
           printf '%s  %s\n' "$(jq -er '.sha256' "$EVIDENCE/signed-update-baseline/manifest.json")" "$EVIDENCE/signed-update-baseline/app.apk" | sha256sum --check
       - name: Restore signed update baseline
+        id: update-baseline-restore
+        continue-on-error: ${{ inputs.side == 'parent' }}
         if: inputs.update_baseline_run != ''
         env:
           GH_TOKEN: ${{ github.token }}
@@ -234,13 +272,19 @@ jobs:
           gh run download "$BASELINE_RUN" --repo "$GITHUB_REPOSITORY" --name "verify-chat-reactions.md-$BASELINE_RUN" --dir "$RUNNER_TEMP/update-baseline"
           cp -a "$RUNNER_TEMP/update-baseline/signed-update-baseline" "$EVIDENCE/"
       - name: Check reaction screenshot oracle
+        id: reaction-oracle
+        continue-on-error: ${{ inputs.side == 'parent' }}
         run: |
           python3 -m pip install Pillow
           python3 .claude/skills/verify-multiprompt-android/scripts/reactions.test.py
       - name: Check recovery UI oracle
+        id: recovery-oracle
+        continue-on-error: ${{ inputs.side == 'parent' }}
         if: env.VERIFY_FEATURE == 'chat-resync.md'
         run: python3 -B tools/release-choices/ui.test.py
       - name: Reject code scroll interception on original source
+        id: gesture-reject
+        continue-on-error: ${{ inputs.side == 'parent' }}
         if: inputs.feature == 'session-gestures.md'
         run: |
           python3 -B tools/session-gestures/scroll.test.py
@@ -263,6 +307,8 @@ jobs:
           cp app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.ReplyToMessageTest.xml "$EVIDENCE/original-gesture.xml"
           gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*ReplyToMessageTest' --tests '*ShellViewTest'
       - name: Prepare signed choices APK and same-signer fixture instrumentation
+        id: signed-apk
+        continue-on-error: ${{ inputs.side == 'parent' }}
         if: inputs.release_choices == true || inputs.released_reactions == true || inputs.released_terminal == true || inputs.released_robots == true || inputs.released_chat == true
         env:
           CANDIDATE: ${{ inputs.candidate }}
@@ -279,6 +325,8 @@ jobs:
           echo "VERIFY_PACKAGE=$(cat "$EVIDENCE/package-name.txt")" >> "$GITHUB_ENV"
           echo "EXPECTED_VERSION=$(cat "$EVIDENCE/version.txt")" >> "$GITHUB_ENV"
       - name: Download published icon APK
+        id: icon-apk
+        continue-on-error: ${{ inputs.side == 'parent' }}
         if: inputs.release_icon == true
         run: |
           test "$VERIFY_FEATURE" = launcher-icon.md
@@ -291,6 +339,8 @@ jobs:
           echo "VERIFY_PACKAGE=dev.multiprompt.companion" >> "$GITHUB_ENV"
           echo "EXPECTED_VERSION=$(jq -er '.versionName' "$EVIDENCE/manifest.json")" >> "$GITHUB_ENV"
       - name: Reject original Codex reader
+        id: codex-reject
+        continue-on-error: ${{ inputs.side == 'parent' }}
         if: inputs.feature == 'chat-codex.md'
         run: |
           git fetch origin 099a8e73b6857ff901d1166854dbbda0884122f1
@@ -303,6 +353,9 @@ jobs:
           python3 -B tools/codex-sync.test.py 2>&1 | tee "$EVIDENCE/codex-fixed.txt"
           echo ORIGINAL_CODEX_REJECTED
       - name: Build debug APK
+        id: build-apk
+        timeout-minutes: ${{ inputs.side == 'parent' && 15 || 35 }}
+        continue-on-error: ${{ inputs.side == 'parent' }}
         if: inputs.release_choices != true && inputs.release_icon != true && inputs.released_reactions != true && inputs.released_terminal != true && inputs.released_robots != true && inputs.released_chat != true
         run: |
           mkdir -p "$EVIDENCE"
@@ -315,21 +368,29 @@ jobs:
           echo "VERIFY_APK=$app_source/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
           sha256sum "$app_source/app/build/outputs/apk/debug/app-debug.apk" > "$EVIDENCE/app-apk-sha256.txt"
       - name: Build fixture instrumentation
+        id: build-instrumentation
+        timeout-minutes: ${{ inputs.side == 'parent' && 15 || 35 }}
+        continue-on-error: ${{ inputs.side == 'parent' }}
         if: inputs.released_chat != true && inputs.release_choices != true && inputs.release_icon != true && inputs.released_reactions != true && inputs.released_terminal != true && inputs.released_robots != true
         run: gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g assembleDebugAndroidTest
       - name: Prepare shell and chat recording
+        id: recording-tools
+        continue-on-error: ${{ inputs.side == 'parent' }}
         if: env.VERIFY_FEATURE == 'chat-queued.md'
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg tesseract-ocr
           ffmpeg -version
       - name: Start ephemeral public-key-only SSH and tmux
+        id: ssh-fixture
+        continue-on-error: ${{ inputs.side == 'parent' }}
         run: .claude/skills/verify-multiprompt-android/scripts/fixture.sh
       - name: Install, doctor and drive the real app
         id: native-ui
-        continue-on-error: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.expect_native_missing == 'true' || github.event.inputs.expect_shell_missing == 'true' || github.event.inputs.expect_settings_missing == 'true' || github.event.inputs.expect_shared_missing == 'true') }}
+        timeout-minutes: ${{ inputs.side == 'parent' && 20 || 35 }}
+        continue-on-error: ${{ inputs.side == 'parent' || github.event_name == 'workflow_dispatch' && (github.event.inputs.expect_native_missing == 'true' || github.event.inputs.expect_shell_missing == 'true' || github.event.inputs.expect_settings_missing == 'true' || github.event.inputs.expect_shared_missing == 'true') }}
         uses: ./.github/actions/android-proof
         with:
-          stage: stage-1
+          stage: stage-1${{ inputs.side && format('-{0}-{1}', inputs.side, inputs.feature) || '' }}
           target: default
           script: |
             adb install -r -g "$VERIFY_APK"
@@ -341,6 +402,8 @@ jobs:
             fi
             if [ -n "$UPDATE_BASELINE_RUN" ]; then .claude/skills/verify-multiprompt-android/scripts/update-reaction-release.sh; fi
       - name: Compare desktop and Android transcript posts
+        id: codex-parity
+        continue-on-error: ${{ inputs.side == 'parent' }}
         if: inputs.feature == 'chat-codex.md'
         run: |
           curl -fsSL https://raw.githubusercontent.com/valentinyeo/multiprompt/93ff8a0631761eefaf772b58ccb7a6318c7edc02/src/chat_history_reader.py -o /tmp/desktop-codex-reader.py
@@ -350,6 +413,8 @@ jobs:
           cat "$EVIDENCE/desktop-android-parity.txt"
           grep -Fx DESKTOP_ANDROID_POSTS_IDENTICAL "$EVIDENCE/desktop-android-parity.txt"
       - name: Require the Android 301 settings failure
+        id: require-settings
+        continue-on-error: ${{ inputs.side == 'parent' }}
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.expect_settings_missing == 'true'
         env:
           EMULATOR_OUTCOME: ${{ steps.native-ui.outcome }}
@@ -366,6 +431,7 @@ jobs:
           grep -Ex 'SETTINGS_NAVIGATION_RETIRED_DESTINATION|SETTINGS_NAVIGATION_MISSING_HOST_MAPPING' "$EVIDENCE/settings-baseline.txt"
           printf 'ANDROID_301_SETTINGS_REJECTED\n' > "$EVIDENCE/settings-baseline-result.txt"
       - name: Require Android 303 shared host-state failure
+        continue-on-error: ${{ inputs.side == 'parent' }}
         if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.expect_shared_missing == 'true'
         env:
           EMULATOR_OUTCOME: ${{ steps.native-ui.outcome }}
@@ -385,6 +451,8 @@ jobs:
           esac
           printf 'ANDROID_303_SHARED_HOST_STATE_REJECTED\n' > "$EVIDENCE/shared-negative-result.txt"
       - name: Require the original native-skill failure
+        id: require-native
+        continue-on-error: ${{ inputs.side == 'parent' }}
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.expect_native_missing == 'true'
         env:
           EMULATOR_OUTCOME: ${{ steps.native-ui.outcome }}
@@ -396,6 +464,7 @@ jobs:
           grep -F 'NATIVE_SLASH_PICKER_MISSING' "$EVIDENCE/driver-transcript.txt"
           printf '%s\n' '{"status":"expected-red","error":"NATIVE_SLASH_PICKER_MISSING"}' > "$EVIDENCE/native-baseline-result.json"
       - name: Require the original shell swipe failure
+        continue-on-error: ${{ inputs.side == 'parent' }}
         if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.expect_shell_missing == 'true'
         env:
           EMULATOR_OUTCOME: ${{ steps.native-ui.outcome }}
@@ -409,6 +478,7 @@ jobs:
           grep -F 'Timed out waiting for SHELL_HISTORY_' "$EVIDENCE/driver-transcript.txt"
           printf 'ORIGINAL_SHELL_SWIPE_REJECTED\n' > "$EVIDENCE/shell-baseline-result.txt"
       - name: Retain emulator exit and host memory evidence
+        continue-on-error: ${{ inputs.side == 'parent' }}
         if: always()
         run: |
           mkdir -p "$EVIDENCE/emulator-diagnostics"
@@ -418,14 +488,24 @@ jobs:
           free -m > "$EVIDENCE/emulator-diagnostics/memory.txt"
           ps -eo pid,ppid,stat,rss,args > "$EVIDENCE/emulator-diagnostics/processes.txt"
       - name: Stop recorded fixture processes and retain logs
+        continue-on-error: ${{ inputs.side == 'parent' }}
         timeout-minutes: 2
         if: always()
         run: .claude/skills/verify-multiprompt-android/scripts/cleanup.sh
+      - name: Record the parent result for the judge
+        if: always() && inputs.side == 'parent'
+        continue-on-error: true
+        env:
+          STEPS_JSON: ${{ toJSON(steps) }}
+        run: |
+          mkdir -p "$EVIDENCE"
+          jq -n --argjson steps "$STEPS_JSON" '{side: "parent", passed: (($steps["native-ui"].outcome == "success") and ([$steps[] | .outcome] | all(. == "success" or . == "skipped"))), steps: ($steps | map_values(.outcome))}' > "$EVIDENCE/side-result.json"
       - name: Upload evidence even on failure
+        continue-on-error: ${{ inputs.side == 'parent' }}
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: verify-${{ env.VERIFY_FEATURE }}-${{ github.run_id }}
+          name: verify-${{ env.VERIFY_FEATURE }}-${{ github.run_id }}${{ inputs.side == 'parent' && '-parent' || '' }}
           path: verification-evidence/
           if-no-files-found: error
           retention-days: 7
