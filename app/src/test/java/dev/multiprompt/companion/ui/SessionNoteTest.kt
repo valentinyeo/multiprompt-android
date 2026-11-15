@@ -81,4 +81,57 @@ class SessionNoteTest {
     fun fromColonPrefixIsNotRelabelled() {
         assertNull(SessionNote.parse("From Beta Runner: check the build"))
     }
+
+    @Test
+    fun agentMessageWithIdOnlyIsAnotherAgent() {
+        val note = SessionNote.parse("<agent-message from=\"abb23277c284f1efe\">\nPR #3506 is green &amp; ready\n</agent-message>")!!
+        assertEquals("Another agent", note.sender)
+        assertEquals("PR #3506 is green & ready", note.body)
+        assertNull(note.ticket)
+        assertEquals("Another agent to Boss", SessionNote.label(note, "Boss"))
+    }
+
+    @Test
+    fun agentMessageShortNameBecomesSender() {
+        val note = SessionNote.parse("<agent-message from=\"heic-verify\">\nStanding down. IGSH-2351 done\n</agent-message>")!!
+        assertEquals("heic-verify", note.sender)
+        assertEquals("IGSH-2351", note.ticket)
+        assertEquals("Standing down. IGSH-2351 done", note.body)
+        assertEquals("heic-verify", SessionNote.parse("<agent-message from='heic-verify'>done</agent-message>")!!.sender)
+    }
+
+    @Test
+    fun agentMessageFromNameWinsOverFrom() {
+        assertEquals("Poteto 2 LC", SessionNote.parse("<agent-message from='abb23277c284f1efe' from-name='Poteto 2 LC'>hi</agent-message>")!!.sender)
+        assertEquals("Poteto 2 LC", SessionNote.parse("<agent-message from-name='Poteto 2 LC' from='heic-verify'>hi</agent-message>")!!.sender)
+    }
+
+    @Test
+    fun agentMessageWithoutUsableNameIsAnotherAgent() {
+        assertEquals("Another agent", SessionNote.parse("<agent-message>hi</agent-message>")!!.sender)
+        assertEquals("Another agent", SessionNote.parse("<agent-message from=\"  \">hi</agent-message>")!!.sender)
+        assertEquals("Another agent", SessionNote.parse("<agent-message from-name='  '>hi</agent-message>")!!.sender)
+        assertEquals("Another agent", SessionNote.parse("<agent-message from=\"0123456789ab\">hi</agent-message>")!!.sender)
+    }
+
+    @Test
+    fun agentMessageDecodesEntitiesAndStripsTags() {
+        val note = SessionNote.parse("<agent-message from=\"run&amp;ner\">&lt;ok&gt; <b>bold</b></agent-message>")!!
+        assertEquals("run&ner", note.sender)
+        assertEquals("<ok> bold", note.body)
+    }
+
+    @Test
+    fun hostileAgentMessagesAreNotNotes() {
+        listOf(
+            "Please read <agent-message from='x'>hi</agent-message>",
+            "<agent-message from=x>bad</agent-message>",
+            "<agent-message-extra>hi</agent-message>",
+            "<agent-message-extra>hi</agent-message-extra>",
+            "<agent-message>no close",
+            "<agent-message>a</agent-message>b</agent-message>",
+            "<agent-message>one</agent-message> and reply",
+            "<agent-message from='x'>hi</cross-session-message>",
+        ).forEach { assertNull(it, SessionNote.parse(it)) }
+    }
 }
