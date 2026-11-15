@@ -517,6 +517,14 @@ test('every step of verify.yml cannot turn the parent run red, and the head run 
   assert.ok(ids.includes('native-ui'));
 });
 
+test('a parent journey that fails records its exit code and leaves the job green', () => {
+  const verify = read('.github/workflows/verify.yml');
+  assert.match(jobBlock(verify, 'verify'), /^ {6}VERIFY_SIDE: \$\{\{ inputs\.side \}\}$/m);
+  const drive = stepBlocks(verify).find(step => /id: native-ui/.test(step));
+  assert.match(drive, /if \[ "\$\{VERIFY_SIDE:-\}" = parent \]; then\n\s+set \+e\n\s+\(set -euo pipefail; proof\)\n\s+code=\$\?\n\s+set -e\n/);
+  assert.match(drive, /printf '%s\\n' "\$code" > "\$EVIDENCE\/parent-driver-exit\.txt"\n\s+else\n\s+proof\n\s+fi/);
+});
+
 test('every step that can fail a head run has an id so the parent result counts it', () => {
   const steps = stepBlocks(read('.github/workflows/verify.yml'));
   for (const step of steps) {
@@ -537,6 +545,8 @@ test('the parent result is written into the artifact by an always step before th
   assert.match(steps[record], /STEPS_JSON: \$\{\{ toJSON\(steps\) \}\}/);
   assert.match(steps[record], /\$EVIDENCE\/side-result\.json/);
   assert.match(steps[record], /\$steps\["native-ui"\]\.outcome == "success"/);
+  assert.match(steps[record], /\$driver == 0/);
+  assert.match(steps[record], /parent-driver-exit\.txt/);
   assert.match(steps[upload], /if: always\(\)/);
 });
 
