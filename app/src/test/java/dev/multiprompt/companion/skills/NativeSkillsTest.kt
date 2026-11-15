@@ -3,6 +3,7 @@ package dev.multiprompt.companion.skills
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NativeSkillsTest {
@@ -20,6 +21,29 @@ class NativeSkillsTest {
     @Test fun skipsRowsWithAnInvalidNameInsteadOfFailingTheWholeList() {
         val json = """[{"name":"bad command"},{"name":"review","description":"Check it"},{"description":"no name"},"text",{"name":"-x"},{"name":"qa:test"}]"""
         assertEquals(listOf(NativeSkill("qa:test", ""), NativeSkill("review", "Check it")), NativeSkills.parse(json))
+    }
+
+    @Test fun claudeCommandsRankClearFirstAndANameMatchBeatsADescription() {
+        for (name in listOf("clear", "compact", "model", "resume", "context")) {
+            assertTrue(NativeSkills.claudeCommands.single { it.name == name }.description.isNotBlank())
+        }
+        val typed = NativeSkills.menu(
+            listOf(NativeSkill("client", "A skill"), NativeSkill("paper", "Clear the log")),
+            "cl",
+        )
+        assertEquals("clear", typed.first().name)
+        assertTrue(typed.indexOfFirst { it.name == "client" } < typed.indexOfFirst { it.name == "paper" })
+        val order = NativeSkills.menu(emptyList(), "co").map { it.name }
+        assertEquals("code-review", order.first())
+        assertTrue(order.indexOf("color") < order.indexOf("compact"))
+        assertTrue(order.indexOf("compact") < order.indexOf("context"))
+        assertTrue(order.indexOf("context") < order.indexOf("copy"))
+        assertEquals(
+            "clear",
+            NativeSkills.menu(listOf(NativeSkill("clearly", "notes"), NativeSkill("notes", "clear the buffer")), "clear").first().name,
+        )
+        assertEquals(1, NativeSkills.menu(listOf(NativeSkill("clear", "user skill")), "cl").count { it.name == "clear" })
+        assertEquals(emptyList<NativeSkill>(), NativeSkills.menu(emptyList(), "zzzz"))
     }
 
     @Test fun slashFiltersNameAndDescriptionWithoutChangingTheDraft() {
