@@ -32,11 +32,15 @@ internal object SessionNote {
 
     private val prefix = Regex("""^\s*\[from ([^\]\n]{1,80})\][ \t]*""")
     private val ticketId = Regex("""\b[A-Z][A-Z0-9]{1,7}-\d{1,6}\b""")
+    private val hexId = Regex("[0-9a-f]{12,}")
 
     private const val SPACE = " \t\r\n"
     private const val ENVELOPE = "<cross-session-message"
     private const val ENVELOPE_CLOSE = "</cross-session-message>"
+    private const val AGENT_ENVELOPE = "<agent-message"
+    private const val AGENT_ENVELOPE_CLOSE = "</agent-message>"
     private const val ANOTHER_SESSION = "another session"
+    private const val ANOTHER_AGENT = "Another agent"
     private const val SENDER_MAX = 63
 
     fun parse(message: String): Note? {
@@ -49,14 +53,20 @@ internal object SessionNote {
 
     private fun parseEnvelope(message: String): Note? {
         val text = message.trim { it in SPACE }
-        if (!text.startsWith(ENVELOPE) || text.length <= ENVELOPE.length) return null
-        val next = text[ENVELOPE.length]
+        val agent = text.startsWith(AGENT_ENVELOPE)
+        val open = if (agent) AGENT_ENVELOPE else ENVELOPE
+        val closeTag = if (agent) AGENT_ENVELOPE_CLOSE else ENVELOPE_CLOSE
+        val fallback = if (agent) ANOTHER_AGENT else ANOTHER_SESSION
+        if (!text.startsWith(open) || text.length <= open.length) return null
+        val next = text[open.length]
         if (next != '>' && next !in SPACE) return null
         val end = tagEnd(text) ?: return null
-        val close = text.indexOf(ENVELOPE_CLOSE, end + 1)
-        if (close < 0 || close + ENVELOPE_CLOSE.length != text.length) return null
-        var sender = ANOTHER_SESSION
-        var attrs = text.substring(ENVELOPE.length, end).trim { it in SPACE }
+        val close = text.indexOf(closeTag, end + 1)
+        if (close < 0 || close + closeTag.length != text.length) return null
+        var sender = fallback
+        var named = false
+        var origin = ""
+        var attrs = text.substring(open.length, end).trim { it in SPACE }
         while (attrs.isNotEmpty()) {
             val nameEnd = attrs.indexOfFirst { it == '=' || it in SPACE }
             if (nameEnd <= 0) return null
@@ -70,14 +80,20 @@ internal object SessionNote {
             val valueEnd = attrs.indexOf(quote)
             if (valueEnd < 0) return null
             val value = attrs.substring(0, valueEnd)
-            if (name == "from-name" && value.trim { it in SPACE }.isNotEmpty()) sender = value
+            if (name == "from-name" && value.trim { it in SPACE }.isNotEmpty()) {
+                sender = value
+                named = true
+            } else if (name == "from") {
+                origin = value.trim { it in SPACE }
+            }
             attrs = attrs.substring(valueEnd + 1)
             if (attrs.isNotEmpty() && attrs[0] !in SPACE) return null
             attrs = attrs.trimStart { it in SPACE }
         }
+        if (agent && !named && origin.isNotEmpty() && !hexId.matches(decode(origin, false))) sender = origin
         val label = decode(sender, false).take(SENDER_MAX).map { if (it < ' ') ' ' else it }.joinToString("").trim()
         val body = decode(text.substring(end + 1, close).trim { it in SPACE }, true).trim { it in SPACE }
-        return Note(label.ifEmpty { ANOTHER_SESSION }, ticketId.find(body)?.value, body)
+        return Note(label.ifEmpty { fallback }, ticketId.find(body)?.value, body)
     }
 
     private fun tagEnd(text: String): Int? {
