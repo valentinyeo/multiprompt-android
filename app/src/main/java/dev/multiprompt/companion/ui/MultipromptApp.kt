@@ -247,6 +247,8 @@ import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.dictation.DictationState
 import dev.multiprompt.companion.reader.HostChange
+import dev.multiprompt.companion.reader.PiModel
+import dev.multiprompt.companion.reader.PiModels
 import dev.multiprompt.companion.reader.MessageActionResult
 import dev.multiprompt.companion.reader.QueuedEdit
 import dev.multiprompt.companion.reader.ReaderStatus
@@ -3084,6 +3086,7 @@ internal fun ReaderScreen(
 ) = key(connection) {
     MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
     val reader by connection.state.collectAsState()
+    val piModels by connection.piModels.collectAsState()
     val displayName = stringResource(R.string.app_name)
     val working = reader.isWorking(session.agent)
     LaunchedEffect(connection, working) {
@@ -3491,7 +3494,7 @@ internal fun ReaderScreen(
         } else {
             val command = dev.multiprompt.companion.model.SlashCommand.commandName(draftText)
             dev.multiprompt.companion.model.SlashCommand.decide(
-                session.liveChat && session.agent == AgentKind.CLAUDE,
+                (session.liveChat && session.agent == AgentKind.CLAUDE) || (session.agent == AgentKind.PI && command == "model"),
                 draftText,
                 command != null && reader.nativeSkills.any { it.name == command },
             )
@@ -3503,7 +3506,8 @@ internal fun ReaderScreen(
             else -> null
         }
         if (pickerSection != null) {
-            if (HostChange.sections(connection.hostSettings() != null).any { it.first == pickerSection }) {
+            val piModelSection = session.agent == AgentKind.PI && pickerSection == PiModels.SECTION
+            if (piModelSection || HostChange.sections(connection.hostSettings() != null).any { it.first == pickerSection }) {
                 attachMenuSection = pickerSection
                 attachMenuExpanded = true
             } else {
@@ -3569,6 +3573,13 @@ internal fun ReaderScreen(
         delay(1_000)
         waitingSend = null
         sendDraft(text)
+    }
+    val applyPiModel: (PiModel) -> Unit = { model ->
+        readerScope.launch {
+            val result = connection.changePiModel(model)
+            if (result == MessageActionResult.Applied) onSessionInteraction()
+            android.widget.Toast.makeText(context, PiModels.resultMessage(result, model), android.widget.Toast.LENGTH_SHORT).show()
+        }
     }
     val sendModelCommand: (String) -> Unit = { command ->
         if (!reader.sending && pendingPromptAction == null) {
@@ -4390,7 +4401,38 @@ internal fun ReaderScreen(
                                 val openSection = if (settingsProvider != null) {
                                     HostChange.sections(connection.hostSettings() != null, settingsProvider).firstOrNull { it.first == attachMenuSection }
                                 } else null
-                                if (openSection != null) {
+                                val piModelMenu = session.agent == AgentKind.PI && attachMenuSection == PiModels.SECTION
+                                if (piModelMenu) {
+                                    val currentModel = connection.hostSettings()?.model?.takeIf { it.isNotEmpty() } ?: runtimeDetails.model
+                                    LaunchedEffect(connection) { connection.loadPiModels() }
+                                    KitMenuRow(
+                                        label = PiModels.SECTION,
+                                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                        onClick = { attachMenuSection = null },
+                                    )
+                                    KitDivider()
+                                    when {
+                                        piModels.models.isNotEmpty() -> piModels.models.forEach { model ->
+                                            KitMenuRow(
+                                                label = model.name,
+                                                trailingText = PiModels.trailing(model, currentModel),
+                                                onClick = {
+                                                    attachMenuExpanded = false
+                                                    applyPiModel(model)
+                                                },
+                                            )
+                                        }
+                                        piModels.loading || piModels.error == null -> KitMenuRow(
+                                            label = PiModels.LOADING,
+                                            enabled = false,
+                                            onClick = {},
+                                        )
+                                        else -> KitMenuRow(
+                                            label = piModels.error ?: PiModels.FAILED,
+                                            onClick = { connection.loadPiModels() },
+                                        )
+                                    }
+                                } else if (openSection != null) {
                                     val hostSettings = connection.hostSettings()
                                     KitMenuRow(
                                         label = openSection.first,
@@ -4440,6 +4482,14 @@ internal fun ReaderScreen(
                                                 promptField = TextFieldValue(NativeSkills.open(prompt), selection = TextRange(1))
                                                 promptFocusRequester.requestFocus()
                                             },
+                                        )
+                                    }
+                                    if (session.agent == AgentKind.PI) {
+                                        KitDivider()
+                                        KitMenuRow(
+                                            label = PiModels.SECTION,
+                                            trailingText = "›",
+                                            onClick = { attachMenuSection = PiModels.SECTION },
                                         )
                                     }
                                     if (settingsProvider != null) {
