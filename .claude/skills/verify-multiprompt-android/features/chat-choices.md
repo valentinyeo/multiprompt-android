@@ -7,7 +7,7 @@ The isolated SSH/tmux Python fixture writes real structured AskUserQuestion even
 ## Journey
 
 1. Import the generated key and trust the displayed fingerprint through normal host screens.
-2. Open `verify-session`. Check exact question, header, labels and descriptions. Select **Use the current account**, then **Submit answer**. Require raw-key receipt `VERIFY_QUESTION_KEY:2`.
+2. Open `verify-session`. Check exact question, header, labels and descriptions. Select **Use the current account**; a single choice sends on tap, with no **Submit answer** tap. Require raw-key receipt `VERIFY_QUESTION_KEY:2`.
 3. For **What should we keep?**, select **History** and **Settings**, type **Custom** into **Other**, then submit. Require `VERIFY_MULTI:{"other": "Custom", "selected": [0, 1]}`.
 4. Require **Structured questions answered.** and no remaining answer card.
 5. Capture ordinary numbered and bulleted lists. Require original markers and complete text without clickable items.
