@@ -38,8 +38,10 @@ import dev.multiprompt.companion.reader.ChatHistoryPrefetch
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
+import dev.multiprompt.companion.reader.SwitchAi
 import dev.multiprompt.companion.auth.SyncAuthManager
 import android.content.Intent
+import android.widget.Toast
 import dev.multiprompt.companion.account.AccountHosts
 import dev.multiprompt.companion.account.BotPhotoCache
 import dev.multiprompt.companion.account.AccountHostMap
@@ -1529,6 +1531,57 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         warmReaderTouchedAt.remove(key)
         _state.update { it.copy(reader = null, readerSession = null) }
         openReader(session, userInitiated = true)
+    }
+
+    fun switchAi(session: TmuxSession, to: String) {
+        val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
+        val key = SessionReadStore.key(session.hostId, session.name)
+        val reader = warmReaders[key] ?: _state.value.reader?.takeIf {
+            _state.value.readerSession?.let { open -> open.hostId == session.hostId && open.name == session.name } == true
+        } ?: return
+        viewModelScope.launch {
+            _state.update { it.copy(sessionActionError = null) }
+            when (val outcome = reader.switchAi(to)) {
+                is SwitchAi.Outcome.Failed -> _state.update { it.copy(sessionActionError = outcome.message) }
+                is SwitchAi.Outcome.Unknown -> {
+                    val updated = runCatching { ssh.listSessions(host) }.getOrNull()
+                        ?.sessions?.firstOrNull { it.name == session.name }
+                    if (updated != null && updated.hostProvider == to && updated.hostSessionId.isNotEmpty() &&
+                        updated.hostSessionId != session.hostSessionId
+                    ) {
+                        followSwitch(session, session.copy(hostProvider = updated.hostProvider, hostSessionId = updated.hostSessionId), key)
+                        Toast.makeText(getApplication(), SwitchAi.notice(to), Toast.LENGTH_SHORT).show()
+                    } else {
+                        _state.update { it.copy(sessionActionError = SwitchAi.UNKNOWN) }
+                    }
+                    refresh()
+                }
+                is SwitchAi.Outcome.Switched -> {
+                    followSwitch(session, session.copy(hostProvider = outcome.provider, hostSessionId = outcome.sid), key)
+                    Toast.makeText(getApplication(), SwitchAi.notice(outcome.provider), Toast.LENGTH_SHORT).show()
+                    refresh()
+                }
+            }
+        }
+    }
+
+    private fun followSwitch(previous: TmuxSession, switched: TmuxSession, key: String) {
+        _state.update { state ->
+            state.copy(sessions = state.sessions.map { item ->
+                if (item.hostId == previous.hostId && item.name == previous.name) {
+                    item.copy(hostProvider = switched.hostProvider, hostSessionId = switched.hostSessionId)
+                } else {
+                    item
+                }
+            })
+        }
+        val stillOpen = _state.value.readerSession?.let { it.hostId == previous.hostId && it.name == previous.name } == true
+        if (stillOpen) {
+            reattachReader(switched)
+        } else {
+            warmReaders.remove(key)?.close()
+            warmReaderTouchedAt.remove(key)
+        }
     }
 
     fun closeReader() {
