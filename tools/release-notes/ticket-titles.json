@@ -84,5 +84,6 @@
   "IGSH-2296": "Android: keep one server link open for the chat list",
   "IGSH-2313": "Android: measure app start time with and without startup profile",
   "IGSH-2354": "No false live view error in desktop hosted chats",
-  "IGSH-2370": "Android: remove the ETA countdown like desktop"
+  "IGSH-2370": "Android: remove the ETA countdown like desktop",
+  "IGSH-2366": "Android: agent messages in the new format show as a sender card"
 }
