@@ -411,6 +411,39 @@ class SshRepository(private val secrets: SecretStorage) {
         }
     }
 
+    suspend fun piModels(host: HostProfile): List<dev.multiprompt.companion.reader.PiModel> = withContext(Dispatchers.IO) {
+        withTimeout(PI_MODELS_TIMEOUT_MS) {
+            withServerLink(host) { client ->
+                coroutineScope {
+                    val session = client.openSession()
+                        ?: throw SshProblem.Connection("The SSH server refused a model list channel")
+                    try {
+                        if (!session.requestExec("exec python3 ~/.local/share/zigshell/mp_complete.py --serve")) {
+                            throw SshProblem.Connection("The SSH server refused the model list helper")
+                        }
+                        launch { for (chunk in session.stderr) { } }
+                        session.write(dev.multiprompt.companion.reader.PiModels.request(1).toByteArray(Charsets.UTF_8))
+                        val framer = TranscriptProtocol.Framer()
+                        var wire: String? = null
+                        while (wire == null) {
+                            val chunk = session.stdout.receiveCatching().getOrNull()
+                                ?: throw SshProblem.Connection("The model list helper is unavailable")
+                            val frames = framer.feed(chunk)
+                            check(frames.size <= 1 && (frames.isEmpty() || !framer.hasPending())) {
+                                "Unexpected model list response"
+                            }
+                            wire = frames.firstOrNull()
+                        }
+                        dev.multiprompt.companion.reader.PiModels.parse(wire, 1)
+                            ?: throw SshProblem.Connection("Invalid model list response")
+                    } finally {
+                        session.close()
+                    }
+                }
+            }
+        }
+    }
+
     suspend fun heldPrompt(
         client: SshClient,
         script: ByteArray,
@@ -799,6 +832,7 @@ class SshRepository(private val secrets: SecretStorage) {
         const val LOG_TAG = "MultipromptSSH"
         const val CONNECTION_TIMEOUT_MS = 20_000L
         const val LINK_CLOSE_TIMEOUT_MS = 2_000L
+        const val PI_MODELS_TIMEOUT_MS = 35_000L
         const val MAX_COMMAND_OUTPUT = 2 * 1024 * 1024
         const val MAX_PROMPT_BYTES = 64 * 1024
         const val MAX_SNAPSHOT_HEX_CHARS = 1024 * 1024
