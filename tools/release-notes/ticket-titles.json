@@ -88,5 +88,6 @@
   "IGSH-2363": "Android: phone chat engine catches up with desktop again",
   "IGSH-2364": "Android: switch a chat to another AI",
   "IGSH-2379": "A second AI tests every Android change before merge",
-  "IGSH-2432": "Second AI question test matches how answers send now"
+  "IGSH-2432": "Second AI question test matches how answers send now",
+  "IGSH-2290": "Android: skills in a message show as a pill"
 }
