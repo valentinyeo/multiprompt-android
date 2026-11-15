@@ -47,7 +47,7 @@ internal fun DictationBar(
     level: StateFlow<Float>,
     sending: Boolean,
     onStop: () -> Unit,
-    onCancel: () -> Unit,
+    onCancel: () -> Unit = {},
     onSend: () -> Unit,
 ) {
     val dark = Color(0xFF2B2B2B)
