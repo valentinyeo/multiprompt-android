@@ -11,8 +11,10 @@ data class PiModelList(val models: List<PiModel> = emptyList(), val loading: Boo
 
 object PiModels {
     const val SECTION = "Model"
+    const val LOADING = "Loading Pi models..."
     const val EMPTY = "No Pi models on this server. Tap to retry."
     const val FAILED = "Could not load Pi models. Tap to retry."
+    const val STARTING = "This Pi chat is still starting"
     const val SWITCHED = "Pi did not switch the model; try again"
     const val MAX_MODELS = 512
     private val PART = Regex("[A-Za-z0-9][A-Za-z0-9._/-]{0,159}")
@@ -48,4 +50,18 @@ object PiModels {
     fun command(model: PiModel): String = "/model ${model.reference}"
 
     fun notice(model: PiModel): String = "Model: ${model.name}"
+
+    fun selected(model: PiModel, current: String?): Boolean {
+        val value = current?.trim().orEmpty()
+        return value.isNotEmpty() && (value == model.reference || value == model.name)
+    }
+
+    fun trailing(model: PiModel, current: String?): String? =
+        if (selected(model, current)) "✓" else model.provider.ifBlank { model.detail }.ifBlank { null }
+
+    fun resultMessage(result: MessageActionResult, model: PiModel): String = when (result) {
+        MessageActionResult.Applied -> notice(model)
+        is MessageActionResult.Rejected -> if (result.reason == "Chat is not ready" || result.reason == "Chat is unavailable") STARTING else SWITCHED
+        else -> SWITCHED
+    }
 }
