@@ -12,6 +12,7 @@ const AUTHOR = 'github-actions';
 const MARKER_PREFIX = 'pstack-verifier:v1';
 const VERDICTS = ['PASS', 'PASS+NOTES', 'FAIL'];
 const MAX_JOURNEYS = 3;
+const SMOKE_JOURNEY = 'native-skills.md';
 const MAX_EVIDENCE_LINES = 8;
 const MAX_NOT_COVERED = 6;
 const MAX_LINE = 400;
@@ -114,7 +115,9 @@ function parsePick(content) {
   const parsed = parseJson(content);
   if (!parsed || !Array.isArray(parsed.features)) throw new Error('the picker answer is not the expected JSON');
   const { features, dropped } = validateFeatures(parsed.features);
-  return { features, dropped, reason: oneLine(parsed.reason, 300) };
+  const reason = oneLine(parsed.reason, 300);
+  if (!features.length) return { features: [SMOKE_JOURNEY], dropped, reason: reason || 'No journey fits this change.', smoke: true };
+  return { features, dropped, reason, smoke: false };
 }
 
 function parseVerdict(content) {
@@ -131,7 +134,7 @@ function parseVerdict(content) {
   };
 }
 
-function applyRules({ modelVerdict, features, conclusions, notDrivenReason }) {
+function applyRules({ modelVerdict, features, conclusions, notDrivenReason, smoke = false }) {
   const notes = [];
   let verdict = VERDICTS.includes(modelVerdict) ? modelVerdict : 'FAIL';
   const journeys = features.map(feature => {
@@ -143,8 +146,11 @@ function applyRules({ modelVerdict, features, conclusions, notDrivenReason }) {
     verdict = 'FAIL';
     notes.push(`Journey not passed: ${failed.map(journey => `${journey.feature} (${journey.conclusion ?? 'no result'})`).join(', ')}.`);
   }
-  if (!features.length && verdict === 'PASS') {
+  if ((!features.length || smoke) && verdict === 'PASS') {
     verdict = 'PASS+NOTES';
+  }
+  if (smoke && features.length) {
+    notes.push(`Only the smoke journey was driven, so the app still works but this change itself was not exercised. ${oneLine(notDrivenReason, 300) || 'No journey fits this change.'}`.trim());
   }
   if (!features.length) {
     notes.push(`Nothing was driven, so the app was not exercised. ${oneLine(notDrivenReason, 300) || 'No journey fits this change.'}`.trim());
@@ -379,9 +385,9 @@ async function pick(env) {
   const user = `Journey catalog (the only names you may choose):\n${journeyCatalog(env.ROOT ?? process.cwd())}\n\n${prContext(pr, diff, PICK_DIFF_CHARS)}`;
   const answer = await callDeepSeek({ key, system: PICK_INSTRUCTIONS, user });
   const picked = parsePick(answer);
-  const reason = picked.reason || (picked.features.length ? 'Journeys chosen for this change.' : 'No journey fits this change.');
-  console.log(`pstack-verifier pick: PR #${number} features=${JSON.stringify(picked.features)} dropped=${JSON.stringify(picked.dropped)} reason=${reason}`);
-  setOutputs({ features: JSON.stringify(picked.features), reason, number, head_sha: head });
+  const reason = picked.reason || 'Journeys chosen for this change.';
+  console.log(`pstack-verifier pick: PR #${number} features=${JSON.stringify(picked.features)} smoke=${picked.smoke} dropped=${JSON.stringify(picked.dropped)} reason=${reason}`);
+  setOutputs({ features: JSON.stringify(picked.features), smoke: picked.smoke ? 'yes' : 'no', reason, number, head_sha: head });
 }
 
 function ownComments(repo, number) {
@@ -425,6 +431,7 @@ async function judge(env) {
     throw new Error('FEATURES is not JSON');
   }
   const { features } = validateFeatures(requested);
+  const smoke = env.SMOKE === 'yes';
 
   const pr = fetchPr(repo, number);
   if (pr.head.sha !== sha) {
@@ -438,7 +445,7 @@ async function judge(env) {
   try {
     const directories = downloadEvidence(repo, runId, features, scratch);
     const journeyText = features.length
-      ? features.map(feature => `=== Journey ${feature}: job conclusion ${conclusions[feature] ?? 'no result'}\n${journeyEvidence(directories[feature])}`).join('\n\n')
+      ? (smoke ? `Only the smoke journey was driven because no journey fits this change. Reason: ${oneLine(env.PICK_REASON, 300) || 'none given'}\n\n` : '') + features.map(feature => `=== Journey ${feature}: job conclusion ${conclusions[feature] ?? 'no result'}\n${journeyEvidence(directories[feature])}`).join('\n\n')
       : `No journey was driven. Reason: ${oneLine(env.PICK_REASON, 300) || 'none given'}`;
     content = `${prContext(pr, diff, JUDGE_DIFF_CHARS)}\n\nJourney evidence:\n${journeyText}`;
   } finally {
@@ -446,7 +453,7 @@ async function judge(env) {
   }
   const answer = await callDeepSeek({ key, system: JUDGE_INSTRUCTIONS, user: content });
   const model = parseVerdict(answer);
-  const ruled = applyRules({ modelVerdict: model.verdict, features, conclusions, notDrivenReason: env.PICK_REASON });
+  const ruled = applyRules({ modelVerdict: model.verdict, features, conclusions, notDrivenReason: env.PICK_REASON, smoke });
 
   const current = fetchPr(repo, number).head.sha;
   if (current !== sha) {
@@ -477,7 +484,7 @@ async function judge(env) {
 }
 
 module.exports = {
-  ALLOWLIST, MODEL, ENDPOINT, MARKER_PREFIX, VERDICTS, MAX_JOURNEYS,
+  ALLOWLIST, MODEL, ENDPOINT, MARKER_PREFIX, VERDICTS, MAX_JOURNEYS, SMOKE_JOURNEY,
   escapeText, validateFeatures, parseJson, parsePick, parseVerdict, applyRules, buildComment,
   findOwnComment, jobConclusions, callDeepSeek, doneWhen, journeyEvidence, journeyCatalog, requireKey,
 };

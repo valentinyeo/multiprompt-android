@@ -346,3 +346,15 @@ test('verify.yml can be called with one required feature and keeps its own trigg
   assert.equal((call.match(/^ {6}\w+:$/gm) ?? []).length, 1);
   assert.match(verify, /^ {2}group: verify-\$\{\{ github\.ref \}\}\$\{\{ inputs\.feature && inputs\.feature != github\.event\.inputs\.feature && format\('-\{0\}', inputs\.feature\) \|\| '' \}\}$/m);
 });
+
+test('a change no journey fits still drives the smoke journey and never gets a plain PASS', () => {
+  const picked = verifier.parsePick(JSON.stringify({ features: ['not-a-journey.md'], reason: 'Only workflow files changed.' }));
+  assert.deepEqual(picked.features, [verifier.SMOKE_JOURNEY]);
+  assert.equal(picked.smoke, true);
+  assert.ok(verifier.ALLOWLIST.includes(verifier.SMOKE_JOURNEY));
+  const passed = verifier.applyRules({ modelVerdict: 'PASS', features: picked.features, conclusions: { [verifier.SMOKE_JOURNEY]: 'success' }, notDrivenReason: picked.reason, smoke: true });
+  assert.equal(passed.verdict, 'PASS+NOTES');
+  assert.match(passed.notes.join(' '), /Only the smoke journey was driven/);
+  const broken = verifier.applyRules({ modelVerdict: 'PASS', features: picked.features, conclusions: { [verifier.SMOKE_JOURNEY]: 'failure' }, smoke: true });
+  assert.equal(broken.verdict, 'FAIL');
+});

@@ -41,6 +41,7 @@ test('every unconditional PR job is required', async () => {
     if (/^    paths:/m.test(event)) continue;
     const blocks = text.split(/^jobs:\s*$/m)[1].split(/^  ([\w-]+):\s*$/m);
     for (let i = 1; i < blocks.length; i += 2) {
+      if (/^    uses: /m.test(blocks[i + 1])) continue;
       const explicit = blocks[i + 1].match(/^    name: (.+)$/m)?.[1];
       jobs.push(explicit ?? blocks[i]);
     }

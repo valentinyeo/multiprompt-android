@@ -33,6 +33,7 @@ jobs:
       pull-requests: read
     outputs:
       features: ${{ steps.pick.outputs.features }}
+      smoke: ${{ steps.pick.outputs.smoke }}
       reason: ${{ steps.pick.outputs.reason }}
       number: ${{ steps.pick.outputs.number }}
       head_sha: ${{ steps.pick.outputs.head_sha }}
@@ -61,7 +62,6 @@ jobs:
   journeys:
     name: journey ${{ matrix.feature }}
     needs: pick
-    if: needs.pick.result == 'success' && needs.pick.outputs.features != '[]'
     strategy:
       fail-fast: false
       matrix:
@@ -100,6 +100,7 @@ jobs:
           PR_NUMBER: ${{ needs.pick.outputs.number }}
           HEAD_SHA: ${{ needs.pick.outputs.head_sha }}
           FEATURES: ${{ needs.pick.outputs.features }}
+          SMOKE: ${{ needs.pick.outputs.smoke }}
           PICK_REASON: ${{ needs.pick.outputs.reason }}
           PICK_RESULT: ${{ needs.pick.result }}
           RUN_ID: ${{ github.run_id }}
