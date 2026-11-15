@@ -560,3 +560,20 @@ test('verify.yml pins the parent app source to a full sha and takes it through a
   assert.match(checkout, /ref: \$\{\{ env\.APP_REF \}\}/);
   assert.match(checkout, /path: app-source/);
 });
+
+test('a verdict wrapped in prose or a fence still parses, and a bad answer is asked for once more', async () => {
+  assert.deepEqual(verifier.parseJson('Here it is:\n```json\n{"verdict":"PASS"}\n```\nDone.'), { verdict: 'PASS' });
+  assert.deepEqual(verifier.parseJson('Verdict: {"verdict":"FAIL"} end'), { verdict: 'FAIL' });
+  assert.equal(verifier.parseJson('no object here'), null);
+  const answers = ['not json', '{"ok":true}'];
+  let asked = 0;
+  const parse = text => { const value = verifier.parseJson(text); if (!value) throw new Error('bad'); return value; };
+  assert.deepEqual(await verifier.askParsed({ ask: async () => answers[asked++], parse }), { ok: true });
+  assert.equal(asked, 2);
+  asked = 0;
+  await assert.rejects(verifier.askParsed({ ask: async () => { asked += 1; return 'still bad'; }, parse }), /bad/);
+  assert.equal(asked, 2);
+  asked = 0;
+  await assert.rejects(verifier.askParsed({ ask: async () => { asked += 1; throw Object.assign(new Error('cut'), { fatal: true }); }, parse }), /cut/);
+  assert.equal(asked, 1);
+});

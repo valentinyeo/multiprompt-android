@@ -109,12 +109,28 @@ function validateFeatures(raw) {
 
 function parseJson(text) {
   const source = String(text ?? '').trim();
-  const fenced = source.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  const fenced = source.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  const open = source.indexOf('{');
+  const close = source.lastIndexOf('}');
+  const candidates = [source, fenced?.[1], open >= 0 && close > open ? source.slice(open, close + 1) : null];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    try {
+      const value = JSON.parse(candidate);
+      if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+async function askParsed({ ask, parse }) {
   try {
-    const value = JSON.parse(fenced ? fenced[1] : source);
-    return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
-  } catch {
-    return null;
+    return parse(await ask());
+  } catch (error) {
+    if (error?.fatal) throw error;
+    return parse(await ask());
   }
 }
 
@@ -411,8 +427,7 @@ async function pick(env) {
   const diff = fetchDiff(repo, number);
   if (!/^diff --git /m.test(diff)) throw new Error('no patch text came back for the pull request');
   const user = `Journey catalog (the only names you may choose):\n${journeyCatalog(env.ROOT ?? process.cwd())}\n\n${prContext(pr, diff, PICK_DIFF_CHARS)}`;
-  const answer = await callDeepSeek({ key, system: PICK_INSTRUCTIONS, user });
-  const picked = parsePick(answer);
+  const picked = await askParsed({ ask: () => callDeepSeek({ key, system: PICK_INSTRUCTIONS, user }), parse: parsePick });
   const reason = picked.reason || 'Journeys chosen for this change.';
   console.log(`pstack-verifier pick: PR #${number} features=${JSON.stringify(picked.features)} smoke=${picked.smoke} dropped=${JSON.stringify(picked.dropped)} reason=${reason}`);
   setOutputs({ features: JSON.stringify(picked.features), smoke: picked.smoke ? 'yes' : 'no', reason, number, head_sha: head, merge_base: mergeBase });
@@ -512,8 +527,7 @@ async function judge(env) {
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }
-  const answer = await callDeepSeek({ key, system: JUDGE_INSTRUCTIONS, user: content });
-  const model = parseVerdict(answer);
+  const model = await askParsed({ ask: () => callDeepSeek({ key, system: JUDGE_INSTRUCTIONS, user: content }), parse: parseVerdict });
   const ruled = applyRules({ modelVerdict: model.verdict, features, conclusions, parents, notDrivenReason: env.PICK_REASON, smoke });
 
   const current = fetchPr(repo, number).head.sha;
@@ -546,7 +560,7 @@ async function judge(env) {
 
 module.exports = {
   ALLOWLIST, MODEL, ENDPOINT, MARKER_PREFIX, VERDICTS, MAX_JOURNEYS, SMOKE_JOURNEY,
-  SIDES, RESULT_FILE, escapeText, validateFeatures, parseJson, parsePick, parseVerdict, applyRules, parentResult, buildComment,
+  SIDES, RESULT_FILE, escapeText, validateFeatures, parseJson, askParsed, parsePick, parseVerdict, applyRules, parentResult, buildComment,
   artifactName, readSideFiles, fetchMergeBase, findOwnComment, jobConclusions, callDeepSeek, doneWhen, journeyEvidence, journeyCatalog, requireKey,
 };
 
