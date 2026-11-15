@@ -16,6 +16,12 @@ on:
       - '.claude/skills/verify-multiprompt-android/**'
       - '.github/workflows/verify.yml'
       - '.github/actions/android-proof/**'
+  workflow_call:
+    inputs:
+      feature:
+        description: User journey from the verification feature map
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       released_terminal:
@@ -118,7 +124,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: verify-${{ github.ref }}
+  group: verify-${{ github.ref }}${{ inputs.feature && inputs.feature != github.event.inputs.feature && format('-{0}', inputs.feature) || '' }}
   cancel-in-progress: true
 
 jobs:
