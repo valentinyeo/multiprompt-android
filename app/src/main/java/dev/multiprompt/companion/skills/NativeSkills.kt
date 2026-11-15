@@ -65,6 +65,12 @@ object NativeSkills {
 
     fun open(text: String): String = if (text.startsWith('/')) text else "/ $text"
 
+    fun insert(text: String, name: String): String {
+        val end = text.indexOfFirst(Char::isWhitespace).takeIf { it >= 0 } ?: text.length
+        val rest = text.substring(end).trimStart()
+        return "/$name $rest"
+    }
+
     fun insert(text: String, name: String, cursor: Int): SkillInsertion {
         val slash = token(text, cursor) ?: return SkillInsertion(text, cursor.coerceIn(0, text.length))
         var wordEnd = slash.start

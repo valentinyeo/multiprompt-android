@@ -34,6 +34,15 @@ class NativeSkillsTest {
         assertEquals("review", NativeSkills.query(" /review", " /review".length))
     }
 
+    @Test fun leadingSlashInsertStillReplacesTheFirstWord() {
+        val opened = NativeSkills.open("keep this draft")
+        assertEquals("/review keep this draft", NativeSkills.insert(opened, "review"))
+        assertEquals("/review ", NativeSkills.insert("/rev", "review"))
+        assertEquals("/qa:test same text", NativeSkills.insert("/old same text", "qa:test"))
+        assertEquals("/review ", NativeSkills.insert(NativeSkills.open(""), "review"))
+        assertEquals("/deploy task", NativeSkills.insert("/review task", "deploy"))
+    }
+
     @Test fun plusAndTypingShareTheSameQueryAndNativeInsertion() {
         val opened = NativeSkills.open("keep this draft")
         assertEquals("", NativeSkills.query(opened, 1))
