@@ -2,7 +2,7 @@ package dev.multiprompt.companion.ui
 
 import dev.multiprompt.companion.reader.ChatMention
 
-internal object ChatFind {
+object ChatFind {
     data class Hit(val message: Int, val start: Int, val end: Int)
 
     fun find(messages: List<String>, query: String): List<Hit> {
