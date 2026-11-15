@@ -18,7 +18,6 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
@@ -89,7 +88,9 @@ class ChatTableExpandTest {
         val results = ArrayList<TextLayoutResult>()
         sheet.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
         assertEquals(1, results.single().lineCount)
-        sheet.performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("table-sheet-scroll").performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100000f) }
+        compose.waitForIdle()
+        sheet.assertIsDisplayed()
         compose.onNodeWithTag("table-close").performClick()
         compose.onNodeWithTag("md-table-expanded").assertDoesNotExist()
         compose.onNodeWithTag("table-expand").assertIsDisplayed()

@@ -213,7 +213,7 @@ private fun ExpandedChatTable(
                     modifier = Modifier.testTag("table-close"),
                 )
             }
-            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(vertical)) {
+            Column(Modifier.weight(1f).fillMaxWidth().testTag("table-sheet-scroll").verticalScroll(vertical)) {
                 Row(Modifier.horizontalScroll(horizontal)) {
                     MarkdownTable(table, fontSize, Kit.Text, Kit.Text, Kit.Text.copy(alpha = 0.10f), expanded = true)
                 }
