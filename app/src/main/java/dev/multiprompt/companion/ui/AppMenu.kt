@@ -53,8 +53,8 @@ internal fun InboxOverflowMenu(
     onArrangeSplits: () -> Unit,
     onNewWorkspace: () -> Unit,
     onRefresh: () -> Unit,
-    onRestartIdleChats: (() -> Unit)? = null,
     onReleaseNotes: () -> Unit = {},
+    onRestartIdleChats: (() -> Unit)? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
