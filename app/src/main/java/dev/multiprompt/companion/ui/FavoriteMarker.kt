@@ -15,6 +15,16 @@ object FavoriteMarker {
     const val DOT_DP: Int = 6
 }
 
+enum class RowDot { BLUE, YELLOW, NONE }
+
+object RowDotRule {
+    fun pick(unread: Boolean, favorite: Boolean, inFavoritesView: Boolean): RowDot = when {
+        unread -> RowDot.BLUE
+        favorite && !inFavoritesView -> RowDot.YELLOW
+        else -> RowDot.NONE
+    }
+}
+
 @Composable
 fun FavoriteDot(modifier: Modifier = Modifier) {
     Box(modifier.size(FavoriteMarker.DOT_DP.dp).background(if (LocalMaterial3.current) MaterialTheme.colorScheme.primary else Color(FavoriteMarker.DOT_ARGB), CircleShape))

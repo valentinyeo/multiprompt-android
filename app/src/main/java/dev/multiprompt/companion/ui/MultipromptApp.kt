@@ -2319,6 +2319,7 @@ internal fun SessionsScreen(
                             onEnd = { endPromptSession = session },
                             onForget = { onForgetSession(session) },
                             onMoveToGroup = if (tab != null && state.signedIn) ({ groupMoveTarget = tab }) else null,
+                            inFavoritesView = state.selectedWorkspaceId == FAVORITES_SPLIT_ID,
                         )
                     }
                 }
@@ -2544,6 +2545,7 @@ private fun SessionCard(
     muted: Boolean = false,
     onToggleMute: (() -> Unit)? = null,
     onMoveToGroup: (() -> Unit)? = null,
+    inFavoritesView: Boolean = false,
 ) {
     var menuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     val dismissState = rememberSwipeToDismissBoxState(
@@ -2656,6 +2658,9 @@ private fun SessionCard(
                     ) {
                         Text(UnreadCount.label(unreadCount))
                     }
+                }
+                if (RowDotRule.pick(unread, starred, inFavoritesView) == RowDot.YELLOW) {
+                    FavoriteDot(Modifier.testTag("Session favorite dot"))
                 }
             }
             Box(Modifier.align(Alignment.TopEnd)) {
