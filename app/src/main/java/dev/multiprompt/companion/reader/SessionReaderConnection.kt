@@ -54,6 +54,7 @@ data class ReaderState(
     val failedActions: Long = 0,
     val waitingForInput: Boolean = false,
     val lastFailure: String? = null,
+    val eta: TmuxText.SessionEta? = null,
     val hookState: TmuxText.HookState? = null,
     val sentPrompts: List<String> = emptyList(),
     val sentRecord: List<QueuedMessages.SentPrompt> = emptyList(),
@@ -481,6 +482,7 @@ class SessionReaderConnection(
                     lastUpdatedAtMillis = System.currentTimeMillis(),
                     waitingForInput = frame.waitingForInput,
                     alternateOn = frame.alternateOn,
+                    eta = frame.eta?.toEta(System.currentTimeMillis()),
                     hookState = frame.hookState,
                 )
             }
