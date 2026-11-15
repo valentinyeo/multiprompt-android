@@ -459,6 +459,22 @@ class SshRepository(private val secrets: SecretStorage) {
         return outcome
     }
 
+    suspend fun switchAi(
+        client: SshClient,
+        script: ByteArray,
+        provider: String,
+        sid: String,
+        to: String,
+    ): dev.multiprompt.companion.reader.SwitchAi.Outcome {
+        val query = dev.multiprompt.companion.reader.SwitchAi.query(1, provider, sid, to)
+        var outcome: dev.multiprompt.companion.reader.SwitchAi.Outcome =
+            dev.multiprompt.companion.reader.SwitchAi.Outcome.Failed(dev.multiprompt.companion.reader.SwitchAi.NO_ANSWER)
+        streamChatHistory(client, script) { exchange ->
+            outcome = dev.multiprompt.companion.reader.SwitchAi.outcome(exchange(query), 1, to)
+        }
+        return outcome
+    }
+
     suspend fun sendPrompt(client: SshClient, sessionName: String, prompt: String) {
         require(prompt.isNotBlank()) { "Enter a prompt first" }
         val bytes = prompt.toByteArray(Charsets.UTF_8)

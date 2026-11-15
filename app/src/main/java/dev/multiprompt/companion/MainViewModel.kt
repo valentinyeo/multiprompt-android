@@ -1531,6 +1531,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         openReader(session, userInitiated = true)
     }
 
+    fun switchAi(session: TmuxSession, to: String) {
+        val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
+        val key = SessionReadStore.key(session.hostId, session.name)
+        val reader = warmReaders[key] ?: _state.value.reader?.takeIf {
+            _state.value.readerSession?.let { open -> open.hostId == session.hostId && open.name == session.name } == true
+        } ?: return
+        viewModelScope.launch {
+            _state.update { it.copy(sessionActionError = null) }
+            val outcome = reader.switchAi(to)
+            if (outcome is dev.multiprompt.companion.reader.SwitchAi.Outcome.Failed) {
+                _state.update { it.copy(sessionActionError = outcome.message) }
+                return@launch
+            }
+            if (outcome is dev.multiprompt.companion.reader.SwitchAi.Outcome.Unknown) {
+                _state.update { it.copy(sessionActionError = dev.multiprompt.companion.reader.SwitchAi.UNKNOWN) }
+            }
+            val updated = runCatching { ssh.listSessions(host) }.getOrNull()
+                ?.sessions?.firstOrNull { it.name == session.name }
+            val stillOpen = _state.value.readerSession?.let { it.hostId == session.hostId && it.name == session.name } == true
+            if (updated != null && (updated.agent != session.agent || updated.hostSessionId != session.hostSessionId)) {
+                if (stillOpen) {
+                    reattachReader(updated)
+                } else {
+                    warmReaders.remove(key)?.close()
+                    warmReaderTouchedAt.remove(key)
+                }
+            }
+            refresh()
+        }
+    }
+
     fun closeReader() {
         _state.value.reader?.select(false)
         _state.update { it.copy(reader = null, readerSession = null, readerSwipeOrder = emptyList()) }
