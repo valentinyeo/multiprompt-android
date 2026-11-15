@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -127,6 +128,21 @@ class DesignKitTest {
         val round = capture("round")
         assertEquals(Kit.RoundButton.value.toInt(), round.width)
         assertPixel(round, 6, round.height / 2, Kit.Surface, "round fill")
+    }
+
+    @Test
+    fun expandButtonIsASmallRoundSurfaceControl() {
+        var clicks = 0
+        compose.setContent {
+            Page { KitExpandButton(onClick = { clicks++ }, modifier = Modifier.testTag("expand")) }
+        }
+        val bitmap = capture("expand")
+        assertEquals(32, bitmap.width)
+        assertEquals(32, bitmap.height)
+        assertPixel(bitmap, 4, bitmap.height / 2, Kit.Surface, "expand fill")
+        compose.onNodeWithTag("expand").performClick()
+        compose.runOnIdle { assertEquals(1, clicks) }
+        compose.onNodeWithContentDescription("Expand table").assertExists()
     }
 
     @Test
