@@ -2536,7 +2536,7 @@ private fun SessionCard(
     unreadCount: Int,
     archived: Boolean,
     starred: Boolean,
-    hasDraft: Boolean,
+    hasDraft: Boolean = false,
     onToggleFavorite: (() -> Unit)?,
     onClick: () -> Unit,
     onOpenTerminal: () -> Unit,
