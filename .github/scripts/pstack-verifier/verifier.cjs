@@ -216,7 +216,7 @@ async function callDeepSeek({ key, system, user, fetchImpl = fetch, sleep = ms =
     model: MODEL,
     messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
     response_format: { type: 'json_object' },
-    max_tokens: 8192,
+    max_tokens: 32000,
     stream: false,
   });
   let lastError;
