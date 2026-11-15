@@ -21,6 +21,8 @@ export const requiredChecks = [
   'approved-style-emulator',
   'secret-scan',
   'no-paid-ai',
+  'pick journeys',
+  'pstack-verifier',
 ];
 export const intervalMs = 300_000;
 export const timeoutMs = 1_800_000;
