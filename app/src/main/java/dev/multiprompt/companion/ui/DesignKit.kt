@@ -30,7 +30,11 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -268,16 +272,49 @@ internal fun KitMenu(
     expanded: Boolean,
     onDismissRequest: () -> Unit,
     contentResetKey: String = "",
+    footer: (@Composable ColumnScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     if (expanded) {
         KitSheet(onDismiss = onDismissRequest) {
+            val sheet = this
             key(contentResetKey) {
                 val scrollState = rememberScrollState()
                 Column(Modifier.weight(1f, fill = false).verticalScroll(scrollState)) {
                     KitListGroup(content = content)
                 }
+                if (footer != null) footer(sheet)
             }
+        }
+    }
+}
+
+@Composable
+internal fun KitSavedNote(
+    modifier: Modifier = Modifier,
+    text: String = "Saved",
+    fade: Boolean = true,
+    onFinished: () -> Unit = {},
+) {
+    val opacity = remember { mutableFloatStateOf(1f) }
+    if (fade) {
+        LaunchedEffect(Unit) {
+            delay(1_600)
+            opacity.floatValue = 0.65f
+            delay(150)
+            opacity.floatValue = 0.3f
+            delay(150)
+            opacity.floatValue = 0f
+            delay(100)
+            onFinished()
+        }
+    }
+    if (opacity.floatValue > 0f) {
+        Box(
+            modifier.alpha(opacity.floatValue).kitSurface().padding(horizontal = 16.dp, vertical = 8.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text, style = Kit.Hint, color = Kit.Text, maxLines = 1)
         }
     }
 }
