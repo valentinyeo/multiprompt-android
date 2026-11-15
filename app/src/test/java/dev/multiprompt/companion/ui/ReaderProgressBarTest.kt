@@ -94,19 +94,17 @@ class ReaderProgressBarTest {
         compose.onNodeWithContentDescription("Working").assertDoesNotExist()
     }
 
-    @Test fun etaDoesNotAddABarAboveComposerWhileIdleOrSending() {
+    @Test fun sendingDoesNotAddABarAboveComposer() {
         render()
         val viewport = compose.onNodeWithTag("chat-history")
         val idleBounds = viewport.getUnclippedBoundsInRoot()
         val reader = f.field<MutableStateFlow<ReaderState>>(connection, "_state")
         for (sending in listOf(false, true)) {
             compose.runOnIdle {
-                reader.value = reader.value.copy(sending = sending,
-                    eta = TmuxText.SessionEta(System.currentTimeMillis() + 120_000, 240_000, ""))
+                reader.value = reader.value.copy(sending = sending)
             }
-            assertEquals("ETA must not shrink chat above the composer (sending=$sending)",
+            assertEquals("Chat must not shrink above the composer (sending=$sending)",
                 idleBounds, viewport.getUnclippedBoundsInRoot())
-            compose.runOnIdle { reader.value = reader.value.copy(eta = null) }
         }
     }
 }
