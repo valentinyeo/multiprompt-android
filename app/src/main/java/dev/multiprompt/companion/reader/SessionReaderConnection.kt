@@ -116,6 +116,9 @@ class SessionReaderConnection(
     private var streamJob: Job? = null
     private var actionJob: Job? = null
     private val skillsRunning = AtomicBoolean(false)
+    private val piModelsRunning = AtomicBoolean(false)
+    private val _piModels = MutableStateFlow(PiModelList())
+    val piModels: StateFlow<PiModelList> = _piModels.asStateFlow()
 
     private var historyConnection: ChatHistoryConnection? = null
     private var historyIdentity: ChatHistoryProtocol.Identity? = null
@@ -225,6 +228,32 @@ class SessionReaderConnection(
             }
         }
     }
+
+    fun loadPiModels() {
+        loadPiModels { repository.piModels(host) }
+    }
+
+    internal fun loadPiModels(fetch: suspend () -> List<PiModel>) {
+        if (agent != AgentKind.PI || !piModelsRunning.compareAndSet(false, true)) return
+        _piModels.update { it.copy(loading = true, error = null) }
+        scope.launch {
+            try {
+                val models = fetch()
+                _piModels.value = PiModelList(models, error = if (models.isEmpty()) PiModels.EMPTY else null)
+            } catch (_: TimeoutCancellationException) {
+                _piModels.update { it.copy(loading = false, error = PiModels.FAILED) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _piModels.update { it.copy(loading = false, error = PiModels.FAILED) }
+            } finally {
+                piModelsRunning.set(false)
+            }
+        }
+    }
+
+    suspend fun changePiModel(model: PiModel): MessageActionResult =
+        historyConnection?.changePiModel(model) ?: MessageActionResult.Rejected("Chat is not ready")
 
     suspend fun sendPrompt(text: String): PromptAdmission {
         if (sharedMessages) {
