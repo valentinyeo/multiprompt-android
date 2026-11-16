@@ -1940,6 +1940,45 @@ if [[ "$feature" == terminal.md ]]; then
         adb pull "/sdcard/shell-scroll-$keyboard_state.mp4" "$EVIDENCE/shell-scroll-$keyboard_state.mp4"
     done
     printf 'SHELL_SCROLL_500_KEYBOARD_ANCHOR_LIVE_OK\n' | tee "$EVIDENCE/shell-scroll-result.txt"
+    sudo -u verifyssh tmux respawn-pane -k -t verify-session 'env PS1="VERIFY_SHELL> " HISTFILE=/dev/null bash --noprofile --norc -i'
+    python3 "$scripts/terminal-proof.py" ready "$EVIDENCE"
+    tap_node terminal ''
+    adb shell input text 'echo%sTYPED_\$\(\(40+2\)\)'
+    adb shell input keyevent 66
+    python3 "$scripts/terminal-proof.py" typed "$EVIDENCE"
+    shot shell-input-typed
+    adb shell input text 'sleep%s300'
+    adb shell input keyevent 66
+    sleep 2
+    python3 "$scripts/terminal-proof.py" sleep "$EVIDENCE"
+    shot shell-input-sleep
+    tap_desc 'Ctrl key'
+    adb shell input text c
+    python3 "$scripts/terminal-proof.py" interrupt "$EVIDENCE"
+    shot shell-input-interrupt
+    dump_ui
+    read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" key-row 'Ctrl key')
+    for attempt in {1..4}; do
+        if select_node desc 'Up key' >/dev/null 2>&1; then break; fi
+        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 400
+    done
+    tap_desc 'Up key'
+    tap_desc 'Up key'
+    adb shell input keyevent 66
+    python3 "$scripts/terminal-proof.py" history "$EVIDENCE"
+    shot shell-input-history
+    dump_ui
+    read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" key-row 'Up key')
+    for attempt in {1..4}; do
+        if select_node desc 'Tab key' >/dev/null 2>&1; then break; fi
+        adb shell input swipe "$x1" "$y1" "$x2" "$y2" 400
+    done
+    touch /tmp/verify_tabfile_unique.txt
+    adb shell input text 'ls%s/tmp/verify_tabf'
+    tap_desc 'Tab key'
+    adb shell input keyevent 66
+    python3 "$scripts/terminal-proof.py" tab "$EVIDENCE"
+    shot shell-input-tab
     exit 0
 fi
 sudo -u verifyssh mkdir -p /home/verifyssh/.local/state/multiprompt
