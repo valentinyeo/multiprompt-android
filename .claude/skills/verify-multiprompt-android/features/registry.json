@@ -76,8 +76,8 @@
       ]
     },
     "chat-queued.md": {
-      "name": "Queued label",
-      "description": "sent messages show Queued until taken in and answered, then return to normal.",
+      "name": "Queued messages",
+      "description": "Queued host messages stay visible once, receive correlated consumption receipts and become answered without stale delivery labels.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -464,7 +464,7 @@
       ]
     },
     "chat-queued.journey": {
-      "description": "sent messages show Queued until taken in and answered, then return to normal.",
+      "description": "Queued host messages stay visible once, receive correlated consumption receipts and become answered without stale delivery labels.",
       "journey": "chat-queued.md",
       "sideEffect": true,
       "match": [

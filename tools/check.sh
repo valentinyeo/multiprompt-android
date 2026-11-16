@@ -11,6 +11,7 @@ source_checks() {
   python3 -B tools/message-projection/check.py
   python3 -B tools/message-projection/check.test.py
   python3 -B tools/message-projection/ui.test.py
+  python3 -B tools/fixture-journeys.test.py
   python3 -B tools/journey-actions/check.py
   python3 -B tools/journey-actions/action.test.py
   python3 -B tools/session-gestures/scroll.test.py

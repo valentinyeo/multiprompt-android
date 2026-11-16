@@ -1,34 +1,35 @@
 #!/usr/bin/env python3
+import json
 import sys
 import xml.etree.ElementTree as ET
 
-xml, expected, name = sys.argv[1], int(sys.argv[2]), sys.argv[3]
-root = ET.parse(xml).getroot()
-parents = {child: parent for parent in root.iter() for child in parent}
-labels = [n for n in root.iter('node') if n.get('text') == 'Queued']
-assert len(labels) == expected, f'{name}: expected {expected} Queued labels, found {len(labels)}'
-phases = {
-    'QUEUE_WAITING': (('WAITING_ONE', 'Queued'), ('WAITING_TWO', 'Queued')),
-    'QUEUE_SUBMITTED': (('WAITING_ONE', 'Sending'), ('WAITING_TWO', 'Queued')),
-    'QUEUE_FIRST_DELIVERED': (('WAITING_ONE', 'Delivered'), ('WAITING_TWO', 'Sending')),
-    'QUEUE_BOTH_DELIVERED': (('WAITING_ONE', 'Delivered'), ('WAITING_TWO', 'Delivered')),
-    'FOLLOWUP_SUBMITTED': (('FOLLOWUP', 'Sending'),),
-    'FOLLOWUP_DELIVERED': (('FOLLOWUP', 'Delivered'),),
-    'UNCERTAIN_SUBMITTED': (('UNCERTAIN_ONE', 'Sending'), ('UNCERTAIN_TWO', 'Queued')),
+PHASES = {
+    'QUEUE_WAITING': (('WAITING_ONE', 'queued'), ('WAITING_TWO', 'queued')),
+    'QUEUE_SUBMITTED': (('WAITING_ONE', 'sent'), ('WAITING_TWO', 'queued')),
+    'QUEUE_FIRST_DELIVERED': (('WAITING_ONE', 'started'), ('WAITING_TWO', 'sent')),
+    'QUEUE_BOTH_DELIVERED': (('WAITING_ONE', 'started'), ('WAITING_TWO', 'started')),
+    'FOLLOWUP_SUBMITTED': (('FOLLOWUP', 'sent'),),
+    'FOLLOWUP_DELIVERED': (('FOLLOWUP', 'started'),),
+    'UNCERTAIN_SUBMITTED': (('UNCERTAIN_ONE', 'sent'), ('UNCERTAIN_TWO', 'queued')),
 }
-if name in phases:
-    pairs = phases[name]
+
+
+def verify(root, expected, name, evidence=None):
+    texts = [node.get('text') for node in root.iter('node')]
+    if evidence is None:
+        assert texts.count('Queued') == expected, f'{name}: expected {expected} Queued labels'
+        return
+    pairs = PHASES[name]
+    assert [(row['text'], row['state']) for row in evidence] == list(pairs), f'{name}: canonical queue state mismatch'
+    assert sum(state == 'queued' for _, state in pairs) == expected
+    assert not any(label in texts for label in ('Queued', 'Sending', 'Delivered', 'Not sent')), f'{name}: unexpected delivery label'
     for body, state in pairs:
-        matches = [n for n in root.iter('node') if n.get('text') == body]
-        assert len(matches) == 1, f'{name}: {body} occurs {len(matches)} times'
-        node = matches[0]
-        while node in parents:
-            node = parents[node]
-            texts = [n.get('text') for n in node.iter('node')]
-            if state in texts:
-                assert not any(other in texts for other, _ in pairs if other != body), f'{name}: {state} not attached to {body}'
-                assert not any(other in texts for other in ('Queued', 'Sending', 'Delivered') if other != state), f'{name}: conflicting state for {body}'
-                break
-        else:
-            raise AssertionError(f'{name}: {body} lacks {state}')
-print(f'QUEUE_UI_{name}: {expected} Queued')
+        assert texts.count(body) == 1, f'{name}: {body} must stay visible exactly once while {state}'
+    return dict(phase=name, queued=expected, ids=[row['id'] for row in evidence], visible=[body for body, _ in pairs])
+
+
+if __name__ == '__main__':
+    xml, expected, name = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+    evidence = json.load(open(sys.argv[4])) if len(sys.argv) > 4 else None
+    result = verify(ET.parse(xml).getroot(), expected, name, evidence)
+    print('QUEUE_UI_' + name, json.dumps(result))

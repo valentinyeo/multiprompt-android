@@ -18,7 +18,7 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `chat-choices.journey`. Runner: `verify.yml` (debug).
 - [Codex transcript parity](chat-codex.md): Dispatch `feature=chat-codex.md`. The real Android APK connects through SSH to independent Hax, native Codex, and Claude fixture sessions. Hax and Codex write the same JSONL schemas consumed by desktop. Their terminal output deliberately excludes every transcript reply, ruling out terminal-scrape success.
   - Outcomes: `codex.transcript`. Runner: `verify.yml` (debug).
-- [Queued label](chat-queued.md): sent messages show Queued until taken in and answered, then return to normal.
+- [Queued messages](chat-queued.md): Queued host messages stay visible once, receive correlated consumption receipts and become answered without stale delivery labels.
   - Outcomes: `chat-queued.journey`. Runner: `verify.yml` (debug).
 - [Claude reactions](chat-reactions.md): quoted sends, one badge, restart identity, fallback and signed update offers.
   - Outcomes: `chat-reactions.journey`. Runner: `verify.yml` (debug).

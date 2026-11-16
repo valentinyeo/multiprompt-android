@@ -1492,15 +1492,16 @@ if [[ "$feature" == chat-queued.md ]]; then
         local expected=$1 name=$2 attempt
         for attempt in {1..30}; do
             dump_ui
-            if python3 "$scripts/queued.py" "$EVIDENCE/current.xml" "$expected" "$name" >/dev/null 2>&1; then return; fi
+            if python3 "$scripts/queued.py" "$EVIDENCE/current.xml" "$expected" "$name" "$EVIDENCE/queue-state.tmp" >/dev/null 2>&1; then return; fi
             sleep 1
         done
-        python3 "$scripts/queued.py" "$EVIDENCE/current.xml" "$expected" "$name"
+        python3 "$scripts/queued.py" "$EVIDENCE/current.xml" "$expected" "$name" "$EVIDENCE/queue-state.tmp"
     }
     provider_event() { sudo -u verifyssh env GITHUB_ACTIONS="$GITHUB_ACTIONS" HOME=/home/verifyssh python3 /home/verifyssh/queued-console.py "$1"; }
     fixture_counts() {
         python3 - "$1" "$2" <<'QUEUE_COUNTS'
 import json
+import re
 import subprocess
 import sys
 expected_inputs = [] if sys.argv[1] == '-' else sys.argv[1].split(',')
@@ -1509,14 +1510,14 @@ inputs = subprocess.check_output(['sudo', 'cat', '/home/verifyssh/receipts.txt']
 assert inputs == ['VERIFY_RECEIVED:' + text for text in expected_inputs], inputs
 raw = subprocess.check_output(['sudo', 'cat', '/home/verifyssh/.claude/projects/-home-verifyssh-queued-work/a1b2c3d4-1008-4000-8000-000000001008.jsonl'], text=True)
 rows = [json.loads(line) for line in raw.splitlines()]
-receipts = [row['attachment']['prompt'] for row in rows if row.get('type') == 'attachment' and row.get('attachment', {}).get('type') == 'queued_command' and not row.get('isSidechain')]
+receipts = [re.sub(r'\n\[mp:[0-9a-f]{16}\]\s*$', '', row['attachment']['prompt']) for row in rows if row.get('type') == 'attachment' and row.get('attachment', {}).get('type') == 'queued_command' and not row.get('isSidechain')]
 assert receipts == expected_receipts, receipts
 QUEUE_COUNTS
     }
-    resync_marker() {
-        tap_desc 'Session actions'
-        wait_for_text 'Reset this chat'
-        tap_text 'Reset this chat'
+    reopen_marker() {
+        adb shell input keyevent KEYCODE_BACK
+        wait_for_text Inbox
+        tap_text verify-session
         provider_event "marker:$1"
         wait_for_text "$1"
     }
@@ -1534,7 +1535,7 @@ QUEUE_COUNTS
     fixture_counts - -
     provider_event clear-draft
     wait_receipt 'VERIFY_RECEIVED:WAITING_ONE'
-    queue_states waiting submitted queued | tee "$EVIDENCE/queue-submitted.json"
+    queue_states waiting sent queued | tee "$EVIDENCE/queue-submitted.json"
     queue_ui 1 QUEUE_SUBMITTED
     shot queued-submitted
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/native-queue-blocked.txt"
@@ -1548,19 +1549,19 @@ QUEUE_COUNTS
     else
         [[ $? -eq 1 ]]
     fi
-    resync_marker BEFORE_CONSUMPTION_MARKER
-    queue_states waiting submitted queued | tee "$EVIDENCE/queue-after-resync.json"
+    reopen_marker BEFORE_CONSUMPTION_MARKER
+    queue_states waiting sent queued | tee "$EVIDENCE/queue-after-resync.json"
     queue_ui 1 QUEUE_SUBMITTED
     fixture_counts WAITING_ONE -
     shot queued-after-resync
     provider_event consume:WAITING_ONE
     wait_receipt 'VERIFY_RECEIVED:WAITING_TWO'
-    queue_states waiting delivered submitted | tee "$EVIDENCE/queue-first-delivered.json"
+    queue_states waiting started sent | tee "$EVIDENCE/queue-first-delivered.json"
     queue_ui 0 QUEUE_FIRST_DELIVERED
     fixture_counts WAITING_ONE,WAITING_TWO WAITING_ONE
     shot queued-first-delivered
     provider_event consume:WAITING_TWO
-    queue_states waiting delivered delivered | tee "$EVIDENCE/queue-both-delivered.json"
+    queue_states waiting started started | tee "$EVIDENCE/queue-both-delivered.json"
     queue_ui 0 QUEUE_BOTH_DELIVERED
     fixture_counts WAITING_ONE,WAITING_TWO WAITING_ONE,WAITING_TWO
     shot queued-both-delivered
@@ -1569,11 +1570,11 @@ QUEUE_COUNTS
     fill 'Message verify-session' FOLLOWUP
     tap_desc 'Send prompt'
     wait_receipt 'VERIFY_RECEIVED:FOLLOWUP'
-    queue_states followup submitted | tee "$EVIDENCE/queue-followup-submitted.json"
+    queue_states followup sent | tee "$EVIDENCE/queue-followup-submitted.json"
     queue_ui 0 FOLLOWUP_SUBMITTED
     fixture_counts WAITING_ONE,WAITING_TWO,FOLLOWUP WAITING_ONE,WAITING_TWO
     provider_event consume:FOLLOWUP
-    queue_states followup delivered | tee "$EVIDENCE/queue-followup-delivered.json"
+    queue_states followup started | tee "$EVIDENCE/queue-followup-delivered.json"
     wait_for_text FOLLOWUP
     queue_ui 0 FOLLOWUP_DELIVERED
     fixture_counts WAITING_ONE,WAITING_TWO,FOLLOWUP WAITING_ONE,WAITING_TWO,FOLLOWUP
@@ -1598,7 +1599,7 @@ QUEUE_COUNTS
     fill 'Message verify-session' UNCERTAIN_TWO
     tap_desc 'Send prompt'
     wait_receipt 'VERIFY_RECEIVED:UNCERTAIN_ONE'
-    queue_states uncertain submitted queued | tee "$EVIDENCE/queue-uncertain.json"
+    queue_states uncertain sent queued | tee "$EVIDENCE/queue-uncertain.json"
     queue_ui 1 UNCERTAIN_SUBMITTED
     fixture_counts WAITING_ONE,WAITING_TWO,FOLLOWUP,UNCERTAIN_ONE WAITING_ONE,WAITING_TWO,FOLLOWUP
     provider_event clear-hint
@@ -1609,14 +1610,14 @@ QUEUE_COUNTS
     else
         [[ $? -eq 1 ]]
     fi
-    resync_marker UNCERTAIN_MARKER_1
-    queue_states uncertain submitted queued | tee "$EVIDENCE/queue-uncertain-resync-1.json"
+    reopen_marker UNCERTAIN_MARKER_1
+    queue_states uncertain sent queued | tee "$EVIDENCE/queue-uncertain-resync-1.json"
     queue_ui 1 UNCERTAIN_SUBMITTED
     fixture_counts WAITING_ONE,WAITING_TWO,FOLLOWUP,UNCERTAIN_ONE WAITING_ONE,WAITING_TWO,FOLLOWUP
     shot queued-uncertain-resync-1
     fill 'Message verify-session' PHONE_DRAFT_UNCERTAIN
-    resync_marker UNCERTAIN_MARKER_2
-    queue_states uncertain submitted queued | tee "$EVIDENCE/queue-uncertain-resync-2.json"
+    reopen_marker UNCERTAIN_MARKER_2
+    queue_states uncertain sent queued | tee "$EVIDENCE/queue-uncertain-resync-2.json"
     queue_ui 1 UNCERTAIN_SUBMITTED
     dump_ui
     python3 - "$EVIDENCE/current.xml" "$package" <<'QUEUE_DRAFT'
@@ -1634,15 +1635,16 @@ QUEUE_DRAFT
         [[ $? -eq 1 ]]
     fi
     shot queued-uncertain-resync-2
-    queue_states waiting delivered delivered | tee "$EVIDENCE/queue-waiting-final.json"
-    queue_states followup delivered | tee "$EVIDENCE/queue-followup-final.json"
-    queue_states uncertain submitted queued | tee "$EVIDENCE/queue-uncertain-final.json"
-    queue_states all delivered delivered delivered submitted queued | tee "$EVIDENCE/queue-all-final.json"
+    queue_states waiting started started | tee "$EVIDENCE/queue-waiting-final.json"
+    queue_states followup started | tee "$EVIDENCE/queue-followup-final.json"
+    queue_states uncertain sent queued | tee "$EVIDENCE/queue-uncertain-final.json"
+    queue_states all started started started sent queued | tee "$EVIDENCE/queue-all-final.json"
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/queued-receipts.txt"
     sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-queued-work/a1b2c3d4-1008-4000-8000-000000001008.jsonl > "$EVIDENCE/queued-transcript.jsonl"
     sudo cat /home/verifyssh/shell-events.jsonl > "$EVIDENCE/shell-events.jsonl"
     python3 - "$EVIDENCE" <<'QUEUE_RESULT'
 import json
+import re
 from pathlib import Path
 import sys
 root = Path(sys.argv[1])
@@ -1650,15 +1652,15 @@ consumed = ['WAITING_ONE', 'WAITING_TWO', 'FOLLOWUP']
 inputs = root.joinpath('queued-receipts.txt').read_text().splitlines()
 assert inputs == ['VERIFY_RECEIVED:' + text for text in consumed + ['UNCERTAIN_ONE']], inputs
 rows = [json.loads(line) for line in root.joinpath('queued-transcript.jsonl').read_text().splitlines()]
-receipts = [r['attachment']['prompt'] for r in rows if r.get('type') == 'attachment' and r.get('attachment', {}).get('type') == 'queued_command' and not r.get('isSidechain')]
+receipts = [re.sub(r'\n\[mp:[0-9a-f]{16}\]\s*$', '', r['attachment']['prompt']) for r in rows if r.get('type') == 'attachment' and r.get('attachment', {}).get('type') == 'queued_command' and not r.get('isSidechain')]
 assert receipts == consumed, receipts
 waiting_names = ('queue-pending.json', 'queue-submitted.json', 'queue-after-resync.json', 'queue-first-delivered.json', 'queue-both-delivered.json', 'queue-waiting-final.json')
 waiting = [json.loads(root.joinpath(name).read_text()) for name in waiting_names]
-assert all([r['id'] for r in state] == [r['id'] for r in waiting[0]] for state in waiting)
+assert all([(r['id'], r['attempt']) for r in state] == [(r['id'], r['attempt']) for r in waiting[0]] for state in waiting)
 assert [r['receipt_claims'] for r in waiting[-1]] == [r['receipt_claims'] for r in waiting[-2]]
 uncertain_names = ('queue-uncertain.json', 'queue-uncertain-resync-1.json', 'queue-uncertain-resync-2.json', 'queue-uncertain-final.json')
 uncertain = [json.loads(root.joinpath(name).read_text()) for name in uncertain_names]
-assert all([r['id'] for r in state] == [r['id'] for r in uncertain[0]] for state in uncertain)
+assert all([(r['id'], r['attempt']) for r in state] == [(r['id'], r['attempt']) for r in uncertain[0]] for state in uncertain)
 followup = [json.loads(root.joinpath(name).read_text()) for name in ('queue-followup-submitted.json', 'queue-followup-delivered.json', 'queue-followup-final.json')]
 assert all(state[0]['id'] == followup[0][0]['id'] for state in followup)
 assert followup[-1][0]['receipt_claims'] == followup[-2][0]['receipt_claims']
