@@ -3443,6 +3443,29 @@ class SharedQueueDraftTest(unittest.TestCase):
                     self.assertEqual(self.live()['queue'], [dict(text=text, sender=sender, injected=True)])
                 self.query.update(cached_sid='', inode=0, offset=0)
 
+    def test_IGSH_2351_agent_messages_become_named_incoming_notes(self):
+        samples = [
+            ('<agent-message from="abb23277c284f1efe">\nPR #3506 is green &amp; ready\n</agent-message>', 'Another agent', 'PR #3506 is green & ready'),
+            ('<agent-message from="heic-verify">\nStanding down.\n</agent-message>', 'heic-verify', 'Standing down.'),
+            ('<agent-message from="abb23277c284f1efe" from-name="Poteto 2 LC">hi</agent-message>', 'Poteto 2 LC', 'hi'),
+            ('<agent-message>hi</agent-message>', 'Another agent', 'hi'),
+            ('<agent-message from="  ">hi</agent-message>', 'Another agent', 'hi'),
+        ]
+        for envelope, sender, text in samples:
+            with self.subTest(sender=sender, text=text):
+                self.assertEqual(reader.queue_item(envelope), dict(text=text, sender=sender, injected=True))
+        for plain in ('Please read <agent-message from="x">example</agent-message>',
+                      '<agent-message from=x>bad</agent-message>',
+                      '<agent-message-extra>hi</agent-message-extra>'):
+            with self.subTest(plain=plain):
+                self.assertEqual(reader.queue_item(plain), plain)
+        queued = '<agent-message from="abb23277c284f1efe">\nready\n</agent-message>'
+        state = ([queued], [])
+        reader.queue_apply(state, self.op('remove', '<agent-message from="other-agent">ready</agent-message>'))
+        self.assertEqual(state, ([queued], []))
+        reader.queue_apply(state, self.op('remove', '<agent-message from="abb23277c284f1efe">ready</agent-message>'))
+        self.assertEqual(state, ([], [queued]))
+
     def test_IGSH_722_queue_keeps_non_envelopes_as_plain_strings(self):
         samples = ['hello', 'Please read <cross-session-message>example</cross-session-message>',
                    '<cross-session-message>one</cross-session-message> and reply',
@@ -4901,6 +4924,11 @@ for raw in sys.stdin:
     try:
         line = json.loads(raw)
     except ValueError:
+        continue
+    if line.get('type') == 'control_request' and (line.get('request') or {}).get('subtype') == 'remote_control':
+        record(dict(kind='control', frame=line))
+        sys.stdout.write(json.dumps(dict(type='control_response', response=dict(subtype='success', request_id=line['request_id'], response={}))) + '\n')
+        sys.stdout.flush()
         continue
     record(dict(kind='user', text=line['message']['content'][0]['text']))
     if mode == 'crash':
@@ -6455,6 +6483,10 @@ for raw in sys.stdin:
         line = json.loads(raw)
     except ValueError:
         continue
+    if line.get('type') == 'control_request' and (line.get('request') or {}).get('subtype') == 'remote_control':
+        record(dict(kind='control', frame=line))
+        emit(dict(type='control_response', response=dict(subtype='success', request_id=line['request_id'], response={})))
+        continue
     record(dict(kind='user', text=line['message']['content'][0]['text']))
     turns += 1
     message_id = 'msg-' + str(turns)
@@ -6775,6 +6807,19 @@ class AgentHostStreamTest(AgentHostStreamFixture, unittest.TestCase):
         self.assertEqual(self.events('text.delta')[-1]['item'], 'msg-1:text:0')
         self.assertEqual([row['payload']['state'] for row in self.events('host.status')][-1], 'ready')
 
+    def test_host_enables_remote_control_and_still_answers_the_first_message(self):
+        self.fake('stream')
+        os.environ['FAKE_AGENT_PACE'] = '0'
+        self.addCleanup(os.environ.pop, 'FAKE_AGENT_PACE', None)
+        self.seed()
+        self.dispatch()
+        self.wait_for(lambda: self.events('turn.ended'))
+        controls = self.agent_rows('control')
+        self.assertEqual(len(controls), 1, 'each new hosted Claude process must enable Remote Control')
+        self.assertEqual(controls[0]['frame']['request'], dict(subtype='remote_control', enabled=True))
+        self.assertEqual(self.user_lines(), [self.text])
+        self.assertEqual([row['payload']['text'] for row in self.events('text.done')], ['one answer'])
+
     def test_a_hosted_turn_shows_tool_steps_through_item_events(self):
         self.fake('tools')
         self.seed()
@@ -6827,6 +6872,31 @@ class HostControlFixture(HostEventStreamFixture):
 
 
 class HostControlTest(HostControlFixture, unittest.TestCase):
+    def test_claude_start_enables_remote_control_without_a_model_prompt(self):
+        reader.host_claude_open(self.provider, self.sid, self.tmux, self.session)
+        writes = self.writes()
+        self.assertEqual(len(writes), 1, 'a new hosted Claude chat must enable Remote Control')
+        self.assertEqual(writes[0]['type'], 'control_request')
+        self.assertEqual(writes[0]['request'], dict(subtype='remote_control', enabled=True))
+        self.assertTrue(writes[0]['request_id'])
+        self.assertFalse([frame for frame in writes if frame.get('type') == 'user'])
+
+    def test_cursor_start_does_not_request_remote_control(self):
+        open_cursor = getattr(reader, 'host_cursor_open', None)
+        self.assertIs(reader.HOST_ADAPTERS['cursor']['open'], open_cursor)
+        open_cursor('cursor', self.sid, self.tmux, self.session)
+        self.assertEqual(self.writes(), [])
+
+    def test_remote_control_rejection_does_not_stop_normal_chat(self):
+        reader.host_claude_open(self.provider, self.sid, self.tmux, self.session)
+        writes = self.writes()
+        self.assertEqual(len(writes), 1, 'Remote Control must be requested before testing rejection')
+        self.feed(dict(type='control_response', response=dict(subtype='error', request_id=writes[0]['request_id'],
+                                                            error='unsupported control request')))
+        self.feed(dict(type='assistant', message=dict(id='normal-reply', content=[dict(type='text', text='Still working')])))
+        self.assertEqual([row['payload']['text'] for row in self.events('text.done')], ['Still working'])
+        self.assertEqual(self.session['turn'], 't-1')
+
     def test_a_control_request_is_parked_and_turned_into_an_approval_request(self):
         request_id = self.approval(suggestions=[dict(type='addRules', rules=[dict(toolName='Bash', ruleContent='rm -rf build')],
                                                      behavior='allow', destination='localSettings')])

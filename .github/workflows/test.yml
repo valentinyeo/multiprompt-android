@@ -105,6 +105,11 @@ jobs:
         with:
           node-version: 22
 
+      - name: Check the feature registry and initial-gap ratchet
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node .github/scripts/pstack-verifier/coverage.cjs check
+
       - name: No code comments
         run: node tools/strip-comments.mjs --check
 

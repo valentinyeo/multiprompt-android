@@ -1,66 +1,102 @@
 # multiprompt Android verification map
 
-This is the maintained map of the primary Compose mobile surface. Read SKILL.md before dispatching. The SSH reader is the core product. The journeys below cover local SSH and account entry; split-setting mutations require a real signed-in account. Dictation, account sync and signed self-updates have additional prerequisites.
+Generated from [registry.json](registry.json). Run `node .github/scripts/pstack-verifier/coverage.cjs generate` after editing the registry. CI rejects drift.
 
-## Baseline preconditions
+Read [SKILL.md](../SKILL.md) before dispatching. Use a fresh GitHub-hosted emulator per journey. Never build or run Android locally. Debug SSH fixtures do not prove account OTP, live providers or signed-release behavior.
 
-- Dispatch `verify.yml` on the pushed branch; never build or launch an emulator locally.
-- Each invocation owns a fresh GitHub emulator, app data, runner SSH daemon and tmux fixture. Never double-drive an instance.
-- The APK is `dev.multiprompt.companion.debug`, expected version `0.1.2-verify.<run-number>-debug`.
-- Require `DOCTOR READY` before driving. Installation grants the app's declared runtime permissions so a notification prompt cannot obscure Sign in.
-- SSH journeys use runner address `10.0.2.2`, port `2222`, user `verifyssh`, host label `Verify`, session `verify-session`, and job-generated ed25519 keys. Seed the disposable CLI host fixture, then compare the fingerprint and explicitly trust it. The signed journey uses a same-signer instrumentation fixture.
-- Debug-only **Use without account (debug)** does not create an account or authenticate any account service. Release and m3 have no offline route.
-
-## Driving conventions
-
-Use the matching filename as workflow `feature` input. `drive.sh` uses `adb shell input` and UI Automator XML: exact text for visible names, contentDescription for icon buttons, label/placeholder plus EditText class for fields. Bounds come from a fresh dump, not hard-coded coordinates. The driver's functions are shell-internal; use the shipped driver, not a nonexistent adb selector API. Each recipe lists exact driver selectors and observable proof.
-
-## Proof and skip reporting
-
-Numbered PNG/XML pairs show action and result. The transcript records commands and exit; runner receipts, SSH auth log and tmux captures independently verify side effects. Read the artifact after cleanup. A mapped sub-feature or entry point is not necessarily covered by the dispatch recipe: report unexercised paths explicitly. Never claim OTP, synced settings, Chat View or release security was exercised merely because the debug fixture passed. The changed-key recipe covers dismissal of one rotated identity, not accepting replacements or subsequent rotations.
+A product change must name every changed outcome. The second-AI verifier requires the matching successful head journey, exact APK source SHA, action and result citations into the retained artifact, and independent side effects where required. Smoke alone cannot prove a product change. A new behavior needs a new outcome; extending an old recipe does not imply coverage.
 
 ## Features
 
-- [Sign in](sign-in.md): real account browser handoff; OTP remains manual.
 - [App name and update](app-name.md): published signed Android in-app update proof.
-- [Settings navigation](settings-navigation.md): sessions-first settings, host mapping and account handoff on the signed APK.
-- [Hosts](hosts.md): add VPS, import encrypted-at-rest key, compare/trust and retain the host identity.
-- [Retired hosts](hosts-retired.md): a saved host at a retired server address is gone after relaunch; account sync never adds it back.
-- [Changed host key](host-changed-key.md): compare a rotated identity, persist Not now and refuse authentication.
-- [Sessions](sessions.md): authenticated tmux discovery and search.
+  - Outcomes: `app-name.journey`. Runner: `app-name.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Late account bot pictures](bot-photo-refresh.md): hosted ViewModel and Compose regressions; seeded picture, not live account sync.
-- [Session favorites](session-favorites.md): signed APK, isolated SSH sessions and offline favorite cache; no production sync.
-- [Pinned sessions](session-pins.md): signed scrolling in both list orders. Use `session-favorites.md` with `pins_scroll=true`.
-- [Session settings](session-settings.md): full-screen split switches; saving is blocked without account OTP and a pulled layout.
-- [Session routing](session-routing.md): Inbox and swipe switching, typed and simulated dictated sends, independent SSH receipts.
-- [Chat choices](chat-choices.md): latest-reply option taps and live question number keys, with independent SSH/tmux receipts.
-- [Working dots on the signed release](chat-working.md): quiet tools, lock/unlock, real SSH reconnect, recording and timed visible-state samples. Uses `working-dots.yml`.
+  - Outcomes: `bot-photo-refresh.journey`. Runner: `test.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Cancel waiting messages](chat-cancel.md): exact cancellation, surviving order, host receipt and delivered actions, with a recording.
+  - Outcomes: `chat-cancel.journey`. Runner: `verify.yml` (debug).
+- [Chat choices](chat-choices.md): latest-reply option taps and live question number keys, with independent SSH/tmux receipts.
+  - Outcomes: `chat-choices.journey`. Runner: `verify.yml` (debug).
+- [Codex transcript parity](chat-codex.md): Dispatch `feature=chat-codex.md`. The real Android APK connects through SSH to independent Hax, native Codex, and Claude fixture sessions. Hax and Codex write the same JSONL schemas consumed by desktop. Their terminal output deliberately excludes every transcript reply, ruling out terminal-scrape success.
+  - Outcomes: `codex.transcript`. Runner: `verify.yml` (debug).
 - [Queued label](chat-queued.md): sent messages show Queued until taken in and answered, then return to normal.
-- [Native Claude controls](native-skills.md): slash filtering, shared plus entry, actual session model/effort and retained image picker.
+  - Outcomes: `chat-queued.journey`. Runner: `verify.yml` (debug).
 - [Claude reactions](chat-reactions.md): quoted sends, one badge, restart identity, fallback and signed update offers.
+  - Outcomes: `chat-reactions.journey`. Runner: `verify.yml` (debug).
 - [Legacy resync](chat-resync.md): historical held-queue proof; not host Reset proof.
+  - Outcomes: `chat-resync.journey`. Runner: `verify.yml` (debug).
 - [Shared chat store](chat-shared.md): synthetic SSH store admission and host Reset, retaining both drafts.
-- [Session reader](session-reader.md): native output, Send, Enter/approve and Interrupt, with independent console receipts.
-- [Terminal](terminal.md): real SSH PTY/tmux fallback attachment.
+  - Outcomes: `chat-shared.journey`. Runner: `verify.yml` (debug).
+- [Working dots on the signed release](chat-working.md): quiet tools, lock/unlock, real SSH reconnect, recording and timed visible-state samples. Uses `working-dots.yml`.
+  - Outcomes: `chat-working.journey`. Runner: `working-dots.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
+- [Changed host key](host-changed-key.md): compare a rotated identity, persist Not now and refuse authentication.
+  - Outcomes: `host-changed-key.journey`. Runner: `verify.yml` (debug).
+- [Retired hosts](hosts-retired.md): a saved host at a retired server address is gone after relaunch; account sync never adds it back.
+  - Outcomes: `hosts-retired.journey`. Runner: `verify.yml` (debug).
+- [Hosts](hosts.md): add VPS, import encrypted-at-rest key, compare/trust and retain the host identity.
+  - Outcomes: `hosts.journey`. Runner: `verify.yml` (debug).
 - [Launcher icon](launcher-icon.md): the robot launcher icon in the emulator's app drawer, with the themed-icon layer present in the built APK.
-
-## Shipped but not automated
-
-Prerequisites below are coverage gaps, never green skips. Account routes need human email OTP; never inject tokens or app state.
-
-- **IGSH-449 device approval:** OTP, a second pending device and trusted SSH access to every saved host. Sign in on the new device; on the approving phone compare **Approve this device?** and fingerprint, tap **Approve**, then connect from the new device.
-- **IGSH-429 crash upload:** a queued real app crash plus account-service receipt access. On a disposable debug install crash, relaunch, complete **Sign in**, and verify the stable report id server-side. Check startup/sign-in drain, including dismissed reports; the console never crashes the app.
-- **IGSH-422 account hosts / first screen:** first-screen entry is automated. Sync needs OTP, account servers and host-sync capability. Complete **Sign in**, inspect **Session list actions → Hosts** and compare another device; offline hosts do not prove sync.
-- **IGSH-432 Inbox badge:** an agent transcript with multiple new assistant messages after a recorded read position. Read a session, leave, generate replies on the host, check Inbox's count (`<n> unread messages`), reopen and check it clears. The console is not an agent.
-- **IGSH-434 dictation:** Deepgram credential, microphone permission, controlled speech/silence and network/audio evidence. Reader **Session actions → More → Dictation API key**, **API key → Save and dictate**, then **Start dictation / Stop dictation**. Verify transcript and silence gating; short pre-roll/hangover is intentional. IGSH-2358: while recording, tap **Cancel dictation** (the X left of Stop); the bar closes and the message box holds exactly what it held before Start, with no spoken text. IGSH-2286: on a phone with no key, sign in and the Dictation API key field reads Replacement API key with nothing typed; signed out, a hand-typed key still dictates.
-- **IGSH-423 split settings:** saving needs OTP and a pulled account layout. **Session list actions → Settings → Show Frequent split**, Back, check **Frequent**; repeat off and compare another device. Not dispatchable in CI.
-- **IGSH-415 Frequent:** account-mapped sessions with input in 24 h, or three watch visits of at least 10 s in 6 h. Send input, return to **Frequent**, compare ordering; check watch-only fallback and **Settings → Newest sessions at bottom** separately.
-- **IGSH-426 version placement:** prefix checks Sign in's exact version only. No credential blocks local-screen layout inspection; navigation/bounds proof is unimplemented. Inspect the label on Inbox, reader, shell, Hosts, editor and Settings; tap for **Update**. Workspaces need OTP. Sign in's label is bottom-centred, not beside three dots.
-- **IGSH-424 / IGSH-428 / IGSH-420 Chat View:** a supported agent (Claude) transcript on the SSH host, including tables/nested lists and model/effort/ETA state. Open from Inbox, scroll the complete transcript, inspect tables horizontally and top-bar subtitle; no **Conversation** header/status row. **Session actions → Session history** opens alternate-screen history. Console output proves none of this.
-- **IGSH-418 reply:** a real bubble plus swipe/long-press input, beyond the tap-only driver. Swipe right or long-press → **Reply**; inspect **Reply to …**, **Cancel reply**, and send a quoted reply.
-- **IGSH-425 shell:** multi-touch and long/wide tmux output, no extra credential. **Open live terminal**, pinch (8–28 sp, retained on reopen), pan, swipe down or **Open shell history**, then **Jump to live** / **Back to the live view**. Terminal.md proves attachment only.
-- **IGSH-414 search layout:** matching/close are automated; no credential blocks layout proof, but keyboard-visible bounds inspection is unimplemented. Inbox **Search sessions**, type in **Search all sessions**, inspect results below the box and above the keyboard before closing.
-- **IGSH-413 shared menu:** no credential blocks comparing signed-out **Sign in to sync** in Inbox **Session list actions** and reader **Session actions**; that comparison is unimplemented. OTP is needed for **Sync: signed in — sign out** and synced splits. Compare both menus, then complete sign-in manually.
-
+  - Outcomes: `launcher-icon.journey`. Runner: `verify.yml` (debug).
+- [Native Claude controls](native-skills.md): slash filtering, shared plus entry, actual session model/effort and retained image picker.
+  - Outcomes: `claude.skills-model-effort`. Runner: `verify.yml` (debug).
+- [Robot inbox and chat](robot-faces.md): Run `verify.yml` with `feature=robot-faces.md`. For the signed candidate, set `released_robots=true` and `candidate=true`. For the published update, set `released_robots=true` and `expected_commit` to the released SHA.
+  - Outcomes: `robot-faces.journey`. Runner: `verify.yml` (signed). Inputs: `{"released_robots":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
+- [Session favorites](session-favorites.md): signed APK, isolated SSH sessions and offline favorite cache; no production sync.
+  - Outcomes: `session-favorites.journey`. Runner: `verify.yml` (signed). Inputs: `{"released_chat":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Session gestures](session-gestures.md): no session swipes, bidirectional code scroll, ten replies, back to inbox on the signed APK.
+  - Outcomes: `session-gestures.journey`. Runner: `verify.yml` (signed). Inputs: `{"released_chat":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
+- [Pinned sessions](session-pins.md): signed scrolling in both list orders. Use `session-favorites.md` with `pins_scroll=true`.
+  - Outcomes: `session-pins.journey`. Runner: `verify.yml` (signed). Inputs: `{"feature":"session-favorites.md","pins_scroll":true,"released_chat":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
+- [Session reader](session-reader.md): native output, Send, Enter/approve and Interrupt, with independent console receipts.
+  - Outcomes: `reader.send-enter-interrupt`. Runner: `verify.yml` (debug).
+- [Session routing](session-routing.md): Inbox and swipe switching, typed and simulated dictated sends, independent SSH receipts.
+  - Outcomes: `session-routing.journey`. Runner: `verify.yml` (debug).
+- [Session settings](session-settings.md): full-screen split switches; saving is blocked without account OTP and a pulled layout.
+  - Outcomes: `session-settings.journey`. Runner: `verify.yml` (manual). Prerequisites: Account email OTP and a pulled account layout.
+- [Useful inbox summaries](session-summaries.md): Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.
+  - Outcomes: `inbox.summaries`. Runner: `verify.yml` (debug).
+- [Sessions](sessions.md): authenticated tmux discovery and search.
+  - Outcomes: `inbox.search`. Runner: `verify.yml` (debug).
+- [Settings navigation](settings-navigation.md): sessions-first settings, host mapping and account handoff on the signed APK.
+  - Outcomes: `settings-navigation.journey`. Runner: `verify.yml` (signed). Inputs: `{"release_choices":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
+- [Sign in](sign-in.md): real account browser handoff; OTP remains manual.
+  - Outcomes: `sign-in.journey`. Runner: `verify.yml` (debug).
+- [Terminal](terminal.md): real SSH PTY/tmux fallback attachment.
+  - Outcomes: `terminal.journey`. Runner: `verify.yml` (debug).
+
+## Initial coverage gaps
+
+These IDs are an inventory, not exemptions for future changes. Untouched gaps do not block this migration. Changing one requires its own journey proof. New uncovered IDs fail the ratchet even if another gap was removed. Signed, dedicated and manual routes remain explicit; the debug picker must not select them.
+
+| Outcome | Existing case | Cleanup ticket |
+|---|---|---|
+| `snippets.save-reuse-delete` | [#376](https://github.com/valentinyeo/multiprompt-android/pull/376) | SOFT-2531 |
+| `ai.switch` | [#373](https://github.com/valentinyeo/multiprompt-android/pull/373) | SOFT-2531 |
+| `pi.model-switch` | [#374](https://github.com/valentinyeo/multiprompt-android/pull/374) | SOFT-2531 |
+| `chat-search.open` | [#380](https://github.com/valentinyeo/multiprompt-android/pull/380) | SOFT-2531 |
+| `claude.remote-control` | [#366](https://github.com/valentinyeo/multiprompt-android/pull/366) | SOFT-2531 |
+| `ai.usage` | [#377](https://github.com/valentinyeo/multiprompt-android/pull/377) | SOFT-2531 |
+| `skills.pills` | [#378](https://github.com/valentinyeo/multiprompt-android/pull/378) | SOFT-2531 |
+| `chat-table.expand` | [#379](https://github.com/valentinyeo/multiprompt-android/pull/379) | SOFT-2531 |
+| `claude.clear-ranking` | [#381](https://github.com/valentinyeo/multiprompt-android/pull/381) | SOFT-2531 |
+| `legacy.igsh-449` | IGSH-449 | IGSH-449 |
+| `legacy.igsh-429` | IGSH-429 | IGSH-429 |
+| `legacy.igsh-422` | IGSH-422 | IGSH-422 |
+| `legacy.igsh-432` | IGSH-432 | IGSH-432 |
+| `legacy.igsh-434` | IGSH-434 | IGSH-434 |
+| `legacy.igsh-423` | IGSH-423 | IGSH-423 |
+| `legacy.igsh-415` | IGSH-415 | IGSH-415 |
+| `legacy.igsh-426` | IGSH-426 | IGSH-426 |
+| `legacy.igsh-424` | IGSH-424 | IGSH-424 |
+| `legacy.igsh-418` | IGSH-418 | IGSH-418 |
+| `legacy.igsh-425` | IGSH-425 | IGSH-425 |
+| `legacy.igsh-414` | IGSH-414 | IGSH-414 |
+| `legacy.igsh-413` | IGSH-413 | IGSH-413 |
+| `app-name.journey` | app-name.md | SOFT-2531 |
+| `bot-photo-refresh.journey` | bot-photo-refresh.md | SOFT-2531 |
+| `chat-working.journey` | chat-working.md | SOFT-2531 |
+| `robot-faces.journey` | robot-faces.md | SOFT-2531 |
+| `session-favorites.journey` | session-favorites.md | SOFT-2531 |
+| `session-gestures.journey` | session-gestures.md | SOFT-2531 |
+| `session-pins.journey` | session-pins.md | SOFT-2531 |
+| `session-settings.journey` | session-settings.md | SOFT-2531 |
+| `settings-navigation.journey` | settings-navigation.md | SOFT-2531 |

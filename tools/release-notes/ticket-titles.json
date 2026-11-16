@@ -1,4 +1,7 @@
 {
+  "IGSH-2535": "Android phone tests tap what a person can really reach",
+  "IGSH-2531": "Android checks prove the feature that changed, not another one",
+  "IGSH-2440": "Ten checks that stop today's advisor mistakes",
   "IGSH-2345": "Android: show when a chat's AI has stopped, with Restart",
   "HYCI-169": "Multiprompt Android runs phone checks for unrelated changes",
   "HYCI-202": "Chat engine test fails at random when engines start together",
@@ -85,5 +88,19 @@
   "IGSH-2313": "Android: measure app start time with and without startup profile",
   "IGSH-2354": "No false live view error in desktop hosted chats",
   "IGSH-2366": "Android: agent messages in the new format show as a sender card",
-  "IGSH-2358": "Android: cancel a dictation and drop the recording"
+  "IGSH-2358": "Android: cancel a dictation and drop the recording",
+  "IGSH-2370": "Android: remove the ETA countdown like desktop",
+  "IGSH-2363": "Android: phone chat engine catches up with desktop again",
+  "IGSH-2365": "Android: pick the model in a Pi chat",
+  "IGSH-2364": "Android: switch a chat to another AI",
+  "IGSH-2379": "A second AI tests every Android change before merge",
+  "IGSH-2432": "Second AI question test matches how answers send now",
+  "IGSH-2293": "Android: open a chat table full screen",
+  "IGSH-2306": "Android: search inside one chat",
+  "IGSH-2308": "Android: saved snippets in the message box",
+  "IGSH-2290": "Android: skills in a message show as a pill",
+  "IGSH-2475": "Android: Claude commands like /clear in the slash menu",
+  "IGSH-2294": "Android: usage and plan pace card",
+  "IGSH-2486": "Android shell gets Esc, Tab, Ctrl and arrow keys",
+  "IGSH-2533": "Android old-screen check stops breaking on every change"
 }
