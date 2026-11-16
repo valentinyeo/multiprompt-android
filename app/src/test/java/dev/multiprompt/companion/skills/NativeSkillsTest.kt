@@ -46,6 +46,17 @@ class NativeSkillsTest {
         assertEquals(emptyList<NativeSkill>(), NativeSkills.menu(emptyList(), "zzzz"))
     }
 
+    @Test fun menuRanksValentinModeBeforeDescriptionMatches() {
+        val sessionSkills = listOf(
+            NativeSkill("board-identity", "Set up Valentin's board login"),
+            NativeSkill("decisions", "Record Valentin's decisions"),
+            NativeSkill("design-lead", "Run Valentin's design role"),
+            NativeSkill("figma-design", "Design Valentin's apps in Figma"),
+            NativeSkill("valentin-mode", "Work in Valentin's style"),
+        )
+        assertEquals("valentin-mode", NativeSkills.menu(sessionSkills, "valen").first().name)
+    }
+
     @Test fun bareSlashListsSessionSkillsBeforeClaudeCommands() {
         val all = NativeSkills.menu(listOf(NativeSkill("review-native", "Review"), NativeSkill("personal-note", "Note")), "").map { it.name }
         assertEquals(listOf("personal-note", "review-native"), all.take(2))
