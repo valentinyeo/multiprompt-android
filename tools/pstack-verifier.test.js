@@ -203,6 +203,44 @@ test('the evidence sent to the model is text only, capped and keeps the transcri
   assert.match(verifier.journeyEvidence(path.join(os.tmpdir(), 'pstack-missing-dir')), /No evidence artifact/);
 });
 
+test('registered queue UI and receipts survive generic evidence and oversized actions', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-queue-proof-'));
+  try {
+    fs.writeFileSync(path.join(directory, 'driver-transcript.txt'), `${'+ fill Message '.repeat(300)}WAITING_ONE\n`.repeat(60));
+    for (let n = 0; n < 20; n++) fs.writeFileSync(path.join(directory, `${n}-generic.xml`), 'GENERIC_UI'.repeat(500));
+    fs.writeFileSync(path.join(directory, '00-queue-ui.json'), JSON.stringify({ visible: ['WAITING_ONE', 'WAITING_TWO'], answer: 'Both messages received.' }));
+    fs.writeFileSync(path.join(directory, '00-queue-receipts.txt'), 'VERIFY_RECEIVED:WAITING_ONE\nVERIFY_RECEIVED:WAITING_TWO\n');
+    const text = verifier.journeyEvidence(directory, 'chat-queued.md');
+    assert.ok(text.includes('"answer":"Both messages received."'));
+    assert.ok(text.includes('VERIFY_RECEIVED:WAITING_TWO'));
+    assert.ok(text.includes('--- driver-transcript.txt (user actions)'));
+    assert.ok(text.length <= 20_000, `Evidence exceeded its budget: ${text.length}`);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('identity evidence retains complete independent receipt JSON bodies', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-identity-proof-'));
+  try {
+    const before = JSON.stringify({ accepted: [{ phone_id: 'phone-before-2532', native_id: 'native-before-2532' }], transcript: 'before'.repeat(340) });
+    const reconnect = JSON.stringify({ accepted: [{ phone_id: 'phone-before-2532' }, { phone_id: 'phone-after-2532' }], events: 'turn.started'.repeat(380) });
+    fs.writeFileSync(path.join(directory, 'projection-receipts-before.json'), before);
+    fs.writeFileSync(path.join(directory, 'projection-receipts-reconnect.json'), reconnect);
+    fs.writeFileSync(path.join(directory, 'projection-state-reconnect.json'), '{"occurrences":1,"visible":["PHONE_BEFORE_2532","REPLY_BEFORE_2532","PHONE_AFTER_2532","REPLY_AFTER_2532"]}');
+    fs.writeFileSync(path.join(directory, 'driver-transcript.txt'), '+ tap_desc Send prompt\n');
+    for (let n = 0; n < 20; n++) fs.writeFileSync(path.join(directory, `${n}-generic.xml`), 'GENERIC_UI'.repeat(500));
+    const text = verifier.journeyEvidence(directory, 'chat-identity.md');
+    assert.ok(text.includes(before), 'The full before receipt body must reach the verifier');
+    assert.ok(text.includes(reconnect), 'The full reconnect receipt body must reach the verifier');
+    assert.ok(text.includes('"occurrences":1'));
+    assert.ok(text.includes('+ tap_desc Send prompt'));
+    assert.ok(text.length <= 20_000);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('the Done-when lines of the description are passed on', () => {
   const body = '## Why\nBecause.\n\n## Done when\n- The list scrolls.\n- Nothing jumps.\n\n## Notes\nExtra.';
   const done = verifier.doneWhen(body);
