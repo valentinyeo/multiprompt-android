@@ -6,6 +6,13 @@ import xml.etree.ElementTree as ET
 
 root = ET.parse(sys.argv[1]).getroot()
 mode, value = sys.argv[2:4]
+if mode.startswith("reach-"):
+    from journey_action import Unreachable, plan
+    try:
+        print(plan(root, mode.removeprefix("reach-"), value, sys.argv[4] if len(sys.argv) > 4 else "forward"))
+    except Unreachable as error:
+        raise SystemExit(f"JOURNEY_ACTION_UNREACHABLE: {value!r}: {error}")
+    raise SystemExit(0)
 parents = {child: parent for parent in root.iter() for child in parent}
 matches = []
 if mode == "terminal":
