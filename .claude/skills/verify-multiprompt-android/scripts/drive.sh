@@ -779,6 +779,125 @@ PYINFO
     exit 0
 fi
 
+if [[ "$feature" == session-drafts.md ]]; then
+    wait_for_text 'Inbox preview stays.'
+    python3 "$scripts/draft-label.py" absent "$EVIDENCE/current.xml"
+    shot inbox-before-draft
+    tap_text verify-session
+    wait_for_text 'Message verify-session'
+    fill 'Message verify-session' 'unsent%sdraft%stext'
+    shot composer-unsent
+    if sudo grep -F 'VERIFY_RECEIVED:unsent draft text' /home/verifyssh/receipts.txt; then
+        printf 'Unsent draft reached the host\n' >&2
+        exit 1
+    fi
+    tap_desc Back
+    wait_for_text Inbox
+    wait_for_text Draft
+    wait_for_text 'Inbox preview stays.'
+    shot inbox-draft
+    python3 "$scripts/draft-label.py" present "$EVIDENCE/$(printf '%02d' "$step")-inbox-draft.xml"
+    tap_text verify-session
+    wait_for_text 'unsent draft text'
+    sent=0
+    for attempt in {1..15}; do
+        dump_ui
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" reach-desc 'Send prompt' >/dev/null 2>&1; then
+            tap_desc 'Send prompt'
+            sent=1
+            break
+        fi
+        sleep 1
+    done
+    [[ "$sent" == 1 ]]
+    wait_receipt 'VERIFY_RECEIVED:unsent draft text'
+    tap_desc Back
+    wait_for_text Inbox
+    wait_for_text 'Inbox preview stays.'
+    for attempt in {1..30}; do
+        dump_ui
+        if python3 "$scripts/draft-label.py" absent "$EVIDENCE/current.xml"; then break; fi
+        sleep 1
+    done
+    shot inbox-draft-cleared
+    python3 "$scripts/draft-label.py" absent "$EVIDENCE/$(printf '%02d' "$step")-inbox-draft-cleared.xml"
+    sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
+    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt"
+    grep -Fx 'VERIFY_RECEIVED:unsent draft text' "$EVIDENCE/receipts.txt"
+    printf 'INBOX_DRAFT_LABEL_OK\n'
+    exit 0
+fi
+if [[ "$feature" == copy-chat-id.md ]]; then
+    hosted_id=$(sudo -u verifyssh tmux show-options -t verify-session -v @mp_host_sid 2>/dev/null | tr -d '\r' || true)
+    [[ "$hosted_id" == copy-chat-id-2371 ]]
+    name_id=$(sudo -u verifyssh tmux show-options -t verify-name -v @mp_host_sid 2>/dev/null | tr -d '\r' || true)
+    [[ -z "$name_id" ]]
+    wait_for_text verify-name
+    copy_chat_id() {
+        local session=$1
+        local chat_id=$2
+        local shot_name=$3
+        local label="Message ${session}"
+        local attempt pasted
+        tap_text "$session"
+        wait_for_text "$label"
+        for attempt in {1..15}; do
+            dump_ui
+            if python3 "$scripts/copy-chat-id.py" empty "$EVIDENCE/current.xml"; then
+                break
+            fi
+            sleep 1
+        done
+        python3 "$scripts/copy-chat-id.py" empty "$EVIDENCE/current.xml"
+        if [[ "$chat_id" != "$session" ]]; then
+            python3 "$scripts/copy-chat-id.py" hidden "$EVIDENCE/current.xml" "$chat_id"
+        fi
+        tap_desc 'Session actions'
+        wait_for_text 'Copy chat ID'
+        shot "$shot_name"
+        tap_text 'Copy chat ID'
+        for attempt in {1..15}; do
+            dump_ui
+            if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent 'Copy chat ID' >/dev/null 2>&1; then
+                break
+            fi
+            sleep 1
+        done
+        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent 'Copy chat ID'
+        pasted=0
+        for attempt in {1..8}; do
+            dump_ui
+            if python3 "$scripts/copy-chat-id.py" pasted "$EVIDENCE/current.xml" "$chat_id"; then
+                pasted=1
+                break
+            fi
+            if select_node focused-field "$label" >/dev/null 2>&1; then
+                adb shell input keyevent KEYCODE_PASTE
+            else
+                tap_node field "$label" || true
+            fi
+            sleep 1
+        done
+        [[ "$pasted" == 1 ]]
+        shot "composer-${shot_name}"
+        python3 "$scripts/copy-chat-id.py" pasted "$EVIDENCE/$(printf '%02d' "$step")-composer-${shot_name}.xml" "$chat_id"
+        if sudo test -f /home/verifyssh/receipts.txt && sudo grep -F "VERIFY_RECEIVED:${chat_id}" /home/verifyssh/receipts.txt; then
+            printf 'Copied chat id reached the host\n' >&2
+            exit 1
+        fi
+        if sudo test -f /home/verifyssh/name-receipts.txt && sudo grep -F "VERIFY_RECEIVED:${chat_id}" /home/verifyssh/name-receipts.txt; then
+            printf 'Copied chat id reached the host\n' >&2
+            exit 1
+        fi
+        tap_desc Back
+        wait_for_text Inbox
+    }
+    copy_chat_id verify-session "$hosted_id" hosted-id
+    copy_chat_id verify-name verify-name tmux-name
+    sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
+    printf 'COPY_CHAT_ID_OK\n'
+    exit 0
+fi
 if [[ "$feature" == session-summaries.md ]]; then
     wait_for_text 'Lauren Tan profile is done, checked and pushed.'
     shot summary-reply

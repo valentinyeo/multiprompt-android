@@ -147,6 +147,20 @@
         "chat-working.journey"
       ]
     },
+    "copy-chat-id.md": {
+      "name": "Copy chat ID",
+      "description": "the chat menu copies the host chat id, or the tmux name when the chat has no host id.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "chat.copy-id"
+      ]
+    },
     "host-changed-key.md": {
       "name": "Changed host key",
       "description": "compare a rotated identity, persist Not now and refuse authentication.",
@@ -234,6 +248,20 @@
       },
       "outcomes": [
         "robot-faces.journey"
+      ]
+    },
+    "session-drafts.md": {
+      "name": "Inbox draft label",
+      "description": "unsent composer text shows Draft before the inbox preview, and sending that text removes it.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "inbox.draft"
       ]
     },
     "session-favorites.md": {
@@ -485,6 +513,14 @@
       "sideEffect": false,
       "match": []
     },
+    "chat.copy-id": {
+      "description": "The chat menu copies the host chat id, or the tmux name when the chat has no host id.",
+      "journey": "copy-chat-id.md",
+      "sideEffect": false,
+      "match": [
+        "Copy chat ID|object ChatId"
+      ]
+    },
     "host-changed-key.journey": {
       "description": "compare a rotated identity, persist Not now and refuse authentication.",
       "journey": "host-changed-key.md",
@@ -566,6 +602,14 @@
       "journey": "session-settings.md",
       "sideEffect": false,
       "match": []
+    },
+    "inbox.draft": {
+      "description": "Inbox rows show Draft before the preview while a chat has unsent text, and hide it once that text is sent.",
+      "journey": "session-drafts.md",
+      "sideEffect": false,
+      "match": [
+        "observeDrafts|Session draft"
+      ]
     },
     "inbox.summaries": {
       "description": "Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.",
