@@ -86,7 +86,7 @@ class ChatChoicesTest {
         )
         val accepted = ChatHistoryMessage("accepted", "user", "[from Runner] accepted note", "", 0, 1)
         compose.setContent {
-            MaterialTheme { ChatHistoryList(listOf(accepted) + ChatHistory().displayMessages(sent), sessionName = "Recipient") }
+            MaterialTheme { ChatHistoryList(listOf(accepted) + ChatHistory().projectMessages(sent = sent), sessionName = "Recipient") }
         }
         compose.onAllNodesWithText("Local · unconfirmed").assertCountEquals(3)
         compose.onNodeWithTag("session-note-chip-accepted").assertExists()
