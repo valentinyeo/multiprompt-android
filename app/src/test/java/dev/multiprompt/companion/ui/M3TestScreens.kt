@@ -17,6 +17,7 @@ import dev.multiprompt.companion.reader.ChatHistoryCache
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.reader.ChatHistory
 import dev.multiprompt.companion.reader.ChatHistoryConnection
+import dev.multiprompt.companion.reader.ChatPollGate
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import dev.multiprompt.companion.reader.ChatHistoryState
 import dev.multiprompt.companion.security.SecretStore
@@ -133,7 +134,7 @@ private fun ReaderFixture(material3: Boolean, sunlight: Boolean) {
             )
             val identity = ChatHistoryProtocol.Identity(testSession.agent, testSession.name, testSession.workingDirectory)
             val history = ChatHistoryConnection(SshRepository(secrets), testHost, identity, byteArrayOf(),
-                ChatHistoryCache(context.cacheDir.resolve("m3-chat-history")))
+                ChatHistoryCache(context.cacheDir.resolve("m3-chat-history")), pollGate = ChatPollGate())
             ReflectionHelpers.getField<MutableStateFlow<ChatHistoryState>>(history, "_state").value = ChatHistoryState(
                 history = ChatHistory(sid = "fixture", inode = 1, offset = 2, rows = listOf(
                     ChatHistoryProtocol.Row("user", "Give the Inbox a Material 3 look.", "user", "", 0, 1),

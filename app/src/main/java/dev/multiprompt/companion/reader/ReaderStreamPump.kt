@@ -10,12 +10,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
-
-internal fun streamWanted(selected: Flow<Boolean>, confirmationPending: Flow<Boolean>): Flow<Boolean> =
-    combine(selected, confirmationPending) { onScreen, pending -> onScreen || pending }
 
 internal class ModelSwitchConfirmation(
     private val now: () -> Long,
@@ -61,7 +57,7 @@ internal class ReaderStreamPump<C : Any>(
     suspend fun pump() {
         var warm: C? = null
         wanted.distinctUntilChanged().collectLatest { visible ->
-            if (ChatPollGate.step(visible) == ChatPollGate.Step.WAIT_FOR_WAKE) return@collectLatest
+            if (!visible) return@collectLatest
             while (true) {
                 var reused = warm != null
                 try {

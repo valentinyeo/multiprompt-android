@@ -54,7 +54,7 @@ class ChatHistoryPrefetchTest {
         assertEquals("sid1", requests[1].getString("cached_sid"))
         assertEquals(listOf("question", "answer"), cache.peek(key)?.rows?.map { it.text })
 
-        ChatHistoryConnection(SshRepository(SecretStore(RuntimeEnvironment.getApplication())), host, identity, byteArrayOf(), cache).use { connection ->
+        ChatHistoryConnection(SshRepository(SecretStore(RuntimeEnvironment.getApplication())), host, identity, byteArrayOf(), cache, pollGate = ChatPollGate()).use { connection ->
             assertFalse(connection.state.value.loaded)
             connection.start()
             assertTrue(connection.state.value.loaded)

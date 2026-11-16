@@ -1345,6 +1345,29 @@ PROOF
 fi
 
 if [[ "$feature" == chat-codex.md ]]; then
+    reader_counts() {
+        local name=$1 session=$2 stage=$3
+        sudo cat /home/verifyssh/reader-requests.jsonl > "$EVIDENCE/$name-$stage-requests.jsonl"
+        python3 tools/reader-ownership/receipts.py count "$EVIDENCE/$name-$stage-requests.jsonl" "$session" > "$EVIDENCE/$name-$stage.json"
+    }
+    reader_lifecycle() {
+        local name=$1 session=$2 marker="HOST_WHILE_HIDDEN_$1"
+        sleep 3
+        reader_counts "$name" "$session" visible
+        adb shell input keyevent KEYCODE_HOME
+        sleep 3
+        reader_counts "$name" "$session" hidden-before
+        sudo -u verifyssh tmux send-keys -t "=$session:" -l "$marker"
+        sudo -u verifyssh tmux send-keys -t "=$session:" Enter
+        sleep 4
+        reader_counts "$name" "$session" hidden-after
+        python3 tools/reader-ownership/receipts.py hidden "$EVIDENCE/$name-hidden-before.json" "$EVIDENCE/$name-hidden-after.json" | tee "$EVIDENCE/$name-hidden-result.txt"
+        adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
+        wait_for_text "CODEX_REPLY_${name}_$marker"
+        shot "$name-reader-resumed"
+        reader_counts "$name" "$session" resumed
+        python3 tools/reader-ownership/receipts.py resumed "$EVIDENCE/$name-hidden-after.json" "$EVIDENCE/$name-resumed.json" | tee "$EVIDENCE/$name-resumed-result.txt"
+    }
     : > "$FIXTURE/recorder.pid"
     adb shell 'screenrecord --time-limit 180 --bit-rate 2000000 /sdcard/chat-catchup.mp4 & echo $!; wait' > "$FIXTURE/recorder.pid" &
     recorder_client=$!
@@ -1376,6 +1399,14 @@ if [[ "$feature" == chat-codex.md ]]; then
         printf '%s\n' "$elapsed" > "$EVIDENCE/$mode-visible-ms.txt"
         [[ "$elapsed" -ge 0 && "$elapsed" -le 5000 ]]
         shot "codex-$mode-phone-reply"
+        if [[ "$mode" == hax ]]; then reader_lifecycle hax verify-session; fi
+        if [[ "$mode" == codex ]]; then
+            sleep 3
+            reader_counts hax verify-session switched-before
+            sleep 4
+            reader_counts hax verify-session switched-after
+            python3 tools/reader-ownership/receipts.py hidden "$EVIDENCE/hax-switched-before.json" "$EVIDENCE/hax-switched-after.json" | tee "$EVIDENCE/hax-switched-result.txt"
+        fi
         sudo -u verifyssh tmux capture-pane -pt "$destination" > "$EVIDENCE/$mode-terminal.txt"
         test -s "$EVIDENCE/$mode-terminal.txt"
         if grep -F "CODEX_REPLY_${mode}_PHONE_CODEX" "$EVIDENCE/$mode-terminal.txt"; then
@@ -1386,16 +1417,26 @@ if [[ "$feature" == chat-codex.md ]]; then
     done
     adb shell input keyevent KEYCODE_BACK
     wait_for_text Inbox
+    tap_text verify-session
+    sudo -u verifyssh tmux send-keys -t '=verify-session:' -l AFTER_SECOND_READER_CLOSE
+    sudo -u verifyssh tmux send-keys -t '=verify-session:' Enter
+    wait_for_text CODEX_REPLY_hax_AFTER_SECOND_READER_CLOSE
+    sudo grep -Fx 'VERIFY_RECEIVED:AFTER_SECOND_READER_CLOSE' /home/verifyssh/receipts.txt > "$EVIDENCE/reader-second-close-receipt.txt"
+    shot reader-after-second-close
+    tap_desc Back
+    wait_for_text Inbox
     tap_text claude-control
     wait_for_text 'CODEX_TRANSCRIPT_ONLY_claude'
     fill 'Message claude-control' CLAUDE_CONTROL
     tap_desc 'Send prompt'
     wait_for_text 'CODEX_REPLY_claude_CLAUDE_CONTROL'
+    reader_lifecycle claude claude-control
     wait_for_absence Queued
     tap_desc 'Session actions'
     wait_for_text 'Reset this chat'
     tap_text 'Reset this chat'
     wait_for_text 'CODEX_REPLY_claude_CLAUDE_CONTROL'
+    reader_lifecycle claude claude-control
     sudo grep -Fx 'VERIFY_RECEIVED:CLAUDE_CONTROL' /home/verifyssh/claude-receipts.txt > "$EVIDENCE/claude-receipt.txt"
     shot claude-compatible
     printf 'ANDROID_CODEX_READ_SEND_CLAUDE_OK\n' | tee "$EVIDENCE/codex-result.txt"

@@ -72,7 +72,8 @@
         "driver": true
       },
       "outcomes": [
-        "codex.transcript"
+        "codex.transcript",
+        "reader.lifecycle"
       ]
     },
     "chat-queued.md": {
@@ -750,6 +751,15 @@
       "journey": null,
       "sideEffect": true,
       "match": []
+    },
+    "reader.lifecycle": {
+      "description": "Hax and Claude stop snapshot and history requests while hidden, wake on return, and publish after another reader closes.",
+      "journey": "chat-codex.md",
+      "sideEffect": true,
+      "match": [
+        "ChatPollGate",
+        "ReaderStreamPump"
+      ]
     }
   }
 }

@@ -3298,6 +3298,10 @@ internal fun ReaderScreen(
             speech.shutdown()
         }
     }
+    DisposableEffect(connection, appForeground) {
+        val lease = if (appForeground) connection.observe() else null
+        onDispose { lease?.close() }
+    }
     DisposableEffect(voiceLifecycle) {
         if (voiceLifecycle == null) return@DisposableEffect onDispose {}
         val observer = LifecycleEventObserver { _, event ->

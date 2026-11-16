@@ -55,6 +55,7 @@ class ChatHistoryConnection(
     private val connectedExchange: (suspend (suspend (suspend (String) -> String) -> Unit) -> Unit)? = null,
     private val beforeAdmission: (suspend () -> Unit)? = null,
     private val stallMillis: Long = 60_000L,
+    internal val pollGate: ChatPollGate,
 ) : AutoCloseable {
     private sealed interface Command {
         data class Submit(val text: String, val generation: Long, val result: CompletableDeferred<PromptAdmission>, val replaces: String? = null) : Command
@@ -94,6 +95,8 @@ class ChatHistoryConnection(
     private val _hostError = MutableStateFlow<String?>(null)
     val hostError: StateFlow<String?> = _hostError.asStateFlow()
 
+    private val visibility = pollGate.onChange(::select)
+
     private fun key(sid: String) = "$account\u0000$provider\u0000$sid"
     private fun wire(sid: String) = MessageProtocol.Scope(requireNotNull(provider), sid, identity.tmux)
     private fun owns(sid: String) = selected && ownedKey == key(sid) && gate?.owns(key(sid), token) == true
@@ -116,7 +119,7 @@ class ChatHistoryConnection(
         else gate?.ifOwned(key(sid), token) { journalAccess { requireNotNull(journal).markIssued(id) }; true } ?: false
     }
 
-    @Synchronized fun select(value: Boolean) {
+    @Synchronized private fun select(value: Boolean) {
         if (selected == value) return
         selected = value
         if (value) lastReply = System.nanoTime()
@@ -316,7 +319,7 @@ class ChatHistoryConnection(
     fun start() {
         if (job != null) return
         cache.peek(cacheKey)?.let { _state.value = ChatHistoryState(it, loaded = true) }
-        job = scope.launch {
+        job = pollGate.launchIn(scope) {
             val restoreGeneration = generation
             runCatching { cache.restore(cacheKey) }.getOrNull()?.let {
                 synchronized(this@ChatHistoryConnection) {
@@ -344,7 +347,7 @@ class ChatHistoryConnection(
                                 MessageProtocol.engine(exchange(JSONObject().put("id", requestId).put("op", "engine_info").toString() + "\n"), requestId)
                             }.getOrNull() else null
                             poll@ while (isActive) {
-                                if (ChatPollGate.step(selected) == ChatPollGate.Step.WAIT_FOR_WAKE) {
+                                if (!selected) {
                                     wake.receive()
                                     continue@poll
                                 }
@@ -835,6 +838,7 @@ class ChatHistoryConnection(
     }
 
     override fun close() {
+        visibility.close()
         select(false)
         wake.close(); resyncs.close(); commands.close()
         resyncing?.cancel()

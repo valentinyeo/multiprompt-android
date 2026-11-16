@@ -11,6 +11,7 @@ fi
 if [[ -d "$FIXTURE" ]]; then
     sudo cat "$FIXTURE/sshd.log" > "$EVIDENCE/sshd.log" 2>/dev/null || true
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt" 2>/dev/null || true
+    sudo cat /home/verifyssh/reader-requests.jsonl > "$EVIDENCE/reader-requests.jsonl" 2>/dev/null || true
     for name in tmux sshd; do
         if [[ -f "$FIXTURE/$name.pid" ]]; then
             pid=$(cat "$FIXTURE/$name.pid")

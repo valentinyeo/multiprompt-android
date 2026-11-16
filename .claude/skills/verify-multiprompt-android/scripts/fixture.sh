@@ -27,6 +27,10 @@ COMMAND
     sudo install -m 755 "$FIXTURE/ssh-command" /home/verifyssh/ssh-command
     { printf 'command="/home/verifyssh/ssh-command" '; cat "$FIXTURE/user-key.pub"; } | sudo tee /home/verifyssh/.ssh/authorized_keys >/dev/null
 fi
+if [[ "${VERIFY_FEATURE:-}" == chat-codex.md ]]; then
+    sudo install -m 644 tools/reader-ownership/ssh-observer.py /home/verifyssh/ssh-observer.py
+    { printf 'command="python3 /home/verifyssh/ssh-observer.py" '; cat "$FIXTURE/user-key.pub"; } | sudo tee /home/verifyssh/.ssh/authorized_keys >/dev/null
+fi
 sudo install -d -m 755 /run/sshd
 cat > "$FIXTURE/sshd_config" <<CONFIG
 Port 2222

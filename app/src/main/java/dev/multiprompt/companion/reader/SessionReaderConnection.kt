@@ -122,7 +122,7 @@ class SessionReaderConnection(
 
     private var historyConnection: ChatHistoryConnection? = null
     private var historyIdentity: ChatHistoryProtocol.Identity? = null
-    private val selectedFlow = MutableStateFlow(false)
+    private val pollGate = ChatPollGate()
 
     fun matches(host: HostProfile, agent: AgentKind): Boolean = this.host == host && this.agent == agent
 
@@ -139,10 +139,7 @@ class SessionReaderConnection(
         }
     }
 
-    fun select(value: Boolean) {
-        selectedFlow.value = value
-        historyConnection?.select(value)
-    }
+    fun observe(): AutoCloseable = pollGate.acquire()
 
     fun nudge() {
         if (ReconnectBackoff.shouldNudge(_state.value.status is ReaderStatus.Failed)) streamNudge.trySend(Unit)
@@ -161,11 +158,10 @@ class SessionReaderConnection(
         val identity = ChatHistoryProtocol.Identity(agent, tmuxSessionName, cwd, hostSessionId)
         if (historyIdentity == identity) return requireNotNull(historyConnection)
         historyConnection?.close()
-        return ChatHistoryConnection(repository, host, identity, historyScript, historyCache, messageJournal, messageGate)
+        return ChatHistoryConnection(repository, host, identity, historyScript, historyCache, messageJournal, messageGate, pollGate = pollGate)
             .also {
                 historyIdentity = identity
                 historyConnection = it
-                it.select(selectedFlow.value)
                 it.start()
             }
     }
@@ -478,7 +474,7 @@ class SessionReaderConnection(
         if (streamJob?.isActive == true) return
         streamJob = scope.launch {
             ReaderStreamPump<SshClient>(
-                wanted = streamWanted(selectedFlow, confirmation.pending),
+                wanted = pollGate.active,
                 connect = { withTimeout(CONNECT_TIMEOUT_MS) { repository.connect(host) } },
                 stream = { client, heard -> streamFrames(client, heard) },
                 release = { client -> runCatching { client.disconnect() } },
@@ -637,6 +633,7 @@ class SessionReaderConnection(
 
     override fun close() {
         _state.update { it.copy(status = ReaderStatus.Closed) }
+        pollGate.close()
         requests.close()
         streamJob?.cancel()
         actionJob?.cancel()
