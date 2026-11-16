@@ -1174,6 +1174,33 @@ class ChatHistoryActorTest {
         } finally { f.laterPageRelease.complete(Unit); owner.close() }
     }
 
+    @Test fun settledResetRecoveryCannotStartAnotherReset() = runBlocking {
+        for (provider in listOf("claude", "codex")) {
+            val f = Fixture(provider)
+            f.dropReset = true
+            val owner = f.connection()
+            try {
+                owner.select(true); owner.start(); f.ready(owner)
+                assertEquals(MessageActionResult.Unknown, withTimeout(10_000) { owner.resetConversation().await() })
+                val pending = f.journal.entries().single()
+                assertEquals("reset", pending.operation)
+                f.dropReset = false
+                f.ready(owner)
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.recoverReset(pending.id) })
+                assertTrue(f.journal.entries().isEmpty())
+                assertEquals(2L, f.epoch)
+                assertEquals(2, f.resetCalls)
+                assertTrue(withTimeout(10_000) { owner.recoverReset(pending.id, owner.actionToken()) } is MessageActionResult.Rejected)
+                assertEquals(2L, f.epoch)
+                assertEquals(2, f.resetCalls)
+                assertTrue(f.journal.entries().isEmpty())
+                assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
+                assertEquals(3L, f.epoch)
+                assertEquals(3, f.resetCalls)
+            } finally { owner.close() }
+        }
+    }
+
     @Test fun bothProvidersAdmitAndResetThroughProductionOwner() = runBlocking {
         for (provider in listOf("claude", "codex")) {
             val f = Fixture(provider)

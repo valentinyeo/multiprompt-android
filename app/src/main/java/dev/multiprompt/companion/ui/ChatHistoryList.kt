@@ -117,7 +117,7 @@ internal fun ChatHistoryView(
     LaunchedEffect(state.loaded, state.history.sid, state.retrying) { onChatReady(state.loaded && state.history.sid.isNotEmpty() && !state.retrying) }
     val pendingReset = if (managed) state.unresolved.firstOrNull { it.operation == "reset" }?.id else null
     LaunchedEffect(history, pendingReset) {
-        while (pendingReset != null && history.recoverReset(history.actionToken()) != dev.multiprompt.companion.reader.MessageActionResult.Applied) delay(5_000)
+        while (pendingReset != null && history.recoverReset(pendingReset, history.actionToken()) != dev.multiprompt.companion.reader.MessageActionResult.Applied) delay(5_000)
     }
     SideEffect {
         history.awaitingMessages(messages.any { it.pending })

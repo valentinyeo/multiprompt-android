@@ -99,6 +99,9 @@ function validateRegistry(value = registry, oldGaps = baseline) {
   for (const [name, journey] of Object.entries(value.journeys)) {
     if (!/^[\w-]+\.md$/.test(name) || !['debug', 'signed', 'dedicated', 'manual'].includes(journey.runner.kind)) errors.push(`Invalid journey ${name}`);
     if (!journey.outcomes.length || journey.outcomes.some(id => value.outcomes[id]?.journey !== name)) errors.push(`Journey ${name} must own registered outcomes`);
+    const evidence = journey.evidence ?? [];
+    if (!Array.isArray(evidence) || evidence.length > 8 || new Set(evidence).size !== evidence.length ||
+        evidence.some(file => typeof file !== 'string' || !/^[\w-]+\.(?:txt|json|xml)$/.test(file))) errors.push(`Journey ${name} evidence must list at most eight distinct artifact text filenames`);
   }
   for (const id of gaps) if (!oldGaps[id]) errors.push(`FEATURE_COVERAGE_RATCHET: new uncovered outcome ${id}. Add its executable journey; do not expand coverage-baseline.json.`);
   for (const [id, gap] of Object.entries(oldGaps)) {
@@ -114,7 +117,7 @@ function ratchetErrors(previous, current = baseline) {
 function renderIndex() {
   const rows = Object.entries(registry.journeys).map(([name, journey]) => {
     const runner = journey.runner;
-    return `- [${journey.name}](${name}): ${journey.description}\n  - Outcomes: ${journey.outcomes.map(id => `\`${id}\``).join(', ')}. Runner: \`${runner.workflow}\` (${runner.kind}).${Object.keys(runner.inputs).length ? ` Inputs: \`${JSON.stringify(runner.inputs)}\`.` : ''}${runner.prerequisites.length ? ` Prerequisites: ${runner.prerequisites.join(' ')}` : ''}`;
+    return `- [${journey.name}](${name}): ${journey.description}\n  - Outcomes: ${journey.outcomes.map(id => `\`${id}\``).join(', ')}. Runner: \`${runner.workflow}\` (${runner.kind}).${Object.keys(runner.inputs).length ? ` Inputs: \`${JSON.stringify(runner.inputs)}\`.` : ''}${runner.prerequisites.length ? ` Prerequisites: ${runner.prerequisites.join(' ')}` : ''}${journey.evidence?.length ? ` Priority evidence: ${journey.evidence.map(file => `\`${file}\``).join(', ')}.` : ''}`;
   });
   const gaps = Object.entries(baseline).map(([id, gap]) => `| \`${id}\` | ${gap.sourcePr ? `[#${gap.sourcePr}](https://github.com/valentinyeo/multiprompt-android/pull/${gap.sourcePr})` : gap.sourceTicket ?? gap.sourceRecipe} | ${gap.cleanupTicket} |`);
   return `# multiprompt Android verification map\n\nGenerated from [registry.json](registry.json). Run \`node .github/scripts/pstack-verifier/coverage.cjs generate\` after editing the registry. CI rejects drift.\n\nRead [SKILL.md](../SKILL.md) before dispatching. Use a fresh GitHub-hosted emulator per journey. Never build or run Android locally. Debug SSH fixtures do not prove account OTP, live providers or signed-release behavior.\n\nA product change must name every changed outcome. The second-AI verifier requires the matching successful head journey, exact APK source SHA, action and result citations into the retained artifact, and independent side effects where required. Smoke alone cannot prove a product change. A new behavior needs a new outcome; extending an old recipe does not imply coverage.\n\n## Features\n\n${rows.join('\n')}\n\n## Initial coverage gaps\n\nThese IDs are an inventory, not exemptions for future changes. Untouched gaps do not block this migration. Changing one requires its own journey proof. New uncovered IDs fail the ratchet even if another gap was removed. Signed, dedicated and manual routes remain explicit; the debug picker must not select them.\n\n| Outcome | Existing case | Cleanup ticket |\n|---|---|---|\n${gaps.join('\n')}\n`;

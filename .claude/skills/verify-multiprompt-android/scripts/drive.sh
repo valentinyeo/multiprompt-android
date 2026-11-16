@@ -1287,6 +1287,12 @@ PYNEIGHBOR
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read claude > "$EVIDENCE/shared-claude-after-codex-reset.json"
     cmp "$EVIDENCE/shared-after-reset.json" "$EVIDENCE/shared-claude-after-codex-reset.json"
     printf 'SHARED_STORE_RESET_OK\n' | tee "$EVIDENCE/shared-result.txt"
+    if [[ "${VERIFY_SIDE:-}" != parent ]]; then
+        adb install -r -g app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+        adb shell am instrument -w -r -e class dev.multiprompt.companion.reader.ChatHistoryActorTest#settledResetRecoveryCannotStartAnotherReset \
+            dev.multiprompt.companion.debug.test/androidx.test.runner.AndroidJUnitRunner | tee "$EVIDENCE/reset-recovery-instrumentation.txt"
+        grep -F 'OK (1 test)' "$EVIDENCE/reset-recovery-instrumentation.txt"
+    fi
     exit 0
 fi
 if [[ "$feature" == chat-working.md ]]; then

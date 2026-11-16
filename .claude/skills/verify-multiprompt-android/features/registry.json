@@ -87,6 +87,15 @@
       },
       "outcomes": [
         "chat-queued.journey"
+      ],
+      "evidence": [
+        "00-queue-ui.json",
+        "00-queue-receipts.txt",
+        "queue-pending.json",
+        "queue-waiting-final.json",
+        "queue-followup-final.json",
+        "queue-uncertain-final.json",
+        "catchup-result.json"
       ]
     },
     "chat-reactions.md": {
@@ -129,6 +138,16 @@
       },
       "outcomes": [
         "chat-shared.journey"
+      ],
+      "evidence": [
+        "shared-before-reset.json",
+        "shared-after-reset.json",
+        "shared-codex-before-restart.json",
+        "shared-codex-after-reset.json",
+        "05-shared-after-reset.xml",
+        "07-shared-codex-after-reset.xml",
+        "shared-terminal.txt",
+        "shared-result.txt"
       ]
     },
     "chat-working.md": {

@@ -203,6 +203,23 @@ test('the evidence sent to the model is text only, capped and keeps the transcri
   assert.match(verifier.journeyEvidence(path.join(os.tmpdir(), 'pstack-missing-dir')), /No evidence artifact/);
 });
 
+test('registered queue UI and receipts survive generic evidence and oversized actions', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-queue-proof-'));
+  try {
+    fs.writeFileSync(path.join(directory, 'driver-transcript.txt'), `${'+ fill Message '.repeat(300)}WAITING_ONE\n`.repeat(60));
+    for (let n = 0; n < 20; n++) fs.writeFileSync(path.join(directory, `${n}-generic.xml`), 'GENERIC_UI'.repeat(500));
+    fs.writeFileSync(path.join(directory, '00-queue-ui.json'), JSON.stringify({ visible: ['WAITING_ONE', 'WAITING_TWO'], answer: 'Both messages received.' }));
+    fs.writeFileSync(path.join(directory, '00-queue-receipts.txt'), 'VERIFY_RECEIVED:WAITING_ONE\nVERIFY_RECEIVED:WAITING_TWO\n');
+    const text = verifier.journeyEvidence(directory, 'chat-queued.md');
+    assert.ok(text.includes('"answer":"Both messages received."'));
+    assert.ok(text.includes('VERIFY_RECEIVED:WAITING_TWO'));
+    assert.ok(text.includes('--- driver-transcript.txt (user actions)'));
+    assert.ok(text.length <= 20_000, `Evidence exceeded its budget: ${text.length}`);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('the Done-when lines of the description are passed on', () => {
   const body = '## Why\nBecause.\n\n## Done when\n- The list scrolls.\n- Nothing jumps.\n\n## Notes\nExtra.';
   const done = verifier.doneWhen(body);

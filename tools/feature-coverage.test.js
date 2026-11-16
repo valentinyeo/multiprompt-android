@@ -144,6 +144,14 @@ test('the ratchet tracks exact IDs, not the number of missing journeys', () => {
   assert.deepEqual(gate.ratchetErrors(gate.baseline, {}), []);
 });
 
+test('priority evidence is bounded to distinct artifact text filenames', () => {
+  for (const evidence of ['receipts.txt', ['../secret.txt'], ['/secret.txt'], ['proof.png'], ['proof.txt', 'proof.txt'], Array.from({ length: 9 }, (_, n) => `proof-${n}.json`), [null]]) {
+    const changed = structuredClone(gate.registry);
+    changed.journeys['chat-queued.md'].evidence = evidence;
+    assert.match(gate.validateRegistry(changed).join('\n'), /evidence must list at most eight distinct artifact text filenames/);
+  }
+});
+
 test('every recipe is registered and generated index and dispatch choices cannot drift', () => {
   const recipes = fs.readdirSync(path.join(root, gate.REGISTRY_PATH)).filter(name => name.endsWith('.md') && name !== 'README.md');
   assert.deepEqual(recipes.sort(), Object.keys(gate.registry.journeys).sort());

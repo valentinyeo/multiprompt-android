@@ -19,13 +19,13 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Codex transcript parity](chat-codex.md): Dispatch `feature=chat-codex.md`. The real Android APK connects through SSH to independent Hax, native Codex, and Claude fixture sessions. Hax and Codex write the same JSONL schemas consumed by desktop. Their terminal output deliberately excludes every transcript reply, ruling out terminal-scrape success.
   - Outcomes: `codex.transcript`. Runner: `verify.yml` (debug).
 - [Queued messages](chat-queued.md): Queued host messages stay visible once, receive correlated consumption receipts and become answered without stale delivery labels.
-  - Outcomes: `chat-queued.journey`. Runner: `verify.yml` (debug).
+  - Outcomes: `chat-queued.journey`. Runner: `verify.yml` (debug). Priority evidence: `00-queue-ui.json`, `00-queue-receipts.txt`, `queue-pending.json`, `queue-waiting-final.json`, `queue-followup-final.json`, `queue-uncertain-final.json`, `catchup-result.json`.
 - [Claude reactions](chat-reactions.md): quoted sends, one badge, restart identity, fallback and signed update offers.
   - Outcomes: `chat-reactions.journey`. Runner: `verify.yml` (debug).
 - [Legacy resync](chat-resync.md): historical held-queue proof; not host Reset proof.
   - Outcomes: `chat-resync.journey`. Runner: `verify.yml` (debug).
 - [Shared chat store](chat-shared.md): synthetic SSH store admission and host Reset, retaining both drafts.
-  - Outcomes: `chat-shared.journey`. Runner: `verify.yml` (debug).
+  - Outcomes: `chat-shared.journey`. Runner: `verify.yml` (debug). Priority evidence: `shared-before-reset.json`, `shared-after-reset.json`, `shared-codex-before-restart.json`, `shared-codex-after-reset.json`, `05-shared-after-reset.xml`, `07-shared-codex-after-reset.xml`, `shared-terminal.txt`, `shared-result.txt`.
 - [Working dots on the signed release](chat-working.md): quiet tools, lock/unlock, real SSH reconnect, recording and timed visible-state samples. Uses `working-dots.yml`.
   - Outcomes: `chat-working.journey`. Runner: `working-dots.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Changed host key](host-changed-key.md): compare a rotated identity, persist Not now and refuse authentication.
