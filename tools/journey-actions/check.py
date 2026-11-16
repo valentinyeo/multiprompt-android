@@ -23,7 +23,7 @@ def violations(root):
                 if '"reach-$1"' not in helper:
                     found[f"{relative}: tap_node bypasses reachability"] += 1
                 else:
-                    source = source.replace(helper, "", 1)
+                    source = source.replace('tap) adb shell input tap "$x1" "$y1"; return ;;', "", 1)
             for line in source.splitlines():
                 if re.search(r"\binput\s+tap\b", line) or re.search(r"['\"]input['\"].*['\"]tap['\"]", line):
                     found[f"{relative}: {line.strip()}"] += 1

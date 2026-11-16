@@ -146,6 +146,27 @@ class ActionTest(unittest.TestCase):
             path.parent.mkdir(parents=True)
             path.write_text('adb shell input tap 100 200\n')
             self.assertEqual(sum(check.violations(Path(directory)).values()), 1)
+            baseline = Path(directory) / 'tools/journey-actions/baseline.json'
+            baseline.parent.mkdir(parents=True)
+            baseline.write_text('{}')
+            with self.assertRaisesRegex(ValueError, 'use drive.sh tap_text/tap_desc/tap_node'):
+                check.check(Path(directory))
+
+    def test_raw_tap_added_inside_the_trusted_helper_is_not_exempt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / check.DRIVER
+            path.parent.mkdir(parents=True)
+            source = (ROOT / check.DRIVER).read_text()
+            path.write_text(source.replace('local attempt action x1 y1 x2 y2 direction plan', 'adb shell input tap 1 2\n    local attempt action x1 y1 x2 y2 direction plan'))
+            self.assertIn(f'{check.DRIVER}: adb shell input tap 1 2', check.violations(Path(directory)))
+
+    def test_app_label_requires_clickable_ancestor_but_native_picker_row_can_use_label(self):
+        for package in ('dev.multiprompt.companion.debug', 'dev.multiprompt.companion.m3'):
+            xml = window(f'<node text="Open live terminal" package="{package}" bounds="[20,500][500,580]" />')
+            with self.subTest(package=package), self.assertRaisesRegex(action.Unreachable, 'no enabled clickable ancestor'):
+                self.plan(xml)
+        xml = window('<node text="Open live terminal" package="com.android.documentsui" bounds="[20,500][500,580]" />')
+        self.assertEqual(self.plan(xml), 'tap 260 540')
 
     def test_driver_scrolls_then_redumps_and_taps_once(self):
         source = (SCRIPTS / 'drive.sh').read_text()
