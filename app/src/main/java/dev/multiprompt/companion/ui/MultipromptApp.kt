@@ -261,6 +261,8 @@ import dev.multiprompt.companion.data.ReminderTimeParser
 import dev.multiprompt.companion.data.UnreadCount
 import dev.multiprompt.companion.data.UnreadOnlyFilter
 import dev.multiprompt.companion.data.SessionReadStore
+import dev.multiprompt.companion.data.SnippetStore
+import dev.multiprompt.companion.data.Snippets
 import dev.multiprompt.companion.data.SessionSearch
 import dev.multiprompt.companion.ssh.HostKeyWarning
 import dev.multiprompt.companion.ssh.SshProblem
@@ -3176,6 +3178,9 @@ internal fun ReaderScreen(
     var imageAttachments by remember(connection) { mutableStateOf(emptyList<String>()) }
     var attachMenuExpanded by remember(connection) { mutableStateOf(false) }
     var attachMenuSection by remember(connection) { mutableStateOf<String?>(null) }
+    val snippetStore = remember(draftContext) { SnippetStore(draftContext) }
+    var snippets by remember(draftContext) { mutableStateOf(snippetStore.load()) }
+    var savedToken by remember(connection) { mutableStateOf(0) }
     val computerStore = remember(draftContext) { ComputerStore(draftContext) }
     var computerTarget by remember(session.hostId) { mutableStateOf(computerStore.target(session.hostId)) }
     var computerOpen by remember(session.hostId, session.name) {
@@ -4262,6 +4267,11 @@ internal fun ReaderScreen(
                 Modifier.imePadding().padding(horizontal = ReaderScreenPadding, vertical = ReaderControlSpacing),
                 verticalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
             ) {
+                if (savedToken > 0 && !attachMenuExpanded) {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        key(savedToken) { KitSavedNote(onFinished = { savedToken = 0 }) }
+                    }
+                }
                 if (skillQuery != null && !dictationActive) {
                     NativeSkillPicker(
                         skills = NativeSkills.matches(reader.nativeSkills, skillQuery),
@@ -4392,13 +4402,86 @@ internal fun ReaderScreen(
                                 expanded = attachMenuExpanded,
                                 onDismissRequest = { attachMenuExpanded = false },
                                 contentResetKey = attachMenuSection.orEmpty(),
+                                footer = if (savedToken > 0 && attachMenuExpanded) {
+                                    {
+                                        Box(Modifier.fillMaxWidth().padding(top = Kit.ControlGap), contentAlignment = Alignment.Center) {
+                                            key(savedToken) { KitSavedNote(onFinished = { savedToken = 0 }) }
+                                        }
+                                    }
+                                } else {
+                                    null
+                                },
                             ) {
                                 val settingsProvider = HostChange.providerOf(session.agent)
                                 val openSection = if (settingsProvider != null) {
                                     HostChange.sections(connection.hostSettings() != null, settingsProvider).firstOrNull { it.first == attachMenuSection }
                                 } else null
                                 val piModelMenu = session.agent == AgentKind.PI && attachMenuSection == PiModels.SECTION
-                                if (piModelMenu) {
+                                if (attachMenuSection == "Snippets") {
+                                    KitMenuRow(
+                                        label = "Snippets",
+                                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                        onClick = { attachMenuSection = null },
+                                    )
+                                    KitDivider()
+                                    KitMenuRow(
+                                        label = "Save current text",
+                                        enabled = prompt.isNotBlank(),
+                                        onClick = {
+                                            val next = Snippets.add(snippets, prompt)
+                                            val stored = prompt.trim().take(Snippets.TEXT_LIMIT)
+                                            if (stored.isNotEmpty() && next.any { it.text == stored }) {
+                                                if (next != snippets) {
+                                                    snippetStore.write(next)
+                                                    snippets = next
+                                                }
+                                                savedToken += 1
+                                            }
+                                        },
+                                    )
+                                    if (snippets.isEmpty()) {
+                                        Text(
+                                            "No snippets yet",
+                                            modifier = Modifier.fillMaxWidth().padding(horizontal = Kit.SideChange, vertical = 14.dp),
+                                            style = Kit.Body,
+                                            color = Kit.TextMuted,
+                                        )
+                                    } else {
+                                        KitDivider()
+                                        snippets.forEach { snippet ->
+                                            key(snippet.text) {
+                                                Row(
+                                                    Modifier.fillMaxWidth().heightIn(min = Kit.RowHeight),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                ) {
+                                                    KitListRow(
+                                                        label = snippet.name,
+                                                        modifier = Modifier.weight(1f),
+                                                        onClick = {
+                                                            setPrompt(snippet.text)
+                                                            attachMenuSection = null
+                                                            attachMenuExpanded = false
+                                                            promptFocusRequester.requestFocus()
+                                                        },
+                                                    )
+                                                    Box(
+                                                        Modifier
+                                                            .heightIn(min = Kit.RowHeight)
+                                                            .clickable(role = Role.Button) {
+                                                                val next = Snippets.delete(snippets, snippet.text)
+                                                                snippetStore.write(next)
+                                                                snippets = next
+                                                            }
+                                                            .padding(end = Kit.SideChange),
+                                                        contentAlignment = Alignment.Center,
+                                                    ) {
+                                                        Text("Delete", style = Kit.Hint, color = Kit.Danger)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else if (piModelMenu) {
                                     val currentModel = connection.hostSettings()?.model?.takeIf { it.isNotEmpty() } ?: runtimeDetails.model
                                     LaunchedEffect(connection) { connection.loadPiModels() }
                                     KitMenuRow(
@@ -4480,6 +4563,14 @@ internal fun ReaderScreen(
                                             },
                                         )
                                     }
+                                    KitMenuRow(
+                                        label = "Snippets",
+                                        trailingText = "›",
+                                        onClick = {
+                                            snippets = snippetStore.load()
+                                            attachMenuSection = "Snippets"
+                                        },
+                                    )
                                     if (session.agent == AgentKind.PI) {
                                         KitDivider()
                                         KitMenuRow(

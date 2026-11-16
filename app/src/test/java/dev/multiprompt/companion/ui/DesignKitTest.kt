@@ -309,6 +309,17 @@ class DesignKitTest {
     }
 
     @Test
+    fun savedNoteIsASurfacePillWithAnOutline() {
+        compose.setContent {
+            Page { KitSavedNote(Modifier.testTag("saved"), fade = false) }
+        }
+        val bitmap = capture("saved")
+        assertPixel(bitmap, 14, bitmap.height / 2, Kit.Surface, "saved fill")
+        assertPixel(bitmap, bitmap.width / 2, 0, Kit.Outline, "saved outline")
+        compose.onNodeWithText("Saved").assertExists()
+    }
+
+    @Test
     fun kitFileUsesOnlyReaderTokens() {
         val source = File("src/main/java/dev/multiprompt/companion/ui/DesignKit.kt").readText()
         listOf("MaterialTheme", "colorScheme", "DropdownMenu", "AlertDialog", "Color(0x").forEach {
