@@ -412,6 +412,20 @@
       "outcomes": [
         "terminal.journey"
       ]
+    },
+    "chat-identity.md": {
+      "name": "Message identity and replies",
+      "description": "Phone send receipts, delayed transcript catchup, Fresh start format and reconnect keep each message with its reply once.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "chat.identity"
+      ]
     }
   },
   "outcomes": {
@@ -750,6 +764,14 @@
       "journey": null,
       "sideEffect": true,
       "match": []
+    },
+    "chat.identity": {
+      "description": "Each canonical phone message appears once and keeps its reply across transcript catchup, Fresh start and reconnect.",
+      "journey": "chat-identity.md",
+      "sideEffect": true,
+      "match": [
+        "ChatHistory\\.kt|HostStream\\.kt|MessageProtocol\\.kt|projectMessages|LegacyMessageIdentity"
+      ]
     }
   }
 }

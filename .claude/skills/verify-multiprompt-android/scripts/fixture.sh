@@ -56,6 +56,11 @@ if [[ "${VERIFY_FEATURE:-}" == chat-codex.md ]]; then
     sudo -u verifyssh tmux new-session -d -s claude-control -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/codex-console.py /home/verifyssh/claude-receipts.txt claude'
     sudo -u verifyssh tmux set-window-option -t claude-control automatic-rename off
     sudo -u verifyssh tmux rename-window -t claude-control claude-control
+elif [[ "${VERIFY_FEATURE:-}" == chat-identity.md ]]; then
+    sudo install -m 755 tools/message-projection/fixture.py /home/verifyssh/projection-fixture.py
+    sudo install -m 644 app/src/main/assets/chat_history_reader.py /home/verifyssh/projection-reader.py
+    sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'env GITHUB_ACTIONS=true HOME=/home/verifyssh /home/verifyssh/claude -u /home/verifyssh/projection-fixture.py console'
 elif [[ "${VERIFY_FEATURE:-}" == session-summaries.md ]]; then
     sudo install -m 755 tools/session-summaries/console.py /home/verifyssh/summary-console.py
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude

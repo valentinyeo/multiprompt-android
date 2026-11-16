@@ -1091,6 +1091,53 @@ if [[ "$feature" == sessions.md ]]; then
     exit 0
 fi
 tap_text verify-session
+if [[ "$feature" == chat-identity.md ]]; then
+    wait_for_text PROJECTION_READY_2532
+    projection_event() {
+        sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/projection-fixture.py "$1"
+    }
+    projection_assert() {
+        projection_event read > "$EVIDENCE/projection-receipts-$1.json"
+        shot "projection-$1"
+        python3 tools/message-projection/ui.py "$EVIDENCE/current.xml" "$EVIDENCE/projection-receipts-$1.json" "$1" > "$EVIDENCE/projection-state-$1.json"
+    }
+    fill 'Message verify-session' PHONE_BEFORE_2532
+    shot projection-before-draft
+    tap_desc 'Send prompt'
+    for attempt in {1..20}; do
+        if projection_event accept-before > "$EVIDENCE/projection-accepted-before.json"; then break; fi
+        sleep 1
+    done
+    wait_for_text REPLY_BEFORE_2532
+    adb shell input keyevent KEYCODE_BACK
+    projection_assert before
+    fill 'Message verify-session' PHONE_AFTER_2532
+    shot projection-after-draft
+    tap_desc 'Send prompt'
+    for attempt in {1..20}; do
+        if projection_event accept-after > "$EVIDENCE/projection-accepted-after.json"; then break; fi
+        sleep 1
+    done
+    wait_for_text REPLY_AFTER_2532
+    adb shell input keyevent KEYCODE_BACK
+    projection_assert fresh
+    projection_event catchup > "$EVIDENCE/projection-catchup-receipts.json"
+    adb shell input keyevent KEYCODE_BACK
+    wait_for_text Inbox
+    tap_text All
+    tap_text verify-session
+    wait_for_text REPLY_AFTER_2532
+    projection_assert catchup
+    adb shell am force-stop "$package"
+    adb shell am start -n "$package/dev.multiprompt.companion.MainActivity"
+    wait_for_text Inbox
+    tap_text All
+    tap_text verify-session
+    wait_for_text REPLY_AFTER_2532
+    projection_assert reconnect
+    printf 'MESSAGE_PROJECTION_RECEIPTS_AND_ROWS_OK\n' | tee "$EVIDENCE/projection-proof.txt"
+    exit 0
+fi
 if [[ "$feature" == chat-shared.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true ]]
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py engine-info > "$EVIDENCE/shared-engine-info.json"

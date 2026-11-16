@@ -1,0 +1,20 @@
+# Each phone message and its reply shows once
+
+Dispatch `verify.yml` with `feature=chat-identity.md` on the PR branch. The hosted emulator imports and trusts the ephemeral SSH host through the real Android forms, then opens `verify-session`.
+
+## Journey
+
+1. Send `PHONE_BEFORE_2532` from the phone. The isolated SSH fixture reads the admitted phone ID and records an acceptance receipt, a native transcript user row, and host reply events. The transcript reply deliberately lags behind the live reply. Require one phone message above one `REPLY_BEFORE_2532`.
+2. Send `PHONE_AFTER_2532`. The fixture replays the desktop Fresh start format with a divider, the phone ID as the native user ID, a timestamp without a timezone, and host reply events without native UUID aliases. Require the old reply above the divider, then one new phone message above one new reply.
+3. Let the native transcript catch up with both replies. Reopen the chat and require the same order and counts despite competing card, transcript and host-stream representations.
+4. Force-stop and relaunch Android, then reopen the chat. Require the same identities, counts and reply order after reconnect.
+
+`projection-receipts-*.json` retains independent SSH-store acceptance IDs, host events and real JSONL transcript rows. `projection-state-*.json` records the visible order and counts derived from XML. The driver retains Send actions, draft and result PNG/XML pairs, and cleanup retains `receipts.txt`.
+
+The fixture uses the real protocol store and transcript reader over SSH. It does not call app setters. It synthesizes provider output and the desktop Fresh start handover; it does not prove the Fresh start menu action or a live model restart. Equal bodies with different IDs, CRLF, ten delayed replies, native-fact overlap and cross-session isolation are covered by `MessageProjectionTest` on GitHub.
+
+## Historical controls and remaining legacy cases
+
+`tools/message-projection/check.test.py` rejects the actual source before #77 (`ce2d32d9`) and #312 (`e31c9c4d`). GitHub's historical JVM replay runs the collision, CRLF, retained reply, host-ID and Fresh start fixtures against the five pre-fix implementations. Compile failures are not accepted as red proof; each replay must produce its named assertion failure.
+
+`tools/message-projection/baseline.json` names each remaining old text-match path separately. Shared sends without receipt aliases use timestamp plus normalized text. Legacy delivered sends use a delivery receipt plus source location and normalized text. Old host replies without phone ownership use completed normalized text. ID-less native local intentions remain explicitly unconfirmed and separate because text alone cannot establish delivery. New paths cannot expand those allowances.

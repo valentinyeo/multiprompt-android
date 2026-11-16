@@ -334,7 +334,7 @@ class ChatHistoryActorTest {
             assertEquals(0, f.dismissCalls)
             assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
             assertEquals(1, f.resetCalls)
-            assertTrue(owner.state.value.history.managedMessages(owner.state.value.replica, owner.state.value.unresolved).none { it.text == "hello" })
+            assertTrue(owner.state.value.history.projectMessages(owner.state.value.replica, owner.state.value.unresolved).none { it.text == "hello" })
         } finally { owner.close() }
     }
 
@@ -364,7 +364,7 @@ class ChatHistoryActorTest {
                 assertEquals(entry.id, f.journal.entries().single().id)
                 f.nativeRows = listOf(native(1, "first", 0), native(2, "second", 1))
                 val recovered = withTimeout(15_000) { owner.state.first { !it.retrying && it.replica?.cursor == 2L } }
-                assertEquals(listOf("first", "second"), recovered.history.managedMessages(recovered.replica, recovered.unresolved).map { it.text })
+                assertEquals(listOf("first", "second"), recovered.history.projectMessages(recovered.replica, recovered.unresolved).map { it.text })
                 assertEquals(2, recovered.replica?.nativeFacts?.size)
                 assertEquals(entry.id, f.journal.entries().single().id)
             } finally { owner.close() }
@@ -379,7 +379,7 @@ class ChatHistoryActorTest {
         val owner = f.connection()
         try {
             owner.select(true); owner.start(); f.ready(owner)
-            assertTrue(owner.state.value.history.managedMessages(owner.state.value.replica, owner.state.value.unresolved).none { it.text == "hello" })
+            assertTrue(owner.state.value.history.projectMessages(owner.state.value.replica, owner.state.value.unresolved).none { it.text == "hello" })
             assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.replayUnknown(entry.id) })
             assertEquals(entry.id, f.lastRetryId)
             assertTrue(f.journal.entries().isEmpty())
@@ -659,11 +659,11 @@ class ChatHistoryActorTest {
                 owner.select(true); owner.start()
                 val ready = withTimeout(10_000) { owner.state.first {
                     it.replica != null && it.history.sid == f.sid && it.unresolved.isEmpty() &&
-                        it.history.managedMessages(it.replica, it.unresolved).any { message -> message.text == "native existing" }
+                        it.history.projectMessages(it.replica, it.unresolved).any { message -> message.text == "native existing" }
                 } }
                 assertTrue(ready.unresolved.isEmpty())
-                assertTrue(ready.history.managedMessages(ready.replica, ready.unresolved).any { it.text == "native existing" })
-                if (state == "accepted") assertTrue(ready.history.managedMessages(ready.replica, ready.unresolved).any { it.text == "existing" })
+                assertTrue(ready.history.projectMessages(ready.replica, ready.unresolved).any { it.text == "native existing" })
+                if (state == "accepted") assertTrue(ready.history.projectMessages(ready.replica, ready.unresolved).any { it.text == "existing" })
                 assertEquals(0, f.submitCalls); assertEquals(0, f.retryCalls); assertEquals(0, f.dismissCalls)
                 assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
                 if (state == "accepted") assertEquals("accepted", f.row!!.getString("state"))
@@ -835,7 +835,7 @@ class ChatHistoryActorTest {
                 owner.select(true); owner.start()
                 val ready = f.ready(owner)
                 assertEquals(setOf(submit.id, dismiss.id), f.journal.entries().map { it.id }.toSet())
-                assertTrue(ready.history.managedMessages(ready.replica, ready.unresolved).any { it.text == "original" })
+                assertTrue(ready.history.projectMessages(ready.replica, ready.unresolved).any { it.text == "original" })
                 assertEquals(MessageActionResult.Rejected("Message changed"), owner.removeUnknown(submit.id))
                 assertEquals(0, f.dismissCalls)
                 assertEquals(0, f.submitCalls)
@@ -931,10 +931,10 @@ class ChatHistoryActorTest {
                 assertEquals(MessageActionResult.Rejected("Could not remove message"), withTimeout(10_000) { removal.await() })
                 val refreshed = withTimeout(10_000) { owner.state.first {
                     it.replica?.messages?.get(submit.id)?.state?.name?.lowercase() == state && it.unresolved.isEmpty() &&
-                        it.history.managedMessages(it.replica, it.unresolved).any { message -> message.text == "real transcript" }
+                        it.history.projectMessages(it.replica, it.unresolved).any { message -> message.text == "real transcript" }
                 } }
-                assertTrue(refreshed.history.managedMessages(refreshed.replica, refreshed.unresolved).any { it.text == "real work" })
-                assertTrue(refreshed.history.managedMessages(refreshed.replica, refreshed.unresolved).any { it.text == "real transcript" })
+                assertTrue(refreshed.history.projectMessages(refreshed.replica, refreshed.unresolved).any { it.text == "real work" })
+                assertTrue(refreshed.history.projectMessages(refreshed.replica, refreshed.unresolved).any { it.text == "real transcript" })
                 assertEquals(state, f.row!!.getString("state"))
                 assertEquals(0, f.submitCalls)
                 assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
@@ -962,7 +962,7 @@ class ChatHistoryActorTest {
                 val recovered = f.connection(); second = recovered
                 recovered.select(true); recovered.start()
                 val refreshed = withTimeout(10_000) { recovered.state.first { it.replica?.messages?.get(submit.id)?.state == MessageProtocol.State.ACCEPTED && it.unresolved.isEmpty() } }
-                assertTrue(refreshed.history.managedMessages(refreshed.replica, refreshed.unresolved).any { it.text == "accepted work" })
+                assertTrue(refreshed.history.projectMessages(refreshed.replica, refreshed.unresolved).any { it.text == "accepted work" })
                 assertEquals(1, f.dismissCalls)
                 assertEquals(0, f.submitCalls)
                 assertEquals(MessageActionResult.Applied, withTimeout(10_000) { recovered.resetConversation().await() })
@@ -1037,9 +1037,9 @@ class ChatHistoryActorTest {
                 owner.select(true); owner.start()
                 val ready = withTimeout(10_000) { owner.state.first {
                     it.replica != null && it.history.sid == f.sid &&
-                        it.history.managedMessages(it.replica, it.unresolved).any { message -> message.text == "native accepted" }
+                        it.history.projectMessages(it.replica, it.unresolved).any { message -> message.text == "native accepted" }
                 } }
-                assertTrue(ready.history.managedMessages(ready.replica, ready.unresolved).any { it.text == "native accepted" })
+                assertTrue(ready.history.projectMessages(ready.replica, ready.unresolved).any { it.text == "native accepted" })
                 assertEquals(MessageActionResult.BlockedRecovery, withTimeout(10_000) { owner.resetConversation().await() })
                 assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.replayUnknown(entry.id) })
                 assertEquals(messageId, f.lastDismiss!!.getString("message_id"))
@@ -1050,9 +1050,9 @@ class ChatHistoryActorTest {
                 assertEquals(0, f.submitCalls); assertEquals(0, f.retryCalls)
                 val after = withTimeout(10_000) { owner.state.first {
                     it.replica?.messages?.get(messageId)?.state == MessageProtocol.State.ACCEPTED && it.unresolved.isEmpty() &&
-                        it.history.managedMessages(it.replica, it.unresolved).any { message -> message.text == "native accepted" }
+                        it.history.projectMessages(it.replica, it.unresolved).any { message -> message.text == "native accepted" }
                 } }
-                assertTrue(after.history.managedMessages(after.replica, after.unresolved).any { it.text == "native accepted" })
+                assertTrue(after.history.projectMessages(after.replica, after.unresolved).any { it.text == "native accepted" })
                 assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
                 assertEquals("accepted", f.row!!.getString("state"))
             } finally { owner.close() }
@@ -1186,11 +1186,11 @@ class ChatHistoryActorTest {
                 val queued = withTimeout(10_000) {
                     owner.state.first { it.replica?.messages?.get(id)?.state == MessageProtocol.State.QUEUED && it.unresolved.isEmpty() }
                 }
-                assertTrue(queued.history.managedMessages(queued.replica, queued.unresolved).any { it.requestId == id })
+                assertTrue(queued.history.projectMessages(queued.replica, queued.unresolved).any { it.requestId == id })
                 assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
                 val reset = withTimeout(10_000) { owner.state.first { it.replica?.epoch == 2L } }
                 assertEquals(MessageProtocol.State.CANCELLED, reset.replica?.messages?.get(id)?.state)
-                assertFalse(reset.history.managedMessages(reset.replica, reset.unresolved).any { it.requestId == id })
+                assertFalse(reset.history.projectMessages(reset.replica, reset.unresolved).any { it.requestId == id })
                 assertEquals(1, f.submitCalls)
                 assertEquals(1, f.resetCalls)
             } finally { owner.close() }

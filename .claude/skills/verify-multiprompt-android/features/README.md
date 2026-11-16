@@ -62,6 +62,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `sign-in.journey`. Runner: `verify.yml` (debug).
 - [Terminal](terminal.md): real SSH PTY/tmux fallback attachment.
   - Outcomes: `terminal.journey`. Runner: `verify.yml` (debug).
+- [Message identity and replies](chat-identity.md): Phone send receipts, delayed transcript catchup, Fresh start format and reconnect keep each message with its reply once.
+  - Outcomes: `chat.identity`. Runner: `verify.yml` (debug).
 
 ## Initial coverage gaps
 
