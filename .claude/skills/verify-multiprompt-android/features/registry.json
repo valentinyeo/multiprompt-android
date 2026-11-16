@@ -128,7 +128,8 @@
         "driver": true
       },
       "outcomes": [
-        "chat-shared.journey"
+        "chat-shared.journey",
+        "chat.link-recovery"
       ]
     },
     "chat-working.md": {
@@ -750,6 +751,14 @@
       "journey": null,
       "sideEffect": true,
       "match": []
+    },
+    "chat.link-recovery": {
+      "description": "A dropped SSH link shows a host error and Retry; a waiting prompt enters the host store exactly once after the link returns without another Send tap.",
+      "journey": "chat-shared.md",
+      "sideEffect": true,
+      "match": [
+        "ConversationLoad|PendingPrompts|ChatHistoryConnection|WaitingForConnection"
+      ]
     }
   }
 }

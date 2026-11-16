@@ -347,10 +347,7 @@ class ChatHistoryConnection(
                             var replicaSid: String? = null
                             var wasOlder = false
                             val checked = mutableSetOf<String>()
-                            val engine = if (provider != null) runCatching {
-                                requestId++
-                                MessageProtocol.engine(exchange(JSONObject().put("id", requestId).put("op", "engine_info").toString() + "\n"), requestId)
-                            }.getOrNull() else null
+                            var engine: Pair<Long, String>? = null
                             poll@ while (isActive) {
                                 if (ChatPollGate.step(selected) == ChatPollGate.Step.WAIT_FOR_WAKE) {
                                     wake.receive()
@@ -379,7 +376,15 @@ class ChatHistoryConnection(
                                 } ?: continue@poll
                                 connectionGeneration = cycleGeneration
                                 synchronized(this@ChatHistoryConnection) {
-                                    if (generation == cycleGeneration) _state.value = _state.value.copy(history = next, loaded = true)
+                                    if (generation == cycleGeneration) {
+                                        val previous = _state.value
+                                        _state.value = if (previous.history.sid == next.sid) previous.copy(history = next, loaded = true)
+                                            else ChatHistoryState(next, loaded = true)
+                                    }
+                                }
+                                if (provider != null && engine == null) {
+                                    requestId++
+                                    engine = MessageProtocol.engine(exchange(JSONObject().put("id", requestId).put("op", "engine_info").toString() + "\n"), requestId)
                                 }
                                 val messageScope = if (provider != null && engine != null) wire(page.sid) else null
                                 if (messageScope != null) {

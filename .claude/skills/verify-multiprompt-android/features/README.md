@@ -25,7 +25,7 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Legacy resync](chat-resync.md): historical held-queue proof; not host Reset proof.
   - Outcomes: `chat-resync.journey`. Runner: `verify.yml` (debug).
 - [Shared chat store](chat-shared.md): synthetic SSH store admission and host Reset, retaining both drafts.
-  - Outcomes: `chat-shared.journey`. Runner: `verify.yml` (debug).
+  - Outcomes: `chat-shared.journey`, `chat.link-recovery`. Runner: `verify.yml` (debug).
 - [Working dots on the signed release](chat-working.md): quiet tools, lock/unlock, real SSH reconnect, recording and timed visible-state samples. Uses `working-dots.yml`.
   - Outcomes: `chat-working.journey`. Runner: `working-dots.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Changed host key](host-changed-key.md): compare a rotated identity, persist Not now and refuse authentication.

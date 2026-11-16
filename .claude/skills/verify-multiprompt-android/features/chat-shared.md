@@ -40,3 +40,18 @@ This tests Android, SSH and the canonical store.
 Native provider pickup needs separate proof.
 Desktop UI needs separate proof.
 Production sessions need separate proof.
+
+## Dropped chat link
+
+Outcome `chat.link-recovery` uses this same head journey.
+After the transcript opens, the driver drops fixture SSH traffic on port 2222 in both directions.
+The phone must show a host error and **Retry** instead of silently waiting.
+The driver taps **Send** once while the link is down.
+The waiting bubble must appear, and an independent host-store read must show no admission.
+The driver restores traffic without another Send or Retry tap.
+Exactly one host row must appear, the waiting label and error must disappear, and the draft must clear only after admission.
+
+Inspect `shared-link-down-host.json`, `shared-phone.json`, the `shared-link-*` XML and PNG captures, firewall counters, and `driver-transcript.txt`.
+The EXIT trap restores the fixture traffic even on failure.
+The historical missing-shared-store negative control skips this new probe.
+This proves a dropped SSH link, not physical mobile data, process-death recovery, or background sending.

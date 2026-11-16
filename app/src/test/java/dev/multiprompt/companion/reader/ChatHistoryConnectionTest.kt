@@ -163,6 +163,7 @@ class ChatHistoryConnectionTest {
         @Volatile var hangAt = -1
         @Volatile var online = true
         @Volatile var hangSnapshot = false
+        @Volatile var rejectEngine = false
         val submissions = java.util.concurrent.CopyOnWriteArrayList<String>()
         private val submitted = java.util.concurrent.CopyOnWriteArrayList<JSONObject>()
         private val digest = "b".repeat(64)
@@ -189,9 +190,12 @@ class ChatHistoryConnectionTest {
                 val request = JSONObject(line)
                 val id = request.getLong("id")
                 when (request.optString("op")) {
-                    "engine_info" -> JSONObject().put("id", id)
-                        .put("engine_info", JSONObject().put("protocol", 1).put("generation", 53).put("sha256", digest))
-                        .put("message_protocols", JSONArray().put(1)).toString()
+                    "engine_info" -> {
+                        if (rejectEngine) throw java.io.IOException("Engine handshake failed")
+                        JSONObject().put("id", id)
+                            .put("engine_info", JSONObject().put("protocol", 1).put("generation", 53).put("sha256", digest))
+                            .put("message_protocols", JSONArray().put(1)).toString()
+                    }
                     "message_snapshot" -> {
                         if (hangSnapshot) kotlinx.coroutines.awaitCancellation()
                         result(id, JSONObject().put("snapshot_id", "snap").put("epoch", 1).put("seq", head)
@@ -248,10 +252,29 @@ class ChatHistoryConnectionTest {
     }
 
     @Test
+    fun failedEngineHandshakeRetriesInsteadOfDisablingMessagingForTheConnection(): Unit = runBlocking {
+        val fake = FakeHost().apply { rejectEngine = true }
+        ChatHistoryConnection(repository(), host, ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd"),
+            byteArrayOf(), ChatHistoryCache(temporary.newFolder()), gate = MessageGate(), connectedExchange = { fake.connect(it) }).use { chat ->
+            chat.select(true)
+            chat.start()
+            val failed = withTimeout(5_000L) { chat.state.first { it.retrying } }
+            assertTrue(failed.loaded)
+            assertEquals("question", failed.history.rows.single().text)
+            assertFalse(failed.ready)
+            assertNotNull(failed.connectionError)
+            fake.rejectEngine = false
+            chat.nudge()
+            withTimeout(5_000L) { chat.state.first { it.ready && it.engine != null } }
+            assertNull(chat.state.value.messageError)
+        }
+    }
+
+    @Test
     fun readerFlushesWaitingMessagesAfterInitialFailureAndAfterAnotherDroppedLink(): Unit = runBlocking {
         val fake = FakeHost().apply { online = false }
         val cache = ChatHistoryCache(temporary.newFolder())
-        val preferences = RuntimeEnvironment.getApplication<Application>().getSharedPreferences("pending-${java.util.UUID.randomUUID()}", 0)
+        val preferences = RuntimeEnvironment.getApplication().getSharedPreferences("pending-${java.util.UUID.randomUUID()}", 0)
         val chat = ChatHistoryConnection(repository(), host, ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd"),
             byteArrayOf(), cache, journal = MessageJournal(preferences), gate = MessageGate(), connectedExchange = { fake.connect(it) })
         SessionReaderConnection(repository(), host, "tmux", AgentKind.CLAUDE, byteArrayOf(), cache).use { reader ->
