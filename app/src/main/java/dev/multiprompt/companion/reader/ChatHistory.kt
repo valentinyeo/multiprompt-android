@@ -179,9 +179,10 @@ data class ChatHistory(
         unmatched.filter { it.turn != host.turn }.forEach(::appendReply)
         cards.filter { it.message.key !in placed && it.visible }.forEach { append(it.message) }
         replies.values.flatten().forEach(::appendReply)
-        unresolved.filter { it.operation == "submit" && it.scope.sid == sid && it.messageId !in scoped.map { row -> row.id } }.forEach { entry ->
-            val key = "@shared:${entry.messageId}"
-            if (projected.values.none { it.role == "user" && it.requestId == entry.messageId }) {
+        val canonical = scoped.associateBy { it.id }
+        unresolved.filter { it.operation == "submit" && it.scope.sid == sid && canonical[it.messageId]?.text != it.text }.forEach { entry ->
+            val key = if (entry.messageId in canonical) "@unknown:${entry.id}" else "@shared:${entry.messageId}"
+            if (projected.values.none { it.role == "user" && it.requestId == entry.messageId && it.text == entry.text }) {
                 projected[key] = ChatHistoryMessage(key, "user", entry.text.orEmpty(), "", 0, 0, entry.messageId,
                     delivery = if (offline) NOT_SENT else null, unknownId = entry.id)
             }

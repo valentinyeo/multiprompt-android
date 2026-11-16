@@ -24,6 +24,7 @@ Requires JDK 17 and Android SDK 36. Before every push run `tools/check.sh`: it i
 |---|---|
 | Never push code that does not compile or pass tests | `tools/check.sh` in `test.yml` |
 | No code comments (license headers and tool directives allowed) | `tools/strip-comments.mjs --check` in `tools/check.sh` |
+| An old-screen check builds that complete revision in its own worktree, or uses a retained APK. Do not copy old source into the current app | `tools/historical_control.py` in `tools/check.sh`; `tools/check-session-pins.sh` builds commit `93f137d8` |
 | Changed product outcomes need matching head-journey action/result proof at the exact APK SHA; smoke is not coverage. Initial gaps do not exempt future changes | `features/registry.json`, `coverage.cjs` ratchet in `test.yml`, and structured artifact validation in `pstack-verifier` |
 | One registry owns verification recipes, picker eligibility and dispatch options | `coverage.cjs check` in `tools/check.sh` and `test.yml` |
 | Journey taps resolve an enabled action in the active window, reveal its full clickable bounds and scroll the matching axis; new raw taps are forbidden | `journey_action.py` through `drive.sh tap_node`, `tools/journey-actions/check.py` baseline ratchet and `action.test.py` historical replays in `tools/check.sh` |

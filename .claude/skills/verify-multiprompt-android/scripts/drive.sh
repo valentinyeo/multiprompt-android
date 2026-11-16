@@ -1109,7 +1109,6 @@ if [[ "$feature" == chat-identity.md ]]; then
         sleep 1
     done
     wait_for_text REPLY_BEFORE_2532
-    adb shell input keyevent KEYCODE_BACK
     projection_assert before
     fill 'Message verify-session' PHONE_AFTER_2532
     shot projection-after-draft
@@ -1119,7 +1118,6 @@ if [[ "$feature" == chat-identity.md ]]; then
         sleep 1
     done
     wait_for_text REPLY_AFTER_2532
-    adb shell input keyevent KEYCODE_BACK
     projection_assert fresh
     projection_event catchup > "$EVIDENCE/projection-catchup-receipts.json"
     adb shell input keyevent KEYCODE_BACK

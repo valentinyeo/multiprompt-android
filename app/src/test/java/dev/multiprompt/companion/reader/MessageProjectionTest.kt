@@ -102,6 +102,22 @@ class MessageProjectionTest {
         assertEquals(listOf("different-id", id(1)), history.projectMessages(replica).filter { it.role == "user" }.map { it.requestId })
     }
 
+    @Test fun aConflictingReceiptCannotEraseTheUnconfirmedLocalIntention() {
+        val scope = MessageProtocol.Scope("claude", sid, "verify-session")
+        val journal = MessageJournal.Entry("submit-proof", "account", scope, "submit", id(1), "original")
+        for (state in listOf(MessageProtocol.State.ACCEPTED, MessageProtocol.State.CANCELLED)) {
+            val other = row(1).copy(text = "different", state = state)
+            val replica = MessageReplica(1, 1, mapOf(other.id to other))
+            val drawn = ChatHistory(sid = sid, inode = 7).projectMessages(replica, listOf(journal))
+            val local = drawn.single { it.unknownId == journal.id }
+            assertEquals("original", local.text)
+            assertEquals("@unknown:${journal.id}", local.key)
+            assertEquals(drawn.size, drawn.map { it.key }.toSet().size)
+            assertEquals(if (state == MessageProtocol.State.ACCEPTED) listOf("different") else emptyList<String>(),
+                drawn.filter { it.unknownId == null }.map { it.text })
+        }
+    }
+
     @Test fun anotherSessionCannotClaimAnEqualBodyOrAppendAJournalEcho() {
         val other = row(1).copy(sid = "other-session")
         val journal = MessageJournal.Entry("submit-proof", "account", MessageProtocol.Scope("claude", "other-session", "verify-session"), "submit", other.id, "same")
