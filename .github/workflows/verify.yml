@@ -278,6 +278,9 @@ jobs:
         run: |
           python3 -m pip install Pillow
           python3 .claude/skills/verify-multiprompt-android/scripts/reactions.test.py
+      - name: Check terminal input oracle and selectors
+        if: env.VERIFY_FEATURE == 'terminal.md'
+        run: python3 -B tools/terminal-console.test.py
       - name: Check recovery UI oracle
         id: recovery-oracle
         continue-on-error: ${{ inputs.side == 'parent' }}
