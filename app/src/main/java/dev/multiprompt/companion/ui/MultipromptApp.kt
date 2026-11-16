@@ -4282,7 +4282,7 @@ internal fun ReaderScreen(
                 }
                 if (skillQuery != null && !dictationActive) {
                     NativeSkillPicker(
-                        skills = NativeSkills.matches(reader.nativeSkills, skillQuery),
+                        skills = NativeSkills.menu(reader.nativeSkills, skillQuery),
                         loading = reader.skillsLoading,
                         error = reader.skillsError,
                         onRetry = loadSkills,
@@ -5940,11 +5940,15 @@ private fun NativeSkillPicker(
     onSelect: (NativeSkill) -> Unit,
 ) {
     ComposerList {
-        when {
-            loading -> ComposerListNote("Loading session skills…")
-            error != null -> ComposerListNote(error, onClick = onRetry)
-            skills.isEmpty() -> ComposerListNote("No matching session skills")
-            else -> skills.forEach { skill ->
+        if (skills.isEmpty()) {
+            when {
+                loading -> ComposerListNote("Loading session skills…")
+                error != null -> ComposerListNote(error, onClick = onRetry)
+                else -> ComposerListNote("No matching session skills")
+            }
+        } else {
+            if (error != null) ComposerListNote(error, onClick = onRetry)
+            skills.forEach { skill ->
                 Column(
                     Modifier.fillMaxWidth().heightIn(min = Kit.RowHeight).clickable(role = Role.Button) { onSelect(skill) }
                         .padding(horizontal = Kit.SideChange, vertical = 8.dp),
