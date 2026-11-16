@@ -352,6 +352,20 @@
         "session-settings.journey"
       ]
     },
+    "session-stop.md": {
+      "name": "Stop while the chat works",
+      "description": "Stop replaces Send while a chat is working and the box is empty. Typing brings Send back. Stop interrupts the session.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "reader.stop-while-working"
+      ]
+    },
     "session-summaries.md": {
       "name": "Useful inbox summaries",
       "description": "Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.",
@@ -567,6 +581,14 @@
       "sideEffect": true,
       "match": [
         "SessionReaderConnection"
+      ]
+    },
+    "reader.stop-while-working": {
+      "description": "While a chat is working and the message box is empty, Stop replaces Send. Typing brings Send back, and Stop interrupts the session.",
+      "journey": "session-stop.md",
+      "sideEffect": true,
+      "match": [
+        "composerSlot|stopShown"
       ]
     },
     "session-routing.journey": {
