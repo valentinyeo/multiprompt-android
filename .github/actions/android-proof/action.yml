@@ -10,6 +10,9 @@ inputs:
   stage:
     description: Unique stage name within the job
     default: proof
+  audio:
+    description: Leave the emulator microphone available
+    default: 'false'
 runs:
   using: composite
   steps:
@@ -38,6 +41,16 @@ runs:
         sudo udevadm control --reload-rules
         sudo udevadm trigger --name-match=kvm
         test -r /dev/kvm && test -w /dev/kvm
+        if [[ "${VERIFY_FEATURE:-}" == dictation-cancel.md ]]; then
+          if ! command -v pulseaudio >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y pulseaudio
+          fi
+          timeout 15s pulseaudio --start --exit-idle-time=-1 || true
+          if command -v pactl >/dev/null 2>&1; then
+            timeout 10s pactl load-module module-null-source source_name=verify_silence || true
+            timeout 10s pactl set-default-source verify_silence || true
+          fi
+        fi
         mkdir -p "$RUNNER_TEMP/android-proof"
         free -m | tee "$RUNNER_TEMP/android-proof/memory-before.txt"
         df -h "$ANDROID_HOME" | tee "$RUNNER_TEMP/android-proof/disk-before.txt"
@@ -54,7 +67,7 @@ runs:
         ram-size: 2048M
         disk-size: 2G
         disable-animations: true
-        emulator-options: -no-window -gpu swangle_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -feature -Vulkan -verbose > /tmp/android-proof-emulator.log 2>&1
+        emulator-options: ${{ inputs.audio == 'true' && '-no-window -gpu swangle_indirect -no-snapshot -no-boot-anim -camera-back none -feature -Vulkan -verbose > /tmp/android-proof-emulator.log 2>&1' || '-no-window -gpu swangle_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -feature -Vulkan -verbose > /tmp/android-proof-emulator.log 2>&1' }}
         pre-emulator-launch-script: bash "$ANDROID_PROOF_ACTION/emulator.sh"
         script: bash "$ANDROID_PROOF_ACTION/run.sh"
     - name: Retain emulator host and exit evidence

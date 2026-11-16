@@ -781,6 +781,7 @@ fi
 
 if [[ "$feature" == dictation-cancel.md ]]; then
     adb shell pm grant "$package" android.permission.RECORD_AUDIO
+    timeout 5s adb emu avd hostmicon > "$EVIDENCE/microphone.txt" 2>&1 || true
     blocked=0
     while read -r ip; do
         [[ "$ip" =~ ^[0-9A-Fa-f:.]+$ ]] || continue

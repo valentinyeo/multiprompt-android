@@ -600,7 +600,8 @@
       "journey": "dictation-cancel.md",
       "sideEffect": false,
       "match": [
-        "dictation-cancel|Cancel dictation"
+        "dictation-cancel|Cancel dictation",
+        "DictationLinks|DICTATION_LISTEN_URL"
       ]
     },
     "inbox.draft": {
