@@ -12,7 +12,7 @@ class NotSentTest {
     private val created = 1_000.0
 
     private fun drawn(state: MessageProtocol.State, now: Double?, unresolved: List<MessageJournal.Entry> = emptyList(), offline: Boolean = false, seen: Map<String, Double> = emptyMap()) =
-        ChatHistory(sid = sid, inode = 1, offset = 100).managedMessages(
+        ChatHistory(sid = sid, inode = 1, offset = 100).projectMessages(
             MessageReplica(1, 1, mapOf(id to MessageProtocol.Row(id, "claude", sid, "hello", 1, "attempt", state, null, null, 1, created))),
             unresolved, now, offline, seen,
         )

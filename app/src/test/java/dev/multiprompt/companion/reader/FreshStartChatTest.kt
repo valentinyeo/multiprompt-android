@@ -27,14 +27,14 @@ class FreshStartChatTest {
     @Test fun aPhoneMessageSentAfterFreshStartShowsOnce() {
         val replica = MessageReplica(1, 1, mapOf(older to card(older, 1, "before restart"), newer to card(newer, 2, "after restart")))
 
-        val drawn = ChatHistory(sid = sid, inode = 7, offset = 0, rows = rows()).managedMessages(replica, emptyList())
+        val drawn = ChatHistory(sid = sid, inode = 7, offset = 0, rows = rows()).projectMessages(replica, emptyList())
 
         assertEquals(listOf("before restart", "old answer", divider, "after restart", "new answer"), drawn.map { it.text })
         assertEquals(listOf("@shared:$older", "@shared:$newer"), drawn.filter { it.role == "user" }.map { it.key })
     }
 
     @Test fun olderMessagesStayAboveTheDividerWithoutCards() {
-        val drawn = ChatHistory(sid = sid, inode = 7, offset = 0, rows = rows()).managedMessages(null, emptyList())
+        val drawn = ChatHistory(sid = sid, inode = 7, offset = 0, rows = rows()).projectMessages(null, emptyList())
 
         assertEquals(listOf("before restart", "old answer", divider, "after restart", "new answer"), drawn.map { it.text })
     }
@@ -43,7 +43,7 @@ class FreshStartChatTest {
         val queued = card(newer, 2, "after restart").copy(state = MessageProtocol.State.QUEUED)
         val replica = MessageReplica(1, 1, mapOf(older to card(older, 1, "before restart"), newer to queued))
 
-        val drawn = ChatHistory(sid = sid, inode = 7, offset = 0, rows = rows().take(3)).managedMessages(replica, emptyList())
+        val drawn = ChatHistory(sid = sid, inode = 7, offset = 0, rows = rows().take(3)).projectMessages(replica, emptyList())
 
         assertEquals(listOf("before restart", "old answer", divider, "after restart"), drawn.map { it.text })
         assertEquals(true, drawn.last().pending)

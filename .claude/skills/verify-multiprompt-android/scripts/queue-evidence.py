@@ -1,48 +1,60 @@
 #!/usr/bin/env python3
+from contextlib import closing
 import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import sqlite3
 import sys
 
-if os.environ.get('GITHUB_ACTIONS') != 'true':
-    raise SystemExit('queue evidence requires the hosted fixture')
+SID = 'a1b2c3d4-1008-4000-8000-000000001008'
+GROUPS = {'waiting': ('WAITING_ONE', 'WAITING_TWO'), 'uncertain': ('UNCERTAIN_ONE', 'UNCERTAIN_TWO'), 'followup': ('FOLLOWUP',), 'all': ('WAITING_ONE', 'WAITING_TWO', 'FOLLOWUP', 'UNCERTAIN_ONE', 'UNCERTAIN_TWO')}
 
-groups = {'waiting': ('WAITING_ONE', 'WAITING_TWO'), 'uncertain': ('UNCERTAIN_ONE', 'UNCERTAIN_TWO'), 'followup': ('FOLLOWUP',), 'all': ('WAITING_ONE', 'WAITING_TWO', 'FOLLOWUP', 'UNCERTAIN_ONE', 'UNCERTAIN_TWO')}
-if len(sys.argv) < 3 or sys.argv[1] not in groups:
-    raise SystemExit('expected fixture group and states')
-names = groups[sys.argv[1]]
-states = sys.argv[2:]
-if len(states) != len(names) or any(state not in ('queued', 'submitted', 'delivered') for state in states):
-    raise SystemExit('invalid expected states')
-sid = 'a1b2c3d4-1008-4000-8000-000000001008'
-path = Path('/home/verifyssh/.local/state/multiprompt/held-messages') / hashlib.sha256(b'verify-session').hexdigest() / 'queue.sqlite3'
-try:
-    db = sqlite3.connect(f'file:{path}?mode=ro', uri=True)
-    db.execute('PRAGMA query_only=ON')
-    db.execute('BEGIN')
-    placeholders = ','.join('?' for _ in names)
-    rows = db.execute(f"SELECT key,text,state,source_inode,origin,scan,created FROM messages WHERE sid=? AND text IN ({placeholders}) ORDER BY created", (sid, *names)).fetchall()
-    assert len(rows) == len(names) and [row[1] for row in rows] == list(names)
-    by_name = {row[1]: row for row in rows}
-    assert set(by_name) == set(names)
+
+def read_state(home, group, states):
+    names = GROUPS[group]
+    if len(states) != len(names) or any(state not in ('queued', 'sent', 'started') for state in states):
+        raise ValueError('expected one queued, sent or started state per fixture message')
+    path = home / '.local/state/multiprompt/shared-messages/store.sqlite3'
+    transcript = home / '.claude/projects' / str(home / 'queued-work').replace('/', '-') / (SID + '.jsonl')
+    with closing(sqlite3.connect(f'file:{path}?mode=ro', uri=True)) as db:
+        db.execute('PRAGMA query_only=ON')
+        db.execute('BEGIN')
+        rows = db.execute("SELECT id,text,state,attempt,position FROM shared_messages WHERE provider='claude' AND sid=? ORDER BY position", (SID,)).fetchall()
+        rows = [row for row in rows if row[1] in names]
+        assert [row[1] for row in rows] == list(names), f'expected {names}, found {[(row[1], row[2]) for row in rows]}'
+        facts = [json.loads(row[0]) for row in db.execute("SELECT body FROM connector_facts WHERE provider='claude' AND sid=?", (SID,))]
     result = []
-    for name, state in zip(names, states):
-        key, text, actual, inode, origin, scan, created = by_name[name]
-        assert key and actual == state
-        claims = db.execute('SELECT inode,offset,digest FROM held_receipts WHERE sid=? AND key=? ORDER BY offset', (sid, key)).fetchall()
-        assert len(claims) == (1 if state == 'delivered' else 0)
-        result.append(dict(id=key, text=text, state=actual, claims=len(claims),
-                           receipt_claims=[dict(inode=i, offset=o, digest=d) for i, o, d in claims],
-                           inode=inode, origin=origin, scan=scan, created=created))
+    for (identity, text, actual, attempt, position), expected in zip(rows, states):
+        assert identity and attempt and actual == expected, f'{text}: expected {expected}, found {actual}'
+        accepted = [fact for fact in facts if fact.get('kind') == 'accepted' and fact.get('id') == identity and fact.get('attempt') == attempt]
+        started = [fact for fact in facts if fact.get('kind') == 'started' and fact.get('id') == identity and fact.get('attempt') == attempt]
+        count = 1 if expected == 'started' else 0
+        assert len(accepted) == len(started) == count, f'{text}: acceptance/start receipt count mismatch'
+        claims = []
+        for fact in started:
+            assert fact['source'] == 'attachment.queued_command' and fact['sid'] == SID
+            with transcript.open('rb') as source:
+                source.seek(fact['offset'])
+                raw = source.read(fact['end'] - fact['offset'])
+            event = json.loads(raw)
+            body = re.sub(r'\n\[mp:[0-9a-f]{16}\]\s*$', '', event['attachment']['prompt'])
+            assert event['type'] == 'attachment' and not event.get('isSidechain') and body == text
+            assert accepted[0]['offset'] == fact['offset'] and accepted[0]['end'] == fact['end']
+            claims.append(dict(inode=transcript.stat().st_ino, offset=fact['offset'], digest=hashlib.sha256(raw).hexdigest(), event_id=fact['event_id']))
+        result.append(dict(id=identity, attempt=attempt, text=text, state=actual, claims=count, receipt_claims=claims, position=position))
     assert len({row['id'] for row in result}) == len(result)
-    if sys.argv[1] == 'all':
-        claims = db.execute('SELECT key,inode,offset FROM held_receipts WHERE sid=?', (sid,)).fetchall()
-        assert len(claims) == sum(row['claims'] for row in result) == 3
-        assert {claim[0] for claim in claims} == {row['id'] for row in result if row['state'] == 'delivered'}
-        assert len({(claim[1], claim[2]) for claim in claims}) == len(claims)
-    print(json.dumps(result))
-except (sqlite3.Error, AssertionError) as exc:
-    print(f'queue evidence not ready: {exc}', file=sys.stderr)
-    sys.exit(1)
+    if group == 'all':
+        assert sum(row['claims'] for row in result) == 3
+        assert len({(claim['inode'], claim['offset']) for row in result for claim in row['receipt_claims']}) == 3
+    return result
+
+
+if __name__ == '__main__':
+    if os.environ.get('GITHUB_ACTIONS') != 'true':
+        raise SystemExit('queue evidence requires the hosted fixture')
+    try:
+        print(json.dumps(read_state(Path('/home/verifyssh'), sys.argv[1], sys.argv[2:])))
+    except (sqlite3.Error, AssertionError, ValueError, KeyError, OSError) as error:
+        sys.exit(f'queue evidence not ready: {error}')

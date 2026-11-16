@@ -12,7 +12,7 @@ class SentBubbleCalmTest {
     private fun history() = ChatHistory(sid = sid, inode = 1, offset = 100)
 
     private fun drawn(state: MessageProtocol.State, unresolved: List<MessageJournal.Entry> = emptyList()) =
-        history().managedMessages(
+        history().projectMessages(
             MessageReplica(1, 1, mapOf(id to MessageProtocol.Row(id, "claude", sid, "calm text", 1, "attempt", state, null, null, 1, 1.0))),
             unresolved,
         )
@@ -44,6 +44,6 @@ class SentBubbleCalmTest {
 
     @Test fun aPlainChatStillLabelsItsUnconfirmedEcho() {
         val prompt = QueuedMessages.SentPrompt("plain text", 1, sid = sid, inode = 1, afterOffset = 100)
-        assertEquals("Local · unconfirmed", history().displayMessages(listOf(prompt)).single().delivery)
+        assertEquals("Local · unconfirmed", history().projectMessages(sent = listOf(prompt)).single().delivery)
     }
 }
