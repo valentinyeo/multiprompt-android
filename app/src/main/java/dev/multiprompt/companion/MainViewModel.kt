@@ -9,6 +9,7 @@ import dev.multiprompt.companion.account.VisitDwell
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.multiprompt.companion.model.HostDraft
+import dev.multiprompt.companion.model.PlanUsage
 import dev.multiprompt.companion.network.NetworkReturnWatcher
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.AgentHarness
@@ -153,6 +154,7 @@ data class AppUiState(
     val etaAccuracy: List<TmuxText.AgentAccuracy>? = null,
     val etaAccuracyLoading: Boolean = false,
     val etaAccuracyError: String? = null,
+    val aiUsage: AiUsageState? = null,
     val newestSessionsAtBottom: Boolean = true,
     val allSplitOnRight: Boolean = true,
     val readerDefaultFontScale: Float = 1f,
@@ -180,6 +182,12 @@ data class AppUiState(
         next.copy(selectedWorkspaceId = if (next.selectedWorkspaceId in visible) next.selectedWorkspaceId else visible.first())
     }
 }
+
+data class AiUsageState(
+    val loading: Boolean = false,
+    val error: String? = null,
+    val plans: List<PlanUsage.Plan> = emptyList(),
+)
 
 enum class NewSessionStep { HOST, PATH, HARNESS, EXISTING }
 
@@ -409,6 +417,68 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissEtaAccuracy() {
         _state.update { it.copy(etaAccuracy = null, etaAccuracyLoading = false, etaAccuracyError = null) }
+    }
+
+    private var aiUsageGeneration = 0
+
+    fun showAiUsage() {
+        val generation = ++aiUsageGeneration
+        val hosts = usageHosts(_state.value)
+        _state.update { it.copy(aiUsage = AiUsageState(loading = true)) }
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { fetchAiUsage(hosts) }
+            if (generation != aiUsageGeneration) return@launch
+            _state.update { state ->
+                if (state.aiUsage == null) state else state.copy(
+                    aiUsage = when (result) {
+                        is AiUsageFetch.Ready -> AiUsageState(plans = result.plans)
+                        is AiUsageFetch.Failed -> AiUsageState(error = result.message)
+                    },
+                )
+            }
+        }
+    }
+
+    fun dismissAiUsage() {
+        aiUsageGeneration++
+        _state.update { it.copy(aiUsage = null) }
+    }
+
+    private fun usageHosts(state: AppUiState): List<HostProfile> {
+        val trusted = (state.hosts + state.accountHosts.values)
+            .distinctBy { it.id }
+            .filter { it.hostKeyFingerprint != null || it.hostKeys.isNotEmpty() }
+        return trusted.sortedWith(compareBy { host ->
+            if (host.label == "remote-2" || host.hostname == "remote-2") 0 else 1
+        })
+    }
+
+    private suspend fun fetchAiUsage(hosts: List<HostProfile>): AiUsageFetch {
+        if (hosts.isEmpty()) return AiUsageFetch.Failed("Could not read AI usage")
+        var sawStale = false
+        var lastError = "Could not read AI usage"
+        val now = System.currentTimeMillis() / 1000
+        for (host in hosts) {
+            try {
+                val parsed = PlanUsage.parse(ssh.readTokenLadderStatus(host), now)
+                if (parsed == null) continue
+                if (parsed.fresh) return AiUsageFetch.Ready(parsed.plans)
+                sawStale = true
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: SshProblem.HostKeyRequired) {
+                continue
+            } catch (thrown: Throwable) {
+                val message = thrown.message?.takeIf { it.isNotBlank() }
+                if (message != null) lastError = message
+            }
+        }
+        return if (sawStale) AiUsageFetch.Failed("Usage is out of date") else AiUsageFetch.Failed(lastError)
+    }
+
+    private sealed interface AiUsageFetch {
+        data class Ready(val plans: List<PlanUsage.Plan>) : AiUsageFetch
+        data class Failed(val message: String) : AiUsageFetch
     }
 
     fun clearSessionActionError() {

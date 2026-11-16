@@ -622,6 +622,8 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onClearCrashReport = viewModel::clearCrashReport,
                     material3 = BuildConfig.MATERIAL3,
                     onMapAccountHost = viewModel::mapAccountHost,
+                    onShowAiUsage = viewModel::showAiUsage,
+                    onDismissAiUsage = viewModel::dismissAiUsage,
                 )
                 AppSection.UPDATE -> UpdateScreen(
                     state = updateState,
@@ -1336,6 +1338,8 @@ internal fun SessionsScreen(
     onSetUnreadOnly: (Boolean) -> Unit = {},
     onSetChatGroup: (AccountTab, String?, Boolean) -> String? = { _, _, _ -> null },
     onUngroup: (String, Boolean) -> String? = { _, _ -> null },
+    onShowAiUsage: () -> Unit = {},
+    onDismissAiUsage: () -> Unit = {},
 ) = MultipromptTheme(
     sunlight = when (appTheme) {
         AppTheme.SYSTEM -> !isSystemInDarkTheme()
@@ -1903,6 +1907,9 @@ internal fun SessionsScreen(
             KitPrimaryButton("Done", onClick = { splitOrderDialogVisible = false }, modifier = Modifier.fillMaxWidth())
         }
     }
+    state.aiUsage?.let { usage ->
+        AiUsageSheet(usage, onDismissAiUsage)
+    }
     if (workspaceDialogVisible) {
         KitSheet(onDismiss = { workspaceDialogVisible = false }) {
             Text("New workspace", style = Kit.Heading, color = Kit.Text)
@@ -2103,6 +2110,7 @@ internal fun SessionsScreen(
                                 onRefresh()
                                 onRefreshRooms()
                             },
+                            onAiUsage = onShowAiUsage,
                             onReleaseNotes = onReleaseNotes,
                         )
                     }
