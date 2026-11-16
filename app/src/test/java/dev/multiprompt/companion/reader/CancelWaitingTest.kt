@@ -13,7 +13,7 @@ class CancelWaitingTest {
         MessageProtocol.Row(id, "claude", sid, text, 1, "attempt", state, null, null, 1, created)
 
     private fun drawn(vararg rows: MessageProtocol.Row, now: Double? = created + 5, seen: Map<String, Double> = emptyMap()) =
-        ChatHistory(sid = sid, inode = 1, offset = 100).managedMessages(
+        ChatHistory(sid = sid, inode = 1, offset = 100).projectMessages(
             MessageReplica(1, 1, rows.associateBy { it.id }),
             emptyList(), now, false, seen,
         )

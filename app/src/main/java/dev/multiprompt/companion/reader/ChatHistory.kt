@@ -31,32 +31,9 @@ data class ChatHistory(
     val held: List<QueuedMessages.SentPrompt> = emptyList(),
     val pendingQuestions: List<PendingQuestion> = emptyList(),
 ) {
-    val messages: List<ChatHistoryMessage> by lazy {
-        val grouped = LinkedHashMap<String, ChatHistoryMessage>()
-        for (row in rows) {
-            if ((row.settlement != null && row.text.isBlank()) || row.questions.isNotEmpty() || row.questionResult.isNotEmpty()) continue
-            val key = "$sid:$inode:${row.role}:${row.id.ifEmpty { "@${row.offset}" }}"
-            val previous = grouped[key]
-            val text = when {
-                previous == null -> row.text
-                row.text == previous.text || previous.text.startsWith(row.text) -> previous.text
-                row.text.startsWith(previous.text) -> row.text
-                else -> previous.text + "\n" + row.text
-            }
-            grouped[key] = ChatHistoryMessage(key, row.role, text, previous?.timestamp ?: row.timestamp,
-                previous?.offset ?: row.offset, row.end, row.id)
-        }
-        grouped.values.toList()
-    }
+    val messages: List<ChatHistoryMessage> by lazy { transcript(rows) }
 
-    fun managedMessages(replica: MessageReplica?, unresolved: List<MessageJournal.Entry>, now: Double? = null, offline: Boolean = false, seen: Map<String, Double> = emptyMap()): List<ChatHistoryMessage> {
-        val source = rows.toMutableList()
-        replica?.nativeFacts?.values?.forEach { fact ->
-            if (fact.inode == inode && fact.offset != null && fact.offset >= offset) {
-                val parsed = runCatching { ChatHistoryProtocol.parseRow(org.json.JSONObject(fact.json).getJSONObject("row")) }.getOrNull()
-                if (parsed != null) source.add(parsed)
-            }
-        }
+    private fun transcript(source: List<Row>): List<ChatHistoryMessage> {
         val grouped = LinkedHashMap<String, ChatHistoryMessage>()
         source.distinctBy { listOf(it.offset, it.end, it.role, it.id, it.normalized) }.sortedBy { it.offset }
             .filter { (it.settlement == null || it.text.isNotBlank()) && it.questions.isEmpty() && it.questionResult.isEmpty() }
@@ -65,9 +42,10 @@ data class ChatHistory(
                 val readId = metadata.optString("read_id")
                 val segment = if (metadata.has("segment")) metadata.get("segment").toString() else ""
                 val identity = when {
+                    row.role == "user" && row.id.isNotEmpty() -> row.id
                     readId.isNotEmpty() -> "read:$readId:$segment"
-                    row.id.isNotEmpty() -> "native:${row.id}:$segment"
-                    else -> "@${row.offset}:${row.end}"
+                    row.id.isNotEmpty() -> row.id
+                    else -> "@${row.offset}"
                 }
                 val key = "$sid:$inode:${row.role}:$identity"
                 val previous = grouped[key]
@@ -80,62 +58,148 @@ data class ChatHistory(
                 grouped[key] = ChatHistoryMessage(key, row.role, text, previous?.timestamp ?: row.timestamp,
                     previous?.offset ?: row.offset, row.end, row.id)
             }
-        val transcript = grouped.values.toList()
-        val spoken = transcript.map { if (it.role == "user") seconds(it.timestamp) else null }
-        val claimed = HashMap<Int, MessageProtocol.Row>()
-        val unplaced = mutableListOf<MessageProtocol.Row>()
-        var floor = -1
-        val sentRows = replica?.host?.sentRows.orEmpty()
-        for (card in replica?.messages?.values.orEmpty().filter { it.state != MessageProtocol.State.CANCELLED }.sortedBy { it.position }) {
-            val uuids = sentRows[card.id].orEmpty()
-            val keyed = transcript.indices.firstOrNull { index ->
-                index !in claimed && transcript[index].role == "user" &&
-                    (transcript[index].requestId == card.id || transcript[index].requestId in uuids)
-            }
-            val index = keyed ?: transcript.indices.firstOrNull { index ->
-                index > floor && index !in claimed && spoken[index]?.let { it >= card.created - CLOCK_SLACK } == true &&
-                    same(transcript[index].text, card.text)
-            }
-            if (index == null) unplaced.add(card) else { claimed[index] = card; floor = maxOf(floor, index) }
-        }
-        val latest = spoken.filterNotNull().maxOrNull()
-        val occurrences = transcript.mapIndexed { index, message ->
-            claimed[index]?.let { message.copy(key = "@shared:${it.id}", requestId = it.id) } ?: message
-        }
-        val cards = unplaced.filter { row ->
-            row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT, MessageProtocol.State.FAILED) || latest == null || latest <= row.created + CLOCK_SLACK
-        }.map { row ->
-            val notSent = notSent(row, now, seen[row.id])
-            ChatHistoryMessage("@shared:${row.id}", "user", row.text, "", 0, 0, row.id,
-                pending = !notSent && row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT),
-                delivery = if (notSent) NOT_SENT else null,
-                cancellable = cancellable(row, now, seen[row.id]))
-        }
-        val drawn = source.filter { it.role == "assistant" }.map { rowKey(it.id) }.filter { it.isNotEmpty() }.toSet()
-        fun hidden(block: HostBlock) = rowKey(block.item) in drawn || (block.done && landed(block.text))
-        val live = replica?.host?.spoken.orEmpty().filterNot { block -> hidden(block) }.map { block ->
-            ChatHistoryMessage("@live:${replica?.host?.turn}:${block.item}", "assistant", block.text, "", 0, 0, pending = !block.done)
-        }
-        val earlier = replica?.host?.earlier.orEmpty().filterNot { block -> hidden(block.copy(done = true)) }.map { block ->
-            ChatHistoryMessage("@live:${block.turn}:${block.item}", "assistant", block.text, "", 0, 0)
-        }
-        val unknown = unresolved.filter { entry -> entry.operation == "submit" && replica?.messages?.get(entry.messageId)?.text != entry.text }.map { entry ->
-            ChatHistoryMessage("@unknown:${entry.id}", "user", entry.text.orEmpty(), "", 0, 0, entry.messageId,
-                delivery = if (offline) NOT_SENT else null, unknownId = entry.id)
-        }
-        return occurrences + earlier + cards + unknown + live
+        return grouped.values.toList()
     }
 
-    private fun seconds(timestamp: String): Double? =
-        runCatching { java.time.Instant.parse(timestamp).toEpochMilli() / 1000.0 }.getOrNull()
+    fun projectMessages(
+        replica: MessageReplica? = null,
+        unresolved: List<MessageJournal.Entry> = emptyList(),
+        now: Double? = null,
+        offline: Boolean = false,
+        seen: Map<String, Double> = emptyMap(),
+        sent: List<QueuedMessages.SentPrompt>? = null,
+    ): List<ChatHistoryMessage> {
+        val scoped = replica?.messages?.values.orEmpty().filter { it.sid == sid }
+        val source = rows.toMutableList()
+        replica?.nativeFacts?.values?.filter { it.sid == sid }?.forEach { fact ->
+            if (fact.inode == inode && fact.offset != null && fact.offset >= offset) {
+                val parsed = runCatching { ChatHistoryProtocol.parseRow(org.json.JSONObject(fact.json).getJSONObject("row")) }.getOrNull()
+                if (parsed != null) source.add(parsed)
+            }
+        }
+        val transcript = transcript(source)
+        val latest = transcript.filter { it.role == "user" }.mapNotNull { LegacyMessageIdentity.seconds(it.timestamp) }.maxOrNull()
+        val host = replica?.host ?: HostStream()
+        val cards = if (sent == null) scoped.filter { it.state != MessageProtocol.State.CANCELLED }.sortedBy { it.position }.map { row ->
+            val notSent = notSent(row, now, seen[row.id])
+            Card(ChatHistoryMessage("@shared:${row.id}", "user", row.text, "", 0, 0, row.id,
+                pending = !notSent && row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT),
+                delivery = if (notSent) NOT_SENT else null,
+                cancellable = cancellable(row, now, seen[row.id])),
+                host.sentRows[row.id].orEmpty().toSet() + row.id,
+                visible = row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT, MessageProtocol.State.FAILED) ||
+                    row.id == host.messageId || latest == null || latest <= row.created + CLOCK_SLACK,
+                shared = row)
+        } else {
+            val local = sent.filter { it.sid.isEmpty() || sid.isEmpty() || it.sid == sid }
+            val own = (local.filter { it.messageId.isNotEmpty() && it.delivery in setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED) } +
+                held.filter { it.sid.isEmpty() || it.sid == sid } + local.filter { it.messageId.isNotEmpty() })
+                .distinctBy { it.messageId }.sortedBy { it.sentAtMillis }
+            local.filter { it.messageId.isEmpty() }.distinctBy { it.localId }.map { prompt ->
+                Card(ChatHistoryMessage("@local:${prompt.localId}", "user", prompt.text, "", 0, 0, delivery = "Local · unconfirmed"))
+            } + own.map { prompt ->
+                val delivery = deliveryState(prompt)
+                Card(ChatHistoryMessage("@held:${prompt.messageId}", "user", prompt.text, "", 0, 0, prompt.messageId,
+                    pending = delivery !in setOf(QueuedMessages.Delivery.CANCELLED, QueuedMessages.Delivery.DELIVERED),
+                    delivery = when (delivery) {
+                        QueuedMessages.Delivery.CANCELLED -> "Cancelled"
+                        QueuedMessages.Delivery.DELIVERED -> "Delivered"
+                        QueuedMessages.Delivery.QUEUED -> "Queued"
+                        QueuedMessages.Delivery.SENDING, QueuedMessages.Delivery.SUBMITTED -> "Sending"
+                    }), setOf(prompt.messageId), legacy = prompt.takeIf { delivery == QueuedMessages.Delivery.DELIVERED })
+            }
+        }
+        val claimed = HashMap<Int, Card>()
+        val placed = mutableSetOf<String>()
+        for (card in cards) {
+            transcript.forEachIndexed { index, message ->
+                if (message.role == "user" && message.requestId.isNotEmpty() && message.requestId in card.aliases) {
+                    claimed[index] = card
+                    placed.add(card.message.key)
+                }
+            }
+        }
+        var floor = -1
+        for (card in cards.filter { it.message.key !in placed }) {
+            val index = transcript.indices.firstOrNull { index ->
+                index !in claimed && when {
+                    card.shared != null && host.sentRows[card.shared.id].isNullOrEmpty() ->
+                        index > floor && LegacyMessageIdentity.shared(transcript[index], card.shared)
+                    card.legacy != null -> LegacyMessageIdentity.delivered(transcript[index], card.legacy, sid, inode)
+                    else -> false
+                }
+            }
+            if (index != null) {
+                claimed[index] = card
+                placed.add(card.message.key)
+                floor = maxOf(floor, index)
+            }
+        }
+        val aliases = HashMap<String, String>()
+        host.sentRows.forEach { (id, uuids) -> (uuids + id).forEach { aliases[it] = id } }
+        scoped.forEach { aliases[it.id] = it.id }
+        val projected = LinkedHashMap<String, ChatHistoryMessage>()
+        transcript.forEachIndexed { index, message ->
+            val card = claimed[index]
+            val phoneId = aliases[message.requestId].takeIf { message.role == "user" }
+            val occurrence = when {
+                card != null -> message.copy(key = card.message.key, requestId = card.message.requestId, delivery = card.message.delivery)
+                phoneId != null -> message.copy(key = "@shared:$phoneId", requestId = phoneId)
+                else -> message
+            }
+            projected[occurrence.key] = occurrence
+        }
+        val blocks = (host.earlier + host.spoken.map { it.copy(turn = host.turn) }).distinctBy { it.turn to it.item }
+        val anchors = cards.filter { it.message.requestId.isNotEmpty() }.associate { it.message.requestId to it.message.key }.toMutableMap()
+        projected.values.filter { it.role == "user" && it.requestId.isNotEmpty() }.forEach { anchors[it.requestId] = it.key }
+        val replies = LinkedHashMap<String, MutableList<HostBlock>>()
+        val unmatched = mutableListOf<HostBlock>()
+        for (block in blocks) {
+            val index = transcript.indexOfFirst { message -> message.role == "assistant" &&
+                (message.requestId.isNotEmpty() && rowKey(message.requestId) == rowKey(block.item) ||
+                    LegacyMessageIdentity.reply(message, block)) }
+            if (index >= 0) {
+                block.messageId?.let { anchors[it] = transcript[index].key }
+            } else {
+                val anchor = block.messageId?.let { anchors[it] }
+                if (anchor == null) unmatched.add(block) else replies.getOrPut(anchor) { mutableListOf() }.add(block)
+            }
+        }
+        fun appendReply(block: HostBlock) {
+            val key = "@live:${block.turn}:${block.item}"
+            projected[key] = ChatHistoryMessage(key, "assistant", block.text, "", 0, 0, pending = !block.done)
+        }
+        val ordered = projected.values.toList()
+        projected.clear()
+        fun append(message: ChatHistoryMessage) {
+            projected[message.key] = message
+            replies.remove(message.key).orEmpty().forEach(::appendReply)
+        }
+        ordered.forEach(::append)
+        unmatched.filter { it.turn != host.turn }.forEach(::appendReply)
+        cards.filter { it.message.key !in placed && it.visible }.forEach { append(it.message) }
+        replies.values.flatten().forEach(::appendReply)
+        val canonical = scoped.associateBy { it.id }
+        unresolved.filter { it.operation == "submit" && it.scope.sid == sid && canonical[it.messageId]?.text != it.text }.forEach { entry ->
+            val key = if (entry.messageId in canonical) "@unknown:${entry.id}" else "@shared:${entry.messageId}"
+            if (projected.values.none { it.role == "user" && it.requestId == entry.messageId && it.text == entry.text }) {
+                projected[key] = ChatHistoryMessage(key, "user", entry.text.orEmpty(), "", 0, 0, entry.messageId,
+                    delivery = if (offline) NOT_SENT else null, unknownId = entry.id)
+            }
+        }
+        unmatched.filter { it.turn == host.turn }.forEach(::appendReply)
+        return projected.values.toList()
+    }
+
+    private data class Card(
+        val message: ChatHistoryMessage,
+        val aliases: Set<String> = emptySet(),
+        val visible: Boolean = true,
+        val shared: MessageProtocol.Row? = null,
+        val legacy: QueuedMessages.SentPrompt? = null,
+    )
 
     private fun rowKey(id: String): String = id.substringBefore(":text:")
-
-    private fun same(left: String, right: String): Boolean =
-        left.replace("\r", "").trimEnd(' ') == right.replace("\r", "").trimEnd(' ')
-
-    private fun landed(text: String): Boolean =
-        rows.any { it.role == "assistant" && same(it.text, text) }
 
     internal fun deliveryState(prompt: QueuedMessages.SentPrompt): QueuedMessages.Delivery {
         val terminal = setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
@@ -149,42 +213,6 @@ data class ChatHistory(
             mapped != null -> mapped
             else -> prompt.delivery
         }
-    }
-
-    fun displayMessages(sent: List<QueuedMessages.SentPrompt>): List<ChatHistoryMessage> {
-        val local = sent.filter { it.sid.isEmpty() || sid.isEmpty() || it.sid == sid }
-        val own = (local.filter { it.messageId.isNotEmpty() && it.delivery in setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED) } +
-            held + local.filter { it.messageId.isNotEmpty() }).distinctBy { it.messageId }.sortedBy { it.sentAtMillis }
-        fun state(prompt: QueuedMessages.SentPrompt) = deliveryState(prompt)
-        val matched = mutableSetOf<String>()
-        val native = local.filter { it.messageId.isEmpty() }
-        val current = messages.map { message ->
-            val record = own.firstOrNull { prompt ->
-                prompt.messageId !in matched && state(prompt) == QueuedMessages.Delivery.DELIVERED &&
-                    prompt.sid.isNotEmpty() && prompt.sid == sid && prompt.inode == inode &&
-                    message.role == "user" && message.offset >= prompt.afterOffset && message.text.trimEnd(' ') == prompt.text.trimEnd(' ')
-            }
-            if (record != null) {
-                matched.add(record.messageId)
-                message.copy(delivery = "Delivered")
-            } else message
-        }
-        val echoes = native.map { prompt ->
-            ChatHistoryMessage("@local:${prompt.localId}", "user", prompt.text, "", 0, 0,
-                delivery = "Local · unconfirmed")
-        }
-        val managed = own.filter { it.messageId !in matched }.map { prompt ->
-            val delivery = state(prompt)
-            ChatHistoryMessage("@held:${prompt.messageId}", "user", prompt.text, "", 0, 0,
-                requestId = prompt.messageId, pending = delivery !in setOf(QueuedMessages.Delivery.CANCELLED, QueuedMessages.Delivery.DELIVERED),
-                delivery = when (delivery) {
-                    QueuedMessages.Delivery.CANCELLED -> "Cancelled"
-                    QueuedMessages.Delivery.DELIVERED -> "Delivered"
-                    QueuedMessages.Delivery.QUEUED -> "Queued"
-                    QueuedMessages.Delivery.SENDING, QueuedMessages.Delivery.SUBMITTED -> "Sending"
-                })
-        }
-        return current + echoes + managed
     }
 
     internal fun resetSeed(): ChatHistory = ChatHistory(
