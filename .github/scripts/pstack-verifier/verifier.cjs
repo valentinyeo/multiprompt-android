@@ -496,12 +496,10 @@ async function judge(env) {
   let model;
   try {
     directories = downloadEvidence(repo, runId, features, scratch, 'head');
-    let toolingProof = 'No non-UI proof artifact was retained.';
-    try {
-      const toolingDir = path.join(scratch, 'tooling');
-      gh(['run', 'download', runId, '-R', repo, '-n', 'verifier-tooling-proof', '-D', toolingDir]);
-      toolingProof = readText(path.join(toolingDir, 'tooling-proof.txt'), 12_000);
-    } catch {}
+    const toolingDir = path.join(scratch, 'tooling');
+    gh(['run', 'download', runId, '-R', repo, '-n', 'verifier-tooling-proof', '-D', toolingDir]);
+    const toolingProof = readText(path.join(toolingDir, 'tooling-proof.txt'), 12_000);
+    if (!toolingProof?.trim()) throw new Error('NON_UI_PROOF_MISSING: retain verifier-tooling-proof/tooling-proof.txt from the hosted Node checks.');
     const parentDirectories = downloadEvidence(repo, runId, features, scratch, 'parent');
     for (const feature of features) {
       const files = readSideFiles(parentDirectories[feature]);

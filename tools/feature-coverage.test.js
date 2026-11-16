@@ -178,12 +178,12 @@ test('the real judge command fails a past search change despite model PASS and a
   try {
     const fixture = JSON.parse(read('tools/fixtures/feature-coverage/pr-380.json'));
     const gh = path.join(directory, 'gh');
-    fs.writeFileSync(gh, `#!${process.execPath}\nconst fs = require('node:fs');\nconst path = require('node:path');\nconst args = process.argv.slice(2);\nif (args[0] === 'run') {\n  const dir = args[args.indexOf('-D') + 1];\n  fs.mkdirSync(dir, {recursive:true});\n  fs.writeFileSync(path.join(dir, 'app-source-sha.txt'), process.env.HEAD_SHA);\n  fs.writeFileSync(path.join(dir, 'tooling-proof.txt'), 'Node tests passed');\n} else if (args.some(arg => arg.includes('/jobs?'))) {\n  console.log(JSON.stringify([{jobs:[{name:'journey session-reader.md / verify',status:'completed',conclusion:'success'}]}]));\n} else if (args.includes('Accept: application/vnd.github.diff')) {\n  process.stdout.write(fs.readFileSync(process.env.FIXTURE_DIFF, 'utf8'));\n} else {\n  console.log(JSON.stringify({number:380,title:'Find inside a chat',body:'',head:{sha:process.env.HEAD_SHA}}));\n}\n`);
+    fs.writeFileSync(gh, `#!${process.execPath}\nconst fs = require('node:fs');\nconst path = require('node:path');\nconst args = process.argv.slice(2);\nif (args[0] === 'run') {\n  const dir = args[args.indexOf('-D') + 1];\n  fs.mkdirSync(dir, {recursive:true});\n  fs.writeFileSync(path.join(dir, 'app-source-sha.txt'), process.env.HEAD_SHA);\n  fs.writeFileSync(path.join(dir, 'tooling-proof.txt'), process.env.MISSING_TOOLING ? '' : 'Node tests passed');\n} else if (args.some(arg => arg.includes('/jobs?'))) {\n  console.log(JSON.stringify([{jobs:[{name:'journey session-reader.md / verify',status:'completed',conclusion:'success'}]}]));\n} else if (args.includes('Accept: application/vnd.github.diff')) {\n  process.stdout.write(fs.readFileSync(process.env.FIXTURE_DIFF, 'utf8'));\n} else {\n  console.log(JSON.stringify({number:380,title:'Find inside a chat',body:'',head:{sha:process.env.HEAD_SHA}}));\n}\n`);
     fs.chmodSync(gh, 0o755);
     const stub = path.join(directory, 'model.cjs');
     fs.writeFileSync(stub, `global.fetch = async () => ({status:200,ok:true,json:async () => ({choices:[{finish_reason:'stop',message:{content:JSON.stringify({verdict:'PASS',summary:'The reader passed.',coverage:[],changed_outcomes:[]})}}]})});`);
     const report = path.join(directory, 'coverage.json');
-    const result = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'judge'], {
+    const options = {
       cwd: directory,
       encoding: 'utf8',
       env: {
@@ -204,7 +204,9 @@ test('the real judge command fails a past search change despite model PASS and a
         COVERAGE_REPORT: report,
         VERIFIER_DRY: '1',
       },
-    });
+    };
+    const args = [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'judge'];
+    const result = spawnSync(process.execPath, args, options);
     assert.equal(result.status, 1, result.stderr);
     assert.match(result.stdout, /pstack-verifier: FAIL @/);
     assert.match(result.stdout, /FEATURE_NOT_EXERCISED: chat-search.open/);
@@ -212,6 +214,10 @@ test('the real judge command fails a past search change despite model PASS and a
     assert.equal(recorded.sha, fixture.headSha);
     assert.deepEqual(recorded.accepted, []);
     assert.ok(recorded.plan.outcomes.includes('chat-search.open'));
+    options.env.MISSING_TOOLING = '1';
+    const missing = spawnSync(process.execPath, args, options);
+    assert.equal(missing.status, 1);
+    assert.match(missing.stderr, /NON_UI_PROOF_MISSING/);
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
