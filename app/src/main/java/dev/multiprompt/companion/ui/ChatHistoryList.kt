@@ -135,7 +135,9 @@ internal fun ChatHistoryView(
     val questions = if (hostRequest != null) hostCards else state.history.pendingQuestions
     Column(modifier.fillMaxSize()) {
         state.connectionError?.let { error ->
-            KitListGroup(Modifier.padding(Kit.SideChange)) {
+            KitListGroup(Modifier.padding(horizontal = Kit.SideChange).padding(
+                top = if (LocalReaderStyle.current) ReaderFloatingInset + WindowInsets.statusBars.asPaddingValues().calculateTopPadding() else Kit.SideChange,
+            )) {
                 KitAssistantBubble(error, Modifier.fillMaxWidth())
                 KitSecondaryButton("Retry", { history.nudge() }, Modifier.fillMaxWidth())
             }

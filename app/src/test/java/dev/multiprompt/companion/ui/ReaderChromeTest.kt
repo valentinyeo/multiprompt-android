@@ -273,6 +273,8 @@ class ReaderChromeTest {
             connectionError = dev.multiprompt.companion.reader.ConversationLoad.TIMED_OUT)
         render()
         compose.onNodeWithText(dev.multiprompt.companion.reader.ConversationLoad.TIMED_OUT).assertIsDisplayed()
+        assertTrue(compose.onNodeWithText(dev.multiprompt.companion.reader.ConversationLoad.TIMED_OUT).getUnclippedBoundsInRoot().top >=
+            compose.onNodeWithContentDescription("Session actions").getUnclippedBoundsInRoot().bottom)
         compose.onNodeWithText("Loading conversation…").assertDoesNotExist()
         compose.onNodeWithText("Retry").assertIsDisplayed().performClick()
         compose.runOnIdle { assertTrue(f.field<Channel<Unit>>(chat, "retryNudge").tryReceive().isSuccess) }
