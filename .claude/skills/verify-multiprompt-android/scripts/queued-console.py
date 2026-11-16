@@ -5,7 +5,6 @@ import datetime
 import fcntl
 import hashlib
 import importlib.util
-import re
 import json
 import os
 from pathlib import Path

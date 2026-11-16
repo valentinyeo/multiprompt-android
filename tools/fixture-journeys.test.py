@@ -1,9 +1,16 @@
+import ast
+import base64
+from contextlib import closing
+from datetime import datetime, timezone
 import importlib.util
 import json
 from pathlib import Path
 import sqlite3
+import subprocess
+import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -74,6 +81,59 @@ class FixtureJourneyTest(unittest.TestCase):
                 db.commit()
                 with self.assertRaisesRegex(AssertionError, 'receipt count mismatch'):
                     queue.read_state(home, 'waiting', ['started', 'started'])
+
+    def test_fixture_uses_canonical_dispatch_and_connector_receipts(self):
+        reader = load('fixture_canonical_reader', ROOT / 'app/src/main/assets/chat_history_reader.py')
+        source = ast.parse((SCRIPTS / 'queued-console.py').read_text())
+        functions = [node for node in ast.walk(source) if isinstance(node, ast.FunctionDef) and node.name in ('advance_queue', 'accept_input')]
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            transcript = home / '.claude/projects' / str(home / 'queued-work').replace('/', '-') / (queue.SID + '.jsonl')
+            transcript.parent.mkdir(parents=True)
+            transcript.write_text('')
+            sources = {name: base64.b64encode((ROOT / 'app/src/main/assets/chat_connectors' / (name + '.py')).read_bytes()).decode() for name in ('claude', 'codex')}
+            namespace = dict(reader=reader, SID=queue.SID, RECEIPTS=home / 'receipts.txt', draft='FIXTURE_OWNED_DRAFT', native=[], redraw=lambda: None, closing=closing)
+            exec(compile(ast.Module(body=functions, type_ignores=[]), '<queued-fixture-controller>', 'exec'), namespace)
+            with patch.object(reader, 'HOME', home), patch.object(reader, 'CONNECTOR_SOURCES', sources, create=True), patch.object(reader, 'resolve_tmux_agent', return_value=(queue.SID, transcript)), patch.object(reader, 'send_response_preserve_draft', namespace['accept_input']):
+                request = dict(message_protocol=1, provider='claude', sid=queue.SID, tmux='verify-session')
+                for n, text in enumerate(('WAITING_ONE', 'WAITING_TWO'), 1):
+                    reader.message_store_request(dict(request, op='message_submit', message_id=f'message_fixture_{n:04d}', text=text))
+                namespace['advance_queue']()
+                self.assertEqual(['queued', 'queued'], [row['state'] for row in queue.read_state(home, 'waiting', ['queued', 'queued'])])
+                self.assertFalse((home / 'receipts.txt').exists())
+                namespace['draft'] = ''
+                namespace['advance_queue']()
+                queue.read_state(home, 'waiting', ['sent', 'queued'])
+                payload = namespace['native'].pop(0)
+                event = dict(type='attachment', uuid='native-1', sessionId=queue.SID, timestamp=datetime.now(timezone.utc).isoformat(), attachment=dict(type='queued_command', prompt=payload))
+                transcript.write_text(json.dumps(event) + '\n')
+                namespace['advance_queue']()
+                state = queue.read_state(home, 'waiting', ['started', 'sent'])
+                self.assertEqual(1, state[0]['claims'])
+                self.assertEqual(['VERIFY_RECEIVED:WAITING_ONE', 'VERIFY_RECEIVED:WAITING_TWO'], (home / 'receipts.txt').read_text().splitlines())
+
+    def test_focused_field_can_be_cleared_after_the_hint_disappears(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            xml = Path(temporary) / 'current.xml'
+            attributes = dict(text='SHARED_PHONE_SYNTH', **{'class': 'android.widget.EditText', 'package': 'dev.multiprompt.companion.debug', 'focused': 'true', 'enabled': 'true', 'bounds': '[179,872][1048,998]'})
+            root = ET.Element('hierarchy')
+            ET.SubElement(root, 'node', attributes)
+            xml.write_text(ET.tostring(root, encoding='unicode'))
+            result = subprocess.run([sys.executable, str(SCRIPTS / 'ui.py'), str(xml), 'clear-field', ''], capture_output=True, text=True)
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual(['123'] + ['67'] * len(attributes['text']), result.stdout.split())
+            root[0].set('focused', 'false')
+            xml.write_text(ET.tostring(root, encoding='unicode'))
+            result = subprocess.run([sys.executable, str(SCRIPTS / 'ui.py'), str(xml), 'clear-field', ''], capture_output=True, text=True)
+            self.assertNotEqual(0, result.returncode)
+
+    def test_answered_phase_requires_the_actual_visible_reply(self):
+        root = ET.fromstring('<hierarchy><node text="WAITING_ONE"/><node text="WAITING_TWO"/></hierarchy>')
+        evidence = [dict(id=f'phone-{n}', text=text, state='started') for n, text in enumerate(('WAITING_ONE', 'WAITING_TWO'), 1)]
+        with self.assertRaisesRegex(AssertionError, 'provider answer must be visible'):
+            ui.verify(root, 0, 'QUEUE_ANSWERED', evidence)
+        ET.SubElement(root, 'node', text='Both messages received.')
+        self.assertEqual('Both messages received.', ui.verify(root, 0, 'QUEUE_ANSWERED', evidence)['answer'])
 
     def test_wrong_attempt_receipt_cannot_confirm_a_queued_message(self):
         with tempfile.TemporaryDirectory() as temporary:

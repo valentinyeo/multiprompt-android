@@ -178,14 +178,23 @@ wait_for_text() {
     return 1
 }
 fill() {
-    local attempt
+    local attempt index character
     local -a clear_keys
+    tap_node field "$1"
+    select_node focused-field "$1" >/dev/null
     for attempt in 1 2 3; do
-        tap_node field "$1"
-        select_node focused-field "$1" >/dev/null || continue
-        read -r -a clear_keys < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" clear-field "$1")
+        dump_ui
+        read -r -a clear_keys < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" clear-field "")
         adb shell input keyevent "${clear_keys[@]}"
-        adb shell input text "$2"
+        if (( attempt == 1 )); then
+            adb shell input text "$2"
+        else
+            for ((index = 0; index < ${#2}; index++)); do
+                character=${2:index:1}
+                if [[ "${2:index:2}" == '%s' ]]; then character='%s'; index=$((index + 1)); fi
+                adb shell input text "$character"
+            done
+        fi
         dump_ui
         if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value "$1" "${2//%s/ }"; then
             adb shell input keyevent KEYCODE_BACK
@@ -195,6 +204,7 @@ fill() {
     printf 'Field input did not match: %s\n' "$1" >&2
     return 1
 }
+
 scroll_to_newest() {
     local attempt
     for attempt in {1..8}; do
@@ -1492,10 +1502,10 @@ if [[ "$feature" == chat-queued.md ]]; then
         local expected=$1 name=$2 attempt
         for attempt in {1..30}; do
             dump_ui
-            if python3 "$scripts/queued.py" "$EVIDENCE/current.xml" "$expected" "$name" "$EVIDENCE/queue-state.tmp" >/dev/null 2>&1; then return; fi
+            if python3 "$scripts/queued.py" "$EVIDENCE/current.xml" "$expected" "$name" "$EVIDENCE/queue-state.tmp" "$EVIDENCE/queue-ui-$name.json" >/dev/null 2>&1; then return; fi
             sleep 1
         done
-        python3 "$scripts/queued.py" "$EVIDENCE/current.xml" "$expected" "$name" "$EVIDENCE/queue-state.tmp"
+        python3 "$scripts/queued.py" "$EVIDENCE/current.xml" "$expected" "$name" "$EVIDENCE/queue-state.tmp" "$EVIDENCE/queue-ui-$name.json"
     }
     provider_event() { sudo -u verifyssh env GITHUB_ACTIONS="$GITHUB_ACTIONS" HOME=/home/verifyssh python3 /home/verifyssh/queued-console.py "$1"; }
     fixture_counts() {
@@ -1567,6 +1577,8 @@ QUEUE_COUNTS
     shot queued-both-delivered
     provider_event reply
     wait_for_text 'Both messages received.'
+    queue_ui 0 QUEUE_ANSWERED
+    shot queued-answered
     fill 'Message verify-session' FOLLOWUP
     tap_desc 'Send prompt'
     wait_receipt 'VERIFY_RECEIVED:FOLLOWUP'
@@ -1640,6 +1652,7 @@ QUEUE_DRAFT
     queue_states uncertain sent queued | tee "$EVIDENCE/queue-uncertain-final.json"
     queue_states all started started started sent queued | tee "$EVIDENCE/queue-all-final.json"
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/queued-receipts.txt"
+    cp "$EVIDENCE/queued-receipts.txt" "$EVIDENCE/00-queue-receipts.txt"
     sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-queued-work/a1b2c3d4-1008-4000-8000-000000001008.jsonl > "$EVIDENCE/queued-transcript.jsonl"
     sudo cat /home/verifyssh/shell-events.jsonl > "$EVIDENCE/shell-events.jsonl"
     python3 - "$EVIDENCE" <<'QUEUE_RESULT'
@@ -1676,6 +1689,8 @@ result = dict(consumed_positive=dict(inputs=consumed, synthetic_receipts=receipt
               apk_sha256=root.joinpath('app-apk-sha256.txt').read_text().strip(),
               provider='simulated Claude; real SSH, tmux, client and embedded engine')
 root.joinpath('queue-result.json').write_text(json.dumps(result, indent=2) + '\n')
+ui = {phase: json.loads(root.joinpath('queue-ui-' + name + '.json').read_text()) for phase, name in [('queued', 'QUEUE_WAITING'), ('answered', 'QUEUE_ANSWERED')]}
+root.joinpath('00-queue-ui.json').write_text(json.dumps(ui) + '\n')
 print('QUEUE_JOURNEY_RESULT', json.dumps(result))
 QUEUE_RESULT
     exit 0
