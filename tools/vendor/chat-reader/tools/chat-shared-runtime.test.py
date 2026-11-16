@@ -128,6 +128,16 @@ class RuntimeTest(unittest.TestCase):
         self.assertTrue(published.is_symlink())
         self.assertEqual(published.read_text(), body)
 
+    def test_zsb_ships_inside_the_runtime_as_an_executable_copy(self):
+        body = "#!/bin/sh\necho zsb\n"
+        source = "ZSB_SOURCE = '%s'\n%s" % (base64.b64encode(body.encode()).decode(), SOURCE)
+        self.info(source)
+        published = Path(self.home.name) / '.multiprompt-runtime' / 'mp-zsb'
+        self.assertTrue(published.is_symlink())
+        self.assertEqual(published.read_text(), body)
+        self.assertTrue(os.access(published, os.X_OK))
+        self.assertFalse((Path(self.home.name) / '.multiprompt-runtime' / 'zsb').exists())
+
     def test_reader_tool_is_a_symlink(self):
         info = self.info()
         reader = Path(self.home.name) / '.multiprompt-runtime' / 'reader.py'
