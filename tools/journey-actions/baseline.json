@@ -1,0 +1,7 @@
+{
+  ".claude/skills/verify-multiprompt-android/scripts/drive.sh: adb shell input tap \"$x\" \"$y\"": 1,
+  "tools/account-journey/drive.sh: adb shell input tap \"$x\" \"$y\"": 4,
+  "tools/app-name/drive.py: adb(\"shell\", \"input\", \"tap\", str((x1 + x2) // 2), str((y1 + y2) // 2))": 1,
+  "tools/session-gestures/drive.py: adb('shell', 'input', 'tap', str((back_x + back_right) // 2), str((back_y + back_bottom) // 2))": 1,
+  "tools/session-gestures/drive.py: adb('shell', 'input', 'tap', str(x), str(y))": 1
+}

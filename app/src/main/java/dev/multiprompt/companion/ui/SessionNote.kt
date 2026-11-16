@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -169,8 +170,14 @@ internal fun SessionNoteChip(
     fontScale: Float,
     key: String,
     modifier: Modifier = Modifier,
+    findHits: List<ChatFind.Hit> = emptyList(),
+    activeHit: ChatFind.Hit? = null,
+    findOrigin: Int = 0,
 ) {
     var expanded by rememberSaveable(key) { mutableStateOf(false) }
+    LaunchedEffect(activeHit?.start, activeHit?.end, activeHit?.message) {
+        if (activeHit != null) expanded = true
+    }
     val label = SessionNote.label(note, recipient)
     Column(modifier.fillMaxWidth().testTag("session-note-chip-$key")) {
         Row(
@@ -203,9 +210,9 @@ internal fun SessionNoteChip(
         if (expanded) {
             val fontSize = chatFontSize((14f * fontScale).sp, fontScale)
             Column(Modifier.padding(start = 18.dp, bottom = 4.dp).testTag("session-note-body")) {
-                ChatLinkText(note.body) { line ->
+                ChatLinkText(note.body) { line, start ->
                     Text(
-                        terminalLinks(line, sunlight),
+                        terminalLinks(line, sunlight).marking(findOrigin + start, findHits, activeHit),
                         fontFamily = chatFontFamily(),
                         fontSize = fontSize,
                         lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, fontScale),

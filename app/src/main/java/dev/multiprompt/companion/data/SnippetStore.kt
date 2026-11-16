@@ -1,0 +1,82 @@
+package dev.multiprompt.companion.data
+
+import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
+
+data class Snippet(val name: String, val text: String)
+
+object Snippets {
+    const val NAME_LIMIT = 80
+    const val TEXT_LIMIT = 4096
+    const val MAX_COUNT = 32
+
+    fun nameFrom(text: String): String {
+        val collapsed = text.trim().replace(WHITESPACE, " ")
+        if (collapsed.isEmpty()) return ""
+        if (collapsed.length <= NAME_LIMIT) return collapsed
+        val split = collapsed.lastIndexOf(' ', NAME_LIMIT - 1)
+        val end = if (split > 0) split else NAME_LIMIT
+        return collapsed.substring(0, end)
+    }
+
+    fun add(existing: List<Snippet>, text: String): List<Snippet> {
+        val stored = storedText(text) ?: return existing
+        if (existing.any { it.text == stored }) return existing
+        if (existing.size >= MAX_COUNT) return existing
+        val name = nameFrom(stored)
+        if (name.isEmpty()) return existing
+        return existing + Snippet(name, stored)
+    }
+
+    fun delete(existing: List<Snippet>, text: String): List<Snippet> =
+        existing.filterNot { it.text == text }
+
+    fun encode(snippets: List<Snippet>): String {
+        val array = JSONArray()
+        snippets.forEach { snippet ->
+            array.put(JSONObject().put("name", snippet.name).put("text", snippet.text))
+        }
+        return array.toString()
+    }
+
+    fun decode(raw: String?): List<Snippet> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return runCatching {
+            val array = JSONArray(raw)
+            buildList {
+                for (index in 0 until array.length()) {
+                    if (size >= MAX_COUNT) break
+                    val item = array.optJSONObject(index) ?: continue
+                    val text = item.optString("text").take(TEXT_LIMIT)
+                    if (text.isBlank()) continue
+                    val name = item.optString("name").trim().ifBlank { nameFrom(text) }.take(NAME_LIMIT)
+                    if (name.isBlank()) continue
+                    add(Snippet(name, text))
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun storedText(text: String): String? {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return null
+        return trimmed.take(TEXT_LIMIT)
+    }
+
+    private val WHITESPACE = Regex("\\s+")
+}
+
+class SnippetStore(context: Context) {
+    private val preferences = context.getSharedPreferences("snippets", Context.MODE_PRIVATE)
+
+    fun load(): List<Snippet> = Snippets.decode(preferences.getString(KEY, null))
+
+    fun write(snippets: List<Snippet>) {
+        preferences.edit().putString(KEY, Snippets.encode(snippets)).apply()
+    }
+
+    private companion object {
+        const val KEY = "snippets_json"
+    }
+}
