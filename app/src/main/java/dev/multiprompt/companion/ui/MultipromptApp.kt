@@ -3260,7 +3260,8 @@ internal fun ReaderScreen(
     val readerScope = rememberCoroutineScope()
     var speakableReplies by remember { mutableStateOf<List<dev.multiprompt.companion.reader.ReadAloud.Spoken>>(emptyList()) }
     var chatReady by remember(session.hostId, session.name) { mutableStateOf(false) }
-    var waitingSend by remember(session.hostId, session.name) { mutableStateOf<String?>(null) }
+    var queuedDraft by remember(connection) { mutableStateOf<Pair<String, SentDraft>?>(null) }
+    val acceptedQueuedPrompts by connection.pendingPrompts.accepted.collectAsState()
     var replyCursor by remember { mutableStateOf(0) }
     var reading by remember { mutableStateOf(false) }
     var speakingKey by remember { mutableStateOf<String?>(null) }
@@ -3460,6 +3461,17 @@ internal fun ReaderScreen(
         }
     }
 
+    LaunchedEffect(acceptedQueuedPrompts, queuedDraft) {
+        val (id, draft) = queuedDraft ?: return@LaunchedEffect
+        if (id !in acceptedQueuedPrompts) return@LaunchedEffect
+        if (promptField.text == draft.prompt && imageAttachments == draft.images && replyTo == draft.replyTo) {
+            setPrompt("")
+            mentionPicks = emptyList()
+            imageAttachments = emptyList()
+            replyTo = null
+        }
+        queuedDraft = null
+    }
     LaunchedEffect(reader.completedActions) {
         val pending = pendingPromptAction
         if (pending != null && reader.completedActions > pending) {
@@ -3551,13 +3563,11 @@ internal fun ReaderScreen(
                 if (editing != null) editingMessageId = null
                 when (val admission = sent) {
                     is dev.multiprompt.companion.reader.PromptAdmission.Rejected -> {
-                        val reason = admission.reason
-                        if (reason == "Chat is disconnected" || (reason == "Chat is not ready" && !chatReady)) {
-                            waitingSend = draftText
-                            android.widget.Toast.makeText(context, "Will send when back online", android.widget.Toast.LENGTH_SHORT).show()
-                        } else {
-                            android.widget.Toast.makeText(context, reason, android.widget.Toast.LENGTH_SHORT).show()
-                        }
+                        android.widget.Toast.makeText(context, admission.reason, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    is dev.multiprompt.companion.reader.PromptAdmission.WaitingForConnection -> {
+                        queuedDraft = admission.id to draft
+                        android.widget.Toast.makeText(context, "Will send when the chat reconnects", android.widget.Toast.LENGTH_SHORT).show()
                     }
                     else -> {
                         SendTiming.mark("message_added")
@@ -3579,13 +3589,6 @@ internal fun ReaderScreen(
                 recordingPrompt = false
             }
         }
-    }
-    LaunchedEffect(chatReady, waitingSend) {
-        val text = waitingSend ?: return@LaunchedEffect
-        if (!chatReady) return@LaunchedEffect
-        delay(1_000)
-        waitingSend = null
-        sendDraft(text)
     }
     val applyPiModel: (PiModel) -> Unit = { model ->
         readerScope.launch {

@@ -101,6 +101,7 @@ internal fun ChatHistoryView(
     val history = remember(connection, agent, workingDirectory) { connection.chatHistory(agent, workingDirectory) }
     val state by history.state.collectAsState()
     val managed = connection.sharedMessages
+    val pendingPrompts by connection.pendingPrompts.state.collectAsState()
     val waiting = state.replica?.messages?.values?.any { it.state == MessageProtocol.State.QUEUED || it.state == MessageProtocol.State.SENT } == true
     val now by produceState(System.currentTimeMillis() / 1000.0, waiting) {
         while (waiting) {
@@ -110,10 +111,10 @@ internal fun ChatHistoryView(
     }
     val seen = remember(history) { HashMap<String, Double>() }
     state.replica?.messages?.values?.forEach { if (it.state == MessageProtocol.State.QUEUED || it.state == MessageProtocol.State.SENT) seen.getOrPut(it.id) { System.currentTimeMillis() / 1000.0 } }
-    val messages = if (managed) state.history.managedMessages(state.replica, state.unresolved, now, state.retrying, seen) else state.history.displayMessages(reader.sentRecord)
+    val messages = if (managed) state.history.managedMessages(state.replica, state.unresolved, now, state.retrying, seen) + pendingPrompts.map { it.message() } else state.history.displayMessages(reader.sentRecord)
     val speakable = remember(messages) { dev.multiprompt.companion.reader.ReadAloud.replies(messages) }
     LaunchedEffect(speakable) { onSpeakableReplies(speakable) }
-    LaunchedEffect(state.loaded, state.history.sid, state.retrying) { onChatReady(state.loaded && state.history.sid.isNotEmpty() && !state.retrying) }
+    LaunchedEffect(state.ready) { onChatReady(state.ready) }
     val pendingReset = if (managed) state.unresolved.firstOrNull { it.operation == "reset" }?.id else null
     LaunchedEffect(history, pendingReset) {
         while (pendingReset != null && history.recoverReset(history.actionToken()) != dev.multiprompt.companion.reader.MessageActionResult.Applied) delay(5_000)
@@ -132,6 +133,12 @@ internal fun ChatHistoryView(
     val hostCards = hostRequest?.takeIf { it.id !in hostClosed }?.cards()?.filter { "${it.callId}#${it.index}" !in hostClosed }.orEmpty()
     val questions = if (hostRequest != null) hostCards else state.history.pendingQuestions
     Column(modifier.fillMaxSize()) {
+        state.connectionError?.let { error ->
+            KitListGroup(Modifier.padding(Kit.SideChange)) {
+                KitAssistantBubble(error, Modifier.fillMaxWidth())
+                KitSecondaryButton("Retry", { history.nudge() }, Modifier.fillMaxWidth())
+            }
+        }
         state.messageError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(8.dp)) }
         reader.modelPickerOptions.forEach { option ->
             OutlinedButton(
@@ -144,6 +151,7 @@ internal fun ChatHistoryView(
             messages = messages,
             focusKey = focusKey,
             loaded = state.loaded,
+            loadFailed = state.connectionError != null,
             hasOlder = !state.loaded || state.history.start > 0 || state.history.more,
             agent = agent,
             skills = reader.nativeSkills,
@@ -175,6 +183,7 @@ internal fun ChatHistoryView(
             onSendAgain = if (managed) { target, confirmed ->
                 val row = state.replica?.messages?.get(target.requestId)
                 when {
+                    pendingPrompts.any { it.id == target.requestId } -> connection.pendingPrompts.retry(target.requestId)
                     target.unknownId != null -> { scope.launch { if (history.replayUnknown(target.unknownId) != MessageActionResult.Applied) toast("Could not send again. Try again") }; true }
                     row == null -> true
                     row.state != MessageProtocol.State.FAILED && !confirmed -> false
@@ -185,6 +194,7 @@ internal fun ChatHistoryView(
                 val row = state.replica?.messages?.get(target.requestId)
                 scope.launch {
                     val result = when {
+                        connection.pendingPrompts.remove(target.requestId) -> MessageActionResult.Applied
                         target.unknownId != null -> history.removeUnknown(target.unknownId)
                         row != null -> history.dismiss(row)
                         else -> MessageActionResult.Applied
@@ -215,6 +225,7 @@ internal fun ChatHistoryList(
     modifier: Modifier = Modifier,
     focusKey: String? = null,
     loaded: Boolean = true,
+    loadFailed: Boolean = false,
     agent: AgentKind = AgentKind.CLAUDE,
     skills: List<NativeSkill> = emptyList(),
     fontScale: Float = 1f,
@@ -407,7 +418,7 @@ internal fun ChatHistoryList(
                 }
             }
         }
-        if (presentation.messages.isEmpty()) {
+        if (presentation.messages.isEmpty() && !loadFailed) {
             item(key = "empty") {
                 Text(if (loaded) "No messages yet" else "Loading conversation…", fontSize = fontSize,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp))

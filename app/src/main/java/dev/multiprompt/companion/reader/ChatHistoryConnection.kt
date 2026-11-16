@@ -14,7 +14,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,7 +34,11 @@ data class ChatHistoryState(
     val unresolved: List<MessageJournal.Entry> = emptyList(),
     val messageError: String? = null,
     val engine: Pair<Long, String>? = null,
-)
+    val connected: Boolean = false,
+    val connectionError: String? = null,
+) {
+    val ready: Boolean get() = loaded && connected && !retrying && messageError == null && history.sid.isNotEmpty()
+}
 
 sealed interface MessageActionResult {
     data object Applied : MessageActionResult
@@ -54,7 +57,7 @@ class ChatHistoryConnection(
     private val gate: MessageGate? = null,
     private val connectedExchange: (suspend (suspend (suspend (String) -> String) -> Unit) -> Unit)? = null,
     private val beforeAdmission: (suspend () -> Unit)? = null,
-    private val stallMillis: Long = 60_000L,
+    private val stallMillis: Long = ConversationLoad.TIMEOUT_MS,
 ) : AutoCloseable {
     private sealed interface Command {
         data class Submit(val text: String, val generation: Long, val result: CompletableDeferred<PromptAdmission>, val replaces: String? = null) : Command
@@ -74,7 +77,9 @@ class ChatHistoryConnection(
     private val provider = ChatHistoryProtocol.messageProvider(identity.agent, identity.sid)
     @Volatile private var selected = false
     @Volatile private var lastReply = System.nanoTime()
+    @Volatile private var loadStarted = lastReply
     private class StalledChat : Exception("Chat stopped answering")
+    private class RetryRequested : Exception("Chat reconnect requested")
     @Volatile private var freshSid: String? = null
     @Volatile private var generation = 0L
     private var hostCarry: Pair<String, MessageReplica>? = null
@@ -119,7 +124,10 @@ class ChatHistoryConnection(
     @Synchronized fun select(value: Boolean) {
         if (selected == value) return
         selected = value
-        if (value) lastReply = System.nanoTime()
+        if (value) {
+            lastReply = System.nanoTime()
+            loadStarted = lastReply
+        }
         generation++
         if (!value) {
             resetReply?.complete(MessageActionResult.Unknown)
@@ -163,8 +171,7 @@ class ChatHistoryConnection(
         return result.await()
     }
 
-    fun nudge(): Boolean =
-        ReconnectBackoff.shouldNudge(_state.value.retrying) && retryNudge.trySend(Unit).isSuccess
+    fun nudge(): Boolean = retryNudge.trySend(Unit).isSuccess
 
     fun actionToken(): Long = generation
     suspend fun checkStatus(id: String, observed: Long = generation) = action("status", id, observed = observed)
@@ -281,13 +288,14 @@ class ChatHistoryConnection(
 
     private suspend fun connected(block: suspend (suspend (String) -> String) -> Unit) = coroutineScope {
         lastReply = System.nanoTime()
+        loadStarted = lastReply
         val client = AtomicReference<SshClient?>()
         val watchdog = launch {
             while (true) {
-                delay(stallMillis / 4)
-                if (selected && System.nanoTime() - lastReply > stallMillis * 1_000_000L) {
+                val retry = withTimeoutOrNull((stallMillis / 4).coerceAtLeast(1L)) { retryNudge.receive() } != null
+                if (retry || (selected && ConversationLoad.expired(System.nanoTime(), loadStarted, lastReply, _state.value.ready, stallMillis))) {
                     client.get()?.let(::disconnectAside)
-                    throw StalledChat()
+                    if (retry) throw RetryRequested() else throw StalledChat()
                 }
             }
         }
@@ -370,6 +378,9 @@ class ChatHistoryConnection(
                                     if (generation != historyGeneration) null else { bind(page.sid); generation }
                                 } ?: continue@poll
                                 connectionGeneration = cycleGeneration
+                                synchronized(this@ChatHistoryConnection) {
+                                    if (generation == cycleGeneration) _state.value = _state.value.copy(history = next, loaded = true)
+                                }
                                 val messageScope = if (provider != null && engine != null) wire(page.sid) else null
                                 if (messageScope != null) {
                                     pending(page.sid)
@@ -502,12 +513,12 @@ class ChatHistoryConnection(
                                                 resetReply?.complete(MessageActionResult.Applied)
                                                 resetReply = null
                                             }
-                                            _state.value = ChatHistoryState(next, loaded = true, replica = replica, unresolved = pending(page.sid), engine = engine)
+                                            _state.value = ChatHistoryState(next, loaded = true, connected = true, replica = replica, unresolved = pending(page.sid), engine = engine)
                                             if (next != current) runCatching { cache.save(cacheKey, next) }
                                             true
                                         } else false
                                     } ?: false else {
-                                        _state.value = ChatHistoryState(next, loaded = true, replica = replica, unresolved = pending(page.sid), engine = engine,
+                                        _state.value = ChatHistoryState(next, loaded = true, connected = true, replica = replica, unresolved = pending(page.sid), engine = engine,
                                             messageError = if (provider != null && engine == null) "Shared messaging is unavailable on this host" else null)
                                         if (next != current) runCatching { cache.save(cacheKey, next) }
                                         true
@@ -639,9 +650,10 @@ class ChatHistoryConnection(
                             resetReply = null
                             resetAck = null
                             freshSid = null
-                            _state.value = _state.value.copy(retrying = true,
-                                messageError = if (failure is JournalStorageFailure) "Local storage failure; messages cannot be safely sent" else null)
                         }
+                        _state.value = _state.value.copy(retrying = true, connected = false,
+                            connectionError = if (failure is StalledChat || failure is kotlinx.coroutines.TimeoutCancellationException) ConversationLoad.TIMED_OUT else ConversationLoad.FAILED,
+                            messageError = if (failure is JournalStorageFailure) "Local storage failure; messages cannot be safely sent" else _state.value.messageError)
                     }
                     when (val command = activeCommand) {
                         is Command.Submit -> command.result.complete(PromptAdmission.Rejected("Chat is disconnected"))
@@ -665,6 +677,10 @@ class ChatHistoryConnection(
                         }
                     }
                     if (failure is CancellationException && !isActive) throw failure
+                    if (failure is RetryRequested) {
+                        retryDelay = ReconnectBackoff.INITIAL_MS
+                        continue
+                    }
                 }
                 val nudged = withTimeoutOrNull(retryDelay) { retryNudge.receive() } != null
                 retryDelay = ReconnectBackoff.afterWait(retryDelay, nudged)
