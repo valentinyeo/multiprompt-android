@@ -236,6 +236,20 @@
         "robot-faces.journey"
       ]
     },
+    "session-drafts.md": {
+      "name": "Inbox draft label",
+      "description": "unsent composer text shows Draft before the inbox preview, and sending that text removes it.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "inbox.draft"
+      ]
+    },
     "session-favorites.md": {
       "name": "Session favorites",
       "description": "signed APK, isolated SSH sessions and offline favorite cache; no production sync.",
@@ -566,6 +580,14 @@
       "journey": "session-settings.md",
       "sideEffect": false,
       "match": []
+    },
+    "inbox.draft": {
+      "description": "Inbox rows show Draft before the preview while a chat has unsent text, and hide it once that text is sent.",
+      "journey": "session-drafts.md",
+      "sideEffect": false,
+      "match": [
+        "observeDrafts|Session draft"
+      ]
     },
     "inbox.summaries": {
       "description": "Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.",

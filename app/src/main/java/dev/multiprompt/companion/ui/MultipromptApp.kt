@@ -1982,6 +1982,12 @@ internal fun SessionsScreen(
     }
     val roomsContext = LocalContext.current.applicationContext
     val drafts = remember(roomsContext) { SessionReadStore(roomsContext) }
+    var draftKeys by remember(drafts) { mutableStateOf(drafts.draftKeys()) }
+    DisposableEffect(drafts) {
+        draftKeys = drafts.draftKeys()
+        val stopObserving = drafts.observeDrafts { draftKeys = drafts.draftKeys() }
+        onDispose { stopObserving() }
+    }
     val rooms = remember(state.rooms) {
         state.rooms.map { room ->
             RoomSummary(
@@ -2314,6 +2320,7 @@ internal fun SessionsScreen(
                             unreadCount = state.unreadCounts[key] ?: 1,
                             archived = key in state.archivedSessionKeys,
                             starred = starred,
+                            hasDraft = key in draftKeys,
                             onToggleFavorite = if (tab != null && state.signedIn) {
                                 { onSetFavorite(tab, !starred) }
                             } else null,
@@ -2550,6 +2557,7 @@ private fun SessionCard(
     unreadCount: Int,
     archived: Boolean,
     starred: Boolean,
+    hasDraft: Boolean = false,
     onToggleFavorite: (() -> Unit)?,
     onClick: () -> Unit,
     onOpenTerminal: () -> Unit,
@@ -2650,15 +2658,26 @@ private fun SessionCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        SessionPreview.line(session.preview),
-                        modifier = Modifier.testTag("Session preview"),
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (hasDraft) {
+                            Text(
+                                "Draft",
+                                modifier = Modifier.testTag("Session draft"),
+                                style = Kit.Label,
+                                color = Kit.Text,
+                                maxLines = 1,
+                            )
+                        }
+                        Text(
+                            SessionPreview.line(session.preview),
+                            modifier = Modifier.weight(1f).testTag("Session preview"),
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 Text(
                     sessionActivityLabel(session.lastActivityEpochSeconds, System.currentTimeMillis() / 1000),
