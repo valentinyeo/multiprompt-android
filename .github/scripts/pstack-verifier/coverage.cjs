@@ -24,15 +24,10 @@ function changedOutcomes(diff) {
 }
 
 function planChange(diff, reported) {
-  if (!Array.isArray(reported) || reported.some(id => typeof id !== 'string')) {
+  if (!Array.isArray(reported) || reported.some(id => typeof id !== 'string' || !registry.outcomes[id])) {
     throw new Error('FEATURE_UNMAPPED: report registered changed_outcomes; add a new outcome and its journey to features/registry.json.');
   }
-  const known = reported.filter(id => registry.outcomes[id]);
-  const unknown = reported.filter(id => !registry.outcomes[id]);
-  const outcomes = [...new Set([...changedOutcomes(diff), ...known])];
-  if (unknown.length && outcomes.length === 0) {
-    throw new Error('FEATURE_UNMAPPED: report registered changed_outcomes; add a new outcome and its journey to features/registry.json.');
-  }
+  const outcomes = [...new Set([...changedOutcomes(diff), ...reported])];
   return { product: changedProduct(diff).length > 0, outcomes };
 }
 

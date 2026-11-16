@@ -47,16 +47,6 @@ test('PR #376 unreachable Snippets row fails even when both unrelated journeys p
   assert.match(featureProof.errors.join(' '), /snippets.save-reuse-delete/);
 });
 
-test('a source match survives an unmapped picker label and selects its journey', () => {
-  const diff = productDiff('reader/SessionReaderConnection.kt', 'eta');
-  const plan = gate.planChange(diff, ['unmapped']);
-  assert.deepEqual(plan.outcomes, ['reader.send-enter-interrupt']);
-  const selected = verifier.selectJourneys({ features: ['native-skills.md'], smoke: true, changeKind: 'product' }, plan);
-  assert.deepEqual(selected.features, ['session-reader.md']);
-  assert.equal(selected.smoke, false);
-  assert.throws(() => verifier.selectJourneys({ features: ['native-skills.md'], smoke: true, changeKind: 'tooling' }, { product: true, outcomes: [] }), /FEATURE_UNMAPPED/);
-});
-
 test('unknown product changes fail closed and cannot be called tooling', () => {
   const diff = productDiff('new-feature.kt', 'a new feature');
   const plan = gate.planChange(diff, []);

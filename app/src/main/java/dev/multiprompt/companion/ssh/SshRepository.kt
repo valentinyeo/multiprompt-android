@@ -81,6 +81,7 @@ class SshRepository(private val secrets: SecretStorage) {
         val waitingForInput: Boolean,
         val alternateOn: Boolean,
         val confirmationVisible: Boolean,
+        val eta: TmuxText.SessionEtaState?,
         val hookState: TmuxText.HookState?,
     )
 
@@ -220,6 +221,7 @@ class SshRepository(private val secrets: SecretStorage) {
             }
             val err = async { session.stderr.drain() }
             var alternateOn = false
+            var etaState: TmuxText.SessionEtaState? = null
             var hookState: TmuxText.HookState? = null
             val pending = StringBuilder()
             for (chunk in session.stdout) {
@@ -237,6 +239,11 @@ class SshRepository(private val secrets: SecretStorage) {
                     if (line.startsWith(TmuxCommands.ETA_PREFIX)) {
                         val payload = line.removePrefix(TmuxCommands.ETA_PREFIX).trim()
                         val decoded = TmuxText.decodeHex(payload)
+                        etaState = decoded
+                            .takeIf(String::isNotBlank)
+                            ?.let(TmuxText::parseSessionEtaStates)
+                            ?.values
+                            ?.firstOrNull()
                         hookState = decoded
                             .takeIf(String::isNotBlank)
                             ?.let(TmuxText::parseHookStates)
@@ -263,6 +270,7 @@ class SshRepository(private val secrets: SecretStorage) {
                                 waitingForInput = TmuxText.isWaitingForInput(rawOutput, agent),
                                 alternateOn = alternateOn,
                                 confirmationVisible = TmuxText.isModelSwitchConfirmation(rawOutput),
+                                eta = etaState,
                                 hookState = hookState,
                             ),
                         )
