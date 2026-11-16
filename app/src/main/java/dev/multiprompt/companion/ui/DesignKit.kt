@@ -24,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
@@ -100,6 +101,20 @@ internal fun KitRoundButton(
 }
 
 @Composable
+internal fun KitExpandButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    description: String = "Expand table",
+) {
+    Box(
+        modifier.size(32.dp).kitSurface(CircleShape).clickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Default.OpenInFull, description, Modifier.size(16.dp), tint = Kit.Text)
+    }
+}
+
+@Composable
 internal fun KitTitlePill(text: String, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
     Box(
         modifier.heightIn(min = Kit.RoundButton).kitSurface().let { if (onClick != null) it.clickable(role = Role.Button, onClick = onClick) else it }
@@ -108,6 +123,18 @@ internal fun KitTitlePill(text: String, modifier: Modifier = Modifier, onClick: 
     ) {
         Text(text, style = Kit.BodyStrong, color = Kit.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
+}
+
+@Composable
+internal fun KitSkillPill(text: String, modifier: Modifier = Modifier, style: TextStyle = Kit.Body) {
+    Text(
+        text,
+        modifier.kitSurface().padding(horizontal = 8.dp, vertical = 1.dp),
+        style = style,
+        color = Kit.Text,
+        maxLines = 1,
+        softWrap = false,
+    )
 }
 
 @Composable
