@@ -79,28 +79,28 @@ on:
         required: true
         type: choice
         options:
-          - sign-in.md
-          - settings-navigation.md
-          - hosts.md
-          - hosts-retired.md
-          - host-changed-key.md
-          - sessions.md
-          - session-summaries.md
-          - session-reader.md
-          - chat-choices.md
-          - chat-reactions.md
-          - chat-queued.md
           - chat-cancel.md
-          - native-skills.md
+          - chat-choices.md
+          - chat-codex.md
+          - chat-queued.md
+          - chat-reactions.md
           - chat-resync.md
           - chat-shared.md
-          - chat-codex.md
-          - session-routing.md
-          - session-gestures.md
-          - session-favorites.md
-          - terminal.md
+          - host-changed-key.md
+          - hosts-retired.md
+          - hosts.md
           - launcher-icon.md
+          - native-skills.md
           - robot-faces.md
+          - session-favorites.md
+          - session-gestures.md
+          - session-reader.md
+          - session-routing.md
+          - session-summaries.md
+          - sessions.md
+          - settings-navigation.md
+          - sign-in.md
+          - terminal.md
       expect_settings_missing:
         description: Require signed Android 301 to reject the settings navigation journey
         type: boolean
@@ -142,7 +142,7 @@ jobs:
     timeout-minutes: ${{ inputs.side == 'parent' && 50 || 35 }}
     env:
       EVIDENCE: ${{ github.workspace }}/verification-evidence
-      VERIFY_FEATURE: ${{ inputs.feature || (github.ref == 'refs/heads/ceo/IGSH-1075' && 'chat-queued.md') || ((github.head_ref == 'ceo/IGSH-1076' || startsWith(github.ref, 'refs/heads/ceo/IGSH-1076')) && 'terminal.md') || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1069' && 'chat-choices.md') || (github.event_name == 'push' && github.ref == 'refs/heads/ceo/IGSH-1012' && 'chat-reactions.md') || 'native-skills.md' }}
+      VERIFY_FEATURE: ${{ inputs.feature || 'native-skills.md' }}
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
       UPDATE_BASELINE_RUN: ${{ inputs.update_baseline_run }}
       APP_REF: ${{ inputs.app_ref }}

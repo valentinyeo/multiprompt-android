@@ -104,6 +104,8 @@ test('unknown journey names are dropped and at most three run', () => {
   const picked = verifier.parsePick(JSON.stringify({
     features: ['hosts.md', 'made-up.md', 'settings-navigation.md', '../etc/passwd', 'hosts.md', 'terminal.md', 'sessions.md', 'chat-cancel.md'],
     reason: 'x',
+    changed_outcomes: [],
+    change_kind: 'tooling',
   }));
   assert.deepEqual(picked.features, ['hosts.md', 'terminal.md', 'sessions.md']);
   assert.ok(picked.dropped.includes('made-up.md'));
@@ -286,6 +288,7 @@ test('the journeys job runs verify.yml with no secrets and no key', () => {
   assert.match(journeys, /^ {4}uses: \.\/\.github\/workflows\/verify\.yml$/m);
   assert.match(journeys, /^ {6}feature: \$\{\{ matrix\.feature \}\}$/m);
   assert.match(journeys, /^ {6}side: head$/m);
+  assert.match(journeys, /^ {6}app_ref: \$\{\{ needs\.pick\.outputs\.head_sha \}\}$/m);
   assert.match(journeys, /fail-fast: false/);
   assert.doesNotMatch(journeys, /secrets/i);
   assert.doesNotMatch(journeys, /DEEPSEEK/);
@@ -310,7 +313,7 @@ test('the pick and judge jobs check out only the scripts and the journey maps, n
     assert.match(block, /persist-credentials: false/, job);
     assert.doesNotMatch(block, /gradle|assemble|setup-java|emulator/i, job);
   }
-  assert.doesNotMatch(jobBlock(workflow, 'pstack-verifier'), /\.claude\/skills/);
+  assert.match(jobBlock(workflow, 'pstack-verifier'), /\.claude\/skills\/verify-multiprompt-android\/features/);
 });
 
 test('the check is named pstack-verifier and the workflow skips forks, drafts and dependabot', () => {
@@ -353,7 +356,7 @@ test('verify.yml can be called with one required feature and keeps its own trigg
 });
 
 test('a change no journey fits still drives the smoke journey and never gets a plain PASS', () => {
-  const picked = verifier.parsePick(JSON.stringify({ features: ['not-a-journey.md'], reason: 'Only workflow files changed.' }));
+  const picked = verifier.parsePick(JSON.stringify({ features: ['not-a-journey.md'], changed_outcomes: [], change_kind: 'tooling', reason: 'Only workflow files changed.' }));
   assert.deepEqual(picked.features, [verifier.SMOKE_JOURNEY]);
   assert.equal(picked.smoke, true);
   assert.ok(verifier.ALLOWLIST.includes(verifier.SMOKE_JOURNEY));
