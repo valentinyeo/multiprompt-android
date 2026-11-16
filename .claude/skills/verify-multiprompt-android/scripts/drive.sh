@@ -789,6 +789,54 @@ PYINFO
     exit 0
 fi
 
+if [[ "$feature" == session-drafts.md ]]; then
+    wait_for_text 'Inbox preview stays.'
+    python3 "$scripts/draft-label.py" absent "$EVIDENCE/current.xml"
+    shot inbox-before-draft
+    tap_text verify-session
+    wait_for_text 'Message verify-session'
+    fill 'Message verify-session' 'unsent%sdraft%stext'
+    shot composer-unsent
+    if sudo grep -F 'VERIFY_RECEIVED:unsent draft text' /home/verifyssh/receipts.txt; then
+        printf 'Unsent draft reached the host\n' >&2
+        exit 1
+    fi
+    tap_desc Back
+    wait_for_text Inbox
+    wait_for_text Draft
+    wait_for_text 'Inbox preview stays.'
+    shot inbox-draft
+    python3 "$scripts/draft-label.py" present "$EVIDENCE/$(printf '%02d' "$step")-inbox-draft.xml"
+    tap_text verify-session
+    wait_for_text 'unsent draft text'
+    sent=0
+    for attempt in {1..15}; do
+        dump_ui
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" reach-desc 'Send prompt' >/dev/null 2>&1; then
+            tap_desc 'Send prompt'
+            sent=1
+            break
+        fi
+        sleep 1
+    done
+    [[ "$sent" == 1 ]]
+    wait_receipt 'VERIFY_RECEIVED:unsent draft text'
+    tap_desc Back
+    wait_for_text Inbox
+    wait_for_text 'Inbox preview stays.'
+    for attempt in {1..30}; do
+        dump_ui
+        if python3 "$scripts/draft-label.py" absent "$EVIDENCE/current.xml"; then break; fi
+        sleep 1
+    done
+    shot inbox-draft-cleared
+    python3 "$scripts/draft-label.py" absent "$EVIDENCE/$(printf '%02d' "$step")-inbox-draft-cleared.xml"
+    sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
+    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt"
+    grep -Fx 'VERIFY_RECEIVED:unsent draft text' "$EVIDENCE/receipts.txt"
+    printf 'INBOX_DRAFT_LABEL_OK\n'
+    exit 0
+fi
 if [[ "$feature" == session-summaries.md ]]; then
     wait_for_text 'Lauren Tan profile is done, checked and pushed.'
     shot summary-reply
