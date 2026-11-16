@@ -84,6 +84,7 @@ on:
           - chat-codex.md
           - chat-queued.md
           - chat-reactions.md
+          - chat-restart.md
           - chat-resync.md
           - chat-shared.md
           - host-changed-key.md

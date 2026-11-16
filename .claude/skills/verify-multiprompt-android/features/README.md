@@ -22,6 +22,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `chat-queued.journey`. Runner: `verify.yml` (debug).
 - [Claude reactions](chat-reactions.md): quoted sends, one badge, restart identity, fallback and signed update offers.
   - Outcomes: `chat-reactions.journey`. Runner: `verify.yml` (debug).
+- [Restart on newest version](chat-restart.md): inbox and chat menus record a host restart, and the screen shows no restart failure.
+  - Outcomes: `chat.restart-newest`. Runner: `verify.yml` (debug).
 - [Legacy resync](chat-resync.md): historical held-queue proof; not host Reset proof.
   - Outcomes: `chat-resync.journey`. Runner: `verify.yml` (debug).
 - [Shared chat store](chat-shared.md): synthetic SSH store admission and host Reset, retaining both drafts.

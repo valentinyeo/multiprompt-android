@@ -103,6 +103,20 @@
         "chat-reactions.journey"
       ]
     },
+    "chat-restart.md": {
+      "name": "Restart on newest version",
+      "description": "inbox and chat menus record a host restart, and the screen shows no restart failure.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "chat.restart-newest"
+      ]
+    },
     "chat-resync.md": {
       "name": "Legacy resync",
       "description": "historical held-queue proof; not host Reset proof.",
@@ -477,6 +491,14 @@
       "sideEffect": true,
       "match": [
         "ChatReactions"
+      ]
+    },
+    "chat.restart-newest": {
+      "description": "Restart all idle chats from the inbox menu, and restart one hosted chat on the newest version from its menu. The host records the request and the screen shows no restart failure.",
+      "journey": "chat-restart.md",
+      "sideEffect": true,
+      "match": [
+        "HostRestart"
       ]
     },
     "chat-resync.journey": {
