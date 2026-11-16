@@ -95,5 +95,6 @@
   "IGSH-2308": "Android: saved snippets in the message box",
   "IGSH-2290": "Android: skills in a message show as a pill",
   "IGSH-2475": "Android: Claude commands like /clear in the slash menu",
-  "IGSH-2294": "Android: usage and plan pace card"
+  "IGSH-2294": "Android: usage and plan pace card",
+  "IGSH-2486": "Android shell gets Esc, Tab, Ctrl and arrow keys"
 }
