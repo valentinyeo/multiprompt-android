@@ -1779,14 +1779,29 @@ import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 root = Path(sys.argv[1])
-listed = ET.parse(next(root.glob('*-owner-skill-list.xml'))).getroot()
+def keep(source, dest):
+    tree = ET.parse(source).getroot()
+    out = ET.Element('hierarchy')
+    for node in tree.iter('node'):
+        text = node.get('text') or ''
+        if '/owner-note' in text or '/login-note' in text or 'Owner account skill' in text or 'Login account skill' in text:
+            copy = ET.SubElement(out, 'node')
+            for key in ('text', 'class', 'package', 'content-desc'):
+                if node.get(key):
+                    copy.set(key, node.get(key))
+    ET.ElementTree(out).write(dest, encoding='unicode')
+listed_path = next(root.glob('*-owner-skill-list.xml'))
+listed = ET.parse(listed_path).getroot()
 texts = [node.get('text') or '' for node in listed.iter('node')]
 assert '/owner-note' in texts, texts
 assert not any('/login-note' in text for text in texts), texts
 assert not any('BODY_MUST_NOT_BE_INJECTED' in text for text in texts)
-inserted = ET.parse(next(root.glob('*-owner-skill-inserted.xml'))).getroot()
+inserted_path = next(root.glob('*-owner-skill-inserted.xml'))
+inserted = ET.parse(inserted_path).getroot()
 fields = [node for node in inserted.iter('node') if node.get('class') == 'android.widget.EditText' and node.get('package') == 'dev.multiprompt.companion.debug']
 assert len(fields) == 1 and fields[0].get('text') == '/owner-note ', fields
+keep(listed_path, root / 'owner-skill-list.xml')
+keep(inserted_path, root / 'owner-skill-inserted.xml')
 print('OWNER_SKILL_LIST_VISIBLE')
 OWNER
     adb shell input text kept

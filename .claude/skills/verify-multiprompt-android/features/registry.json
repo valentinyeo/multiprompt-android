@@ -248,7 +248,14 @@
       },
       "outcomes": [
         "skills.other-account"
-      ]
+      ],
+      "evidence": {
+        "owner-skill-list.xml": 1500,
+        "owner-skill-inserted.xml": 800,
+        "owner-receipts.txt": 800,
+        "owner-receipts-before.txt": 400,
+        "owner-session-path.txt": 200
+      }
     },
     "robot-faces.md": {
       "name": "Robot inbox and chat",
