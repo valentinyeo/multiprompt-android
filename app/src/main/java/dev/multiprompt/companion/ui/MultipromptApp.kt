@@ -1,23 +1,17 @@
 package dev.multiprompt.companion.ui
 
-import dev.multiprompt.companion.model.HostDraft
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.foundation.layout.RowScope
-import android.text.format.DateUtils
-import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.Sync
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.outlined.Image as OutlinedImage
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import android.text.format.DateUtils
 import androidx.compose.foundation.lazy.rememberLazyListState
 import dev.multiprompt.companion.reader.AiStopped
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
@@ -61,6 +55,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -99,6 +94,7 @@ import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Mic
@@ -112,6 +108,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -197,6 +194,7 @@ import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
@@ -205,6 +203,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -237,6 +236,7 @@ import dev.multiprompt.companion.model.DirectoryRanking
 import dev.multiprompt.companion.model.RecentFolder
 import dev.multiprompt.companion.model.RecentFolders
 import dev.multiprompt.companion.model.SessionFinder
+import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.model.DissolvedSession

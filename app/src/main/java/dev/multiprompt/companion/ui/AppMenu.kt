@@ -1,15 +1,14 @@
 package dev.multiprompt.companion.ui
 
-import androidx.compose.material3.minimumInteractiveComponentSize
-import androidx.compose.material3.Icon
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -18,6 +17,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import dev.multiprompt.companion.BuildConfig
+import androidx.compose.material3.minimumInteractiveComponentSize
 
 @Composable
 internal fun ColumnScope.AppMenuItems(

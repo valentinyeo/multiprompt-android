@@ -1,9 +1,5 @@
 package dev.multiprompt.companion.ui
 
-import androidx.compose.material3.minimumInteractiveComponentSize
-import androidx.compose.material3.Icon
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -29,13 +25,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,6 +53,7 @@ import dev.multiprompt.companion.computer.ComputerViewerPage
 import dev.multiprompt.companion.computer.ComputerStatus
 import dev.multiprompt.companion.computer.ComputerTarget
 import java.io.File
+import androidx.compose.material3.minimumInteractiveComponentSize
 
 @Composable
 internal fun ComputerPane(

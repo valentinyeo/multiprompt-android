@@ -1,0 +1,49 @@
+name: Historical message projection proof
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  message-projection-replay:
+    name: message projection replay (${{ matrix.fix }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - fix: ce2d32d9
+            method: queuedMessageKeysFromPr77
+          - fix: 5acb08d8
+            method: lineBreakEchoFromPr245
+          - fix: f6ac627c
+            method: liveChatStreamFromPr286
+          - fix: c05b80eb
+            method: liveMessageOnceFromPr308
+          - fix: e31c9c4d
+            method: freshStartChatFromPr312
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.1"
+      - name: Require the named assertion on the old source and success on the historical fix
+        env:
+          GRADLE: gradle
+        run: bash tools/message-projection/replay.sh "${{ matrix.fix }}" "${{ matrix.method }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: message-projection-replay-${{ matrix.fix }}
+          path: app/build/reports/message-projection/
+          if-no-files-found: error
+

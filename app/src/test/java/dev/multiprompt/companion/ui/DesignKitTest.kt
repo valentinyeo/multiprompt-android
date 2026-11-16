@@ -1,7 +1,5 @@
 package dev.multiprompt.companion.ui
 
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
 import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -14,7 +12,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap

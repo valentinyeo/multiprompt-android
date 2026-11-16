@@ -1,8 +1,5 @@
 package dev.multiprompt.companion.ui
 
-import dev.multiprompt.companion.ssh.TmuxText
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -28,7 +25,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberCoroutineScope
@@ -51,6 +50,7 @@ import dev.multiprompt.companion.skills.NativeSkill
 import dev.multiprompt.companion.reader.ChatMention
 import dev.multiprompt.companion.reader.ChatReactions
 import dev.multiprompt.companion.reader.ReaderStatus
+import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.reader.PendingQuestion
 import dev.multiprompt.companion.reader.ChatHistoryMessage
 import dev.multiprompt.companion.reader.ReaderState
@@ -109,13 +109,14 @@ internal fun ChatHistoryView(
     }
     val seen = remember(history) { HashMap<String, Double>() }
     state.replica?.messages?.values?.forEach { if (it.state == MessageProtocol.State.QUEUED || it.state == MessageProtocol.State.SENT) seen.getOrPut(it.id) { System.currentTimeMillis() / 1000.0 } }
-    val messages = if (managed) state.history.managedMessages(state.replica, state.unresolved, now, state.retrying, seen) else state.history.displayMessages(reader.sentRecord)
+    val messages = state.history.projectMessages(state.replica.takeIf { managed }, state.unresolved, now, state.retrying, seen,
+        sent = reader.sentRecord.takeUnless { managed })
     val speakable = remember(messages) { dev.multiprompt.companion.reader.ReadAloud.replies(messages) }
     LaunchedEffect(speakable) { onSpeakableReplies(speakable) }
     LaunchedEffect(state.loaded, state.history.sid, state.retrying) { onChatReady(state.loaded && state.history.sid.isNotEmpty() && !state.retrying) }
     val pendingReset = if (managed) state.unresolved.firstOrNull { it.operation == "reset" }?.id else null
     LaunchedEffect(history, pendingReset) {
-        while (pendingReset != null && history.recoverReset(history.actionToken()) != dev.multiprompt.companion.reader.MessageActionResult.Applied) delay(5_000)
+        while (pendingReset != null && history.recoverReset(pendingReset, history.actionToken()) != dev.multiprompt.companion.reader.MessageActionResult.Applied) delay(5_000)
     }
     SideEffect {
         history.awaitingMessages(messages.any { it.pending })

@@ -211,6 +211,20 @@ jobs:
             app/build/reports/summary-control/*.xml
             app/build/test-results/test*UnitTest/*.xml
 
+  message-projection-replays:
+    uses: ./.github/workflows/message-projection.yml
+
+  message-projection-proof:
+    name: message-projection-proof
+    needs: message-projection-replays
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every historical replay to pass
+        env:
+          RESULT: ${{ needs.message-projection-replays.result }}
+        run: test "$RESULT" = success
+
   unit-tests:
     name: unit-tests
     runs-on: ubuntu-24.04
