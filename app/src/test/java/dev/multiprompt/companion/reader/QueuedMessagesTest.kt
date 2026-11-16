@@ -7,7 +7,7 @@ class QueuedMessagesTest {
     private val first = QueuedMessages.SentPrompt("same", 1, "first", QueuedMessages.Delivery.QUEUED, "sid", 9, 100)
     private val second = first.copy(messageId = "second")
     private fun ChatHistory.display(sent: List<QueuedMessages.SentPrompt> = listOf(first, second)) =
-        displayMessages(sent)
+        projectMessages(sent = sent)
 
     @Test fun onlyIdFactsSettleAndIdenticalIntentionsStaySeparate() {
         val row = ChatHistoryProtocol.Row("user", "same", "row", "2099-01-01T00:00:00Z", 100, 110, queued = true)

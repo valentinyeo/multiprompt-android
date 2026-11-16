@@ -339,13 +339,18 @@ function listFiles(directory) {
     .sort();
 }
 
-function journeyEvidence(directory) {
+function journeyEvidence(directory, feature) {
   if (!directory || !fs.existsSync(directory)) return 'No evidence artifact was downloaded.';
   const files = listFiles(directory);
   const screenshots = files.filter(file => /\.png$/i.test(file)).length;
   const parts = [`Files: ${files.length} in the artifact, ${screenshots} screenshots you cannot see. Names: ${files.slice(0, 60).join(', ')}`];
   let used = parts[0].length;
   const included = new Set();
+  const append = block => {
+    if (used + block.length + 1 > PER_SIDE_CHARS) return;
+    used += block.length + 1;
+    parts.push(block);
+  };
   const take = (file, limit) => {
     if (included.has(file)) return;
     const full = path.join(directory, file);
@@ -358,23 +363,22 @@ function journeyEvidence(directory) {
       return;
     }
     if (!text || !text.trim()) return;
-    const block = `--- ${file}${file === 'driver-transcript.txt' ? ' (tail)' : ''}\n${text.trim()}`;
-    if (used + block.length > PER_SIDE_CHARS) return;
-    used += block.length;
-    parts.push(block);
-    included.add(file);
+    const before = parts.length;
+    append(`--- ${file}${file === 'driver-transcript.txt' ? ' (tail)' : ''}\n${text.trim()}`);
+    if (parts.length > before) included.add(file);
   };
+  const proof = coverageGate.registry.journeys[feature]?.evidence ?? {};
+  const priority = [...new Set([...PRIORITY_FILES.slice(0, 2), ...Object.keys(proof), ...PRIORITY_FILES.slice(2)])];
   for (const file of files.filter(file => /shared-link-(?:down|waiting|recovered)\.xml$|shared-(?:phone|link-down-host)\.json$/.test(file))) take(file, 2_500);
-  for (const name of PRIORITY_FILES) if (files.includes(name)) take(name, name === 'driver-transcript.txt' ? TRANSCRIPT_TAIL_CHARS : SMALL_FILE_BYTES);
+  for (const name of priority) if (files.includes(name)) take(name, proof[name] ?? (name === 'driver-transcript.txt' ? TRANSCRIPT_TAIL_CHARS : SMALL_FILE_BYTES));
   if (files.includes('driver-transcript.txt')) {
     const actions = fs.readFileSync(path.join(directory, 'driver-transcript.txt'), 'utf8').split('\n').filter(line => /^\++ (?:tap_text|tap_desc|fill |set_composer|adb shell input)/.test(line));
-    parts.push(`--- driver-transcript.txt (user actions)\n${actions.slice(-60).join('\n')}`);
-    used += parts.at(-1).length;
+    append(`--- driver-transcript.txt (user actions)\n${actions.slice(-60).join('\n').slice(-TRANSCRIPT_TAIL_CHARS)}`);
   }
-  const xml = files.filter(file => file.endsWith('.xml')).slice(-4);
+  const xml = files.filter(file => file.endsWith('.xml') && !priority.includes(file)).slice(-4);
   for (const file of xml) take(file, 2_500);
   for (const file of files) {
-    if (xml.includes(file) || PRIORITY_FILES.includes(file) || !/\.(?:txt|json|xml)$/i.test(file) || SKIPPED_FILES.test(path.basename(file))) continue;
+    if (xml.includes(file) || priority.includes(file) || !/\.(?:txt|json|xml)$/i.test(file) || SKIPPED_FILES.test(path.basename(file))) continue;
     if (!file.endsWith('.xml') && fs.statSync(path.join(directory, file)).size > SMALL_FILE_BYTES) continue;
     take(file, SMALL_FILE_BYTES);
   }
@@ -523,8 +527,8 @@ async function judge(env) {
     const side = (label, feature, text) => `--- ${label}, journey ${feature}\n${text}`;
     const journeyBlock = feature => [
       `=== Journey ${feature}`,
-      side('PARENT (app before the change, merge base)', feature, `result: ${parents[feature]} (job conclusion ${parentConclusions[feature] ?? 'no result'})\n${journeyEvidence(parentDirectories[feature])}`),
-      side('HEAD (app after the change)', feature, `result: ${conclusions[feature] === 'success' ? 'passed' : 'not passed'} (job conclusion ${conclusions[feature] ?? 'no result'})\n${journeyEvidence(directories[feature])}`),
+      side('PARENT (app before the change, merge base)', feature, `result: ${parents[feature]} (job conclusion ${parentConclusions[feature] ?? 'no result'})\n${journeyEvidence(parentDirectories[feature], feature)}`),
+      side('HEAD (app after the change)', feature, `result: ${conclusions[feature] === 'success' ? 'passed' : 'not passed'} (job conclusion ${conclusions[feature] ?? 'no result'})\n${journeyEvidence(directories[feature], feature)}`),
     ].join('\n');
     const journeyText = features.length
       ? (smoke ? `Only the smoke journey was driven because no journey fits this change. Reason: ${oneLine(env.PICK_REASON, 300) || 'none given'}\n\n` : '') + features.map(journeyBlock).join('\n\n')

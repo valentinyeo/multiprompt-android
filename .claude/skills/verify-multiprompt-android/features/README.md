@@ -18,14 +18,14 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `chat-choices.journey`. Runner: `verify.yml` (debug).
 - [Codex transcript parity](chat-codex.md): Dispatch `feature=chat-codex.md`. The real Android APK connects through SSH to independent Hax, native Codex, and Claude fixture sessions. Hax and Codex write the same JSONL schemas consumed by desktop. Their terminal output deliberately excludes every transcript reply, ruling out terminal-scrape success.
   - Outcomes: `codex.transcript`. Runner: `verify.yml` (debug).
-- [Queued label](chat-queued.md): sent messages show Queued until taken in and answered, then return to normal.
-  - Outcomes: `chat-queued.journey`. Runner: `verify.yml` (debug).
+- [Queued messages](chat-queued.md): Queued host messages stay visible once, receive correlated consumption receipts and become answered without stale delivery labels.
+  - Outcomes: `chat-queued.journey`. Runner: `verify.yml` (debug). Priority evidence: `00-queue-ui.json` (1500 characters), `00-queue-receipts.txt` (1500 characters), `queue-pending.json` (1500 characters), `queue-waiting-final.json` (1500 characters), `queue-followup-final.json` (1500 characters), `queue-uncertain-final.json` (1500 characters), `catchup-result.json` (1500 characters).
 - [Claude reactions](chat-reactions.md): quoted sends, one badge, restart identity, fallback and signed update offers.
   - Outcomes: `chat-reactions.journey`. Runner: `verify.yml` (debug).
 - [Legacy resync](chat-resync.md): historical held-queue proof; not host Reset proof.
   - Outcomes: `chat-resync.journey`. Runner: `verify.yml` (debug).
 - [Shared chat store](chat-shared.md): synthetic SSH store admission and host Reset, retaining both drafts.
-  - Outcomes: `chat-shared.journey`, `chat.link-recovery`. Runner: `verify.yml` (debug).
+  - Outcomes: `chat-shared.journey`, `chat.link-recovery`. Runner: `verify.yml` (debug). Priority evidence: `shared-before-reset.json` (1000 characters), `shared-after-reset.json` (1000 characters), `shared-codex-before-restart.json` (1000 characters), `shared-codex-after-reset.json` (1000 characters), `05-shared-after-reset.xml` (3000 characters), `07-shared-codex-after-reset.xml` (3000 characters), `shared-terminal.txt` (1000 characters), `shared-result.txt` (500 characters).
 - [Working dots on the signed release](chat-working.md): quiet tools, lock/unlock, real SSH reconnect, recording and timed visible-state samples. Uses `working-dots.yml`.
   - Outcomes: `chat-working.journey`. Runner: `working-dots.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Changed host key](host-changed-key.md): compare a rotated identity, persist Not now and refuse authentication.
@@ -40,6 +40,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `claude.skills-model-effort`. Runner: `verify.yml` (debug).
 - [Robot inbox and chat](robot-faces.md): Run `verify.yml` with `feature=robot-faces.md`. For the signed candidate, set `released_robots=true` and `candidate=true`. For the published update, set `released_robots=true` and `expected_commit` to the released SHA.
   - Outcomes: `robot-faces.journey`. Runner: `verify.yml` (signed). Inputs: `{"released_robots":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
+- [Inbox draft label](session-drafts.md): unsent composer text shows Draft before the inbox preview, and sending that text removes it.
+  - Outcomes: `inbox.draft`. Runner: `verify.yml` (debug).
 - [Session favorites](session-favorites.md): signed APK, isolated SSH sessions and offline favorite cache; no production sync.
   - Outcomes: `session-favorites.journey`. Runner: `verify.yml` (signed). Inputs: `{"released_chat":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Session gestures](session-gestures.md): no session swipes, bidirectional code scroll, ten replies, back to inbox on the signed APK.
@@ -62,6 +64,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `sign-in.journey`. Runner: `verify.yml` (debug).
 - [Terminal](terminal.md): real SSH PTY/tmux fallback attachment.
   - Outcomes: `terminal.journey`. Runner: `verify.yml` (debug).
+- [Message identity and replies](chat-identity.md): Phone send receipts, delayed transcript catchup, Fresh start format and reconnect keep each message with its reply once.
+  - Outcomes: `chat.identity`. Runner: `verify.yml` (debug). Priority evidence: `projection-receipts-before.json` (2500 characters), `projection-receipts-reconnect.json` (5500 characters), `projection-state-before.json` (500 characters), `projection-state-fresh.json` (500 characters), `projection-state-catchup.json` (500 characters), `projection-state-reconnect.json` (500 characters), `projection-proof.txt` (500 characters).
 
 ## Initial coverage gaps
 
@@ -69,15 +73,15 @@ These IDs are an inventory, not exemptions for future changes. Untouched gaps do
 
 | Outcome | Existing case | Cleanup ticket |
 |---|---|---|
-| `snippets.save-reuse-delete` | [#376](https://github.com/valentinyeo/multiprompt-android/pull/376) | SOFT-2531 |
-| `ai.switch` | [#373](https://github.com/valentinyeo/multiprompt-android/pull/373) | SOFT-2531 |
-| `pi.model-switch` | [#374](https://github.com/valentinyeo/multiprompt-android/pull/374) | SOFT-2531 |
-| `chat-search.open` | [#380](https://github.com/valentinyeo/multiprompt-android/pull/380) | SOFT-2531 |
-| `claude.remote-control` | [#366](https://github.com/valentinyeo/multiprompt-android/pull/366) | SOFT-2531 |
-| `ai.usage` | [#377](https://github.com/valentinyeo/multiprompt-android/pull/377) | SOFT-2531 |
-| `skills.pills` | [#378](https://github.com/valentinyeo/multiprompt-android/pull/378) | SOFT-2531 |
-| `chat-table.expand` | [#379](https://github.com/valentinyeo/multiprompt-android/pull/379) | SOFT-2531 |
-| `claude.clear-ranking` | [#381](https://github.com/valentinyeo/multiprompt-android/pull/381) | SOFT-2531 |
+| `snippets.save-reuse-delete` | [#376](https://github.com/valentinyeo/multiprompt-android/pull/376) | SOFT-2537 |
+| `ai.switch` | [#373](https://github.com/valentinyeo/multiprompt-android/pull/373) | SOFT-2538 |
+| `pi.model-switch` | [#374](https://github.com/valentinyeo/multiprompt-android/pull/374) | SOFT-2539 |
+| `chat-search.open` | [#380](https://github.com/valentinyeo/multiprompt-android/pull/380) | SOFT-2540 |
+| `claude.remote-control` | [#366](https://github.com/valentinyeo/multiprompt-android/pull/366) | SOFT-2541 |
+| `ai.usage` | [#377](https://github.com/valentinyeo/multiprompt-android/pull/377) | SOFT-2542 |
+| `skills.pills` | [#378](https://github.com/valentinyeo/multiprompt-android/pull/378) | SOFT-2543 |
+| `chat-table.expand` | [#379](https://github.com/valentinyeo/multiprompt-android/pull/379) | SOFT-2544 |
+| `claude.clear-ranking` | [#381](https://github.com/valentinyeo/multiprompt-android/pull/381) | SOFT-2545 |
 | `legacy.igsh-449` | IGSH-449 | IGSH-449 |
 | `legacy.igsh-429` | IGSH-429 | IGSH-429 |
 | `legacy.igsh-422` | IGSH-422 | IGSH-422 |
