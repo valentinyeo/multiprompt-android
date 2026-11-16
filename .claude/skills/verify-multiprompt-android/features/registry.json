@@ -336,6 +336,20 @@
         "session-routing.journey"
       ]
     },
+    "session-rows.md": {
+      "name": "Inbox question and step",
+      "description": "a waiting question replaces the pane reply on the inbox row, and a working live chat shows its current step.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "inbox.row"
+      ]
+    },
     "session-settings.md": {
       "name": "Session settings",
       "description": "full-screen split switches; saving is blocked without account OTP and a pulled layout.",
@@ -520,7 +534,7 @@
       "journey": "hosts.md",
       "sideEffect": true,
       "match": [
-        "HostStore|HostProfile"
+        "HostStore|(?<!: )HostProfile"
       ]
     },
     "launcher-icon.journey": {
@@ -594,6 +608,14 @@
       "journey": "session-summaries.md",
       "sideEffect": false,
       "match": []
+    },
+    "inbox.row": {
+      "description": "Inbox rows show a waiting question, or the current step while that chat is working, ahead of the last pane reply.",
+      "journey": "session-rows.md",
+      "sideEffect": false,
+      "match": [
+        "RowParts|recordRowParts"
+      ]
     },
     "inbox.search": {
       "description": "authenticated tmux discovery and search.",

@@ -97,6 +97,7 @@ on:
           - session-gestures.md
           - session-reader.md
           - session-routing.md
+          - session-rows.md
           - session-summaries.md
           - sessions.md
           - settings-navigation.md
