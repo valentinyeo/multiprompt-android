@@ -9,6 +9,7 @@ import dev.multiprompt.companion.account.VisitDwell
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.multiprompt.companion.model.HostDraft
+import dev.multiprompt.companion.model.PlanUsage
 import dev.multiprompt.companion.network.NetworkReturnWatcher
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.AgentHarness
@@ -38,8 +39,10 @@ import dev.multiprompt.companion.reader.ChatHistoryPrefetch
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
+import dev.multiprompt.companion.reader.SwitchAi
 import dev.multiprompt.companion.auth.SyncAuthManager
 import android.content.Intent
+import android.widget.Toast
 import dev.multiprompt.companion.account.AccountHosts
 import dev.multiprompt.companion.account.BotPhotoCache
 import dev.multiprompt.companion.account.AccountHostMap
@@ -151,6 +154,7 @@ data class AppUiState(
     val etaAccuracy: List<TmuxText.AgentAccuracy>? = null,
     val etaAccuracyLoading: Boolean = false,
     val etaAccuracyError: String? = null,
+    val aiUsage: AiUsageState? = null,
     val newestSessionsAtBottom: Boolean = true,
     val allSplitOnRight: Boolean = true,
     val readerDefaultFontScale: Float = 1f,
@@ -178,6 +182,12 @@ data class AppUiState(
         next.copy(selectedWorkspaceId = if (next.selectedWorkspaceId in visible) next.selectedWorkspaceId else visible.first())
     }
 }
+
+data class AiUsageState(
+    val loading: Boolean = false,
+    val error: String? = null,
+    val plans: List<PlanUsage.Plan> = emptyList(),
+)
 
 enum class NewSessionStep { HOST, PATH, HARNESS, EXISTING }
 
@@ -407,6 +417,68 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissEtaAccuracy() {
         _state.update { it.copy(etaAccuracy = null, etaAccuracyLoading = false, etaAccuracyError = null) }
+    }
+
+    private var aiUsageGeneration = 0
+
+    fun showAiUsage() {
+        val generation = ++aiUsageGeneration
+        val hosts = usageHosts(_state.value)
+        _state.update { it.copy(aiUsage = AiUsageState(loading = true)) }
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { fetchAiUsage(hosts) }
+            if (generation != aiUsageGeneration) return@launch
+            _state.update { state ->
+                if (state.aiUsage == null) state else state.copy(
+                    aiUsage = when (result) {
+                        is AiUsageFetch.Ready -> AiUsageState(plans = result.plans)
+                        is AiUsageFetch.Failed -> AiUsageState(error = result.message)
+                    },
+                )
+            }
+        }
+    }
+
+    fun dismissAiUsage() {
+        aiUsageGeneration++
+        _state.update { it.copy(aiUsage = null) }
+    }
+
+    private fun usageHosts(state: AppUiState): List<HostProfile> {
+        val trusted = (state.hosts + state.accountHosts.values)
+            .distinctBy { it.id }
+            .filter { it.hostKeyFingerprint != null || it.hostKeys.isNotEmpty() }
+        return trusted.sortedWith(compareBy { host ->
+            if (host.label == "remote-2" || host.hostname == "remote-2") 0 else 1
+        })
+    }
+
+    private suspend fun fetchAiUsage(hosts: List<HostProfile>): AiUsageFetch {
+        if (hosts.isEmpty()) return AiUsageFetch.Failed("Could not read AI usage")
+        var sawStale = false
+        var lastError = "Could not read AI usage"
+        val now = System.currentTimeMillis() / 1000
+        for (host in hosts) {
+            try {
+                val parsed = PlanUsage.parse(ssh.readTokenLadderStatus(host), now)
+                if (parsed == null) continue
+                if (parsed.fresh) return AiUsageFetch.Ready(parsed.plans)
+                sawStale = true
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: SshProblem.HostKeyRequired) {
+                continue
+            } catch (thrown: Throwable) {
+                val message = thrown.message?.takeIf { it.isNotBlank() }
+                if (message != null) lastError = message
+            }
+        }
+        return if (sawStale) AiUsageFetch.Failed("Usage is out of date") else AiUsageFetch.Failed(lastError)
+    }
+
+    private sealed interface AiUsageFetch {
+        data class Ready(val plans: List<PlanUsage.Plan>) : AiUsageFetch
+        data class Failed(val message: String) : AiUsageFetch
     }
 
     fun clearSessionActionError() {
@@ -1529,6 +1601,57 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         warmReaderTouchedAt.remove(key)
         _state.update { it.copy(reader = null, readerSession = null) }
         openReader(session, userInitiated = true)
+    }
+
+    fun switchAi(session: TmuxSession, to: String) {
+        val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
+        val key = SessionReadStore.key(session.hostId, session.name)
+        val reader = warmReaders[key] ?: _state.value.reader?.takeIf {
+            _state.value.readerSession?.let { open -> open.hostId == session.hostId && open.name == session.name } == true
+        } ?: return
+        viewModelScope.launch {
+            _state.update { it.copy(sessionActionError = null) }
+            when (val outcome = reader.switchAi(to)) {
+                is SwitchAi.Outcome.Failed -> _state.update { it.copy(sessionActionError = outcome.message) }
+                is SwitchAi.Outcome.Unknown -> {
+                    val updated = runCatching { ssh.listSessions(host) }.getOrNull()
+                        ?.sessions?.firstOrNull { it.name == session.name }
+                    if (updated != null && updated.hostProvider == to && updated.hostSessionId.isNotEmpty() &&
+                        updated.hostSessionId != session.hostSessionId
+                    ) {
+                        followSwitch(session, session.copy(hostProvider = updated.hostProvider, hostSessionId = updated.hostSessionId), key)
+                        Toast.makeText(getApplication(), SwitchAi.notice(to), Toast.LENGTH_SHORT).show()
+                    } else {
+                        _state.update { it.copy(sessionActionError = SwitchAi.UNKNOWN) }
+                    }
+                    refresh()
+                }
+                is SwitchAi.Outcome.Switched -> {
+                    followSwitch(session, session.copy(hostProvider = outcome.provider, hostSessionId = outcome.sid), key)
+                    Toast.makeText(getApplication(), SwitchAi.notice(outcome.provider), Toast.LENGTH_SHORT).show()
+                    refresh()
+                }
+            }
+        }
+    }
+
+    private fun followSwitch(previous: TmuxSession, switched: TmuxSession, key: String) {
+        _state.update { state ->
+            state.copy(sessions = state.sessions.map { item ->
+                if (item.hostId == previous.hostId && item.name == previous.name) {
+                    item.copy(hostProvider = switched.hostProvider, hostSessionId = switched.hostSessionId)
+                } else {
+                    item
+                }
+            })
+        }
+        val stillOpen = _state.value.readerSession?.let { it.hostId == previous.hostId && it.name == previous.name } == true
+        if (stillOpen) {
+            reattachReader(switched)
+        } else {
+            warmReaders.remove(key)?.close()
+            warmReaderTouchedAt.remove(key)
+        }
     }
 
     fun closeReader() {

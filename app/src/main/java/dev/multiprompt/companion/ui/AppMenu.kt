@@ -52,6 +52,7 @@ internal fun InboxOverflowMenu(
     onArrangeSplits: () -> Unit,
     onNewWorkspace: () -> Unit,
     onRefresh: () -> Unit,
+    onAiUsage: () -> Unit = {},
     onReleaseNotes: () -> Unit = {},
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -90,6 +91,13 @@ internal fun InboxOverflowMenu(
                 onClick = {
                     expanded = false
                     onRefresh()
+                },
+            )
+            KitMenuRow(
+                label = "AI usage",
+                onClick = {
+                    expanded = false
+                    onAiUsage()
                 },
             )
             KitMenuRow(
