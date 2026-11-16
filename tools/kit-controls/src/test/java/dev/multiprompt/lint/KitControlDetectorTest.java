@@ -54,7 +54,7 @@ public final class KitControlDetectorTest extends LintDetectorTest {
                 Switch(false, {})
                 DropdownMenu(true, {}) { DropdownMenuItem({}, {}) }
             }
-            "")).testModes(TestMode.DEFAULT).run().expectErrorCount(10)
+            """)).testModes(TestMode.DEFAULT).run().expectErrorCount(10)
             .expectContains("KIT_CONTROL_REQUIRED: calls androidx.compose.material3.AlertDialog. Use KitSheet with KitPrimaryButton/KitSecondaryButton")
             .expectContains("Use KitPrimaryButton from ui/DesignKit.kt")
             .expectContains("Use KitRoundButton from ui/DesignKit.kt")
@@ -73,7 +73,7 @@ public final class KitControlDetectorTest extends LintDetectorTest {
                 KitPrimaryButton("Save", {})
                 val text = "androidx.compose.material3.AlertDialog(onDismissRequest = {})"
             }
-            "")).run().expectClean();
+            """)).run().expectClean();
     }
 
     public void testMaterial2AndDeletedWrappersCannotReturn() {
@@ -126,7 +126,7 @@ public final class KitControlDetectorTest extends LintDetectorTest {
                 androidx.compose.material3.AlertDialog({})
             }
             fun NewScreen() { Renamed({}) }
-            "")).testModes(TestMode.DEFAULT).run().expectErrorCount(2);
+            """)).testModes(TestMode.DEFAULT).run().expectErrorCount(2);
     }
 
     private String historical(String name) throws IOException {
