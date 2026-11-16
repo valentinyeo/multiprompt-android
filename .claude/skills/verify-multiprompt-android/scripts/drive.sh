@@ -1128,6 +1128,8 @@ if [[ "$feature" == chat-identity.md ]]; then
     projection_assert catchup
     adb shell am force-stop "$package"
     adb shell am start -n "$package/dev.multiprompt.companion.MainActivity"
+    wait_for_text 'Use without account (debug)'
+    tap_text 'Use without account (debug)'
     wait_for_text Inbox
     tap_text All
     tap_text verify-session

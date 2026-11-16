@@ -7,7 +7,7 @@ Dispatch `verify.yml` with `feature=chat-identity.md` on the PR branch. The host
 1. Send `PHONE_BEFORE_2532` from the phone. The isolated SSH fixture reads the admitted phone ID and records an acceptance receipt, a native transcript user row, and host reply events. The transcript reply deliberately lags behind the live reply. Require one phone message above one `REPLY_BEFORE_2532`.
 2. Send `PHONE_AFTER_2532`. The fixture replays the desktop Fresh start format with a divider, the phone ID as the native user ID, a timestamp without a timezone, and host reply events without native UUID aliases. Require the old reply above the divider, then one new phone message above one new reply.
 3. Let the native transcript catch up with both replies. Reopen the chat and require the same order and counts despite competing card, transcript and host-stream representations.
-4. Force-stop and relaunch Android, then reopen the chat. Require the same identities, counts and reply order after reconnect.
+4. Force-stop and relaunch Android. Choose **Use without account (debug)** again, then reopen the saved host's chat. Require the same identities, counts and reply order after reconnect.
 
 `projection-receipts-*.json` retains independent SSH-store acceptance IDs, host events and real JSONL transcript rows. `projection-state-*.json` records the visible order and counts derived from XML. The driver retains Send actions, draft and result PNG/XML pairs, and cleanup retains `receipts.txt`.
 
