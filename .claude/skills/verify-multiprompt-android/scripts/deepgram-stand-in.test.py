@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
+import base64
+import hashlib
 import importlib.util
 import os
+import secrets
 import selectors
 import socket
 import subprocess
@@ -12,9 +15,9 @@ from pathlib import Path
 
 SCRIPT = Path(__file__).with_name("deepgram-stand-in.py")
 ROOT = Path(__file__).resolve().parents[4]
-TOKEN = "stand-in-probe-token-not-a-credential"
-RFC_KEY = "dGhlIHNhbXBsZSBub25jZQ=="
-RFC_ACCEPT = "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="
+TOKEN = "probe-" + secrets.token_hex(12)
+RFC_KEY = base64.b64encode(b"the sample nonce").decode()
+RFC_ACCEPT = base64.b64encode(hashlib.sha1((RFC_KEY + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest()).decode()
 
 
 def read_exact(conn, count):
