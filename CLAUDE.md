@@ -25,6 +25,8 @@ Requires JDK 17 and Android SDK 36. Before every push run `tools/check.sh`: it i
 | Never push code that does not compile or pass tests | `tools/check.sh` in `test.yml` |
 | No code comments (license headers and tool directives allowed) | `tools/strip-comments.mjs --check` in `tools/check.sh` |
 | An old-screen check builds that complete revision in its own worktree, or uses a retained APK. Do not copy old source into the current app | `tools/historical_control.py` in `tools/check.sh`; `tools/check-session-pins.sh` builds commit `93f137d8` |
+| Changed product outcomes need matching head-journey action/result proof at the exact APK SHA; smoke is not coverage. Initial gaps do not exempt future changes | `features/registry.json`, `coverage.cjs` ratchet in `test.yml`, and structured artifact validation in `pstack-verifier` |
+| One registry owns verification recipes, picker eligibility and dispatch options | `coverage.cjs check` in `tools/check.sh` and `test.yml` |
 | No scratch output (logs, OCR dumps, screenshots) at the repo root | `tools/root-files.mjs` allowlist in `tools/check.sh` |
 | Merged branches do not linger on GitHub | repo setting: delete branch on merge |
 | Every PR title starts with its ticket, like `IGSH-1684: what changed`; add that ticket's exact Hypertask title to `tools/release-notes/ticket-titles.json`. Update notes show one `IGSH-N exact title` line per ticket, never filler | `tools/release-notes/notes.mjs` in `test.yml` and `release.yml` |

@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
-case "$feature" in
-    settings-navigation.md|chat-codex.md|session-gestures.md|session-favorites.md|chat-working.md|session-summaries.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|chat-shared.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
-    *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
-esac
+scripts=$(cd "$(dirname "$0")" && pwd)
+node "$scripts/../../../../.github/scripts/pstack-verifier/coverage.cjs" journey "$feature"
 : "${EVIDENCE:?Set evidence directory}"
 : "${FIXTURE:?Set fixture directory}"
 : "${EXPECTED_VERSION:?Set expected APK versionName}"
-scripts=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$EVIDENCE"
 exec > >(tee -a "$EVIDENCE/driver-transcript.txt") 2>&1
 set -x

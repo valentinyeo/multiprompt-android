@@ -7,6 +7,16 @@ description: Verify multiprompt Android's Jetpack Compose mobile UI on GitHub's 
 
 Read [the feature index](features/README.md), then the selected recipe. Everything that builds or runs the app happens on GitHub, never on the local server. No local Gradle, Java, emulator or Actions imitation.
 
+## Choose proof for the change
+
+[features/registry.json](features/registry.json) owns outcome IDs, recipe ownership, runner kinds and prerequisites. The generated index, picker catalog, driver eligibility and workflow choices all come from it. Run `node .github/scripts/pstack-verifier/coverage.cjs generate` when it changes; CI runs `check` and rejects drift.
+
+For every product change, identify the changed outcome IDs. Add a new ID and journey for a new behavior. The picker reports `changed_outcomes`; deterministic source matches and the independent judge can add required IDs. An unknown product outcome fails closed. Tooling-only work can use the retained hosted Node test proof instead of claiming that an Android smoke test covered it.
+
+The second-AI verdict must include `coverage` entries for every changed ID. Each entry names its registered journey and quotes a real action from `driver-transcript.txt`, a resulting XML/JSON state, and independent receipt/server evidence where required. The gate checks these references in the downloaded head artifact after cleanup, requires a successful matching journey and exact `app-source-sha.txt`, then retains `verifier-feature-coverage`. Free-text `not_covered`, a green unrelated journey or smoke cannot satisfy this contract. Both sides may pass; a manufactured failing parent is not required.
+
+`features/coverage-baseline.json` lists the initial uncovered IDs, including dedicated, signed and manual routes outside the debug picker. The baseline is an inventory, not permission to change those features without proof. New uncovered IDs fail even if another gap disappears. Keep dedicated workflows and account prerequisites; never make them debug recipes just to obtain a green verdict.
+
 ## Launch
 
 If the diff misses `on.pull_request.paths`, dispatch `verify.yml` yourself and treat a missing pull-request job as unrun.
