@@ -15,6 +15,10 @@ class PromptComposerTest {
             "> Earlier reply\n\n/reviewer my task",
             PromptComposer.composeMessage("/reviewer my task", emptyList(), "Earlier reply", skills),
         )
+        assertEquals(
+            "please /review this",
+            PromptComposer.composeMessage("please /review this", emptyList(), null, skills),
+        )
     }
 
     @Test

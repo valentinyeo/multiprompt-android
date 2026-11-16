@@ -53,6 +53,7 @@ internal fun InboxOverflowMenu(
     onArrangeSplits: () -> Unit,
     onNewWorkspace: () -> Unit,
     onRefresh: () -> Unit,
+    onAiUsage: () -> Unit = {},
     onReleaseNotes: () -> Unit = {},
     onRestartIdleChats: (() -> Unit)? = null,
 ) {
@@ -103,6 +104,13 @@ internal fun InboxOverflowMenu(
                     },
                 )
             }
+            KitMenuRow(
+                label = "AI usage",
+                onClick = {
+                    expanded = false
+                    onAiUsage()
+                },
+            )
             KitMenuRow(
                 label = BuildConfig.VERSION_NAME,
                 modifier = Modifier.testTag("app-version").semantics {
