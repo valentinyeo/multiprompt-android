@@ -32,7 +32,10 @@ object MessageProtocol {
         val resolved: String? = null,
         val settings: HostSettings? = null,
         val sent: Pair<String, List<String>>? = null,
-    )
+    ) {
+        internal val nativeItem: String?
+            get() = item?.takeUnless { it == "text.delta" || it == "text.done" }
+    }
 
     sealed interface Item {
         data class Message(val row: Row) : Item

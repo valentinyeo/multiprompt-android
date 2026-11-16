@@ -42,6 +42,7 @@ data class ChatHistory(
                 val readId = metadata.optString("read_id")
                 val segment = if (metadata.has("segment")) metadata.get("segment").toString() else ""
                 val identity = when {
+                    row.role == "user" && row.id.isNotEmpty() -> row.id
                     readId.isNotEmpty() -> "read:$readId:$segment"
                     row.id.isNotEmpty() -> row.id
                     else -> "@${row.offset}"
@@ -87,7 +88,7 @@ data class ChatHistory(
                 cancellable = cancellable(row, now, seen[row.id])),
                 host.sentRows[row.id].orEmpty().toSet() + row.id,
                 visible = row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT, MessageProtocol.State.FAILED) ||
-                    latest == null || latest <= row.created + CLOCK_SLACK,
+                    row.id == host.messageId || latest == null || latest <= row.created + CLOCK_SLACK,
                 shared = row)
         } else {
             val local = sent.filter { it.sid.isEmpty() || sid.isEmpty() || it.sid == sid }
@@ -134,15 +135,23 @@ data class ChatHistory(
                 floor = maxOf(floor, index)
             }
         }
+        val aliases = HashMap<String, String>()
+        host.sentRows.forEach { (id, uuids) -> (uuids + id).forEach { aliases[it] = id } }
+        scoped.forEach { aliases[it.id] = it.id }
         val projected = LinkedHashMap<String, ChatHistoryMessage>()
         transcript.forEachIndexed { index, message ->
             val card = claimed[index]
-            val occurrence = if (card == null) message else message.copy(key = card.message.key,
-                requestId = card.message.requestId, delivery = card.message.delivery)
+            val phoneId = aliases[message.requestId].takeIf { message.role == "user" }
+            val occurrence = when {
+                card != null -> message.copy(key = card.message.key, requestId = card.message.requestId, delivery = card.message.delivery)
+                phoneId != null -> message.copy(key = "@shared:$phoneId", requestId = phoneId)
+                else -> message
+            }
             projected[occurrence.key] = occurrence
         }
         val blocks = (host.earlier + host.spoken.map { it.copy(turn = host.turn) }).distinctBy { it.turn to it.item }
         val anchors = cards.filter { it.message.requestId.isNotEmpty() }.associate { it.message.requestId to it.message.key }.toMutableMap()
+        projected.values.filter { it.role == "user" && it.requestId.isNotEmpty() }.forEach { anchors[it.requestId] = it.key }
         val replies = LinkedHashMap<String, MutableList<HostBlock>>()
         val unmatched = mutableListOf<HostBlock>()
         for (block in blocks) {

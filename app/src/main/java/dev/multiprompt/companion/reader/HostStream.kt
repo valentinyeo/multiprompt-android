@@ -39,7 +39,7 @@ data class HostStream(
         val body = event.text ?: return this
         val fresh = if (event.turn != null && event.turn != turn) next(event.turn) else this
         val item = event.item ?: event.kind
-        val block = HostBlock(item, event.kind.substringBefore('.'), body, event.done, messageId = fresh.messageId)
+        val block = HostBlock(item, event.kind.substringBefore('.'), body, event.done, messageId = fresh.messageId.takeIf { event.nativeItem != null })
         val existing = fresh.blocks.indexOfFirst { it.item == item }
         val blocks = if (existing < 0) fresh.blocks + block else fresh.blocks.toMutableList().also { it[existing] = block }
         return fresh.copy(blocks = blocks)

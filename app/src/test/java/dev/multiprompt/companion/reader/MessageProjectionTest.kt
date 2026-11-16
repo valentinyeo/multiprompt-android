@@ -81,6 +81,20 @@ class MessageProjectionTest {
         once(history.projectMessages(replica, listOf(journal, journal.copy(id = "replayed-submit"))), listOf("same", "answer 1"))
     }
 
+    @Test fun receiptIdentitySurvivesWithoutAQueuedCard() {
+        val replica = replica(emptyList(), host(1))
+        val history = ChatHistory(sid = sid, inode = 7, rows = listOf(user(1), user(2, id(1))))
+        once(history.projectMessages(replica), listOf("same", "answer 1"))
+        assertEquals(id(1), history.projectMessages(replica).first().requestId)
+    }
+
+    @Test fun equalRepliesWithDifferentOwnedIdsStaySeparate() {
+        val replica = replica(listOf(row(1)), host(1))
+        val earlier = ChatHistoryProtocol.Row("assistant", "answer 1", "different-reply", "", 0, 50)
+        val history = ChatHistory(sid = sid, inode = 7, rows = listOf(earlier, user(1)))
+        once(history.projectMessages(replica), listOf("answer 1", "same", "answer 1"))
+    }
+
     @Test fun knownIdsNeverClaimADifferentMessageWithEqualText() {
         val replica = replica(listOf(row(1)), host(1))
         val history = ChatHistory(sid = sid, inode = 7, rows = listOf(user(1, "different-id")))
