@@ -92,5 +92,6 @@
   "IGSH-2379": "A second AI tests every Android change before merge",
   "IGSH-2432": "Second AI question test matches how answers send now",
   "IGSH-2293": "Android: open a chat table full screen",
+  "IGSH-2308": "Android: saved snippets in the message box",
   "IGSH-2290": "Android: skills in a message show as a pill"
 }
