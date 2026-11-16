@@ -278,6 +278,43 @@ internal fun KitDivider(modifier: Modifier = Modifier) {
 }
 
 @Composable
+internal fun KitUsageBar(fraction: Float?, modifier: Modifier = Modifier) {
+    val fill = fraction?.takeIf { it.isFinite() }?.coerceIn(0f, 1f)
+    Box(modifier.fillMaxWidth().height(8.dp).clip(Kit.PillShape).background(Kit.Outline)) {
+        if (fill != null && fill > 0f) {
+            Box(Modifier.fillMaxWidth(fill).height(8.dp).background(Kit.Text))
+        }
+    }
+}
+
+@Composable
+internal fun KitPlanBlock(
+    name: String,
+    percent: String,
+    fraction: Float?,
+    paceLine: String,
+    detailLine: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier.fillMaxWidth().kitSurface(Kit.CardShape).padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(name, style = Kit.BodyStrong, color = Kit.Text, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(percent, style = Kit.BodyStrong, color = Kit.Text, maxLines = 1)
+        }
+        KitUsageBar(fraction)
+        Text(paceLine, style = Kit.Hint, color = Kit.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(detailLine, style = Kit.Hint, color = Kit.TextMuted, maxLines = 3, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
 internal fun KitSectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
         text.uppercase(),
