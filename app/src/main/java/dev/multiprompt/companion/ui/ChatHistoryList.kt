@@ -94,6 +94,9 @@ internal fun ChatHistoryView(
     modifier: Modifier = Modifier,
     unreadSinceEpochSeconds: Long? = null,
     onEditPending: ((ChatHistoryMessage) -> Unit)? = null,
+    findQuery: String = "",
+    findIndex: Int = 0,
+    onFindCount: (Int) -> Unit = {},
 ) {
     val history = remember(connection, agent, workingDirectory) { connection.chatHistory(agent, workingDirectory) }
     val state by history.state.collectAsState()
@@ -198,6 +201,9 @@ internal fun ChatHistoryView(
             modifier = Modifier.weight(1f),
             bottomPadding = bottomPadding,
             unreadSinceEpochSeconds = unreadSinceEpochSeconds,
+            findQuery = findQuery,
+            findIndex = findIndex,
+            onFindCount = onFindCount,
         )
 
     }
@@ -236,11 +242,20 @@ internal fun ChatHistoryList(
     bottomPadding: Dp = 0.dp,
     unreadSinceEpochSeconds: Long? = null,
     onEditPending: ((ChatHistoryMessage) -> Unit)? = null,
+    findQuery: String = "",
+    findIndex: Int = 0,
+    onFindCount: (Int) -> Unit = {},
 ) {
     val presentation = remember(messages, agent, collapsePendingReactions) {
         if (agent == AgentKind.CLAUDE) ChatReactions.present(messages, collapsePendingReactions)
         else ChatReactions.Presentation(messages, emptyMap())
     }
+    val findHits = remember(presentation.messages, findQuery) {
+        if (findQuery.isBlank()) emptyList() else ChatFind.find(presentation.messages.map { ChatFind.display(it.role, it.text) }, findQuery)
+    }
+    val activeFind = findHits.getOrNull(if (findHits.isEmpty()) -1 else findIndex.coerceIn(0, findHits.lastIndex))
+    val hitsByMessage = remember(findHits) { findHits.groupBy { it.message } }
+    SideEffect { onFindCount(findHits.size) }
     val showDots = working || awaitingReply(presentation.messages, questions.size)
     val firstUnreadKey = remember(presentation.messages, unreadMessageKey, unreadSinceEpochSeconds) {
         ChatOpenAnchor.unreadKey(presentation.messages, unreadMessageKey, unreadSinceEpochSeconds)
@@ -292,7 +307,14 @@ internal fun ChatHistoryList(
     val holdingForUnread = openHold && anchorPosition != null
     val newest = messages.lastOrNull()
     LaunchedEffect(newest?.key, newest?.text, newest?.pending, questions) {
-        if (atBottom && !holdingForUnread) listState.scrollToItem(0)
+        if (atBottom && !holdingForUnread && findQuery.isBlank()) listState.scrollToItem(0)
+    }
+    LaunchedEffect(activeFind?.message, activeFind?.start, activeFind?.end, showDots, questions.size) {
+        val hit = activeFind ?: return@LaunchedEffect
+        if (findQuery.isBlank()) return@LaunchedEffect
+        openHold = false
+        val listIndex = (if (showDots) 1 else 0) + questions.size + (presentation.messages.lastIndex - hit.message)
+        if (listIndex >= 0) listState.scrollToItem(listIndex)
     }
     LaunchedEffect(followRequest) {
         if (followRequest > 0) {
@@ -303,8 +325,8 @@ internal fun ChatHistoryList(
     LaunchedEffect(listState) {
         listState.interactionSource.interactions.collect { if (it is DragInteraction.Start) openHold = false }
     }
-    LaunchedEffect(openHold, anchorPosition, pendingJump != null) {
-        if (!openHold || pendingJump != null) return@LaunchedEffect
+    LaunchedEffect(openHold, anchorPosition, pendingJump != null, findQuery.isNotBlank()) {
+        if (!openHold || pendingJump != null || findQuery.isNotBlank()) return@LaunchedEffect
         val position = anchorPosition ?: return@LaunchedEffect
         listState.scrollToItem(position)
         val info = listState.layoutInfo
@@ -357,6 +379,7 @@ internal fun ChatHistoryList(
                 }
                 val previous = presentation.messages.getOrNull(presentation.messages.lastIndex - index - 1)
                 if (LocalReaderStyle.current && previous != null && previous.role != message.role) Spacer(Modifier.height(10.dp))
+                val messageIndex = presentation.messages.lastIndex - index
                 HistoryBubble(if (message.role == "user") ChatMention.visible(message.text) else message.text, message.role, message.pending, fontScale, sunlight, replyGate, onReply, skills,
                     messageId = message.requestId, sessionName = sessionName, onMarkUnread = { openHold = false; onMarkUnread(message.key) },
                     key = message.key, highlighted = highlightedKey == message.key,
@@ -368,7 +391,9 @@ internal fun ChatHistoryList(
                     delivery = message.delivery?.takeIf { it in FAILURE_LABELS },
                     onCancel = if (message.role == "user" && (message.delivery == "Queued" || message.cancellable) && message.requestId.isNotEmpty() && onCancelPending != null) {
                         { onCancelPending(message) }
-                    } else null)
+                    } else null,
+                    findHits = hitsByMessage[messageIndex].orEmpty(),
+                    activeHit = activeFind?.takeIf { it.message == messageIndex })
                 if (onEditPending != null && QueuedEdit.shows(message)) {
                     Row(Modifier.fillMaxWidth().padding(top = 6.dp).testTag("edit-waiting-${message.key}"), horizontalArrangement = Arrangement.End) {
                         KitSecondaryButton("Edit", { onEditPending(message) })
@@ -411,23 +436,43 @@ private fun HistoryBubble(
     onReaction: ((ChatReactions.Emoji) -> Unit)? = null,
     onCancel: (() -> Unit)? = null,
     delivery: String? = null,
+    findHits: List<ChatFind.Hit> = emptyList(),
+    activeHit: ChatFind.Hit? = null,
 ) {
     val fontSize = chatFontSize((14f * fontScale).sp, fontScale)
     val isUser = role == "user"
     val note = remember(text, isUser, pending, key) { if (isUser && !pending && listOf("@local:", "@shared:", "@unknown:").none(key::startsWith)) SessionNote.parse(text) else null }
     val reply = remember(text, isUser, note) { if (isUser && note == null) ReplyQuote.parse(text) else null }
     val start = remember { BringIntoViewRequester() }
+    val currentFind = activeHit
+    val activeHere = currentFind != null && findHits.any { it.start == currentFind.start && it.end == currentFind.end }
     LaunchedEffect(highlighted) {
         if (highlighted) {
             withFrameNanos { }
             start.bringIntoView(Rect(0f, 0f, 1f, 1f))
         }
     }
+    LaunchedEffect(activeHere, activeHit?.start, activeHit?.end) {
+        if (activeHere) {
+            withFrameNanos { }
+            runCatching { start.bringIntoView(Rect(0f, 0f, 1f, 1f)) }
+        }
+    }
     Column(Modifier.testTag("chat-message-$key").bringIntoViewRequester(start).then(
         if (highlighted) Modifier.semantics { stateDescription = "Original message" } else Modifier,
     )) {
         if (note != null) {
-            SessionNoteChip(note, sessionName, sunlight, fontScale, key)
+            val origin = text.indexOf(note.body)
+            SessionNoteChip(
+                note,
+                sessionName,
+                sunlight,
+                fontScale,
+                key,
+                findHits = if (origin >= 0) findHits else emptyList(),
+                activeHit = activeHit,
+                findOrigin = origin.coerceAtLeast(0),
+            )
             return@Column
         }
         if (reply != null) ReplyReference(reply, sunlight, fontScale, Modifier.alpha(if (pending) 0.5f else 1f)) { onJump(reply) }
@@ -441,7 +486,9 @@ private fun HistoryBubble(
                     color = chatHintColor(sunlight))
             }
             if (isUser) {
-                ChatLinkText(reply?.body ?: text) { line ->
+                val painted = reply?.body ?: text
+                val paintedOrigin = if (painted == text) 0 else text.lastIndexOf(painted).let { if (it < 0) 0 else it }
+                ChatLinkText(painted) { line, start ->
                     SkillMessageText(
                         text = line,
                         skills = skills,
@@ -449,10 +496,21 @@ private fun HistoryBubble(
                         fontSize = fontSize,
                         lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, fontScale),
                         sunlight = sunlight,
+                        matchBase = paintedOrigin + start,
+                        matchHits = findHits,
+                        activeHit = activeHit,
                     )
                 }
             } else {
-                MarkdownText(text = text, fontSize = fontSize, color = chatTextColor(sunlight), linkColor = chatLinkColor(terminalBlue(sunlight)), imagePreviews = true)
+                MarkdownText(
+                    text = text,
+                    fontSize = fontSize,
+                    color = chatTextColor(sunlight),
+                    linkColor = chatLinkColor(terminalBlue(sunlight)),
+                    imagePreviews = true,
+                    matchHits = findHits,
+                    activeHit = activeHit,
+                )
             }
         }
     }

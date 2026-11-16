@@ -9,6 +9,8 @@ Read [the feature index](features/README.md), then the selected recipe. Everythi
 
 ## Launch
 
+If the diff misses `on.pull_request.paths`, dispatch `verify.yml` yourself and treat a missing pull-request job as unrun.
+
 From a pushed branch containing this workflow:
 
 ```bash
@@ -34,6 +36,8 @@ EXPECTED_VERSION="0.1.2-verify.$GITHUB_RUN_NUMBER-debug" EVIDENCE="$GITHUB_WORKS
 It requires boot completion, the debug package's expected build versionName, resumed MainActivity and a non-empty parsed UI XML containing the app package. It writes `package.txt`, `activity.txt` and `doctor.xml`. It never launches, grants permissions, imports keys or changes app state. Rerun it first when the UI appears wrong; a browser on top intentionally fails it.
 
 ## Drive
+
+Prove desktop-hosted chat by loading skills and returning to the live view through the desktop host; a retry or a clearer error is a failure.
 
 The workflow calls, on its fresh GitHub emulator only:
 

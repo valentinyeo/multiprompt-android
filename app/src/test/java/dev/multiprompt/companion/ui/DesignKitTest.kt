@@ -228,12 +228,20 @@ class DesignKitTest {
     @Test
     fun skillPillUsesTheSurfaceAndOutline() {
         compose.setContent {
-            Page { KitSkillPill("/ship", Modifier.testTag("skill")) }
+            Page {
+                KitSkillPill("/ship", Modifier.testTag("skill"))
+                KitSkillPill("/other", Modifier.testTag("skill-other"), marked = true)
+                KitSkillPill("/now", Modifier.testTag("skill-current"), current = true)
+            }
         }
         val bitmap = capture("skill")
         assertPixel(bitmap, bitmap.width / 2, 0, Kit.Outline, "skill outline")
         assertPixel(bitmap, 4, bitmap.height / 2, Kit.Surface, "skill fill")
         compose.onNodeWithText("/ship").assertExists()
+        val other = capture("skill-other")
+        assertPixel(other, 4, other.height / 2, Kit.Outline, "other skill match")
+        val current = capture("skill-current")
+        assertPixel(current, 4, current.height / 2, Kit.Text, "current skill match")
     }
 
     @Test
@@ -278,6 +286,26 @@ class DesignKitTest {
         assertFalse(Integer.toHexString(dimmed.getPixel(dimmed.width - 6, dimmed.height / 2)) == Integer.toHexString(Kit.Surface.toArgb()))
         compose.onNodeWithTag("idle").performClick()
         compose.runOnIdle { assertEquals(1, clicks) }
+    }
+
+    @Test
+    fun searchBoxCountAndMatchMarkerUseKitColours() {
+        compose.setContent {
+            Page {
+                KitSearchBox("", {}, Modifier.fillMaxWidth().testTag("search-box"), placeholder = "Search")
+                KitMatchCount("2 of 4", Modifier.testTag("match-count"))
+                KitMatchMarker("match", current = false, Modifier.testTag("mark-other"))
+                KitMatchMarker("match", current = true, Modifier.testTag("mark-current"))
+            }
+        }
+        val box = capture("search-box")
+        assertPixel(box, 8, box.height / 2, Kit.Surface, "search fill")
+        assertPixel(box, box.width / 2, 0, Kit.Outline, "search outline")
+        compose.onNodeWithText("2 of 4").assertExists()
+        val other = capture("mark-other")
+        assertPixel(other, 2, other.height / 2, Kit.Outline, "other match")
+        val current = capture("mark-current")
+        assertPixel(current, 2, current.height / 2, Kit.Text, "current match")
     }
 
     @Test
