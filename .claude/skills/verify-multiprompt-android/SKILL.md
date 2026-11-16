@@ -98,6 +98,7 @@ All helpers are executable. These setup/interaction commands are **GitHub-job-on
 .claude/skills/verify-multiprompt-android/scripts/drive.sh host-changed-key.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh sessions.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh session-drafts.md
+.claude/skills/verify-multiprompt-android/scripts/drive.sh room-order.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh session-reader.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh session-routing.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh chat-choices.md

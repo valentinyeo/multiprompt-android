@@ -92,6 +92,7 @@ on:
           - launcher-icon.md
           - native-skills.md
           - robot-faces.md
+          - room-order.md
           - session-drafts.md
           - session-favorites.md
           - session-gestures.md

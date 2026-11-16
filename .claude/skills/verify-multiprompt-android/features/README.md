@@ -40,6 +40,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `claude.skills-model-effort`. Runner: `verify.yml` (debug).
 - [Robot inbox and chat](robot-faces.md): Run `verify.yml` with `feature=robot-faces.md`. For the signed candidate, set `released_robots=true` and `candidate=true`. For the published update, set `released_robots=true` and `expected_commit` to the released SHA.
   - Outcomes: `robot-faces.journey`. Runner: `verify.yml` (signed). Inputs: `{"released_robots":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
+- [Room message order](room-order.md): a room keeps two sends in post order, and the later reply includes the other agent's earlier answer.
+  - Outcomes: `rooms.order`. Runner: `verify.yml` (debug).
 - [Inbox draft label](session-drafts.md): unsent composer text shows Draft before the inbox preview, and sending that text removes it.
   - Outcomes: `inbox.draft`. Runner: `verify.yml` (debug).
 - [Session favorites](session-favorites.md): signed APK, isolated SSH sessions and offline favorite cache; no production sync.

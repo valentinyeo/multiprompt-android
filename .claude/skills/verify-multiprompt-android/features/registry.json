@@ -255,6 +255,20 @@
         "robot-faces.journey"
       ]
     },
+    "room-order.md": {
+      "name": "Room message order",
+      "description": "a room keeps two sends in post order, and the later reply includes the other agent's earlier answer.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "rooms.order"
+      ]
+    },
     "session-drafts.md": {
       "name": "Inbox draft label",
       "description": "unsent composer text shows Draft before the inbox preview, and sending that text removes it.",
@@ -629,6 +643,14 @@
       "sideEffect": false,
       "match": [
         "observeDrafts|Session draft"
+      ]
+    },
+    "rooms.order": {
+      "description": "Room sends stay in post order, and a later reply includes the other agent's earlier answer before the new message.",
+      "journey": "room-order.md",
+      "sideEffect": true,
+      "match": [
+        "Room messages since your last turn|COALESCE\\(q\\.checked,0\\)"
       ]
     },
     "inbox.summaries": {

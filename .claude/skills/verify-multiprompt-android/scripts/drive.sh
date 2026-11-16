@@ -837,6 +837,81 @@ if [[ "$feature" == session-drafts.md ]]; then
     printf 'INBOX_DRAFT_LABEL_OK\n'
     exit 0
 fi
+if [[ "$feature" == room-order.md ]]; then
+    adb shell am force-stop "$package"
+    account_id=$(python3 "$scripts/room-order.py" account-id)
+    adb shell am instrument -w \
+        -e class dev.multiprompt.companion.account.SeedAccountDeviceTest#seedsDeviceLoginFromInstrumentationArguments \
+        -e refresh_token aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+        -e account_id "$account_id" \
+        -e device_id verify-phone \
+        "$package.test/androidx.test.runner.AndroidJUnitRunner" > "$EVIDENCE/room-account-seed.txt"
+    grep -F 'OK (1 test)' "$EVIDENCE/room-account-seed.txt"
+    sudo -u verifyssh env HOME=/home/verifyssh python3 "$scripts/room-order.py" install
+    relaunch_app
+    for attempt in {1..45}; do
+        if select_node contains 'Order room' >/dev/null 2>&1; then break; fi
+        sleep 1
+    done
+    select_node contains 'Order room' >/dev/null
+    shot room-inbox
+    tap_text 'Order room'
+    wait_for_text 'No messages yet'
+    shot room-empty
+    if sudo test -f /home/verifyssh/room-submits.jsonl; then
+        sudo cat /home/verifyssh/room-submits.jsonl > "$EVIDENCE/room-submits-before.txt"
+    else
+        : > "$EVIDENCE/room-submits-before.txt"
+    fi
+    python3 "$scripts/room-order.py" nothing-sent "$EVIDENCE/room-submits-before.txt"
+    fill 'Message Order room' one
+    tap_text Send
+    for attempt in {1..30}; do
+        if sudo test -f /home/verifyssh/room-submits.jsonl; then
+            sudo cat /home/verifyssh/room-submits.jsonl > "$EVIDENCE/room-submits-first.txt"
+            if python3 "$scripts/room-order.py" alpha-only "$EVIDENCE/room-submits-first.txt"; then break; fi
+        fi
+        sleep 1
+    done
+    python3 "$scripts/room-order.py" alpha-only "$EVIDENCE/room-submits-first.txt"
+    for attempt in {1..30}; do
+        dump_ui
+        if python3 "$scripts/room-order.py" first "$EVIDENCE/current.xml"; then break; fi
+        sleep 1
+    done
+    python3 "$scripts/room-order.py" first "$EVIDENCE/current.xml"
+    shot room-first-message
+    fill 'Message Order room' two
+    tap_text Send
+    stacked_saved=
+    for attempt in {1..40}; do
+        dump_ui
+        if [[ -z "$stacked_saved" ]] && python3 "$scripts/room-order.py" stacked "$EVIDENCE/current.xml"; then
+            cp "$EVIDENCE/current.xml" "$EVIDENCE/room-stacked.xml"
+            stacked_saved=1
+        fi
+        if [[ -n "$stacked_saved" ]]; then
+            if python3 "$scripts/room-order.py" shown "$EVIDENCE/current.xml" "$EVIDENCE/room-stacked.xml"; then break; fi
+        elif python3 "$scripts/room-order.py" shown "$EVIDENCE/current.xml"; then
+            break
+        fi
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "" >/dev/null 2>&1; then
+            read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
+            adb shell input swipe "$x2" "$y2" "$x1" "$y1" 400
+        fi
+        sleep 1
+    done
+    shot room-ordered
+    if [[ -n "$stacked_saved" ]]; then
+        python3 "$scripts/room-order.py" shown "$EVIDENCE/$(printf '%02d' "$step")-room-ordered.xml" "$EVIDENCE/room-stacked.xml"
+    else
+        python3 "$scripts/room-order.py" shown "$EVIDENCE/$(printf '%02d' "$step")-room-ordered.xml"
+    fi
+    sudo cat /home/verifyssh/room-submits.jsonl > "$EVIDENCE/room-submits.jsonl"
+    python3 "$scripts/room-order.py" submitted "$EVIDENCE/room-submits.jsonl"
+    printf 'ROOM_ORDER_OK\n'
+    exit 0
+fi
 if [[ "$feature" == session-summaries.md ]]; then
     wait_for_text 'Lauren Tan profile is done, checked and pushed.'
     shot summary-reply
