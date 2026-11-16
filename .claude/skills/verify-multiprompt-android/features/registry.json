@@ -147,6 +147,20 @@
         "chat-working.journey"
       ]
     },
+    "dictation-cancel.md": {
+      "name": "Cancel dictation",
+      "description": "start a dictation in a chat, cancel it, and the composer stays empty with nothing sent.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "dictation.cancel"
+      ]
+    },
     "host-changed-key.md": {
       "name": "Changed host key",
       "description": "compare a rotated identity, persist Not now and refuse authentication.",
@@ -580,6 +594,14 @@
       "journey": "session-settings.md",
       "sideEffect": false,
       "match": []
+    },
+    "dictation.cancel": {
+      "description": "Cancel dictation drops the in-progress recording and restores the composer without that transcript or a send.",
+      "journey": "dictation-cancel.md",
+      "sideEffect": false,
+      "match": [
+        "dictation-cancel|Cancel dictation"
+      ]
     },
     "inbox.draft": {
       "description": "Inbox rows show Draft before the preview while a chat has unsent text, and hide it once that text is sent.",

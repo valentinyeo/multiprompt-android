@@ -28,6 +28,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `chat-shared.journey`. Runner: `verify.yml` (debug).
 - [Working dots on the signed release](chat-working.md): quiet tools, lock/unlock, real SSH reconnect, recording and timed visible-state samples. Uses `working-dots.yml`.
   - Outcomes: `chat-working.journey`. Runner: `working-dots.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
+- [Cancel dictation](dictation-cancel.md): start a dictation in a chat, cancel it, and the composer stays empty with nothing sent.
+  - Outcomes: `dictation.cancel`. Runner: `verify.yml` (debug).
 - [Changed host key](host-changed-key.md): compare a rotated identity, persist Not now and refuse authentication.
   - Outcomes: `host-changed-key.journey`. Runner: `verify.yml` (debug).
 - [Retired hosts](hosts-retired.md): a saved host at a retired server address is gone after relaunch; account sync never adds it back.
