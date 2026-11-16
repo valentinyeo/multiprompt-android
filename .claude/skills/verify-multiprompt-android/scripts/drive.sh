@@ -1876,11 +1876,20 @@ fi
 if [[ "$feature" == terminal.md ]]; then
     adb shell settings put secure show_ime_with_hard_keyboard 1
     tap_desc 'Session actions'
+    for attempt in {1..6}; do
+        dump_ui
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text 'Open live terminal' >/dev/null 2>&1; then break; fi
+        read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
+        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 500
+    done
     tap_text 'Open live terminal'
     wait_for_text 'SSH · tmux attached'
     sudo -u verifyssh tmux list-clients -F '#{client_name} #{client_session}' > "$EVIDENCE/tmux-clients.txt"
     grep -F verify-session "$EVIDENCE/tmux-clients.txt"
     shot terminal-attached
+    for key in Esc Tab Ctrl Alt; do
+        select_node desc "$key key"
+    done
     sudo -u verifyssh tmux capture-pane -p -S - -t verify-session > "$EVIDENCE/shell-history-before.txt"
     grep -Fx SHELL_HISTORY_0001 "$EVIDENCE/shell-history-before.txt"
     grep -Fx SHELL_HISTORY_0500 "$EVIDENCE/shell-history-before.txt"

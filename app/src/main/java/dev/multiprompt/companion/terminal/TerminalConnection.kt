@@ -57,7 +57,7 @@ class TerminalConnection(
         initialCols = 80,
         defaultForeground = Color(0xFFE5E7EB),
         defaultBackground = Color(0xFF090B10),
-        onKeyboardInput = { data -> keyboard.trySend(data) },
+        onKeyboardInput = ::sendRaw,
         onResize = { dimensions -> if (fixedSize == null) resizes.value = dimensions },
         autoDetectUrls = true,
     )
@@ -126,8 +126,12 @@ class TerminalConnection(
         }
     }
 
+    fun sendRaw(bytes: ByteArray) {
+        if (bytes.isNotEmpty()) keyboard.trySend(bytes)
+    }
+
     fun paste(text: String) {
-        if (text.isNotEmpty()) keyboard.trySend(text.toByteArray(Charsets.UTF_8))
+        sendRaw(text.toByteArray(Charsets.UTF_8))
     }
 
     override fun close() {

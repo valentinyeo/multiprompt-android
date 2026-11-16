@@ -160,6 +160,7 @@ import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
@@ -284,6 +285,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.launch
 import org.connectbot.terminal.Terminal
 import dev.multiprompt.companion.terminal.TerminalInputTracker
+import dev.multiprompt.companion.terminal.TerminalKeys
 
 @Composable
 fun MultipromptApp(viewModel: MainViewModel) {
@@ -5614,10 +5616,50 @@ private fun TerminalScreen(
                 dictating = dictating,
             )
         },
+        bottomBar = {
+            Row(
+                Modifier.fillMaxWidth().background(Kit.Page).navigationBarsPadding().imePadding()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(Kit.ControlGap),
+                horizontalArrangement = Arrangement.spacedBy(Kit.ControlGap),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TerminalKeys.Key.entries.forEach { key ->
+                    if (key == TerminalKeys.Key.Up) {
+                        listOf("Ctrl", "Alt").forEach { label ->
+                            val active = if (label == "Ctrl") inputTracker.isCtrlActive() else inputTracker.isAltActive()
+                            val toggle = if (label == "Ctrl") inputTracker::toggleCtrl else inputTracker::toggleAlt
+                            KitSegmented(
+                                options = listOf(true to label),
+                                selected = active,
+                                onSelect = { toggle() },
+                                modifier = Modifier.width(Kit.ControlHeight + Kit.SideChange * 2)
+                                    .clearAndSetSemantics {
+                                        contentDescription = "$label key"
+                                        selected = active
+                                        role = Role.Button
+                                        onClick { toggle(); true }
+                                    },
+                            )
+                        }
+                    }
+                    KitSecondaryButton(
+                        text = key.label,
+                        onClick = {
+                            historyVisible = false
+                            connection.sendRaw(key.bytes())
+                            inputTracker.clearTransients()
+                        },
+                        modifier = Modifier.semantics { contentDescription = "${key.label} key" },
+                    )
+                }
+            }
+        },
     ) { padding ->
         BoxWithConstraints(
             Modifier
                 .padding(padding)
+                .consumeWindowInsets(padding)
                 .fillMaxSize()
                 .imePadding()
                 .background(TerminalBackground)
