@@ -26,8 +26,8 @@ class ChatPollGate : AutoCloseable {
     private fun publish() {
         val value = leases.isNotEmpty()
         if (_active.value == value) return
-        _active.value = value
         listeners.forEach { it(value) }
+        _active.value = value
     }
 
     internal fun launchIn(scope: CoroutineScope, block: suspend CoroutineScope.() -> Unit): Job = scope.launch {

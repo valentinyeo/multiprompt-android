@@ -1,5 +1,10 @@
 package dev.multiprompt.companion.reader
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -31,6 +36,28 @@ class ChatPollGateTest {
             gate.close()
         }
         assertEquals(listOf(false, true, false, true, false), changes)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun cancelledReadsObserveTheReleasedSelectionBeforeCompletingAnAction() = runTest(UnconfinedTestDispatcher()) {
+        val gate = ChatPollGate()
+        var selected = false
+        gate.onChange { selected = it }
+        var selectedAtCancellation: Boolean? = null
+        val reader = gate.launchIn(backgroundScope) {
+            try {
+                awaitCancellation()
+            } finally {
+                selectedAtCancellation = selected
+            }
+        }
+        val lease = gate.acquire()
+        runCurrent()
+        lease.close()
+        runCurrent()
+        assertEquals(false, selectedAtCancellation)
+        reader.cancel()
     }
 
     @Test
