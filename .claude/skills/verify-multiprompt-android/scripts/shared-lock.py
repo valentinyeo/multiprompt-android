@@ -3,7 +3,8 @@ import fcntl
 import hashlib
 import os
 from pathlib import Path
-import signal
+import select
+import sqlite3
 import sys
 
 assert os.environ.get('GITHUB_ACTIONS') == 'true'
@@ -17,4 +18,8 @@ with lock_path.open('a') as lock:
     fcntl.flock(lock, fcntl.LOCK_EX)
     Path('/home/verifyssh/shared-lock-ready-' + provider + '-' + sid).write_text('held\n')
     while True:
-        signal.pause()
+        if path.exists():
+            with sqlite3.connect(path) as db:
+                if db.execute("SELECT 1 FROM sqlite_master WHERE name='shared_messages'").fetchone():
+                    db.execute("UPDATE shared_messages SET deadline=NULL WHERE provider=? AND sid=? AND state IN ('queued','sent') AND deadline IS NOT NULL", (provider, sid))
+        select.select([], [], [], 0.1)

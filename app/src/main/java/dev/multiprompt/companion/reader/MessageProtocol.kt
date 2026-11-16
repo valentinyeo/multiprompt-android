@@ -32,7 +32,10 @@ object MessageProtocol {
         val resolved: String? = null,
         val settings: HostSettings? = null,
         val sent: Pair<String, List<String>>? = null,
-    )
+    ) {
+        internal val nativeItem: String?
+            get() = item?.takeUnless { it == "text.delta" || it == "text.done" }
+    }
 
     sealed interface Item {
         data class Message(val row: Row) : Item
@@ -130,9 +133,9 @@ object MessageProtocol {
 
     private fun sentRows(payload: JSONObject): Pair<String, List<String>>? {
         val id = payload.optString("message_id").ifEmpty { return null }
-        val listed = payload.optJSONArray("uuids") ?: return null
+        val listed = payload.optJSONArray("uuids") ?: JSONArray()
         val uuids = (0 until listed.length()).mapNotNull { listed.opt(it) as? String }.filter { it.isNotEmpty() }
-        return if (uuids.isEmpty()) null else id to uuids
+        return id to uuids
     }
 
     private fun fact(value: JSONObject, scope: Scope, native: Boolean): Fact {

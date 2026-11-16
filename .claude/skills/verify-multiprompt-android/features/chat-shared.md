@@ -3,11 +3,12 @@
 Run `verify.yml` with `feature=chat-shared.md`.
 The public fixture uses synthetic chat histories.
 It covers Claude and Codex.
-The exact bundled reader initializes the store first.
+The complete generation-22 reader and connector bundle initializes the store first.
+`tools/shared-fixture-runtime.py` extracts revision `bebcb708b7ae9338230c2c5b04fa769484f46ccd` and verifies its exact 224961-byte bundle and SHA-256 before installing it. It never relabels the current runtime as generation 22.
 Android connects afterward.
 Artifacts retain engine identity and bundle hash.
 They also retain the initial snapshots.
-Separate worker locks prevent native provider pickup.
+Separate worker locks prevent native provider pickup. While those isolated fixture workers hold work, they suspend only their provider/SID admission deadlines; Reset and all delivery states remain canonical. The app may subsequently select its newer compatible runtime, whose actual generation and hash are retained.
 
 For each provider, Android submits through SSH.
 A second reader submits another message.
