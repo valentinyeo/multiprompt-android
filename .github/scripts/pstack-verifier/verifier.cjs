@@ -411,10 +411,22 @@ async function pick(env) {
   const user = `Journey catalog (the only names you may choose):\n${journeyCatalog(env.ROOT ?? process.cwd())}\n\n${prContext(pr, diff, PICK_DIFF_CHARS)}`;
   const picked = await askParsed({ ask: () => callDeepSeek({ key, system: PICK_INSTRUCTIONS, user }), parse: parsePick });
   const plan = coverageGate.planChange(diff, picked.changedOutcomes);
-  if (plan.product && picked.changeKind !== 'product') throw new Error('FEATURE_UNMAPPED: product source changes cannot use tooling-only validation.');
+  const selected = selectJourneys(picked, plan);
   const reason = picked.reason || 'Journeys chosen for this change.';
-  console.log(`pstack-verifier pick: PR #${number} features=${JSON.stringify(picked.features)} smoke=${picked.smoke} dropped=${JSON.stringify(picked.dropped)} reason=${reason}`);
-  setOutputs({ features: JSON.stringify(picked.features), smoke: picked.smoke ? 'yes' : 'no', reason, number, head_sha: head, merge_base: mergeBase, changed_outcomes: JSON.stringify(plan.outcomes) });
+  console.log(`pstack-verifier pick: PR #${number} features=${JSON.stringify(selected.features)} smoke=${selected.smoke} dropped=${JSON.stringify(picked.dropped)} reason=${reason}`);
+  setOutputs({ features: JSON.stringify(selected.features), smoke: selected.smoke ? 'yes' : 'no', reason, number, head_sha: head, merge_base: mergeBase, changed_outcomes: JSON.stringify(plan.outcomes) });
+}
+
+function selectJourneys(picked, plan) {
+  if (plan.product && !plan.outcomes.length) {
+    throw new Error('FEATURE_UNMAPPED: product code changed but no outcome was identified. Add its outcome and journey to features/registry.json; smoke is not coverage.');
+  }
+  const forced = plan.outcomes
+    .map(id => coverageGate.registry.outcomes[id]?.journey)
+    .filter(name => coverageGate.debugJourneys.includes(name));
+  if (!forced.length) return { features: picked.features, smoke: picked.smoke };
+  const features = [...new Set([...forced, ...picked.features.filter(name => name !== SMOKE_JOURNEY)])].slice(0, MAX_JOURNEYS);
+  return { features, smoke: false };
 }
 
 function ownComments(repo, number) {
@@ -556,7 +568,7 @@ async function judge(env) {
 
 module.exports = {
   ALLOWLIST, MODEL, ENDPOINT, MARKER_PREFIX, VERDICTS, MAX_JOURNEYS, SMOKE_JOURNEY,
-  SIDES, RESULT_FILE, escapeText, validateFeatures, parseJson, askParsed, parsePick, parseVerdict, applyRules, parentResult, buildComment,
+  SIDES, RESULT_FILE, escapeText, validateFeatures, parseJson, askParsed, parsePick, parseVerdict, applyRules, parentResult, buildComment, selectJourneys,
   artifactName, readSideFiles, fetchMergeBase, findOwnComment, jobConclusions, callDeepSeek, doneWhen, journeyEvidence, journeyCatalog, requireKey,
 };
 
