@@ -33,6 +33,16 @@ class ActionTest(unittest.TestCase):
     def plan(self, xml, mode="text", value="Open live terminal", direction="forward"):
         return action.plan(ET.fromstring(xml), mode, value, direction)
 
+    def test_terminal_typing_area_is_reachable_without_a_clickable_text_node(self):
+        xml = window('<node content-desc="Show keyboard" bounds="[900,40][1000,140]" /><node class="android.widget.HorizontalScrollView" scrollable="true" bounds="[0,1000][1080,1100]"><node content-desc="Esc key" bounds="[10,1010][100,1090]" /></node>')
+        self.assertEqual(self.plan(xml, mode='terminal', value=''), 'tap 505 575')
+        for changed in (xml.replace('[10,1010][100,1090]', '[10,990][100,1090]'), xml.replace('Show keyboard', 'Hidden keyboard')):
+            with self.subTest(xml=changed), self.assertRaisesRegex(action.Unreachable, 'typing anchor'):
+                self.plan(changed, mode='terminal', value='')
+        covered = xml.replace('</node></hierarchy>', '<node clickable="true" bounds="[400,500][600,650]" /></node></hierarchy>')
+        with self.assertRaisesRegex(action.Unreachable, 'overlap'):
+            self.plan(covered, mode='terminal', value='')
+
     def test_complete_button_uses_clickable_ancestor(self):
         xml = window('<node clickable="true" bounds="[20,400][500,600]"><node text="Open live terminal" bounds="[50,450][300,500]" /></node>')
         self.assertEqual(self.plan(xml), "tap 260 500")
@@ -40,6 +50,19 @@ class ActionTest(unittest.TestCase):
     def test_pr129_pin_center_obscured_by_fixed_tabs_is_not_tapped(self):
         with self.assertRaisesRegex(action.Unreachable, "overlap"):
             self.plan(PIN, value="pin-00")
+
+    def test_foreground_send_button_is_not_occluded_by_its_background_editor(self):
+        xml = window('<node class="android.widget.EditText" clickable="true" bounds="[179,872][1048,998]" />' + button('Send prompt', '[927,872][1053,998]'))
+        self.assertEqual(self.plan(xml, value='Send prompt'), 'tap 990 935')
+
+    def test_drawing_order_takes_precedence_over_accessibility_sibling_order(self):
+        xml = window('<node clickable="true" drawing-order="2" bounds="[0,400][600,700]" />' + button(attributes='drawing-order="1"'))
+        with self.assertRaisesRegex(action.Unreachable, 'overlap'):
+            self.plan(xml)
+
+    def test_edge_touch_target_overlap_does_not_hide_the_clickable_center(self):
+        xml = window(button() + '<node clickable="true" bounds="[480,500][600,580]" />')
+        self.assertEqual(self.plan(xml), 'tap 260 540')
 
     def test_fully_covered_button_is_not_tapped(self):
         xml = window(button() + '<node clickable="true" bounds="[0,400][600,700]" />')

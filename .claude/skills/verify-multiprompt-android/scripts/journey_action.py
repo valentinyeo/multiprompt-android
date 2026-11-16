@@ -63,6 +63,39 @@ def plan(root, mode, value, direction="forward"):
             start, end = end, start
         return "swipe " + " ".join(map(str, (*start, *end)))
 
+    def above(other, target):
+        for front, back in zip(reversed(list(chain(other))), reversed(list(chain(target)))):
+            if front is not back:
+                siblings = list(parents[front])
+                return int(front.get("drawing-order", siblings.index(front))) > int(back.get("drawing-order", siblings.index(back)))
+        return False
+
+    def tap(rect, relatives, target=None):
+        x, y = (rect[0] + rect[2]) // 2, (rect[1] + rect[3]) // 2
+        for other in nodes:
+            if other in relatives or not enabled(other) or not (other.get("clickable") == "true" or other.get("selected") == "true"):
+                continue
+            if target is not None and not above(other, target):
+                continue
+            other_rect = bounds(other)
+            if other_rect[0] <= x < other_rect[2] and other_rect[1] <= y < other_rect[3]:
+                raise Unreachable("clickable center overlaps another control; reveal the complete button before tapping")
+        return f"tap {x} {y}"
+
+    if mode == "terminal":
+        anchors = []
+        for description in ("Show keyboard", "Esc key"):
+            matches = [n for n in nodes if n.get("content-desc") == description and enabled(n)]
+            if len(matches) != 1 or not inside(bounds(matches[0]), viewport(matches[0])):
+                raise Unreachable(f"terminal typing anchor is missing, ambiguous or clipped: {description}")
+            anchors.append(bounds(matches[0]))
+        toolbar, keys = anchors
+        area = keys[0], toolbar[3], toolbar[2], keys[1]
+        if not inside(area, screen):
+            raise Unreachable("terminal typing area is not visible between toolbar and key row")
+        x, y = (area[0] + area[2]) // 2, (area[1] + area[3]) // 2
+        return tap((x, y, x + 1, y + 1), set())
+
     matches = []
     for node in nodes:
         if mode == "text" and node.get("text") == value:
@@ -101,12 +134,4 @@ def plan(root, mode, value, direction="forward"):
                 raise Unreachable("clickable bounds are clipped outside the active viewport; no ancestor can scroll on that axis")
             offset = 0 if axis == "horizontal" else 1
             return scroll(scrolls[0], axis, candidate_rect[offset + 2] > visible[offset + 2])
-    relatives = set(chain(target)) | set(target.iter())
-    for other in nodes:
-        if other in relatives or not enabled(other) or not (other.get("clickable") == "true" or other.get("selected") == "true"):
-            continue
-        other_rect = bounds(other)
-        overlap = intersection(rect, other_rect)
-        if overlap[0] < overlap[2] and overlap[1] < overlap[3] and other_rect != screen:
-            raise Unreachable("clickable bounds overlap another control; reveal the complete button before tapping")
-    return f"tap {(rect[0] + rect[2]) // 2} {(rect[1] + rect[3]) // 2}"
+    return tap(rect, set(chain(target)) | set(target.iter()), target)

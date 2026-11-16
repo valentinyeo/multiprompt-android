@@ -11,7 +11,7 @@ if mode.startswith("reach-"):
     try:
         print(plan(root, mode.removeprefix("reach-"), value, sys.argv[4] if len(sys.argv) > 4 else "forward"))
     except Unreachable as error:
-        raise SystemExit(f"JOURNEY_ACTION_UNREACHABLE: {value!r}: {error}")
+        raise SystemExit(f"JOURNEY_ACTION_UNREACHABLE: {value or mode.removeprefix('reach-')!r}: {error}")
     raise SystemExit(0)
 parents = {child: parent for parent in root.iter() for child in parent}
 matches = []
