@@ -17,6 +17,14 @@ The second-AI verdict must include `coverage` entries for every changed ID. Each
 
 `features/coverage-baseline.json` lists the initial uncovered IDs, including dedicated, signed and manual routes outside the debug picker. The baseline is an inventory, not permission to change those features without proof. New uncovered IDs fail even if another gap disappears. Keep dedicated workflows and account prerequisites; never make them debug recipes just to obtain a green verdict.
 
+## Design-kit controls
+
+For button or menu migrations, run `tools/check.sh lint` on GitHub. It checks resolved Material symbols in debug, release and m3, including aliases and fully qualified calls. `KitControlDetectorTest` rejects the exact dialog removed in #136 (`c58a41b6`) and menu removed in #132 (`0cc8e05e`). `tools/kit-controls/history.test.py` verifies their provenance and forbids new baseline allowances. The shipping inventory is empty; diagnostic debug sources and tests are explicit exclusions. The hosted `kit-controls-proof` artifact also retains rejection of a new aliased dialog, qualified dialog and menu against the real Material dependency, not only test stubs. Only `KitSheet` in `DesignKit.kt` may call Material `ModalBottomSheet`.
+
+Do not count kit-component tests as screen proof. `DesignKitTest.deviceApprovalScreenUsesKitButtonPixelsAndActions` captures the actual approval screen's button fills and checks both callbacks. `DeviceApprovalPromptTest` checks busy, error and explicit-choice behavior. These are hosted screen regressions, not live account approval proof.
+
+Dispatch `hosts.md` and `host-changed-key.md` for trust-sheet changes. Inspect the fingerprint, Trust and connect, Not now and independent SSH receipts. Dispatch `sign-in.md` for the Sign in button. Device approval still needs real account OTP and a second device; keep that limitation visible. Run the existing reader/menu journeys for reader button changes. New kit components or colours still require the design approval in `CLAUDE.md`.
+
 ## Launch
 
 If the diff misses `on.pull_request.paths`, dispatch `verify.yml` yourself and treat a missing pull-request job as unrun.

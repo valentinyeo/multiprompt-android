@@ -1,17 +1,10 @@
 package dev.multiprompt.companion.ui
 
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
-import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.outlined.Image as OutlinedImage
-import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.navigationBarsPadding
-import android.text.format.DateUtils
 import androidx.compose.foundation.lazy.rememberLazyListState
 import dev.multiprompt.companion.reader.AiStopped
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
@@ -55,7 +48,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -94,7 +86,6 @@ import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Mic
@@ -108,17 +99,13 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Badge
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ScrollableTabRow
@@ -131,7 +118,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.rememberSwipeToDismissBoxState
@@ -198,7 +184,6 @@ import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
@@ -207,7 +192,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -240,7 +224,6 @@ import dev.multiprompt.companion.model.DirectoryRanking
 import dev.multiprompt.companion.model.RecentFolder
 import dev.multiprompt.companion.model.RecentFolders
 import dev.multiprompt.companion.model.SessionFinder
-import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.model.DissolvedSession
@@ -353,12 +336,7 @@ private fun UpdateBanner(
             )
             if (state is UpdateState.Available) {
                 KitSecondaryButton("Later", onClick = { onLater(release) })
-                Button(
-                    onClick = { onInstall(release) },
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
-                ) {
-                    Text("Install")
-                }
+                KitPrimaryButton("Install", onClick = { onInstall(release) })
             }
         }
     }
@@ -648,85 +626,38 @@ private fun AppScreens(viewModel: MainViewModel) {
 
             NewSessionStep.EXISTING -> Unit
 
-            NewSessionStep.HARNESS -> AlertDialog(
-                onDismissRequest = viewModel::closeNewSession,
-                title = { Text("Start in ${picker.chosenPath?.substringAfterLast('/').orEmpty()}") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(picker.chosenPath.orEmpty(), style = MaterialTheme.typography.labelSmall)
-                        state.sessionActionError?.let { message ->
-                            Text(
-                                message,
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                        }
-                        AgentHarness.entries.forEach { harness ->
-                            if (harness == AgentHarness.CLAUDE) {
-                                Button(
-                                    onClick = { viewModel.createNewSession(harness) },
-                                    enabled = !state.creatingSession,
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) { Text(harness.label) }
-                            } else {
-                                OutlinedButton(
-                                    onClick = { viewModel.createNewSession(harness) },
-                                    enabled = !state.creatingSession,
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) { Text(harness.label) }
-                            }
+            NewSessionStep.HARNESS -> KitSheet(onDismiss = viewModel::closeNewSession) {
+                Text("Start in ${picker.chosenPath?.substringAfterLast('/').orEmpty()}", style = Kit.Heading, color = Kit.Text)
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(picker.chosenPath.orEmpty(), style = Kit.Hint, color = Kit.TextMuted)
+                    state.sessionActionError?.let { message -> Text(message, color = Kit.Danger, style = Kit.Hint) }
+                    AgentHarness.entries.forEach { harness ->
+                        if (harness == AgentHarness.CLAUDE) {
+                            KitPrimaryButton(harness.label, onClick = { viewModel.createNewSession(harness) }, enabled = !state.creatingSession, modifier = Modifier.fillMaxWidth())
+                        } else {
+                            KitSecondaryButton(harness.label, onClick = { viewModel.createNewSession(harness) }, enabled = !state.creatingSession, modifier = Modifier.fillMaxWidth())
                         }
                     }
-                },
-                confirmButton = {},
-                dismissButton = {
-                    TextButton(onClick = viewModel::backToNewSessionFolder) { Text("Back") }
-                },
-            )
+                    KitSecondaryButton("Back", onClick = viewModel::backToNewSessionFolder)
+                }
+            }
         }
     }
 
     state.pendingHostKeys.entries.firstOrNull()?.let { (hostId, key) ->
         val host = state.hosts.firstOrNull { it.id == hostId }
         val warning = HostKeyWarning.text(host, key)
-        AlertDialog(
-            onDismissRequest = {},
-            title = {
-                Text(warning.title)
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(warning.body)
-                    Text(
-                        warning.server,
-                        fontFamily = FontFamily.Monospace,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    warning.saved?.let { saved ->
-                        Text(
-                            saved,
-                            fontFamily = FontFamily.Monospace,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                    Text(
-                        warning.presented,
-                        fontFamily = FontFamily.Monospace,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            },
-            confirmButton = {
-                Button(onClick = { viewModel.trustHostKey(hostId) }) {
-                    Text(warning.confirm)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.dismissHostKey(hostId) }) {
-                    Text("Not now")
-                }
-            },
-        )
+        KitSheet(onDismiss = {}, dismissible = false) {
+            Text(warning.title, style = Kit.Heading, color = Kit.Text)
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(warning.body, style = Kit.Body, color = Kit.Text)
+                Text(warning.server, fontFamily = FontFamily.Monospace, style = Kit.Hint, color = Kit.Text)
+                warning.saved?.let { saved -> Text(saved, fontFamily = FontFamily.Monospace, style = Kit.Hint, color = Kit.Text) }
+                Text(warning.presented, fontFamily = FontFamily.Monospace, style = Kit.Hint, color = Kit.Text)
+                KitPrimaryButton(warning.confirm, onClick = { viewModel.trustHostKey(hostId) })
+                KitSecondaryButton("Not now", onClick = { viewModel.dismissHostKey(hostId) })
+            }
+        }
     }
 }
 
@@ -750,9 +681,9 @@ private fun SignInScreen(
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center,
                 )
-                Button(onClick = onSignIn) { Text("Sign in") }
+                KitPrimaryButton("Sign in", onClick = onSignIn)
                 if (BuildConfig.DEBUG && onUseWithoutAccount != null) {
-                    TextButton(onClick = onUseWithoutAccount) { Text("Use without account (debug)") }
+                    KitSecondaryButton("Use without account (debug)", onClick = onUseWithoutAccount)
                 }
                 if (error != null) {
                     Text(error, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
@@ -790,13 +721,11 @@ internal fun Header(
             if (refreshing) {
                 CircularProgressIndicator(Modifier.padding(12.dp).size(22.dp), strokeWidth = 2.dp)
             } else {
-                IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, "Refresh") }
+                KitRoundButton(onClick = onRefresh, icon = Icons.Default.Refresh, description = "Refresh")
             }
             VersionLabel(onClick = onReleaseNotes)
             Box {
-                IconButton(onClick = { menuExpanded = true }) {
-                    Icon(Icons.Default.MoreVert, "Open navigation")
-                }
+                KitRoundButton(onClick = { menuExpanded = true }, icon = Icons.Default.MoreVert, description = "Open navigation")
                 KitMenu(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
@@ -828,7 +757,7 @@ private fun UpdateBanner(release: UpdateRelease, onInstall: () -> Unit, onLater:
     ) {
         Text("v${release.versionName} is ready", Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
         KitSecondaryButton("Later", onClick = onLater)
-        FilledTonalButton(onClick = onInstall) { Text("Update now") }
+        KitPrimaryButton("Update now", onClick = onInstall)
     }
 }
 
@@ -1171,11 +1100,7 @@ internal fun NewSessionFolderScreen(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            TextButton(
-                onClick = { onChoose(picker.path) },
-                enabled = picker.path.isNotBlank(),
-                colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
-            ) { Text("Use this folder", fontSize = 14.sp, fontWeight = FontWeight.Medium) }
+            KitSecondaryButton("Use this folder", onClick = { onChoose(picker.path) }, enabled = picker.path.isNotBlank())
         }
         if (picker.loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.onSurfaceVariant, trackColor = MaterialTheme.colorScheme.surfaceContainer)
         picker.error?.let { message ->
@@ -1543,9 +1468,7 @@ internal fun SessionsScreen(
                         Modifier.fillMaxWidth().statusBarsPadding().padding(end = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        IconButton(onClick = { settingsPage = SettingsPage.HIDDEN }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                        }
+                        KitRoundButton(onClick = { settingsPage = SettingsPage.HIDDEN }, icon = Icons.AutoMirrored.Filled.ArrowBack, description = "Back")
                         Text("Session list settings", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                         VersionLabel(onClick = {
                             settingsPage = SettingsPage.HIDDEN
@@ -1876,18 +1799,20 @@ internal fun SessionsScreen(
                                 color = Kit.Text,
                             )
                         }
-                        IconButton(
+                        KitSecondaryButton(
+                            text = "↑",
                             onClick = {
                                 onMoveWorkspaceSplit(splitId, if (state.allSplitOnRight) 1 else -1)
                             },
                             enabled = index > 0,
-                        ) { Text("↑", color = Kit.Text) }
-                        IconButton(
+                        )
+                        KitSecondaryButton(
+                            text = "↓",
                             onClick = {
                                 onMoveWorkspaceSplit(splitId, if (state.allSplitOnRight) -1 else 1)
                             },
                             enabled = index < arrangedWorkspaceSplitIds.lastIndex,
-                        ) { Text("↓", color = Kit.Text) }
+                        )
                     }
                 }
                 if (state.archivedWorkspaces.isNotEmpty()) {
@@ -2030,25 +1955,15 @@ internal fun SessionsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box {
-                        TextButton(
+                        KitTitlePill(
+                            text = when (state.sessionBucket) {
+                                SessionBucket.OPEN -> "Inbox"
+                                SessionBucket.WAITING -> "Waiting"
+                                SessionBucket.ARCHIVE -> "Archive"
+                            } + if (state.unreadOnly) " · Unread" else "",
                             onClick = { bucketMenuExpanded = true },
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                            modifier = if (LocalReaderStyle.current) Modifier
-                                .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
-                                .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape) else Modifier,
-                        ) {
-                            Text(
-                                when (state.sessionBucket) {
-                                    SessionBucket.OPEN -> "Inbox"
-                                    SessionBucket.WAITING -> "Waiting"
-                                    SessionBucket.ARCHIVE -> "Archive"
-                                } + if (state.unreadOnly) " · Unread" else "",
-                                color = MaterialTheme.colorScheme.onSurface,
-                                style = if (LocalMaterial3.current) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
-                                fontWeight = if (LocalMaterial3.current) FontWeight.Normal else FontWeight.SemiBold,
-                            )
-                            Icon(Icons.Default.ExpandMore, "Switch session bucket", tint = MaterialTheme.colorScheme.onSurface)
-                        }
+                            modifier = Modifier.semantics { contentDescription = "Switch session bucket" },
+                        )
                         KitMenu(
                             expanded = bucketMenuExpanded,
                             onDismissRequest = { bucketMenuExpanded = false },
@@ -2084,31 +1999,17 @@ internal fun SessionsScreen(
                         if (state.refreshing && state.sessions.isEmpty()) {
                             CircularProgressIndicator(Modifier.padding(12.dp).size(20.dp), strokeWidth = 2.dp)
                         }
-                        IconButton(
-                            onClick = {
+                        KitRoundButton(onClick = {
                                 searchVisible = !searchVisible
                                 if (!searchVisible) {
                                     searchQuery = ""
                                     focusManager.clearFocus()
                                 }
-                            },
-                            modifier = Modifier.roundOutlined(),
-                        ) {
-                            Icon(
-                                if (searchVisible) Icons.Default.Close else Icons.Default.Search,
-                                if (searchVisible) "Close session search" else "Search sessions",
-                            )
-                        }
-                        IconButton(
-                            enabled = !state.creatingSession,
-                            onClick = onStartNewSession,
-                            modifier = Modifier.roundOutlined(),
-                        ) {
-                            if (state.creatingSession) {
-                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                            } else {
-                                Icon(Icons.Default.Add, "New session")
-                            }
+                            }, icon = if (searchVisible) Icons.Default.Close else Icons.Default.Search, description = if (searchVisible) "Close session search" else "Search sessions")
+                        if (state.creatingSession) {
+                            CircularProgressIndicator(Modifier.size(Kit.RoundButton), strokeWidth = 2.dp)
+                        } else {
+                            KitRoundButton(onClick = onStartNewSession, icon = Icons.Default.Add, description = "New session")
                         }
                         InboxOverflowMenu(
                             onSettings = { settingsPage = SettingsPage.PREFERENCES },
@@ -2142,9 +2043,7 @@ internal fun SessionsScreen(
                             leadingIcon = { Icon(Icons.Default.Search, null) },
                             trailingIcon = if (searchQuery.isNotEmpty()) {
                                 {
-                                    IconButton(onClick = { searchQuery = "" }) {
-                                        Icon(Icons.Default.Close, "Clear search")
-                                    }
+                                    KitRoundButton(onClick = { searchQuery = "" }, icon = Icons.Default.Close, description = "Clear search")
                                 }
                             } else {
                                 null
@@ -2237,13 +2136,10 @@ internal fun SessionsScreen(
                                 FREQUENT_SPLIT_ID -> "Frequent"
                                 else -> state.workspaces.firstOrNull { it.id == id }?.name.orEmpty()
                             }
-                            val label: @Composable RowScope.() -> Unit = {
-                                Text(name, color = if (state.selectedWorkspaceId == id) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
                             if (state.selectedWorkspaceId == id) {
-                                androidx.compose.material3.FilledTonalButton(onClick = { onSelectWorkspace(id) }, modifier = Modifier.semantics { selected = true }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(containerColor = if (sunlight) MaterialTheme.colorScheme.surfaceContainerHigh else Color(0xFF353535), contentColor = MaterialTheme.colorScheme.onSurface), content = label)
+                                KitPrimaryButton(name, onClick = { onSelectWorkspace(id) }, modifier = Modifier.semantics { selected = true })
                             } else {
-                                TextButton(onClick = { onSelectWorkspace(id) }, modifier = Modifier.semantics { selected = false }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), content = label)
+                                KitSecondaryButton(name, onClick = { onSelectWorkspace(id) }, modifier = Modifier.semantics { selected = false })
                             }
                         }
                     }
@@ -2854,8 +2750,8 @@ private fun DissolvedSessionCard(
                 modifier = Modifier.padding(top = 6.dp),
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onForget) { Text("Forget") }
-                TextButton(onClick = onRestore, enabled = session.resumeCommand.isNotBlank()) { Text("Resume") }
+                KitSecondaryButton("Forget", onClick = onForget, destructive = true)
+                KitSecondaryButton("Resume", onClick = onRestore, enabled = session.resumeCommand.isNotBlank())
             }
         }
     }
@@ -2938,9 +2834,7 @@ internal fun ReaderTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
             ) {
-                IconButton(onClick = onBack, modifier = Modifier.roundOutlined()) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                }
+                KitRoundButton(onClick = onBack, icon = Icons.AutoMirrored.Filled.ArrowBack, description = "Back")
                 Box(Modifier.weight(1f)) {
                     Row(
                         Modifier.height(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
@@ -2961,9 +2855,7 @@ internal fun ReaderTopBar(
                     }
                 }
                 Box {
-                    IconButton(onClick = onMenuClick, modifier = Modifier.roundOutlined()) {
-                        Icon(Icons.Default.MoreVert, "Session actions")
-                    }
+                    KitRoundButton(onClick = onMenuClick, icon = Icons.Default.MoreVert, description = "Session actions")
                     menuContent()
                 }
             }
@@ -2974,9 +2866,7 @@ internal fun ReaderTopBar(
         expandedHeight = if (LocalMaterial3.current) 64.dp else androidx.compose.material3.TopAppBarDefaults.TopAppBarExpandedHeight,
         navigationIcon = {
             if (LocalMaterial3.current) {
-                IconButton(onClick = onBack, modifier = Modifier.semantics { onClick(label = "Back", action = null) }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
-                }
+                KitRoundButton(onClick = onBack, modifier = Modifier.semantics { onClick(label = "Back", action = null) }, icon = Icons.AutoMirrored.Filled.ArrowBack, description = "Back")
             }
         },
         modifier = Modifier.testTag("reader-top-bar").statusBarsPadding().pointerInput(onOpenTerminal) {
@@ -3064,9 +2954,7 @@ internal fun ReaderTopBar(
         actions = {
             VersionLabel(onClick = onReleaseNotes)
             Box {
-                IconButton(onClick = onMenuClick) {
-                    Icon(Icons.Default.MoreVert, "Session actions")
-                }
+                KitRoundButton(onClick = onMenuClick, icon = Icons.Default.MoreVert, description = "Session actions")
                 menuContent()
             }
         },
@@ -3897,11 +3785,10 @@ internal fun ReaderScreen(
         floatingActionButton = {
             if (if (historyChat) chatListState.canScrollBackward else scrollState.canScrollForward) {
                 val count = if (historyChat) newBelow else 0
-                FloatingActionButton(onClick = scrollLive, modifier = if (count > 0) Modifier.height(ReaderJumpSize) else Modifier.size(ReaderJumpSize), shape = CircleShape, containerColor = MaterialTheme.colorScheme.surfaceContainerHighest) {
-                    Row(Modifier.padding(horizontal = if (count > 0) 12.dp else 0.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.KeyboardArrowDown, if (count > 0) "Jump to newest, $count new" else "Jump to newest")
-                        if (count > 0) Text(jumpCountLabel(count))
-                    }
+                if (count > 0) {
+                    KitSecondaryButton("↓ ${jumpCountLabel(count)}", onClick = scrollLive, modifier = Modifier.semantics { contentDescription = "Jump to newest, $count new" })
+                } else {
+                    KitRoundButton(onClick = scrollLive, icon = Icons.Default.KeyboardArrowDown, description = "Jump to newest")
                 }
             }
         },
@@ -4366,14 +4253,9 @@ internal fun ReaderScreen(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
-                                    IconButton(
-                                        onClick = {
+                                    KitRoundButton(onClick = {
                                             imageAttachments = imageAttachments.filterNot { it == url }
-                                        },
-                                        modifier = Modifier.size(if (LocalMaterial3.current) 48.dp else 30.dp),
-                                    ) {
-                                        Icon(Icons.Default.Close, if (serverFile) "Remove file ${PromptComposer.attachmentLabel(url, index)}" else "Remove image ${index + 1}")
-                                    }
+                                        }, modifier = Modifier.size(if (LocalMaterial3.current) 48.dp else 30.dp), icon = Icons.Default.Close, description = if (serverFile) "Remove file ${PromptComposer.attachmentLabel(url, index)}" else "Remove image ${index + 1}")
                                 }
                             }
                         }
@@ -4417,15 +4299,15 @@ internal fun ReaderScreen(
                         horizontalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
                     ) {
                         Box {
-                            IconButton(
-                                onClick = { attachMenuSection = null; attachMenuExpanded = true },
-                                enabled = !reader.sending && !dictationActive && !imageUploading,
-                                modifier = Modifier.minimumInteractiveComponentSize().size(ReaderControlSize)
-                                    .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
-                                    .border(ReaderOutlineWidth, ReaderOutline, CircleShape),
-                            ) {
-                                if (imageUploading) CircularProgressIndicator(Modifier.size(ReaderBadgeSize), strokeWidth = 2.dp)
-                                else Icon(Icons.Default.Add, "Attach")
+                            if (imageUploading) {
+                                CircularProgressIndicator(Modifier.size(Kit.RoundButton), strokeWidth = 2.dp)
+                            } else {
+                                KitRoundButton(
+                                    onClick = { attachMenuSection = null; attachMenuExpanded = true },
+                                    enabled = !reader.sending && !dictationActive,
+                                    icon = Icons.Default.Add,
+                                    description = "Attach",
+                                )
                             }
                             KitMenu(
                                 expanded = attachMenuExpanded,
@@ -4682,29 +4564,19 @@ internal fun ReaderScreen(
                                         inner()
                                     }
                                     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-                                        IconButton(
-                                            onClick = {
-                                                if (dictationActive) {
-                                                    dictation.stop()
-                                                } else if (dictationState.configured) {
-                                                    startDictation()
-                                                } else {
-                                                    apiKeyDialogVisible = true
-                                                }
-                                            },
-                                            enabled = !reader.sending,
-                                        ) {
-                                            when (dictationState.status) {
-                                                DictationStatus.CONNECTING, DictationStatus.FINISHING -> {
-                                                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                                                }
-                                                DictationStatus.LISTENING -> {
-                                                    Icon(Icons.Default.Stop, "Stop dictation")
-                                                }
-                                                else -> {
-                                                    Icon(Icons.Default.Mic, "Start dictation")
-                                                }
-                                            }
+                                        if (dictationState.status in listOf(DictationStatus.CONNECTING, DictationStatus.FINISHING)) {
+                                            CircularProgressIndicator(Modifier.size(Kit.RoundButton), strokeWidth = 2.dp)
+                                        } else {
+                                            KitRoundButton(
+                                                onClick = {
+                                                    if (dictationActive) dictation.stop()
+                                                    else if (dictationState.configured) startDictation()
+                                                    else apiKeyDialogVisible = true
+                                                },
+                                                enabled = !reader.sending,
+                                                icon = if (dictationActive) Icons.Default.Stop else Icons.Default.Mic,
+                                                description = if (dictationActive) "Stop dictation" else "Start dictation",
+                                            )
                                         }
                                     }
                                     Box(
@@ -4845,18 +4717,15 @@ internal fun ReaderScreen(
             verticalArrangement = Arrangement.spacedBy(ReaderMessageSpacing),
         ) {
             if (!historyAgent && transcript == null && reader.alternateOn) {
-                OutlinedButton(
+                KitSecondaryButton(
+                    text = when {
+                        loadingOlder -> "Loading older messages…"
+                        noOlderHistory -> "No older messages"
+                        else -> "Load older messages"
+                    },
                     onClick = loadOlder,
                     enabled = !loadingOlder && !noOlderHistory && !reader.sending,
-                ) {
-                    Text(
-                        when {
-                            loadingOlder -> "Loading older messages…"
-                            noOlderHistory -> "No older messages"
-                            else -> "Load older messages"
-                        },
-                    )
-                }
+                )
             }
             if (reader.status == ReaderStatus.Connecting && reader.output.isBlank()) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -4992,7 +4861,8 @@ internal fun ReaderScreen(
                                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                             )
                             reader.modelPickerOptions.forEach { option ->
-                                OutlinedButton(
+                                KitSecondaryButton(
+                                    text = option.label + if (option.current) " · current" else "",
                                     onClick = {
                                         if (connection.selectModelPickerOption(option.index)) {
                                             onSessionInteraction()
@@ -5001,16 +4871,7 @@ internal fun ReaderScreen(
                                     },
                                     enabled = !reader.sending,
                                     modifier = Modifier.fillMaxWidth(),
-                                ) {
-                                    Text(
-                                        buildString {
-                                            append(option.label)
-                                            if (option.current) append(" · current")
-                                        },
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
+                                )
                             }
                         }
                     }
@@ -5197,34 +5058,16 @@ private fun ReaderCollapsibleBlock(
         ),
     ) {
         Column(Modifier.fillMaxWidth()) {
-            TextButton(
+            KitListRow(
+                label = if (isCode) {
+                    if (expanded) "Hide code" else "Show code"
+                } else {
+                    if (expanded) "Hide activity" else "Show activity"
+                },
                 onClick = onToggle,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-            ) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            if (isCode) {
-                                if (expanded) "Hide code" else "Show code"
-                            } else {
-                                if (expanded) "Hide activity" else "Show activity"
-                            },
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            "$metadata · $preview",
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Text(if (expanded) "▲" else "▼")
-                }
-            }
+                trailing = { Text(if (expanded) "▲" else "▼", color = Kit.Text) },
+            )
+            Text("$metadata · $preview", modifier = Modifier.padding(horizontal = Kit.SideChange), maxLines = 1, overflow = TextOverflow.Ellipsis, style = Kit.Hint, color = Kit.TextMuted)
             if (expanded) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
                 SelectionContainer {
@@ -5376,14 +5219,10 @@ private fun UpdateScreen(
             UpdateState.Installing -> Text("APK verified. Installing update…", color = MaterialTheme.colorScheme.secondary)
             is UpdateState.Failed -> {
                 InlineError(state.message)
-                state.release?.let { release -> Button(onClick = { onInstall(release) }) { Text("Try update again") } }
+                state.release?.let { release -> KitPrimaryButton("Try update again", onClick = { onInstall(release) }) }
             }
         }
-        OutlinedButton(onClick = onCheck, enabled = state !is UpdateState.Checking && state !is UpdateState.Downloading) {
-            Icon(Icons.Default.Refresh, null)
-            Spacer(Modifier.size(8.dp))
-            Text("Check now")
-        }
+        KitSecondaryButton("Check now", onClick = onCheck, enabled = state !is UpdateState.Checking && state !is UpdateState.Downloading)
         val history = when (state) {
             is UpdateState.Current -> state.history
             is UpdateState.Available -> state.release.history
@@ -5491,7 +5330,7 @@ private fun UpdateAvailableCard(release: UpdateRelease, onInstall: () -> Unit) {
             Text("v${release.versionName} available", fontWeight = FontWeight.Bold)
             ChangelogNotes(release.notes)
             Text("${release.sizeBytes / 1024 / 1024} MB", style = MaterialTheme.typography.labelMedium)
-            Button(onClick = onInstall) { Text("Download and update") }
+            KitPrimaryButton("Download and update", onClick = onInstall)
         }
     }
 }
@@ -5536,21 +5375,10 @@ internal fun TerminalTopBar(
         },
         actions = {
             VersionLabel(onClick = onReleaseNotes)
-            IconButton(onClick = onOpenHistory) {
-                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Open shell history")
-            }
-            IconButton(onClick = onLiveView) {
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Back to the live view")
-            }
-            IconButton(onClick = onDictate) {
-                Icon(
-                    if (dictating) Icons.Default.Mic else Icons.Default.MicNone,
-                    contentDescription = if (dictating) "Stop dictation" else "Dictate into the shell",
-                )
-            }
-            IconButton(onClick = onShowKeyboard) {
-                Icon(Icons.Default.Keyboard, contentDescription = "Show keyboard")
-            }
+            KitRoundButton(onClick = onOpenHistory, icon = Icons.Default.KeyboardArrowUp, description = "Open shell history")
+            KitRoundButton(onClick = onLiveView, icon = Icons.Default.KeyboardArrowDown, description = "Back to the live view")
+            KitRoundButton(onClick = onDictate, icon = if (dictating) Icons.Default.Mic else Icons.Default.MicNone, description = if (dictating) "Stop dictation" else "Dictate into the shell")
+            KitRoundButton(onClick = onShowKeyboard, icon = Icons.Default.Keyboard, description = "Show keyboard")
         },
     )
 }
@@ -5760,7 +5588,7 @@ private fun EmptyState(title: String, body: String, action: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(20.dp))
-        Button(onClick = action) { Text("Host mapping") }
+        KitPrimaryButton("Host mapping", onClick = action)
     }
 }
 
@@ -5789,9 +5617,7 @@ private fun DismissibleError(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-            Icon(Icons.Default.Close, contentDescription = "Dismiss error", modifier = Modifier.size(16.dp))
-        }
+        KitRoundButton(onClick = onDismiss, modifier = Modifier.size(28.dp), icon = Icons.Default.Close, description = "Dismiss error")
     }
 }
 
@@ -5821,9 +5647,7 @@ private fun CachedSessionsNotice(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        IconButton(onClick = onRetry, enabled = retryEnabled, modifier = Modifier.size(28.dp)) {
-            Icon(Icons.Default.Refresh, contentDescription = "Retry connection", modifier = Modifier.size(16.dp))
-        }
+        KitRoundButton(onClick = onRetry, enabled = retryEnabled, modifier = Modifier.size(28.dp), icon = Icons.Default.Refresh, description = "Retry connection")
     }
 }
 

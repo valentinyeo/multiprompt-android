@@ -287,6 +287,15 @@ jobs:
         env:
           GRADLE: gradle
         run: tools/check.sh lint
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kit-controls-proof
+          path: |
+            tools/kit-controls/build/test-results/test/*.xml
+            app/build/reports/kit-controls/*.xml
+            app/build/reports/lint-results-*.xml
+          if-no-files-found: error
       - name: Unpublished bot photo fails its test
         env:
           GRADLE: gradle

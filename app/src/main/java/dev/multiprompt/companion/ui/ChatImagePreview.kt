@@ -13,14 +13,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -90,9 +86,7 @@ internal fun ChatImagePreviews(runs: List<InlineRun>) {
                             translationY = pan.y
                         }.transformable(transform),
                     )
-                    IconButton(onClick = { expanded = false }, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)) {
-                        Icon(Icons.Default.Close, "Close image", tint = Color.White)
-                    }
+                    KitRoundButton(onClick = { expanded = false }, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp), icon = Icons.Default.Close, description = "Close image")
                 }
             }
         }

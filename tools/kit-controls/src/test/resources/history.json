@@ -1,0 +1,18 @@
+[
+  {
+    "fixture": "dialog-136.txt",
+    "cleanup": "c58a41b6",
+    "pr": 136,
+    "ref": "7d0a7b06fc8e35f04bd74263757fa66aa4bde1c9",
+    "path": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt",
+    "sha256": "b1a350d14503056fd66d3284637052beb5dbb74118c7d75aa2f2fc9754bc2433"
+  },
+  {
+    "fixture": "menu-132.txt",
+    "cleanup": "0cc8e05e",
+    "pr": 132,
+    "ref": "e7cea06ca9dac248ae351df96e003cd63756c886",
+    "path": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt",
+    "sha256": "aeb6ad59fc7878ff2596a0b0b0b8e54bf13b296731f335116756e0c4312b2ac1"
+  }
+]

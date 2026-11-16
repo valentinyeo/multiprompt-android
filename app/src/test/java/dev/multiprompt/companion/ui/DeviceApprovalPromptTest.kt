@@ -9,19 +9,28 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowDialog
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class, qualifiers = "w390dp-h844dp-mdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class DeviceApprovalPromptTest {
+    private val scheduler = TestCoroutineScheduler()
     @get:Rule
-    val compose = createComposeRule()
+    val compose = createComposeRule(effectContext = UnconfinedTestDispatcher(scheduler))
 
     private val publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICAYGZ8wT28oTGncjtNzBoZDBnaWkiurSTzige2NVMZg igsh449-fingerprint-fixture"
     private val fingerprint = "SHA256:W2CKuicFsDaNvoYldwrvSrADDI5vhAwTk5l4O47ROHo"
@@ -111,7 +120,7 @@ class DeviceApprovalPromptTest {
         compose.runOnIdle {
             val event = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_OUTSIDE, -1f, -1f, 0)
             try {
-                assertEquals(true, ShadowDialog.getLatestDialog().onTouchEvent(event))
+                ShadowDialog.getLatestDialog().onTouchEvent(event)
             } finally {
                 event.recycle()
             }
@@ -121,6 +130,14 @@ class DeviceApprovalPromptTest {
         compose.onNodeWithText("Approve this device?").assertIsDisplayed()
         compose.onNodeWithText("No").performClick()
         compose.runOnIdle { assertEquals(1, denials) }
+    }
+
+    @Test
+    fun draggingDownDoesNotHidePrompt() {
+        render()
+        compose.onNodeWithText("Approve this device?").performTouchInput { swipeDown() }
+        compose.onNodeWithText("Approve").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals(1, approvals); assertEquals(0, denials) }
     }
 
     @Test

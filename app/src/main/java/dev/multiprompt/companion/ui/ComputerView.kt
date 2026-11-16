@@ -25,17 +25,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,9 +76,7 @@ internal fun ComputerPane(
     ) {
         if (!fullScreen) {
             Row(Modifier.fillMaxWidth().testTag("computer-header"), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to chat")
-                }
+                KitRoundButton(onClick = onBack, icon = Icons.AutoMirrored.Filled.ArrowBack, description = "Back to chat")
                 Text("Computer", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
                     " · $hostLabel",
@@ -91,9 +85,7 @@ internal fun ComputerPane(
                     modifier = Modifier.weight(1f),
                 )
                 Box {
-                    IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Default.MoreVert, "Computer actions")
-                    }
+                    KitRoundButton(onClick = { menuOpen = true }, icon = Icons.Default.MoreVert, description = "Computer actions")
                     KitMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         KitMenuRow(label = target.value, enabled = false, onClick = {})
                         KitMenuRow(label = "Viewer address", onClick = { menuOpen = false; onEditTarget() })
@@ -375,9 +367,7 @@ internal fun PagePane(
         verticalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
     ) {
         Row(Modifier.fillMaxWidth().testTag("page-header"), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to chat")
-            }
+            KitRoundButton(onClick = onBack, icon = Icons.AutoMirrored.Filled.ArrowBack, description = "Back to chat")
             Text("Page", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
                 " · $title",
@@ -386,9 +376,7 @@ internal fun PagePane(
                 modifier = Modifier.weight(1f),
             )
             Box {
-                IconButton(onClick = { menuOpen = true }) {
-                    Icon(Icons.Default.MoreVert, "Page actions")
-                }
+                KitRoundButton(onClick = { menuOpen = true }, icon = Icons.Default.MoreVert, description = "Page actions")
                 KitMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     KitMenuRow(label = "Open in browser", onClick = { menuOpen = false; onOpenInBrowser() })
                     KitMenuRow(label = "Close page", onClick = { menuOpen = false; onBack() })

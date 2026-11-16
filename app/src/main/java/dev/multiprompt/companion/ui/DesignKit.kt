@@ -31,6 +31,8 @@ import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ModalBottomSheetProperties
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -102,9 +104,10 @@ internal fun KitRoundButton(
     description: String,
     modifier: Modifier = Modifier,
     tint: Color = Kit.Text,
+    enabled: Boolean = true,
 ) {
     Box(
-        modifier.size(Kit.RoundButton).kitSurface(CircleShape).clickable(role = Role.Button, onClick = onClick),
+        modifier.size(Kit.RoundButton).alpha(if (enabled) 1f else 0.45f).kitSurface(CircleShape).clickable(enabled = enabled, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, description, Modifier.size(20.dp), tint = tint)
@@ -337,10 +340,11 @@ internal fun KitSheetSurface(modifier: Modifier = Modifier, content: @Composable
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun KitSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+internal fun KitSheet(onDismiss: () -> Unit, dismissible: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true, confirmValueChange = { dismissible || it != SheetValue.Hidden }),
+        properties = ModalBottomSheetProperties(shouldDismissOnBackPress = dismissible, shouldDismissOnClickOutside = dismissible),
         containerColor = Kit.Sheet,
         dragHandle = null,
         shape = Kit.SheetShape,

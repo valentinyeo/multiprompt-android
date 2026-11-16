@@ -1,15 +1,11 @@
 package dev.multiprompt.companion.ui
 
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,9 +53,7 @@ internal fun InboxOverflowMenu(
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { expanded = true }, modifier = Modifier.roundOutlined()) {
-            Icon(Icons.Default.MoreVert, "Session list actions")
-        }
+        KitRoundButton(onClick = { expanded = true }, icon = Icons.Default.MoreVert, description = "Session list actions")
         KitMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },

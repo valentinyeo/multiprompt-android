@@ -18,18 +18,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -219,8 +215,6 @@ internal fun ShellHistory(
                 )
             }
         }
-        FloatingActionButton(onClick = onJumpToLive, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)) {
-            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Jump to live")
-        }
+        KitRoundButton(onClick = onJumpToLive, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp), icon = Icons.Default.KeyboardArrowDown, description = "Jump to live")
     }
 }

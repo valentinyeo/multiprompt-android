@@ -19,16 +19,13 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberCoroutineScope
@@ -51,7 +48,6 @@ import dev.multiprompt.companion.skills.NativeSkill
 import dev.multiprompt.companion.reader.ChatMention
 import dev.multiprompt.companion.reader.ChatReactions
 import dev.multiprompt.companion.reader.ReaderStatus
-import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.reader.PendingQuestion
 import dev.multiprompt.companion.reader.ChatHistoryMessage
 import dev.multiprompt.companion.reader.ReaderState
@@ -134,11 +130,12 @@ internal fun ChatHistoryView(
     Column(modifier.fillMaxSize()) {
         state.messageError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(8.dp)) }
         reader.modelPickerOptions.forEach { option ->
-            OutlinedButton(
+            KitSecondaryButton(
+                text = option.label + if (option.current) " · current" else "",
                 onClick = { if (connection.selectModelPickerOption(option.index)) onSessionUsed() },
                 enabled = !reader.sending,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text(option.label + if (option.current) " · current" else "") }
+            )
         }
         ChatHistoryList(
             messages = messages,
