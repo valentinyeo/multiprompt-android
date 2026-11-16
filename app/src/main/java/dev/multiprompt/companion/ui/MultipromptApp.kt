@@ -1,5 +1,7 @@
 package dev.multiprompt.companion.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.material.icons.outlined.Image as OutlinedImage
 import androidx.compose.material.icons.filled.Delete

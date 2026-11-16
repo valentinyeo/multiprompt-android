@@ -1,5 +1,7 @@
 package dev.multiprompt.companion.ui
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.clickable

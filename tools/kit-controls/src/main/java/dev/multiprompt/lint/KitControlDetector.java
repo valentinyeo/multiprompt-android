@@ -75,6 +75,10 @@ public final class KitControlDetector extends Detector implements SourceCodeScan
         baseline.putAll(allowances);
     }
 
+    boolean requiresMigration(String key) {
+        return seen.merge(key, 1, Integer::sum) > Integer.parseInt(baseline.getProperty(key, "0"));
+    }
+
     @Override
     public void beforeCheckRootProject(Context context) {
         seen.clear();
@@ -87,7 +91,7 @@ public final class KitControlDetector extends Detector implements SourceCodeScan
 
     @Override
     public UElementHandler createUastHandler(JavaContext context) {
-        if (context.isTestSource() || context.file.toPath().toString().replace('\\', '/').contains("/src/debug/")) return null;
+        if (context.isTestSource() || context.file.toPath().startsWith(context.getProject().getDir().toPath().resolve("src/debug"))) return null;
         return new UElementHandler() {
             @Override
             public void visitCallExpression(UCallExpression node) {
@@ -107,8 +111,7 @@ public final class KitControlDetector extends Detector implements SourceCodeScan
                 if (name.equals("ModalBottomSheet") && context.file.getName().equals("DesignKit.kt") && enclosing != null && enclosing.getName().equals("KitSheet") && context.getUastFile().getPackageName().equals("dev.multiprompt.companion.ui")) return;
                 String function = enclosing == null ? "<initializer>" : enclosing.getName() + "(" + String.join(",", java.util.Arrays.stream(enclosing.getJavaPsi().getParameterList().getParameters()).map(parameter -> parameter.getType().getCanonicalText()).toList()) + ")";
                 String key = library + "." + name + "|" + context.getUastFile().getPackageName() + "." + function;
-                int count = seen.merge(key, 1, Integer::sum);
-                if (count <= Integer.parseInt(baseline.getProperty(key, "0"))) return;
+                if (!requiresMigration(key)) return;
                 context.report(ISSUE, node, context.getNameLocation(node), "KIT_CONTROL_REQUIRED: calls " + library + "." + name + ". Use " + replacement + " from ui/DesignKit.kt.");
             }
         };

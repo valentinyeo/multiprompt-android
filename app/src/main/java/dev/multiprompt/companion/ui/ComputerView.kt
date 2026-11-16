@@ -1,5 +1,7 @@
 package dev.multiprompt.companion.ui
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas

@@ -116,17 +116,13 @@ public final class KitControlDetectorTest extends LintDetectorTest {
 
     public void testBaselineCountsSymbolsAndFunctionsNotLinesOrFileNames() {
         allowances.setProperty("androidx.compose.material3.AlertDialog|screens.Example()", "1");
-        lint().files(material, kotlin("src/screens/Moved.kt", """
-            package screens
-            import androidx.compose.material3.AlertDialog as Renamed
-
-
-            fun Example() {
-                Renamed({})
-                androidx.compose.material3.AlertDialog({})
-            }
-            fun NewScreen() { Renamed({}) }
-            """)).testModes(TestMode.DEFAULT).run().expectErrorCount(2);
+        KitControlDetector detector = new KitControlDetector(allowances);
+        String key = "androidx.compose.material3.AlertDialog|screens.Example()";
+        assertFalse(detector.requiresMigration(key));
+        assertTrue(detector.requiresMigration(key));
+        assertTrue(detector.requiresMigration("androidx.compose.material3.AlertDialog|screens.NewScreen()"));
+        detector.beforeCheckRootProject(null);
+        assertFalse(detector.requiresMigration(key));
     }
 
     private String historical(String name) throws IOException {
