@@ -816,7 +816,14 @@ PY
     [[ "$blocked" == 1 ]]
     sudo iptables -S OUTPUT > "$EVIDENCE/deepgram-blocked.txt"
     sudo ip6tables -S OUTPUT >> "$EVIDENCE/deepgram-blocked.txt" || true
-    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts-before.txt"
+    copy_host_receipts() {
+        if sudo test -f /home/verifyssh/receipts.txt; then
+            sudo cat /home/verifyssh/receipts.txt > "$1"
+        else
+            : > "$1"
+        fi
+    }
+    copy_host_receipts "$EVIDENCE/receipts-before.txt"
     tap_text verify-session
     wait_for_text 'Message verify-session'
     started=0
@@ -881,7 +888,7 @@ PY
     [[ "$cleared" == 1 ]]
     shot composer-after-cancel
     python3 "$scripts/dictation-cancel.py" empty "$EVIDENCE/$(printf '%02d' "$step")-composer-after-cancel.xml"
-    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts-after.txt"
+    copy_host_receipts "$EVIDENCE/receipts-after.txt"
     cmp "$EVIDENCE/receipts-before.txt" "$EVIDENCE/receipts-after.txt"
     if grep -F 'VERIFY_RECEIVED' "$EVIDENCE/receipts-after.txt"; then
         printf 'Dictation cancel sent text to the host\n' >&2
