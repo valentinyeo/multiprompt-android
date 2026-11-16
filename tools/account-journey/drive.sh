@@ -192,9 +192,9 @@ fi
 layout "$admin" list | tee "$EVIDENCE/cli-list.txt"
 start=$(now)
 layout "$admin" move --to Runners --create --match 'runner-*' | tee "$EVIDENCE/cli-move.txt"
-wait_text Runners 30
+tap_split Runners
 section_seconds=$(python3 -c "print(round($(now) - $start, 2))")
-tap_text Runners
+wait_text Runners 30 selected
 wait_text runner-1 10 hasi
 wait_text runner-2 10 hasi
 wait_text runner-3 10 hasi
