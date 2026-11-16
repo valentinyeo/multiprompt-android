@@ -19,7 +19,7 @@ Open a session reader, then **Session actions → Open live terminal**. Double-t
 Preconditions: fresh fixture; dispatch `feature=terminal.md`. For the published APK, also set `released_terminal=true` and `expected_commit` to its manifest commit; the existing same-signer instrumentation seeds only an isolated offline account session. Driver imports the real key, compares/trusts the host and opens `verify-session` in the reader first.
 
 - Require native `VERIFY_READY_528` and capture `reader-ready`.
-- `tap_desc 'Session actions'`; scroll the sheet until **Open live terminal** is visible; `tap_text 'Open live terminal'`; `wait_for_text 'SSH · tmux attached'`.
+- `tap_desc 'Session actions'`; `tap_text 'Open live terminal'` resolves the active sheet and scrolls its vertical viewport until the complete enabled button is reachable, without using the horizontal key row; `wait_for_text 'SSH · tmux attached'`.
 - Require descriptions **Esc key**, **Tab key**, **Ctrl key**, **Alt key** on the initial key row. The **Up key** is exercised below after horizontal scrolling if needed; other arrow behavior remains manual.
 - Independently run the read-only `sudo -u verifyssh tmux list-clients -F '#{client_name} #{client_session}'`; require a client attached to `verify-session` and save `tmux-clients.txt`.
 - Capture `terminal-attached` PNG/XML. Visually inspect the terminal pixels for fixture text; XML proves controls/status but does not represent every terminal cell.
