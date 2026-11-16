@@ -7,7 +7,19 @@ description: Verify multiprompt Android's Jetpack Compose mobile UI on GitHub's 
 
 Read [the feature index](features/README.md), then the selected recipe. Everything that builds or runs the app happens on GitHub, never on the local server. No local Gradle, Java, emulator or Actions imitation.
 
+## Choose proof for the change
+
+[features/registry.json](features/registry.json) owns outcome IDs, recipe ownership, runner kinds and prerequisites. The generated index, picker catalog, driver eligibility and workflow choices all come from it. Run `node .github/scripts/pstack-verifier/coverage.cjs generate` when it changes; CI runs `check` and rejects drift.
+
+For every product change, identify the changed outcome IDs. Add a new ID and journey for a new behavior. The picker reports `changed_outcomes`; deterministic source matches and the independent judge can add required IDs. An unknown product outcome fails closed. Tooling-only work can use the retained hosted Node test proof instead of claiming that an Android smoke test covered it.
+
+The second-AI verdict must include `coverage` entries for every changed ID. Each entry names its registered journey and quotes a real action from `driver-transcript.txt`, a resulting XML/JSON state, and independent receipt/server evidence where required. The gate checks these references in the downloaded head artifact after cleanup, requires a successful matching journey and exact `app-source-sha.txt`, then retains `verifier-feature-coverage`. Free-text `not_covered`, a green unrelated journey or smoke cannot satisfy this contract. Both sides may pass; a manufactured failing parent is not required.
+
+`features/coverage-baseline.json` lists the initial uncovered IDs, including dedicated, signed and manual routes outside the debug picker. The baseline is an inventory, not permission to change those features without proof. New uncovered IDs fail even if another gap disappears. Keep dedicated workflows and account prerequisites; never make them debug recipes just to obtain a green verdict.
+
 ## Launch
+
+If the diff misses `on.pull_request.paths`, dispatch `verify.yml` yourself and treat a missing pull-request job as unrun.
 
 From a pushed branch containing this workflow:
 
@@ -35,6 +47,8 @@ It requires boot completion, the debug package's expected build versionName, res
 
 ## Drive
 
+Prove desktop-hosted chat by loading skills and returning to the live view through the desktop host; a retry or a clearer error is a failure.
+
 The workflow calls, on its fresh GitHub emulator only:
 
 ```bash
@@ -42,7 +56,7 @@ The workflow calls, on its fresh GitHub emulator only:
 .claude/skills/verify-multiprompt-android/scripts/drive.sh session-routing.md
 ```
 
-`EVIDENCE`, `FIXTURE` and `EXPECTED_VERSION` come from the workflow. Pass any filename in the feature index. `drive.sh` has small `tap_text`, `tap_desc`, `wait_for_text`, `dump_ui` and `shot` functions. It dumps `uiautomator` XML before locating an exact text or contentDescription and taps the matched clickable ancestor's bounds (or the exact enabled text node for native picker rows that do not expose a clickable ancestor) using `adb shell input`. Editable fields are found by class and their label/placeholder. Missing or ambiguous selectors fail instead of falling back to blind coordinates. While waiting, a system **isn't responding** dialog from the slow emulator is answered with **Wait** and logged in `system-anr.txt`; before launch the driver sets the emulator's `hide_error_dialogs` so other apps' ANR dialogs cannot cover the app (an app crash still fails doctor and shows in `logcat.txt`), and doctor runs at most three times, each failure logged in `doctor-retries.txt`. After doctor it waits up to 60 s for the emulator to reach `10.0.2.2` (logged in `network-wait.txt`) and fails as blocked otherwise. A single **Trust and connect** tap must reach `verify-session`; failure is logged in `trust-retries.txt`, captured as `trust-retry-1`, and fails the journey without retrying. Existing Compose accessibility text suffices; no test-only state setters or UI instrumentation are used.
+`EVIDENCE`, `FIXTURE` and `EXPECTED_VERSION` come from the workflow. Pass any filename in the feature index. `drive.sh` has small `tap_text`, `tap_desc`, `wait_for_text`, `dump_ui` and `shot` functions. Use `tap_text`, `tap_desc` or `tap_node` for new actions, never a raw coordinate tap. Their shared `journey_action.py` planner resolves the enabled label and clickable ancestor in the active window, requires the complete clickable bounds inside the window and ancestor scroll viewports, and rejects tap centers covered by foreground controls (drawing order, or accessibility sibling order when absent). The existing native terminal-focus action checks both toolbar/key-row anchors and the typing point between them. It chooses the clipped target's vertical or horizontal scroll ancestor, redumps after every swipe and taps only after re-resolution. A missing lazy label searches the unique active vertical container forward then backward, bounded to 18 gestures; ambiguous containers fail rather than scrolling the background or key row. Failures name the label with `JOURNEY_ACTION_UNREACHABLE`. Native picker rows without a clickable ancestor use the enabled label bounds. `tools/journey-actions/check.py` blocks new bypasses; its baseline lists old raw taps for cleanup. Observation selectors such as `contains` do not prove reachability. Update the affected recipe alongside changed interactions, then rerun that journey with its existing resulting-state and independent receipt assertions. Editable fields are found by class and their label/placeholder. Missing or ambiguous selectors fail instead of falling back to blind coordinates. While waiting, a system **isn't responding** dialog from the slow emulator is answered with **Wait** and logged in `system-anr.txt`; before launch the driver sets the emulator's `hide_error_dialogs` so other apps' ANR dialogs cannot cover the app (an app crash still fails doctor and shows in `logcat.txt`), and doctor runs at most three times, each failure logged in `doctor-retries.txt`. After doctor it waits up to 60 s for the emulator to reach `10.0.2.2` (logged in `network-wait.txt`) and fails as blocked otherwise. A single **Trust and connect** tap must reach `verify-session`; failure is logged in `trust-retries.txt`, captured as `trust-retry-1`, and fails the journey without retrying. Existing Compose accessibility text suffices; no test-only state setters or UI instrumentation are used.
 
 Every journey requires the exact `EXPECTED_VERSION` text and `Version <version>, open release notes` description immediately after doctor, saving `version-label.txt` (no added `v` prefix). On Sign in this label is at the bottom, not beside a menu.
 

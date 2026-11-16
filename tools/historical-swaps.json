@@ -1,0 +1,64 @@
+{
+  "swaps": [
+    {
+      "script": ".github/workflows/account-journey.yml",
+      "revision": "eb29d0a1c7dc3d5032d89820fa6480a687cb85db",
+      "boundary": "app/src/main/java/dev/multiprompt/companion/account/AccountHostMap.kt"
+    },
+    {
+      "script": ".github/workflows/test.yml",
+      "revision": "099a8e7",
+      "boundary": "app/src/main/java/dev/multiprompt/companion/ui/SessionPreview.kt"
+    },
+    {
+      "script": ".github/workflows/verify.yml",
+      "revision": "f1e4e3ea3d25d48e4559337434a37f2f605609f7",
+      "boundary": "app/src/main/java/dev/multiprompt/companion/ui/ReplyableBubble.kt"
+    },
+    {
+      "script": "tools/check-approved-style.sh",
+      "revision": "ce2d32d",
+      "boundary": "app/src/androidTest"
+    },
+    {
+      "script": "tools/check-approved-style.sh",
+      "revision": "ce2d32d",
+      "boundary": "app/src/main"
+    },
+    {
+      "script": "tools/check-day-theme.sh",
+      "revision": "DAY_THEME_BASE_REF",
+      "boundary": "app/src/main/java/dev/multiprompt/companion/MainActivity.kt"
+    },
+    {
+      "script": "tools/check-day-theme.sh",
+      "revision": "DAY_THEME_BASE_REF",
+      "boundary": "app/src/main/java/dev/multiprompt/companion/ui/ChatBubble.kt"
+    },
+    {
+      "script": "tools/check-day-theme.sh",
+      "revision": "DAY_THEME_BASE_REF",
+      "boundary": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt"
+    },
+    {
+      "script": "tools/check-day-theme.sh",
+      "revision": "DAY_THEME_BASE_REF",
+      "boundary": "app/src/main/java/dev/multiprompt/companion/ui/Theme.kt"
+    },
+    {
+      "script": "tools/check-day-theme.sh",
+      "revision": "DAY_THEME_BASE_REF",
+      "boundary": "app/src/main/java/dev/multiprompt/companion/ui/TopFade.kt"
+    },
+    {
+      "script": "tools/check-session-rows.sh",
+      "revision": "5204eda",
+      "boundary": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt"
+    },
+    {
+      "script": "tools/top-fade-proof.sh",
+      "revision": "$TOP_FADE_BASE_REF",
+      "boundary": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt"
+    }
+  ]
+}

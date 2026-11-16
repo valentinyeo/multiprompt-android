@@ -7,7 +7,9 @@ gradle_run() {
 }
 
 source_checks() {
-  node --test tools/root-files.test.js tools/strip-comments.test.js tools/release-status.test.js tools/verify-published.test.mjs tools/workflow-inputs.test.js tools/pr-checks.test.js tools/release-notes/notes.test.mjs tools/baseline-profile.test.mjs tools/pstack-verifier.test.js
+  node --test tools/root-files.test.js tools/strip-comments.test.js tools/release-status.test.js tools/verify-published.test.mjs tools/workflow-inputs.test.js tools/pr-checks.test.js tools/release-notes/notes.test.mjs tools/baseline-profile.test.mjs tools/pstack-verifier.test.js tools/feature-coverage.test.js
+  python3 -B tools/journey-actions/check.py
+  python3 -B tools/journey-actions/action.test.py
   python3 -B tools/session-gestures/scroll.test.py
   python3 -B tools/send-frame.test.py
   python3 -B tools/working-dots/check.test.py
@@ -21,6 +23,7 @@ source_checks() {
   python3 -B tools/native-skills.test.py
   python3 -B tools/release-choices/ui.test.py
   python3 -B tools/check-approved-style-source.test.py
+  python3 -B tools/historical_control.test.py
   python3 -B tools/account-journey/ui.test.py
   python3 -B tools/check-day-theme-images.test.py
   python3 -B tools/emulator.test.py
@@ -28,6 +31,7 @@ source_checks() {
   python3 -B tools/long-chat/check.test.py
   python3 -B tools/app-name/drive.test.py
   python3 -B tools/app-name/select_run.test.py
+  node .github/scripts/pstack-verifier/coverage.cjs check
   node tools/root-files.mjs
   node tools/strip-comments.mjs --check
 }

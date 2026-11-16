@@ -1,0 +1,755 @@
+{
+  "smoke": "native-skills.md",
+  "journeys": {
+    "app-name.md": {
+      "name": "App name and update",
+      "description": "published signed Android in-app update proof.",
+      "runner": {
+        "kind": "dedicated",
+        "workflow": "app-name.yml",
+        "inputs": {},
+        "prerequisites": [
+          "Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable."
+        ],
+        "driver": false
+      },
+      "outcomes": [
+        "app-name.journey"
+      ]
+    },
+    "bot-photo-refresh.md": {
+      "name": "Late account bot pictures",
+      "description": "hosted ViewModel and Compose regressions; seeded picture, not live account sync.",
+      "runner": {
+        "kind": "dedicated",
+        "workflow": "test.yml",
+        "inputs": {},
+        "prerequisites": [
+          "Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable."
+        ],
+        "driver": false
+      },
+      "outcomes": [
+        "bot-photo-refresh.journey"
+      ]
+    },
+    "chat-cancel.md": {
+      "name": "Cancel waiting messages",
+      "description": "exact cancellation, surviving order, host receipt and delivered actions, with a recording.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "chat-cancel.journey"
+      ]
+    },
+    "chat-choices.md": {
+      "name": "Chat choices",
+      "description": "latest-reply option taps and live question number keys, with independent SSH/tmux receipts.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "chat-choices.journey"
+      ]
+    },
+    "chat-codex.md": {
+      "name": "Codex transcript parity",
+      "description": "Dispatch `feature=chat-codex.md`. The real Android APK connects through SSH to independent Hax, native Codex, and Claude fixture sessions. Hax and Codex write the same JSONL schemas consumed by desktop. Their terminal output deliberately excludes every transcript reply, ruling out terminal-scrape success.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "codex.transcript"
+      ]
+    },
+    "chat-queued.md": {
+      "name": "Queued label",
+      "description": "sent messages show Queued until taken in and answered, then return to normal.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "chat-queued.journey"
+      ]
+    },
+    "chat-reactions.md": {
+      "name": "Claude reactions",
+      "description": "quoted sends, one badge, restart identity, fallback and signed update offers.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "chat-reactions.journey"
+      ]
+    },
+    "chat-resync.md": {
+      "name": "Legacy resync",
+      "description": "historical held-queue proof; not host Reset proof.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "chat-resync.journey"
+      ]
+    },
+    "chat-shared.md": {
+      "name": "Shared chat store",
+      "description": "synthetic SSH store admission and host Reset, retaining both drafts.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "chat-shared.journey"
+      ]
+    },
+    "chat-working.md": {
+      "name": "Working dots on the signed release",
+      "description": "quiet tools, lock/unlock, real SSH reconnect, recording and timed visible-state samples. Uses `working-dots.yml`.",
+      "runner": {
+        "kind": "dedicated",
+        "workflow": "working-dots.yml",
+        "inputs": {},
+        "prerequisites": [
+          "Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable."
+        ],
+        "driver": true
+      },
+      "outcomes": [
+        "chat-working.journey"
+      ]
+    },
+    "host-changed-key.md": {
+      "name": "Changed host key",
+      "description": "compare a rotated identity, persist Not now and refuse authentication.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "host-changed-key.journey"
+      ]
+    },
+    "hosts-retired.md": {
+      "name": "Retired hosts",
+      "description": "a saved host at a retired server address is gone after relaunch; account sync never adds it back.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "hosts-retired.journey"
+      ]
+    },
+    "hosts.md": {
+      "name": "Hosts",
+      "description": "add VPS, import encrypted-at-rest key, compare/trust and retain the host identity.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "hosts.journey"
+      ]
+    },
+    "launcher-icon.md": {
+      "name": "Launcher icon",
+      "description": "the robot launcher icon in the emulator's app drawer, with the themed-icon layer present in the built APK.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "launcher-icon.journey"
+      ]
+    },
+    "native-skills.md": {
+      "name": "Native Claude controls",
+      "description": "slash filtering, shared plus entry, actual session model/effort and retained image picker.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "claude.skills-model-effort"
+      ]
+    },
+    "robot-faces.md": {
+      "name": "Robot inbox and chat",
+      "description": "Run `verify.yml` with `feature=robot-faces.md`. For the signed candidate, set `released_robots=true` and `candidate=true`. For the published update, set `released_robots=true` and `expected_commit` to the released SHA.",
+      "runner": {
+        "kind": "signed",
+        "workflow": "verify.yml",
+        "inputs": {
+          "released_robots": true,
+          "candidate": true
+        },
+        "prerequisites": [
+          "Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable."
+        ],
+        "driver": true
+      },
+      "outcomes": [
+        "robot-faces.journey"
+      ]
+    },
+    "session-favorites.md": {
+      "name": "Session favorites",
+      "description": "signed APK, isolated SSH sessions and offline favorite cache; no production sync.",
+      "runner": {
+        "kind": "signed",
+        "workflow": "verify.yml",
+        "inputs": {
+          "released_chat": true,
+          "candidate": true
+        },
+        "prerequisites": [
+          "Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable."
+        ],
+        "driver": true
+      },
+      "outcomes": [
+        "session-favorites.journey"
+      ]
+    },
+    "session-gestures.md": {
+      "name": "Session gestures",
+      "description": "no session swipes, bidirectional code scroll, ten replies, back to inbox on the signed APK.",
+      "runner": {
+        "kind": "signed",
+        "workflow": "verify.yml",
+        "inputs": {
+          "released_chat": true,
+          "candidate": true
+        },
+        "prerequisites": [
+          "Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable."
+        ],
+        "driver": true
+      },
+      "outcomes": [
+        "session-gestures.journey"
+      ]
+    },
+    "session-pins.md": {
+      "name": "Pinned sessions",
+      "description": "signed scrolling in both list orders. Use `session-favorites.md` with `pins_scroll=true`.",
+      "runner": {
+        "kind": "signed",
+        "workflow": "verify.yml",
+        "inputs": {
+          "feature": "session-favorites.md",
+          "pins_scroll": true,
+          "released_chat": true
+        },
+        "prerequisites": [
+          "Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable."
+        ],
+        "driver": false
+      },
+      "outcomes": [
+        "session-pins.journey"
+      ]
+    },
+    "session-reader.md": {
+      "name": "Session reader",
+      "description": "native output, Send, Enter/approve and Interrupt, with independent console receipts.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "reader.send-enter-interrupt"
+      ]
+    },
+    "session-routing.md": {
+      "name": "Session routing",
+      "description": "Inbox and swipe switching, typed and simulated dictated sends, independent SSH receipts.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "session-routing.journey"
+      ]
+    },
+    "session-settings.md": {
+      "name": "Session settings",
+      "description": "full-screen split switches; saving is blocked without account OTP and a pulled layout.",
+      "runner": {
+        "kind": "manual",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [
+          "Account email OTP and a pulled account layout."
+        ],
+        "driver": false
+      },
+      "outcomes": [
+        "session-settings.journey"
+      ]
+    },
+    "session-summaries.md": {
+      "name": "Useful inbox summaries",
+      "description": "Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "inbox.summaries"
+      ]
+    },
+    "sessions.md": {
+      "name": "Sessions",
+      "description": "authenticated tmux discovery and search.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "inbox.search"
+      ]
+    },
+    "settings-navigation.md": {
+      "name": "Settings navigation",
+      "description": "sessions-first settings, host mapping and account handoff on the signed APK.",
+      "runner": {
+        "kind": "signed",
+        "workflow": "verify.yml",
+        "inputs": {
+          "release_choices": true,
+          "candidate": true
+        },
+        "prerequisites": [
+          "Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable."
+        ],
+        "driver": true
+      },
+      "outcomes": [
+        "settings-navigation.journey"
+      ]
+    },
+    "sign-in.md": {
+      "name": "Sign in",
+      "description": "real account browser handoff; OTP remains manual.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "sign-in.journey"
+      ]
+    },
+    "terminal.md": {
+      "name": "Terminal",
+      "description": "real SSH PTY/tmux fallback attachment.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "terminal.journey"
+      ]
+    }
+  },
+  "outcomes": {
+    "app-name.journey": {
+      "description": "published signed Android in-app update proof.",
+      "journey": "app-name.md",
+      "sideEffect": false,
+      "match": []
+    },
+    "bot-photo-refresh.journey": {
+      "description": "hosted ViewModel and Compose regressions; seeded picture, not live account sync.",
+      "journey": "bot-photo-refresh.md",
+      "sideEffect": false,
+      "match": []
+    },
+    "chat-cancel.journey": {
+      "description": "exact cancellation, surviving order, host receipt and delivered actions, with a recording.",
+      "journey": "chat-cancel.md",
+      "sideEffect": true,
+      "match": [
+        "QueuedEdit|cancelQueued"
+      ]
+    },
+    "chat-choices.journey": {
+      "description": "latest-reply option taps and live question number keys, with independent SSH/tmux receipts.",
+      "journey": "chat-choices.md",
+      "sideEffect": false,
+      "match": []
+    },
+    "codex.transcript": {
+      "description": "Dispatch `feature=chat-codex.md`. The real Android APK connects through SSH to independent Hax, native Codex, and Claude fixture sessions. Hax and Codex write the same JSONL schemas consumed by desktop. Their terminal output deliberately excludes every transcript reply, ruling out terminal-scrape success.",
+      "journey": "chat-codex.md",
+      "sideEffect": true,
+      "match": [
+        "codex"
+      ]
+    },
+    "chat-queued.journey": {
+      "description": "sent messages show Queued until taken in and answered, then return to normal.",
+      "journey": "chat-queued.md",
+      "sideEffect": true,
+      "match": [
+        "QueuedMessages"
+      ]
+    },
+    "chat-reactions.journey": {
+      "description": "quoted sends, one badge, restart identity, fallback and signed update offers.",
+      "journey": "chat-reactions.md",
+      "sideEffect": true,
+      "match": [
+        "ChatReactions"
+      ]
+    },
+    "chat-resync.journey": {
+      "description": "historical held-queue proof; not host Reset proof.",
+      "journey": "chat-resync.md",
+      "sideEffect": false,
+      "match": []
+    },
+    "chat-shared.journey": {
+      "description": "synthetic SSH store admission and host Reset, retaining both drafts.",
+      "journey": "chat-shared.md",
+      "sideEffect": true,
+      "match": [
+        "HostStream|HostReply"
+      ]
+    },
+    "chat-working.journey": {
+      "description": "quiet tools, lock/unlock, real SSH reconnect, recording and timed visible-state samples. Uses `working-dots.yml`.",
+      "journey": "chat-working.md",
+      "sideEffect": false,
+      "match": []
+    },
+    "host-changed-key.journey": {
+      "description": "compare a rotated identity, persist Not now and refuse authentication.",
+      "journey": "host-changed-key.md",
+      "sideEffect": true,
+      "match": [
+        "PinningHostKeyVerifier|HostKeyWarning"
+      ]
+    },
+    "hosts-retired.journey": {
+      "description": "a saved host at a retired server address is gone after relaunch; account sync never adds it back.",
+      "journey": "hosts-retired.md",
+      "sideEffect": false,
+      "match": [
+        "RetiredHosts"
+      ]
+    },
+    "hosts.journey": {
+      "description": "add VPS, import encrypted-at-rest key, compare/trust and retain the host identity.",
+      "journey": "hosts.md",
+      "sideEffect": true,
+      "match": [
+        "HostStore|HostProfile"
+      ]
+    },
+    "launcher-icon.journey": {
+      "description": "the robot launcher icon in the emulator's app drawer, with the themed-icon layer present in the built APK.",
+      "journey": "launcher-icon.md",
+      "sideEffect": false,
+      "match": []
+    },
+    "claude.skills-model-effort": {
+      "description": "slash filtering, shared plus entry, actual session model/effort and retained image picker.",
+      "journey": "native-skills.md",
+      "sideEffect": true,
+      "match": [
+        "NativeSkills|SkillsLoader"
+      ]
+    },
+    "robot-faces.journey": {
+      "description": "Run `verify.yml` with `feature=robot-faces.md`. For the signed candidate, set `released_robots=true` and `candidate=true`. For the published update, set `released_robots=true` and `expected_commit` to the released SHA.",
+      "journey": "robot-faces.md",
+      "sideEffect": false,
+      "match": []
+    },
+    "session-favorites.journey": {
+      "description": "signed APK, isolated SSH sessions and offline favorite cache; no production sync.",
+      "journey": "session-favorites.md",
+      "sideEffect": false,
+      "match": []
+    },
+    "session-gestures.journey": {
+      "description": "no session swipes, bidirectional code scroll, ten replies, back to inbox on the signed APK.",
+      "journey": "session-gestures.md",
+      "sideEffect": false,
+      "match": []
+    },
+    "session-pins.journey": {
+      "description": "signed scrolling in both list orders. Use `session-favorites.md` with `pins_scroll=true`.",
+      "journey": "session-pins.md",
+      "sideEffect": false,
+      "match": []
+    },
+    "reader.send-enter-interrupt": {
+      "description": "native output, Send, Enter/approve and Interrupt, with independent console receipts.",
+      "journey": "session-reader.md",
+      "sideEffect": true,
+      "match": [
+        "SessionReaderConnection"
+      ]
+    },
+    "session-routing.journey": {
+      "description": "Inbox and swipe switching, typed and simulated dictated sends, independent SSH receipts.",
+      "journey": "session-routing.md",
+      "sideEffect": true,
+      "match": []
+    },
+    "session-settings.journey": {
+      "description": "full-screen split switches; saving is blocked without account OTP and a pulled layout.",
+      "journey": "session-settings.md",
+      "sideEffect": false,
+      "match": []
+    },
+    "inbox.summaries": {
+      "description": "Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.",
+      "journey": "session-summaries.md",
+      "sideEffect": false,
+      "match": []
+    },
+    "inbox.search": {
+      "description": "authenticated tmux discovery and search.",
+      "journey": "sessions.md",
+      "sideEffect": false,
+      "match": [
+        "SessionSearch|SessionFinder"
+      ]
+    },
+    "settings-navigation.journey": {
+      "description": "sessions-first settings, host mapping and account handoff on the signed APK.",
+      "journey": "settings-navigation.md",
+      "sideEffect": false,
+      "match": []
+    },
+    "sign-in.journey": {
+      "description": "real account browser handoff; OTP remains manual.",
+      "journey": "sign-in.md",
+      "sideEffect": false,
+      "match": []
+    },
+    "terminal.journey": {
+      "description": "real SSH PTY/tmux fallback attachment.",
+      "journey": "terminal.md",
+      "sideEffect": true,
+      "match": [
+        "/terminal/|TerminalKeys|TerminalInputTracker"
+      ]
+    },
+    "snippets.save-reuse-delete": {
+      "description": "Save, reuse, delete and retain snippets.",
+      "journey": null,
+      "sideEffect": true,
+      "match": [
+        "SnippetStore|snippet|Snippet"
+      ]
+    },
+    "ai.switch": {
+      "description": "Switch AI and reattach to the chosen provider.",
+      "journey": null,
+      "sideEffect": true,
+      "match": [
+        "switchAi|Switch AI|switchAgent|SwitchAgent"
+      ]
+    },
+    "pi.model-switch": {
+      "description": "Discover Pi models, switch them and retry.",
+      "journey": null,
+      "sideEffect": true,
+      "match": [
+        "PiModels|piModels|piModel"
+      ]
+    },
+    "chat-search.open": {
+      "description": "Open chat search, count and mark hits, navigate, wrap and close.",
+      "journey": null,
+      "sideEffect": false,
+      "match": [
+        "ChatFind|chatFind|findInChat"
+      ]
+    },
+    "claude.remote-control": {
+      "description": "Start Claude remote control and run its bundled operations.",
+      "journey": null,
+      "sideEffect": true,
+      "match": [
+        "RemoteControl|remoteControl|remote-control"
+      ]
+    },
+    "ai.usage": {
+      "description": "Open AI usage and render live, stale and missing status.",
+      "journey": null,
+      "sideEffect": false,
+      "match": [
+        "AiUsage|PlanUsage|planUsage"
+      ]
+    },
+    "skills.pills": {
+      "description": "Insert skills mid-message and render visible skill pills.",
+      "journey": null,
+      "sideEffect": false,
+      "match": [
+        "SkillMessageText|skillPill|SkillPill"
+      ]
+    },
+    "chat-table.expand": {
+      "description": "Expand, scroll and close a chat table.",
+      "journey": null,
+      "sideEffect": false,
+      "match": [
+        "ExpandedChatTable|expandTable|expandedTable"
+      ]
+    },
+    "claude.clear-ranking": {
+      "description": "Type /cl, select /clear and check name-first slash ranking.",
+      "journey": null,
+      "sideEffect": true,
+      "match": [
+        "BUILT_IN_COMMANDS|builtInCommands|nameRank|/clear"
+      ]
+    },
+    "legacy.igsh-449": {
+      "description": "OTP, a second pending device and trusted SSH access to every saved host. Sign in on the new device; on the approving phone compare **Approve this device?** and fingerprint, tap **Approve**, then connect from the new device.",
+      "journey": null,
+      "sideEffect": true,
+      "match": []
+    },
+    "legacy.igsh-429": {
+      "description": "a queued real app crash plus account-service receipt access. On a disposable debug install crash, relaunch, complete **Sign in**, and verify the stable report id server-side. Check startup/sign-in drain, including dismissed reports; the console never crashes the app.",
+      "journey": null,
+      "sideEffect": true,
+      "match": []
+    },
+    "legacy.igsh-422": {
+      "description": "first-screen entry is automated. Sync needs OTP, account servers and host-sync capability. Complete **Sign in**, inspect **Session list actions \u2192 Hosts** and compare another device; offline hosts do not prove sync.",
+      "journey": null,
+      "sideEffect": true,
+      "match": []
+    },
+    "legacy.igsh-432": {
+      "description": "an agent transcript with multiple new assistant messages after a recorded read position. Read a session, leave, generate replies on the host, check Inbox's count (`<n> unread messages`), reopen and check it clears. The console is not an agent.",
+      "journey": null,
+      "sideEffect": true,
+      "match": []
+    },
+    "legacy.igsh-434": {
+      "description": "Deepgram credential, microphone permission, controlled speech/silence and network/audio evidence. Reader **Session actions \u2192 More \u2192 Dictation API key**, **API key \u2192 Save and dictate**, then **Start dictation / Stop dictation**. Verify transcript and silence gating; short pre-roll/hangover is intentional. IGSH-2286: on a phone with no key, sign in and the Dictation API key field reads Replacement API key with nothing typed; signed out, a hand-typed key still dictates.",
+      "journey": null,
+      "sideEffect": true,
+      "match": []
+    },
+    "legacy.igsh-423": {
+      "description": "saving needs OTP and a pulled account layout. **Session list actions \u2192 Settings \u2192 Show Frequent split**, Back, check **Frequent**; repeat off and compare another device. Not dispatchable in CI.",
+      "journey": null,
+      "sideEffect": true,
+      "match": []
+    },
+    "legacy.igsh-415": {
+      "description": "account-mapped sessions with input in 24 h, or three watch visits of at least 10 s in 6 h. Send input, return to **Frequent**, compare ordering; check watch-only fallback and **Settings \u2192 Newest sessions at bottom** separately.",
+      "journey": null,
+      "sideEffect": true,
+      "match": []
+    },
+    "legacy.igsh-426": {
+      "description": "prefix checks Sign in's exact version only. No credential blocks local-screen layout inspection; navigation/bounds proof is unimplemented. Inspect the label on Inbox, reader, shell, Hosts, editor and Settings; tap for **Update**. Workspaces need OTP. Sign in's label is bottom-centred, not beside three dots.",
+      "journey": null,
+      "sideEffect": true,
+      "match": []
+    },
+    "legacy.igsh-424": {
+      "description": "a supported agent (Claude) transcript on the SSH host, including tables/nested lists and model/effort state. Open from Inbox, scroll the complete transcript, inspect tables horizontally and top-bar subtitle; no **Conversation** header/status row. **Session actions \u2192 Session history** opens alternate-screen history. Console output proves none of this.",
+      "journey": null,
+      "sideEffect": true,
+      "match": []
+    },
+    "legacy.igsh-418": {
+      "description": "a real bubble plus swipe/long-press input, beyond the tap-only driver. Swipe right or long-press \u2192 **Reply**; inspect **Reply to \u2026**, **Cancel reply**, and send a quoted reply.",
+      "journey": null,
+      "sideEffect": true,
+      "match": []
+    },
+    "legacy.igsh-425": {
+      "description": "multi-touch and long/wide tmux output, no extra credential. **Open live terminal**, pinch (8\u201328 sp, retained on reopen), pan, swipe down or **Open shell history**, then **Jump to live** / **Back to the live view**. Terminal.md proves attachment only.",
+      "journey": null,
+      "sideEffect": true,
+      "match": []
+    },
+    "legacy.igsh-414": {
+      "description": "matching/close are automated; no credential blocks layout proof, but keyboard-visible bounds inspection is unimplemented. Inbox **Search sessions**, type in **Search all sessions**, inspect results below the box and above the keyboard before closing.",
+      "journey": null,
+      "sideEffect": true,
+      "match": []
+    },
+    "legacy.igsh-413": {
+      "description": "no credential blocks comparing signed-out **Sign in to sync** in Inbox **Session list actions** and reader **Session actions**; that comparison is unimplemented. OTP is needed for **Sync: signed in \u2014 sign out** and synced splits. Compare both menus, then complete sign-in manually.",
+      "journey": null,
+      "sideEffect": true,
+      "match": []
+    }
+  }
+}

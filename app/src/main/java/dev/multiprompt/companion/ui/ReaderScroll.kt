@@ -21,7 +21,7 @@ internal fun rememberReaderScrollState(session: Any): ScrollState =
     remember(session) { ScrollState(0) }
 
 @Composable
-internal fun Modifier.readerScroll(state: ScrollState, followRequest: Int = 0): Modifier {
+internal fun Modifier.readerScroll(state: ScrollState, followRequest: Int = 0, pinToBottom: Boolean = true): Modifier {
     var pinnedToBottom by remember(state) { mutableStateOf(true) }
     var chosenOffset by remember(state) { mutableIntStateOf(0) }
     val userScroll = remember(state) {
@@ -43,7 +43,11 @@ internal fun Modifier.readerScroll(state: ScrollState, followRequest: Int = 0): 
         pinnedToBottom = true
         if (state.maxValue != Int.MAX_VALUE) state.scrollTo(state.maxValue)
     }
-    LaunchedEffect(state) {
+    LaunchedEffect(state, pinToBottom) {
+        if (!pinToBottom) {
+            pinnedToBottom = false
+            return@LaunchedEffect
+        }
         snapshotFlow { Triple(state.maxValue, state.isScrollInProgress, pinnedToBottom) }
             .collect { (maximum, scrolling, pinned) ->
                 if (!scrolling && maximum != Int.MAX_VALUE) {

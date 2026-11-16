@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
-case "$feature" in
-    settings-navigation.md|chat-codex.md|session-gestures.md|session-favorites.md|chat-working.md|session-summaries.md|sign-in.md|hosts.md|hosts-retired.md|host-changed-key.md|sessions.md|session-reader.md|session-routing.md|chat-choices.md|terminal.md|chat-reactions.md|chat-queued.md|native-skills.md|chat-resync.md|chat-shared.md|launcher-icon.md|chat-cancel.md|robot-faces.md) ;;
-    *) printf 'Unknown feature: %s\n' "$feature" >&2; exit 2 ;;
-esac
+scripts=$(cd "$(dirname "$0")" && pwd)
+node "$scripts/../../../../.github/scripts/pstack-verifier/coverage.cjs" journey "$feature"
 : "${EVIDENCE:?Set evidence directory}"
 : "${FIXTURE:?Set fixture directory}"
 : "${EXPECTED_VERSION:?Set expected APK versionName}"
-scripts=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$EVIDENCE"
 exec > >(tee -a "$EVIDENCE/driver-transcript.txt") 2>&1
 set -x
@@ -109,10 +106,21 @@ select_node() {
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "$1" "$2"
 }
 tap_node() {
-    local point x y
-    point=$(select_node "$1" "$2") || return
-    read -r x y <<< "$point"
-    adb shell input tap "$x" "$y"
+    local attempt action x1 y1 x2 y2 direction plan
+    for attempt in {1..18}; do
+        dump_ui || return
+        direction=forward
+        if (( attempt > 6 )); then direction=backward; fi
+        plan=$(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "reach-$1" "$2" "$direction") || return
+        read -r action x1 y1 x2 y2 <<< "$plan"
+        case "$action" in
+            tap) adb shell input tap "$x1" "$y1"; return ;;
+            swipe) adb shell input swipe "$x1" "$y1" "$x2" "$y2" 500 ;;
+            *) return 1 ;;
+        esac
+    done
+    printf 'JOURNEY_ACTION_UNREACHABLE: %s: not reachable after 18 scrolls in the active container\n' "$2" >&2
+    return 1
 }
 tap_text() { tap_node text "$1"; }
 tap_desc() { tap_node desc "$1"; }
@@ -1881,6 +1889,9 @@ if [[ "$feature" == terminal.md ]]; then
     sudo -u verifyssh tmux list-clients -F '#{client_name} #{client_session}' > "$EVIDENCE/tmux-clients.txt"
     grep -F verify-session "$EVIDENCE/tmux-clients.txt"
     shot terminal-attached
+    for key in Esc Tab Ctrl Alt; do
+        select_node desc "$key key"
+    done
     sudo -u verifyssh tmux capture-pane -p -S - -t verify-session > "$EVIDENCE/shell-history-before.txt"
     grep -Fx SHELL_HISTORY_0001 "$EVIDENCE/shell-history-before.txt"
     grep -Fx SHELL_HISTORY_0500 "$EVIDENCE/shell-history-before.txt"
@@ -1931,6 +1942,45 @@ if [[ "$feature" == terminal.md ]]; then
         adb pull "/sdcard/shell-scroll-$keyboard_state.mp4" "$EVIDENCE/shell-scroll-$keyboard_state.mp4"
     done
     printf 'SHELL_SCROLL_500_KEYBOARD_ANCHOR_LIVE_OK\n' | tee "$EVIDENCE/shell-scroll-result.txt"
+    sudo -u verifyssh tmux respawn-pane -k -t verify-session 'env PS1="VERIFY_SHELL> " HISTFILE=/dev/null bash --noprofile --norc -i'
+    python3 "$scripts/terminal-proof.py" ready "$EVIDENCE"
+    tap_node terminal ''
+    adb shell input text 'echo%sTYPED_\$\(\(40+2\)\)'
+    adb shell input keyevent 66
+    python3 "$scripts/terminal-proof.py" typed "$EVIDENCE"
+    shot shell-input-typed
+    adb shell input text 'sleep%s300'
+    adb shell input keyevent 66
+    sleep 2
+    python3 "$scripts/terminal-proof.py" sleep "$EVIDENCE"
+    shot shell-input-sleep
+    tap_desc 'Ctrl key'
+    adb shell input text c
+    python3 "$scripts/terminal-proof.py" interrupt "$EVIDENCE"
+    shot shell-input-interrupt
+    dump_ui
+    read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" key-row 'Ctrl key')
+    for attempt in {1..4}; do
+        if select_node desc 'Up key' >/dev/null 2>&1; then break; fi
+        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 400
+    done
+    tap_desc 'Up key'
+    tap_desc 'Up key'
+    adb shell input keyevent 66
+    python3 "$scripts/terminal-proof.py" history "$EVIDENCE"
+    shot shell-input-history
+    dump_ui
+    read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" key-row 'Up key')
+    for attempt in {1..4}; do
+        if select_node desc 'Tab key' >/dev/null 2>&1; then break; fi
+        adb shell input swipe "$x1" "$y1" "$x2" "$y2" 400
+    done
+    touch /tmp/verify_tabfile_unique.txt
+    adb shell input text 'ls%s/tmp/verify_tabf'
+    tap_desc 'Tab key'
+    adb shell input keyevent 66
+    python3 "$scripts/terminal-proof.py" tab "$EVIDENCE"
+    shot shell-input-tab
     exit 0
 fi
 sudo -u verifyssh mkdir -p /home/verifyssh/.local/state/multiprompt

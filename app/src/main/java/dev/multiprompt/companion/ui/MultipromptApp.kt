@@ -15,6 +15,7 @@ import android.text.format.DateUtils
 import androidx.compose.foundation.lazy.rememberLazyListState
 import dev.multiprompt.companion.reader.AiStopped
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
+import dev.multiprompt.companion.reader.TranscriptMessage
 import dev.multiprompt.companion.reader.ChatMention
 import dev.multiprompt.companion.reader.MentionChat
 import androidx.compose.foundation.layout.ColumnScope
@@ -44,6 +45,8 @@ import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
@@ -157,6 +160,7 @@ import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
@@ -185,6 +189,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.LinkAnnotation
@@ -196,6 +201,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -256,6 +262,8 @@ import dev.multiprompt.companion.data.ReminderTimeParser
 import dev.multiprompt.companion.data.UnreadCount
 import dev.multiprompt.companion.data.UnreadOnlyFilter
 import dev.multiprompt.companion.data.SessionReadStore
+import dev.multiprompt.companion.data.SnippetStore
+import dev.multiprompt.companion.data.Snippets
 import dev.multiprompt.companion.data.SessionSearch
 import dev.multiprompt.companion.ssh.HostKeyWarning
 import dev.multiprompt.companion.ssh.SshProblem
@@ -277,6 +285,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.launch
 import org.connectbot.terminal.Terminal
 import dev.multiprompt.companion.terminal.TerminalInputTracker
+import dev.multiprompt.companion.terminal.TerminalKeys
 
 @Composable
 fun MultipromptApp(viewModel: MainViewModel) {
@@ -618,6 +627,8 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onClearCrashReport = viewModel::clearCrashReport,
                     material3 = BuildConfig.MATERIAL3,
                     onMapAccountHost = viewModel::mapAccountHost,
+                    onShowAiUsage = viewModel::showAiUsage,
+                    onDismissAiUsage = viewModel::dismissAiUsage,
                 )
                 AppSection.UPDATE -> UpdateScreen(
                     state = updateState,
@@ -1332,6 +1343,8 @@ internal fun SessionsScreen(
     onSetUnreadOnly: (Boolean) -> Unit = {},
     onSetChatGroup: (AccountTab, String?, Boolean) -> String? = { _, _, _ -> null },
     onUngroup: (String, Boolean) -> String? = { _, _ -> null },
+    onShowAiUsage: () -> Unit = {},
+    onDismissAiUsage: () -> Unit = {},
 ) = MultipromptTheme(
     sunlight = when (appTheme) {
         AppTheme.SYSTEM -> !isSystemInDarkTheme()
@@ -1899,6 +1912,9 @@ internal fun SessionsScreen(
             KitPrimaryButton("Done", onClick = { splitOrderDialogVisible = false }, modifier = Modifier.fillMaxWidth())
         }
     }
+    state.aiUsage?.let { usage ->
+        AiUsageSheet(usage, onDismissAiUsage)
+    }
     if (workspaceDialogVisible) {
         KitSheet(onDismiss = { workspaceDialogVisible = false }) {
             Text("New workspace", style = Kit.Heading, color = Kit.Text)
@@ -2105,6 +2121,7 @@ internal fun SessionsScreen(
                                 onRefresh()
                                 onRefreshRooms()
                             },
+                            onAiUsage = onShowAiUsage,
                             onReleaseNotes = onReleaseNotes,
                         )
                     }
@@ -2852,6 +2869,50 @@ internal enum class ReaderMenuPage(val title: String) {
     SWITCH_AI("Switch AI"),
 }
 
+@Composable
+private fun ReaderSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    countLabel: String,
+    onClose: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    focusRequester: FocusRequester,
+) {
+    TopFade {
+        Row(
+            Modifier.fillMaxWidth().testTag("reader-search-bar").padding(ReaderScreenPadding),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
+        ) {
+            KitRoundButton(onClose, Icons.AutoMirrored.Filled.ArrowBack, "Close search")
+            KitSearchBox(
+                value = query,
+                onValueChange = onQueryChange,
+                modifier = Modifier.weight(1f).testTag("chat-search"),
+                placeholder = "Search this chat",
+                onSearch = onNext,
+                focusRequester = focusRequester,
+            )
+            KitMatchCount(countLabel, Modifier.testTag("chat-search-count"))
+            KitRoundButton(onPrevious, Icons.Default.KeyboardArrowUp, "Previous match")
+            KitRoundButton(onNext, Icons.Default.KeyboardArrowDown, "Next match")
+        }
+    }
+}
+
+@Composable
+private fun Modifier.findPin(active: Boolean): Modifier {
+    val requester = remember { BringIntoViewRequester() }
+    LaunchedEffect(active) {
+        if (active) {
+            withFrameNanos { }
+            runCatching { requester.bringIntoView() }
+        }
+    }
+    return this.bringIntoViewRequester(requester)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ReaderTopBar(
@@ -3120,6 +3181,20 @@ internal fun ReaderScreen(
     var sendMarkPending by remember(connection) { mutableStateOf(false) }
     var sentDraft by remember(connection) { mutableStateOf<SentDraft?>(null) }
     var menuExpanded by remember(connection) { mutableStateOf(false) }
+    var searchOpen by remember(connection) { mutableStateOf(false) }
+    var searchQuery by remember(connection) { mutableStateOf("") }
+    var searchIndex by remember(connection) { mutableStateOf(Int.MAX_VALUE) }
+    var historyFindCount by remember(connection) { mutableStateOf(0) }
+    val searchFocus = remember { FocusRequester() }
+    fun closeSearch() {
+        searchOpen = false
+        searchQuery = ""
+        searchIndex = Int.MAX_VALUE
+        historyFindCount = 0
+    }
+    LaunchedEffect(searchOpen) {
+        if (searchOpen) runCatching { searchFocus.requestFocus() }
+    }
     var menuPage by remember(connection) { mutableStateOf(ReaderMenuPage.MAIN) }
     var apiKeyDialogVisible by remember(connection) { mutableStateOf(false) }
     var microphoneError by remember(connection) { mutableStateOf<String?>(null) }
@@ -3132,6 +3207,9 @@ internal fun ReaderScreen(
     var imageAttachments by remember(connection) { mutableStateOf(emptyList<String>()) }
     var attachMenuExpanded by remember(connection) { mutableStateOf(false) }
     var attachMenuSection by remember(connection) { mutableStateOf<String?>(null) }
+    val snippetStore = remember(draftContext) { SnippetStore(draftContext) }
+    var snippets by remember(draftContext) { mutableStateOf(snippetStore.load()) }
+    var savedToken by remember(connection) { mutableStateOf(0) }
     val computerStore = remember(draftContext) { ComputerStore(draftContext) }
     var computerTarget by remember(session.hostId) { mutableStateOf(computerStore.target(session.hostId)) }
     var computerOpen by remember(session.hostId, session.name) {
@@ -3436,6 +3514,9 @@ internal fun ReaderScreen(
         }
     }
     val loadSkills = { connection.loadSkills(context.assets.open("native_skills.py").use { it.readBytes() }, session.workingDirectory) }
+    LaunchedEffect(connection) {
+        if (session.agent == AgentKind.CLAUDE) loadSkills()
+    }
     LaunchedEffect(connection, skillQuery != null) {
         if (skillQuery != null) loadSkills()
     }
@@ -3781,8 +3862,31 @@ internal fun ReaderScreen(
         }
     }
     val statusLabel = "waiting for input".takeIf { reader.waitingForInput }
+    val searchVisibleBlocks = remember(transcript, reader.output, reader.status, session.agent, reader.sentPrompts, technicalMode) {
+        if (transcript != null) emptyList()
+        else {
+            val displayed = reader.output.ifBlank {
+                if (reader.status !is ReaderStatus.Failed && reader.status != ReaderStatus.Connecting) "No recent output" else ""
+            }
+            TmuxText.readerBlocks(displayed, session.agent, reader.sentPrompts).filterNot { block ->
+                !technicalMode && !TmuxText.containsLink(block.text) && (
+                    block.kind == TmuxText.ReaderBlockKind.PROGRESS ||
+                        block.kind == TmuxText.ReaderBlockKind.CODE
+                    )
+            }
+        }
+    }
+    val searchPieces = remember(transcript, searchVisibleBlocks) { fallbackFindPieces(transcript, searchVisibleBlocks) }
+    val searchHits = if (!historyChat && searchOpen) ChatFind.find(searchPieces.map { it.text }, searchQuery) else emptyList()
+    val findCount = if (historyChat) historyFindCount else searchHits.size
+    val findShown = if (findCount == 0) 0 else searchIndex.coerceIn(0, findCount - 1)
+    fun stepSearch(previous: Boolean) {
+        val current = if (findCount == 0) 0 else searchIndex.coerceIn(0, findCount - 1)
+        searchIndex = ChatFind.step(current, findCount, previous)
+    }
     BackHandler {
         when {
+            searchOpen -> closeSearch()
             pageOpen -> pageOpen = false
             computerOpen -> setComputerOpen(false)
             else -> onBack()
@@ -3802,7 +3906,18 @@ internal fun ReaderScreen(
             }
         },
         topBar = {
-            if (!computerOpen) ReaderTopBar(
+            if (!computerOpen && searchOpen) ReaderSearchBar(
+                query = searchQuery,
+                onQueryChange = {
+                    searchQuery = it
+                    searchIndex = Int.MAX_VALUE
+                },
+                countLabel = ChatFind.label(findShown, findCount),
+                onClose = ::closeSearch,
+                onPrevious = { stepSearch(true) },
+                onNext = { stepSearch(false) },
+                focusRequester = searchFocus,
+            ) else if (!computerOpen) ReaderTopBar(
                 onBack = onBack,
                 botFace = draftStore.botFace(session),
                 botColor = draftStore.botColor(session),
@@ -3842,6 +3957,16 @@ internal fun ReaderScreen(
                                     KitDivider()
                                 }
                                 KitSectionLabel("Chat")
+                                KitMenuRow(
+                                    label = "Search in chat",
+                                    onClick = {
+                                        menuExpanded = false
+                                        pageOpen = false
+                                        searchQuery = ""
+                                        searchIndex = Int.MAX_VALUE
+                                        searchOpen = true
+                                    },
+                                )
                                 KitMenuRow(
                                     label = listOfNotNull(runtimeDetails.label, statusLabel).joinToString(" · ").ifEmpty { "Model / effort" },
                                     trailingText = "Change ›",
@@ -4171,14 +4296,20 @@ internal fun ReaderScreen(
                 Modifier.imePadding().padding(horizontal = ReaderScreenPadding, vertical = ReaderControlSpacing),
                 verticalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
             ) {
+                if (savedToken > 0 && !attachMenuExpanded) {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        key(savedToken) { KitSavedNote(onFinished = { savedToken = 0 }) }
+                    }
+                }
                 if (skillQuery != null && !dictationActive) {
                     NativeSkillPicker(
-                        skills = NativeSkills.matches(reader.nativeSkills, skillQuery),
+                        skills = NativeSkills.menu(reader.nativeSkills, skillQuery),
                         loading = reader.skillsLoading,
                         error = reader.skillsError,
                         onRetry = loadSkills,
                         onSelect = { skill ->
-                            promptField = TextFieldValue(NativeSkills.insert(prompt, skill.name), selection = TextRange(skill.name.length + 2))
+                            val inserted = NativeSkills.insert(prompt, skill.name, promptField.selection.start)
+                            promptField = TextFieldValue(inserted.text, selection = TextRange(inserted.cursor.coerceIn(0, inserted.text.length)))
                             promptFocusRequester.requestFocus()
                         },
                     )
@@ -4300,13 +4431,86 @@ internal fun ReaderScreen(
                                 expanded = attachMenuExpanded,
                                 onDismissRequest = { attachMenuExpanded = false },
                                 contentResetKey = attachMenuSection.orEmpty(),
+                                footer = if (savedToken > 0 && attachMenuExpanded) {
+                                    {
+                                        Box(Modifier.fillMaxWidth().padding(top = Kit.ControlGap), contentAlignment = Alignment.Center) {
+                                            key(savedToken) { KitSavedNote(onFinished = { savedToken = 0 }) }
+                                        }
+                                    }
+                                } else {
+                                    null
+                                },
                             ) {
                                 val settingsProvider = HostChange.providerOf(session.agent)
                                 val openSection = if (settingsProvider != null) {
                                     HostChange.sections(connection.hostSettings() != null, settingsProvider).firstOrNull { it.first == attachMenuSection }
                                 } else null
                                 val piModelMenu = session.agent == AgentKind.PI && attachMenuSection == PiModels.SECTION
-                                if (piModelMenu) {
+                                if (attachMenuSection == "Snippets") {
+                                    KitMenuRow(
+                                        label = "Snippets",
+                                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                        onClick = { attachMenuSection = null },
+                                    )
+                                    KitDivider()
+                                    KitMenuRow(
+                                        label = "Save current text",
+                                        enabled = prompt.isNotBlank(),
+                                        onClick = {
+                                            val next = Snippets.add(snippets, prompt)
+                                            val stored = prompt.trim().take(Snippets.TEXT_LIMIT)
+                                            if (stored.isNotEmpty() && next.any { it.text == stored }) {
+                                                if (next != snippets) {
+                                                    snippetStore.write(next)
+                                                    snippets = next
+                                                }
+                                                savedToken += 1
+                                            }
+                                        },
+                                    )
+                                    if (snippets.isEmpty()) {
+                                        Text(
+                                            "No snippets yet",
+                                            modifier = Modifier.fillMaxWidth().padding(horizontal = Kit.SideChange, vertical = 14.dp),
+                                            style = Kit.Body,
+                                            color = Kit.TextMuted,
+                                        )
+                                    } else {
+                                        KitDivider()
+                                        snippets.forEach { snippet ->
+                                            key(snippet.text) {
+                                                Row(
+                                                    Modifier.fillMaxWidth().heightIn(min = Kit.RowHeight),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                ) {
+                                                    KitListRow(
+                                                        label = snippet.name,
+                                                        modifier = Modifier.weight(1f),
+                                                        onClick = {
+                                                            setPrompt(snippet.text)
+                                                            attachMenuSection = null
+                                                            attachMenuExpanded = false
+                                                            promptFocusRequester.requestFocus()
+                                                        },
+                                                    )
+                                                    Box(
+                                                        Modifier
+                                                            .heightIn(min = Kit.RowHeight)
+                                                            .clickable(role = Role.Button) {
+                                                                val next = Snippets.delete(snippets, snippet.text)
+                                                                snippetStore.write(next)
+                                                                snippets = next
+                                                            }
+                                                            .padding(end = Kit.SideChange),
+                                                        contentAlignment = Alignment.Center,
+                                                    ) {
+                                                        Text("Delete", style = Kit.Hint, color = Kit.Danger)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else if (piModelMenu) {
                                     val currentModel = connection.hostSettings()?.model?.takeIf { it.isNotEmpty() } ?: runtimeDetails.model
                                     LaunchedEffect(connection) { connection.loadPiModels() }
                                     KitMenuRow(
@@ -4388,6 +4592,14 @@ internal fun ReaderScreen(
                                             },
                                         )
                                     }
+                                    KitMenuRow(
+                                        label = "Snippets",
+                                        trailingText = "›",
+                                        onClick = {
+                                            snippets = snippetStore.load()
+                                            attachMenuSection = "Snippets"
+                                        },
+                                    )
                                     if (session.agent == AgentKind.PI) {
                                         KitDivider()
                                         KitMenuRow(
@@ -4417,6 +4629,9 @@ internal fun ReaderScreen(
                             !sendAfterDictation &&
                             (prompt.isNotBlank() || imageAttachments.isNotEmpty() || dictationActive)
                         val composerText = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
+                        val skillSpans = remember(prompt, reader.nativeSkills) { NativeSkills.spans(prompt, reader.nativeSkills) }
+                        var composerLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
+                        val skillText = remember(skillSpans) { if (skillSpans.isEmpty()) VisualTransformation.None else SkillPillText(skillSpans) }
                         Box(Modifier.weight(1f).padding(vertical = 2.dp)) {
                         BasicTextField(
                             value = promptField,
@@ -4433,6 +4648,8 @@ internal fun ReaderScreen(
                                 },
                             textStyle = composerText,
                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            visualTransformation = skillText,
+                            onTextLayout = { composerLayout = it },
                             minLines = 1,
                             maxLines = 6,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
@@ -4452,7 +4669,7 @@ internal fun ReaderScreen(
                                     Modifier.heightIn(min = ReaderControlSize).padding(start = 16.dp, end = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    Box(Modifier.weight(1f).padding(vertical = 10.dp)) {
+                                    Box(Modifier.weight(1f).padding(vertical = 10.dp).skillPills(skillSpans, composerLayout)) {
                                         if (prompt.isEmpty()) {
                                             Text(
                                                 "Message ${session.displayName}",
@@ -4605,6 +4822,9 @@ internal fun ReaderScreen(
                 listState = chatListState,
                 followRequest = followRequest,
                 onNewBelow = { newBelow = it },
+                findQuery = if (searchOpen) searchQuery else "",
+                findIndex = searchIndex,
+                onFindCount = { historyFindCount = it },
                 bottomPadding = padding.calculateBottomPadding(),
                 modifier = Modifier.padding(horizontal = ReaderScreenPadding)
                     .transformable(state = transcriptTransform, canPan = { false })
@@ -4616,7 +4836,7 @@ internal fun ReaderScreen(
             Modifier
                 .fillMaxSize()
                 .nestedScroll(overscrollLoader)
-                .readerScroll(scrollState, followRequest)
+                .readerScroll(scrollState, followRequest, pinToBottom = !(searchOpen && searchQuery.isNotBlank()))
                 .pointerInput(onOpenTerminal, session.liveChat) {
                     if (!session.liveChat) detectEarlyDoubleTap(onOpenTerminal)
                 }
@@ -4682,16 +4902,18 @@ internal fun ReaderScreen(
                 waitingForInput -> MaterialTheme.colorScheme.onSecondaryContainer
                 else -> MaterialTheme.colorScheme.onPrimaryContainer
             }
-            val readerBlocks = remember(displayedOutput, session.agent, reader.sentPrompts) {
-                TmuxText.readerBlocks(displayedOutput, session.agent, reader.sentPrompts)
-            }
-            val visibleReaderBlocks = if (transcript != null) emptyList() else readerBlocks.filterNot { block ->
-                !technicalMode && !TmuxText.containsLink(block.text) && (
-                    block.kind == TmuxText.ReaderBlockKind.PROGRESS ||
-                        block.kind == TmuxText.ReaderBlockKind.CODE
-                    )
-            }
+            val visibleReaderBlocks = searchVisibleBlocks
             var expandedReaderBlocks by remember(connection) { mutableStateOf(emptySet<String>()) }
+            val findFrame = FindFrame(
+                searchHits,
+                searchHits.getOrNull(if (searchHits.isEmpty()) -1 else searchIndex.coerceIn(0, searchHits.lastIndex)),
+            )
+            LaunchedEffect(searchOpen, searchIndex, searchQuery, searchHits) {
+                if (!searchOpen) return@LaunchedEffect
+                val hit = searchHits.getOrNull(if (searchHits.isEmpty()) -1 else searchIndex.coerceIn(0, searchHits.lastIndex)) ?: return@LaunchedEffect
+                val key = searchPieces.getOrNull(hit.message)?.expandKey ?: return@LaunchedEffect
+                if (key !in expandedReaderBlocks) expandedReaderBlocks = expandedReaderBlocks + key
+            }
             val transcriptFontSize = chatFontSize((14f * transcriptZoom).sp, transcriptZoom)
             Column(
                 Modifier
@@ -4798,6 +5020,7 @@ internal fun ReaderScreen(
                 transcript?.forEachIndexed { index, message ->
                     val isUser = message.role == "user"
                     val bodyColor = chatTextColor(sunlightMode, isUser)
+                    val (hits, active) = findFrame.next()
                     key(connection, message.role, message.timestamp, message.text) {
                         if (unreadMessageKey == "transcript:${message.role}:${message.timestamp}:${message.text.hashCode()}") Text("New", color = MaterialTheme.colorScheme.primary)
                         if (index == batchStart && batchLabel != null) BatchTimeLine(batchLabel, sunlightMode)
@@ -4809,15 +5032,21 @@ internal fun ReaderScreen(
                             gate = replyGate,
                             sessionName = session.displayName,
                             onMarkUnread = { onMarkUnreadFrom("transcript:${message.role}:${message.timestamp}:${message.text.hashCode()}") },
+                            modifier = Modifier.findPin(active != null),
                         ) {
                             if (isUser) {
-                                ChatLinkText(message.text) { line ->
-                                    Text(
-                                        terminalLinks(line, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
-                                        fontFamily = chatFontFamily(),
+                                ChatLinkText(message.text) { line, start ->
+                                    SkillMessageText(
+                                        text = line,
+                                        skills = reader.nativeSkills,
+                                        color = bodyColor,
                                         fontSize = transcriptFontSize,
                                         lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
-                                        color = bodyColor,
+                                        sunlight = sunlightMode,
+                                        linkColor = chatLinkColor(terminalBlue(sunlightMode)),
+                                        matchBase = start,
+                                        matchHits = hits,
+                                        activeHit = active,
                                     )
                                 }
                             } else {
@@ -4827,6 +5056,8 @@ internal fun ReaderScreen(
                                     color = bodyColor,
                                     linkColor = chatLinkColor(terminalBlue(sunlightMode)),
                                     imagePreviews = true,
+                                    matchHits = hits,
+                                    activeHit = active,
                                 )
                             }
                         }
@@ -4849,6 +5080,10 @@ internal fun ReaderScreen(
                             val run = visibleReaderBlocks.drop(index)
                                 .takeWhile { it.kind == TmuxText.ReaderBlockKind.PROSE }
                             val text = run.joinToString("\n\n") { it.text }
+                            val marked = run.map { part ->
+                                val (hits, active) = findFrame.next()
+                                Triple(part, hits, active)
+                            }
                             key(connection, blockKey) {
                                 if (unreadMessageKey == "block:${blockKey.hashCode()}") Text("New", color = MaterialTheme.colorScheme.primary)
                                 ReplyableBubble(
@@ -4861,14 +5096,15 @@ internal fun ReaderScreen(
                                     onMarkUnread = { onMarkUnreadFrom("block:${blockKey.hashCode()}") },
                                 ) {
                                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        run.forEach { part ->
-                                            ChatLinkText(part.text) { line ->
+                                        marked.forEach { (part, hits, active) ->
+                                            ChatLinkText(part.text) { line, start ->
                                                 Text(
-                                                    terminalLinks(line, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
+                                                    terminalLinks(line, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))).marking(start, hits, active),
                                                     fontFamily = chatFontFamily(),
                                                     fontSize = transcriptFontSize,
                                                     lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
                                                     color = chatTextColor(sunlightMode),
+                                                    modifier = Modifier.findPin(active != null),
                                                 )
                                             }
                                         }
@@ -4876,7 +5112,9 @@ internal fun ReaderScreen(
                                 }
                             }
                         }
-                        TmuxText.ReaderBlockKind.USER_PROMPT -> key(connection, blockKey) {
+                        TmuxText.ReaderBlockKind.USER_PROMPT -> {
+                            val (hits, active) = findFrame.next()
+                            key(connection, blockKey) {
                             if (unreadMessageKey == "block:${blockKey.hashCode()}") Text("New", color = MaterialTheme.colorScheme.primary)
                             ReplyableBubble(
                                 isUser = true,
@@ -4886,25 +5124,35 @@ internal fun ReaderScreen(
                                 gate = replyGate,
                                 sessionName = session.displayName,
                                 onMarkUnread = { onMarkUnreadFrom("block:${blockKey.hashCode()}") },
+                                modifier = Modifier.findPin(active != null),
                             ) {
-                                ChatLinkText(block.text) { line ->
-                                    Text(
-                                        terminalLinks(line, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
-                                        fontFamily = chatFontFamily(),
+                                ChatLinkText(block.text) { line, start ->
+                                    SkillMessageText(
+                                        text = line,
+                                        skills = reader.nativeSkills,
+                                        color = chatTextColor(sunlightMode),
                                         fontSize = transcriptFontSize,
                                         lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
-                                        color = chatTextColor(sunlightMode),
+                                        sunlight = sunlightMode,
+                                        linkColor = chatLinkColor(terminalBlue(sunlightMode)),
+                                        matchBase = start,
+                                        matchHits = hits,
+                                        activeHit = active,
                                     )
                                 }
+                            }
                             }
                         }
                         TmuxText.ReaderBlockKind.CODE,
                         TmuxText.ReaderBlockKind.PROGRESS -> {
+                            val (hits, active) = findFrame.next()
                             ReaderCollapsibleBlock(
                                 block = block,
-                                expanded = blockKey in expandedReaderBlocks,
+                                expanded = blockKey in expandedReaderBlocks || active != null,
                                 fontScale = transcriptZoom,
                                 sunlightMode = sunlightMode,
+                                findHits = hits,
+                                activeHit = active,
                                 onToggle = {
                                     expandedReaderBlocks = if (blockKey in expandedReaderBlocks) {
                                         expandedReaderBlocks - blockKey
@@ -4929,6 +5177,8 @@ private fun ReaderCollapsibleBlock(
     fontScale: Float,
     sunlightMode: Boolean,
     onToggle: () -> Unit,
+    findHits: List<ChatFind.Hit> = emptyList(),
+    activeHit: ChatFind.Hit? = null,
 ) {
     val isCode = block.kind == TmuxText.ReaderBlockKind.CODE
     val lineCount = block.text.lineSequence().count()
@@ -4940,7 +5190,7 @@ private fun ReaderCollapsibleBlock(
         "$lineCount lines",
     ).joinToString(" · ")
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().findPin(activeHit != null),
         shape = chatShape(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -4980,7 +5230,7 @@ private fun ReaderCollapsibleBlock(
                 SelectionContainer {
                     if (isCode) {
                         Text(
-                            syntaxHighlightCode(block),
+                            syntaxHighlightCode(block).marking(0, findHits, activeHit),
                             modifier = Modifier.fillMaxWidth().padding(12.dp),
                             fontFamily = ReaderFontFamily,
                             fontSize = (10f * fontScale).sp,
@@ -4989,7 +5239,7 @@ private fun ReaderCollapsibleBlock(
                         )
                     } else {
                         Text(
-                            terminalLinks(block.text, sunlightMode),
+                            terminalLinks(block.text, sunlightMode).marking(0, findHits, activeHit),
                             modifier = Modifier.fillMaxWidth().padding(12.dp),
                             fontFamily = FontFamily.Default,
                             fontSize = chatFontSize((12f * fontScale).sp, fontScale),
@@ -5008,6 +5258,51 @@ internal fun isTransientProgress(value: String): Boolean = value.lineSequence().
     trimmed.isBlank() || listOf(
         "working", "running", "thinking", "reading", "searching", "esc to cancel",
     ).any { trimmed.startsWith(it, ignoreCase = true) }
+}
+
+private data class FallbackPiece(val text: String, val expandKey: String?)
+
+private class FindFrame(val hits: List<ChatFind.Hit>, val active: ChatFind.Hit?) {
+    private var index = 0
+    fun next(): Pair<List<ChatFind.Hit>, ChatFind.Hit?> {
+        val mine = hits.filter { it.message == index }
+        val current = active?.takeIf { it.message == index }
+        index++
+        return mine to current
+    }
+}
+
+private fun fallbackFindPieces(
+    transcript: List<TranscriptMessage>?,
+    blocks: List<TmuxText.ReaderBlock>,
+): List<FallbackPiece> {
+    val pieces = ArrayList<FallbackPiece>()
+    transcript?.forEach { message ->
+        pieces += FallbackPiece(ChatFind.display(message.role, message.text), null)
+    }
+    var index = 0
+    while (index < blocks.size) {
+        val block = blocks[index]
+        when (block.kind) {
+            TmuxText.ReaderBlockKind.PROSE -> {
+                if (index == 0 || blocks[index - 1].kind != TmuxText.ReaderBlockKind.PROSE) {
+                    blocks.drop(index).takeWhile { it.kind == TmuxText.ReaderBlockKind.PROSE }.forEach { part ->
+                        pieces += FallbackPiece(ChatMention.visible(part.text), null)
+                    }
+                }
+                index++
+            }
+            TmuxText.ReaderBlockKind.USER_PROMPT -> {
+                pieces += FallbackPiece(ChatMention.visible(block.text), null)
+                index++
+            }
+            else -> {
+                pieces += FallbackPiece(block.text, readerBlockKey(block))
+                index++
+            }
+        }
+    }
+    return pieces
 }
 
 private fun readerBlockKey(block: TmuxText.ReaderBlock): String = listOf(
@@ -5340,10 +5635,50 @@ private fun TerminalScreen(
                 dictating = dictating,
             )
         },
+        bottomBar = {
+            Row(
+                Modifier.fillMaxWidth().background(Kit.Page).navigationBarsPadding().imePadding()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(Kit.ControlGap),
+                horizontalArrangement = Arrangement.spacedBy(Kit.ControlGap),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TerminalKeys.Key.entries.forEach { key ->
+                    if (key == TerminalKeys.Key.Up) {
+                        listOf("Ctrl", "Alt").forEach { label ->
+                            val active = if (label == "Ctrl") inputTracker.isCtrlActive() else inputTracker.isAltActive()
+                            val toggle = if (label == "Ctrl") inputTracker::toggleCtrl else inputTracker::toggleAlt
+                            KitSegmented(
+                                options = listOf(true to label),
+                                selected = active,
+                                onSelect = { toggle() },
+                                modifier = Modifier.width(Kit.ControlHeight + Kit.SideChange * 2)
+                                    .clearAndSetSemantics {
+                                        contentDescription = "$label key"
+                                        selected = active
+                                        role = Role.Button
+                                        onClick { toggle(); true }
+                                    },
+                            )
+                        }
+                    }
+                    KitSecondaryButton(
+                        text = key.label,
+                        onClick = {
+                            historyVisible = false
+                            connection.sendRaw(key.bytes())
+                            inputTracker.clearTransients()
+                        },
+                        modifier = Modifier.semantics { contentDescription = "${key.label} key" },
+                    )
+                }
+            }
+        },
     ) { padding ->
         BoxWithConstraints(
             Modifier
                 .padding(padding)
+                .consumeWindowInsets(padding)
                 .fillMaxSize()
                 .imePadding()
                 .background(TerminalBackground)
@@ -5666,11 +6001,15 @@ private fun NativeSkillPicker(
     onSelect: (NativeSkill) -> Unit,
 ) {
     ComposerList {
-        when {
-            loading -> ComposerListNote("Loading session skills…")
-            error != null -> ComposerListNote(error, onClick = onRetry)
-            skills.isEmpty() -> ComposerListNote("No matching session skills")
-            else -> skills.forEach { skill ->
+        if (skills.isEmpty()) {
+            when {
+                loading -> ComposerListNote("Loading session skills…")
+                error != null -> ComposerListNote(error, onClick = onRetry)
+                else -> ComposerListNote("No matching session skills")
+            }
+        } else {
+            if (error != null) ComposerListNote(error, onClick = onRetry)
+            skills.forEach { skill ->
                 Column(
                     Modifier.fillMaxWidth().heightIn(min = Kit.RowHeight).clickable(role = Role.Button) { onSelect(skill) }
                         .padding(horizontal = Kit.SideChange, vertical = 8.dp),

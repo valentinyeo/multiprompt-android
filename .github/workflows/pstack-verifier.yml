@@ -38,6 +38,7 @@ jobs:
       number: ${{ steps.pick.outputs.number }}
       head_sha: ${{ steps.pick.outputs.head_sha }}
       merge_base: ${{ steps.pick.outputs.merge_base }}
+      changed_outcomes: ${{ steps.pick.outputs.changed_outcomes }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -45,10 +46,24 @@ jobs:
           sparse-checkout: |
             .github/scripts
             .claude/skills/verify-multiprompt-android/features
+            tools/pstack-verifier.test.js
+            tools/feature-coverage.test.js
+            tools/fixtures/feature-coverage
+            .github/workflows
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
+      - name: Prove the verifier on real historical mistakes
+        run: node --test tools/feature-coverage.test.js tools/pstack-verifier.test.js > "$RUNNER_TEMP/tooling-proof.txt" 2>&1
+      - name: Retain non-UI verifier proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verifier-tooling-proof
+          path: ${{ runner.temp }}/tooling-proof.txt
+          if-no-files-found: error
+          retention-days: 7
       - name: Choose the journeys that exercise this change
         id: pick
         env:
@@ -74,6 +89,7 @@ jobs:
     with:
       feature: ${{ matrix.feature }}
       side: head
+      app_ref: ${{ needs.pick.outputs.head_sha }}
 
   parents:
     name: parent journey ${{ matrix.feature }}
@@ -105,7 +121,9 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 1
-          sparse-checkout: .github/scripts
+          sparse-checkout: |
+            .github/scripts
+            .claude/skills/verify-multiprompt-android/features
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -119,9 +137,19 @@ jobs:
           HEAD_SHA: ${{ needs.pick.outputs.head_sha }}
           MERGE_BASE: ${{ needs.pick.outputs.merge_base }}
           FEATURES: ${{ needs.pick.outputs.features }}
+          CHANGED_OUTCOMES: ${{ needs.pick.outputs.changed_outcomes }}
+          COVERAGE_REPORT: ${{ runner.temp }}/feature-coverage.json
           SMOKE: ${{ needs.pick.outputs.smoke }}
           PICK_REASON: ${{ needs.pick.outputs.reason }}
           PICK_RESULT: ${{ needs.pick.result }}
           RUN_ID: ${{ github.run_id }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: node .github/scripts/pstack-verifier/verifier.cjs judge
+      - name: Retain structured outcome coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verifier-feature-coverage
+          path: ${{ runner.temp }}/feature-coverage.json
+          if-no-files-found: error
+          retention-days: 7
