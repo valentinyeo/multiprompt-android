@@ -106,10 +106,21 @@ select_node() {
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "$1" "$2"
 }
 tap_node() {
-    local point x y
-    point=$(select_node "$1" "$2") || return
-    read -r x y <<< "$point"
-    adb shell input tap "$x" "$y"
+    local attempt action x1 y1 x2 y2 direction plan
+    for attempt in {1..18}; do
+        dump_ui || return
+        direction=forward
+        if (( attempt > 6 )); then direction=backward; fi
+        plan=$(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "reach-$1" "$2" "$direction") || return
+        read -r action x1 y1 x2 y2 <<< "$plan"
+        case "$action" in
+            tap) adb shell input tap "$x1" "$y1"; return ;;
+            swipe) adb shell input swipe "$x1" "$y1" "$x2" "$y2" 500 ;;
+            *) return 1 ;;
+        esac
+    done
+    printf 'JOURNEY_ACTION_UNREACHABLE: %s: not reachable after 18 scrolls in the active container\n' "$2" >&2
+    return 1
 }
 tap_text() { tap_node text "$1"; }
 tap_desc() { tap_node desc "$1"; }
@@ -1873,12 +1884,6 @@ fi
 if [[ "$feature" == terminal.md ]]; then
     adb shell settings put secure show_ime_with_hard_keyboard 1
     tap_desc 'Session actions'
-    for attempt in {1..6}; do
-        dump_ui
-        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text 'Open live terminal' >/dev/null 2>&1; then break; fi
-        read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
-        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 500
-    done
     tap_text 'Open live terminal'
     wait_for_text 'SSH · tmux attached'
     sudo -u verifyssh tmux list-clients -F '#{client_name} #{client_session}' > "$EVIDENCE/tmux-clients.txt"
