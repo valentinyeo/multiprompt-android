@@ -89,11 +89,15 @@ internal fun SkillMessageText(
     sunlight: Boolean,
     modifier: Modifier = Modifier,
     linkColor: Color? = null,
+    matchBase: Int = 0,
+    matchHits: List<ChatFind.Hit> = emptyList(),
+    activeHit: ChatFind.Hit? = null,
 ) {
     val spans = remember(text, skills) { NativeSkills.spans(text, skills) }
     if (spans.isEmpty()) {
         Text(
-            if (linkColor == null) terminalLinks(text, sunlight) else terminalLinks(text, sunlight, linkColor = linkColor),
+            (if (linkColor == null) terminalLinks(text, sunlight) else terminalLinks(text, sunlight, linkColor = linkColor))
+                .marking(matchBase, matchHits, activeHit),
             modifier = modifier,
             fontFamily = chatFontFamily(),
             fontSize = fontSize,
@@ -106,18 +110,26 @@ internal fun SkillMessageText(
     val density = LocalDensity.current
     val fontFamily = chatFontFamily()
     val pillStyle = TextStyle(fontFamily = fontFamily, fontSize = fontSize, lineHeight = fontSize, color = Kit.Text)
-    val annotated = remember(text, spans, sunlight, linkColor) { skillAnnotated(text, spans, sunlight, linkColor) }
+    val annotated = remember(text, spans, sunlight, linkColor, matchBase, matchHits, activeHit) {
+        skillAnnotated(text, spans, sunlight, linkColor).marking(matchBase, matchHits, activeHit)
+    }
     val padX = with(density) { 8.dp.roundToPx() }
     val padY = with(density) { 1.dp.roundToPx() }
     val inline = spans.mapIndexed { index, span ->
         val label = text.substring(span.start, span.end)
+        val paint = skillHitPaint(span.start, span.end, matchBase, matchHits, activeHit)
         val measured = measurer.measure(AnnotatedString(label), style = pillStyle).size
         val width = with(density) { (measured.width + padX * 2).toSp() }
         val height = with(density) { (measured.height + padY * 2).coerceAtLeast(1).toSp() }
         "skill$index" to InlineTextContent(
             Placeholder(width, height, PlaceholderVerticalAlign.TextCenter),
         ) { _ ->
-            KitSkillPill(label, style = pillStyle)
+            KitSkillPill(
+                label,
+                style = pillStyle,
+                current = paint == SkillHitPaint.Current,
+                marked = paint == SkillHitPaint.Other,
+            )
         }
     }.toMap()
     BasicText(

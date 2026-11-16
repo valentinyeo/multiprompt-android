@@ -15,6 +15,7 @@ import android.text.format.DateUtils
 import androidx.compose.foundation.lazy.rememberLazyListState
 import dev.multiprompt.companion.reader.AiStopped
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
+import dev.multiprompt.companion.reader.TranscriptMessage
 import dev.multiprompt.companion.reader.ChatMention
 import dev.multiprompt.companion.reader.MentionChat
 import androidx.compose.foundation.layout.ColumnScope
@@ -44,6 +45,8 @@ import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
@@ -2845,6 +2848,50 @@ internal enum class ReaderMenuPage(val title: String) {
     SWITCH_AI("Switch AI"),
 }
 
+@Composable
+private fun ReaderSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    countLabel: String,
+    onClose: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    focusRequester: FocusRequester,
+) {
+    TopFade {
+        Row(
+            Modifier.fillMaxWidth().testTag("reader-search-bar").padding(ReaderScreenPadding),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
+        ) {
+            KitRoundButton(onClose, Icons.AutoMirrored.Filled.ArrowBack, "Close search")
+            KitSearchBox(
+                value = query,
+                onValueChange = onQueryChange,
+                modifier = Modifier.weight(1f).testTag("chat-search"),
+                placeholder = "Search this chat",
+                onSearch = onNext,
+                focusRequester = focusRequester,
+            )
+            KitMatchCount(countLabel, Modifier.testTag("chat-search-count"))
+            KitRoundButton(onPrevious, Icons.Default.KeyboardArrowUp, "Previous match")
+            KitRoundButton(onNext, Icons.Default.KeyboardArrowDown, "Next match")
+        }
+    }
+}
+
+@Composable
+private fun Modifier.findPin(active: Boolean): Modifier {
+    val requester = remember { BringIntoViewRequester() }
+    LaunchedEffect(active) {
+        if (active) {
+            withFrameNanos { }
+            runCatching { requester.bringIntoView() }
+        }
+    }
+    return this.bringIntoViewRequester(requester)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ReaderTopBar(
@@ -3113,6 +3160,20 @@ internal fun ReaderScreen(
     var sendMarkPending by remember(connection) { mutableStateOf(false) }
     var sentDraft by remember(connection) { mutableStateOf<SentDraft?>(null) }
     var menuExpanded by remember(connection) { mutableStateOf(false) }
+    var searchOpen by remember(connection) { mutableStateOf(false) }
+    var searchQuery by remember(connection) { mutableStateOf("") }
+    var searchIndex by remember(connection) { mutableStateOf(Int.MAX_VALUE) }
+    var historyFindCount by remember(connection) { mutableStateOf(0) }
+    val searchFocus = remember { FocusRequester() }
+    fun closeSearch() {
+        searchOpen = false
+        searchQuery = ""
+        searchIndex = Int.MAX_VALUE
+        historyFindCount = 0
+    }
+    LaunchedEffect(searchOpen) {
+        if (searchOpen) runCatching { searchFocus.requestFocus() }
+    }
     var menuPage by remember(connection) { mutableStateOf(ReaderMenuPage.MAIN) }
     var apiKeyDialogVisible by remember(connection) { mutableStateOf(false) }
     var microphoneError by remember(connection) { mutableStateOf<String?>(null) }
@@ -3780,8 +3841,31 @@ internal fun ReaderScreen(
         }
     }
     val statusLabel = "waiting for input".takeIf { reader.waitingForInput }
+    val searchVisibleBlocks = remember(transcript, reader.output, reader.status, session.agent, reader.sentPrompts, technicalMode) {
+        if (transcript != null) emptyList()
+        else {
+            val displayed = reader.output.ifBlank {
+                if (reader.status !is ReaderStatus.Failed && reader.status != ReaderStatus.Connecting) "No recent output" else ""
+            }
+            TmuxText.readerBlocks(displayed, session.agent, reader.sentPrompts).filterNot { block ->
+                !technicalMode && !TmuxText.containsLink(block.text) && (
+                    block.kind == TmuxText.ReaderBlockKind.PROGRESS ||
+                        block.kind == TmuxText.ReaderBlockKind.CODE
+                    )
+            }
+        }
+    }
+    val searchPieces = remember(transcript, searchVisibleBlocks) { fallbackFindPieces(transcript, searchVisibleBlocks) }
+    val searchHits = if (!historyChat && searchOpen) ChatFind.find(searchPieces.map { it.text }, searchQuery) else emptyList()
+    val findCount = if (historyChat) historyFindCount else searchHits.size
+    val findShown = if (findCount == 0) 0 else searchIndex.coerceIn(0, findCount - 1)
+    fun stepSearch(previous: Boolean) {
+        val current = if (findCount == 0) 0 else searchIndex.coerceIn(0, findCount - 1)
+        searchIndex = ChatFind.step(current, findCount, previous)
+    }
     BackHandler {
         when {
+            searchOpen -> closeSearch()
             pageOpen -> pageOpen = false
             computerOpen -> setComputerOpen(false)
             else -> onBack()
@@ -3801,7 +3885,18 @@ internal fun ReaderScreen(
             }
         },
         topBar = {
-            if (!computerOpen) ReaderTopBar(
+            if (!computerOpen && searchOpen) ReaderSearchBar(
+                query = searchQuery,
+                onQueryChange = {
+                    searchQuery = it
+                    searchIndex = Int.MAX_VALUE
+                },
+                countLabel = ChatFind.label(findShown, findCount),
+                onClose = ::closeSearch,
+                onPrevious = { stepSearch(true) },
+                onNext = { stepSearch(false) },
+                focusRequester = searchFocus,
+            ) else if (!computerOpen) ReaderTopBar(
                 onBack = onBack,
                 botFace = draftStore.botFace(session),
                 botColor = draftStore.botColor(session),
@@ -3841,6 +3936,16 @@ internal fun ReaderScreen(
                                     KitDivider()
                                 }
                                 KitSectionLabel("Chat")
+                                KitMenuRow(
+                                    label = "Search in chat",
+                                    onClick = {
+                                        menuExpanded = false
+                                        pageOpen = false
+                                        searchQuery = ""
+                                        searchIndex = Int.MAX_VALUE
+                                        searchOpen = true
+                                    },
+                                )
                                 KitMenuRow(
                                     label = listOfNotNull(runtimeDetails.label, statusLabel).joinToString(" · ").ifEmpty { "Model / effort" },
                                     trailingText = "Change ›",
@@ -4696,6 +4801,9 @@ internal fun ReaderScreen(
                 listState = chatListState,
                 followRequest = followRequest,
                 onNewBelow = { newBelow = it },
+                findQuery = if (searchOpen) searchQuery else "",
+                findIndex = searchIndex,
+                onFindCount = { historyFindCount = it },
                 bottomPadding = padding.calculateBottomPadding(),
                 modifier = Modifier.padding(horizontal = ReaderScreenPadding)
                     .transformable(state = transcriptTransform, canPan = { false })
@@ -4707,7 +4815,7 @@ internal fun ReaderScreen(
             Modifier
                 .fillMaxSize()
                 .nestedScroll(overscrollLoader)
-                .readerScroll(scrollState, followRequest)
+                .readerScroll(scrollState, followRequest, pinToBottom = !(searchOpen && searchQuery.isNotBlank()))
                 .pointerInput(onOpenTerminal, session.liveChat) {
                     if (!session.liveChat) detectEarlyDoubleTap(onOpenTerminal)
                 }
@@ -4773,16 +4881,18 @@ internal fun ReaderScreen(
                 waitingForInput -> MaterialTheme.colorScheme.onSecondaryContainer
                 else -> MaterialTheme.colorScheme.onPrimaryContainer
             }
-            val readerBlocks = remember(displayedOutput, session.agent, reader.sentPrompts) {
-                TmuxText.readerBlocks(displayedOutput, session.agent, reader.sentPrompts)
-            }
-            val visibleReaderBlocks = if (transcript != null) emptyList() else readerBlocks.filterNot { block ->
-                !technicalMode && !TmuxText.containsLink(block.text) && (
-                    block.kind == TmuxText.ReaderBlockKind.PROGRESS ||
-                        block.kind == TmuxText.ReaderBlockKind.CODE
-                    )
-            }
+            val visibleReaderBlocks = searchVisibleBlocks
             var expandedReaderBlocks by remember(connection) { mutableStateOf(emptySet<String>()) }
+            val findFrame = FindFrame(
+                searchHits,
+                searchHits.getOrNull(if (searchHits.isEmpty()) -1 else searchIndex.coerceIn(0, searchHits.lastIndex)),
+            )
+            LaunchedEffect(searchOpen, searchIndex, searchQuery, searchHits) {
+                if (!searchOpen) return@LaunchedEffect
+                val hit = searchHits.getOrNull(if (searchHits.isEmpty()) -1 else searchIndex.coerceIn(0, searchHits.lastIndex)) ?: return@LaunchedEffect
+                val key = searchPieces.getOrNull(hit.message)?.expandKey ?: return@LaunchedEffect
+                if (key !in expandedReaderBlocks) expandedReaderBlocks = expandedReaderBlocks + key
+            }
             val transcriptFontSize = chatFontSize((14f * transcriptZoom).sp, transcriptZoom)
             Column(
                 Modifier
@@ -4889,6 +4999,7 @@ internal fun ReaderScreen(
                 transcript?.forEachIndexed { index, message ->
                     val isUser = message.role == "user"
                     val bodyColor = chatTextColor(sunlightMode, isUser)
+                    val (hits, active) = findFrame.next()
                     key(connection, message.role, message.timestamp, message.text) {
                         if (unreadMessageKey == "transcript:${message.role}:${message.timestamp}:${message.text.hashCode()}") Text("New", color = MaterialTheme.colorScheme.primary)
                         if (index == batchStart && batchLabel != null) BatchTimeLine(batchLabel, sunlightMode)
@@ -4900,9 +5011,10 @@ internal fun ReaderScreen(
                             gate = replyGate,
                             sessionName = session.displayName,
                             onMarkUnread = { onMarkUnreadFrom("transcript:${message.role}:${message.timestamp}:${message.text.hashCode()}") },
+                            modifier = Modifier.findPin(active != null),
                         ) {
                             if (isUser) {
-                                ChatLinkText(message.text) { line ->
+                                ChatLinkText(message.text) { line, start ->
                                     SkillMessageText(
                                         text = line,
                                         skills = reader.nativeSkills,
@@ -4911,6 +5023,9 @@ internal fun ReaderScreen(
                                         lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
                                         sunlight = sunlightMode,
                                         linkColor = chatLinkColor(terminalBlue(sunlightMode)),
+                                        matchBase = start,
+                                        matchHits = hits,
+                                        activeHit = active,
                                     )
                                 }
                             } else {
@@ -4920,6 +5035,8 @@ internal fun ReaderScreen(
                                     color = bodyColor,
                                     linkColor = chatLinkColor(terminalBlue(sunlightMode)),
                                     imagePreviews = true,
+                                    matchHits = hits,
+                                    activeHit = active,
                                 )
                             }
                         }
@@ -4942,6 +5059,10 @@ internal fun ReaderScreen(
                             val run = visibleReaderBlocks.drop(index)
                                 .takeWhile { it.kind == TmuxText.ReaderBlockKind.PROSE }
                             val text = run.joinToString("\n\n") { it.text }
+                            val marked = run.map { part ->
+                                val (hits, active) = findFrame.next()
+                                Triple(part, hits, active)
+                            }
                             key(connection, blockKey) {
                                 if (unreadMessageKey == "block:${blockKey.hashCode()}") Text("New", color = MaterialTheme.colorScheme.primary)
                                 ReplyableBubble(
@@ -4954,14 +5075,15 @@ internal fun ReaderScreen(
                                     onMarkUnread = { onMarkUnreadFrom("block:${blockKey.hashCode()}") },
                                 ) {
                                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        run.forEach { part ->
-                                            ChatLinkText(part.text) { line ->
+                                        marked.forEach { (part, hits, active) ->
+                                            ChatLinkText(part.text) { line, start ->
                                                 Text(
-                                                    terminalLinks(line, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
+                                                    terminalLinks(line, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))).marking(start, hits, active),
                                                     fontFamily = chatFontFamily(),
                                                     fontSize = transcriptFontSize,
                                                     lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
                                                     color = chatTextColor(sunlightMode),
+                                                    modifier = Modifier.findPin(active != null),
                                                 )
                                             }
                                         }
@@ -4969,7 +5091,9 @@ internal fun ReaderScreen(
                                 }
                             }
                         }
-                        TmuxText.ReaderBlockKind.USER_PROMPT -> key(connection, blockKey) {
+                        TmuxText.ReaderBlockKind.USER_PROMPT -> {
+                            val (hits, active) = findFrame.next()
+                            key(connection, blockKey) {
                             if (unreadMessageKey == "block:${blockKey.hashCode()}") Text("New", color = MaterialTheme.colorScheme.primary)
                             ReplyableBubble(
                                 isUser = true,
@@ -4979,8 +5103,9 @@ internal fun ReaderScreen(
                                 gate = replyGate,
                                 sessionName = session.displayName,
                                 onMarkUnread = { onMarkUnreadFrom("block:${blockKey.hashCode()}") },
+                                modifier = Modifier.findPin(active != null),
                             ) {
-                                ChatLinkText(block.text) { line ->
+                                ChatLinkText(block.text) { line, start ->
                                     SkillMessageText(
                                         text = line,
                                         skills = reader.nativeSkills,
@@ -4989,17 +5114,24 @@ internal fun ReaderScreen(
                                         lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
                                         sunlight = sunlightMode,
                                         linkColor = chatLinkColor(terminalBlue(sunlightMode)),
+                                        matchBase = start,
+                                        matchHits = hits,
+                                        activeHit = active,
                                     )
                                 }
+                            }
                             }
                         }
                         TmuxText.ReaderBlockKind.CODE,
                         TmuxText.ReaderBlockKind.PROGRESS -> {
+                            val (hits, active) = findFrame.next()
                             ReaderCollapsibleBlock(
                                 block = block,
-                                expanded = blockKey in expandedReaderBlocks,
+                                expanded = blockKey in expandedReaderBlocks || active != null,
                                 fontScale = transcriptZoom,
                                 sunlightMode = sunlightMode,
+                                findHits = hits,
+                                activeHit = active,
                                 onToggle = {
                                     expandedReaderBlocks = if (blockKey in expandedReaderBlocks) {
                                         expandedReaderBlocks - blockKey
@@ -5024,6 +5156,8 @@ private fun ReaderCollapsibleBlock(
     fontScale: Float,
     sunlightMode: Boolean,
     onToggle: () -> Unit,
+    findHits: List<ChatFind.Hit> = emptyList(),
+    activeHit: ChatFind.Hit? = null,
 ) {
     val isCode = block.kind == TmuxText.ReaderBlockKind.CODE
     val lineCount = block.text.lineSequence().count()
@@ -5035,7 +5169,7 @@ private fun ReaderCollapsibleBlock(
         "$lineCount lines",
     ).joinToString(" · ")
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().findPin(activeHit != null),
         shape = chatShape(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -5075,7 +5209,7 @@ private fun ReaderCollapsibleBlock(
                 SelectionContainer {
                     if (isCode) {
                         Text(
-                            syntaxHighlightCode(block),
+                            syntaxHighlightCode(block).marking(0, findHits, activeHit),
                             modifier = Modifier.fillMaxWidth().padding(12.dp),
                             fontFamily = ReaderFontFamily,
                             fontSize = (10f * fontScale).sp,
@@ -5084,7 +5218,7 @@ private fun ReaderCollapsibleBlock(
                         )
                     } else {
                         Text(
-                            terminalLinks(block.text, sunlightMode),
+                            terminalLinks(block.text, sunlightMode).marking(0, findHits, activeHit),
                             modifier = Modifier.fillMaxWidth().padding(12.dp),
                             fontFamily = FontFamily.Default,
                             fontSize = chatFontSize((12f * fontScale).sp, fontScale),
@@ -5103,6 +5237,51 @@ internal fun isTransientProgress(value: String): Boolean = value.lineSequence().
     trimmed.isBlank() || listOf(
         "working", "running", "thinking", "reading", "searching", "esc to cancel",
     ).any { trimmed.startsWith(it, ignoreCase = true) }
+}
+
+private data class FallbackPiece(val text: String, val expandKey: String?)
+
+private class FindFrame(val hits: List<ChatFind.Hit>, val active: ChatFind.Hit?) {
+    private var index = 0
+    fun next(): Pair<List<ChatFind.Hit>, ChatFind.Hit?> {
+        val mine = hits.filter { it.message == index }
+        val current = active?.takeIf { it.message == index }
+        index++
+        return mine to current
+    }
+}
+
+private fun fallbackFindPieces(
+    transcript: List<TranscriptMessage>?,
+    blocks: List<TmuxText.ReaderBlock>,
+): List<FallbackPiece> {
+    val pieces = ArrayList<FallbackPiece>()
+    transcript?.forEach { message ->
+        pieces += FallbackPiece(ChatFind.display(message.role, message.text), null)
+    }
+    var index = 0
+    while (index < blocks.size) {
+        val block = blocks[index]
+        when (block.kind) {
+            TmuxText.ReaderBlockKind.PROSE -> {
+                if (index == 0 || blocks[index - 1].kind != TmuxText.ReaderBlockKind.PROSE) {
+                    blocks.drop(index).takeWhile { it.kind == TmuxText.ReaderBlockKind.PROSE }.forEach { part ->
+                        pieces += FallbackPiece(ChatMention.visible(part.text), null)
+                    }
+                }
+                index++
+            }
+            TmuxText.ReaderBlockKind.USER_PROMPT -> {
+                pieces += FallbackPiece(ChatMention.visible(block.text), null)
+                index++
+            }
+            else -> {
+                pieces += FallbackPiece(block.text, readerBlockKey(block))
+                index++
+            }
+        }
+    }
+    return pieces
 }
 
 private fun readerBlockKey(block: TmuxText.ReaderBlock): String = listOf(
