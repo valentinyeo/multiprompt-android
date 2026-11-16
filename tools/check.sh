@@ -7,7 +7,7 @@ gradle_run() {
 }
 
 source_checks() {
-  node --test tools/root-files.test.js tools/strip-comments.test.js tools/release-status.test.js tools/verify-published.test.mjs tools/workflow-inputs.test.js tools/pr-checks.test.js tools/release-notes/notes.test.mjs tools/baseline-profile.test.mjs tools/pstack-verifier.test.js tools/feature-coverage.test.js
+  node --test tools/root-files.test.js tools/strip-comments.test.js tools/release-status.test.js tools/verify-published.test.mjs tools/workflow-inputs.test.js tools/pr-checks.test.js tools/release-notes/notes.test.mjs tools/baseline-profile.test.mjs tools/pstack-verifier.test.js tools/feature-coverage.test.js tools/shared-link.test.mjs
   python3 -B tools/journey-actions/check.py
   python3 -B tools/journey-actions/action.test.py
   python3 -B tools/session-gestures/scroll.test.py
