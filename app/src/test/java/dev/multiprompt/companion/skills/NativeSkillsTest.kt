@@ -3,6 +3,7 @@ package dev.multiprompt.companion.skills
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NativeSkillsTest {
@@ -20,6 +21,46 @@ class NativeSkillsTest {
     @Test fun skipsRowsWithAnInvalidNameInsteadOfFailingTheWholeList() {
         val json = """[{"name":"bad command"},{"name":"review","description":"Check it"},{"description":"no name"},"text",{"name":"-x"},{"name":"qa:test"}]"""
         assertEquals(listOf(NativeSkill("qa:test", ""), NativeSkill("review", "Check it")), NativeSkills.parse(json))
+    }
+
+    @Test fun claudeCommandsRankClearFirstAndANameMatchBeatsADescription() {
+        for (name in listOf("clear", "compact", "model", "resume", "context")) {
+            assertTrue(NativeSkills.claudeCommands.single { it.name == name }.description.isNotBlank())
+        }
+        val typed = NativeSkills.menu(
+            listOf(NativeSkill("client", "A skill"), NativeSkill("paper", "Clear the log")),
+            "cl",
+        )
+        assertEquals("clear", typed.first().name)
+        assertTrue(typed.indexOfFirst { it.name == "client" } < typed.indexOfFirst { it.name == "paper" })
+        val order = NativeSkills.menu(emptyList(), "co").map { it.name }
+        assertEquals("code-review", order.first())
+        assertTrue(order.indexOf("color") < order.indexOf("compact"))
+        assertTrue(order.indexOf("compact") < order.indexOf("context"))
+        assertTrue(order.indexOf("context") < order.indexOf("copy"))
+        assertEquals(
+            "clear",
+            NativeSkills.menu(listOf(NativeSkill("clearly", "notes"), NativeSkill("notes", "clear the buffer")), "clear").first().name,
+        )
+        assertEquals(1, NativeSkills.menu(listOf(NativeSkill("clear", "user skill")), "cl").count { it.name == "clear" })
+        assertEquals(emptyList<NativeSkill>(), NativeSkills.menu(emptyList(), "zzzz"))
+    }
+
+    @Test fun menuRanksValentinModeBeforeDescriptionMatches() {
+        val sessionSkills = listOf(
+            NativeSkill("board-identity", "Set up Valentin's board login"),
+            NativeSkill("decisions", "Record Valentin's decisions"),
+            NativeSkill("design-lead", "Run Valentin's design role"),
+            NativeSkill("figma-design", "Design Valentin's apps in Figma"),
+            NativeSkill("valentin-mode", "Work in Valentin's style"),
+        )
+        assertEquals("valentin-mode", NativeSkills.menu(sessionSkills, "valen").first().name)
+    }
+
+    @Test fun bareSlashListsSessionSkillsBeforeClaudeCommands() {
+        val all = NativeSkills.menu(listOf(NativeSkill("review-native", "Review"), NativeSkill("personal-note", "Note")), "").map { it.name }
+        assertEquals(listOf("personal-note", "review-native"), all.take(2))
+        assertTrue("clear" in all)
     }
 
     @Test fun slashFiltersNameAndDescriptionWithoutChangingTheDraft() {
