@@ -5,7 +5,8 @@ from pathlib import Path
 
 import historical_control as control
 
-PAST = 'ee0cacbb67cdc39e76e5ed5273fdda232727c6a3'
+RUN_HEAD = 'ee0cacbb67cdc39e76e5ed5273fdda232727c6a3'
+MERGED = '50eb80bbcc560ee2813d0eb869ab2364663275a8'
 EXPECTED = 'PINNED_STRIP_MUST_NOT_SHOW'
 
 
@@ -29,7 +30,7 @@ class HistoricalControlTest(unittest.TestCase):
 
     def test_igsh_2306_pins_swap_is_rejected(self):
         text = subprocess.check_output(
-            ['git', 'show', f'{PAST}:tools/check-session-pins.sh'],
+            ['git', 'show', f'{MERGED}:tools/check-session-pins.sh'],
             text=True,
         )
         swaps = control.find_swaps(text, 'tools/check-session-pins.sh')
@@ -45,7 +46,7 @@ class HistoricalControlTest(unittest.TestCase):
         self.assertIn("ComposableFunction1<String, Unit>", log)
         self.assertIn("ComposableFunction2<String, Int, Unit>", log)
         self.assertIn('run 43716979907', log)
-        self.assertIn(PAST, log)
+        self.assertIn(RUN_HEAD, log)
         text, code = control.classify_log(log, EXPECTED)
         self.assertEqual(code, 0)
         self.assertIn('buildable=false launched=false assertionObserved=false', text)
