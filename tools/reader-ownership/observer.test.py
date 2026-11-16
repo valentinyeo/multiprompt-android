@@ -1,6 +1,7 @@
 import importlib.util
 import io
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -40,6 +41,21 @@ class ObserverTest(unittest.TestCase):
             observer.record("snapshot", "verify-session")
             observer.record("snapshot", "other")
             self.assertEqual(dict(history=1, snapshot=1), receipts.counts(observer.LOG, "verify-session"))
+
+    def test_deadline_observation_can_skip_idle_sleep_without_skipping_the_ui_check(self):
+        source = (ROOT.parents[1] / ".claude/skills/verify-multiprompt-android/scripts/drive.sh").read_text()
+        helper = source[source.index("wait_for_text() {"):source.index("\nfill() {")]
+        for interval, expected in [("", "1"), ("0", "0")]:
+            script = helper + f'''
+attempts=0
+select_node() {{ attempts=$((attempts + 1)); [[ "$attempts" == 2 ]]; }}
+dismiss_system_anr() {{ :; }}
+sleep() {{ printf 'wait=%s\\n' "$1"; }}
+wait_for_text reply {interval} || exit 1
+printf 'attempts=%s\\n' "$attempts"
+'''
+            result = subprocess.run(["bash", "-c", script], text=True, capture_output=True, check=True)
+            self.assertEqual(f"wait={expected}\nattempts=2\n", result.stdout)
 
     def test_hidden_gate_requires_positive_controls_and_zero_more_requests(self):
         for before, after in [(dict(history=0, snapshot=0), dict(history=0, snapshot=0)),

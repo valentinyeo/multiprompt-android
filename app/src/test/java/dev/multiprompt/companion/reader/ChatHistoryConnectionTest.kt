@@ -40,6 +40,7 @@ class ChatHistoryConnectionTest {
         cache.save(key, history)
         ChatHistoryConnection(repository(), host, identity, byteArrayOf(), cache, pollGate = ChatPollGate()).use { connection ->
             assertFalse(connection.state.value.loaded)
+            connection.pollGate.acquire()
             connection.start()
             val failed = withTimeout(10_000L) { connection.state.first { it.retrying } }
             assertTrue(failed.loaded)

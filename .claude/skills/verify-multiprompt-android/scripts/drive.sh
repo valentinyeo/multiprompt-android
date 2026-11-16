@@ -172,7 +172,7 @@ wait_for_text() {
     for attempt in {1..30}; do
         if select_node contains "$1" >/dev/null 2>&1; then return; fi
         dismiss_system_anr
-        sleep 1
+        sleep "${2:-1}"
     done
     printf 'Timed out waiting for %s\n' "$1" >&2
     return 1
@@ -1363,7 +1363,7 @@ if [[ "$feature" == chat-codex.md ]]; then
         reader_counts "$name" "$session" hidden-after
         python3 tools/reader-ownership/receipts.py hidden "$EVIDENCE/$name-hidden-before.json" "$EVIDENCE/$name-hidden-after.json" | tee "$EVIDENCE/$name-hidden-result.txt"
         adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
-        wait_for_text "CODEX_REPLY_${name}_$marker"
+        wait_for_text "CODEX_REPLY_${name}_$marker" 0
         shot "$name-reader-resumed"
         reader_counts "$name" "$session" resumed
         python3 tools/reader-ownership/receipts.py resumed "$EVIDENCE/$name-hidden-after.json" "$EVIDENCE/$name-resumed.json" | tee "$EVIDENCE/$name-resumed-result.txt"
@@ -1391,7 +1391,7 @@ if [[ "$feature" == chat-codex.md ]]; then
         fill "Message $destination" PHONE_CODEX
         tap_desc 'Send prompt'
         started=$(date +%s%N)
-        wait_for_text "CODEX_REPLY_${mode}_PHONE_CODEX"
+        wait_for_text "CODEX_REPLY_${mode}_PHONE_CODEX" 0
         finished=$(date +%s%N)
         sudo grep -Fx 'VERIFY_RECEIVED:PHONE_CODEX' "/home/verifyssh/$receipt" > "$EVIDENCE/$mode-receipt.txt"
         published=$(sudo cat "/home/verifyssh/$mode-reply-ns.txt")
