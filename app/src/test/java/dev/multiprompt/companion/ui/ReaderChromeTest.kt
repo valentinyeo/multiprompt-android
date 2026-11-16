@@ -257,6 +257,7 @@ class ReaderChromeTest {
         compose.onNodeWithContentDescription("Send prompt").performClick()
         compose.runOnIdle { assertEquals("Will send when the chat reconnects", ShadowToast.getTextOfLatestToast()) }
         compose.onNode(hasSetTextAction()).assertTextEquals("offline hello")
+        compose.onNodeWithText(dev.multiprompt.companion.reader.PendingPrompts.WAITING_LABEL).assertIsDisplayed()
         compose.onNodeWithContentDescription("Send prompt").performClick()
         compose.runOnIdle {
             val entry = connection.pendingPrompts.state.value.single()

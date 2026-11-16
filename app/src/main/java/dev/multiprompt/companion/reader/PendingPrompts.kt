@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.asStateFlow
 class PendingPrompts {
     data class Entry(val id: String, val text: String, val issuing: Boolean = false, val error: String? = null) {
         fun message() = ChatHistoryMessage("@pending:$id", "user", text, "", 0, 0,
-            requestId = id, pending = error == null, delivery = if (error == null) "Waiting for chat connection" else ChatHistory.NOT_SENT)
+            requestId = id, pending = error == null, delivery = if (error == null) WAITING_LABEL else ChatHistory.NOT_SENT)
     }
 
     private val _state = MutableStateFlow<List<Entry>>(emptyList())
@@ -52,6 +52,8 @@ class PendingPrompts {
     }
 
     companion object {
+        const val WAITING_LABEL = "Waiting for chat connection"
+
         fun retryable(reason: String): Boolean = reason in setOf("Chat is disconnected", "Chat is not ready", "Chat is catching up")
     }
 }

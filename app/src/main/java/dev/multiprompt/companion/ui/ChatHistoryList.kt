@@ -63,6 +63,7 @@ import dev.multiprompt.companion.reader.ChatHistory
 import dev.multiprompt.companion.reader.MessageActionResult
 import dev.multiprompt.companion.reader.MessageProtocol
 import dev.multiprompt.companion.reader.PromptAdmission
+import dev.multiprompt.companion.reader.PendingPrompts
 import dev.multiprompt.companion.reader.QueuedEdit
 
 private data class ReplyJump(val message: ChatHistoryMessage, val reply: ReplyQuote.Reply)
@@ -399,7 +400,7 @@ internal fun ChatHistoryList(
                     onReaction = if (agent == AgentKind.CLAUDE && message.role == "assistant" && onReaction != null) {
                         { emoji -> onReaction(message, emoji) }
                     } else null,
-                    delivery = message.delivery?.takeIf { it in FAILURE_LABELS },
+                    delivery = message.delivery?.takeIf { it in FAILURE_LABELS || it == PendingPrompts.WAITING_LABEL },
                     onCancel = if (message.role == "user" && (message.delivery == "Queued" || message.cancellable) && message.requestId.isNotEmpty() && onCancelPending != null) {
                         { onCancelPending(message) }
                     } else null,
@@ -492,7 +493,9 @@ private fun HistoryBubble(
             onReply = { onReply(it, isUser) }, gate = gate,
             messageId = messageId, sessionName = sessionName, onMarkUnread = onMarkUnread,
             highlighted = highlighted, reactions = reactions, onReaction = onReaction, onCancel = onCancel) {
-            if (delivery != null) {
+            if (delivery == PendingPrompts.WAITING_LABEL) {
+                KitMatchCount(delivery)
+            } else if (delivery != null) {
                 Text(delivery, fontFamily = chatFontFamily(), fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp,
                     color = chatHintColor(sunlight))
             }
