@@ -460,6 +460,105 @@ if ! wait_for_text verify-session; then
 fi
 shot sessions
 
+if [[ "$feature" == session-favorite-dot.md ]]; then
+    [[ "$package" == dev.multiprompt.companion.debug ]]
+    wait_for_text verify-keep
+    wait_dot() {
+        local mode=$1 attempt
+        for attempt in {1..30}; do
+            dump_ui
+            if python3 "$scripts/favorite-dot.py" "$mode" "$EVIDENCE/current.xml"; then return 0; fi
+            sleep 1
+        done
+        printf 'Timed out waiting for favorite dot mode %s\n' "$mode" >&2
+        return 1
+    }
+    prove_dot() {
+        local mode=$1 name=$2
+        wait_dot "$mode"
+        shot "$name"
+        python3 "$scripts/favorite-dot.py" "$mode" "$EVIDENCE/$(printf '%02d' "$step")-$name.xml" | tee "$EVIDENCE/$name.json"
+    }
+    open_session_menu() {
+        local label=$1 row_x row_y
+        read -r row_x row_y <<< "$(select_node text verify-session)"
+        adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
+        wait_for_text "$label"
+    }
+    prove_dot plain favorite-dot-before
+    python3 -m http.server 8788 > "$FIXTURE/offline-proxy.log" 2>&1 &
+    echo "$!" > "$FIXTURE/offline-proxy.pid"
+    adb shell settings put global http_proxy 10.0.2.2:8788
+    [[ "$(adb shell settings get global http_proxy | tr -d '\r')" == 10.0.2.2:8788 ]]
+    python3 - <<'PYPROXY'
+import socket
+import time
+for attempt in range(20):
+    try:
+        with socket.create_connection(("127.0.0.1", 8788), timeout=1) as connection:
+            connection.sendall(b"CONNECT fixture.invalid:443 HTTP/1.1\r\nHost: fixture.invalid\r\n\r\n")
+            assert b" 501 " in connection.recv(1024).split(b"\r\n", 1)[0]
+        break
+    except OSError:
+        if attempt == 19:
+            raise
+        time.sleep(0.1)
+PYPROXY
+    adb shell am force-stop "$package"
+    adb shell am instrument -w -e class dev.multiprompt.companion.account.FavoriteDotSeedTest#seedsOfflineFavoriteLayout \
+        -e mode favorite-dot-seed \
+        "$package.test/androidx.test.runner.AndroidJUnitRunner" | tr -d '\r' > "$EVIDENCE/favorite-dot-seed.txt"
+    grep -F 'OK (1 test)' "$EVIDENCE/favorite-dot-seed.txt"
+    if grep -F 'FAILURES' "$EVIDENCE/favorite-dot-seed.txt"; then
+        printf 'Favorite dot seed failed\n' >&2
+        exit 1
+    fi
+    relaunch_app
+    wait_for_text verify-session
+    wait_for_text verify-keep
+    prove_dot starred favorite-dot-all
+    tap_desc 'Search sessions'
+    fill 'Search all sessions' verify-session
+    wait_for_text '1 result across all splits'
+    prove_dot search favorite-dot-search
+    tap_desc 'Close session search'
+    wait_for_absence 'Search all sessions'
+    tap_text Fixture
+    wait_for_text verify-session
+    wait_for_text verify-keep
+    prove_dot starred favorite-dot-workspace
+    tap_text Favorites
+    wait_for_text verify-session
+    prove_dot favorites favorite-dot-favorites
+    open_session_menu Unfavorite
+    tap_text Unfavorite
+    tap_text All
+    wait_for_text verify-session
+    wait_for_text verify-keep
+    prove_dot plain favorite-dot-unstarred
+    tap_text Favorites
+    wait_for_text 'No starred sessions'
+    wait_for_absence verify-session
+    tap_text All
+    open_session_menu Favorite
+    tap_text Favorite
+    prove_dot starred favorite-dot-restarred
+    tap_text Favorites
+    wait_for_text verify-session
+    prove_dot favorites favorite-dot-favorites-again
+    if [[ -f /home/verifyssh/receipts.txt ]] && sudo grep -F 'VERIFY_RECEIVED:' /home/verifyssh/receipts.txt; then
+        printf 'Starred-dot journey sent text to the host\n' >&2
+        exit 1
+    fi
+    if [[ -f /home/verifyssh/keep-receipts.txt ]] && sudo grep -F 'VERIFY_RECEIVED:' /home/verifyssh/keep-receipts.txt; then
+        printf 'Starred-dot journey sent text to the host\n' >&2
+        exit 1
+    fi
+    sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
+    printf 'FAVORITE_DOT_OK\n' | tee "$EVIDENCE/favorite-dot-result.txt"
+    exit 0
+fi
+
 if [[ "$feature" == settings-navigation.md ]]; then
     tap_desc 'Session list actions'
     tap_text Settings

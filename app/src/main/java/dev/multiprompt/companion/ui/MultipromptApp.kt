@@ -2699,7 +2699,7 @@ private fun SessionCard(
                     }
                 }
                 if (RowDotRule.pick(unread, starred, inFavoritesView) == RowDot.YELLOW) {
-                    FavoriteDot(Modifier.testTag("Session favorite dot"))
+                    FavoriteDot(Modifier.testTag("Session favorite dot").semantics { contentDescription = "Session favorite dot" })
                 }
             }
             Box(Modifier.align(Alignment.TopEnd)) {
