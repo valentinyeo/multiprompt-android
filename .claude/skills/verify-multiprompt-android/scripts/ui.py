@@ -10,7 +10,7 @@ parents = {child: parent for parent in root.iter() for child in parent}
 matches = []
 package = os.environ.get("VERIFY_PACKAGE", "dev.multiprompt.companion.debug")
 for node in root.iter("node"):
-    if mode == "scroll-back" and node.get("scrollable") == "true" and node.get("package") == package:
+    if mode == "scroll-back" and node.get("scrollable") == "true" and node.get("package") == package and node.get("class") != "android.widget.HorizontalScrollView":
         matches.append(node)
     elif mode in ("text", "absent", "version") and value == node.get("text"):
         matches.append(node)
