@@ -1,39 +1,39 @@
 {
   "snippets.save-reuse-delete": {
     "sourcePr": 376,
-    "cleanupTicket": "SOFT-2531"
+    "cleanupTicket": "SOFT-2537"
   },
   "ai.switch": {
     "sourcePr": 373,
-    "cleanupTicket": "SOFT-2531"
+    "cleanupTicket": "SOFT-2538"
   },
   "pi.model-switch": {
     "sourcePr": 374,
-    "cleanupTicket": "SOFT-2531"
+    "cleanupTicket": "SOFT-2539"
   },
   "chat-search.open": {
     "sourcePr": 380,
-    "cleanupTicket": "SOFT-2531"
+    "cleanupTicket": "SOFT-2540"
   },
   "claude.remote-control": {
     "sourcePr": 366,
-    "cleanupTicket": "SOFT-2531"
+    "cleanupTicket": "SOFT-2541"
   },
   "ai.usage": {
     "sourcePr": 377,
-    "cleanupTicket": "SOFT-2531"
+    "cleanupTicket": "SOFT-2542"
   },
   "skills.pills": {
     "sourcePr": 378,
-    "cleanupTicket": "SOFT-2531"
+    "cleanupTicket": "SOFT-2543"
   },
   "chat-table.expand": {
     "sourcePr": 379,
-    "cleanupTicket": "SOFT-2531"
+    "cleanupTicket": "SOFT-2544"
   },
   "claude.clear-ranking": {
     "sourcePr": 381,
-    "cleanupTicket": "SOFT-2531"
+    "cleanupTicket": "SOFT-2545"
   },
   "legacy.igsh-449": {
     "sourceTicket": "IGSH-449",
