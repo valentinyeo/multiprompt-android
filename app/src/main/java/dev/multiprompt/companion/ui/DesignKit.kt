@@ -130,6 +130,18 @@ internal fun KitTitlePill(text: String, modifier: Modifier = Modifier, onClick: 
 }
 
 @Composable
+internal fun KitSkillPill(text: String, modifier: Modifier = Modifier, style: TextStyle = Kit.Body) {
+    Text(
+        text,
+        modifier.kitSurface().padding(horizontal = 8.dp, vertical = 1.dp),
+        style = style,
+        color = Kit.Text,
+        maxLines = 1,
+        softWrap = false,
+    )
+}
+
+@Composable
 internal fun KitPrimaryButton(
     text: String,
     onClick: () -> Unit,
