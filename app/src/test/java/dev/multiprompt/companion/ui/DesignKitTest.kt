@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -130,6 +131,21 @@ class DesignKitTest {
     }
 
     @Test
+    fun expandButtonIsASmallRoundSurfaceControl() {
+        var clicks = 0
+        compose.setContent {
+            Page { KitExpandButton(onClick = { clicks++ }, modifier = Modifier.testTag("expand")) }
+        }
+        val bitmap = capture("expand")
+        assertEquals(32, bitmap.width)
+        assertEquals(32, bitmap.height)
+        assertPixel(bitmap, 4, bitmap.height / 2, Kit.Surface, "expand fill")
+        compose.onNodeWithTag("expand").performClick()
+        compose.runOnIdle { assertEquals(1, clicks) }
+        compose.onNodeWithContentDescription("Expand table").assertExists()
+    }
+
+    @Test
     fun toggleFlipsAndShowsTheSelectedFill() {
         var on by mutableStateOf(false)
         compose.setContent {
@@ -210,6 +226,25 @@ class DesignKitTest {
     }
 
     @Test
+    fun skillPillUsesTheSurfaceAndOutline() {
+        compose.setContent {
+            Page {
+                KitSkillPill("/ship", Modifier.testTag("skill"))
+                KitSkillPill("/other", Modifier.testTag("skill-other"), marked = true)
+                KitSkillPill("/now", Modifier.testTag("skill-current"), current = true)
+            }
+        }
+        val bitmap = capture("skill")
+        assertPixel(bitmap, bitmap.width / 2, 0, Kit.Outline, "skill outline")
+        assertPixel(bitmap, 4, bitmap.height / 2, Kit.Surface, "skill fill")
+        compose.onNodeWithText("/ship").assertExists()
+        val other = capture("skill-other")
+        assertPixel(other, 4, other.height / 2, Kit.Outline, "other skill match")
+        val current = capture("skill-current")
+        assertPixel(current, 4, current.height / 2, Kit.Text, "current skill match")
+    }
+
+    @Test
     fun unreadBadgeIsTheOnlyBlue() {
         compose.setContent {
             Page { KitUnreadBadge(11, Modifier.testTag("badge")) }
@@ -251,6 +286,65 @@ class DesignKitTest {
         assertFalse(Integer.toHexString(dimmed.getPixel(dimmed.width - 6, dimmed.height / 2)) == Integer.toHexString(Kit.Surface.toArgb()))
         compose.onNodeWithTag("idle").performClick()
         compose.runOnIdle { assertEquals(1, clicks) }
+    }
+
+    @Test
+    fun searchBoxCountAndMatchMarkerUseKitColours() {
+        compose.setContent {
+            Page {
+                KitSearchBox("", {}, Modifier.fillMaxWidth().testTag("search-box"), placeholder = "Search")
+                KitMatchCount("2 of 4", Modifier.testTag("match-count"))
+                KitMatchMarker("match", current = false, Modifier.testTag("mark-other"))
+                KitMatchMarker("match", current = true, Modifier.testTag("mark-current"))
+            }
+        }
+        val box = capture("search-box")
+        assertPixel(box, 8, box.height / 2, Kit.Surface, "search fill")
+        assertPixel(box, box.width / 2, 0, Kit.Outline, "search outline")
+        compose.onNodeWithText("2 of 4").assertExists()
+        val other = capture("mark-other")
+        assertPixel(other, 2, other.height / 2, Kit.Outline, "other match")
+        val current = capture("mark-current")
+        assertPixel(current, 2, current.height / 2, Kit.Text, "current match")
+    }
+
+    @Test
+    fun usageBarFillsWithTextAndPlanBlockSitsOnTheSurface() {
+        compose.setContent {
+            Page {
+                KitUsageBar(0.5f, Modifier.testTag("usage"))
+                KitUsageBar(null, Modifier.testTag("usage-empty"))
+                KitPlanBlock(
+                    name = "Claude",
+                    percent = "35%",
+                    fraction = 0.35f,
+                    paceLine = "BEHIND | RESETS THU 21:13, IN 1D 23H",
+                    detailLine = "WEEK 35% | 5H 4% | EMPTY IN 40H",
+                    modifier = Modifier.testTag("plan"),
+                )
+            }
+        }
+        val bar = capture("usage")
+        assertPixel(bar, bar.width / 4, bar.height / 2, Kit.Text, "usage fill")
+        assertPixel(bar, bar.width * 3 / 4, bar.height / 2, Kit.Outline, "usage track")
+        val empty = capture("usage-empty")
+        assertPixel(empty, empty.width / 4, empty.height / 2, Kit.Outline, "empty usage track")
+        val plan = capture("plan")
+        assertPixel(plan, 20, plan.height - 6, Kit.Surface, "plan fill")
+        compose.onNodeWithText("Claude").assertExists()
+        compose.onNodeWithText("BEHIND | RESETS THU 21:13, IN 1D 23H").assertExists()
+        compose.onNodeWithText("AHEAD | RESETS THU 21:13, IN 1D 23H").assertDoesNotExist()
+    }
+
+    @Test
+    fun savedNoteIsASurfacePillWithAnOutline() {
+        compose.setContent {
+            Page { KitSavedNote(Modifier.testTag("saved"), fade = false) }
+        }
+        val bitmap = capture("saved")
+        assertPixel(bitmap, 14, bitmap.height / 2, Kit.Surface, "saved fill")
+        assertPixel(bitmap, bitmap.width / 2, 0, Kit.Outline, "saved outline")
+        compose.onNodeWithText("Saved").assertExists()
     }
 
     @Test
