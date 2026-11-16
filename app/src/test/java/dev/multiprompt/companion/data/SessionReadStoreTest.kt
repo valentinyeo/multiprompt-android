@@ -31,4 +31,26 @@ class SessionReadStoreTest {
             SessionReadStore.shouldRemainArchived(101, 100, null, 101, needsAttention = false),
         )
     }
+
+    @Test
+    fun draftKeysListOnlySessionsWithUnsentText() {
+        val stored = mapOf(
+            "composer_draft::host::alpha" to "half a message",
+            "composer_draft::host::beta" to "   ",
+            "composer_draft::host::gamma" to "",
+            "composer_draft::host::delta" to 7,
+            "host::epsilon" to "not a draft",
+            "unread_only" to "text",
+        )
+        assertEquals(setOf("host::alpha"), SessionReadStore.draftKeysFrom(stored))
+    }
+
+    @Test
+    fun draftKeysAreEmptyOnceTheTextIsClearedOrSent() {
+        assertEquals(emptySet<String>(), SessionReadStore.draftKeysFrom(emptyMap<String, Any>()))
+        assertEquals(
+            emptySet<String>(),
+            SessionReadStore.draftKeysFrom(mapOf("composer_draft::host::alpha" to "\n")),
+        )
+    }
 }

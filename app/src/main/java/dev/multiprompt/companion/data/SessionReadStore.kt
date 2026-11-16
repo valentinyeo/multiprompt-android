@@ -1,6 +1,7 @@
 package dev.multiprompt.companion.data
 
 import android.content.Context
+import android.content.SharedPreferences
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.ui.AppTheme
 import dev.multiprompt.companion.ssh.TmuxText
@@ -285,6 +286,16 @@ class SessionReadStore(context: Context) {
         editor.apply()
     }
 
+    fun draftKeys(): Set<String> = draftKeysFrom(preferences.all)
+
+    fun observeDrafts(onChange: () -> Unit): () -> Unit {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, changed ->
+            if (changed == null || changed.startsWith(DRAFT_PREFIX)) onChange()
+        }
+        preferences.registerOnSharedPreferenceChangeListener(listener)
+        return { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
     fun sessionBucket(): String? = preferences.getString(SESSION_BUCKET, null)
 
     fun setSessionBucket(bucket: String) {
@@ -356,6 +367,15 @@ class SessionReadStore(context: Context) {
         private const val MAX_FONT_SCALE = 5f
 
         fun key(hostId: String, sessionName: String): String = "$hostId::$sessionName"
+
+        fun draftKeysFrom(stored: Map<String, *>): Set<String> =
+            stored.mapNotNull { (prefKey, value) ->
+                if (prefKey.startsWith(DRAFT_PREFIX) && value is String && value.isNotBlank()) {
+                    prefKey.removePrefix(DRAFT_PREFIX)
+                } else {
+                    null
+                }
+            }.toSet()
 
         private fun archiveKey(hostId: String, sessionName: String): String =
             "$ARCHIVE_PREFIX${key(hostId, sessionName)}"
