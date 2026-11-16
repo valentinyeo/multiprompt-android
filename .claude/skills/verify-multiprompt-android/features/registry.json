@@ -189,6 +189,20 @@
         "hosts.journey"
       ]
     },
+    "inbox-pin.md": {
+      "name": "Pin a chat to the top",
+      "description": "long-press Pin to top moves the lower chat above the other, keeps it there after relaunch, and Unpin restores the old order.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "inbox.pin"
+      ]
+    },
     "launcher-icon.md": {
       "name": "Launcher icon",
       "description": "the robot launcher icon in the emulator's app drawer, with the themed-icon layer present in the built APK.",
@@ -587,6 +601,14 @@
       "sideEffect": false,
       "match": [
         "observeDrafts|Session draft"
+      ]
+    },
+    "inbox.pin": {
+      "description": "Pin to top moves that chat above the others and Unpin puts it back, including after the app restarts.",
+      "journey": "inbox-pin.md",
+      "sideEffect": false,
+      "match": [
+        "SessionPins|setPinnedToTop|Pin to top"
       ]
     },
     "inbox.summaries": {

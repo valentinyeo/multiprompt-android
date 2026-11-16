@@ -34,6 +34,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `hosts-retired.journey`. Runner: `verify.yml` (debug).
 - [Hosts](hosts.md): add VPS, import encrypted-at-rest key, compare/trust and retain the host identity.
   - Outcomes: `hosts.journey`. Runner: `verify.yml` (debug).
+- [Pin a chat to the top](inbox-pin.md): long-press Pin to top moves the lower chat above the other, keeps it there after relaunch, and Unpin restores the old order.
+  - Outcomes: `inbox.pin`. Runner: `verify.yml` (debug).
 - [Launcher icon](launcher-icon.md): the robot launcher icon in the emulator's app drawer, with the themed-icon layer present in the built APK.
   - Outcomes: `launcher-icon.journey`. Runner: `verify.yml` (debug).
 - [Native Claude controls](native-skills.md): slash filtering, shared plus entry, actual session model/effort and retained image picker.

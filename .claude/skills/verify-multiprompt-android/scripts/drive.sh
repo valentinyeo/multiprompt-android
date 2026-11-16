@@ -779,6 +779,72 @@ PYINFO
     exit 0
 fi
 
+if [[ "$feature" == inbox-pin.md ]]; then
+    wait_for_text verify-session
+    wait_for_text verify-other
+    dump_ui
+    order=$(python3 "$scripts/pin-order.py" order "$EVIDENCE/current.xml")
+    read -r top_key top_name bottom_key bottom_name <<< "$order"
+    [[ "$top_key" == top && "$bottom_key" == bottom && "$top_name" != "$bottom_name" ]]
+    shot inbox-before-pin
+    order=$(python3 "$scripts/pin-order.py" order "$EVIDENCE/$(printf '%02d' "$step")-inbox-before-pin.xml")
+    read -r shot_top_key shot_top_name shot_bottom_key shot_bottom_name <<< "$order"
+    [[ "$shot_top_name" == "$top_name" && "$shot_bottom_name" == "$bottom_name" ]]
+    row=$(select_node text "$bottom_name")
+    read -r row_x row_y <<< "$row"
+    adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
+    wait_for_text 'Pin to top'
+    shot pin-menu
+    tap_text 'Pin to top'
+    pinned=0
+    for attempt in {1..30}; do
+        dump_ui
+        if python3 "$scripts/pin-order.py" above "$EVIDENCE/current.xml" "$bottom_name"; then
+            pinned=1
+            break
+        fi
+        sleep 1
+    done
+    [[ "$pinned" == 1 ]]
+    shot inbox-pinned
+    python3 "$scripts/pin-order.py" above "$EVIDENCE/$(printf '%02d' "$step")-inbox-pinned.xml" "$bottom_name"
+    relaunch_app
+    wait_for_text verify-session
+    wait_for_text verify-other
+    dump_ui
+    python3 "$scripts/pin-order.py" above "$EVIDENCE/current.xml" "$bottom_name"
+    shot inbox-pinned-relaunch
+    python3 "$scripts/pin-order.py" above "$EVIDENCE/$(printf '%02d' "$step")-inbox-pinned-relaunch.xml" "$bottom_name"
+    row=$(select_node text "$bottom_name")
+    read -r row_x row_y <<< "$row"
+    adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
+    wait_for_text Unpin
+    shot unpin-menu
+    tap_text Unpin
+    restored=0
+    for attempt in {1..30}; do
+        dump_ui
+        if python3 "$scripts/pin-order.py" same "$EVIDENCE/current.xml" "$top_name" "$bottom_name"; then
+            restored=1
+            break
+        fi
+        sleep 1
+    done
+    [[ "$restored" == 1 ]]
+    shot inbox-unpinned
+    python3 "$scripts/pin-order.py" same "$EVIDENCE/$(printf '%02d' "$step")-inbox-unpinned.xml" "$top_name" "$bottom_name"
+    if sudo test -r /home/verifyssh/receipts.txt && sudo grep -F 'VERIFY_RECEIVED:' /home/verifyssh/receipts.txt; then
+        printf 'Pin journey sent a prompt\n' >&2
+        exit 1
+    fi
+    if sudo test -r /home/verifyssh/other-receipts.txt && sudo grep -F 'VERIFY_RECEIVED:' /home/verifyssh/other-receipts.txt; then
+        printf 'Pin journey sent a prompt\n' >&2
+        exit 1
+    fi
+    sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
+    printf 'INBOX_PIN_OK\n'
+    exit 0
+fi
 if [[ "$feature" == session-drafts.md ]]; then
     wait_for_text 'Inbox preview stays.'
     python3 "$scripts/draft-label.py" absent "$EVIDENCE/current.xml"

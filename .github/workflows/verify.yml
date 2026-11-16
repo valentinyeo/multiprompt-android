@@ -89,6 +89,7 @@ on:
           - host-changed-key.md
           - hosts-retired.md
           - hosts.md
+          - inbox-pin.md
           - launcher-icon.md
           - native-skills.md
           - robot-faces.md
