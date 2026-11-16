@@ -1,0 +1,8 @@
+run 43716979907
+commit ee0cacbb67cdc39e76e5ed5273fdda232727c6a3
+pr 380
+e: file:///home/runner/work/multiprompt-android/multiprompt-android/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4143:60 Argument type mismatch: actual type is 'ComposableFunction1<String, Unit>', but 'ComposableFunction2<String, Int, Unit>' was expected.
+e: file:///home/runner/work/multiprompt-android/multiprompt-android/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4194:69 Argument type mismatch: actual type is 'ComposableFunction1<String, Unit>', but 'ComposableFunction2<String, Int, Unit>' was expected.
+e: file:///home/runner/work/multiprompt-android/multiprompt-android/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4219:58 Argument type mismatch: actual type is 'ComposableFunction1<String, Unit>', but 'ComposableFunction2<String, Int, Unit>' was expected.
+* What went wrong:
+> Compilation error. See log for more details
