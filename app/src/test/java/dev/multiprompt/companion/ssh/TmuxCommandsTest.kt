@@ -13,6 +13,11 @@ import java.security.MessageDigest
 
 class TmuxCommandsTest {
     @Test
+    fun tokenLadderStatusIsAFixedCommand() {
+        assertEquals("cat ~/.local/state/token-ladder/status.json", TmuxCommands.tokenLadderStatus())
+    }
+
+    @Test
     fun nativeSkillsQuotesTheSessionAndTheWorkingDirectory() {
         val prefix = "python3 -c 'import sys;s=sys.stdin.buffer.read().decode();" +
             "exec(compile(s,\"<native-skills>\",\"exec\"),{\"__name__\":\"__main__\",\"NATIVE_SKILLS_SOURCE\":s})'"

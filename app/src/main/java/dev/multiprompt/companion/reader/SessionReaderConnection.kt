@@ -116,6 +116,9 @@ class SessionReaderConnection(
     private var streamJob: Job? = null
     private var actionJob: Job? = null
     private val skillsRunning = AtomicBoolean(false)
+    private val piModelsRunning = AtomicBoolean(false)
+    private val _piModels = MutableStateFlow(PiModelList())
+    val piModels: StateFlow<PiModelList> = _piModels.asStateFlow()
 
     private var historyConnection: ChatHistoryConnection? = null
     private var historyIdentity: ChatHistoryProtocol.Identity? = null
@@ -226,6 +229,32 @@ class SessionReaderConnection(
         }
     }
 
+    fun loadPiModels() {
+        loadPiModels { repository.piModels(host) }
+    }
+
+    internal fun loadPiModels(fetch: suspend () -> List<PiModel>) {
+        if (agent != AgentKind.PI || !piModelsRunning.compareAndSet(false, true)) return
+        _piModels.update { it.copy(loading = true, error = null) }
+        scope.launch {
+            try {
+                val models = fetch()
+                _piModels.value = PiModelList(models, error = if (models.isEmpty()) PiModels.EMPTY else null)
+            } catch (_: TimeoutCancellationException) {
+                _piModels.update { it.copy(loading = false, error = PiModels.FAILED) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _piModels.update { it.copy(loading = false, error = PiModels.FAILED) }
+            } finally {
+                piModelsRunning.set(false)
+            }
+        }
+    }
+
+    suspend fun changePiModel(model: PiModel): MessageActionResult =
+        historyConnection?.changePiModel(model) ?: MessageActionResult.Rejected("Chat is not ready")
+
     suspend fun sendPrompt(text: String): PromptAdmission {
         if (sharedMessages) {
             return historyConnection?.submit(text) ?: PromptAdmission.Rejected("Chat is not ready")
@@ -277,6 +306,26 @@ class SessionReaderConnection(
         val provider = ChatHistoryProtocol.hostedProvider(agent, hostSessionId)
         if (!dev.multiprompt.companion.reader.FreshStart.supported(provider, hostSessionId)) return false
         return requests.trySend(Request.FreshStart(requireNotNull(provider), hostSessionId)).isSuccess
+    }
+
+    suspend fun switchAi(to: String): SwitchAi.Outcome {
+        val provider = ChatHistoryProtocol.hostedProvider(agent, hostSessionId)
+        if (!SwitchAi.supported(provider, hostSessionId) || to == provider || SwitchAi.TARGETS.none { it.provider == to }) {
+            return SwitchAi.Outcome.Failed("Switch AI is not available for this chat")
+        }
+        return try {
+            withTimeout(SWITCH_TIMEOUT_MS) {
+                withFreshClient { client ->
+                    repository.switchAi(client, historyScript, requireNotNull(provider), hostSessionId, to)
+                }
+            }
+        } catch (timeout: TimeoutCancellationException) {
+            SwitchAi.Outcome.Unknown
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (throwable: Throwable) {
+            SwitchAi.Outcome.Failed(throwable.message ?: SwitchAi.NO_ANSWER)
+        }
     }
 
     fun interrupt() {
@@ -603,6 +652,7 @@ class SessionReaderConnection(
     private companion object {
         const val CONNECT_TIMEOUT_MS = 20_000L
         const val REQUEST_TIMEOUT_MS = 20_000L
+        const val SWITCH_TIMEOUT_MS = 75_000L
         const val RECONNECT_DELAY_MS = 3_000L
         const val REUSE_FIRST_BYTES_MS = 2_000L
         const val SENT_PROMPT_MEMORY = 3

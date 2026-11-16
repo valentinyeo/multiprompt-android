@@ -79,6 +79,8 @@ object TmuxCommands {
             "if [ -f \"\$mp_dir/eta-log.jsonl\" ]; then " +
             "tail -c 65536 \"\$mp_dir/eta-log.jsonl\" | od -An -v -tx1 | tr -d ' \\n'; fi"
 
+    fun tokenLadderStatus(): String = "cat ~/.local/state/token-ladder/status.json"
+
     fun capture(sessionName: String): String = captureCommand(target(sessionName))
 
     private fun captureCommand(target: String): String =

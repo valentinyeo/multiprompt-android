@@ -1,0 +1,126 @@
+{
+  "snippets.save-reuse-delete": {
+    "sourcePr": 376,
+    "cleanupTicket": "SOFT-2531"
+  },
+  "ai.switch": {
+    "sourcePr": 373,
+    "cleanupTicket": "SOFT-2531"
+  },
+  "pi.model-switch": {
+    "sourcePr": 374,
+    "cleanupTicket": "SOFT-2531"
+  },
+  "chat-search.open": {
+    "sourcePr": 380,
+    "cleanupTicket": "SOFT-2531"
+  },
+  "claude.remote-control": {
+    "sourcePr": 366,
+    "cleanupTicket": "SOFT-2531"
+  },
+  "ai.usage": {
+    "sourcePr": 377,
+    "cleanupTicket": "SOFT-2531"
+  },
+  "skills.pills": {
+    "sourcePr": 378,
+    "cleanupTicket": "SOFT-2531"
+  },
+  "chat-table.expand": {
+    "sourcePr": 379,
+    "cleanupTicket": "SOFT-2531"
+  },
+  "claude.clear-ranking": {
+    "sourcePr": 381,
+    "cleanupTicket": "SOFT-2531"
+  },
+  "legacy.igsh-449": {
+    "sourceTicket": "IGSH-449",
+    "cleanupTicket": "IGSH-449"
+  },
+  "legacy.igsh-429": {
+    "sourceTicket": "IGSH-429",
+    "cleanupTicket": "IGSH-429"
+  },
+  "legacy.igsh-422": {
+    "sourceTicket": "IGSH-422",
+    "cleanupTicket": "IGSH-422"
+  },
+  "legacy.igsh-432": {
+    "sourceTicket": "IGSH-432",
+    "cleanupTicket": "IGSH-432"
+  },
+  "legacy.igsh-434": {
+    "sourceTicket": "IGSH-434",
+    "cleanupTicket": "IGSH-434"
+  },
+  "legacy.igsh-423": {
+    "sourceTicket": "IGSH-423",
+    "cleanupTicket": "IGSH-423"
+  },
+  "legacy.igsh-415": {
+    "sourceTicket": "IGSH-415",
+    "cleanupTicket": "IGSH-415"
+  },
+  "legacy.igsh-426": {
+    "sourceTicket": "IGSH-426",
+    "cleanupTicket": "IGSH-426"
+  },
+  "legacy.igsh-424": {
+    "sourceTicket": "IGSH-424",
+    "cleanupTicket": "IGSH-424"
+  },
+  "legacy.igsh-418": {
+    "sourceTicket": "IGSH-418",
+    "cleanupTicket": "IGSH-418"
+  },
+  "legacy.igsh-425": {
+    "sourceTicket": "IGSH-425",
+    "cleanupTicket": "IGSH-425"
+  },
+  "legacy.igsh-414": {
+    "sourceTicket": "IGSH-414",
+    "cleanupTicket": "IGSH-414"
+  },
+  "legacy.igsh-413": {
+    "sourceTicket": "IGSH-413",
+    "cleanupTicket": "IGSH-413"
+  },
+  "app-name.journey": {
+    "sourceRecipe": "app-name.md",
+    "cleanupTicket": "SOFT-2531"
+  },
+  "bot-photo-refresh.journey": {
+    "sourceRecipe": "bot-photo-refresh.md",
+    "cleanupTicket": "SOFT-2531"
+  },
+  "chat-working.journey": {
+    "sourceRecipe": "chat-working.md",
+    "cleanupTicket": "SOFT-2531"
+  },
+  "robot-faces.journey": {
+    "sourceRecipe": "robot-faces.md",
+    "cleanupTicket": "SOFT-2531"
+  },
+  "session-favorites.journey": {
+    "sourceRecipe": "session-favorites.md",
+    "cleanupTicket": "SOFT-2531"
+  },
+  "session-gestures.journey": {
+    "sourceRecipe": "session-gestures.md",
+    "cleanupTicket": "SOFT-2531"
+  },
+  "session-pins.journey": {
+    "sourceRecipe": "session-pins.md",
+    "cleanupTicket": "SOFT-2531"
+  },
+  "session-settings.journey": {
+    "sourceRecipe": "session-settings.md",
+    "cleanupTicket": "SOFT-2531"
+  },
+  "settings-navigation.journey": {
+    "sourceRecipe": "settings-navigation.md",
+    "cleanupTicket": "SOFT-2531"
+  }
+}
