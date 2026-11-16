@@ -78,6 +78,49 @@ elif [[ "${VERIFY_FEATURE:-}" == native-skills.md ]]; then
     sudo install -m 755 "$(dirname "$0")/skills-console.py" /home/verifyssh/skills-console.py
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/skills-console.py /home/verifyssh/receipts.txt'
+elif [[ "${VERIFY_FEATURE:-}" == owner-skills.md ]]; then
+    sudo useradd -m -s /bin/bash skillowner
+    sudo chmod 755 /home/verifyssh /home/skillowner
+    sudo install -d -m 755 -o skillowner -g skillowner /home/skillowner/chat-work
+    sudo -u skillowner mkdir -p /home/skillowner/.claude/skills/owner-note
+    sudo -u skillowner tee /home/skillowner/.claude/skills/owner-note/SKILL.md >/dev/null <<'SKILL'
+---
+name: owner-note
+description: Owner account skill
+---
+BODY_MUST_NOT_BE_INJECTED
+SKILL
+    sudo chmod 700 /home/skillowner/.claude /home/skillowner/.claude/skills /home/skillowner/.claude/skills/owner-note
+    sudo chmod 600 /home/skillowner/.claude/skills/owner-note/SKILL.md
+    sudo -u verifyssh mkdir -p /home/verifyssh/.claude/skills/login-note
+    sudo -u verifyssh tee /home/verifyssh/.claude/skills/login-note/SKILL.md >/dev/null <<'SKILL'
+---
+name: login-note
+description: Login account skill
+---
+BODY_MUST_NOT_BE_INJECTED
+SKILL
+    printf '%s\n' 'Defaults:verifyssh !requiretty' 'verifyssh ALL=(skillowner) NOPASSWD: /usr/bin/python3' | sudo tee /etc/sudoers.d/verify-skillowner >/dev/null
+    sudo chmod 440 /etc/sudoers.d/verify-skillowner
+    sudo visudo -cf /etc/sudoers.d/verify-skillowner
+    sudo -u verifyssh bash <<'PREFLIGHT'
+set -euo pipefail
+cd "$HOME"
+sudo -n -H -u skillowner -- python3 -c 'import os,pwd; assert os.environ["HOME"]=="/home/skillowner" and pwd.getpwuid(os.getuid()).pw_name=="skillowner"'
+PREFLIGHT
+    sudo -u skillowner test -r /home/skillowner/.claude/skills/owner-note/SKILL.md
+    sudo -u verifyssh test ! -r /home/skillowner/.claude/skills/owner-note/SKILL.md
+    sudo -u verifyssh test -r /home/verifyssh/.claude/skills/login-note/SKILL.md
+    sudo install -m 755 "$(dirname "$0")/owner-skills-console.py" /home/verifyssh/owner-skills-console.py
+    sudo -u verifyssh tmux new-session -d -s verify-session -c /home/skillowner/chat-work -x 100 -y 32 'exec -a claude /usr/bin/python3 -u /home/verifyssh/owner-skills-console.py /home/verifyssh/receipts.txt'
+    [[ "$(sudo -u verifyssh tmux display-message -p -t verify-session '#{session_path}')" == /home/skillowner/chat-work ]]
+    [[ "$(sudo -u verifyssh tmux display-message -p -t verify-session '#{pane_current_path}')" == /home/skillowner/chat-work ]]
+    {
+        printf 'session_path=%s\n' "$(sudo -u verifyssh tmux display-message -p -t verify-session '#{session_path}')"
+        printf 'pane_path=%s\n' "$(sudo -u verifyssh tmux display-message -p -t verify-session '#{pane_current_path}')"
+        printf 'owner_skill_hidden=yes\n'
+        printf 'login_skill=yes\n'
+    } > "$EVIDENCE/owner-fixture.txt"
 elif [[ "${VERIFY_FEATURE:-}" == chat-reactions.md ]]; then
     sudo install -m 755 "$(dirname "$0")/reaction-console.py" /home/verifyssh/reaction-console.py
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude

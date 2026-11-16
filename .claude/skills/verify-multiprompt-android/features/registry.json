@@ -217,6 +217,20 @@
         "claude.skills-model-effort"
       ]
     },
+    "owner-skills.md": {
+      "name": "Skills for another account",
+      "description": "a chat under another server account lists that account's skills.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "skills.other-account"
+      ]
+    },
     "robot-faces.md": {
       "name": "Robot inbox and chat",
       "description": "Run `verify.yml` with `feature=robot-faces.md`. For the signed candidate, set `released_robots=true` and `candidate=true`. For the published update, set `released_robots=true` and `expected_commit` to the released SHA.",
@@ -535,6 +549,14 @@
       "sideEffect": true,
       "match": [
         "NativeSkills|SkillsLoader"
+      ]
+    },
+    "skills.other-account": {
+      "description": "A chat whose folder is under another server account lists that account's skills.",
+      "journey": "owner-skills.md",
+      "sideEffect": true,
+      "match": [
+        "owner_for_cwd|NATIVE_SKILLS_PROGRAM"
       ]
     },
     "robot-faces.journey": {
