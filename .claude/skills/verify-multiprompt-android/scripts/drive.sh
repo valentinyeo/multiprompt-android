@@ -1379,7 +1379,7 @@ if [[ "$feature" == chat-codex.md ]]; then
     [[ "$recorder_pid" =~ ^[0-9]+$ ]]
     for mode in hax codex; do
         if [[ "$mode" == codex ]]; then
-            adb shell input keyevent KEYCODE_BACK
+            tap_desc Back
             wait_for_text Inbox
             tap_text codex-native
         fi
@@ -1415,7 +1415,7 @@ if [[ "$feature" == chat-codex.md ]]; then
             [[ $? -eq 1 ]]
         fi
     done
-    adb shell input keyevent KEYCODE_BACK
+    tap_desc Back
     wait_for_text Inbox
     tap_text verify-session
     sudo -u verifyssh tmux send-keys -t '=verify-session:' -l AFTER_SECOND_READER_CLOSE
@@ -1436,7 +1436,6 @@ if [[ "$feature" == chat-codex.md ]]; then
     wait_for_text 'Reset this chat'
     tap_text 'Reset this chat'
     wait_for_text 'CODEX_REPLY_claude_CLAUDE_CONTROL'
-    reader_lifecycle claude claude-control
     sudo grep -Fx 'VERIFY_RECEIVED:CLAUDE_CONTROL' /home/verifyssh/claude-receipts.txt > "$EVIDENCE/claude-receipt.txt"
     shot claude-compatible
     printf 'ANDROID_CODEX_READ_SEND_CLAUDE_OK\n' | tee "$EVIDENCE/codex-result.txt"
