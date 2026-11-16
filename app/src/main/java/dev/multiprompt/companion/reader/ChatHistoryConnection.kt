@@ -59,7 +59,12 @@ class ChatHistoryConnection(
 ) : AutoCloseable {
     private sealed interface Command {
         data class Submit(val text: String, val generation: Long, val result: CompletableDeferred<PromptAdmission>, val replaces: String? = null) : Command
-        data class Action(val kind: String, val id: String, val epoch: Long?, val attempt: String?, val generation: Long, val result: CompletableDeferred<MessageActionResult>, val target: MessageJournal.Entry? = null, val line: ((Long, String) -> String)? = null) : Command
+        data class Action(val kind: String, val id: String, val epoch: Long?, val attempt: String?, val generation: Long, val result: CompletableDeferred<MessageActionResult>, val target: MessageJournal.Entry? = null, val line: ((Long, String) -> String)? = null) : Command {
+            var mutationIssued = false
+
+            fun interrupted(currentGeneration: Long): MessageActionResult =
+                if (generation != currentGeneration && !mutationIssued) MessageActionResult.Rejected("Chat changed") else MessageActionResult.Unknown
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -648,14 +653,14 @@ class ChatHistoryConnection(
                     }
                     when (val command = activeCommand) {
                         is Command.Submit -> command.result.complete(PromptAdmission.Rejected("Chat is disconnected"))
-                        is Command.Action -> command.result.complete(MessageActionResult.Unknown)
+                        is Command.Action -> command.result.complete(command.interrupted(generation))
                         null -> Unit
                     }
                     activeCommand = null
                     while (deferredCommands.isNotEmpty()) {
                         when (val command = deferredCommands.removeFirst()) {
                             is Command.Submit -> command.result.complete(PromptAdmission.Rejected("Chat is disconnected"))
-                            is Command.Action -> command.result.complete(MessageActionResult.Unknown)
+                            is Command.Action -> command.result.complete(command.interrupted(generation))
                         }
                     }
                     resyncing?.completeExceptionally(failure)
@@ -664,7 +669,7 @@ class ChatHistoryConnection(
                     while (true) {
                         when (val command = commands.tryReceive().getOrNull() ?: break) {
                             is Command.Submit -> command.result.complete(PromptAdmission.Rejected("Chat is disconnected"))
-                            is Command.Action -> command.result.complete(MessageActionResult.Unknown)
+                            is Command.Action -> command.result.complete(command.interrupted(generation))
                         }
                     }
                     if (failure is CancellationException && !isActive) throw failure
@@ -682,6 +687,7 @@ class ChatHistoryConnection(
             val build = command.line ?: return MessageActionResult.Rejected("Unknown action")
             if (!owns(wire.sid)) return MessageActionResult.Rejected("Chat changed")
             val id = nextId()
+            command.mutationIssued = true
             return when (val outcome = HostReply.outcome(exchange(build(id, wire.sid) + "\n"), id)) {
                 HostReply.Outcome.Sent, HostReply.Outcome.Gone -> MessageActionResult.Applied
                 is HostReply.Outcome.Failed -> MessageActionResult.Rejected(outcome.message)
@@ -795,6 +801,7 @@ class ChatHistoryConnection(
         }
         if (entry != null && !markIssued(wire.sid, command.generation, entry.id)) return MessageActionResult.Rejected("Chat changed")
         val id = nextId()
+        command.mutationIssued = operation != "message_status"
         val response = exchange(MessageProtocol.request(id, wire, operation, args))
         if (operation == "message_reset") {
             val result = MessageProtocol.reset(response, id)

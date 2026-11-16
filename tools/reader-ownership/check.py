@@ -46,8 +46,15 @@ def violations(files, baseline):
             r"job\s*=\s*pollGate\.launchIn\(scope\)",
             r"if\s*\(!selected\)\s*\{\s*wake\.receive\(\)",
         ],
+        "app/src/main/java/dev/multiprompt/companion/ssh/TmuxCommands.kt": [
+            r"trap 'exit 0' HUP INT TERM PIPE",
+            r"trap 'rm -f .*' EXIT;",
+        ],
         "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt": [
-            r"DisposableEffect\(connection,\s*appForeground\)\s*\{\s*val\s+lease\s*=\s*if\s*\(appForeground\)\s*connection\.observe\(\)\s*else\s*null\s*onDispose\s*\{\s*lease\?\.close\(\)",
+            r"DisposableEffect\(connection,\s*voiceLifecycle\)",
+            r"Lifecycle\.Event\.ON_STOP\s*->\s*\{\s*readerLease\?\.close\(\)\s*readerLease\s*=\s*null",
+            r"Lifecycle\.Event\.ON_START\s*->\s*\{\s*readerLease\s*=\s*readerLease\s*\?:\s*connection\.observe\(\)",
+            r"onDispose\s*\{\s*voiceLifecycle\.lifecycle\.removeObserver\(observer\)\s*readerLease\?\.close\(\)",
         ],
     }
     for path, patterns in requirements.items():

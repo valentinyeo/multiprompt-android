@@ -36,7 +36,7 @@ class ChatPollGate : AutoCloseable {
 
     @Synchronized
     fun acquire(): AutoCloseable {
-        check(!closed) { "Reader is closed" }
+        if (closed) return AutoCloseable {}
         val token = Any()
         leases += token
         publish()

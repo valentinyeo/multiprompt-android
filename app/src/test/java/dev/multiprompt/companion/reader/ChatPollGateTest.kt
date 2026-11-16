@@ -40,6 +40,7 @@ class ChatPollGateTest {
         gate.close()
         lease.close()
         assertFalse(gate.active.value)
-        assertTrue(runCatching { gate.acquire() }.isFailure)
+        gate.acquire().use { assertFalse(gate.active.value) }
+        assertFalse(gate.active.value)
     }
 }
