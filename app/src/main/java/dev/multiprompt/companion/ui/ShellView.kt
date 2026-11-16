@@ -1,5 +1,7 @@
 package dev.multiprompt.companion.ui
 
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.background
@@ -217,6 +219,6 @@ internal fun ShellHistory(
                 )
             }
         }
-        KitRoundButton(onClick = onJumpToLive, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp), icon = Icons.Default.KeyboardArrowDown, description = "Jump to live")
+        KitRoundButton(onClick = onJumpToLive, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).minimumInteractiveComponentSize(), icon = Icons.Default.KeyboardArrowDown, description = "Jump to live")
     }
 }

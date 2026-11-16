@@ -1,5 +1,7 @@
 package dev.multiprompt.companion.ui
 
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Box
@@ -55,7 +57,7 @@ internal fun InboxOverflowMenu(
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        KitRoundButton(onClick = { expanded = true }, icon = Icons.Default.MoreVert, description = "Session list actions")
+        KitRoundButton(onClick = { expanded = true }, icon = Icons.Default.MoreVert, description = "Session list actions", modifier = Modifier.minimumInteractiveComponentSize())
         KitMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },

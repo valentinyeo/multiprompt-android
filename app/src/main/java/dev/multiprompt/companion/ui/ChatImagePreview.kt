@@ -1,5 +1,7 @@
 package dev.multiprompt.companion.ui
 
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.background
@@ -88,7 +90,7 @@ internal fun ChatImagePreviews(runs: List<InlineRun>) {
                             translationY = pan.y
                         }.transformable(transform),
                     )
-                    KitRoundButton(onClick = { expanded = false }, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp), icon = Icons.Default.Close, description = "Close image")
+                    KitRoundButton(onClick = { expanded = false }, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp).minimumInteractiveComponentSize(), icon = Icons.Default.Close, description = "Close image")
                 }
             }
         }

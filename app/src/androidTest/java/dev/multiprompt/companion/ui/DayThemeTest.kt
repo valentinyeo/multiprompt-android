@@ -14,6 +14,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -132,7 +133,7 @@ class DayThemeTest {
         textNodes.fetchSemanticsNodes().forEachIndexed { index, node ->
             val layouts = mutableListOf<TextLayoutResult>()
             val interaction = textNodes[index]
-            if (node.boundsInRoot.width <= 0 || node.boundsInRoot.height <= 0) return@forEachIndexed
+            if (!interaction.isDisplayed() || node.boundsInRoot.width <= 0 || node.boundsInRoot.height <= 0) return@forEachIndexed
             interaction.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
             val bounds = node.boundsInRoot
             val position = node.positionOnScreen

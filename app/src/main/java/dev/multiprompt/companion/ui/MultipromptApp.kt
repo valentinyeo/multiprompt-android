@@ -1,5 +1,16 @@
 package dev.multiprompt.companion.ui
 
+import dev.multiprompt.companion.model.HostDraft
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.foundation.layout.RowScope
+import android.text.format.DateUtils
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextStyle
@@ -723,11 +734,11 @@ internal fun Header(
             if (refreshing) {
                 CircularProgressIndicator(Modifier.padding(12.dp).size(22.dp), strokeWidth = 2.dp)
             } else {
-                KitRoundButton(onClick = onRefresh, icon = Icons.Default.Refresh, description = "Refresh")
+                KitRoundButton(onClick = onRefresh, icon = Icons.Default.Refresh, description = "Refresh", modifier = Modifier.minimumInteractiveComponentSize())
             }
             VersionLabel(onClick = onReleaseNotes)
             Box {
-                KitRoundButton(onClick = { menuExpanded = true }, icon = Icons.Default.MoreVert, description = "Open navigation")
+                KitRoundButton(onClick = { menuExpanded = true }, icon = Icons.Default.MoreVert, description = "Open navigation", modifier = Modifier.minimumInteractiveComponentSize())
                 KitMenu(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
@@ -1470,7 +1481,7 @@ internal fun SessionsScreen(
                         Modifier.fillMaxWidth().statusBarsPadding().padding(end = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        KitRoundButton(onClick = { settingsPage = SettingsPage.HIDDEN }, icon = Icons.AutoMirrored.Filled.ArrowBack, description = "Back")
+                        KitRoundButton(onClick = { settingsPage = SettingsPage.HIDDEN }, icon = Icons.AutoMirrored.Filled.ArrowBack, description = "Back", modifier = Modifier.minimumInteractiveComponentSize())
                         Text("Session list settings", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                         VersionLabel(onClick = {
                             settingsPage = SettingsPage.HIDDEN
@@ -2007,11 +2018,11 @@ internal fun SessionsScreen(
                                     searchQuery = ""
                                     focusManager.clearFocus()
                                 }
-                            }, icon = if (searchVisible) Icons.Default.Close else Icons.Default.Search, description = if (searchVisible) "Close session search" else "Search sessions")
+                            }, icon = if (searchVisible) Icons.Default.Close else Icons.Default.Search, description = if (searchVisible) "Close session search" else "Search sessions", modifier = Modifier.minimumInteractiveComponentSize())
                         if (state.creatingSession) {
-                            CircularProgressIndicator(Modifier.size(Kit.RoundButton), strokeWidth = 2.dp)
+                            CircularProgressIndicator(Modifier.minimumInteractiveComponentSize().size(Kit.RoundButton), strokeWidth = 2.dp)
                         } else {
-                            KitRoundButton(onClick = onStartNewSession, icon = Icons.Default.Add, description = "New session")
+                            KitRoundButton(onClick = onStartNewSession, icon = Icons.Default.Add, description = "New session", modifier = Modifier.minimumInteractiveComponentSize())
                         }
                         InboxOverflowMenu(
                             onSettings = { settingsPage = SettingsPage.PREFERENCES },
@@ -2045,7 +2056,7 @@ internal fun SessionsScreen(
                             leadingIcon = { Icon(Icons.Default.Search, null) },
                             trailingIcon = if (searchQuery.isNotEmpty()) {
                                 {
-                                    KitRoundButton(onClick = { searchQuery = "" }, icon = Icons.Default.Close, description = "Clear search")
+                                    KitRoundButton(onClick = { searchQuery = "" }, icon = Icons.Default.Close, description = "Clear search", modifier = Modifier.minimumInteractiveComponentSize())
                                 }
                             } else {
                                 null
@@ -2836,7 +2847,7 @@ internal fun ReaderTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
             ) {
-                KitRoundButton(onClick = onBack, icon = Icons.AutoMirrored.Filled.ArrowBack, description = "Back")
+                KitRoundButton(onClick = onBack, modifier = Modifier.minimumInteractiveComponentSize().size(ReaderControlSize), icon = Icons.AutoMirrored.Filled.ArrowBack, description = "Back")
                 Box(Modifier.weight(1f)) {
                     Row(
                         Modifier.height(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
@@ -2857,7 +2868,7 @@ internal fun ReaderTopBar(
                     }
                 }
                 Box {
-                    KitRoundButton(onClick = onMenuClick, icon = Icons.Default.MoreVert, description = "Session actions")
+                    KitRoundButton(onClick = onMenuClick, modifier = Modifier.minimumInteractiveComponentSize().size(ReaderControlSize), icon = Icons.Default.MoreVert, description = "Session actions")
                     menuContent()
                 }
             }
@@ -2868,7 +2879,7 @@ internal fun ReaderTopBar(
         expandedHeight = if (LocalMaterial3.current) 64.dp else androidx.compose.material3.TopAppBarDefaults.TopAppBarExpandedHeight,
         navigationIcon = {
             if (LocalMaterial3.current) {
-                KitRoundButton(onClick = onBack, modifier = Modifier.semantics { onClick(label = "Back", action = null) }, icon = Icons.AutoMirrored.Filled.ArrowBack, description = "Back")
+                KitRoundButton(onClick = onBack, modifier = Modifier.semantics { onClick(label = "Back", action = null) }.minimumInteractiveComponentSize(), icon = Icons.AutoMirrored.Filled.ArrowBack, description = "Back")
             }
         },
         modifier = Modifier.testTag("reader-top-bar").statusBarsPadding().pointerInput(onOpenTerminal) {
@@ -2956,7 +2967,7 @@ internal fun ReaderTopBar(
         actions = {
             VersionLabel(onClick = onReleaseNotes)
             Box {
-                KitRoundButton(onClick = onMenuClick, icon = Icons.Default.MoreVert, description = "Session actions")
+                KitRoundButton(onClick = onMenuClick, modifier = Modifier.minimumInteractiveComponentSize().size(ReaderControlSize), icon = Icons.Default.MoreVert, description = "Session actions")
                 menuContent()
             }
         },
@@ -3790,7 +3801,7 @@ internal fun ReaderScreen(
                 if (count > 0) {
                     KitSecondaryButton("↓ ${jumpCountLabel(count)}", onClick = scrollLive, modifier = Modifier.semantics { contentDescription = "Jump to newest, $count new" })
                 } else {
-                    KitRoundButton(onClick = scrollLive, icon = Icons.Default.KeyboardArrowDown, description = "Jump to newest")
+                    KitRoundButton(onClick = scrollLive, icon = Icons.Default.KeyboardArrowDown, description = "Jump to newest", modifier = Modifier.minimumInteractiveComponentSize())
                 }
             }
         },
@@ -4302,11 +4313,12 @@ internal fun ReaderScreen(
                     ) {
                         Box {
                             if (imageUploading) {
-                                CircularProgressIndicator(Modifier.size(Kit.RoundButton), strokeWidth = 2.dp)
+                                CircularProgressIndicator(Modifier.minimumInteractiveComponentSize().size(Kit.RoundButton), strokeWidth = 2.dp)
                             } else {
                                 KitRoundButton(
                                     onClick = { attachMenuSection = null; attachMenuExpanded = true },
                                     enabled = !reader.sending && !dictationActive,
+                                    modifier = Modifier.minimumInteractiveComponentSize().size(ReaderControlSize),
                                     icon = Icons.Default.Add,
                                     description = "Attach",
                                 )
@@ -4567,18 +4579,13 @@ internal fun ReaderScreen(
                                     }
                                     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
                                         if (dictationState.status in listOf(DictationStatus.CONNECTING, DictationStatus.FINISHING)) {
-                                            CircularProgressIndicator(Modifier.size(Kit.RoundButton), strokeWidth = 2.dp)
+                                            CircularProgressIndicator(Modifier.minimumInteractiveComponentSize().size(Kit.RoundButton), strokeWidth = 2.dp)
                                         } else {
-                                            KitRoundButton(
-                                                onClick = {
+                                            KitRoundButton(onClick = {
                                                     if (dictationActive) dictation.stop()
                                                     else if (dictationState.configured) startDictation()
                                                     else apiKeyDialogVisible = true
-                                                },
-                                                enabled = !reader.sending,
-                                                icon = if (dictationActive) Icons.Default.Stop else Icons.Default.Mic,
-                                                description = if (dictationActive) "Stop dictation" else "Start dictation",
-                                            )
+                                                }, enabled = !reader.sending, icon = if (dictationActive) Icons.Default.Stop else Icons.Default.Mic, description = if (dictationActive) "Stop dictation" else "Start dictation", modifier = Modifier.minimumInteractiveComponentSize())
                                         }
                                     }
                                     Box(
@@ -5377,10 +5384,10 @@ internal fun TerminalTopBar(
         },
         actions = {
             VersionLabel(onClick = onReleaseNotes)
-            KitRoundButton(onClick = onOpenHistory, icon = Icons.Default.KeyboardArrowUp, description = "Open shell history")
-            KitRoundButton(onClick = onLiveView, icon = Icons.Default.KeyboardArrowDown, description = "Back to the live view")
-            KitRoundButton(onClick = onDictate, icon = if (dictating) Icons.Default.Mic else Icons.Default.MicNone, description = if (dictating) "Stop dictation" else "Dictate into the shell")
-            KitRoundButton(onClick = onShowKeyboard, icon = Icons.Default.Keyboard, description = "Show keyboard")
+            KitRoundButton(onClick = onOpenHistory, icon = Icons.Default.KeyboardArrowUp, description = "Open shell history", modifier = Modifier.minimumInteractiveComponentSize())
+            KitRoundButton(onClick = onLiveView, icon = Icons.Default.KeyboardArrowDown, description = "Back to the live view", modifier = Modifier.minimumInteractiveComponentSize())
+            KitRoundButton(onClick = onDictate, icon = if (dictating) Icons.Default.Mic else Icons.Default.MicNone, description = if (dictating) "Stop dictation" else "Dictate into the shell", modifier = Modifier.minimumInteractiveComponentSize())
+            KitRoundButton(onClick = onShowKeyboard, icon = Icons.Default.Keyboard, description = "Show keyboard", modifier = Modifier.minimumInteractiveComponentSize())
         },
     )
 }

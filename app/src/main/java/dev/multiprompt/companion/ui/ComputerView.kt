@@ -1,5 +1,7 @@
 package dev.multiprompt.companion.ui
 
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import android.graphics.Bitmap
@@ -78,7 +80,7 @@ internal fun ComputerPane(
     ) {
         if (!fullScreen) {
             Row(Modifier.fillMaxWidth().testTag("computer-header"), verticalAlignment = Alignment.CenterVertically) {
-                KitRoundButton(onClick = onBack, icon = Icons.AutoMirrored.Filled.ArrowBack, description = "Back to chat")
+                KitRoundButton(onClick = onBack, icon = Icons.AutoMirrored.Filled.ArrowBack, description = "Back to chat", modifier = Modifier.minimumInteractiveComponentSize())
                 Text("Computer", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
                     " · $hostLabel",
@@ -87,7 +89,7 @@ internal fun ComputerPane(
                     modifier = Modifier.weight(1f),
                 )
                 Box {
-                    KitRoundButton(onClick = { menuOpen = true }, icon = Icons.Default.MoreVert, description = "Computer actions")
+                    KitRoundButton(onClick = { menuOpen = true }, icon = Icons.Default.MoreVert, description = "Computer actions", modifier = Modifier.minimumInteractiveComponentSize())
                     KitMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         KitMenuRow(label = target.value, enabled = false, onClick = {})
                         KitMenuRow(label = "Viewer address", onClick = { menuOpen = false; onEditTarget() })
@@ -369,7 +371,7 @@ internal fun PagePane(
         verticalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
     ) {
         Row(Modifier.fillMaxWidth().testTag("page-header"), verticalAlignment = Alignment.CenterVertically) {
-            KitRoundButton(onClick = onBack, icon = Icons.AutoMirrored.Filled.ArrowBack, description = "Back to chat")
+            KitRoundButton(onClick = onBack, icon = Icons.AutoMirrored.Filled.ArrowBack, description = "Back to chat", modifier = Modifier.minimumInteractiveComponentSize())
             Text("Page", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
                 " · $title",
@@ -378,7 +380,7 @@ internal fun PagePane(
                 modifier = Modifier.weight(1f),
             )
             Box {
-                KitRoundButton(onClick = { menuOpen = true }, icon = Icons.Default.MoreVert, description = "Page actions")
+                KitRoundButton(onClick = { menuOpen = true }, icon = Icons.Default.MoreVert, description = "Page actions", modifier = Modifier.minimumInteractiveComponentSize())
                 KitMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     KitMenuRow(label = "Open in browser", onClick = { menuOpen = false; onOpenInBrowser() })
                     KitMenuRow(label = "Close page", onClick = { menuOpen = false; onBack() })

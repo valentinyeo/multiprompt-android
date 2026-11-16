@@ -1,5 +1,6 @@
 package dev.multiprompt.companion.ui
 
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import android.content.Intent

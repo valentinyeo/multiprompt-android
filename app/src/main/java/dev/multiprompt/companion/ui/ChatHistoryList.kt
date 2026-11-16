@@ -1,5 +1,6 @@
 package dev.multiprompt.companion.ui
 
+import dev.multiprompt.companion.ssh.TmuxText
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.interaction.DragInteraction
