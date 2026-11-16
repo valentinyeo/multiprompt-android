@@ -9,6 +9,10 @@ import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -252,6 +256,7 @@ class ReaderChromeTest {
         compose.onNode(hasSetTextAction()).performTextInput("offline hello")
         compose.onNodeWithContentDescription("Send prompt").performClick()
         compose.runOnIdle { assertEquals("Will send when the chat reconnects", ShadowToast.getTextOfLatestToast()) }
+        compose.onNode(hasSetTextAction()).assertTextEquals("offline hello")
         compose.onNodeWithContentDescription("Send prompt").performClick()
         compose.runOnIdle {
             val entry = connection.pendingPrompts.state.value.single()
@@ -259,7 +264,7 @@ class ReaderChromeTest {
             connection.pendingPrompts.complete(entry.id, dev.multiprompt.companion.reader.PromptAdmission.Recorded("saved"))
         }
         compose.runOnIdle { scheduler.runCurrent() }
-        compose.onNode(hasSetTextAction()).assertTextEquals("")
+        compose.onNode(hasSetTextAction()).assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
     }
 
     @Test fun failedInitialLoadShowsRetryInsteadOfLoadingForever() {

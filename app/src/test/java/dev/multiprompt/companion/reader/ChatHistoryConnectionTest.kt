@@ -291,6 +291,7 @@ class ChatHistoryConnectionTest {
                 chat.nudge()
                 withTimeout(10_000L) { reader.pendingPrompts.accepted.first { waiting.id in it } }
                 assertTrue(reader.pendingPrompts.state.value.isEmpty())
+                withTimeout(10_000L) { while (fake.submissions.none { it == text }) delay(10L) }
                 assertEquals(1, fake.submissions.count { it == text })
                 fake.online = false
                 chat.nudge()

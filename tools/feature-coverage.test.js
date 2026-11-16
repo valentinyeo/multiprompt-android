@@ -13,6 +13,22 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const tool = path.join(root, '.github/scripts/pstack-verifier/coverage.cjs');
 const productDiff = (file, text) => `diff --git a/app/src/main/${file} b/app/src/main/${file}\n--- a/app/src/main/${file}\n+++ b/app/src/main/${file}\n@@ -1 +1 @@\n-old\n+${text}\n`;
 
+test('shared chat recovery proof pins the reader and connectors it actually installs', () => {
+  const scripts = '.claude/skills/verify-multiprompt-android/scripts';
+  const source = read('app/src/main/assets/chat_history_reader.py');
+  const generation = Number(source.match(/^RUNTIME_GENERATION = (\d+)$/m)[1]);
+  const modules = ['claude', 'codex'].map(name => Buffer.from(read(`app/src/main/assets/chat_connectors/${name}.py`)).toString('base64'));
+  const bundle = Buffer.from(`CONNECTOR_SOURCES = {'claude':'${modules[0]}','codex':'${modules[1]}'}\n${source}`);
+  const hash = require('node:crypto').createHash('sha256').update(bundle).digest('hex');
+  for (const script of ['fixture.sh', 'drive.sh']) {
+    const code = read(`${scripts}/${script}`);
+    assert.equal(Number(code.match(/\.bundle_bytes == (\d+)/)[1]), bundle.length, `${script} has stale fixture bytes`);
+    assert.equal(code.match(/\.bundle_sha256 == "([a-f0-9]{64})"/)[1], hash, `${script} has a stale fixture hash`);
+  }
+  assert.equal(Number(read(`${scripts}/shared-evidence.py`).match(/assert info\['generation'\] == (\d+)/)[1]), generation);
+  assert.equal(Number(read(`${scripts}/fixture.sh`).match(/\.engine_info.generation == (\d+)/)[1]), generation);
+});
+
 for (const [pr, outcome] of [[380, 'chat-search.open'], [376, 'snippets.save-reuse-delete']]) {
   test(`real PR #${pr} is rejected despite its successful unrelated head journeys`, () => {
     const fixture = JSON.parse(read(`tools/fixtures/feature-coverage/pr-${pr}.json`));

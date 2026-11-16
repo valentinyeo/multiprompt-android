@@ -43,7 +43,7 @@ if sys.argv[1] in ('desktop-submit', 'neighbor-submit', 'engine-info', 'bootstra
         info = packet['engine_info']
         assert 1 in packet['message_protocols']
         if sys.argv[1] == 'bootstrap':
-            assert info['generation'] == 22
+            assert info['generation'] == 126
         else:
             assert info['generation'] >= 22
         installed = home / '.multiprompt-runtime' / (info['sha256'] + '.py')
