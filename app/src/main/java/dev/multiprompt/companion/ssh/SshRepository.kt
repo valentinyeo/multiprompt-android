@@ -31,6 +31,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.connectbot.sshlib.AuthResult
@@ -314,6 +315,13 @@ class SshRepository(private val secrets: SecretStorage) {
         client: SshClient,
         script: ByteArray,
         exchange: suspend (suspend (String) -> String) -> Unit,
+    ) = streamChatHistory(client, script, 45_000L, exchange)
+
+    suspend fun streamChatHistory(
+        client: SshClient,
+        script: ByteArray,
+        timeoutMs: Long,
+        exchange: suspend (suspend (String) -> String) -> Unit,
     ) = withContext(Dispatchers.IO) {
         coroutineScope {
             val session = client.openSession()
@@ -339,7 +347,7 @@ class SshRepository(private val secrets: SecretStorage) {
                     else -> throw SshProblem.Connection("The history reader did not start")
                 }
                 exchange { query ->
-                    withTimeout(45_000L) {
+                    withTimeout(timeoutMs) {
                         session.write(query.toByteArray(Charsets.UTF_8))
                         line()
                     }
@@ -404,6 +412,39 @@ class SshRepository(private val secrets: SecretStorage) {
         }
     }
 
+    suspend fun piModels(host: HostProfile): List<dev.multiprompt.companion.reader.PiModel> = withContext(Dispatchers.IO) {
+        withTimeout(PI_MODELS_TIMEOUT_MS) {
+            withServerLink(host) { client ->
+                coroutineScope {
+                    val session = client.openSession()
+                        ?: throw SshProblem.Connection("The SSH server refused a model list channel")
+                    try {
+                        if (!session.requestExec("exec python3 ~/.local/share/zigshell/mp_complete.py --serve")) {
+                            throw SshProblem.Connection("The SSH server refused the model list helper")
+                        }
+                        launch { for (chunk in session.stderr) { } }
+                        session.write(dev.multiprompt.companion.reader.PiModels.request(1).toByteArray(Charsets.UTF_8))
+                        val framer = TranscriptProtocol.Framer()
+                        var wire: String? = null
+                        while (wire == null) {
+                            val chunk = session.stdout.receiveCatching().getOrNull()
+                                ?: throw SshProblem.Connection("The model list helper is unavailable")
+                            val frames = framer.feed(chunk)
+                            check(frames.size <= 1 && (frames.isEmpty() || !framer.hasPending())) {
+                                "Unexpected model list response"
+                            }
+                            wire = frames.firstOrNull()
+                        }
+                        dev.multiprompt.companion.reader.PiModels.parse(wire, 1)
+                            ?: throw SshProblem.Connection("Invalid model list response")
+                    } finally {
+                        session.close()
+                    }
+                }
+            }
+        }
+    }
+
     suspend fun heldPrompt(
         client: SshClient,
         script: ByteArray,
@@ -455,6 +496,22 @@ class SshRepository(private val secrets: SecretStorage) {
             dev.multiprompt.companion.reader.FreshStart.Outcome.Failed(dev.multiprompt.companion.reader.FreshStart.NO_ANSWER)
         streamChatHistory(client, script) { exchange ->
             outcome = dev.multiprompt.companion.reader.FreshStart.outcome(exchange(query), 1)
+        }
+        return outcome
+    }
+
+    suspend fun switchAi(
+        client: SshClient,
+        script: ByteArray,
+        provider: String,
+        sid: String,
+        to: String,
+    ): dev.multiprompt.companion.reader.SwitchAi.Outcome {
+        val query = dev.multiprompt.companion.reader.SwitchAi.query(1, provider, sid, to)
+        var outcome: dev.multiprompt.companion.reader.SwitchAi.Outcome =
+            dev.multiprompt.companion.reader.SwitchAi.Outcome.Failed(dev.multiprompt.companion.reader.SwitchAi.NO_ANSWER)
+        streamChatHistory(client, script, timeoutMs = 60_000L) { exchange ->
+            outcome = dev.multiprompt.companion.reader.SwitchAi.outcome(exchange(query), 1, to)
         }
         return outcome
     }
@@ -598,6 +655,22 @@ class SshRepository(private val secrets: SecretStorage) {
                 throw cancelled
             } catch (throwable: Throwable) {
                 null
+            }
+        }
+
+    suspend fun readTokenLadderStatus(host: HostProfile): String =
+        withContext(Dispatchers.IO) {
+            try {
+                withTimeout(CONNECTION_TIMEOUT_MS) {
+                    withAuthenticatedClient(host) { client ->
+                        val result = execute(client, TmuxCommands.tokenLadderStatus())
+                        result.requireSuccess("read AI usage")
+                        result.stdout
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                if (cancelled is TimeoutCancellationException) throw SshProblem.Connection("Could not read AI usage")
+                throw cancelled
             }
         }
 
@@ -776,6 +849,7 @@ class SshRepository(private val secrets: SecretStorage) {
         const val LOG_TAG = "MultipromptSSH"
         const val CONNECTION_TIMEOUT_MS = 20_000L
         const val LINK_CLOSE_TIMEOUT_MS = 2_000L
+        const val PI_MODELS_TIMEOUT_MS = 35_000L
         const val MAX_COMMAND_OUTPUT = 2 * 1024 * 1024
         const val MAX_PROMPT_BYTES = 64 * 1024
         const val MAX_SNAPSHOT_HEX_CHARS = 1024 * 1024

@@ -5,11 +5,11 @@ The native reader streams output and lets a user send a prompt, send Enter/appro
 ## Sub-features
 
 - `reader-output`: live native output from the SSH/tmux stream.
-- `reader-no-progress-bar`: active ETA has no blue strip above the composer, idle and sending; send spinner remains.
+- `reader-no-progress-bar`: an active ETA fixture has no ETA text in the Session actions menu and no blue strip above the composer, idle and sending; send spinner remains.
 - `reader-send`: compose and send a message with a server-side receipt.
 - `reader-enter`: send an empty Enter from the actions menu.
 - `reader-interrupt`: interrupt the real foreground tmux process.
-- `reader-extras`: Chat View is a full transcript in one scroll, with model/effort/ETA/waiting state in the top-bar subtitle, no Conversation/status row, and horizontally scrollable tables/nested lists; needs a supported agent transcript on the host (not automated).
+- `reader-extras`: Chat View is a full transcript in one scroll, with model/effort/waiting state in the top-bar subtitle, no Conversation/status row, and horizontally scrollable tables/nested lists; needs a supported agent transcript on the host (not automated).
 - `reader-reply`: right-swipe a message bubble or long-press → **Reply**; **Reply to …** above the composer, **Cancel reply**, send Markdown quote (not automated).
 - `reader-history`: **Session actions → Session history** opens alternate-screen agent history (not automated).
 - `reader-tools`: attachments, speech-gated Deepgram dictation, search and font controls need their own evidence (not automated).
@@ -23,7 +23,7 @@ Tap `verify-session` in Inbox. **Message verify-session** is the composer and **
 Preconditions: fresh fixture; dispatch `feature=session-reader.md`. The driver first performs the complete real host import and trust journey, then opens the discovered session card.
 
 - `tap_text verify-session`; `wait_for_text VERIFY_READY_528`; `shot reader-ready` capture a native reader of the real console.
-- `tap_desc 'Attach'`; require `Add image` and `Add file`, the only rows a non-Claude session shows (Skill, Model and Effort appear for Claude sessions only and are covered by `native-skills.md`); capture `attach-menu` (outlined + button, outlined menu card with line icons); back closes it; capture `attach-closed`.
+- `tap_desc 'Attach'`; require `Add image` and `Add file`. This console is not Claude or Pi, so Skill, Model and Effort stay hidden. Claude adds Skill, Model and Effort (`native-skills.md`). A Pi chat adds Model. Capture `attach-menu` (outlined + button, outlined menu card with line icons); back closes it; capture `attach-closed`.
 - `fill 'Message verify-session' VERIFY_SENT_528`; `shot send-draft`; `tap_desc 'Send prompt'`. Require both the visible `VERIFY_RECEIVED:VERIFY_SENT_528` and the same line in the fixture's receipts; capture `send-result`.
 - The fixture delays the SSH send by 15 s. Right after the tap, `send-timing.py` requires the message on screen, the composer empty and the logcat marks `message_added` and `box_cleared_frame` within 100 ms of the tap.
 - `tap_desc 'Session actions'`; capture `enter-action`; `tap_text 'Enter / approve'`. Require `VERIFY_ENTER_528` in receipts and native output; capture `enter-result`.
