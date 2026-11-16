@@ -602,6 +602,7 @@ class ChatHistoryConnection(
                                                 }
                                             }
                                             is Command.Action -> {
+                                                connectionGeneration = command.generation
                                                 val result = try {
                                                     performAction(command, observed, messageScope, exchange) { ++requestId }
                                                 } catch (failure: Exception) {
