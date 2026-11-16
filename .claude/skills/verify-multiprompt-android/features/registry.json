@@ -88,15 +88,15 @@
       "outcomes": [
         "chat-queued.journey"
       ],
-      "evidence": [
-        "00-queue-ui.json",
-        "00-queue-receipts.txt",
-        "queue-pending.json",
-        "queue-waiting-final.json",
-        "queue-followup-final.json",
-        "queue-uncertain-final.json",
-        "catchup-result.json"
-      ]
+      "evidence": {
+        "00-queue-ui.json": 1500,
+        "00-queue-receipts.txt": 1500,
+        "queue-pending.json": 1500,
+        "queue-waiting-final.json": 1500,
+        "queue-followup-final.json": 1500,
+        "queue-uncertain-final.json": 1500,
+        "catchup-result.json": 1500
+      }
     },
     "chat-reactions.md": {
       "name": "Claude reactions",
@@ -139,16 +139,16 @@
       "outcomes": [
         "chat-shared.journey"
       ],
-      "evidence": [
-        "shared-before-reset.json",
-        "shared-after-reset.json",
-        "shared-codex-before-restart.json",
-        "shared-codex-after-reset.json",
-        "05-shared-after-reset.xml",
-        "07-shared-codex-after-reset.xml",
-        "shared-terminal.txt",
-        "shared-result.txt"
-      ]
+      "evidence": {
+        "shared-before-reset.json": 1000,
+        "shared-after-reset.json": 1000,
+        "shared-codex-before-restart.json": 1000,
+        "shared-codex-after-reset.json": 1000,
+        "05-shared-after-reset.xml": 3000,
+        "07-shared-codex-after-reset.xml": 3000,
+        "shared-terminal.txt": 1000,
+        "shared-result.txt": 500
+      }
     },
     "chat-working.md": {
       "name": "Working dots on the signed release",
@@ -444,7 +444,16 @@
       },
       "outcomes": [
         "chat.identity"
-      ]
+      ],
+      "evidence": {
+        "projection-receipts-before.json": 2500,
+        "projection-receipts-reconnect.json": 5500,
+        "projection-state-before.json": 500,
+        "projection-state-fresh.json": 500,
+        "projection-state-catchup.json": 500,
+        "projection-state-reconnect.json": 500,
+        "projection-proof.txt": 500
+      }
     }
   },
   "outcomes": {

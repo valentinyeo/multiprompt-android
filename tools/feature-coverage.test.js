@@ -144,11 +144,13 @@ test('the ratchet tracks exact IDs, not the number of missing journeys', () => {
   assert.deepEqual(gate.ratchetErrors(gate.baseline, {}), []);
 });
 
-test('priority evidence is bounded to distinct artifact text filenames', () => {
-  for (const evidence of ['receipts.txt', ['../secret.txt'], ['/secret.txt'], ['proof.png'], ['proof.txt', 'proof.txt'], Array.from({ length: 9 }, (_, n) => `proof-${n}.json`), [null]]) {
+test('priority evidence paths and per-file limits fit the journey budget', () => {
+  for (const evidence of ['receipts.txt', ['proof.txt'], { '../secret.txt': 1500 }, { '/secret.txt': 1500 }, { 'proof.png': 1500 },
+    { 'proof.json': 0 }, { 'proof.json': 6001 }, { 'proof.json': 1.5 }, { 'proof.json': '1500' },
+    { 'one.json': 6000, 'two.json': 6000, 'three.json': 1 }, Object.fromEntries(Array.from({ length: 9 }, (_, n) => [`proof-${n}.json`, 1]))]) {
     const changed = structuredClone(gate.registry);
     changed.journeys['chat-queued.md'].evidence = evidence;
-    assert.match(gate.validateRegistry(changed).join('\n'), /evidence must list at most eight distinct artifact text filenames/);
+    assert.match(gate.validateRegistry(changed).join('\n'), /evidence must map at most eight artifact text filenames to character limits/);
   }
 });
 

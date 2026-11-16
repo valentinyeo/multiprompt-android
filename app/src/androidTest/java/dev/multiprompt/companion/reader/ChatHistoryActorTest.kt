@@ -1184,8 +1184,11 @@ class ChatHistoryActorTest {
                 assertEquals(MessageActionResult.Unknown, withTimeout(10_000) { owner.resetConversation().await() })
                 val pending = f.journal.entries().single()
                 assertEquals("reset", pending.operation)
+                withTimeout(10_000) { owner.state.first { it.retrying } }
                 f.dropReset = false
-                f.ready(owner)
+                withTimeout(15_000) {
+                    owner.state.first { !it.retrying && it.replica != null && it.unresolved.any { entry -> entry.id == pending.id } }
+                }
                 assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.recoverReset(pending.id) })
                 assertTrue(f.journal.entries().isEmpty())
                 assertEquals(2L, f.epoch)

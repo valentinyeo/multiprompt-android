@@ -361,9 +361,9 @@ function journeyEvidence(directory, feature) {
     if (!text || !text.trim()) return;
     append(`--- ${file}${file === 'driver-transcript.txt' ? ' (tail)' : ''}\n${text.trim()}`);
   };
-  const proof = coverageGate.registry.journeys[feature]?.evidence ?? [];
-  const priority = [...new Set([...PRIORITY_FILES.slice(0, 2), ...proof, ...PRIORITY_FILES.slice(2)])];
-  for (const name of priority) if (files.includes(name)) take(name, name === 'driver-transcript.txt' ? TRANSCRIPT_TAIL_CHARS : SMALL_FILE_BYTES);
+  const proof = coverageGate.registry.journeys[feature]?.evidence ?? {};
+  const priority = [...new Set([...PRIORITY_FILES.slice(0, 2), ...Object.keys(proof), ...PRIORITY_FILES.slice(2)])];
+  for (const name of priority) if (files.includes(name)) take(name, proof[name] ?? (name === 'driver-transcript.txt' ? TRANSCRIPT_TAIL_CHARS : SMALL_FILE_BYTES));
   if (files.includes('driver-transcript.txt')) {
     const actions = fs.readFileSync(path.join(directory, 'driver-transcript.txt'), 'utf8').split('\n').filter(line => /^\++ (?:tap_text|tap_desc|fill |set_composer|adb shell input)/.test(line));
     append(`--- driver-transcript.txt (user actions)\n${actions.slice(-60).join('\n').slice(-TRANSCRIPT_TAIL_CHARS)}`);
