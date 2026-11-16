@@ -3,6 +3,9 @@ package dev.multiprompt.companion.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,13 +43,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -130,12 +137,23 @@ internal fun KitTitlePill(text: String, modifier: Modifier = Modifier, onClick: 
 }
 
 @Composable
-internal fun KitSkillPill(text: String, modifier: Modifier = Modifier, style: TextStyle = Kit.Body) {
+internal fun KitSkillPill(
+    text: String,
+    modifier: Modifier = Modifier,
+    style: TextStyle = Kit.Body,
+    current: Boolean = false,
+    marked: Boolean = false,
+) {
+    val fill = when {
+        current -> Kit.Text
+        marked -> Kit.Outline
+        else -> Kit.Surface
+    }
     Text(
         text,
-        modifier.kitSurface().padding(horizontal = 8.dp, vertical = 1.dp),
+        modifier.kitSurface(fill = fill).padding(horizontal = 8.dp, vertical = 1.dp),
         style = style,
-        color = Kit.Text,
+        color = if (current) Kit.Page else Kit.Text,
         maxLines = 1,
         softWrap = false,
     )
@@ -471,5 +489,51 @@ internal fun KitAnswerOption(
             Text(title, style = Kit.BodyStrong.copy(lineHeight = 22.sp), color = Kit.Text)
             if (detail.isNotBlank()) Text(detail, style = Kit.Hint, color = Kit.TextMuted)
         }
+    }
+}
+
+@Composable
+internal fun KitSearchBox(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "Search",
+    onSearch: () -> Unit = {},
+    focusRequester: FocusRequester? = null,
+) {
+    Row(
+        modifier.height(Kit.RoundButton).kitSurface().padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = Kit.Body.copy(color = Kit.Text),
+            cursorBrush = SolidColor(Kit.Text),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+            modifier = Modifier.fillMaxWidth().then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
+            decorationBox = { inner ->
+                Box(contentAlignment = Alignment.CenterStart) {
+                    if (value.isEmpty()) Text(placeholder, style = Kit.Body, color = Kit.TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    inner()
+                }
+            },
+        )
+    }
+}
+
+@Composable
+internal fun KitMatchCount(label: String, modifier: Modifier = Modifier) {
+    Text(label, style = Kit.Hint, color = Kit.TextMuted, maxLines = 1, modifier = modifier)
+}
+
+@Composable
+internal fun KitMatchMarker(text: String, current: Boolean, modifier: Modifier = Modifier) {
+    val fill = if (current) Kit.Text else Kit.Outline
+    val color = if (current) Kit.Page else Kit.Text
+    Box(modifier.background(fill, RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 2.dp)) {
+        Text(text, style = Kit.Body, color = color, maxLines = 1)
     }
 }

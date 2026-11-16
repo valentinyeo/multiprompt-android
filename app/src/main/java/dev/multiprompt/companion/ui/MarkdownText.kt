@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -24,10 +26,12 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -61,6 +65,8 @@ fun MarkdownText(
     linkColor: Color,
     modifier: Modifier = Modifier,
     imagePreviews: Boolean = false,
+    matchHits: List<ChatFind.Hit> = emptyList(),
+    activeHit: ChatFind.Hit? = null,
 ) {
     val blocks = remember(text) { MarkdownParser.parse(LiveMention.visible(text)) }
     var heading: String? = null
@@ -68,40 +74,80 @@ fun MarkdownText(
     val codeFontFamily = if (LocalReaderStyle.current) FontFamily.SansSerif else FontFamily.Monospace
     val scale = if (LocalReaderStyle.current) fontSize.value / ReaderTextSize.value else if (LocalMaterial3.current) fontSize.value / 15f else 1f
     val lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, scale)
+    val bringMatch = remember { BringIntoViewRequester() }
+    LaunchedEffect(activeHit?.message, activeHit?.start, activeHit?.end) {
+        if (activeHit != null && matchHits.any { it.message == activeHit.message && it.start == activeHit.start && it.end == activeHit.end }) {
+            withFrameNanos { }
+            runCatching { bringMatch.bringIntoView() }
+        }
+    }
+    fun mark(value: AnnotatedString, at: Int) = value.marking(at, matchHits, activeHit)
+    @Composable
+    fun Modifier.pin(at: Int, length: Int): Modifier {
+        val hit = activeHit
+        return if (hit != null && length > 0 && hit.start >= at && hit.start < at + length) this.bringIntoViewRequester(bringMatch) else this
+    }
     androidx.compose.material3.ProvideTextStyle(androidx.compose.ui.text.TextStyle(fontFamily = chatFontFamily())) {
     Column(if (LocalReaderStyle.current) modifier else modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        blocks.forEach { block ->
+        var cursor = 0
+        blocks.forEachIndexed { blockIndex, block ->
+            val piece = MarkdownParser.blockText(block)
+            val base = cursor
             if (block is MdBlock.Heading) {
                 val title = block.runs.joinToString("") { it.text }.trim()
                 if (title.isNotEmpty()) heading = title
             }
             when (block) {
-                is MdBlock.Paragraph -> if (imagePreviews) {
-                    ChatImageRuns(block.runs) { runs ->
-                        Text(markdownAnnotated(runs, linkColor, codeBg, codeFontFamily),
+                is MdBlock.Paragraph -> if (matchHits.isEmpty()) {
+                    if (imagePreviews) {
+                        ChatImageRuns(block.runs) { runs ->
+                            Text(markdownAnnotated(runs, linkColor, codeBg, codeFontFamily),
+                                fontSize = fontSize, lineHeight = lineHeight, color = color)
+                        }
+                    } else {
+                        Text(markdownAnnotated(block.runs, linkColor, codeBg, codeFontFamily),
                             fontSize = fontSize, lineHeight = lineHeight, color = color)
                     }
                 } else {
-                    Text(markdownAnnotated(block.runs, linkColor, codeBg, codeFontFamily),
-                        fontSize = fontSize, lineHeight = lineHeight, color = color)
+                    val lines = if (imagePreviews) inlineMatchLines(block.runs) else listOf(0 to block.runs)
+                    Column {
+                        lines.forEach { (offset, line) ->
+                            val length = line.sumOf { it.text.length }
+                            Text(
+                                mark(markdownAnnotated(line, linkColor, codeBg, codeFontFamily), base + offset),
+                                fontSize = fontSize,
+                                lineHeight = lineHeight,
+                                color = color,
+                                modifier = Modifier.pin(base + offset, length),
+                            )
+                            if (imagePreviews) ChatImagePreviews(line)
+                        }
+                    }
                 }
                 is MdBlock.Heading -> Text(
-                    markdownAnnotated(block.runs, linkColor, codeBg, codeFontFamily),
+                    mark(markdownAnnotated(block.runs, linkColor, codeBg, codeFontFamily), base),
                     fontSize = if (LocalReaderStyle.current) ReaderHeadingTextSize * scale else if (LocalMaterial3.current) MaterialTheme.typography.titleMedium.fontSize * scale else (fontSize.value * headingScale(block.level)).sp,
                     lineHeight = if (LocalReaderStyle.current) ReaderHeadingLineHeight * scale else if (LocalMaterial3.current) MaterialTheme.typography.titleMedium.lineHeight * scale else (fontSize.value * headingScale(block.level) * 1.35f).sp,
                     fontWeight = FontWeight.Bold,
                     color = color,
-                    modifier = Modifier.padding(top = 4.dp),
+                    modifier = Modifier.padding(top = 4.dp).pin(base, piece.length),
                 )
                 is MdBlock.ListItem -> {
+                    val runsAt = base + block.marker.length
                     Row(Modifier.padding(start = (block.depth * 16).dp)) {
-                        Text(block.marker, fontSize = fontSize, lineHeight = lineHeight, color = color,
-                            modifier = Modifier.width(if (block.marker.length > 2) 28.dp else 18.dp))
                         Text(
-                            markdownAnnotated(block.runs, linkColor, codeBg, codeFontFamily),
-                            fontSize = fontSize, lineHeight = lineHeight,
+                            mark(AnnotatedString(block.marker), base),
+                            fontSize = fontSize,
+                            lineHeight = lineHeight,
                             color = color,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.width(if (block.marker.length > 2) 28.dp else 18.dp).pin(base, block.marker.length),
+                        )
+                        Text(
+                            mark(markdownAnnotated(block.runs, linkColor, codeBg, codeFontFamily), runsAt),
+                            fontSize = fontSize,
+                            lineHeight = lineHeight,
+                            color = color,
+                            modifier = Modifier.weight(1f).pin(runsAt, piece.length - block.marker.length),
                         )
                     }
                 }
@@ -109,11 +155,11 @@ fun MarkdownText(
                     .then(if (LocalMaterial3.current) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp)) else Modifier)) {
                     Box(Modifier.width(3.dp).fillMaxHeight().background(if (LocalMaterial3.current) MaterialTheme.colorScheme.primary else color.copy(alpha = 0.4f)))
                     Text(
-                        markdownAnnotated(block.runs, linkColor, codeBg, codeFontFamily),
+                        mark(markdownAnnotated(block.runs, linkColor, codeBg, codeFontFamily), base),
                         fontSize = if (LocalMaterial3.current && !LocalReaderStyle.current) 13.sp else fontSize, lineHeight = lineHeight,
                         color = if (LocalMaterial3.current) MaterialTheme.colorScheme.onSurfaceVariant else color.copy(alpha = 0.85f),
                         fontStyle = if (LocalMaterial3.current) FontStyle.Normal else FontStyle.Italic,
-                        modifier = Modifier.padding(start = 10.dp).weight(1f),
+                        modifier = Modifier.padding(start = 10.dp).weight(1f).pin(base, piece.length),
                     )
                 }
                 is MdBlock.Code -> Box(
@@ -121,10 +167,11 @@ fun MarkdownText(
                         .fillMaxWidth()
                         .background(codeBg, chromeShape(RoundedCornerShape(4.dp)))
                         .horizontalScroll(rememberScrollState())
-                        .padding(10.dp),
+                        .padding(10.dp)
+                        .pin(base, piece.length),
                 ) {
                     Text(
-                        block.text,
+                        mark(AnnotatedString(block.text), base),
                         fontFamily = codeFontFamily,
                         fontSize = if (LocalReaderStyle.current) ReaderCodeTextSize * scale else (fontSize.value * 0.88f).sp,
                         lineHeight = if (LocalReaderStyle.current) ReaderCodeLineHeight * scale else (fontSize.value * 1.35f).sp,
@@ -132,13 +179,24 @@ fun MarkdownText(
                         softWrap = false,
                     )
                 }
-                is MdBlock.Table -> ChatTable(block, fontSize, color, linkColor, codeBg, heading)
+                is MdBlock.Table -> ChatTable(
+                    block,
+                    fontSize,
+                    color,
+                    linkColor,
+                    codeBg,
+                    heading,
+                    modifier = Modifier.pin(base, piece.length),
+                    matchHits = matchHits,
+                    activeHit = activeHit,
+                    tableBase = base,
+                )
                 MdBlock.Rule -> Box(
                     Modifier.fillMaxWidth().padding(vertical = 4.dp).height(1.dp)
                         .background(color.copy(alpha = 0.3f)),
                 )
             }
-            if (imagePreviews) {
+            if (imagePreviews && (matchHits.isEmpty() || block !is MdBlock.Paragraph)) {
                 val runs = when (block) {
                     is MdBlock.Heading -> block.runs
                     is MdBlock.ListItem -> block.runs
@@ -148,9 +206,36 @@ fun MarkdownText(
                 }
                 ChatImagePreviews(runs)
             }
+            cursor += piece.length
+            if (blockIndex < blocks.lastIndex) cursor += 1
         }
     }
     }
+}
+
+private fun inlineMatchLines(runs: List<InlineRun>): List<Pair<Int, List<InlineRun>>> {
+    if (runs.none { run -> !run.code && run.url != null }) return listOf(0 to runs)
+    val lines = ArrayList<Pair<Int, List<InlineRun>>>()
+    var current = ArrayList<InlineRun>()
+    var origin = 0
+    var cursor = 0
+    fun finishLine() {
+        lines += origin to current
+        current = ArrayList()
+    }
+    runs.forEach { run ->
+        run.text.split('\n').forEachIndexed { index, part ->
+            if (index > 0) {
+                finishLine()
+                cursor += 1
+                origin = cursor
+            }
+            current += run.copy(text = part)
+            cursor += part.length
+        }
+    }
+    finishLine()
+    return lines
 }
 
 @Composable
@@ -161,10 +246,24 @@ private fun ChatTable(
     linkColor: Color,
     codeBg: Color,
     title: String?,
+    modifier: Modifier = Modifier,
+    matchHits: List<ChatFind.Hit> = emptyList(),
+    activeHit: ChatFind.Hit? = null,
+    tableBase: Int = 0,
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
-        MarkdownTable(table, fontSize, color, linkColor, codeBg)
+        MarkdownTable(
+            table,
+            fontSize,
+            color,
+            linkColor,
+            codeBg,
+            modifier = modifier,
+            matchHits = matchHits,
+            activeHit = activeHit,
+            tableBase = tableBase,
+        )
         KitExpandButton(
             onClick = { open = true },
             modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).testTag("table-expand"),
@@ -172,7 +271,7 @@ private fun ChatTable(
     }
     if (open) {
         KitSheet(onDismiss = { open = false }) {
-            ExpandedChatTable(table, fontSize, title) { open = false }
+            ExpandedChatTable(table, fontSize, title, matchHits, activeHit, tableBase) { open = false }
         }
     }
 }
@@ -182,6 +281,9 @@ private fun ExpandedChatTable(
     table: MdBlock.Table,
     fontSize: TextUnit,
     title: String?,
+    matchHits: List<ChatFind.Hit>,
+    activeHit: ChatFind.Hit?,
+    tableBase: Int,
     onClose: () -> Unit,
 ) {
     val vertical = rememberScrollState()
@@ -215,7 +317,17 @@ private fun ExpandedChatTable(
             }
             Column(Modifier.weight(1f).fillMaxWidth().testTag("table-sheet-scroll").verticalScroll(vertical)) {
                 Row(Modifier.horizontalScroll(horizontal)) {
-                    MarkdownTable(table, fontSize, Kit.Text, Kit.Text, Kit.Text.copy(alpha = 0.10f), expanded = true)
+                    MarkdownTable(
+                        table,
+                        fontSize,
+                        Kit.Text,
+                        Kit.Text,
+                        Kit.Text.copy(alpha = 0.10f),
+                        matchHits = matchHits,
+                        activeHit = activeHit,
+                        tableBase = tableBase,
+                        expanded = true,
+                    )
                 }
             }
         }
@@ -229,6 +341,10 @@ private fun MarkdownTable(
     color: Color,
     linkColor: Color,
     codeBg: Color,
+    modifier: Modifier = Modifier,
+    matchHits: List<ChatFind.Hit> = emptyList(),
+    activeHit: ChatFind.Hit? = null,
+    tableBase: Int = 0,
     expanded: Boolean = false,
 ) {
     val material3 = LocalMaterial3.current
@@ -236,17 +352,24 @@ private fun MarkdownTable(
     val rows = listOf(table.header) + table.rows
     val cellCount = rows.size * columns
     val dividerCount = if (material3) rows.size - 1 else 1
+    var cellAt = tableBase
     val horizontal = rememberScrollState()
     Layout(
-        modifier = Modifier.testTag(if (expanded) "md-table-expanded" else "md-table")
+        modifier = modifier.testTag(if (expanded) "md-table-expanded" else "md-table")
             .then(if (expanded) Modifier else Modifier.horizontalScroll(horizontal))
             .then(if (material3) Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp)) else Modifier)
             .background(if (material3) MaterialTheme.colorScheme.surface else color.copy(alpha = 0.05f), chromeShape(RoundedCornerShape(4.dp))),
         content = {
             rows.forEachIndexed { rowIndex, row ->
                 for (c in 0 until columns) {
+                    val runs = row.getOrNull(c).orEmpty()
+                    val at = cellAt
+                    val length = runs.sumOf { it.text.length }
+                    cellAt += length
+                    if (c < columns - 1) cellAt += 1
                     Text(
-                        markdownAnnotated(row.getOrNull(c).orEmpty(), linkColor, codeBg, if (LocalReaderStyle.current) FontFamily.SansSerif else FontFamily.Monospace),
+                        markdownAnnotated(runs, linkColor, codeBg, if (LocalReaderStyle.current) FontFamily.SansSerif else FontFamily.Monospace)
+                            .marking(at, matchHits, activeHit),
                         fontSize = if (LocalReaderStyle.current) ReaderCodeTextSize * (fontSize.value / ReaderTextSize.value) else if (LocalMaterial3.current) MaterialTheme.typography.bodyMedium.fontSize * (fontSize.value / 15f) else (fontSize.value * 0.92f).sp,
                         lineHeight = if (LocalReaderStyle.current) ReaderCodeLineHeight * (fontSize.value / ReaderTextSize.value) else TextUnit.Unspecified,
                         fontWeight = if (rowIndex == 0) { if (LocalMaterial3.current) FontWeight.SemiBold else FontWeight.Bold } else FontWeight.Normal,
@@ -254,6 +377,7 @@ private fun MarkdownTable(
                         modifier = Modifier.testTag("md-cell").padding(horizontal = 8.dp, vertical = 5.dp),
                     )
                 }
+                if (rowIndex < rows.lastIndex) cellAt += 1
             }
             if (material3) Box(Modifier.background(MaterialTheme.colorScheme.surfaceContainer))
             repeat(dividerCount) {
