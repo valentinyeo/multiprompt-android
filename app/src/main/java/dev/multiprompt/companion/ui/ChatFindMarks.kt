@@ -30,3 +30,20 @@ internal fun AnnotatedString.marking(base: Int, hits: List<ChatFind.Hit>, active
     }
     return if (painted) builder.toAnnotatedString() else this
 }
+
+internal enum class SkillHitPaint { None, Other, Current }
+
+internal fun skillHitPaint(spanStart: Int, spanEnd: Int, base: Int, hits: List<ChatFind.Hit>, active: ChatFind.Hit?): SkillHitPaint {
+    if (hits.isEmpty() || spanEnd <= spanStart) return SkillHitPaint.None
+    val from = base + spanStart
+    val to = base + spanEnd
+    var other = false
+    hits.forEach { hit ->
+        if (hit.end <= from || hit.start >= to) return@forEach
+        if (active != null && hit.message == active.message && hit.start == active.start && hit.end == active.end) {
+            return SkillHitPaint.Current
+        }
+        other = true
+    }
+    return if (other) SkillHitPaint.Other else SkillHitPaint.None
+}

@@ -226,6 +226,25 @@ class DesignKitTest {
     }
 
     @Test
+    fun skillPillUsesTheSurfaceAndOutline() {
+        compose.setContent {
+            Page {
+                KitSkillPill("/ship", Modifier.testTag("skill"))
+                KitSkillPill("/other", Modifier.testTag("skill-other"), marked = true)
+                KitSkillPill("/now", Modifier.testTag("skill-current"), current = true)
+            }
+        }
+        val bitmap = capture("skill")
+        assertPixel(bitmap, bitmap.width / 2, 0, Kit.Outline, "skill outline")
+        assertPixel(bitmap, 4, bitmap.height / 2, Kit.Surface, "skill fill")
+        compose.onNodeWithText("/ship").assertExists()
+        val other = capture("skill-other")
+        assertPixel(other, 4, other.height / 2, Kit.Outline, "other skill match")
+        val current = capture("skill-current")
+        assertPixel(current, 4, current.height / 2, Kit.Text, "current skill match")
+    }
+
+    @Test
     fun unreadBadgeIsTheOnlyBlue() {
         compose.setContent {
             Page { KitUnreadBadge(11, Modifier.testTag("badge")) }

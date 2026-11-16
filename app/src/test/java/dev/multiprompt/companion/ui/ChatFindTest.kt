@@ -76,4 +76,15 @@ class ChatFindTest {
         assertTrue(MarkdownParser.visibleText(source).contains("code"))
         assertTrue(!MarkdownParser.visibleText(source).contains("**"))
     }
+
+    @Test
+    fun skillPillTakesTheStrongestOverlappingHit() {
+        val other = ChatFind.Hit(0, 0, 4)
+        val current = ChatFind.Hit(0, 2, 6)
+        assertEquals(SkillHitPaint.None, skillHitPaint(0, 4, 0, emptyList(), null))
+        assertEquals(SkillHitPaint.None, skillHitPaint(0, 4, 10, listOf(other), null))
+        assertEquals(SkillHitPaint.Other, skillHitPaint(0, 4, 0, listOf(other), ChatFind.Hit(1, 0, 4)))
+        assertEquals(SkillHitPaint.Current, skillHitPaint(0, 4, 0, listOf(other, current), current))
+        assertEquals(SkillHitPaint.Current, skillHitPaint(1, 3, 1, listOf(current), current))
+    }
 }

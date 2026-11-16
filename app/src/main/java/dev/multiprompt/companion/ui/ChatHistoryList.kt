@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.model.AgentKind
+import dev.multiprompt.companion.skills.NativeSkill
 import dev.multiprompt.companion.reader.ChatMention
 import dev.multiprompt.companion.reader.ChatReactions
 import dev.multiprompt.companion.reader.ReaderStatus
@@ -145,6 +146,7 @@ internal fun ChatHistoryView(
             loaded = state.loaded,
             hasOlder = !state.loaded || state.history.start > 0 || state.history.more,
             agent = agent,
+            skills = reader.nativeSkills,
             fontScale = fontScale,
             sunlight = sunlight,
             replyGate = replyGate,
@@ -214,6 +216,7 @@ internal fun ChatHistoryList(
     focusKey: String? = null,
     loaded: Boolean = true,
     agent: AgentKind = AgentKind.CLAUDE,
+    skills: List<NativeSkill> = emptyList(),
     fontScale: Float = 1f,
     sunlight: Boolean = false,
     replyGate: ReplySwipeGate = remember { ReplySwipeGate() },
@@ -377,7 +380,7 @@ internal fun ChatHistoryList(
                 val previous = presentation.messages.getOrNull(presentation.messages.lastIndex - index - 1)
                 if (LocalReaderStyle.current && previous != null && previous.role != message.role) Spacer(Modifier.height(10.dp))
                 val messageIndex = presentation.messages.lastIndex - index
-                HistoryBubble(if (message.role == "user") ChatMention.visible(message.text) else message.text, message.role, message.pending, fontScale, sunlight, replyGate, onReply,
+                HistoryBubble(if (message.role == "user") ChatMention.visible(message.text) else message.text, message.role, message.pending, fontScale, sunlight, replyGate, onReply, skills,
                     messageId = message.requestId, sessionName = sessionName, onMarkUnread = { openHold = false; onMarkUnread(message.key) },
                     key = message.key, highlighted = highlightedKey == message.key,
                     onJump = { pendingJump = ReplyJump(message, it) },
@@ -422,6 +425,7 @@ private fun HistoryBubble(
     sunlight: Boolean,
     gate: ReplySwipeGate,
     onReply: (String, Boolean) -> Unit,
+    skills: List<NativeSkill> = emptyList(),
     messageId: String = "",
     sessionName: String = "",
     onMarkUnread: () -> Unit = {},
@@ -485,8 +489,17 @@ private fun HistoryBubble(
                 val painted = reply?.body ?: text
                 val paintedOrigin = if (painted == text) 0 else text.lastIndexOf(painted).let { if (it < 0) 0 else it }
                 ChatLinkText(painted) { line, start ->
-                    Text(terminalLinks(line, sunlight).marking(paintedOrigin + start, findHits, activeHit), fontFamily = chatFontFamily(), fontSize = fontSize,
-                        lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, fontScale), color = chatTextColor(sunlight))
+                    SkillMessageText(
+                        text = line,
+                        skills = skills,
+                        color = chatTextColor(sunlight),
+                        fontSize = fontSize,
+                        lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, fontScale),
+                        sunlight = sunlight,
+                        matchBase = paintedOrigin + start,
+                        matchHits = findHits,
+                        activeHit = activeHit,
+                    )
                 }
             } else {
                 MarkdownText(
