@@ -185,6 +185,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.LinkAnnotation
@@ -196,6 +197,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -3417,6 +3419,9 @@ internal fun ReaderScreen(
         }
     }
     val loadSkills = { connection.loadSkills(context.assets.open("native_skills.py").use { it.readBytes() }, session.workingDirectory) }
+    LaunchedEffect(connection) {
+        if (session.agent == AgentKind.CLAUDE) loadSkills()
+    }
     LaunchedEffect(connection, skillQuery != null) {
         if (skillQuery != null) loadSkills()
     }
@@ -4159,7 +4164,8 @@ internal fun ReaderScreen(
                         error = reader.skillsError,
                         onRetry = loadSkills,
                         onSelect = { skill ->
-                            promptField = TextFieldValue(NativeSkills.insert(prompt, skill.name), selection = TextRange(skill.name.length + 2))
+                            val inserted = NativeSkills.insert(prompt, skill.name, promptField.selection.start)
+                            promptField = TextFieldValue(inserted.text, selection = TextRange(inserted.cursor.coerceIn(0, inserted.text.length)))
                             promptFocusRequester.requestFocus()
                         },
                     )
@@ -4398,6 +4404,9 @@ internal fun ReaderScreen(
                             !sendAfterDictation &&
                             (prompt.isNotBlank() || imageAttachments.isNotEmpty() || dictationActive)
                         val composerText = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
+                        val skillSpans = remember(prompt, reader.nativeSkills) { NativeSkills.spans(prompt, reader.nativeSkills) }
+                        var composerLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
+                        val skillText = remember(skillSpans) { if (skillSpans.isEmpty()) VisualTransformation.None else SkillPillText(skillSpans) }
                         Box(Modifier.weight(1f).padding(vertical = 2.dp)) {
                         BasicTextField(
                             value = promptField,
@@ -4414,6 +4423,8 @@ internal fun ReaderScreen(
                                 },
                             textStyle = composerText,
                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            visualTransformation = skillText,
+                            onTextLayout = { composerLayout = it },
                             minLines = 1,
                             maxLines = 6,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
@@ -4433,7 +4444,7 @@ internal fun ReaderScreen(
                                     Modifier.heightIn(min = ReaderControlSize).padding(start = 16.dp, end = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    Box(Modifier.weight(1f).padding(vertical = 10.dp)) {
+                                    Box(Modifier.weight(1f).padding(vertical = 10.dp).skillPills(skillSpans, composerLayout)) {
                                         if (prompt.isEmpty()) {
                                             Text(
                                                 "Message ${session.displayName}",
@@ -4793,12 +4804,14 @@ internal fun ReaderScreen(
                         ) {
                             if (isUser) {
                                 ChatLinkText(message.text) { line ->
-                                    Text(
-                                        terminalLinks(line, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
-                                        fontFamily = chatFontFamily(),
+                                    SkillMessageText(
+                                        text = line,
+                                        skills = reader.nativeSkills,
+                                        color = bodyColor,
                                         fontSize = transcriptFontSize,
                                         lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
-                                        color = bodyColor,
+                                        sunlight = sunlightMode,
+                                        linkColor = chatLinkColor(terminalBlue(sunlightMode)),
                                     )
                                 }
                             } else {
@@ -4869,12 +4882,14 @@ internal fun ReaderScreen(
                                 onMarkUnread = { onMarkUnreadFrom("block:${blockKey.hashCode()}") },
                             ) {
                                 ChatLinkText(block.text) { line ->
-                                    Text(
-                                        terminalLinks(line, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
-                                        fontFamily = chatFontFamily(),
+                                    SkillMessageText(
+                                        text = line,
+                                        skills = reader.nativeSkills,
+                                        color = chatTextColor(sunlightMode),
                                         fontSize = transcriptFontSize,
                                         lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
-                                        color = chatTextColor(sunlightMode),
+                                        sunlight = sunlightMode,
+                                        linkColor = chatLinkColor(terminalBlue(sunlightMode)),
                                     )
                                 }
                             }
