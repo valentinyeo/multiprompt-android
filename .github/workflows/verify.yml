@@ -103,6 +103,9 @@ on:
           - skill-pills.md
           - chat-table.md
           - clear-ranking.md
+          - message-reply.md
+          - signed-out-sync.md
+          - version-labels.md
       expect_settings_missing:
         description: Require signed Android 301 to reject the settings navigation journey
         type: boolean

@@ -483,7 +483,7 @@
     },
     "sessions.md": {
       "name": "Sessions",
-      "description": "Default seed readback: 42 real tmux sessions and a large transcript, runtime-selected off-screen reader entry, and an exact search result for that same session. Does not assert all 42 rows render.",
+      "description": "Default seed readback: 42 real tmux sessions and a large transcript, runtime-selected off-screen reader entry, and an exact search result for that same session below the search box and above the keyboard. Does not assert all 42 rows render.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -492,7 +492,8 @@
         "driver": true
       },
       "outcomes": [
-        "inbox.search"
+        "inbox.search",
+        "legacy.igsh-414"
       ],
       "evidence": {
         "seed-counts.json": 2500,
@@ -675,7 +676,7 @@
     },
     "chat-table.md": {
       "name": "Expand and scroll a chat table",
-      "description": "Open a wide chat table, scroll sideways and down to a known far cell, then close. SOFT-2544.",
+      "description": "Open a Claude transcript, check its subtitle and the absence of a Conversation header, then scroll a wide table sideways and down. SOFT-2544.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -684,9 +685,11 @@
         "driver": true
       },
       "outcomes": [
-        "chat-table.expand"
+        "chat-table.expand",
+        "legacy.igsh-424"
       ],
       "evidence": {
+        "table-header.json": 400,
         "table-inline.json": 1200,
         "table-open.json": 1200,
         "table-sideways.json": 1200,
@@ -717,6 +720,67 @@
         "clear-before.txt": 200,
         "clear-selected-host.txt": 200,
         "clear-proof.txt": 200
+      }
+    },
+    "message-reply.md": {
+      "name": "Reply to a message",
+      "description": "Long-press a Claude bubble, cancel the reply bar, then send a quoted reply with a host receipt.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "legacy.igsh-418"
+      ],
+      "evidence": {
+        "reply-open.json": 400,
+        "reply-cancelled.json": 200,
+        "reply-sent.json": 200,
+        "reply-receipts.txt": 800,
+        "reply-proof.txt": 80
+      }
+    },
+    "signed-out-sync.md": {
+      "name": "Signed-out sync row",
+      "description": "Reader Session actions, then More, shows Sign in to sync. The journey does not sign in.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "legacy.igsh-413"
+      ],
+      "evidence": {
+        "reader-sync.json": 200,
+        "sync-menu-proof.txt": 80
+      }
+    },
+    "version-labels.md": {
+      "name": "Version label",
+      "description": "The version label on Inbox, settings, the reader and the shell, and the Update screen it opens.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "legacy.igsh-426"
+      ],
+      "evidence": {
+        "inbox-version.json": 300,
+        "update-screen.json": 400,
+        "settings-version.json": 300,
+        "reader-version.json": 300,
+        "shell-version.json": 300,
+        "version-proof.txt": 80
       }
     }
   },
@@ -1138,22 +1202,62 @@
       "match": []
     },
     "legacy.igsh-426": {
-      "description": "prefix checks Sign in's exact version only. No credential blocks local-screen layout inspection; navigation/bounds proof is unimplemented. Inspect the label on Inbox, reader, shell, Hosts, editor and Settings; tap for **Update**. Workspaces need OTP. Sign in's label is bottom-centred, not beside three dots.",
-      "journey": null,
-      "sideEffect": true,
-      "match": []
+      "description": "The version label on Inbox, Session list settings, the reader and the live shell. Tapping it opens App updates. Hosts and the host editor no longer show this label.",
+      "journey": "version-labels.md",
+      "sideEffect": false,
+      "match": [
+        "open release notes"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "open release notes"
+        },
+        "result": {
+          "file": "update-screen.json",
+          "quote": "\"required\": [\n    \"App updates\""
+        }
+      }
     },
     "legacy.igsh-424": {
-      "description": "a supported agent (Claude) transcript on the SSH host, including tables/nested lists and model/effort state. Open from Inbox, scroll the complete transcript, inspect tables horizontally and top-bar subtitle; no **Conversation** header/status row. **Session actions \u2192 Session history** opens alternate-screen history. Console output proves none of this.",
-      "journey": null,
-      "sideEffect": true,
-      "match": []
+      "description": "Open the Claude fixture from Inbox. The top bar shows a model or waiting subtitle, the screen has no Conversation header, and the transcript table scrolls sideways.",
+      "journey": "chat-table.md",
+      "sideEffect": false,
+      "match": [
+        "Model / effort"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tools/chat-table/header.py"
+        },
+        "result": {
+          "file": "table-header.json",
+          "quote": "\"conversationHeader\": false"
+        }
+      }
     },
     "legacy.igsh-418": {
-      "description": "a real bubble plus swipe/long-press input, beyond the tap-only driver. Swipe right or long-press \u2192 **Reply**; inspect **Reply to \u2026**, **Cancel reply**, and send a quoted reply.",
-      "journey": null,
+      "description": "Long-press a Claude bubble, cancel Replying, then send a quoted reply. The host receipt contains the quote and the new text.",
+      "journey": "message-reply.md",
       "sideEffect": true,
-      "match": []
+      "match": [
+        "Cancel reply"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tap_text Reply"
+        },
+        "result": {
+          "file": "reply-open.json",
+          "quote": "\"cancel\": \"Cancel reply\""
+        },
+        "sideEffect": {
+          "file": "reply-receipts.txt",
+          "quote": "> REPLY_BUBBLE_418"
+        }
+      }
     },
     "legacy.igsh-425": {
       "description": "multi-touch and long/wide tmux output, no extra credential. **Open live terminal**, pinch (8\u201328 sp, retained on reopen), pan, swipe down or **Open shell history**, then **Jump to live** / **Back to the live view**. Terminal.md proves attachment only.",
@@ -1162,16 +1266,40 @@
       "match": []
     },
     "legacy.igsh-414": {
-      "description": "matching/close are automated; no credential blocks layout proof, but keyboard-visible bounds inspection is unimplemented. Inbox **Search sessions**, type in **Search all sessions**, inspect results below the box and above the keyboard before closing.",
-      "journey": null,
-      "sideEffect": true,
-      "match": []
+      "description": "Inbox search keeps the keyboard open. The exact session row sits below the search box and above the keyboard.",
+      "journey": "sessions.md",
+      "sideEffect": false,
+      "match": [
+        "Search all sessions"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tools/search-layout/bounds.py"
+        },
+        "result": {
+          "file": "search-keyboard.json",
+          "quote": "\"aboveKeyboard\": true"
+        }
+      }
     },
     "legacy.igsh-413": {
-      "description": "no credential blocks comparing signed-out **Sign in to sync** in Inbox **Session list actions** and reader **Session actions**; that comparison is unimplemented. OTP is needed for **Sync: signed in \u2014 sign out** and synced splits. Compare both menus, then complete sign-in manually.",
-      "journey": null,
-      "sideEffect": true,
-      "match": []
+      "description": "Signed out, reader Session actions, then More, shows Sign in to sync. The journey does not complete sign-in. Inbox Session list actions does not contain that row.",
+      "journey": "signed-out-sync.md",
+      "sideEffect": false,
+      "match": [
+        "Sign in to sync"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tap_text More"
+        },
+        "result": {
+          "file": "reader-sync.json",
+          "quote": "\"row\": \"Sign in to sync\""
+        }
+      }
     },
     "chat.link-recovery": {
       "description": "A dropped SSH link shows a host error and Retry; a waiting prompt enters the host store exactly once after the link returns without another Send tap.",

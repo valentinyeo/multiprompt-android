@@ -31,29 +31,9 @@
     "sourceTicket": "IGSH-415",
     "cleanupTicket": "IGSH-415"
   },
-  "legacy.igsh-426": {
-    "sourceTicket": "IGSH-426",
-    "cleanupTicket": "IGSH-426"
-  },
-  "legacy.igsh-424": {
-    "sourceTicket": "IGSH-424",
-    "cleanupTicket": "IGSH-424"
-  },
-  "legacy.igsh-418": {
-    "sourceTicket": "IGSH-418",
-    "cleanupTicket": "IGSH-418"
-  },
   "legacy.igsh-425": {
     "sourceTicket": "IGSH-425",
     "cleanupTicket": "IGSH-425"
-  },
-  "legacy.igsh-414": {
-    "sourceTicket": "IGSH-414",
-    "cleanupTicket": "IGSH-414"
-  },
-  "legacy.igsh-413": {
-    "sourceTicket": "IGSH-413",
-    "cleanupTicket": "IGSH-413"
   },
   "app-name.journey": {
     "sourceRecipe": "app-name.md",

@@ -27,7 +27,7 @@ Preconditions: fresh fixture; use `feature=sessions.md`. The driver performs the
 - Open **Search sessions** and type the runtime-chosen session name, not the host label. Require `1 result across all splits` and the exact `Robot <name>` row, then retain `seed-search.xml` and the `search-match` PNG/XML pair. Query text alone is not a matching row.
 - Close search, require the search field and one-result count to disappear, and reveal the same chosen session again. Retain `search-cleared`.
 - This journey proves the 42-session SSH seed/readback, one runtime-selected reader and its exact search result. It does not claim every seeded row rendered, a long-chat soak, transcript performance or session-menu behavior. The failed full-inbox swipe sweep and all-rows assertion were removed.
-- Results start beneath the search box and above the keyboard; current automation closes the keyboard before its shot, so inspect that layout manually. Inspect the XML as well as the screenshot: the typed query alone must not be mistaken for a matching card.
+- The driver types the session name and leaves the keyboard up. `search-keyboard.json` requires that exact `Robot <name>` row below the search field and above the keyboard frame from `dumpsys`. Closing search still requires the field and the one-result count to disappear. Inspect the XML as well as the screenshot: the typed query alone must not be mistaken for a matching card.
 
 ## Gotchas
 
