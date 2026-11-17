@@ -82,6 +82,7 @@
   "IGSH-2288": "Android: archive and delete workspaces",
   "IGSH-2342": "Android: add a chat to a group and remove it",
   "IGSH-2352": "Android: skills list fails with no reason shown",
+  "IGSH-2362": "Android: yellow dot on starred chats in every list",
   "IGSH-2311": "Android: hidden warm chats stop pulling screen updates",
   "IGSH-2296": "Android: keep one server link open for the chat list",
   "IGSH-2313": "Android: measure app start time with and without startup profile",
@@ -106,5 +107,6 @@
   "IGSH-2486": "Android shell gets Esc, Tab, Ctrl and arrow keys",
   "IGSH-2532": "Android chat shows each message once, with its reply",
   "IGSH-2533": "Android old-screen check stops breaking on every change",
-  "IGSH-2539": "Android phone test switches Pi models"
+  "IGSH-2539": "Android phone test switches Pi models",
+  "IGSH-2560": "Server overload: worker caps, heavy checks in the cloud, cloud workers"
 }

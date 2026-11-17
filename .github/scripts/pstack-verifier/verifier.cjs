@@ -266,7 +266,7 @@ async function callDeepSeek({ key, system, user, fetchImpl = fetch, sleep = ms =
         const payload = await response.json();
         const choice = payload?.choices?.[0];
         const content = choice?.message?.content;
-        if (choice?.finish_reason === 'length') throw Object.assign(new Error('DeepSeek cut the answer off'), { fatal: true });
+        if (choice?.finish_reason === 'length') throw Object.assign(new Error('DeepSeek cut the answer off'), { fatal: attempt >= 2 });
         if (typeof content !== 'string' || !content.trim()) throw Object.assign(new Error('DeepSeek returned no content'), { fatal: true });
         return content;
       }
