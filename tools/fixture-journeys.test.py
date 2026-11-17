@@ -1,6 +1,10 @@
 import ast
 import base64
-from contextlib import closing
+from contextlib import closing, redirect_stdout
+import io
+import os
+import pwd
+import shlex
 from datetime import datetime, timezone
 import importlib.util
 import json
@@ -30,6 +34,29 @@ ui = load('queue_ui', SCRIPTS / 'queued.py')
 
 
 class FixtureJourneyTest(unittest.TestCase):
+    def test_ai_switch_fixture_user_can_enable_the_initial_chat(self):
+        fixture = load('ai_switch_fixture', SCRIPTS / 'ai-switch-fixture.py')
+        branch = (SCRIPTS / 'fixture.sh').read_text().split('== ai-switch.md ]]; then', 1)[1].split('elif', 1)[0]
+        setup = next(line.strip() for line in branch.splitlines() if '/.local/bin' in line and ('mkdir' in line or 'install -d' in line))
+        user = pwd.getpwuid(os.getuid()).pw_name
+        previous = Path.cwd()
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            try:
+                command = setup.replace('/home/verifyssh', str(home)).replace('verifyssh', user)
+                subprocess.run(shlex.split(command), check=True)
+                self.assertTrue(os.access(home / '.local', os.W_OK), 'the fixture user must own the parent needed for host state')
+                (home / 'ai-switch-reader.py').write_bytes((ROOT / 'app/src/main/assets/chat_history_reader.py').read_bytes())
+                with patch.object(fixture, 'HOME', home), patch.object(fixture, 'CWD', home / 'ai-switch-work'), patch.object(fixture, 'boundary'), patch.object(sys, 'stdin', io.StringIO('')), patch.dict(os.environ, HOME=str(home), GITHUB_ACTIONS='true'), redirect_stdout(io.StringIO()) as output:
+                    fixture.console()
+                self.assertIn('AI_SWITCH_READY_2538', output.getvalue())
+                configs = [json.loads(path.read_text()) for path in (home / '.local/state/multiprompt/agent-host').glob('*.config.json')]
+                self.assertEqual(1, len(configs))
+                self.assertEqual(('claude', fixture.SID, 'verify-session', True), tuple(configs[0][key] for key in ('provider', 'sid', 'tmux', 'enabled')))
+            finally:
+                os.chdir(previous)
+                subprocess.run(['sudo', 'chown', '-R', f'{os.getuid()}:{os.getgid()}', str(home)], check=True)
+
     def test_real_generation_22_bundle_is_prepared_without_relabeling_current_source(self):
         with tempfile.TemporaryDirectory() as temporary:
             destination = Path(temporary)

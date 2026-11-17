@@ -51,10 +51,24 @@ if [[ "${VERIFY_FEATURE:-}" == ai-switch.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true ]]
     sudo install -m 755 "$(dirname "$0")/ai-switch-fixture.py" /home/verifyssh/ai-switch-fixture.py
     sudo install -m 644 app/src/main/assets/chat_history_reader.py /home/verifyssh/ai-switch-reader.py
-    sudo install -d -m 755 -o verifyssh -g verifyssh /home/verifyssh/.local/bin
+    sudo -u verifyssh mkdir -p /home/verifyssh/.local/bin
     sudo install -m 755 "$(dirname "$0")/ai-switch-fixture.py" /home/verifyssh/.local/bin/pi
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
-    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'env GITHUB_ACTIONS=true HOME=/home/verifyssh /home/verifyssh/claude -u /home/verifyssh/ai-switch-fixture.py console'
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'env GITHUB_ACTIONS=true HOME=/home/verifyssh /home/verifyssh/claude -u /home/verifyssh/ai-switch-fixture.py console 2>/home/verifyssh/ai-switch-startup.txt'
+    ready=false
+    for attempt in {1..30}; do
+        if sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/ai-switch-startup-pane.txt"; then
+            if grep -Fq AI_SWITCH_READY_2538 "$EVIDENCE/ai-switch-startup-pane.txt"; then ready=true; break; fi
+        else
+            break
+        fi
+        sleep 1
+    done
+    sudo cat /home/verifyssh/ai-switch-startup.txt > "$EVIDENCE/ai-switch-startup.txt"
+    if [[ "$ready" != true ]]; then
+        cat "$EVIDENCE/ai-switch-startup.txt" "$EVIDENCE/ai-switch-startup-pane.txt"
+        exit 1
+    fi
 elif [[ "${VERIFY_FEATURE:-}" == chat-codex.md ]]; then
     sudo install -m 755 "$(dirname "$0")/codex-console.py" /home/verifyssh/codex-console.py
     sudo install -m 755 "$(dirname "$0")/resync-console.py" /home/verifyssh/resync-console.py
