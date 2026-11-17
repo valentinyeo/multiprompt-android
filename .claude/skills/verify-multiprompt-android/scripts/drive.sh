@@ -178,14 +178,23 @@ wait_for_text() {
     return 1
 }
 fill() {
-    local attempt
+    local attempt index character
     local -a clear_keys
+    tap_node field "$1"
+    select_node focused-field "$1" >/dev/null
     for attempt in 1 2 3; do
-        tap_node field "$1"
-        select_node focused-field "$1" >/dev/null || continue
-        read -r -a clear_keys < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" clear-field "$1")
+        dump_ui
+        read -r -a clear_keys < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" clear-field "")
         adb shell input keyevent "${clear_keys[@]}"
-        adb shell input text "$2"
+        if (( attempt == 1 )); then
+            adb shell input text "$2"
+        else
+            for ((index = 0; index < ${#2}; index++)); do
+                character=${2:index:1}
+                if [[ "${2:index:2}" == '%s' ]]; then character='%s'; index=$((index + 1)); fi
+                adb shell input text "$character"
+            done
+        fi
         dump_ui
         if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value "$1" "${2//%s/ }"; then
             adb shell input keyevent KEYCODE_BACK
@@ -195,6 +204,7 @@ fill() {
     printf 'Field input did not match: %s\n' "$1" >&2
     return 1
 }
+
 scroll_to_newest() {
     local attempt
     for attempt in {1..8}; do
@@ -779,6 +789,54 @@ PYINFO
     exit 0
 fi
 
+if [[ "$feature" == session-drafts.md ]]; then
+    wait_for_text 'Inbox preview stays.'
+    python3 "$scripts/draft-label.py" absent "$EVIDENCE/current.xml"
+    shot inbox-before-draft
+    tap_text verify-session
+    wait_for_text 'Message verify-session'
+    fill 'Message verify-session' 'unsent%sdraft%stext'
+    shot composer-unsent
+    if sudo grep -F 'VERIFY_RECEIVED:unsent draft text' /home/verifyssh/receipts.txt; then
+        printf 'Unsent draft reached the host\n' >&2
+        exit 1
+    fi
+    tap_desc Back
+    wait_for_text Inbox
+    wait_for_text Draft
+    wait_for_text 'Inbox preview stays.'
+    shot inbox-draft
+    python3 "$scripts/draft-label.py" present "$EVIDENCE/$(printf '%02d' "$step")-inbox-draft.xml"
+    tap_text verify-session
+    wait_for_text 'unsent draft text'
+    sent=0
+    for attempt in {1..15}; do
+        dump_ui
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" reach-desc 'Send prompt' >/dev/null 2>&1; then
+            tap_desc 'Send prompt'
+            sent=1
+            break
+        fi
+        sleep 1
+    done
+    [[ "$sent" == 1 ]]
+    wait_receipt 'VERIFY_RECEIVED:unsent draft text'
+    tap_desc Back
+    wait_for_text Inbox
+    wait_for_text 'Inbox preview stays.'
+    for attempt in {1..30}; do
+        dump_ui
+        if python3 "$scripts/draft-label.py" absent "$EVIDENCE/current.xml"; then break; fi
+        sleep 1
+    done
+    shot inbox-draft-cleared
+    python3 "$scripts/draft-label.py" absent "$EVIDENCE/$(printf '%02d' "$step")-inbox-draft-cleared.xml"
+    sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
+    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt"
+    grep -Fx 'VERIFY_RECEIVED:unsent draft text' "$EVIDENCE/receipts.txt"
+    printf 'INBOX_DRAFT_LABEL_OK\n'
+    exit 0
+fi
 if [[ "$feature" == session-summaries.md ]]; then
     wait_for_text 'Lauren Tan profile is done, checked and pushed.'
     shot summary-reply
@@ -1091,6 +1149,53 @@ if [[ "$feature" == sessions.md ]]; then
     exit 0
 fi
 tap_text verify-session
+if [[ "$feature" == chat-identity.md ]]; then
+    wait_for_text PROJECTION_READY_2532
+    projection_event() {
+        sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/projection-fixture.py "$1"
+    }
+    projection_assert() {
+        projection_event read > "$EVIDENCE/projection-receipts-$1.json"
+        shot "projection-$1"
+        python3 tools/message-projection/ui.py "$EVIDENCE/current.xml" "$EVIDENCE/projection-receipts-$1.json" "$1" > "$EVIDENCE/projection-state-$1.json"
+    }
+    fill 'Message verify-session' PHONE_BEFORE_2532
+    shot projection-before-draft
+    tap_desc 'Send prompt'
+    for attempt in {1..20}; do
+        if projection_event accept-before > "$EVIDENCE/projection-accepted-before.json"; then break; fi
+        sleep 1
+    done
+    wait_for_text REPLY_BEFORE_2532
+    projection_assert before
+    fill 'Message verify-session' PHONE_AFTER_2532
+    shot projection-after-draft
+    tap_desc 'Send prompt'
+    for attempt in {1..20}; do
+        if projection_event accept-after > "$EVIDENCE/projection-accepted-after.json"; then break; fi
+        sleep 1
+    done
+    wait_for_text REPLY_AFTER_2532
+    projection_assert fresh
+    projection_event catchup > "$EVIDENCE/projection-catchup-receipts.json"
+    adb shell input keyevent KEYCODE_BACK
+    wait_for_text Inbox
+    tap_text All
+    tap_text verify-session
+    wait_for_text REPLY_AFTER_2532
+    projection_assert catchup
+    adb shell am force-stop "$package"
+    adb shell am start -n "$package/dev.multiprompt.companion.MainActivity"
+    wait_for_text 'Use without account (debug)'
+    tap_text 'Use without account (debug)'
+    wait_for_text Inbox
+    tap_text All
+    tap_text verify-session
+    wait_for_text REPLY_AFTER_2532
+    projection_assert reconnect
+    printf 'MESSAGE_PROJECTION_RECEIPTS_AND_ROWS_OK\n' | tee "$EVIDENCE/projection-proof.txt"
+    exit 0
+fi
 if [[ "$feature" == chat-shared.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true ]]
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py engine-info > "$EVIDENCE/shared-engine-info.json"
@@ -1230,6 +1335,12 @@ PYNEIGHBOR
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read claude > "$EVIDENCE/shared-claude-after-codex-reset.json"
     cmp "$EVIDENCE/shared-after-reset.json" "$EVIDENCE/shared-claude-after-codex-reset.json"
     printf 'SHARED_STORE_RESET_OK\n' | tee "$EVIDENCE/shared-result.txt"
+    if [[ "${VERIFY_SIDE:-}" != parent ]]; then
+        adb install -r -g app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+        adb shell am instrument -w -r -e class dev.multiprompt.companion.reader.ChatHistoryActorTest#settledResetRecoveryCannotStartAnotherReset \
+            dev.multiprompt.companion.debug.test/androidx.test.runner.AndroidJUnitRunner | tee "$EVIDENCE/reset-recovery-instrumentation.txt"
+        grep -F 'OK (1 test)' "$EVIDENCE/reset-recovery-instrumentation.txt"
+    fi
     exit 0
 fi
 if [[ "$feature" == chat-working.md ]]; then
@@ -1485,15 +1596,16 @@ if [[ "$feature" == chat-queued.md ]]; then
         local expected=$1 name=$2 attempt
         for attempt in {1..30}; do
             dump_ui
-            if python3 "$scripts/queued.py" "$EVIDENCE/current.xml" "$expected" "$name" >/dev/null 2>&1; then return; fi
+            if python3 "$scripts/queued.py" "$EVIDENCE/current.xml" "$expected" "$name" "$EVIDENCE/queue-state.tmp" "$EVIDENCE/queue-ui-$name.json" >/dev/null 2>&1; then return; fi
             sleep 1
         done
-        python3 "$scripts/queued.py" "$EVIDENCE/current.xml" "$expected" "$name"
+        python3 "$scripts/queued.py" "$EVIDENCE/current.xml" "$expected" "$name" "$EVIDENCE/queue-state.tmp" "$EVIDENCE/queue-ui-$name.json"
     }
     provider_event() { sudo -u verifyssh env GITHUB_ACTIONS="$GITHUB_ACTIONS" HOME=/home/verifyssh python3 /home/verifyssh/queued-console.py "$1"; }
     fixture_counts() {
         python3 - "$1" "$2" <<'QUEUE_COUNTS'
 import json
+import re
 import subprocess
 import sys
 expected_inputs = [] if sys.argv[1] == '-' else sys.argv[1].split(',')
@@ -1502,14 +1614,14 @@ inputs = subprocess.check_output(['sudo', 'cat', '/home/verifyssh/receipts.txt']
 assert inputs == ['VERIFY_RECEIVED:' + text for text in expected_inputs], inputs
 raw = subprocess.check_output(['sudo', 'cat', '/home/verifyssh/.claude/projects/-home-verifyssh-queued-work/a1b2c3d4-1008-4000-8000-000000001008.jsonl'], text=True)
 rows = [json.loads(line) for line in raw.splitlines()]
-receipts = [row['attachment']['prompt'] for row in rows if row.get('type') == 'attachment' and row.get('attachment', {}).get('type') == 'queued_command' and not row.get('isSidechain')]
+receipts = [re.sub(r'\n\[mp:[0-9a-f]{16}\]\s*$', '', row['attachment']['prompt']) for row in rows if row.get('type') == 'attachment' and row.get('attachment', {}).get('type') == 'queued_command' and not row.get('isSidechain')]
 assert receipts == expected_receipts, receipts
 QUEUE_COUNTS
     }
-    resync_marker() {
-        tap_desc 'Session actions'
-        wait_for_text 'Reset this chat'
-        tap_text 'Reset this chat'
+    reopen_marker() {
+        adb shell input keyevent KEYCODE_BACK
+        wait_for_text Inbox
+        tap_text verify-session
         provider_event "marker:$1"
         wait_for_text "$1"
     }
@@ -1527,7 +1639,7 @@ QUEUE_COUNTS
     fixture_counts - -
     provider_event clear-draft
     wait_receipt 'VERIFY_RECEIVED:WAITING_ONE'
-    queue_states waiting submitted queued | tee "$EVIDENCE/queue-submitted.json"
+    queue_states waiting sent queued | tee "$EVIDENCE/queue-submitted.json"
     queue_ui 1 QUEUE_SUBMITTED
     shot queued-submitted
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/native-queue-blocked.txt"
@@ -1541,32 +1653,34 @@ QUEUE_COUNTS
     else
         [[ $? -eq 1 ]]
     fi
-    resync_marker BEFORE_CONSUMPTION_MARKER
-    queue_states waiting submitted queued | tee "$EVIDENCE/queue-after-resync.json"
+    reopen_marker BEFORE_CONSUMPTION_MARKER
+    queue_states waiting sent queued | tee "$EVIDENCE/queue-after-resync.json"
     queue_ui 1 QUEUE_SUBMITTED
     fixture_counts WAITING_ONE -
     shot queued-after-resync
     provider_event consume:WAITING_ONE
     wait_receipt 'VERIFY_RECEIVED:WAITING_TWO'
-    queue_states waiting delivered submitted | tee "$EVIDENCE/queue-first-delivered.json"
+    queue_states waiting started sent | tee "$EVIDENCE/queue-first-delivered.json"
     queue_ui 0 QUEUE_FIRST_DELIVERED
     fixture_counts WAITING_ONE,WAITING_TWO WAITING_ONE
     shot queued-first-delivered
     provider_event consume:WAITING_TWO
-    queue_states waiting delivered delivered | tee "$EVIDENCE/queue-both-delivered.json"
+    queue_states waiting started started | tee "$EVIDENCE/queue-both-delivered.json"
     queue_ui 0 QUEUE_BOTH_DELIVERED
     fixture_counts WAITING_ONE,WAITING_TWO WAITING_ONE,WAITING_TWO
     shot queued-both-delivered
     provider_event reply
     wait_for_text 'Both messages received.'
+    queue_ui 0 QUEUE_ANSWERED
+    shot queued-answered
     fill 'Message verify-session' FOLLOWUP
     tap_desc 'Send prompt'
     wait_receipt 'VERIFY_RECEIVED:FOLLOWUP'
-    queue_states followup submitted | tee "$EVIDENCE/queue-followup-submitted.json"
+    queue_states followup sent | tee "$EVIDENCE/queue-followup-submitted.json"
     queue_ui 0 FOLLOWUP_SUBMITTED
     fixture_counts WAITING_ONE,WAITING_TWO,FOLLOWUP WAITING_ONE,WAITING_TWO
     provider_event consume:FOLLOWUP
-    queue_states followup delivered | tee "$EVIDENCE/queue-followup-delivered.json"
+    queue_states followup started | tee "$EVIDENCE/queue-followup-delivered.json"
     wait_for_text FOLLOWUP
     queue_ui 0 FOLLOWUP_DELIVERED
     fixture_counts WAITING_ONE,WAITING_TWO,FOLLOWUP WAITING_ONE,WAITING_TWO,FOLLOWUP
@@ -1591,7 +1705,7 @@ QUEUE_COUNTS
     fill 'Message verify-session' UNCERTAIN_TWO
     tap_desc 'Send prompt'
     wait_receipt 'VERIFY_RECEIVED:UNCERTAIN_ONE'
-    queue_states uncertain submitted queued | tee "$EVIDENCE/queue-uncertain.json"
+    queue_states uncertain sent queued | tee "$EVIDENCE/queue-uncertain.json"
     queue_ui 1 UNCERTAIN_SUBMITTED
     fixture_counts WAITING_ONE,WAITING_TWO,FOLLOWUP,UNCERTAIN_ONE WAITING_ONE,WAITING_TWO,FOLLOWUP
     provider_event clear-hint
@@ -1602,14 +1716,14 @@ QUEUE_COUNTS
     else
         [[ $? -eq 1 ]]
     fi
-    resync_marker UNCERTAIN_MARKER_1
-    queue_states uncertain submitted queued | tee "$EVIDENCE/queue-uncertain-resync-1.json"
+    reopen_marker UNCERTAIN_MARKER_1
+    queue_states uncertain sent queued | tee "$EVIDENCE/queue-uncertain-resync-1.json"
     queue_ui 1 UNCERTAIN_SUBMITTED
     fixture_counts WAITING_ONE,WAITING_TWO,FOLLOWUP,UNCERTAIN_ONE WAITING_ONE,WAITING_TWO,FOLLOWUP
     shot queued-uncertain-resync-1
     fill 'Message verify-session' PHONE_DRAFT_UNCERTAIN
-    resync_marker UNCERTAIN_MARKER_2
-    queue_states uncertain submitted queued | tee "$EVIDENCE/queue-uncertain-resync-2.json"
+    reopen_marker UNCERTAIN_MARKER_2
+    queue_states uncertain sent queued | tee "$EVIDENCE/queue-uncertain-resync-2.json"
     queue_ui 1 UNCERTAIN_SUBMITTED
     dump_ui
     python3 - "$EVIDENCE/current.xml" "$package" <<'QUEUE_DRAFT'
@@ -1627,15 +1741,17 @@ QUEUE_DRAFT
         [[ $? -eq 1 ]]
     fi
     shot queued-uncertain-resync-2
-    queue_states waiting delivered delivered | tee "$EVIDENCE/queue-waiting-final.json"
-    queue_states followup delivered | tee "$EVIDENCE/queue-followup-final.json"
-    queue_states uncertain submitted queued | tee "$EVIDENCE/queue-uncertain-final.json"
-    queue_states all delivered delivered delivered submitted queued | tee "$EVIDENCE/queue-all-final.json"
+    queue_states waiting started started | tee "$EVIDENCE/queue-waiting-final.json"
+    queue_states followup started | tee "$EVIDENCE/queue-followup-final.json"
+    queue_states uncertain sent queued | tee "$EVIDENCE/queue-uncertain-final.json"
+    queue_states all started started started sent queued | tee "$EVIDENCE/queue-all-final.json"
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/queued-receipts.txt"
+    cp "$EVIDENCE/queued-receipts.txt" "$EVIDENCE/00-queue-receipts.txt"
     sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-queued-work/a1b2c3d4-1008-4000-8000-000000001008.jsonl > "$EVIDENCE/queued-transcript.jsonl"
     sudo cat /home/verifyssh/shell-events.jsonl > "$EVIDENCE/shell-events.jsonl"
     python3 - "$EVIDENCE" <<'QUEUE_RESULT'
 import json
+import re
 from pathlib import Path
 import sys
 root = Path(sys.argv[1])
@@ -1643,15 +1759,15 @@ consumed = ['WAITING_ONE', 'WAITING_TWO', 'FOLLOWUP']
 inputs = root.joinpath('queued-receipts.txt').read_text().splitlines()
 assert inputs == ['VERIFY_RECEIVED:' + text for text in consumed + ['UNCERTAIN_ONE']], inputs
 rows = [json.loads(line) for line in root.joinpath('queued-transcript.jsonl').read_text().splitlines()]
-receipts = [r['attachment']['prompt'] for r in rows if r.get('type') == 'attachment' and r.get('attachment', {}).get('type') == 'queued_command' and not r.get('isSidechain')]
+receipts = [re.sub(r'\n\[mp:[0-9a-f]{16}\]\s*$', '', r['attachment']['prompt']) for r in rows if r.get('type') == 'attachment' and r.get('attachment', {}).get('type') == 'queued_command' and not r.get('isSidechain')]
 assert receipts == consumed, receipts
 waiting_names = ('queue-pending.json', 'queue-submitted.json', 'queue-after-resync.json', 'queue-first-delivered.json', 'queue-both-delivered.json', 'queue-waiting-final.json')
 waiting = [json.loads(root.joinpath(name).read_text()) for name in waiting_names]
-assert all([r['id'] for r in state] == [r['id'] for r in waiting[0]] for state in waiting)
+assert all([(r['id'], r['attempt']) for r in state] == [(r['id'], r['attempt']) for r in waiting[0]] for state in waiting)
 assert [r['receipt_claims'] for r in waiting[-1]] == [r['receipt_claims'] for r in waiting[-2]]
 uncertain_names = ('queue-uncertain.json', 'queue-uncertain-resync-1.json', 'queue-uncertain-resync-2.json', 'queue-uncertain-final.json')
 uncertain = [json.loads(root.joinpath(name).read_text()) for name in uncertain_names]
-assert all([r['id'] for r in state] == [r['id'] for r in uncertain[0]] for state in uncertain)
+assert all([(r['id'], r['attempt']) for r in state] == [(r['id'], r['attempt']) for r in uncertain[0]] for state in uncertain)
 followup = [json.loads(root.joinpath(name).read_text()) for name in ('queue-followup-submitted.json', 'queue-followup-delivered.json', 'queue-followup-final.json')]
 assert all(state[0]['id'] == followup[0][0]['id'] for state in followup)
 assert followup[-1][0]['receipt_claims'] == followup[-2][0]['receipt_claims']
@@ -1667,6 +1783,8 @@ result = dict(consumed_positive=dict(inputs=consumed, synthetic_receipts=receipt
               apk_sha256=root.joinpath('app-apk-sha256.txt').read_text().strip(),
               provider='simulated Claude; real SSH, tmux, client and embedded engine')
 root.joinpath('queue-result.json').write_text(json.dumps(result, indent=2) + '\n')
+ui = {phase: json.loads(root.joinpath('queue-ui-' + name + '.json').read_text()) for phase, name in [('queued', 'QUEUE_WAITING'), ('answered', 'QUEUE_ANSWERED')]}
+root.joinpath('00-queue-ui.json').write_text(json.dumps(ui) + '\n')
 print('QUEUE_JOURNEY_RESULT', json.dumps(result))
 QUEUE_RESULT
     exit 0

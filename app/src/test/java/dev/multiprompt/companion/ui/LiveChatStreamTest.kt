@@ -155,11 +155,11 @@ class LiveChatStreamTest {
         val second = MessageProtocol.Row("mp-abcdef0123456789", "claude", sid, "second", 2, "attempt0123456789",
             MessageProtocol.State.QUEUED, null, null, 0, 1793653981.5)
         val replica = MessageReplica(0, 0, messages = mapOf(second.id to second), host = next)
-        val drawn = asked.managedMessages(replica, emptyList()).map { it.text }
+        val drawn = asked.projectMessages(replica, emptyList()).map { it.text }
         assertEquals(listOf("first", "Here is the answer.", "second"), drawn)
 
         val landed = asked.copy(rows = asked.rows + ChatHistoryProtocol.Row("assistant", "Here is the answer.", "a1", "", 180, 300))
-        val settled = landed.managedMessages(replica, emptyList())
+        val settled = landed.projectMessages(replica, emptyList())
         assertEquals(1, settled.count { it.text == "Here is the answer." })
         assertTrue(settled.none { it.key.startsWith("@live:t-1") })
     }
@@ -171,13 +171,13 @@ class LiveChatStreamTest {
         val replica = MessageReplica(0, 0, host = HostStream("t-1", running = false,
             blocks = listOf(HostBlock("x:text:0", "text", "Still here.", true))))
 
-        val drawn = history.managedMessages(replica, emptyList())
+        val drawn = history.projectMessages(replica, emptyList())
         assertEquals(listOf("Still here."), drawn.filter { it.role == "assistant" }.map { it.text })
         assertTrue(drawn.none { it.key.startsWith("@live:") })
 
         val streaming = replica.copy(host = replica.host.copy(running = true,
             blocks = listOf(HostBlock("y:text:0", "text", "Still here. More to come", false))))
-        val growing = history.managedMessages(streaming, emptyList()).filter { it.key.startsWith("@live:") }
+        val growing = history.projectMessages(streaming, emptyList()).filter { it.key.startsWith("@live:") }
         assertEquals(listOf("Still here. More to come"), growing.map { it.text })
         assertTrue(growing.single().pending)
     }
@@ -259,7 +259,7 @@ class LiveChatStreamTest {
     @Test
     fun anAnsweredLiveChatEndsWithTheReply() {
         val state = answeredChat()
-        val drawn = state.history.managedMessages(state.replica, emptyList())
+        val drawn = state.history.projectMessages(state.replica, emptyList())
         assertEquals("Synthetic answer arrived", drawn.last().text)
         assertEquals(1, drawn.count { it.text == "Synthetic ask" })
         assertEquals("@shared:mp-0000000000000016", drawn.single { it.text == "Synthetic ask" }.key)
@@ -274,7 +274,7 @@ class LiveChatStreamTest {
         val state = answeredChat()
         val waiting = accepted(17, "Synthetic follow up", 1793712100.0)
         val replica = state.replica!!.copy(messages = state.replica!!.messages + (waiting.id to waiting))
-        val drawn = state.history.managedMessages(replica, emptyList())
+        val drawn = state.history.projectMessages(replica, emptyList())
         assertEquals(listOf("Synthetic answer arrived", "Synthetic follow up"), drawn.takeLast(2).map { it.text })
         assertEquals("@shared:${waiting.id}", drawn.last().key)
     }

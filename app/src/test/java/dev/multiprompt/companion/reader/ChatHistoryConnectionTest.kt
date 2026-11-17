@@ -138,7 +138,7 @@ class ChatHistoryConnectionTest {
             for (page in listOf(stale, stale.copy(inode = 10))) {
                 val recovered = seed.apply(page)
                 assertEquals(terminal, recovered.deliveries["id"])
-                assertFalse(recovered.displayMessages(listOf(prompt)).single().pending)
+                assertFalse(recovered.projectMessages(sent = listOf(prompt)).single().pending)
                 assertTrue(unconfirmedAfterResync(recovered, listOf(prompt)).isEmpty())
             }
             val rotated = known.apply(stale.copy(inode = 10))
