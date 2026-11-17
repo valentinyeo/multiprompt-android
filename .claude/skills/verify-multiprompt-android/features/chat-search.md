@@ -2,9 +2,9 @@
 
 Prove `chat-search.open` for [SOFT-2540](https://app.hypertask.ai/detail/project-2060/2540), closing the missing phone journey from [PR #380](https://github.com/valentinyeo/multiprompt-android/pull/380).
 
-Dispatch `verify.yml` with `feature=chat-search.md`. Use a fresh GitHub-hosted emulator. The driver imports the disposable SSH key through the document picker, compares the host fingerprint, and taps **Trust and connect** before opening the chat.
+Dispatch `verify.yml` with `feature=chat-search.md`. Use a fresh GitHub-hosted emulator. The shared driver seeds the disposable SSH host and key through its existing instrumentation fixture. It compares the host fingerprint and taps **Trust and connect** before opening the chat. Host-form entry and document-picker import are not covered.
 
-The independent SSH fixture writes a Claude JSONL transcript. Two replies contain `orchard north` and `orchard south`, separated by twelve long exchanges. The terminal shows only a ready marker, so terminal scraping cannot supply the matches. No account, provider key, app setter, or production data is involved.
+The independent SSH fixture writes a Claude JSONL transcript. Two replies contain `orchard north` and `orchard south`, separated by twelve long exchanges. The terminal shows only a ready marker, so terminal scraping cannot supply the matches. No chat state is injected into the app. No account, provider key, or production data is involved.
 
 ## Journey
 
