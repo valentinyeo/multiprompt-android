@@ -385,8 +385,11 @@ function journeyEvidence(directory, feature) {
   return parts.join('\n');
 }
 
-function includeRequiredJourneys(picked, plan) {
-  const required = [...new Set(plan.outcomes.map(id => coverageGate.registry.outcomes[id].journey).filter(name => ALLOWLIST.includes(name)))];
+function includeRequiredJourneys(picked, plan, diff = '') {
+  const required = [...new Set([
+    ...plan.outcomes.map(id => coverageGate.registry.outcomes[id].journey),
+    ...ALLOWLIST.filter(name => diff.includes(`b/${coverageGate.REGISTRY_PATH}/${name}\n`)),
+  ].filter(name => ALLOWLIST.includes(name)))];
   if (required.length > MAX_JOURNEYS) throw new Error('Required outcomes need more than three journeys; split the change.');
   if (!required.length) return picked;
   const selected = validateFeatures([...required, ...picked.features]);
@@ -430,7 +433,7 @@ async function pick(env) {
   const picked = await askParsed({ ask: () => callDeepSeek({ key, system: PICK_INSTRUCTIONS, user }), parse: parsePick });
   const plan = coverageGate.planChange(diff, picked.changedOutcomes);
   if (plan.product && picked.changeKind !== 'product') throw new Error('FEATURE_UNMAPPED: product source changes cannot use tooling-only validation.');
-  const selected = includeRequiredJourneys(picked, plan);
+  const selected = includeRequiredJourneys(picked, plan, diff);
   const reason = picked.reason || 'Journeys chosen for this change.';
   console.log(`pstack-verifier pick: PR #${number} features=${JSON.stringify(selected.features)} smoke=${selected.smoke} dropped=${JSON.stringify(selected.dropped)} reason=${reason}`);
   setOutputs({ features: JSON.stringify(selected.features), smoke: selected.smoke ? 'yes' : 'no', reason, number, head_sha: head, merge_base: mergeBase, changed_outcomes: JSON.stringify(plan.outcomes) });
