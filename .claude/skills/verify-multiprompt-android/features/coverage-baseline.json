@@ -1,8 +1,4 @@
 {
-  "snippets.save-reuse-delete": {
-    "sourcePr": 376,
-    "cleanupTicket": "SOFT-2537"
-  },
   "pi.model-switch": {
     "sourcePr": 374,
     "cleanupTicket": "SOFT-2539"
