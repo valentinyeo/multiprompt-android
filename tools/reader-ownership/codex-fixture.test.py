@@ -64,6 +64,11 @@ class CodexFixtureTest(unittest.TestCase):
                 self.assertEqual("VERIFY_RECEIVED:PHONE_CODEX\n", (home / "codex-receipts.txt").read_text())
                 rows = [json.loads(line) for line in path.read_text().splitlines()]
                 self.assertEqual("CODEX_REPLY_codex_PHONE_CODEX", rows[-1]["payload"]["content"][0]["text"])
+                run([sys.executable, str(SCRIPTS / "codex-console.py"), str(home / "receipts.txt"), "hax"],
+                    input="PHONE_CODEX\n", env=env, text=True, capture_output=True, check=True)
+                parity = run([sys.executable, str(SCRIPTS / "codex-parity.py"), str(ROOT / "app/src/main/assets/chat_history_reader.py"),
+                              str(ROOT / "app/src/main/assets/chat_history_reader.py")], env=env, text=True, capture_output=True, check=True)
+                self.assertIn("DESKTOP_ANDROID_POSTS_IDENTICAL", parity.stdout)
                 rejected = run([str(binary), "queue", "--thread", "25340000-0000-4000-8000-000000000099", "--message", "WRONG_THREAD"], cwd=home, env=env, capture_output=True)
                 self.assertNotEqual(0, rejected.returncode)
                 self.assertNotIn("WRONG_THREAD", (home / "codex-receipts.txt").read_text())
