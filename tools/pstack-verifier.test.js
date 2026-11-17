@@ -637,3 +637,20 @@ test('required journeys replace a smoke fallback without inventing coverage for 
   assert.deepEqual(verifier.requiredJourneys(picked, { outcomes: ['sign-in.journey'] }).features, ['sign-in.md']);
   assert.deepEqual(verifier.requiredJourneys(picked, { outcomes: ['session-settings.journey'] }), picked);
 });
+
+test('proof uploads survive the same-run retry that failed PR392 at c2f673c6', () => {
+  const requireReplayable = source => {
+    const lines = source.split('\n');
+    let found = 0;
+    lines.forEach((line, index) => {
+      if (!line.includes('uses: actions/upload-artifact@')) return;
+      found += 1;
+      let end = index + 1;
+      while (end < lines.length && !/^\s*- /.test(lines[end])) end += 1;
+      assert.match(lines.slice(index, end).join('\n'), /^\s+overwrite: true$/m, 'A repeated check must replace its own per-run artifact, not fail with HTTP 409');
+    });
+    assert.ok(found > 0);
+  };
+  for (const file of ['.github/workflows/pstack-verifier.yml', '.github/workflows/verify.yml', '.github/workflows/test.yml', '.github/actions/android-proof/action.yml']) requireReplayable(read(file));
+  assert.throws(() => requireReplayable('uses: actions/upload-artifact@v4\nwith:\n  name: verifier-tooling-proof\n  path: tooling-proof.txt\n'));
+});

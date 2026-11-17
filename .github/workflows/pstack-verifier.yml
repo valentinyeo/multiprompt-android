@@ -60,6 +60,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          overwrite: true
           name: verifier-tooling-proof
           path: ${{ runner.temp }}/tooling-proof.txt
           if-no-files-found: error
@@ -149,6 +150,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          overwrite: true
           name: verifier-feature-coverage
           path: ${{ runner.temp }}/feature-coverage.json
           if-no-files-found: error
