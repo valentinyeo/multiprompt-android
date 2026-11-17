@@ -16,20 +16,20 @@ class LineBreakEchoTest {
 
     @Test fun aSentMessageWithWindowsLineBreaksShowsOnce() {
         val drawn = history(ChatHistoryProtocol.Row("user", "line one\r\nline two", "u1", spoken, 100, 180))
-            .managedMessages(replica("line one\nline two"), emptyList())
+            .projectMessages(replica("line one\nline two"), emptyList())
         assertEquals(1, drawn.count { it.role == "user" })
         assertEquals("@shared:$id", drawn.single { it.role == "user" }.key)
     }
 
     @Test fun aSentMessageMatchesWhenOnlyTheSentCopyHasWindowsLineBreaks() {
         val drawn = history(ChatHistoryProtocol.Row("user", "line one\nline two", "u1", spoken, 100, 180))
-            .managedMessages(replica("line one\r\nline two"), emptyList())
+            .projectMessages(replica("line one\r\nline two"), emptyList())
         assertEquals(1, drawn.count { it.role == "user" })
     }
 
     @Test fun differentTextStillShowsBothMessages() {
         val drawn = history(ChatHistoryProtocol.Row("user", "line one\nline three", "u1", spoken, 100, 180))
-            .managedMessages(replica("line one\nline two"), emptyList())
+            .projectMessages(replica("line one\nline two"), emptyList())
         assertEquals(2, drawn.count { it.role == "user" })
     }
 }

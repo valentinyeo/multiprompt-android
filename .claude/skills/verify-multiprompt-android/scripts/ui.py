@@ -42,7 +42,10 @@ for node in root.iter("node"):
     elif mode == "field-value" and node.get("class") == "android.widget.EditText" and node.get("focused") == "true":
         matches.append(node)
     elif mode in ("field", "focused-field", "clear-field") and node.get("class") == "android.widget.EditText":
-        if any(value == item.get("text") or value == item.get("content-desc") for item in node.iter()):
+        if value == "" and mode == "clear-field":
+            if node.get("focused") == "true" and node.get("package") == package:
+                matches.append(node)
+        elif any(value == item.get("text") or value == item.get("content-desc") for item in node.iter()):
             matches.append(node)
 if mode in ("absent", "lacks"):
     if not any(n.get("package") == package for n in root.iter("node")):
