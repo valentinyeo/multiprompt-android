@@ -160,7 +160,7 @@ if [[ "${VERIFY_FEATURE:-}" == copy-chat-id.md ]]; then
 fi
 sudo -u verifyssh tmux display-message -p '#{pid}' > "$FIXTURE/tmux.pid"
 sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/fixture-start.txt"
-if [[ "${VERIFY_FEATURE:-}" == session-routing.md || "${VERIFY_FEATURE:-}" == session-gestures.md ]]; then
+if [[ "${VERIFY_FEATURE:-}" == session-routing.md || "${VERIFY_FEATURE:-}" == session-gestures.md || "${VERIFY_FEATURE:-}" == inbox-pin.md ]]; then
     sudo -u verifyssh tmux new-session -d -s verify-other -x 100 -y 32 'python3 -u /home/verifyssh/console.py /home/verifyssh/other-receipts.txt'
     sudo -u verifyssh tmux set-window-option -t verify-other automatic-rename off
     sudo -u verifyssh tmux rename-window -t verify-other verify-other

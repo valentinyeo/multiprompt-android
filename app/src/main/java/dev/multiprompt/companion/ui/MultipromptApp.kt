@@ -261,6 +261,7 @@ import dev.multiprompt.companion.skills.NativeSkills
 import dev.multiprompt.companion.data.ReminderTimeParser
 import dev.multiprompt.companion.data.UnreadCount
 import dev.multiprompt.companion.data.UnreadOnlyFilter
+import dev.multiprompt.companion.data.SessionPins
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.SnippetStore
 import dev.multiprompt.companion.data.Snippets
@@ -618,6 +619,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onRenameGroup = viewModel::renameAccountGroup,
                     onSetChatGroup = { tab, name, favorites -> viewModel.editAccountLayout { it.setGroup(tab.identity, name, favorites) } },
                     onUngroup = { name, favorites -> viewModel.editAccountLayout { it.ungroup(name, favorites) } },
+                    onSetPinned = viewModel::setSessionPinned,
                     appTheme = state.appTheme,
                     onSetAppTheme = viewModel::setAppTheme,
                     onClearSessionActionError = viewModel::clearSessionActionError,
@@ -1343,6 +1345,7 @@ internal fun SessionsScreen(
     onSetUnreadOnly: (Boolean) -> Unit = {},
     onSetChatGroup: (AccountTab, String?, Boolean) -> String? = { _, _, _ -> null },
     onUngroup: (String, Boolean) -> String? = { _, _ -> null },
+    onSetPinned: (TmuxSession, Boolean) -> Unit = { _, _ -> },
     onShowAiUsage: () -> Unit = {},
     onDismissAiUsage: () -> Unit = {},
 ) = MultipromptTheme(
@@ -2270,7 +2273,7 @@ internal fun SessionsScreen(
                     item(key = "error-$hostId") { InlineError(error) }
                 }
             }
-            val sessionGroups = SessionGroups.split(visibleSessions, state.accountLayout?.groupOrder?.let { if (reversedSessions) it.asReversed() else it }) { session ->
+            val sessionGroups = SessionGroups.split(SessionPins.arrange(visibleSessions, state.pinnedSessionKeys, reversedSessions), state.accountLayout?.groupOrder?.let { if (reversedSessions) it.asReversed() else it }) { session ->
                 val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
                 tab?.groupIn(state.selectedWorkspaceId == FAVORITES_SPLIT_ID)
             }
@@ -2346,6 +2349,8 @@ internal fun SessionsScreen(
                             onEnd = { endPromptSession = session },
                             onForget = { onForgetSession(session) },
                             onMoveToGroup = if (tab != null && state.signedIn) ({ groupMoveTarget = tab }) else null,
+                            pinnedToTop = key in state.pinnedSessionKeys,
+                            onTogglePin = { onSetPinned(session, key !in state.pinnedSessionKeys) },
                         )
                     }
                 }
@@ -2572,6 +2577,8 @@ private fun SessionCard(
     muted: Boolean = false,
     onToggleMute: (() -> Unit)? = null,
     onMoveToGroup: (() -> Unit)? = null,
+    pinnedToTop: Boolean = false,
+    onTogglePin: (() -> Unit)? = null,
 ) {
     var menuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     val dismissState = rememberSwipeToDismissBoxState(
@@ -2702,6 +2709,15 @@ private fun SessionCard(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
                 ) {
+                    onTogglePin?.let { toggle ->
+                        KitMenuRow(
+                            label = if (pinnedToTop) "Unpin" else "Pin to top",
+                            onClick = {
+                                menuExpanded = false
+                                toggle()
+                            },
+                        )
+                    }
                     onToggleFavorite?.let { toggle ->
                         KitMenuRow(
                             label = if (starred) "Unfavorite" else "Favorite",

@@ -28,6 +28,7 @@ import dev.multiprompt.companion.room.RoomLoadPolicy
 import dev.multiprompt.companion.room.RoomLoadTrigger
 import dev.multiprompt.companion.notify.ReplyNotificationPolicy
 import dev.multiprompt.companion.notify.ReplyNotifier
+import dev.multiprompt.companion.data.SessionPins
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.RetiredHosts
 import dev.multiprompt.companion.data.SessionSearch
@@ -115,6 +116,7 @@ data class AppUiState(
     val readerUnreadMessageKey: String? = null,
     val readerUnreadSince: Long? = null,
     val unreadSessionKeys: Set<String> = emptySet(),
+    val pinnedSessionKeys: Set<String> = emptySet(),
     val unreadCounts: Map<String, Int> = emptyMap(),
     val repliedSessionKeys: Set<String> = emptySet(),
     val archivedSessionKeys: Set<String> = emptySet(),
@@ -275,6 +277,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             accountPending = pendingLayout?.dirty == true,
             accountHosts = AccountHostMap.resolve(hosts.load(), accountStore.hostOverrides()),
             newestSessionsAtBottom = sessionReads.newestSessionsAtBottom(),
+            pinnedSessionKeys = sessionReads.pinnedSessionKeys(),
             allSplitOnRight = sessionReads.allSplitOnRight(),
             readerDefaultFontScale = sessionReads.readerDefaultFontScale(),
             readerTechnicalMode = sessionReads.readerTechnicalMode(),
@@ -676,6 +679,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 terminalFromReader = it.terminalFromReader && it.terminalSession?.hostId != host.id,
                 readerSwipeOrder = it.readerSwipeOrder.filterNot { key -> key.startsWith(sessionPrefix) },
                 unreadSessionKeys = it.unreadSessionKeys.filterNot { key -> key.startsWith(sessionPrefix) }.toSet(),
+                pinnedSessionKeys = it.pinnedSessionKeys.filterNot { key -> key.startsWith(sessionPrefix) }.toSet(),
                 unreadCounts = it.unreadCounts.filterKeys { key -> !key.startsWith(sessionPrefix) },
                 archivedSessionKeys = it.archivedSessionKeys.filterNot { key -> key.startsWith(sessionPrefix) }.toSet(),
                 sessionWorkspaceIds = it.sessionWorkspaceIds.filterKeys { key -> !key.startsWith(sessionPrefix) },
@@ -1219,6 +1223,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         sessionReads.markUnreadFrom(session, messageKey)
         markSessionUnread(session)
         _state.update { it.copy(readerUnreadMessageKey = messageKey, readerUnreadSince = null) }
+    }
+
+    fun setSessionPinned(session: TmuxSession, pinned: Boolean) {
+        sessionReads.setPinnedToTop(session, pinned)
+        val key = SessionReadStore.key(session.hostId, session.name)
+        _state.update {
+            it.copy(pinnedSessionKeys = if (pinned) it.pinnedSessionKeys + key else it.pinnedSessionKeys - key)
+        }
     }
 
     fun markSessionUnread(session: TmuxSession) {
@@ -2312,6 +2324,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 frequentSessions(sessions, state.accountLayout, state.accountHosts, System.currentTimeMillis())
             } else SessionSearch.newestFirst(sessions, state.sessionInteractionEpochSeconds, state.accountLayout, state.accountHosts)
         }
+        .let { SessionPins.arrange(it, state.pinnedSessionKeys, state.newestSessionsAtBottom) }
 
     private companion object {
         const val ROOM_POLL_MS = 4_000L

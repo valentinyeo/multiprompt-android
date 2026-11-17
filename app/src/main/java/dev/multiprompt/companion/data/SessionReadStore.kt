@@ -210,6 +210,18 @@ class SessionReadStore(context: Context) {
         editor.apply()
     }
 
+    fun pinnedSessionKeys(): Set<String> = preferences.all.keys
+        .filter { it.startsWith(PIN_TO_TOP_PREFIX) }
+        .map { it.removePrefix(PIN_TO_TOP_PREFIX) }
+        .toSet()
+
+    fun setPinnedToTop(session: TmuxSession, pinned: Boolean) {
+        val prefKey = PIN_TO_TOP_PREFIX + key(session.hostId, session.name)
+        val editor = preferences.edit()
+        if (pinned) editor.putBoolean(prefKey, true) else editor.remove(prefKey)
+        editor.apply()
+    }
+
     fun botPicture(session: TmuxSession): String? =
         preferences.getString(BOT_PICTURE_PREFIX + key(session.hostId, session.name), null)
 
@@ -332,6 +344,7 @@ class SessionReadStore(context: Context) {
                     it.startsWith("$MANUAL_FONT_SCALE_PREFIX$prefix") ||
                     it.startsWith("$DISPLAY_NAME_PREFIX$prefix")
                     || it.startsWith("$INTERACTION_PREFIX$prefix")
+                    || it.startsWith("$PIN_TO_TOP_PREFIX$prefix")
             }
             .forEach(editor::remove)
         editor.apply()
@@ -360,6 +373,7 @@ class SessionReadStore(context: Context) {
         private const val BOT_PICTURE_PREFIX = "bot_picture::"
         private const val BOT_SYNCED_PHOTO_PREFIX = "bot_synced_photo::"
         private const val PINNED_PAGE_PREFIX = "pinned_page::"
+        private const val PIN_TO_TOP_PREFIX = "pin_to_top::"
         private const val DISPLAY_NAME_PREFIX = "display_name::"
         private const val INTERACTION_PREFIX = "interaction::"
         private const val DEFAULT_FONT_SCALE = 1f
