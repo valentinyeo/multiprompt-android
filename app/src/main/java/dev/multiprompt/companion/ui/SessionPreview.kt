@@ -1,6 +1,5 @@
 package dev.multiprompt.companion.ui
 
-import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.ssh.TmuxText
 
 internal object SessionPreview {
@@ -19,17 +18,6 @@ internal object SessionPreview {
 
     private fun isReply(line: String): Boolean =
         (line.startsWith("⏺ ") || line.startsWith("● ") || line.startsWith("• ")) && !toolCall.matches(line)
-
-    fun line(session: TmuxSession): String {
-        val fallback = line(session.preview)
-        val parts = session.rowParts?.takeIf { it.isCurrentFor(session) } ?: return fallback
-        if (parts.question.isNotEmpty()) return parts.question
-        val working = fallback.startsWith("Working:") || session.replyWaiting == false
-        if (working) {
-            return if (fallback.startsWith("Working:")) fallback else parts.step.ifEmpty { parts.reply.ifEmpty { fallback } }
-        }
-        return parts.reply.ifEmpty { fallback }
-    }
 
     fun line(raw: String): String {
         val rows = raw.lines().map { it.trim() }
