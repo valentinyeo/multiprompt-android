@@ -1,5 +1,6 @@
 {
   "IGSH-2537": "Android phone test saves and reuses snippets",
+  "IGSH-2560": "Server overload: worker caps, heavy checks in the cloud, cloud workers",
   "IGSH-2535": "Android phone tests tap what a person can really reach",
   "IGSH-2531": "Android checks prove the feature that changed, not another one",
   "IGSH-2440": "Ten checks that stop today's advisor mistakes",

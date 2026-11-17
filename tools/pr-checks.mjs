@@ -25,6 +25,14 @@ export const requiredChecks = [
   'pick journeys',
   'pstack-verifier',
 ];
+export const skippableChecks = [
+  'image-preview-emulator',
+  'reply-notifications-emulator',
+  'session-rows-emulator',
+  'session-pins-emulator',
+  'message-actions-emulator',
+  'approved-style-emulator',
+];
 export const intervalMs = 300_000;
 export const timeoutMs = 1_800_000;
 
@@ -35,7 +43,7 @@ export function checkStatus(pr) {
   if (pr.mergeable === 'CONFLICTING') throw new Error('PR conflicts with base');
   const checks = pr.statusCheckRollup;
   const failed = checks.filter(check => check.__typename === 'CheckRun'
-    ? check.status === 'COMPLETED' && check.conclusion !== 'SUCCESS'
+    ? check.status === 'COMPLETED' && check.conclusion !== 'SUCCESS' && !(check.conclusion === 'SKIPPED' && skippableChecks.includes(check.name))
     : check.__typename === 'StatusContext' ? !['SUCCESS', 'PENDING', 'EXPECTED'].includes(check.state) : true);
   if (failed.length) throw new Error(`Checks not green: ${failed.map(check => check.name ?? check.context ?? 'unknown check').join(', ')}`);
   const missing = requiredChecks.filter(name => !checks.some(check => check.__typename === 'CheckRun' && check.name === name));
