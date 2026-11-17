@@ -483,7 +483,7 @@
     },
     "sessions.md": {
       "name": "Sessions",
-      "description": "authenticated tmux discovery and search.",
+      "description": "Default seed readback: 42 real tmux sessions and a large transcript, runtime-selected off-screen reader entry, and an exact search result for that same session. Does not assert all 42 rows render.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -493,7 +493,14 @@
       },
       "outcomes": [
         "inbox.search"
-      ]
+      ],
+      "evidence": {
+        "seed-counts.json": 2500,
+        "seed-check.json": 2500,
+        "seed-search.xml": 3000,
+        "seed-deep-target.xml": 1500,
+        "seed-deep-choice.json": 1500
+      }
     },
     "settings-navigation.md": {
       "name": "Settings navigation",
