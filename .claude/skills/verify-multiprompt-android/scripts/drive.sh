@@ -79,6 +79,10 @@ finish() {
         sudo journalctl --no-pager -n 40 -g "qemu|coredump|apport"
     } > "$EVIDENCE/load-at-exit.txt" 2>&1
     sudo cat /home/verifyssh/commands.log > "$EVIDENCE/commands.txt" 2>/dev/null
+    if [[ "$feature" == pi-model-switch.md ]]; then
+        sudo cat /home/verifyssh/pi-model-switch-receipts.jsonl > "$EVIDENCE/pi-model-switch-receipts.txt" 2>/dev/null
+        sudo sh -c 'cat /home/verifyssh/.local/state/multiprompt/agent-host/*.events.log' > "$EVIDENCE/pi-model-switch-host-events.txt" 2>/dev/null
+    fi
     if [[ "$feature" == session-routing.md ]]; then
         sudo cat /home/verifyssh/canary-raw.bin > "$EVIDENCE/canary-raw-final.bin" 2>/dev/null
         sudo cat /home/verifyssh/canary-receipts.txt > "$EVIDENCE/canary-receipts-final.txt" 2>/dev/null
