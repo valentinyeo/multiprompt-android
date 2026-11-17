@@ -1,5 +1,6 @@
 {
   "IGSH-2536": "Android uses only the design kit for buttons and menus",
+  "IGSH-2568": "Feature freeze until each repo's verification is complete",
   "IGSH-2570": "Android verification meets Lauren's checklist",
   "IGSH-2534": "Android chat reader has one owner for its connection",
   "IGSH-2537": "Android phone test saves and reuses snippets",
