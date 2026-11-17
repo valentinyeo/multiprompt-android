@@ -196,3 +196,17 @@ test('one wait owns a PR; lock is released on success and failure', async () => 
   await assert.rejects(withWaitLock(pr, async () => { throw new Error('check failure'); }), /check failure/);
   assert.equal(await withWaitLock(pr, async () => 'released'), 'released');
 });
+
+test('verifier journey jobs may skip when nothing was picked, but never fail', async () => {
+  const { checkStatus } = await gate;
+  for (const name of ['journey ${{ matrix.feature }}', 'parent journey ${{ matrix.feature }}', 'journey room-order.md / verify']) {
+    const pr = await green();
+    pr.statusCheckRollup.push({ ...pr.statusCheckRollup[0], name, conclusion: 'SKIPPED' });
+    assert.equal(checkStatus(pr).ready, true, name);
+    pr.statusCheckRollup.at(-1).conclusion = 'FAILURE';
+    assert.throws(() => checkStatus(pr), /Checks not green/, name);
+  }
+  const pr = await green();
+  pr.statusCheckRollup.push({ ...pr.statusCheckRollup[0], name: 'journeys-extra', conclusion: 'SKIPPED' });
+  assert.throws(() => checkStatus(pr), /Checks not green/);
+});
