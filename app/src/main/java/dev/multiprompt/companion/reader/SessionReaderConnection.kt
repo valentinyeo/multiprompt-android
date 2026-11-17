@@ -13,6 +13,7 @@ import dev.multiprompt.companion.upload.DeviceFile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
@@ -22,6 +23,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -81,6 +86,7 @@ internal fun unconfirmedAfterResync(history: ChatHistory, sent: List<QueuedMessa
 sealed interface PromptAdmission {
     data class Recorded(val messageId: String) : PromptAdmission
     data object LegacyEnqueued : PromptAdmission
+    data class WaitingForConnection(val id: String) : PromptAdmission
     data class Rejected(val reason: String) : PromptAdmission
 }
 
@@ -121,6 +127,9 @@ class SessionReaderConnection(
     val piModels: StateFlow<PiModelList> = _piModels.asStateFlow()
 
     private var historyConnection: ChatHistoryConnection? = null
+    private var pendingPromptJob: Job? = null
+    private val histories = MutableStateFlow<ChatHistoryConnection?>(null)
+    val pendingPrompts = PendingPrompts()
     private var historyIdentity: ChatHistoryProtocol.Identity? = null
     private val pollGate = ChatPollGate()
 
@@ -162,6 +171,7 @@ class SessionReaderConnection(
             .also {
                 historyIdentity = identity
                 historyConnection = it
+                histories.value = it
                 it.start()
             }
     }
@@ -191,7 +201,26 @@ class SessionReaderConnection(
     fun resetConversation(): kotlinx.coroutines.Deferred<MessageActionResult> =
         historyConnection?.resetConversation() ?: kotlinx.coroutines.CompletableDeferred(MessageActionResult.Rejected("Chat is not ready"))
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun start() {
+        if (pendingPromptJob == null) {
+            pendingPromptJob = scope.launch {
+                combine(histories.flatMapLatest { it?.state ?: flowOf(ChatHistoryState()) }, pendingPrompts.state, pollGate.active) { history, pending, selected ->
+                    selected && history.ready && pending.any { !it.issuing && it.error == null }
+                }.collect { ready ->
+                    if (ready) while (true) {
+                        val history = historyConnection ?: break
+                        val entry = pendingPrompts.next(pollGate.active.value && history.state.value.ready) ?: break
+                        val admission = history.submit(entry.text, messageId = entry.id)
+                        pendingPrompts.complete(entry.id, admission)
+                        if (admission is PromptAdmission.Rejected) {
+                            if (PendingPrompts.retryable(admission.reason)) delay(1_000L)
+                            else _state.update { it.copy(actionError = admission.reason) }
+                        }
+                    }
+                }
+            }
+        }
         if (actionJob == null) {
             actionJob = scope.launch {
                 for (request in requests) runAction(request)
@@ -253,7 +282,20 @@ class SessionReaderConnection(
 
     suspend fun sendPrompt(text: String): PromptAdmission {
         if (sharedMessages) {
-            return historyConnection?.submit(text) ?: PromptAdmission.Rejected("Chat is not ready")
+            val history = historyConnection ?: return PromptAdmission.Rejected("Chat is not ready")
+            if (!pollGate.active.value) return PromptAdmission.Rejected("Chat is no longer selected")
+            if (text.isBlank() || '\u0000' in text) return PromptAdmission.Rejected("Message is empty or invalid")
+            pendingPrompts.state.value.firstOrNull { it.text == text && it.error == null }?.let {
+                return PromptAdmission.WaitingForConnection(it.id)
+            }
+            history.state.value.messageError?.let { return PromptAdmission.Rejected(it) }
+            val admission = if (history.state.value.ready) history.submit(text) else PromptAdmission.Rejected("Chat is disconnected")
+            if (admission is PromptAdmission.Rejected && PendingPrompts.retryable(admission.reason)) {
+                val entry = pendingPrompts.enqueue(text)
+                if (history.state.value.retrying) history.nudge()
+                return PromptAdmission.WaitingForConnection(entry.id)
+            }
+            return admission
         }
         val origin = historyConnection?.state?.value?.takeIf { it.loaded }?.history
         val prompt = QueuedMessages.SentPrompt(text, System.currentTimeMillis(),

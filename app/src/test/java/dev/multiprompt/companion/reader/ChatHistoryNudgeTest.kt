@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -47,9 +46,9 @@ class ChatHistoryNudgeTest {
     }
 
     @Test
-    fun nudgeOnAChatThatNeverFailedDoesNothing() {
+    fun nudgeCanInterruptAnInitialConnectionBeforeItHasFailed() {
         ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()), pollGate = ChatPollGate()).use { chat ->
-            assertFalse(chat.nudge())
+            assertTrue(chat.nudge())
         }
     }
 }

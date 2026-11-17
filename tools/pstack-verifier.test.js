@@ -115,6 +115,36 @@ test('unknown journey names are dropped and at most three run', () => {
   assert.deepEqual(verifier.validateFeatures(null).features, []);
 });
 
+test('required outcome journeys cannot be omitted by the model picker', () => {
+  const picked = { features: ['chat-shared.md'], dropped: [], smoke: false, reason: 'chat recovery' };
+  const selected = verifier.includeRequiredJourneys(picked, { outcomes: ['reader.send-enter-interrupt', 'chat.link-recovery'] });
+  assert.deepEqual(selected.features, ['session-reader.md', 'chat-shared.md']);
+  assert.equal(selected.smoke, false);
+  assert.throws(() => verifier.includeRequiredJourneys(picked, { outcomes: ['reader.send-enter-interrupt', 'chat.link-recovery', 'inbox.search', 'terminal.journey'] }), /more than three/);
+});
+
+test('the judge receives recovery UI and host receipts before large diagnostic files', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-link-proof-'));
+  try {
+    fs.writeFileSync(path.join(directory, 'driver-transcript.txt'), '+ tap_desc Send prompt\n' + 'diagnostic line\n'.repeat(5000));
+    for (const [file, text] of [['04-shared-link-down.xml', 'Retry'], ['05-shared-link-waiting.xml', 'Waiting for chat connection'], ['06-shared-link-recovered.xml', 'SHARED_PHONE_SYNTHETIC']]) {
+      fs.writeFileSync(path.join(directory, file), `<hierarchy><node text="${text}" bounds="[0,100][400,200]" />${'<node text="" />'.repeat(3000)}</hierarchy>`);
+    }
+    fs.writeFileSync(path.join(directory, 'shared-link-down-host.json'), '{"rows":[]}');
+    fs.writeFileSync(path.join(directory, 'shared-phone.json'), '{"rows":[{"body":"SHARED_PHONE_SYNTHETIC","state":"queued"}]}');
+    for (let i = 0; i < 30; i++) fs.writeFileSync(path.join(directory, `99-noise-${i}.xml`), '<node text="diagnostic" />'.repeat(2000));
+    const text = verifier.journeyEvidence(directory);
+    assert.ok(text.includes('text="Retry"'));
+    assert.ok(text.includes('text="Waiting for chat connection"'));
+    assert.ok(text.includes('text="SHARED_PHONE_SYNTHETIC"'));
+    assert.ok(text.includes('--- shared-link-down-host.json\n{"rows":[]}'));
+    assert.ok(text.includes('--- shared-phone.json\n{"rows":[{"body":"SHARED_PHONE_SYNTHETIC","state":"queued"}]}'));
+    assert.ok(text.length < 21_000);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('the comment starts with the verdict and the full head sha', () => {
   for (const verdict of ['PASS', 'PASS+NOTES', 'FAIL']) {
     const body = verifier.buildComment({ sha, verdict, summary: 'Ok.', journeys: [], evidence: [], notCovered: [], notes: [], runUrl });
