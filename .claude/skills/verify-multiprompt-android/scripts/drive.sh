@@ -945,6 +945,125 @@ if [[ "$feature" == session-drafts.md ]]; then
     printf 'INBOX_DRAFT_LABEL_OK\n'
     exit 0
 fi
+if [[ "$feature" == room-order.md ]]; then
+    adb shell am force-stop "$package"
+    account_id=$(python3 "$scripts/room-order.py" account-id)
+    adb shell am instrument -w \
+        -e class dev.multiprompt.companion.account.SeedAccountDeviceTest#seedsDeviceLoginFromInstrumentationArguments \
+        -e refresh_token aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+        -e account_id "$account_id" \
+        -e device_id verify-phone \
+        "$package.test/androidx.test.runner.AndroidJUnitRunner" > "$EVIDENCE/room-account-seed.txt"
+    grep -F 'OK (1 test)' "$EVIDENCE/room-account-seed.txt"
+    room_stage=$(mktemp -d)
+    mkdir -p "$room_stage/.claude/skills/verify-multiprompt-android/scripts" "$room_stage/app/src/main/assets"
+    cp "$scripts/room-order.py" "$scripts/room-runtime.py" "$room_stage/.claude/skills/verify-multiprompt-android/scripts/"
+    cp -R "$scripts/../../../../app/src/main/assets/rooms" "$room_stage/app/src/main/assets/"
+    chmod -R a+rX "$room_stage"
+    sudo -u verifyssh env HOME=/home/verifyssh python3 "$room_stage/.claude/skills/verify-multiprompt-android/scripts/room-order.py" install
+    getent ahosts account.multiprompt.dev | awk '{print $1}' | sort -u > "$EVIDENCE/account-origin-ips.txt"
+    python3 "$scripts/room-order.py" block-rules "$EVIDENCE/account-origin-ips.txt" > "$EVIDENCE/account-origin-blocked.txt"
+    while read -r family ip; do
+        if [[ "$family" == v6 ]]; then
+            sudo ip6tables -I OUTPUT -d "$ip" -p tcp --dport 443 -j REJECT --reject-with tcp-reset
+        else
+            [[ "$family" == v4 ]]
+            sudo iptables -I OUTPUT -d "$ip" -p tcp --dport 443 -j REJECT --reject-with tcp-reset
+        fi
+    done < "$EVIDENCE/account-origin-blocked.txt"
+    relaunch_app
+    for attempt in {1..45}; do
+        if select_node contains 'Order room' >/dev/null 2>&1; then break; fi
+        sleep 1
+    done
+    select_node contains 'Order room' >/dev/null
+    shot room-inbox
+    tap_text 'Order room'
+    wait_for_text 'No messages yet'
+    shot room-empty
+    if sudo test -f /home/verifyssh/room-submits.jsonl; then
+        sudo cat /home/verifyssh/room-submits.jsonl > "$EVIDENCE/room-submits-before.txt"
+    else
+        : > "$EVIDENCE/room-submits-before.txt"
+    fi
+    python3 "$scripts/room-order.py" nothing-sent "$EVIDENCE/room-submits-before.txt"
+    room_keyboard_closed() {
+        adb shell dumpsys input_method | grep -F 'mInputShown=false' >/dev/null
+    }
+    send_room_text() {
+        local label=$1 attempt dismissed=0
+        fill 'Message Order room' "$label"
+        for attempt in {1..30}; do
+            if [[ "$dismissed" == 0 ]]; then
+                if ! room_keyboard_closed; then
+                    adb shell input keyevent KEYCODE_BACK
+                    sleep 1
+                fi
+                dismissed=1
+            fi
+            dump_ui || true
+            if [[ ! -f "$EVIDENCE/current.xml" ]] || ! python3 "$scripts/room-order.py" composer "$EVIDENCE/current.xml"; then
+                printf 'Left the room while sending %s\n' "$label" >&2
+                return 1
+            fi
+            if ! python3 "$scripts/room-order.py" holding "$EVIDENCE/current.xml" "$label"; then
+                return 0
+            fi
+            if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" reach-text Send forward >/dev/null 2>&1; then
+                tap_text Send || true
+            fi
+            sleep 2
+        done
+        printf 'Room send stayed in the composer: %s\n' "$label" >&2
+        return 1
+    }
+    send_room_text one
+    for attempt in {1..30}; do
+        if sudo test -f /home/verifyssh/room-submits.jsonl; then
+            sudo cat /home/verifyssh/room-submits.jsonl > "$EVIDENCE/room-submits-first.txt"
+            if python3 "$scripts/room-order.py" alpha-only "$EVIDENCE/room-submits-first.txt"; then break; fi
+        fi
+        sleep 1
+    done
+    python3 "$scripts/room-order.py" alpha-only "$EVIDENCE/room-submits-first.txt"
+    for attempt in {1..30}; do
+        dump_ui
+        if python3 "$scripts/room-order.py" first "$EVIDENCE/current.xml"; then break; fi
+        sleep 1
+    done
+    python3 "$scripts/room-order.py" first "$EVIDENCE/current.xml"
+    shot room-first-message
+    send_room_text two
+    stacked_saved=
+    for attempt in {1..40}; do
+        dump_ui
+        if [[ -z "$stacked_saved" ]] && python3 "$scripts/room-order.py" stacked "$EVIDENCE/current.xml"; then
+            cp "$EVIDENCE/current.xml" "$EVIDENCE/room-stacked.xml"
+            stacked_saved=1
+        fi
+        if [[ -n "$stacked_saved" ]]; then
+            if python3 "$scripts/room-order.py" shown "$EVIDENCE/current.xml" "$EVIDENCE/room-stacked.xml"; then break; fi
+        elif python3 "$scripts/room-order.py" shown "$EVIDENCE/current.xml"; then
+            break
+        fi
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "" >/dev/null 2>&1; then
+            read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
+            adb shell input swipe "$x2" "$y2" "$x1" "$y1" 400
+        fi
+        sleep 1
+    done
+    shot room-ordered
+    if [[ -n "$stacked_saved" ]]; then
+        python3 "$scripts/room-order.py" shown "$EVIDENCE/$(printf '%02d' "$step")-room-ordered.xml" "$EVIDENCE/room-stacked.xml"
+    else
+        python3 "$scripts/room-order.py" shown "$EVIDENCE/$(printf '%02d' "$step")-room-ordered.xml"
+    fi
+    sudo cat /home/verifyssh/room-submits.jsonl > "$EVIDENCE/room-submits.jsonl"
+    cp "$EVIDENCE/room-submits.jsonl" "$EVIDENCE/room-submits-final.txt"
+    python3 "$scripts/room-order.py" submitted "$EVIDENCE/room-submits.jsonl"
+    printf 'ROOM_ORDER_OK\n'
+    exit 0
+fi
 if [[ "$feature" == copy-chat-id.md ]]; then
     hosted_id=$(sudo -u verifyssh tmux show-options -t verify-session -v @mp_host_sid 2>/dev/null | tr -d '\r' || true)
     [[ "$hosted_id" == copy-chat-id-2371 ]]

@@ -554,6 +554,25 @@
         "search-closed.json": 500,
         "search-proof.txt": 200
       }
+    },
+    "room-order.md": {
+      "name": "Room message order",
+      "description": "a room keeps two sends in post order, and the later reply includes the other agent's earlier answer.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "rooms.order"
+      ],
+      "evidence": {
+        "room-submits-final.txt": 1000,
+        "room-submits-first.txt": 300,
+        "07-room-ordered.xml": 3000
+      }
     }
   },
   "outcomes": {
@@ -940,6 +959,14 @@
       "sideEffect": true,
       "match": [
         "ChatHistory\\.kt|HostStream\\.kt|MessageProtocol\\.kt|projectMessages|LegacyMessageIdentity"
+      ]
+    },
+    "rooms.order": {
+      "description": "Room sends stay in post order, and a later reply includes the other agent's earlier answer before the new message.",
+      "journey": "room-order.md",
+      "sideEffect": true,
+      "match": [
+        "Room messages since your last turn|COALESCE\\(q\\.checked,0\\)"
       ]
     }
   }

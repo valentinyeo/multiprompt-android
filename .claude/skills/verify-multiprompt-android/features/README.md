@@ -74,6 +74,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `chat.identity`. Runner: `verify.yml` (debug). Priority evidence: `projection-receipts-before.json` (2500 characters), `projection-receipts-reconnect.json` (5500 characters), `projection-state-before.json` (500 characters), `projection-state-fresh.json` (500 characters), `projection-state-catchup.json` (500 characters), `projection-state-reconnect.json` (500 characters), `projection-proof.txt` (500 characters).
 - [Find words inside a chat](chat-search.md): search real chat replies, check highlighted matches, jump, wrap, handle no matches and close. SOFT-2540.
   - Outcomes: `chat-search.open`. Runner: `verify.yml` (debug). Priority evidence: `search-newest.json` (1000 characters), `search-previous.json` (1000 characters), `search-wrap-previous.json` (1000 characters), `search-wrap-next.json` (1000 characters), `search-next.json` (1000 characters), `search-no-match.json` (500 characters), `search-closed.json` (500 characters), `search-proof.txt` (200 characters).
+- [Room message order](room-order.md): a room keeps two sends in post order, and the later reply includes the other agent's earlier answer.
+  - Outcomes: `rooms.order`. Runner: `verify.yml` (debug). Priority evidence: `room-submits-final.txt` (1000 characters), `room-submits-first.txt` (300 characters), `07-room-ordered.xml` (3000 characters).
 
 ## Initial coverage gaps
 

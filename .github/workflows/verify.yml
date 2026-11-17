@@ -96,6 +96,7 @@ on:
           - terminal.md
           - chat-identity.md
           - chat-search.md
+          - room-order.md
       expect_settings_missing:
         description: Require signed Android 301 to reject the settings navigation journey
         type: boolean
