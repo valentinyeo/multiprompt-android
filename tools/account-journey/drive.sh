@@ -44,7 +44,9 @@ tap_text() {
 }
 wait_gone() {
     local deadline=$(( $(date +%s) + ${2:-60} ))
-    while has_text "$1" 0 "${3:-has}"; do
+    while true; do
+        dump_ui || return 1
+        if ! python3 "$here/ui.py" "$EVIDENCE/current.xml" "${3:-has}" "$1"; then return 0; fi
         if (( $(date +%s) > deadline )); then printf 'Still showing %s\n' "$1"; shot "failure-still-${1// /-}"; return 1; fi
         sleep 0.3
     done
@@ -201,10 +203,15 @@ JS
 fi
 
 layout "$admin" list | tee "$EVIDENCE/cli-list.txt"
+wait_text runner-1 10 hasi
 start=$(now)
 layout "$admin" move --to Runners --create --match 'runner-*' | tee "$EVIDENCE/cli-move.txt"
-tap_split Runners
+wait_gone runner-1 10 hasi
 section_seconds=$(python3 -c "print(round($(now) - $start, 2))")
+cp "$EVIDENCE/current.xml" "$EVIDENCE/android-move-observed.xml"
+start=$(now)
+tap_split Runners
+section_navigation_seconds=$(python3 -c "print(round($(now) - $start, 2))")
 wait_text Runners 30 selected
 wait_text runner-1 10 hasi
 wait_text runner-2 10 hasi
@@ -263,5 +270,5 @@ shot android-favorite-added-back
 node "$here/favorites.mjs" http://127.0.0.1:8787 "$admin" read runner-1 true "$EVIDENCE/favorites-set.json" ghost-fav | tee "$EVIDENCE/favorites-added-back.json"
 printf 'favorites-parity ok\n'
 
-printf '{"section_seconds": %s, "open_seconds": %s}\n' "$section_seconds" "$open_seconds" | tee "$EVIDENCE/result.json"
+printf '{"section_seconds": %s, "section_navigation_seconds": %s, "open_seconds": %s}\n' "$section_seconds" "$section_navigation_seconds" "$open_seconds" | tee "$EVIDENCE/result.json"
 python3 -c "import sys; sys.exit(0 if $section_seconds <= 10 and $open_seconds <= 10 else 1)"

@@ -1,0 +1,35 @@
+{
+  "pr": {
+    "number": 41,
+    "title": "Keep chat replies together",
+    "body": "Done when\nEach phone message and its reply appear once after reconnect.",
+    "head": {
+      "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  "diff": "diff --git a/app/src/main/java/dev/multiprompt/companion/reader/ChatHistory.kt b/app/src/main/java/dev/multiprompt/companion/reader/ChatHistory.kt\n--- a/app/src/main/java/dev/multiprompt/companion/reader/ChatHistory.kt\n+++ b/app/src/main/java/dev/multiprompt/companion/reader/ChatHistory.kt\n@@ -206,7 +206,7 @@\n                 pending = entry.error == null, delivery = if (entry.error == null) PendingPrompts.WAITING_LABEL else NOT_SENT)\n         }\n         unmatched.filter { it.turn == host.turn }.forEach(::appendReply)\n-        return projected.values.toList()\n+        return projected.values.toList() + projected.values.filter { it.role == \"assistant\" }\n     }\n \n     private data class Card(\n",
+  "features": [
+    "chat-identity.md"
+  ],
+  "changedOutcomes": [
+    "chat.identity"
+  ],
+  "evidence": {
+    "parent": {
+      "app-source-sha.txt": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n",
+      "side-result.json": "{\"passed\": true, \"productAssertion\": false}",
+      "driver-transcript.txt": "+ fill 'Message verify-session' PHONE_BEFORE_2532\n+ tap_desc 'Send prompt'\n+ projection_assert before\n+ projection_event catchup\n+ projection_assert reconnect\nDriver exit 0\n",
+      "projection-state-reconnect.json": "{\"phase\": \"reconnect\", \"visible\": [\"PHONE_BEFORE_2532\", \"REPLY_BEFORE_2532\"], \"occurrences\": 1}",
+      "projection-receipts-reconnect.json": "{\"accepted\": [{\"phone_id\": \"phone-17\", \"text\": \"PHONE_BEFORE_2532\", \"receipt\": \"fixture-receipt-phone-17\"}], \"transcript\": [{\"role\": \"assistant\", \"text\": \"REPLY_BEFORE_2532\"}]}",
+      "09-reader.xml": "<hierarchy><node text=\"PHONE_BEFORE_2532\" /><node text=\"REPLY_BEFORE_2532\" /></hierarchy>\n"
+    },
+    "head": {
+      "app-source-sha.txt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+      "side-result.json": "{\"passed\": true, \"productAssertion\": false}",
+      "driver-transcript.txt": "+ fill 'Message verify-session' PHONE_BEFORE_2532\n+ tap_desc 'Send prompt'\n+ projection_assert before\n+ projection_event catchup\n+ projection_assert reconnect\nDriver exit 0\n",
+      "projection-state-reconnect.json": "{\"phase\": \"reconnect\", \"visible\": [\"PHONE_BEFORE_2532\", \"REPLY_BEFORE_2532\", \"REPLY_BEFORE_2532\"], \"occurrences\": 2}",
+      "projection-receipts-reconnect.json": "{\"accepted\": [{\"phone_id\": \"phone-17\", \"text\": \"PHONE_BEFORE_2532\", \"receipt\": \"fixture-receipt-phone-17\"}], \"transcript\": [{\"role\": \"assistant\", \"text\": \"REPLY_BEFORE_2532\"}]}",
+      "09-reader.xml": "<hierarchy><node text=\"PHONE_BEFORE_2532\" /><node text=\"REPLY_BEFORE_2532\" /><node text=\"REPLY_BEFORE_2532\" /></hierarchy>\n"
+    }
+  }
+}
