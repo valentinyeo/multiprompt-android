@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 import uuid
 
 HOME = Path('/home/verifyssh')
@@ -45,14 +46,27 @@ def emit(event):
 
 def claude():
     boundary()
-    emit(dict(type='system', subtype='init', session_id=SID, model='sonnet'))
+    option = next((option for option in ('--session-id', '--resume') if option in sys.argv), None)
+    sid = sys.argv[sys.argv.index(option) + 1] if option else SID
+    emit(dict(type='system', subtype='init', session_id=sid, model='sonnet'))
     for line in sys.stdin:
         request = json.loads(line)
         if request.get('type') == 'control_request':
             emit(dict(type='control_response', response=dict(subtype='success', request_id=request['request_id'], response={})))
         elif request.get('type') == 'user':
-            with (HOME / 'ai-switch-wrong-provider.txt').open('a') as output:
-                output.write(line)
+            if sid == SID:
+                with (HOME / 'ai-switch-wrong-provider.txt').open('a') as output:
+                    output.write(line)
+                continue
+            content = request['message']['content']
+            text = content if isinstance(content, str) else ''.join(part.get('text', '') for part in content)
+            with (HOME / 'ai-switch-provider-receipts.jsonl').open('a') as output:
+                output.write(json.dumps(dict(provider='claude', sid=sid, text=text)) + '\n')
+            handover = 'This chat ran on Pi until now and continues on Claude.' in text
+            reply = 'CLAUDE_HANDOVER_READY_2569' if handover else 'CLAUDE_REPLY_' + text
+            emit(dict(type='assistant', uuid=str(uuid.uuid4()), session_id=sid,
+                message=dict(id='msg_' + uuid.uuid4().hex, role='assistant', content=[dict(type='text', text=reply)])))
+            emit(dict(type='result', subtype='success', stop_reason='end_turn', session_id=sid, usage={}))
 
 
 def pi():
@@ -68,10 +82,21 @@ def pi():
             output.write(json.dumps(dict(provider='pi', sid=sid, id=request['id'], text=text)) + '\n')
         handover = 'This chat ran on Claude until now and continues on Pi.' in text
         reply = 'PI_HANDOVER_READY_2538' if handover else 'PI_REPLY_' + text
+        hold = HOME / ('ai-switch-hold-stream-2569' if text == 'PHONE_STREAM_2569' else 'ai-switch-hold-2569')
+        controlled = text == 'PHONE_STREAM_2569' or text == 'PHONE_AFTER_SWITCH_2538' and hold.exists()
         emit(dict(type='response', command='prompt', id=request['id'], success=True))
         emit(dict(type='agent_start'))
         emit(dict(type='message_start'))
-        emit(dict(type='message_update', assistantMessageEvent=dict(type='text_delta', contentIndex=0, delta=reply)))
+        for delta in reply if controlled else [reply]:
+            emit(dict(type='message_update', assistantMessageEvent=dict(type='text_delta', contentIndex=0, delta=delta)))
+            if controlled:
+                time.sleep(0.2)
+        if controlled:
+            for attempt in range(480):
+                if not hold.exists():
+                    break
+                time.sleep(0.25)
+            assert not hold.exists(), 'Phone did not release the streamed reply'
         emit(dict(type='message_update', assistantMessageEvent=dict(type='text_end', contentIndex=0, content=reply)))
         emit(dict(type='message_end', message=dict(role='assistant', stopReason='stop')))
         emit(dict(type='agent_settled'))
