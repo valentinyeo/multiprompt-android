@@ -109,6 +109,9 @@ adb('shell', 'input', 'tap', str((back_x + back_right) // 2), str((back_y + back
 adb('shell', 'uiautomator', 'dump', '/sdcard/gestures.xml')
 inbox = ET.fromstring(adb('exec-out', 'cat', '/sdcard/gestures.xml'))
 assert any(n.get('text') == 'Inbox' for n in inbox.iter('node')), 'Back no longer opens inbox'
-result = dict(status='reader-passed', replies=10, sessionChanges=0, codeLeftShift=left_shift,
-              codeRightShift=right_shift, backToInbox=True, secondSession=False)
+assert any(n.get('text') == 'verify-other' for n in inbox.iter('node')), 'Second session missing'
+screenshot('gestures-inbox')
+result = dict(status='passed', replies=10, sessionChanges=0, codeLeftShift=left_shift,
+              codeRightShift=right_shift, backToInbox=True, secondSession=True)
 (out / 'gesture-result.json').write_text(json.dumps(result, indent=2))
+print('RELEASED_SESSION_GESTURES_PROVEN', json.dumps(result))

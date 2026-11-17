@@ -234,11 +234,11 @@ test('chat search changes require their own phone journey even when the model om
   }
 });
 
-test('the real picker schedules the changed chat search recipe for a tooling-only PR', () => {
+for (const journey of ['chat-search.md', 'sessions.md']) test(`the real picker schedules changed ${journey} for a tooling-only PR`, () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'search-recipe-pick-'));
   try {
     const diff = path.join(directory, 'recipe.diff');
-    fs.writeFileSync(diff, `diff --git a/${gate.REGISTRY_PATH}/chat-search.md b/${gate.REGISTRY_PATH}/chat-search.md\n+Find words inside a chat\n`);
+    fs.writeFileSync(diff, `diff --git a/${gate.REGISTRY_PATH}/${journey} b/${gate.REGISTRY_PATH}/${journey}\n+Drive the registered journey\n`);
     const gh = path.join(directory, 'gh');
     mockPickerGithub(gh);
     const stub = path.join(directory, 'model.cjs');
@@ -265,7 +265,7 @@ test('the real picker schedules the changed chat search recipe for a tooling-onl
       assert.equal(result.status, 0, result.stderr);
       const values = fs.readFileSync(output, 'utf8');
       const selected = JSON.parse(values.match(/^features=(.+)$/m)[1]);
-      assert.equal(selected[0], 'chat-search.md', values);
+      assert.equal(selected[0], journey, values);
       assert.ok(selected.length <= verifier.MAX_JOURNEYS);
       assert.match(values, /^smoke=no$/m);
       assert.match(values, /^changed_outcomes=\[\]$/m);

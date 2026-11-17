@@ -22,7 +22,9 @@ Inbox opens after account sign-in or debug offline entry. Return from Hosts usin
 
 Preconditions: fresh fixture; use `feature=sessions.md`. The driver performs the entire hosts recipe through compare/trust and public-key authentication first.
 
-- `wait_for_text verify-session` and `shot sessions` prove the real fixture is discovered. `ssh-auth.txt` independently proves authentication.
+- Before any action, the driver checks `seed-counts.json` against the live tmux session names and the long transcript's measured bytes and rows. Normal setup provides 42 sessions and a transcript larger than 18 MiB with 1,882 rows; `ssh-auth.txt` independently proves authentication.
+- Find and open the off-screen `row-27` by exact name, require `Message row-27` and `VERIFY_READY_528`, then return to Inbox. `shot seed-deep-target` proves the large-inbox target-selection path.
+- Search for the shared host label `Verify`, require `42 results across all splits`, and scroll through the complete inbox. Retain numbered `seed-inbox-*.xml`/PNG pairs. The oracle compares the visible `Robot <session-name>` rows across these pages with every name in `seed-counts.json`; missing, hidden or clipped rows fail. `seed-inbox.json` records all 42 visible names, the displayed count and the page filenames. This proves discovery and rendering, not a long-chat soak or search inside its transcript.
 - `tap_desc 'Search sessions'` opens search. `fill 'Search all sessions' verify-session` enters the fixture name through adb input. `wait_for_text '1 result across all splits'`, `wait_for_text verify-session` and `shot search-match` capture query and matching result.
 - `tap_desc 'Close session search'` removes the query and search field; the driver asserts `Search all sessions` is absent. `shot search-cleared` captures the original discovered list again.
 - After the search is cleared the driver asserts the Inbox row has no per-row `Session actions` button, long-presses the `verify-session` row, waits for `Mark unread` and `End session`, takes `shot row-long-press-actions`, then presses back to close the menu. The row shows the name, a dim one-line preview and the time.

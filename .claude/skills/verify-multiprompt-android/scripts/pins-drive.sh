@@ -9,6 +9,28 @@ for attempt in {1..30}; do
 done
 test -s "$EVIDENCE/pins-ssh-auth.txt"
 
+sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh bash -c '
+    set -euo pipefail
+    [[ "$GITHUB_ACTIONS" == true && "$HOME" == /home/verifyssh && "$(id -u)" -ne 0 && "$(id -un)" == verifyssh ]]
+    tmux has-session -t =verify-session
+    tmux has-session -t =verify-keep
+    for i in {0..39}; do
+        if (( i < 12 )); then printf -v name "pin-%02d" "$i"
+        else printf -v name "row-%02d" "$((i - 12))"; fi
+        receipt="/home/verifyssh/pins-$name-receipts.txt"
+        tmux new-session -d -s "$name" -x 100 -y 32 \
+            "env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 -u /home/verifyssh/console.py $receipt"
+    done
+    tmux list-sessions -F "#{session_name}" | grep -E "^(pin|row)-[0-9][0-9]$" | sort > /home/verifyssh/pins-names.txt
+    [[ "$(wc -l < /home/verifyssh/pins-names.txt)" == 40 ]]
+    for i in {0..39}; do
+        if (( i < 12 )); then printf -v name "pin-%02d" "$i"
+        else printf -v name "row-%02d" "$((i - 12))"; fi
+        tmux has-session -t "=$name"
+        grep -Fx "$name" /home/verifyssh/pins-names.txt
+    done
+'
+sudo cat /home/verifyssh/pins-names.txt > "$EVIDENCE/pins-tmux-names.txt"
 test "$(wc -l < "$EVIDENCE/pins-tmux-names.txt")" -eq 40
 
 pins_instrument() {

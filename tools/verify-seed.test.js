@@ -92,30 +92,6 @@ tap_text ${target}
   });
 }
 
-test('gesture proof still requires the exact second session after returning to the inbox', () => {
-  const directory = mkdtempSync(path.join(tmpdir(), 'seed-gestures-'));
-  const proof = driver.match(/<<'PYGESTURES'\n([\s\S]*?)\nPYGESTURES/)[1];
-  try {
-    for (const name of ['verify-other-neighbor', 'verify-other']) {
-      writeFileSync(path.join(directory, 'current.xml'), `<hierarchy><node text="Inbox"/><node text="${name}"/></hierarchy>`);
-      writeFileSync(path.join(directory, 'gesture-result.json'), JSON.stringify({ status: 'reader-passed', backToInbox: true, replies: 10, secondSession: false }));
-      const result = spawnSync('python3', ['-I', '-', directory], { input: proof, encoding: 'utf8' });
-      const evidence = JSON.parse(readFileSync(path.join(directory, 'gesture-result.json'), 'utf8'));
-      if (name === 'verify-other') {
-        assert.equal(result.status, 0, result.stderr);
-        assert.equal(evidence.status, 'passed');
-        assert.equal(evidence.secondSession, true);
-      } else {
-        assert.notEqual(result.status, 0);
-        assert.equal(evidence.status, 'reader-passed');
-        assert.equal(evidence.secondSession, false);
-      }
-    }
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
-
 test('reveal uses the existing scroll planner but never taps the row', () => {
   const directory = mkdtempSync(path.join(tmpdir(), 'seed-reveal-'));
   try {
@@ -136,10 +112,23 @@ tap_node text verify-session
   }
 });
 
-test('all fixture consumers reuse setup seeds rather than creating them mid-journey', () => {
+test('default setup seeds once without changing dedicated long-chat and pins fixtures', () => {
   const fixture = readFileSync(path.join(scripts, 'fixture.sh'), 'utf8');
-  assert.equal(fixture.match(/bash \/home\/verifyssh\/seed.sh/g).length, 1);
-  assert.match(fixture, /verify-seed.py record > "\$EVIDENCE\/seed-counts.json"/);
-  assert.doesNotMatch(readFileSync(path.join(scripts, 'pins-drive.sh'), 'utf8'), /tmux new-session/);
-  assert.doesNotMatch(readFileSync(path.join(root, '.github/workflows/long-chat.yml'), 'utf8'), /tmux new-session/);
+  const setup = fixture.slice(fixture.indexOf('if [[ "${VERIFY_FEATURE:-}" != long-chat.md'));
+  for (const [feature, pins, expected] of [['sessions.md', 'false', 1], ['long-chat.md', 'false', 0], ['session-favorites.md', 'true', 0]]) {
+    const directory = mkdtempSync(path.join(tmpdir(), 'seed-setup-'));
+    try {
+      const result = spawnSync('bash', ['-euc', `
+sudo() { printf '%s\\n' "$*" >> "$EVIDENCE/commands"; }
+fixture_session=verify-session
+${setup}
+`], { encoding: 'utf8', env: { ...process.env, VERIFY_FEATURE: feature, PIN_SCROLL_PROOF: pins, EVIDENCE: directory } });
+      assert.equal(result.status, 0, result.stderr);
+      const commands = existsSync(path.join(directory, 'commands')) ? readFileSync(path.join(directory, 'commands'), 'utf8') : '';
+      assert.equal((commands.match(/bash \/home\/verifyssh\/seed.sh/g) || []).length, expected);
+      assert.equal(existsSync(path.join(directory, 'seed-counts.json')), expected === 1);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }
 });

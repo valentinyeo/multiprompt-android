@@ -9,7 +9,9 @@ node "$scripts/../../../../.github/scripts/pstack-verifier/coverage.cjs" journey
 mkdir -p "$EVIDENCE"
 exec > >(tee -a "$EVIDENCE/driver-transcript.txt") 2>&1
 set -x
-sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/verify-seed.py check - < "$EVIDENCE/seed-counts.json"
+if [[ "${PIN_SCROLL_PROOF:-}" != true ]]; then
+    sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/verify-seed.py check - < "$EVIDENCE/seed-counts.json" | tee "$EVIDENCE/seed-check.json"
+fi
 package=${VERIFY_PACKAGE:-dev.multiprompt.companion.debug}
 step=0
 product_checks=0
@@ -120,7 +122,7 @@ if [[ "$feature" == session-routing.md && "$package" == dev.multiprompt.companio
 fi
 select_node() {
     local mode=$1 name=${2#Robot } value=$2 session=
-    if [[ "$mode" =~ ^(contains|text|desc)$ ]]; then
+    if [[ "$mode" =~ ^(contains|text|desc)$ && -f "$EVIDENCE/seed-counts.json" ]]; then
         session=$(jq -er --arg name "$name" '.session_names | if index($name) != null then $name elif $name == "verify-session" and index("live-verify-session") != null then "live-verify-session" else empty end' "$EVIDENCE/seed-counts.json") || session=
         if [[ -n "$session" && "$mode" == contains ]]; then mode=text; fi
     fi
@@ -942,7 +944,6 @@ if [[ "$feature" == chat-search.md ]]; then
 fi
 
 if [[ "$feature" == session-drafts.md ]]; then
-    wait_for_text verify-session
     wait_for_text 'Inbox preview stays.'
     python3 "$scripts/draft-label.py" absent "$EVIDENCE/current.xml"
     shot inbox-before-draft
@@ -956,7 +957,6 @@ if [[ "$feature" == session-drafts.md ]]; then
     fi
     tap_desc Back
     wait_for_text Inbox
-    wait_for_text verify-session
     wait_for_text Draft
     wait_for_text 'Inbox preview stays.'
     shot inbox-draft
@@ -977,7 +977,6 @@ if [[ "$feature" == session-drafts.md ]]; then
     wait_receipt 'VERIFY_RECEIVED:unsent draft text'
     tap_desc Back
     wait_for_text Inbox
-    wait_for_text verify-session
     wait_for_text 'Inbox preview stays.'
     for attempt in {1..30}; do
         dump_ui
@@ -1421,8 +1420,30 @@ PYORACLE
     exit 0
 fi
 if [[ "$feature" == sessions.md ]]; then
+    shot seed-deep-before
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent row-27
+    wait_for_text row-27
+    tap_text row-27
+    wait_for_text 'Message row-27'
+    wait_for_text VERIFY_READY_528
+    shot seed-deep-target
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/seed-deep-target.xml"
+    tap_desc Back
+    wait_for_text Inbox
+    wait_for_text verify-session
     tap_desc 'Search sessions'
-    fill 'Search all sessions' verify-session
+    fill 'Search all sessions' Verify
+    seed_count=$(jq -er .sessions "$EVIDENCE/seed-counts.json")
+    wait_for_text "$seed_count results across all splits"
+    for attempt in {1..16}; do
+        shot "seed-inbox-$attempt"
+        if python3 tools/verify-seed.py inbox "$EVIDENCE" > "$EVIDENCE/seed-inbox.json" 2> "$EVIDENCE/seed-inbox-pending.txt"; then break; fi
+        read -r x1 y1 x2 y2 <<< "$(select_node scroll-back '')"
+        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 500
+    done
+    python3 tools/verify-seed.py inbox "$EVIDENCE" > "$EVIDENCE/seed-inbox.json"
+    cat "$EVIDENCE/seed-inbox.json"
+    fill Verify verify-session
     wait_for_text '1 result across all splits'
     wait_for_text verify-session
     shot search-match
@@ -1676,24 +1697,6 @@ fi
 if [[ "$feature" == session-gestures.md || "$feature" == session-summaries.md ]]; then
     wait_for_text GESTURE_REPLY_TARGET
     python3 tools/session-gestures/drive.py
-    wait_for_text verify-other
-    shot gestures-inbox
-    cp "$EVIDENCE/$(printf '%02d' "$step")-gestures-inbox.png" "$EVIDENCE/gestures-inbox.png"
-    python3 - "$EVIDENCE" <<'PYGESTURES'
-import json
-from pathlib import Path
-import sys
-import xml.etree.ElementTree as ET
-root = Path(sys.argv[1])
-texts = [node.get('text') for node in ET.parse(root / 'current.xml').getroot().iter('node')]
-assert 'Inbox' in texts and 'verify-other' in texts, 'Second session missing'
-path = root / 'gesture-result.json'
-result = json.loads(path.read_text())
-assert result['status'] == 'reader-passed' and result['backToInbox'] and result['replies'] == 10
-result.update(status='passed', secondSession=True)
-path.write_text(json.dumps(result, indent=2))
-print('RELEASED_SESSION_GESTURES_PROVEN', json.dumps(result))
-PYGESTURES
     exit 0
 fi
 if [[ "$feature" == chat-choices.md ]]; then

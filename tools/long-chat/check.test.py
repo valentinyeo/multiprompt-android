@@ -22,11 +22,8 @@ class LongChatTest(unittest.TestCase):
 
     def test_fixture_visible_name_cannot_drift_from_session_identity(self):
         workflow = Path(os.environ.get('LONG_CHAT_WORKFLOW', root / '.github/workflows/long-chat.yml')).read_text()
-        self.assertIn('scripts/fixture.sh', workflow)
-        seed = (root / '.claude/skills/verify-multiprompt-android/scripts/seed.sh').read_text()
-        self.assertIn('tmux set-window-option -t cl-long-chat automatic-rename off', seed)
-        self.assertIn('tmux rename-window -t cl-long-chat cl-long-chat', seed)
-        self.assertNotIn('tmux new-session', workflow)
+        self.assertIn('tmux set-window-option -t cl-long-chat automatic-rename off', workflow)
+        self.assertIn('tmux rename-window -t cl-long-chat cl-long-chat', workflow)
 
     def test_large_real_reader_tail_includes_latest_reply(self):
         with tempfile.TemporaryDirectory() as temporary:

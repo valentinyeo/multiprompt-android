@@ -90,6 +90,55 @@ class VerifySeedTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'SEED_SOURCE_MISMATCH'):
             seed.check(self.home, self.evidence)
 
+    def inbox_pages(self):
+        (self.home / 'seed-check.json').write_text(self.evidence.read_text())
+        pages = []
+        for index in range(0, 42, 6):
+            rows = ''.join(f'<node content-desc="Robot {name}" bounds="[20,{300 + row * 100}][100,{380 + row * 100}]"/>'
+                           for row, name in enumerate(self.names[index:index + 6]))
+            xml = ('<hierarchy><node bounds="[0,0][1080,1920]">'
+                   '<node text="42 results across all splits" bounds="[0,100][1000,200]"/>'
+                   '<node scrollable="true" bounds="[0,250][1080,1800]">' + rows + '</node></node></hierarchy>')
+            page = self.home / f'{index:02d}-seed-inbox-{index}.xml'
+            page.write_text(xml)
+            pages.append(page)
+        return pages
+
+    def test_inbox_evidence_requires_every_seeded_name_on_visible_pages(self):
+        pages = self.inbox_pages()
+        pages[-1].unlink()
+        with self.assertRaisesRegex(AssertionError, 'SEED_INBOX_ROWS_MISSING'):
+            seed.inbox(self.home)
+        self.inbox_pages()
+        result = seed.inbox(self.home)
+        self.assertEqual(42, result['sessions_visible'])
+        self.assertEqual(sorted(self.names), result['session_names'])
+        self.assertEqual(7, len(result['pages']))
+        self.assertEqual('42 results across all splits', result['displayed_count'])
+
+    def test_inbox_evidence_rejects_hidden_clipped_and_query_only_rows(self):
+        for replacement in ['content-desc="Not a robot"', 'visible-to-user="false" content-desc="Robot verify-session"',
+                            'text="verify-session"', 'content-desc="Robot verify-session-neighbor"']:
+            pages = self.inbox_pages()
+            pages[0].write_text(pages[0].read_text().replace('content-desc="Robot verify-session"', replacement))
+            with self.subTest(replacement=replacement), self.assertRaisesRegex(AssertionError, 'SEED_INBOX_ROWS_MISSING'):
+                seed.inbox(self.home)
+        pages = self.inbox_pages()
+        pages[0].write_text(pages[0].read_text().replace('[20,300][100,380]', '[20,240][100,380]'))
+        with self.assertRaisesRegex(AssertionError, 'SEED_INBOX_ROWS_MISSING'):
+            seed.inbox(self.home)
+
+    def test_inbox_evidence_requires_the_displayed_count_and_successful_seed_check(self):
+        pages = self.inbox_pages()
+        for page in pages:
+            page.write_text(page.read_text().replace('42 results across all splits', '1 result across all splits'))
+        with self.assertRaisesRegex(AssertionError, 'SEED_INBOX_COUNT_NOT_VISIBLE'):
+            seed.inbox(self.home)
+        self.inbox_pages()
+        (self.home / 'seed-check.json').write_text('{}')
+        with self.assertRaisesRegex(AssertionError, 'SEED_CHECK_EVIDENCE_MISMATCH'):
+            seed.inbox(self.home)
+
     def test_driver_checks_private_runner_evidence_as_the_fixture_user(self):
         self.home.chmod(0o755)
         private = self.home / 'runner-private'
