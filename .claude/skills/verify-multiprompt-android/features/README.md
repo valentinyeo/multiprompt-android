@@ -74,6 +74,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `chat.identity`. Runner: `verify.yml` (debug). Priority evidence: `projection-receipts-before.json` (2500 characters), `projection-receipts-reconnect.json` (5500 characters), `projection-state-before.json` (500 characters), `projection-state-fresh.json` (500 characters), `projection-state-catchup.json` (500 characters), `projection-state-reconnect.json` (500 characters), `projection-proof.txt` (500 characters).
 - [Approve a pending device](device-approval.md): Shipping Approve/No controls, real browser PKCE, HTTP decisions and independently verified SSH key installation/removal. Local account fixture; not live email OTP.
   - Outcomes: `legacy.igsh-449`. Runner: `verify.yml` (debug). Prerequisites: Local authenticated account fixture; live production email OTP is not exercised. Priority evidence: `device-approve-ui.json` (2000 characters), `device-deny-ui.json` (2000 characters), `device-decisions-ui.json` (2000 characters), `device-approval-receipts.txt` (1500 characters), `device-approved-ssh.txt` (500 characters), `device-after-denial.txt` (1000 characters).
+- [Find words inside a chat](chat-search.md): search real chat replies, check highlighted matches, jump, wrap, handle no matches and close. SOFT-2540.
+  - Outcomes: `chat-search.open`. Runner: `verify.yml` (debug). Priority evidence: `search-newest.json` (1000 characters), `search-previous.json` (1000 characters), `search-wrap-previous.json` (1000 characters), `search-wrap-next.json` (1000 characters), `search-next.json` (1000 characters), `search-no-match.json` (500 characters), `search-closed.json` (500 characters), `search-proof.txt` (200 characters).
 
 ## Initial coverage gaps
 
@@ -84,7 +86,6 @@ These IDs are an inventory, not exemptions for future changes. Untouched gaps do
 | `snippets.save-reuse-delete` | [#376](https://github.com/valentinyeo/multiprompt-android/pull/376) | SOFT-2537 |
 | `ai.switch` | [#373](https://github.com/valentinyeo/multiprompt-android/pull/373) | SOFT-2538 |
 | `pi.model-switch` | [#374](https://github.com/valentinyeo/multiprompt-android/pull/374) | SOFT-2539 |
-| `chat-search.open` | [#380](https://github.com/valentinyeo/multiprompt-android/pull/380) | SOFT-2540 |
 | `claude.remote-control` | [#366](https://github.com/valentinyeo/multiprompt-android/pull/366) | SOFT-2541 |
 | `ai.usage` | [#377](https://github.com/valentinyeo/multiprompt-android/pull/377) | SOFT-2542 |
 | `skills.pills` | [#378](https://github.com/valentinyeo/multiprompt-android/pull/378) | SOFT-2543 |

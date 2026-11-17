@@ -139,6 +139,10 @@ elif [[ "${VERIFY_FEATURE:-}" == chat-queued.md || "${VERIFY_FEATURE:-}" == chat
 elif [[ "${VERIFY_FEATURE:-}" == session-favorites.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true && "$FIXTURE" == "$RUNNER_TEMP/verify-ssh" ]]
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'exec env GITHUB_ACTIONS=true HOME=/home/verifyssh VERIFY_INFORMATION_1015=true python3 -u /home/verifyssh/console.py /home/verifyssh/receipts.txt'
+elif [[ "${VERIFY_FEATURE:-}" == chat-search.md ]]; then
+    sudo install -m 755 tools/chat-search/console.py /home/verifyssh/chat-search-console.py
+    sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/chat-search-console.py'
 elif [[ "${VERIFY_FEATURE:-}" == session-drafts.md ]]; then
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'python3 -c "import sys; sys.stdout.write(\"\u23fa Inbox preview stays.\n\"); sys.stdout.flush()"; exec python3 -u /home/verifyssh/console.py /home/verifyssh/receipts.txt'
 elif [[ "${VERIFY_FEATURE:-}" == chat-resync.md ]]; then
