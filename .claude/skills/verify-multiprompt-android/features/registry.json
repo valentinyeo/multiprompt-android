@@ -278,7 +278,12 @@
       },
       "outcomes": [
         "claude.skills-model-effort"
-      ]
+      ],
+      "evidence": {
+        "native-menu-state.txt": 5000,
+        "native-receipts.txt": 2500,
+        "native-result.json": 1000
+      }
     },
     "robot-faces.md": {
       "name": "Robot inbox and chat",
@@ -798,7 +803,8 @@
       "journey": "native-skills.md",
       "sideEffect": true,
       "match": [
-        "NativeSkills|SkillsLoader"
+        "NativeSkills|SkillsLoader",
+        "HostChange|HostSettings|ReaderMenuPage\\.MODEL|modelMenuExpanded|onModelCommand|sendModelCommand|Use Claude|Set effort:|Open model picker|attachMenuSection"
       ]
     },
     "robot-faces.journey": {

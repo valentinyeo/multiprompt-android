@@ -2853,8 +2853,12 @@
       "label": "Open model menu",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReaderTopBar:clickable:b9960695f3a3e6ac:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3000",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap verify-session in the chat title",
+        "result": "Disabled Current: Fable model row in native-menu-header-current XML/PNG"
+      }
     },
     {
       "id": "chat-header.dismiss-chat-header",
@@ -2862,8 +2866,12 @@
       "label": "Dismiss Chat header",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReaderTopBar:KitMenu:5d835c6c8266669d:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3017",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Press Android Back from the title model menu",
+        "result": "Menu absent and keep this draft intact in native-menu-header-dismissed XML/PNG"
+      }
     },
     {
       "id": "chat-header.current-model-display-only",
@@ -2871,8 +2879,12 @@
       "label": "Current model (display only)",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReaderTopBar:KitMenuRow:e40be40859f0db25:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3021",
-      "journey": null,
-      "missing": "Display-only sheet item is inventoried; no journey asserts this item and its disabled state."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Open the header model menu",
+        "result": "Disabled Current: Fable row in native-menu-header-current XML/PNG and native-menu-state.txt"
+      }
     },
     {
       "id": "chat-header.open-model-picker-model",
@@ -2880,8 +2892,12 @@
       "label": "Open model picker (/model)",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReaderTopBar:KitMenuRow:43afe2b21aa1df45:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3026",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Open model picker (/model) in the header menu",
+        "result": "Received /model. and intact draft in native-menu-header-picker XML/PNG; new /model receipt in native-menu-receipts.txt"
+      }
     },
     {
       "id": "chat-header.use-claude-opus",
@@ -2889,8 +2905,12 @@
       "label": "Use Claude Opus",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReaderTopBar:KitMenuRow:4d880fbe2cbd343b:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3034",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Use Claude Opus in the header menu",
+        "result": "Opus 5.5 · medium in native-menu-header-opus XML/PNG, matching host capture and new /model opus receipt"
+      }
     },
     {
       "id": "chat-header.use-claude-sonnet",
@@ -2898,8 +2918,12 @@
       "label": "Use Claude Sonnet",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReaderTopBar:KitMenuRow:9cbed084d86f7856:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3041",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Use Claude Sonnet in the header menu",
+        "result": "Sonnet 5.5 · medium in native-menu-header-sonnet XML/PNG, matching host capture and new /model sonnet receipt"
+      }
     },
     {
       "id": "chat-header.use-claude-fable",
@@ -2907,8 +2931,12 @@
       "label": "Use Claude Fable",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReaderTopBar:KitMenuRow:84a43aa56460606e:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3048",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Use Claude Fable in the header menu",
+        "result": "Fable 5.5 · medium in native-menu-header-fable XML/PNG, matching host capture and new /model fable receipt"
+      }
     },
     {
       "id": "chat-header.low-effort",
@@ -2916,8 +2944,12 @@
       "label": "Low effort",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReaderTopBar:KitMenuRow:e45a6691415c819b:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3056",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Set effort: low in the header menu",
+        "result": "Fable 5.5 · low in native-menu-header-low XML/PNG, matching host capture and new /effort low receipt"
+      }
     },
     {
       "id": "chat-header.medium-effort",
@@ -2925,8 +2957,12 @@
       "label": "Medium effort",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReaderTopBar:KitMenuRow:e45a6691415c819b:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3056",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Set effort: medium in the header menu",
+        "result": "Fable 5.5 · medium in native-menu-header-medium XML/PNG, matching host capture and new /effort medium receipt"
+      }
     },
     {
       "id": "chat-header.high-effort",
@@ -2934,8 +2970,12 @@
       "label": "High effort",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReaderTopBar:KitMenuRow:e45a6691415c819b:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3056",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Set effort: high in the header menu",
+        "result": "Fable 5.5 · high in native-menu-header-high XML/PNG, matching host capture and new /effort high receipt"
+      }
     },
     {
       "id": "chat-header.extra-high-effort",
@@ -2943,8 +2983,12 @@
       "label": "Extra high effort",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReaderTopBar:KitMenuRow:e45a6691415c819b:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3056",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Set effort: xhigh in the header menu",
+        "result": "Fable 5.5 · xhigh in native-menu-header-xhigh XML/PNG, matching host capture and new /effort xhigh receipt"
+      }
     },
     {
       "id": "chat-header.max-effort",
@@ -2952,8 +2996,12 @@
       "label": "Max effort",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReaderTopBar:KitMenuRow:e45a6691415c819b:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3056",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Set effort: max in the header menu",
+        "result": "Fable 5.5 · max in native-menu-header-max XML/PNG, matching host capture and new /effort max receipt"
+      }
     },
     {
       "id": "chat-header.version-open-release-notes",
@@ -3166,8 +3214,12 @@
       "label": "Dismiss Session actions",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenu:ac347f46de6e832b:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3950",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Press Android Back from Session actions",
+        "result": "Menu absent and keep this draft intact in native-menu-reader-dismissed XML/PNG"
+      }
     },
     {
       "id": "session-actions.back",
@@ -3175,8 +3227,12 @@
       "label": "‹ Back",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:04daaf2cf4a09c36:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3956",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap ‹ Back from the reader model menu",
+        "result": "Search in chat row returns in native-menu-reader-back XML/PNG"
+      }
     },
     {
       "id": "session-actions.reattach-session",
@@ -3206,8 +3262,12 @@
       "label": "Model and effort",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:0fc58e46619a8092:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3987",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Session actions then Change ›",
+        "result": "Disabled Current: Fable row in native-menu-reader-current XML/PNG"
+      }
     },
     {
       "id": "session-actions.enter-approve",
@@ -3437,8 +3497,12 @@
       "label": "Current model (display only)",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:0a732e9b81bcfe98:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4207",
-      "journey": null,
-      "missing": "Display-only sheet item is inventoried; no journey asserts this item and its disabled state."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Open the reader model menu",
+        "result": "Disabled Current: Fable row in native-menu-reader-current XML/PNG and native-menu-state.txt"
+      }
     },
     {
       "id": "model-and-effort.open-model-picker-model",
@@ -3446,8 +3510,12 @@
       "label": "Open model picker (/model)",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:7dd4d0d734ca7037:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4212",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Open model picker (/model) in the reader menu",
+        "result": "Received /model. and intact draft in native-menu-reader-picker XML/PNG; new /model receipt in native-menu-receipts.txt"
+      }
     },
     {
       "id": "model-and-effort.use-claude-opus",
@@ -3455,8 +3523,12 @@
       "label": "Use Claude Opus",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:18e80f38746336e8:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4218",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Use Claude Opus in the reader menu",
+        "result": "Opus 5.5 · medium in native-menu-reader-opus XML/PNG, matching host capture and new /model opus receipt"
+      }
     },
     {
       "id": "model-and-effort.use-claude-sonnet",
@@ -3464,8 +3536,12 @@
       "label": "Use Claude Sonnet",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:18e80f38746336e8:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4218",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Use Claude Sonnet in the reader menu",
+        "result": "Sonnet 5.5 · medium in native-menu-reader-sonnet XML/PNG, matching host capture and new /model sonnet receipt"
+      }
     },
     {
       "id": "model-and-effort.use-claude-fable",
@@ -3473,8 +3549,12 @@
       "label": "Use Claude Fable",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:18e80f38746336e8:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4218",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Use Claude Fable in the reader menu",
+        "result": "Fable 5.5 · medium in native-menu-reader-fable XML/PNG, matching host capture and new /model fable receipt"
+      }
     },
     {
       "id": "model-and-effort.low-effort",
@@ -3482,8 +3562,12 @@
       "label": "Low effort",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:9b726db9c4d46ab1:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4225",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Set effort: low in the reader menu",
+        "result": "Fable 5.5 · low in native-menu-reader-low XML/PNG, matching host capture and new /effort low receipt"
+      }
     },
     {
       "id": "model-and-effort.medium-effort",
@@ -3491,8 +3575,12 @@
       "label": "Medium effort",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:9b726db9c4d46ab1:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4225",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Set effort: medium in the reader menu",
+        "result": "Fable 5.5 · medium in native-menu-reader-medium XML/PNG, matching host capture and new /effort medium receipt"
+      }
     },
     {
       "id": "model-and-effort.high-effort",
@@ -3500,8 +3588,12 @@
       "label": "High effort",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:9b726db9c4d46ab1:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4225",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Set effort: high in the reader menu",
+        "result": "Fable 5.5 · high in native-menu-reader-high XML/PNG, matching host capture and new /effort high receipt"
+      }
     },
     {
       "id": "model-and-effort.extra-high-effort",
@@ -3509,8 +3601,12 @@
       "label": "Extra high effort",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:9b726db9c4d46ab1:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4225",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Set effort: xhigh in the reader menu",
+        "result": "Fable 5.5 · xhigh in native-menu-reader-xhigh XML/PNG, matching host capture and new /effort xhigh receipt"
+      }
     },
     {
       "id": "model-and-effort.max-effort",
@@ -3518,8 +3614,12 @@
       "label": "Max effort",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:9b726db9c4d46ab1:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4225",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Set effort: max in the reader menu",
+        "result": "Fable 5.5 · max in native-menu-reader-max XML/PNG, matching host capture and new /effort max receipt"
+      }
     },
     {
       "id": "switch-ai.switch-to-claude",
@@ -3785,8 +3885,12 @@
       "label": "Back from model / effort / permissions",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:107a13d49edf5e82:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4573",
-      "journey": null,
-      "missing": "Journey closes this menu with system Back, not its Back row."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap the Effort back row",
+        "result": "Add image returns in native-menu-attach-back XML/PNG"
+      }
     },
     {
       "id": "attach-host-settings.opus",
@@ -3794,8 +3898,12 @@
       "label": "Opus",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:0d460e49ef0f9382:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4580",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Attach → Model → Opus",
+        "result": "Opus 5.5 · high header and Opus › selection in native-menu-attach-opus XML/PNG; independent /model opus receipt"
+      }
     },
     {
       "id": "attach-host-settings.sonnet",
@@ -3816,8 +3924,12 @@
       "label": "Haiku",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:0d460e49ef0f9382:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4580",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Attach → Model → Haiku",
+        "result": "Haiku 5.5 · high header and Haiku › selection in native-menu-attach-haiku XML/PNG; independent /model haiku receipt"
+      }
     },
     {
       "id": "attach-host-settings.fable",
@@ -3825,8 +3937,12 @@
       "label": "Fable",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:0d460e49ef0f9382:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4580",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Attach → Model → Fable",
+        "result": "Fable 5.5 · high header and Fable › selection in native-menu-attach-fable XML/PNG; independent /model fable receipt"
+      }
     },
     {
       "id": "attach-host-settings.low-effort",
@@ -3834,8 +3950,12 @@
       "label": "Low effort",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:0d460e49ef0f9382:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4580",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Attach → Effort → Low",
+        "result": "Fable 5.5 · low header and Low › selection in native-menu-attach-low XML/PNG; independent /effort low receipt"
+      }
     },
     {
       "id": "attach-host-settings.medium-effort",
@@ -3843,8 +3963,12 @@
       "label": "Medium effort",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:0d460e49ef0f9382:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4580",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Tap Attach → Effort → Medium",
+        "result": "Fable 5.5 · medium header and Medium › selection in native-menu-attach-medium XML/PNG; independent /effort medium receipt"
+      }
     },
     {
       "id": "attach-host-settings.high-effort",
@@ -5079,8 +5203,12 @@
       "label": "Scroll menu items",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReaderTopBar:KitMenu:5d835c6c8266669d:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3017",
-      "journey": null,
-      "missing": "No journey explicitly checks this menu scroll and the revealed items."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Scroll the header menu on a compact viewport",
+        "result": "Set effort: max hidden before scroll, fully visible afterward in native-menu-header-before-scroll and native-menu-header-scroll XML/PNG pairs and native-menu-state.txt"
+      }
     },
     {
       "id": "session-actions.dismiss-session-actions.scroll",
@@ -5088,8 +5216,12 @@
       "label": "Scroll menu items",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenu:ac347f46de6e832b:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3950",
-      "journey": null,
-      "missing": "No journey explicitly checks this menu scroll and the revealed items."
+      "journey": "native-skills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
+        "action": "Scroll the reader menu on a compact viewport",
+        "result": "Delete hidden before scroll, fully visible afterward in native-menu-reader-before-scroll and native-menu-reader-scroll XML/PNG pairs and native-menu-state.txt"
+      }
     },
     {
       "id": "attach-menu.dismiss-attach-menu.scroll",
