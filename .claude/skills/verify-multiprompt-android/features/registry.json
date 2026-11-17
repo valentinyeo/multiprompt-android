@@ -90,8 +90,19 @@
         "driver": true
       },
       "outcomes": [
-        "codex.transcript"
-      ]
+        "codex.transcript",
+        "reader.lifecycle"
+      ],
+      "evidence": {
+        "reader-ui.json": 6000,
+        "hax-hidden-before.json": 128,
+        "hax-hidden-after.json": 128,
+        "hax-resumed.json": 128,
+        "claude-hidden-before.json": 128,
+        "claude-hidden-after.json": 128,
+        "reader-second-close-receipt.txt": 512,
+        "codex-receipt.txt": 256
+      }
     },
     "chat-queued.md": {
       "name": "Queued messages",
@@ -782,7 +793,7 @@
       "match": []
     },
     "reader.send-enter-interrupt": {
-      "description": "native output, Send, Enter/approve and Interrupt, with independent console receipts.",
+      "description": "Native output, Send, Enter/approve and Interrupt, with independent console receipts. Action evidence: driver-transcript.txt records + tap_desc 'Send prompt', + tap_text 'Enter / approve' and + tap_text 'Interrupt session'. Result evidence: 10-send-result.xml contains VERIFY_RECEIVED:VERIFY_SENT_528, 12-enter-result.xml contains VERIFY_ENTER_528, and 14-interrupt-result.xml contains VERIFY_INTERRUPTED_528. These markers are substrings of multiline text attributes, not standalone text=\"marker\" attributes. Independent side-effect evidence: receipts.txt and tmux-final.txt retain all three literal markers. Quote the marker substring verbatim, without inventing XML attribute boundaries.",
       "journey": "session-reader.md",
       "sideEffect": true,
       "match": [
@@ -1040,6 +1051,15 @@
       "sideEffect": true,
       "match": [
         "ChatHistory\\.kt|HostStream\\.kt|MessageProtocol\\.kt|projectMessages|LegacyMessageIdentity"
+      ]
+    },
+    "reader.lifecycle": {
+      "description": "Hax and Claude stop snapshot and history requests while hidden, wake on return, and publish after another reader closes. Action evidence: driver-transcript.txt records adb shell input keyevent KEYCODE_HOME. Result evidence: reader-ui.json retains CODEX_REPLY_hax_HOST_WHILE_HIDDEN_hax and CODEX_REPLY_hax_AFTER_SECOND_READER_CLOSE. Independent side-effect evidence: hax-hidden-before.json and hax-hidden-after.json retain equal host request counts; hax-resumed.json retains increased counts. reader-second-close-receipt.txt records VERIFY_RECEIVED:AFTER_SECOND_READER_CLOSE. The *-result.txt files are assertion summaries, not independent side-effect citations.",
+      "journey": "chat-codex.md",
+      "sideEffect": true,
+      "match": [
+        "ChatPollGate",
+        "ReaderStreamPump"
       ]
     }
   }

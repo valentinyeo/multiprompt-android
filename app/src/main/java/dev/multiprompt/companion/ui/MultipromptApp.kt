@@ -3224,22 +3224,31 @@ internal fun ReaderScreen(
             speech.shutdown()
         }
     }
-    DisposableEffect(voiceLifecycle) {
-        if (voiceLifecycle == null) return@DisposableEffect onDispose {}
+    DisposableEffect(connection, voiceLifecycle) {
+        var readerLease = if (voiceLifecycle?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.STARTED) != false) connection.observe() else null
+        if (voiceLifecycle == null) return@DisposableEffect onDispose { readerLease?.close() }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_STOP -> {
+                    readerLease?.close()
+                    readerLease = null
                     appForeground = false
                     speech.stop()
                     playback.clear()
                     reading = false
                 }
-                Lifecycle.Event.ON_START -> appForeground = true
+                Lifecycle.Event.ON_START -> {
+                    readerLease = readerLease ?: connection.observe()
+                    appForeground = true
+                }
                 else -> Unit
             }
         }
         voiceLifecycle.lifecycle.addObserver(observer)
-        onDispose { voiceLifecycle.lifecycle.removeObserver(observer) }
+        onDispose {
+            voiceLifecycle.lifecycle.removeObserver(observer)
+            readerLease?.close()
+        }
     }
     LaunchedEffect(speakableReplies, chatReady, voiceModeOn, appForeground, session.hostId, session.name) {
         val enabled = voiceModeOn && appForeground

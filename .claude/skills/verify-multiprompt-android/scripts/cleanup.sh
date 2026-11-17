@@ -11,6 +11,10 @@ fi
 if [[ -d "$FIXTURE" ]]; then
     sudo cat "$FIXTURE/sshd.log" > "$EVIDENCE/sshd.log" 2>/dev/null || true
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt" 2>/dev/null || true
+    for provider in codex claude; do
+        sudo cat "/home/verifyssh/$provider-receipts.txt" > "$EVIDENCE/$provider-receipts.txt" 2>/dev/null || true
+    done
+    sudo cat /home/verifyssh/reader-requests.jsonl > "$EVIDENCE/reader-requests.jsonl" 2>/dev/null || true
     if [[ "${VERIFY_FEATURE:-}" == ai-switch.md ]]; then
         sudo -u verifyssh python3 - > "$EVIDENCE/ai-switch-host-debug.json" <<'PYHOST'
 import json

@@ -1,0 +1,32 @@
+{
+  "run": "https://github.com/valentinyeo/multiprompt-android/actions/runs/43999087099",
+  "sha": "6658565c180750b464713e7f4ede3cc4239d7a34",
+  "files": {
+    "app-source-sha.txt": "6658565c180750b464713e7f4ede3cc4239d7a34\n",
+    "reader-ui.json": "[{\"source\": \"05-codex-hax-phone-reply.xml\", \"text\": \"CODEX_REPLY_hax_PHONE_CODEX\", \"bounds\": \"[64,942][771,1011]\"}, {\"source\": \"06-hax-reader-resumed.xml\", \"text\": \"CODEX_REPLY_hax_HOST_WHILE_HIDDEN_hax\", \"bounds\": \"[64,298][914,436]\"}, {\"source\": \"08-codex-codex-phone-reply.xml\", \"text\": \"CODEX_REPLY_codex_PHONE_CODEX\", \"bounds\": \"[64,942][819,1011]\"}, {\"source\": \"09-reader-after-second-close.xml\", \"text\": \"CODEX_REPLY_hax_AFTER_SECOND_READER_CLOSE\", \"bounds\": \"[64,1073][914,1211]\"}, {\"source\": \"10-claude-reader-resumed.xml\", \"text\": \"CODEX_REPLY_claude_HOST_WHILE_HIDDEN_claude\", \"bounds\": \"[64,655][914,793]\"}]\n",
+    "hax-hidden-before.json": "{\"history\": 21, \"snapshot\": 34}\n",
+    "hax-hidden-after.json": "{\"history\": 21, \"snapshot\": 34}\n",
+    "hax-resumed.json": "{\"history\": 25, \"snapshot\": 41}\n",
+    "claude-hidden-before.json": "{\"history\": 11, \"snapshot\": 42}\n",
+    "claude-hidden-after.json": "{\"history\": 11, \"snapshot\": 42}\n",
+    "reader-second-close-receipt.txt": "VERIFY_RECEIVED:AFTER_SECOND_READER_CLOSE\n",
+    "codex-receipt.txt": "VERIFY_RECEIVED:PHONE_CODEX\n",
+    "driver-transcript.txt": "+ adb shell input keyevent KEYCODE_HOME\n+ adb shell input keyevent KEYCODE_HOME\n"
+  },
+  "coverage": {
+    "outcome": "reader.lifecycle",
+    "journey": "chat-codex.md",
+    "action": {
+      "file": "driver-transcript.txt",
+      "quote": "+ adb shell input keyevent KEYCODE_HOME"
+    },
+    "result": {
+      "file": "reader-ui.json",
+      "quote": "CODEX_REPLY_hax_HOST_WHILE_HIDDEN_hax"
+    },
+    "sideEffect": {
+      "file": "hax-hidden-after.json",
+      "quote": "{\"history\": 21, \"snapshot\": 34}"
+    }
+  }
+}

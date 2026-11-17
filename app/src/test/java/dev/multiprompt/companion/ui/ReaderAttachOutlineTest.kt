@@ -26,6 +26,7 @@ import org.junit.Assert.assertEquals
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.reader.ChatHistoryCache
 import dev.multiprompt.companion.reader.ChatHistoryConnection
+import dev.multiprompt.companion.reader.ChatPollGate
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import dev.multiprompt.companion.reader.ChatHistoryState
 import dev.multiprompt.companion.reader.ReaderState
@@ -70,7 +71,7 @@ class ReaderAttachOutlineTest {
         connection = SessionReaderConnection(f.app.sshRepository, f.host, f.session.name,
             agent = AgentKind.CLAUDE, historyScript = byteArrayOf(), historyCache = cache)
         val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, f.session.name, f.session.workingDirectory)
-        val chat = ChatHistoryConnection(f.app.sshRepository, f.host, identity, byteArrayOf(), cache)
+        val chat = ChatHistoryConnection(f.app.sshRepository, f.host, identity, byteArrayOf(), cache, pollGate = ChatPollGate())
         f.field<MutableStateFlow<ChatHistoryState>>(chat, "_state").value = ChatHistoryState(loaded = true)
         f.field<MutableStateFlow<ReaderState>>(connection, "_state").value = ReaderState(status = ReaderStatus.Live)
         ReflectionHelpers.setField(connection, "historyIdentity", identity)

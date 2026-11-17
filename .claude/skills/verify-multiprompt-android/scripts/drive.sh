@@ -181,7 +181,7 @@ wait_for_text() {
     for attempt in {1..30}; do
         if select_node contains "$1" >/dev/null 2>&1; then return; fi
         dismiss_system_anr
-        sleep 1
+        sleep "${2:-1}"
     done
     printf 'Timed out waiting for %s\n' "$1" >&2
     return 1
@@ -1597,7 +1597,7 @@ PYSHARED
     python3 - "$EVIDENCE/shared-codex-before-restart.json" "$EVIDENCE/shared-codex-after-reset.json" <<'PYCODEXSHARED'
 import json, sys
 before, after = [json.load(open(path)) for path in sys.argv[1:]]
-assert before['provider'] == after['provider'] == 'codex' and before['sid'] == after['sid'] == 'verify-codex'
+assert before['provider'] == after['provider'] == 'codex' and before['sid'] == after['sid'] == '25340000-0000-4000-8000-000000000001'
 assert after['epoch'] == before['epoch'] + 1
 assert len(before['rows']) == len(after['rows']) == 2
 assert all(row['state'] == 'cancelled' for row in after['rows'])
@@ -1751,6 +1751,30 @@ PROOF
 fi
 
 if [[ "$feature" == chat-codex.md ]]; then
+    reader_counts() {
+        local name=$1 session=$2 stage=$3
+        sudo cat /home/verifyssh/reader-requests.jsonl > "$EVIDENCE/$name-$stage-requests.jsonl"
+        python3 tools/reader-ownership/receipts.py count "$EVIDENCE/$name-$stage-requests.jsonl" "$session" > "$EVIDENCE/$name-$stage.json"
+    }
+    reader_lifecycle() {
+        local name=$1 session=$2 marker="HOST_WHILE_HIDDEN_$1"
+        sleep 3
+        reader_counts "$name" "$session" visible
+        adb shell input keyevent KEYCODE_HOME
+        sleep 3
+        reader_counts "$name" "$session" hidden-before
+        sudo -u verifyssh tmux send-keys -t "=$session:" -l "$marker"
+        sudo -u verifyssh tmux send-keys -t "=$session:" Enter
+        sleep 4
+        reader_counts "$name" "$session" hidden-after
+        python3 tools/reader-ownership/receipts.py hidden "$EVIDENCE/$name-hidden-before.json" "$EVIDENCE/$name-hidden-after.json" | tee "$EVIDENCE/$name-hidden-result.txt"
+        adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
+        wait_for_text "CODEX_REPLY_${name}_$marker" 0
+        shot "$name-reader-resumed"
+        python3 tools/reader-ownership/receipts.py ui "$EVIDENCE/$(printf %02d "$step")-$name-reader-resumed.xml" "CODEX_REPLY_${name}_$marker" --append "$EVIDENCE/reader-ui.json"
+        reader_counts "$name" "$session" resumed
+        python3 tools/reader-ownership/receipts.py resumed "$EVIDENCE/$name-hidden-after.json" "$EVIDENCE/$name-resumed.json" | tee "$EVIDENCE/$name-resumed-result.txt"
+    }
     : > "$FIXTURE/recorder.pid"
     adb shell 'screenrecord --time-limit 180 --bit-rate 2000000 /sdcard/chat-catchup.mp4 & echo $!; wait' > "$FIXTURE/recorder.pid" &
     recorder_client=$!
@@ -1762,7 +1786,7 @@ if [[ "$feature" == chat-codex.md ]]; then
     [[ "$recorder_pid" =~ ^[0-9]+$ ]]
     for mode in hax codex; do
         if [[ "$mode" == codex ]]; then
-            adb shell input keyevent KEYCODE_BACK
+            tap_desc Back
             wait_for_text Inbox
             tap_text codex-native
         fi
@@ -1774,7 +1798,7 @@ if [[ "$feature" == chat-codex.md ]]; then
         fill "Message $destination" PHONE_CODEX
         tap_desc 'Send prompt'
         started=$(date +%s%N)
-        wait_for_text "CODEX_REPLY_${mode}_PHONE_CODEX"
+        wait_for_text "CODEX_REPLY_${mode}_PHONE_CODEX" 0
         finished=$(date +%s%N)
         sudo grep -Fx 'VERIFY_RECEIVED:PHONE_CODEX' "/home/verifyssh/$receipt" > "$EVIDENCE/$mode-receipt.txt"
         published=$(sudo cat "/home/verifyssh/$mode-reply-ns.txt")
@@ -1782,6 +1806,15 @@ if [[ "$feature" == chat-codex.md ]]; then
         printf '%s\n' "$elapsed" > "$EVIDENCE/$mode-visible-ms.txt"
         [[ "$elapsed" -ge 0 && "$elapsed" -le 5000 ]]
         shot "codex-$mode-phone-reply"
+        python3 tools/reader-ownership/receipts.py ui "$EVIDENCE/$(printf %02d "$step")-codex-$mode-phone-reply.xml" "CODEX_REPLY_${mode}_PHONE_CODEX" --append "$EVIDENCE/reader-ui.json"
+        if [[ "$mode" == hax ]]; then reader_lifecycle hax verify-session; fi
+        if [[ "$mode" == codex ]]; then
+            sleep 3
+            reader_counts hax verify-session switched-before
+            sleep 4
+            reader_counts hax verify-session switched-after
+            python3 tools/reader-ownership/receipts.py hidden "$EVIDENCE/hax-switched-before.json" "$EVIDENCE/hax-switched-after.json" | tee "$EVIDENCE/hax-switched-result.txt"
+        fi
         sudo -u verifyssh tmux capture-pane -pt "$destination" > "$EVIDENCE/$mode-terminal.txt"
         test -s "$EVIDENCE/$mode-terminal.txt"
         if grep -F "CODEX_REPLY_${mode}_PHONE_CODEX" "$EVIDENCE/$mode-terminal.txt"; then
@@ -1790,13 +1823,23 @@ if [[ "$feature" == chat-codex.md ]]; then
             [[ $? -eq 1 ]]
         fi
     done
-    adb shell input keyevent KEYCODE_BACK
+    tap_desc Back
+    wait_for_text Inbox
+    tap_text verify-session
+    sudo -u verifyssh tmux send-keys -t '=verify-session:' -l AFTER_SECOND_READER_CLOSE
+    sudo -u verifyssh tmux send-keys -t '=verify-session:' Enter
+    wait_for_text CODEX_REPLY_hax_AFTER_SECOND_READER_CLOSE
+    sudo grep -Fx 'VERIFY_RECEIVED:AFTER_SECOND_READER_CLOSE' /home/verifyssh/receipts.txt > "$EVIDENCE/reader-second-close-receipt.txt"
+    shot reader-after-second-close
+    python3 tools/reader-ownership/receipts.py ui "$EVIDENCE/$(printf %02d "$step")-reader-after-second-close.xml" CODEX_REPLY_hax_AFTER_SECOND_READER_CLOSE --append "$EVIDENCE/reader-ui.json"
+    tap_desc Back
     wait_for_text Inbox
     tap_text claude-control
     wait_for_text 'CODEX_TRANSCRIPT_ONLY_claude'
     fill 'Message claude-control' CLAUDE_CONTROL
     tap_desc 'Send prompt'
     wait_for_text 'CODEX_REPLY_claude_CLAUDE_CONTROL'
+    reader_lifecycle claude claude-control
     wait_for_absence Queued
     tap_desc 'Session actions'
     wait_for_text 'Reset this chat'
@@ -2427,18 +2470,21 @@ python3 "$scripts/send-timing.py" "$EVIDENCE/current.xml" "$EVIDENCE/send-timing
 wait_receipt 'VERIFY_RECEIVED:VERIFY_SENT_528'
 wait_for_text 'VERIFY_RECEIVED:VERIFY_SENT_528'
 shot send-result
+if [[ "$feature" == session-reader.md ]]; then python3 tools/reader-ownership/receipts.py ui "$EVIDENCE/$(printf %02d "$step")-send-result.xml" VERIFY_RECEIVED:VERIFY_SENT_528 --append "$EVIDENCE/reader-ui.json"; fi
 tap_desc 'Session actions'
 shot enter-action
 tap_text 'Enter / approve'
 wait_receipt VERIFY_ENTER_528
 wait_for_text VERIFY_ENTER_528
 shot enter-result
+if [[ "$feature" == session-reader.md ]]; then python3 tools/reader-ownership/receipts.py ui "$EVIDENCE/$(printf %02d "$step")-enter-result.xml" VERIFY_ENTER_528 --append "$EVIDENCE/reader-ui.json"; fi
 tap_desc 'Session actions'
 shot interrupt-action
 tap_text 'Interrupt session'
 wait_receipt VERIFY_INTERRUPTED_528
 wait_for_text VERIFY_INTERRUPTED_528
 shot interrupt-result
+if [[ "$feature" == session-reader.md ]]; then python3 tools/reader-ownership/receipts.py ui "$EVIDENCE/$(printf %02d "$step")-interrupt-result.xml" VERIFY_INTERRUPTED_528 --append "$EVIDENCE/reader-ui.json"; fi
 sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt"
 sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt"
 grep -Fx VERIFY_INTERRUPTED_528 "$EVIDENCE/receipts.txt"

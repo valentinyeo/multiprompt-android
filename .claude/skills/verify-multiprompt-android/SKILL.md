@@ -76,6 +76,10 @@ All SSH journeys first capture Sign in, choose **Use without account (debug)**, 
 
 The reaction fixture consumes the prompt and its trailing delivery marker as one transcript turn. A marker is not a second user message or an extra assistant reply. `tools/kit-controls/journeys.test.py` checks this framing and the SSH rotation ownership. Workspace split actions resolve the active horizontal viewport and search both directions; do not wait for an offscreen label before revealing it.
 
+## Reader lifetime
+
+For changes to connection ownership, dispatch `chat-codex.md` and cover `reader.lifecycle`. Its SSH observer counts actual history queries and snapshot captures for Hax and Claude while visible, backgrounded, resumed and switched away. A missing positive control or extra hidden request fails. Retain the raw host log, count files, resumed XML and the receipt after closing the second reader. JVM tests cover multiple observers of the same session and silent reconnects; they do not replace the phone journey.
+
 ## Evidence
 
 Use the pstack proof standard: real user path; action plus resulting state; independently checked side effects; no test-only setters. A final screenshot alone is not proof. The reader recipe records the draft and Send, menu actions and resulting output, plus runner-side receipts and tmux capture. Host setup records the document picker/import, comparison dialog, authenticated session list and pinned identity. Terminal proof requires both attached status and a real tmux client. Split settings cannot be proven by debug offline entry. Sign-in proves only browser handoff, never OTP completion.

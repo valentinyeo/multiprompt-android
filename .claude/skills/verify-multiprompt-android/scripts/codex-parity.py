@@ -11,7 +11,13 @@ for index, path in enumerate(sys.argv[1:]):
     spec.loader.exec_module(reader)
     readers.append(reader)
 for mode in ("hax", "codex"):
-    query = dict(id=1, codex=True, sid="verify-" + mode, tmux="", cwd=str(Path.home()),
+    root = Path.home() / (".local/state/hax/sessions" if mode == "hax" else ".codex/sessions")
+    transcripts = list(root.rglob("*.jsonl"))
+    assert len(transcripts) == 1, transcripts
+    with transcripts[0].open() as source:
+        header = json.loads(source.readline())
+    sid = header["id"] if mode == "hax" else header["payload"]["id"]
+    query = dict(id=1, codex=True, sid=sid, tmux="", cwd=str(Path.home()),
                  cached_sid="", inode=0, offset=0, start=0, no_jump=True, source_offsets=True)
     posts = []
     for reader in readers:
