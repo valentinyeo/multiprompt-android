@@ -21,6 +21,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.multiprompt.companion.model.TmuxSession
 
@@ -79,6 +83,10 @@ internal fun BotLookContent(
                             Modifier
                                 .size(48.dp)
                                 .clickable { onPickFace(index) }
+                                .semantics {
+                                    contentDescription = "Face ${index + 1}"
+                                    selected = pickedFace == index
+                                }
                                 .border(
                                     if (pickedFace == index) 3.dp else 1.dp,
                                     if (pickedFace == index) Kit.Text else Kit.Outline,
@@ -88,7 +96,7 @@ internal fun BotLookContent(
                             BotAvatar(
                                 session.name,
                                 44.dp,
-                                Modifier.align(Alignment.Center),
+                                Modifier.align(Alignment.Center).clearAndSetSemantics {},
                                 workspaceColor = session.workspaceColor,
                                 face = index,
                                 color = pickedColor,
@@ -110,7 +118,11 @@ internal fun BotLookContent(
                                     if (pickedColor == index) Kit.Text else Kit.Outline,
                                     CircleShape,
                                 )
-                                .clickable { onPickColor(index) },
+                                .clickable { onPickColor(index) }
+                                .semantics {
+                                    contentDescription = "Colour ${index + 1}"
+                                    selected = pickedColor == index
+                                },
                         )
                     }
                 }
@@ -120,6 +132,7 @@ internal fun BotLookContent(
                     "Auto",
                     modifier = Modifier
                         .clickable { onPickColor(null) }
+                        .semantics { selected = pickedColor == null }
                         .padding(start = 4.dp),
                     style = Kit.Label,
                     color = if (pickedColor == null) Kit.Text else Kit.TextMuted,
