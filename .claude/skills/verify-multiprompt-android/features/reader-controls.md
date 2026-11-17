@@ -2,8 +2,8 @@
 
 Goal: exercise eight previously uncovered controls from SOFT-2653.
 Run `verify.yml` with `feature=reader-controls.md` on a fresh GitHub-hosted emulator.
-The SSH fixture runs the real receipt-writing console under a Claude-named executable.
-No account or provider credentials are required.
+The SSH fixture reuses the native Claude transcript and receipt-writing console under
+a Claude-named executable. No account or provider credentials are required.
 
 1. Open verify-session → Session actions → Rename. Fill Name with
    `VERIFY_CANCELLED_2653`, assert the editor text and Rename session sheet, and capture
