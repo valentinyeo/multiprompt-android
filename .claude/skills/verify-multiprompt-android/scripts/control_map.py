@@ -207,9 +207,12 @@ def main():
     data = json.loads((ROOT / MAP).read_text())
     if args.command == 'locations':
         locations = {s['site']: s['source'] for s in sites}
+        moved = {entry['source']: locations[entry['site']] for entry in data['controls'] + data['forwarding'] if entry['site'] in locations}
         for entry in data['controls'] + data['forwarding']:
             if entry['site'] in locations:
                 entry['source'] = locations[entry['site']]
+        for screen in data['screens']:
+            screen['source'] = moved.get(screen['source'], screen['source'])
         (ROOT / MAP).write_text(json.dumps(data, indent=2) + '\n')
         return
     baseline = json.loads((ROOT / BASELINE).read_text())

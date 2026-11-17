@@ -288,48 +288,29 @@ class ReaderStreamPumpTest {
     }
 
     @Test
-    fun pendingConfirmationKeepsTheStreamRunningWhileHiddenUntilItResolves() = runTest {
+    fun pendingConfirmationCannotKeepAHiddenChatPolling() = runTest {
         val host = FakeHost()
         val confirmation = ModelSwitchConfirmation({ currentTime }, 25_000L)
-        val selected = MutableStateFlow(true)
-        pump(streamWanted(selected, confirmation.pending), host)
+        val gate = ChatPollGate()
+        val first = gate.acquire()
+        val second = gate.acquire()
+        pump(gate.active, host)
         runCurrent()
         confirmation.begin()
-        selected.value = false
+        second.close()
+        advanceTimeBy(3_000L)
         runCurrent()
-        val hiddenAt = host.snapshots
-        advanceTimeBy(10_000L)
-        runCurrent()
-        assertTrue("stream stopped while confirmation pending", host.snapshots > hiddenAt)
-        assertTrue(confirmation.shouldPress(visible = true))
+        assertTrue(host.snapshots > 1)
+        first.close()
         runCurrent()
         val settled = host.snapshots
-        advanceTimeBy(10_000L)
+        advanceTimeBy(25_001L)
         runCurrent()
-        assertEquals(settled, host.snapshots)
-        assertEquals(0, host.releases)
-    }
-
-    @Test
-    fun unansweredConfirmationExpiresAndTheHiddenStreamStops() = runTest {
-        val host = FakeHost()
-        val confirmation = ModelSwitchConfirmation({ currentTime }, 25_000L)
-        val selected = MutableStateFlow(true)
-        pump(streamWanted(selected, confirmation.pending), host)
-        runCurrent()
-        confirmation.begin()
-        selected.value = false
-        advanceTimeBy(25_000L)
-        runCurrent()
-        assertTrue(!confirmation.expire())
-        advanceTimeBy(1L)
-        runCurrent()
+        assertEquals("HIDDEN_READER_IO: route reads through ChatPollGate", settled, host.snapshots)
         assertTrue(confirmation.expire())
+        gate.acquire()
         runCurrent()
-        val settled = host.snapshots
-        advanceTimeBy(10_000L)
-        runCurrent()
-        assertEquals(settled, host.snapshots)
-        assertTrue(!confirmation.shouldPress(visible = true))
+        assertEquals(settled + 1, host.snapshots)
+        assertEquals(1, host.connects)
     }
 }

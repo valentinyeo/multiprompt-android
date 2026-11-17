@@ -1,5 +1,6 @@
 {
   "IGSH-2570": "Android verification meets Lauren's checklist",
+  "IGSH-2534": "Android chat reader has one owner for its connection",
   "IGSH-2537": "Android phone test saves and reuses snippets",
   "IGSH-2560": "Server overload: worker caps, heavy checks in the cloud, cloud workers",
   "IGSH-2535": "Android phone tests tap what a person can really reach",

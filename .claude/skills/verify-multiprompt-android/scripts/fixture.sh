@@ -27,6 +27,10 @@ COMMAND
     sudo install -m 755 "$FIXTURE/ssh-command" /home/verifyssh/ssh-command
     { printf 'command="/home/verifyssh/ssh-command" '; cat "$FIXTURE/user-key.pub"; } | sudo tee /home/verifyssh/.ssh/authorized_keys >/dev/null
 fi
+if [[ "${VERIFY_FEATURE:-}" == chat-codex.md ]]; then
+    sudo install -m 644 tools/reader-ownership/ssh-observer.py /home/verifyssh/ssh-observer.py
+    { printf 'command="python3 /home/verifyssh/ssh-observer.py" '; cat "$FIXTURE/user-key.pub"; } | sudo tee /home/verifyssh/.ssh/authorized_keys >/dev/null
+fi
 sudo install -d -m 755 /run/sshd
 cat > "$FIXTURE/sshd_config" <<CONFIG
 Port 2222
@@ -83,7 +87,9 @@ if [[ "${VERIFY_FEATURE:-}" == ai-switch.md ]]; then
 elif [[ "${VERIFY_FEATURE:-}" == chat-codex.md ]]; then
     sudo install -m 755 "$(dirname "$0")/codex-console.py" /home/verifyssh/codex-console.py
     sudo install -m 755 "$(dirname "$0")/resync-console.py" /home/verifyssh/resync-console.py
-    for binary in hax codex claude; do sudo -u verifyssh ln -s "$(command -v python3)" "/home/verifyssh/$binary"; done
+    for binary in hax claude; do sudo -u verifyssh ln -s "$(command -v python3)" "/home/verifyssh/$binary"; done
+    sudo install -m 755 "$(readlink -f "$(command -v python3)")" /home/verifyssh/codex
+    sudo install -m 644 "$(dirname "$0")/codex-queue.py" /home/verifyssh/queue
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/hax -u /home/verifyssh/codex-console.py /home/verifyssh/receipts.txt hax'
     sudo -u verifyssh tmux new-session -d -s codex-native -x 100 -y 32 '/home/verifyssh/codex -u /home/verifyssh/codex-console.py /home/verifyssh/codex-receipts.txt codex'
     sudo -u verifyssh tmux new-session -d -s claude-control -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/codex-console.py /home/verifyssh/claude-receipts.txt claude'
@@ -144,14 +150,15 @@ elif [[ "${VERIFY_FEATURE:-}" == chat-queued.md || "${VERIFY_FEATURE:-}" == chat
         sudo install -m 755 "$(dirname "$0")/shared-evidence.py" /home/verifyssh/shared-evidence.py
         sudo install -m 755 "$(dirname "$0")/shared-lock.py" /home/verifyssh/shared-lock.py
         sudo install -m 755 "$(dirname "$0")/codex-console.py" /home/verifyssh/codex-console.py
-        sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/codex
+        sudo install -m 755 "$(readlink -f "$(command -v python3)")" /home/verifyssh/codex
+        sudo install -m 644 "$(dirname "$0")/codex-queue.py" /home/verifyssh/queue
         sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s codex-native -x 100 -y 32 '/home/verifyssh/codex -u /home/verifyssh/codex-console.py /home/verifyssh/codex-receipts.txt codex'
         sudo -u verifyssh tmux set-window-option -t codex-native automatic-rename off
         sudo -u verifyssh tmux rename-window -t codex-native codex-native
         sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s shared-lock-claude 'env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-lock.py claude a1b2c3d4-1008-4000-8000-000000001008'
-        sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s shared-lock-codex 'env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-lock.py codex verify-codex'
-        for attempt in {1..30}; do [[ -f /home/verifyssh/shared-lock-ready-claude-a1b2c3d4-1008-4000-8000-000000001008 && -f /home/verifyssh/shared-lock-ready-codex-verify-codex ]] && break; sleep 1; done
-        [[ -f /home/verifyssh/shared-lock-ready-claude-a1b2c3d4-1008-4000-8000-000000001008 && -f /home/verifyssh/shared-lock-ready-codex-verify-codex ]]
+        sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s shared-lock-codex 'env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-lock.py codex 25340000-0000-4000-8000-000000000001'
+        for attempt in {1..30}; do [[ -f /home/verifyssh/shared-lock-ready-claude-a1b2c3d4-1008-4000-8000-000000001008 && -f /home/verifyssh/shared-lock-ready-codex-25340000-0000-4000-8000-000000000001 ]] && break; sleep 1; done
+        [[ -f /home/verifyssh/shared-lock-ready-claude-a1b2c3d4-1008-4000-8000-000000001008 && -f /home/verifyssh/shared-lock-ready-codex-25340000-0000-4000-8000-000000000001 ]]
         sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py bootstrap > "$EVIDENCE/shared-bootstrap.json"
         jq -e '.engine_info.generation == 22 and .bundle_bytes == 224961 and .bundle_sha256 == "999ef191b364af22994311f4d8b168e22c67a7103585a0c22e0e9c1cc7a9c316" and .snapshot.next_cursor == null and (.snapshot.items | length) == 0' "$EVIDENCE/shared-bootstrap.json" >/dev/null
         sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py bootstrap codex > "$EVIDENCE/shared-bootstrap-codex.json"

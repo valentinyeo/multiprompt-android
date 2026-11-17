@@ -14,6 +14,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -58,10 +59,16 @@ class ChatHistoryConnection(
     private val connectedExchange: (suspend (suspend (suspend (String) -> String) -> Unit) -> Unit)? = null,
     private val beforeAdmission: (suspend () -> Unit)? = null,
     private val stallMillis: Long = ConversationLoad.TIMEOUT_MS,
+    internal val pollGate: ChatPollGate,
 ) : AutoCloseable {
     private sealed interface Command {
         data class Submit(val text: String, val generation: Long, val result: CompletableDeferred<PromptAdmission>, val replaces: String? = null, val messageId: String? = null) : Command
-        data class Action(val kind: String, val id: String, val epoch: Long?, val attempt: String?, val generation: Long, val result: CompletableDeferred<MessageActionResult>, val target: MessageJournal.Entry? = null, val line: ((Long, String) -> String)? = null) : Command
+        data class Action(val kind: String, val id: String, val epoch: Long?, val attempt: String?, val generation: Long, val result: CompletableDeferred<MessageActionResult>, val target: MessageJournal.Entry? = null, val line: ((Long, String) -> String)? = null) : Command {
+            var mutationIssued = false
+
+            fun interrupted(currentGeneration: Long): MessageActionResult =
+                if (generation != currentGeneration && !mutationIssued) MessageActionResult.Rejected("Chat changed") else MessageActionResult.Unknown
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -99,6 +106,8 @@ class ChatHistoryConnection(
     private val _hostError = MutableStateFlow<String?>(null)
     val hostError: StateFlow<String?> = _hostError.asStateFlow()
 
+    private val visibility = pollGate.onChange(::select)
+
     private fun key(sid: String) = "$account\u0000$provider\u0000$sid"
     private fun wire(sid: String) = MessageProtocol.Scope(requireNotNull(provider), sid, identity.tmux)
     private fun owns(sid: String) = selected && ownedKey == key(sid) && gate?.owns(key(sid), token) == true
@@ -121,7 +130,7 @@ class ChatHistoryConnection(
         else gate?.ifOwned(key(sid), token) { journalAccess { requireNotNull(journal).markIssued(id) }; true } ?: false
     }
 
-    @Synchronized fun select(value: Boolean) {
+    @Synchronized private fun select(value: Boolean) {
         if (selected == value) return
         selected = value
         if (value) {
@@ -327,7 +336,8 @@ class ChatHistoryConnection(
     fun start() {
         if (job != null) return
         cache.peek(cacheKey)?.let { _state.value = ChatHistoryState(it, loaded = true) }
-        job = scope.launch {
+        val deferredCommands = java.util.ArrayDeque<Command>()
+        job = pollGate.launchIn(scope) {
             val restoreGeneration = generation
             runCatching { cache.restore(cacheKey) }.getOrNull()?.let {
                 synchronized(this@ChatHistoryConnection) {
@@ -340,7 +350,6 @@ class ChatHistoryConnection(
             }
             var retryDelay = ReconnectBackoff.INITIAL_MS
             var requestId = 0L
-            val deferredCommands = java.util.ArrayDeque<Command>()
             var activeCommand: Command? = null
             while (isActive) {
                 var connectionGeneration = generation
@@ -352,7 +361,7 @@ class ChatHistoryConnection(
                             val checked = mutableSetOf<String>()
                             var engine: Pair<Long, String>? = null
                             poll@ while (isActive) {
-                                if (ChatPollGate.step(selected) == ChatPollGate.Step.WAIT_FOR_WAKE) {
+                                if (!selected) {
                                     wake.receive()
                                     continue@poll
                                 }
@@ -427,8 +436,7 @@ class ChatHistoryConnection(
                                                             clearUnrecordedReset(queued, page.sid)
                                                             queued.result.complete(MessageActionResult.Rejected("Chat is not ready"))
                                                         } else lock.withLock {
-                                                            val outcome = try { performAction(queued, previous, messageScope, exchange) { ++requestId } }
-                                                            catch (failure: Exception) { queued.result.complete(MessageActionResult.Unknown); throw failure }
+                                                            val outcome = performAction(queued, previous, messageScope, exchange) { ++requestId }
                                                             synchronized(this@ChatHistoryConnection) {
                                                                 if (queued.kind == "reset" && outcome == MessageActionResult.Applied && queued.generation == generation && owns(page.sid)) {
                                                                     resetReply = queued.result
@@ -619,12 +627,7 @@ class ChatHistoryConnection(
                                             }
                                             is Command.Action -> {
                                                 connectionGeneration = command.generation
-                                                val result = try {
-                                                    performAction(command, observed, messageScope, exchange) { ++requestId }
-                                                } catch (failure: Exception) {
-                                                    command.result.complete(MessageActionResult.Unknown)
-                                                    throw failure
-                                                }
+                                                val result = performAction(command, observed, messageScope, exchange) { ++requestId }
                                                 synchronized(this@ChatHistoryConnection) {
                                                     if (command.generation != generation || !owns(page.sid)) {
                                                         command.result.complete(if (result is MessageActionResult.Rejected) result else MessageActionResult.Unknown)
@@ -652,40 +655,39 @@ class ChatHistoryConnection(
                             }
                     }
                 } catch (failure: Exception) {
+                    val paused = !isActive
                     synchronized(this@ChatHistoryConnection) {
                         val disconnectedSid = freshSid
-                        if (generation == connectionGeneration && (disconnectedSid == null || provider == null || owns(disconnectedSid))) {
+                        if (!paused && generation == connectionGeneration && (disconnectedSid == null || provider == null || owns(disconnectedSid))) {
                             resetReply?.complete(MessageActionResult.Unknown)
                             resetReply = null
                             resetAck = null
                             freshSid = null
                         }
-                        _state.value = _state.value.copy(retrying = true, connected = false,
+                        if (!paused) _state.value = _state.value.copy(retrying = true, connected = false,
                             connectionError = if (failure is StalledChat || failure is kotlinx.coroutines.TimeoutCancellationException) ConversationLoad.TIMED_OUT else ConversationLoad.FAILED,
                             messageError = if (failure is JournalStorageFailure) "Local storage failure; messages cannot be safely sent" else _state.value.messageError)
                     }
-                    when (val command = activeCommand) {
-                        is Command.Submit -> command.result.complete(PromptAdmission.Rejected("Chat is disconnected"))
-                        is Command.Action -> command.result.complete(MessageActionResult.Unknown)
-                        null -> Unit
+                    val pending = buildList {
+                        activeCommand?.let { add(it) }
+                        while (deferredCommands.isNotEmpty()) add(deferredCommands.removeFirst())
+                        while (true) add(commands.tryReceive().getOrNull() ?: break)
                     }
                     activeCommand = null
-                    while (deferredCommands.isNotEmpty()) {
-                        when (val command = deferredCommands.removeFirst()) {
-                            is Command.Submit -> command.result.complete(PromptAdmission.Rejected("Chat is disconnected"))
-                            is Command.Action -> command.result.complete(MessageActionResult.Unknown)
+                    for (command in pending) {
+                        when (command) {
+                            is Command.Submit -> if (paused && command.generation == generation && !command.result.isCompleted) {
+                                deferredCommands.addLast(command)
+                            } else command.result.complete(PromptAdmission.Rejected("Chat is disconnected"))
+                            is Command.Action -> if (paused && command.generation == generation && !command.mutationIssued && !command.result.isCompleted) {
+                                deferredCommands.addLast(command)
+                            } else command.result.complete(command.interrupted(generation))
                         }
                     }
                     resyncing?.completeExceptionally(failure)
                     resyncing = null
                     while (true) (resyncs.tryReceive().getOrNull() ?: break).completeExceptionally(failure)
-                    while (true) {
-                        when (val command = commands.tryReceive().getOrNull() ?: break) {
-                            is Command.Submit -> command.result.complete(PromptAdmission.Rejected("Chat is disconnected"))
-                            is Command.Action -> command.result.complete(MessageActionResult.Unknown)
-                        }
-                    }
-                    if (failure is CancellationException && !isActive) throw failure
+                    if (paused) ensureActive()
                     if (failure is RetryRequested) {
                         retryDelay = ReconnectBackoff.INITIAL_MS
                         continue
@@ -693,6 +695,15 @@ class ChatHistoryConnection(
                 }
                 val nudged = withTimeoutOrNull(retryDelay) { retryNudge.receive() } != null
                 retryDelay = ReconnectBackoff.afterWait(retryDelay, nudged)
+            }
+        }.also { owner ->
+            owner.invokeOnCompletion {
+                while (deferredCommands.isNotEmpty()) {
+                    when (val command = deferredCommands.removeFirst()) {
+                        is Command.Submit -> command.result.complete(PromptAdmission.Rejected("Chat closed"))
+                        is Command.Action -> command.result.complete(MessageActionResult.Rejected("Chat closed"))
+                    }
+                }
             }
         }
     }
@@ -704,6 +715,7 @@ class ChatHistoryConnection(
             val build = command.line ?: return MessageActionResult.Rejected("Unknown action")
             if (!owns(wire.sid)) return MessageActionResult.Rejected("Chat changed")
             val id = nextId()
+            command.mutationIssued = true
             return when (val outcome = HostReply.outcome(exchange(build(id, wire.sid) + "\n"), id)) {
                 HostReply.Outcome.Sent, HostReply.Outcome.Gone -> MessageActionResult.Applied
                 is HostReply.Outcome.Failed -> MessageActionResult.Rejected(outcome.message)
@@ -818,6 +830,7 @@ class ChatHistoryConnection(
         }
         if (entry != null && !markIssued(wire.sid, command.generation, entry.id)) return MessageActionResult.Rejected("Chat changed")
         val id = nextId()
+        command.mutationIssued = operation != "message_status"
         val response = exchange(MessageProtocol.request(id, wire, operation, args))
         if (operation == "message_reset") {
             val result = MessageProtocol.reset(response, id)
@@ -861,6 +874,7 @@ class ChatHistoryConnection(
     }
 
     override fun close() {
+        visibility.close()
         select(false)
         wake.close(); resyncs.close(); commands.close()
         resyncing?.cancel()
@@ -868,7 +882,7 @@ class ChatHistoryConnection(
         generateSequence { commands.tryReceive().getOrNull() }.forEach {
             when (it) {
                 is Command.Submit -> it.result.complete(PromptAdmission.Rejected("Chat closed"))
-                is Command.Action -> it.result.complete(MessageActionResult.Unknown)
+                is Command.Action -> it.result.complete(it.interrupted(generation))
             }
         }
         scope.cancel()

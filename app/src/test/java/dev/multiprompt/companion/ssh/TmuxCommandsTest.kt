@@ -10,6 +10,8 @@ import org.junit.Test
 import java.io.File
 import java.nio.file.Files
 import java.security.MessageDigest
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 
 class TmuxCommandsTest {
     @Test
@@ -97,6 +99,42 @@ class TmuxCommandsTest {
         assertTrue(command.contains("mp_previous=\$mp_current"))
         assertTrue(command.contains(TmuxCommands.SNAPSHOT_PREFIX))
         assertTrue(command.contains("sleep 1"))
+    }
+
+    @Test
+    fun closingTheSnapshotPipeStopsRemoteCapturesWithoutDisconnectingTheHost() {
+        assumeTrue(File("/bin/sh").canExecute())
+        val root = Files.createTempDirectory("reader-pipe").toFile()
+        val captures = File(root, "captures")
+        File(root, "tmux").apply {
+            writeText("""
+                #!/bin/sh
+                case "${'$'}1" in
+                    has-session) exit 0 ;;
+                    capture-pane) printf 'capture\n' >> "${'$'}CAPTURE_LOG"; printf 'host output\n' ;;
+                    display-message) printf '0\n' ;;
+                esac
+            """.trimIndent())
+            setExecutable(true)
+        }
+        val process = ProcessBuilder("/bin/sh", "-c", TmuxCommands.stream("work")).apply {
+            environment()["PATH"] = root.path + File.pathSeparator + System.getenv("PATH")
+            environment()["HOME"] = root.path
+            environment()["CAPTURE_LOG"] = captures.path
+            redirectError(File(root, "stderr"))
+        }.start()
+        try {
+            val output = process.inputStream.bufferedReader()
+            CompletableFuture.runAsync {
+                check(generateSequence { output.readLine() }.any { it.startsWith(TmuxCommands.SNAPSHOT_PREFIX) })
+            }.get(5, TimeUnit.SECONDS)
+            assertTrue(captures.readLines().isNotEmpty())
+            output.close()
+            assertTrue("HIDDEN_READER_IO: closing a reader pipe must stop its remote capture loop", process.waitFor(3, TimeUnit.SECONDS))
+        } finally {
+            process.destroyForcibly().waitFor()
+            root.deleteRecursively()
+        }
     }
 
     @Test
