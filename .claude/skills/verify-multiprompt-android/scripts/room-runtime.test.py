@@ -44,23 +44,32 @@ class RoomRuntimeTest(unittest.TestCase):
     def test_engine_info_offers_room_messages(self):
         self.assertEqual(self.serve({'op': 'engine_info'})['room_message_protocols'], [1])
 
-    def test_beta_refuses_one_once_then_keeps_submit_order(self):
+    def test_beta_waits_until_alpha_has_the_later_send(self):
         scope = {'room_id': 'room'}
-        refused = self.run_runtime(['--serve'], json.dumps({
-            'op': 'message_submit', 'sid': 'beta', 'message_id': 'm1', 'text': 'one', 'room_scope': scope,
-        }) + '\n')
-        self.assertNotEqual(refused.returncode, 0)
-        self.assertFalse((Path(self.home.name) / 'room-submits.jsonl').exists())
-        accepted = self.serve({
-            'op': 'message_submit', 'sid': 'beta', 'message_id': 'm1', 'text': 'one', 'room_scope': scope,
-        })
+        log = Path(self.home.name) / 'room-submits.jsonl'
+
+        def submit(sid, message_id, text):
+            return self.serve({
+                'op': 'message_submit', 'sid': sid, 'message_id': message_id, 'text': text, 'room_scope': scope,
+            })
+
+        def texts(sid):
+            if not log.exists():
+                return []
+            return [json.loads(line)['text'] for line in log.read_text().splitlines() if json.loads(line)['sid'] == sid]
+
+        held = submit('beta', 'm1', 'one')
+        self.assertEqual(held['result']['message']['id'], 'm1')
+        self.assertFalse(log.exists())
+        submit('alpha', 'a1', 'one')
+        submit('beta', 'm1', 'one')
+        self.assertEqual(texts('alpha'), ['one'])
+        self.assertEqual(texts('beta'), [])
+        submit('alpha', 'a2', 'two')
+        accepted = submit('beta', 'm1', 'one')
         self.assertEqual(accepted['result']['message']['id'], 'm1')
-        later = self.serve({
-            'op': 'message_submit', 'sid': 'beta', 'message_id': 'm2', 'text': 'two', 'room_scope': scope,
-        })
-        self.assertEqual(later['result']['message']['id'], 'm2')
-        rows = [json.loads(line) for line in (Path(self.home.name) / 'room-submits.jsonl').read_text().splitlines()]
-        self.assertEqual([row['text'] for row in rows], ['one', 'two'])
+        submit('beta', 'm2', 'two')
+        self.assertEqual(texts('beta'), ['one', 'two'])
         page = self.serve({'op': 'events_subscribe', 'sid': 'beta', 'after': 0})
         self.assertEqual(page['result']['next_after'], 6)
         self.assertEqual(page['result']['events'][1]['event']['payload']['text'], 'one')

@@ -13,6 +13,6 @@ Dispatch `verify.yml` with `feature=room-order.md`. The driver uses the same deb
 
 ## Gotchas
 
-The app before this change delivers Beta `two` without the earlier answer, so the parent run of this script stops while waiting for `Room messages since your last turn, oldest first:`. A missing submit log means nothing has been sent. The fixture refuses only Beta's first copy of `one`, then accepts it on the next room refresh.
+The app before this change delivers Beta `two` without the earlier answer, so the parent run of this script stops while waiting for `Room messages since your last turn, oldest first:`. A missing submit log means nothing has been sent. Beta does not take `one` until Alpha has taken the later send, so a refresh before that send still lists only Alpha.
 
 Account OTP, a live Claude session, mention-only delivery, an agent that stays offline until later, restart without a repeat send, and the longest message that still fits in one delivery are outside this recipe.

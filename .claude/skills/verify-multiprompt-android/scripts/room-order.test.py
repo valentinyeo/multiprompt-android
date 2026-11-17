@@ -125,6 +125,9 @@ class RoomOrderScriptTest(unittest.TestCase):
                 sync()
                 first = self.run_script('alpha-only', str(Path(home) / 'room-submits.jsonl'))
                 self.assertEqual(first.returncode, 0, first.stderr)
+                sync()
+                held = self.run_script('alpha-only', str(Path(home) / 'room-submits.jsonl'))
+                self.assertEqual(held.returncode, 0, held.stderr)
                 post('two')
                 page = None
                 proved = None

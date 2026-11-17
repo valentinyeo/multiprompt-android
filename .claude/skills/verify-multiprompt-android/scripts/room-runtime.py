@@ -10,7 +10,7 @@ AGENTS = {'alpha': 'tmux-alpha', 'beta': 'tmux-beta'}
 
 def load():
     if not STATE.exists():
-        return {'events': {}, 'failed_beta_once': False}
+        return {'events': {}}
     return json.loads(STATE.read_text())
 
 
@@ -66,6 +66,19 @@ def record(sid, text):
     SUBMITS.chmod(0o600)
 
 
+def recorded_texts(sid):
+    if not SUBMITS.exists():
+        return []
+    texts = []
+    for line in SUBMITS.read_text(encoding='utf-8').splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        if row.get('sid') == sid:
+            texts.append(row.get('text'))
+    return texts
+
+
 def serve(query):
     if query.get('op') == 'engine_info':
         return {'id': 1, 'room_message_protocols': [1]}
@@ -80,10 +93,9 @@ def serve(query):
     if op == 'message_submit':
         text = query.get('text')
         message_id = query.get('message_id')
-        if sid == 'beta' and text == 'one' and not state.get('failed_beta_once'):
-            state['failed_beta_once'] = True
-            save(state)
-            raise SystemExit(1)
+        if sid == 'beta' and not any(item == 'one' for item in recorded_texts('beta')):
+            if text != 'one' or len(recorded_texts('alpha')) < 2:
+                return {'id': 1, 'result': {'message': {'id': message_id}}}
         if not any(row['event'].get('message_id') == message_id for row in events):
             append_reply(events, sid, message_id, query.get('room_scope'), text)
             save(state)
