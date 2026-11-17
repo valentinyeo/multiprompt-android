@@ -173,7 +173,7 @@ function isBugFix({ title = '', body = '', changeKind = '', tickets = {} } = {})
   return ids.some(id => saysBug(tickets[id]));
 }
 
-function applyRules({ modelVerdict, features, conclusions, parents, notDrivenReason, smoke = false, featureProof, bugFix = false, stressProof }) {
+function applyRules({ modelVerdict, features, conclusions, parents, notDrivenReason, smoke = false, featureProof, bugFix = false, stressProof, stressRequired = false }) {
   const notes = [];
   let verdict = VERDICTS.includes(modelVerdict) ? modelVerdict : 'FAIL';
   const journeys = features.map(feature => {
@@ -202,12 +202,14 @@ function applyRules({ modelVerdict, features, conclusions, parents, notDrivenRea
     verdict = 'FAIL';
     notes.push(...featureProof.errors);
   }
-  if (bugFix) {
+  if (bugFix || stressRequired) {
     if (!stressProof || stressProof.errors.length) {
       verdict = 'FAIL';
       notes.push(...(stressProof?.errors ?? ['BREAK_IT_FAILED: retained stress evidence is required for every bug-fix journey.']));
     }
     notes.push(...(stressProof?.evidence ?? []));
+  }
+  if (bugFix) {
     const proven = journeys.filter(journey => journey.passed && journey.parent === 'product assertion');
     if (proven.length !== journeys.length || !journeys.length) {
       verdict = 'FAIL';
@@ -491,7 +493,7 @@ async function pick(env) {
   const selected = includeRequiredJourneys(picked, plan, diff);
   const reason = picked.reason || 'Journeys chosen for this change.';
   console.log(`pstack-verifier pick: PR #${number} features=${JSON.stringify(selected.features)} smoke=${selected.smoke} dropped=${JSON.stringify(selected.dropped)} reason=${reason}`);
-  setOutputs({ features: JSON.stringify(selected.features), smoke: selected.smoke ? 'yes' : 'no', reason, number, head_sha: head, merge_base: mergeBase, changed_outcomes: JSON.stringify(plan.outcomes), change_kind: selected.changeKind, break_it: isBugFix({ title: pr.title, body: pr.body, changeKind: selected.changeKind, tickets: loadTicketTitles() }) ? 'true' : 'false' });
+  setOutputs({ features: JSON.stringify(selected.features), smoke: selected.smoke ? 'yes' : 'no', reason, number, head_sha: head, merge_base: mergeBase, changed_outcomes: JSON.stringify(plan.outcomes), change_kind: selected.changeKind, break_it: isBugFix({ title: pr.title, body: pr.body, changeKind: selected.changeKind, tickets: loadTicketTitles() }) || /^diff --git a\/(?:tools\/android-break-it\/|\.github\/scripts\/pstack-verifier\/break-it\.cjs)/m.test(diff) ? 'true' : 'false' });
 }
 
 function ownComments(repo, number) {
@@ -587,6 +589,7 @@ async function judge(env) {
   if (!/^[0-9a-f]{40}$/.test(mergeBase)) throw new Error('MERGE_BASE must be a full commit sha');
   const bugFix = isBugFix({ title: pr.title, body: pr.body, changeKind: env.CHANGE_KIND, tickets: loadTicketTitles() });
   const parents = {};
+  const stressRequired = bugFix || env.BREAK_IT_REQUIRED === 'true';
   let stressProof;
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-verifier-'));
   let content;
@@ -604,7 +607,7 @@ async function judge(env) {
       const files = readSideFiles(parentDirectories[feature]);
       parents[feature] = parentResult({ conclusion: parentConclusions[feature], result: files.result, sourceSha: files.sourceSha, mergeBase });
     }
-    if (bugFix) {
+    if (stressRequired) {
       const proofs = features.map(feature => breakIt.inspect(directories[feature], feature, sha));
       stressProof = { errors: proofs.flatMap(proof => proof.errors), evidence: proofs.flatMap(proof => proof.evidence) };
     }
@@ -614,11 +617,11 @@ async function judge(env) {
     model = await askParsed({ ask: () => callDeepSeek({ key, system: JUDGE_INSTRUCTIONS, user: content }), parse: parseVerdict });
     const finalPlan = coverageGate.planChange(diff, [...plan.outcomes, ...model.changedOutcomes]);
     featureProof = coverageGate.featureErrors({ plan: finalPlan, coverage: model.coverage, directories, conclusions, sha });
-    fs.writeFileSync(path.resolve(env.COVERAGE_REPORT ?? 'feature-coverage.json'), JSON.stringify({ sha, plan: finalPlan, ...featureProof }, null, 2));
+    fs.writeFileSync(path.resolve(env.COVERAGE_REPORT ?? 'feature-coverage.json'), JSON.stringify({ sha, plan: finalPlan, stressProof, ...featureProof }, null, 2));
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }
-  const ruled = applyRules({ modelVerdict: model.verdict, features, conclusions, parents, notDrivenReason: env.PICK_REASON, smoke, featureProof, bugFix, stressProof });
+  const ruled = applyRules({ modelVerdict: model.verdict, features, conclusions, parents, notDrivenReason: env.PICK_REASON, smoke, featureProof, bugFix, stressProof, stressRequired });
 
   const current = fetchPr(repo, number).head.sha;
   if (current !== sha) {

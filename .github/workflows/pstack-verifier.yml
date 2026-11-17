@@ -164,6 +164,7 @@ jobs:
           FEATURES: ${{ needs.pick.outputs.features }}
           CHANGED_OUTCOMES: ${{ needs.pick.outputs.changed_outcomes }}
           CHANGE_KIND: ${{ needs.pick.outputs.change_kind }}
+          BREAK_IT_REQUIRED: ${{ needs.pick.outputs.break_it }}
           COVERAGE_REPORT: ${{ runner.temp }}/feature-coverage.json
           SMOKE: ${{ needs.pick.outputs.smoke }}
           PICK_REASON: ${{ needs.pick.outputs.reason }}

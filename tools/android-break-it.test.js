@@ -77,6 +77,13 @@ test('repro-first success and a model PASS cannot override broken or missing str
   assert.equal(verifier.applyRules({ ...options, stressProof: fixture.inspect() }).verdict, 'FAIL');
 });
 
+test('break-it tooling changes exercise the real stress gate without inventing an Android parent repro', t => {
+  const fixture = retained(t);
+  const options = { modelVerdict: 'PASS', bugFix: false, stressRequired: true, features: ['ai-switch.md'], conclusions: { 'ai-switch.md': 'success' }, parents: { 'ai-switch.md': 'passed' } };
+  assert.equal(verifier.applyRules(options).verdict, 'FAIL');
+  assert.equal(verifier.applyRules({ ...options, stressProof: fixture.inspect() }).verdict, 'PASS');
+});
+
 test('draft readback survives lost focus without relying on an empty-field placeholder', t => {
   for (const observed of ['PHONE_AFTER_SWITCH_2538', '']) {
     const fixture = retained(t);

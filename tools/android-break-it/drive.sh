@@ -82,8 +82,7 @@ break_it_draft() {
     adb emu network status | tee "$EVIDENCE/network-status.txt"
     grep -q '150' "$EVIDENCE/network-status.txt"
     grep -q '118400' "$EVIDENCE/network-status.txt"
-    dump_ui
-    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value "$label" "$draft"
+    break_it_require_draft "$label" "$draft"
     break_it_checkpoint network "EDGE 118400 bits/s upload and 150:300ms delay applied before Send; the rest of the original journey must pass under this throttle. Draft: $draft"
 }
 break_it_stream_send() {
