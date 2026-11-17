@@ -192,6 +192,9 @@ class VerifySeedTest(unittest.TestCase):
                 self.assertEqual(json.loads(recorded), counts)
                 self.assertEqual(42, counts['sessions'])
                 self.assertEqual(40, len((self.home / 'pins-names.txt').read_text().splitlines()))
+                for name in seed.BULK_NAMES:
+                    self.assertEqual(name, subprocess.check_output(['tmux', 'display-message', '-p', '-t', f'={name}:', '#{window_name}'], text=True).strip())
+                    self.assertEqual('off', subprocess.check_output(['tmux', 'show-window-options', '-t', f'={name}:', '-v', 'automatic-rename'], text=True).strip())
                 self.assertEqual('cl-long-chat|claude', subprocess.check_output(['tmux', 'display-message', '-p', '-t', '=cl-long-chat:', '#{window_name}|#{pane_current_command}'], text=True).strip())
                 reader = load('seed_reader', ROOT / 'app/src/main/assets/chat_history_reader.py')
                 with patch.object(reader, 'HOME', self.home):

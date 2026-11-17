@@ -36,6 +36,33 @@ for (const content of [null, '{', '{"sessions":400}']) {
   });
 }
 
+test('recorded description-only inbox row can be selected and opened by its exact session name', () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'seed-desc-only-'));
+  try {
+    const xml = readFileSync(path.join(root, 'tools/fixtures/verify-seed/row-27-desc-only.xml'), 'utf8');
+    assert.match(xml, /content-desc="Robot row-27"/);
+    assert.doesNotMatch(xml, /text="row-27"/);
+    writeFileSync(path.join(directory, 'current.xml'), xml);
+    writeFileSync(path.join(directory, 'seed-counts.json'), JSON.stringify({ session_names: ['row-27'] }));
+    const result = spawnSync('bash', ['-euc', `
+${shellFunction('session_name')}
+${shellFunction('select_node')}
+${shellFunction('tap_node')}
+${shellFunction('tap_text')}
+dump_ui() { :; }
+adb() { printf '%s\\n' "$*" >> "$EVIDENCE/actions"; }
+scripts=${JSON.stringify(scripts)}
+EVIDENCE=${JSON.stringify(directory)}
+select_node text row-27 >/dev/null
+tap_text row-27
+`], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readFileSync(path.join(directory, 'actions'), 'utf8').trim(), 'shell input tap 540 532');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 for (const seededName of ['verify-session', 'live-verify-session', 'verify-keep', 'verify-other', 'verify-name', 'codex-native', 'claude-control', 'cl-long-chat']) {
   const target = seededName === 'live-verify-session' ? 'verify-session' : seededName;
   test(`finds exact ${seededName} past 41 inbox rows, including after switching readers`, () => {
@@ -46,13 +73,14 @@ for (const seededName of ['verify-session', 'live-verify-session', 'verify-keep'
       for (let page = 0; page < 11; page++) {
         const rows = names.slice(page * 4, page * 4 + 4).map((name, index) => {
           const bounds = `[20,${300 + index * 120}][1000,${400 + index * 120}]`;
-          return `<node clickable="true" content-desc="Robot ${name === target ? seededName : name}" bounds="${bounds}"><node text="${name}" bounds="${bounds}" /></node>`;
+          return `<node clickable="true" content-desc="Robot ${name === target ? seededName : name}" bounds="${bounds}"><node text="python3" bounds="${bounds}" /></node>`;
         }).join('');
         writeFileSync(path.join(directory, `page-${page}.xml`), `<hierarchy><node package="dev.multiprompt.companion.debug" bounds="[0,0][1080,1920]"><node text="Inbox" bounds="[0,0][1000,100]"/><node scrollable="true" bounds="[0,200][1080,1800]">${rows}</node></node></hierarchy>`);
       }
       const lastPage = readFileSync(path.join(directory, 'page-10.xml'), 'utf8');
       writeFileSync(path.join(directory, 'page-10-query.xml'), lastPage.replace('<node scrollable=', `<node class="android.widget.EditText" text="${target}" bounds="[0,110][1000,190]"/><node scrollable=`));
       const result = spawnSync('bash', ['-euc', `
+${shellFunction('session_name')}
 ${shellFunction('select_node')}
 ${shellFunction('tap_node')}
 ${shellFunction('tap_text')}
@@ -77,6 +105,7 @@ cp "$EVIDENCE/page-10-query.xml" "$EVIDENCE/page-10.xml"
 wait_for_text ${target}
 select_node text ${target} >/dev/null
 select_node desc 'Robot ${seededName}' >/dev/null
+tap_text ${target}
 cp "$EVIDENCE/page-10-original.xml" "$EVIDENCE/page-10.xml"
 page=10
 wait_for_text ${target}-neighbor
@@ -85,7 +114,7 @@ page=0
 tap_text ${target}
 `], { encoding: 'utf8', timeout: 30000 });
       assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stdout.trim(), 'TAPPED_PAGE=10');
+      assert.deepEqual(result.stdout.trim().split('\n'), ['TAPPED_PAGE=10', 'TAPPED_PAGE=10']);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
@@ -96,6 +125,7 @@ test('reveal uses the existing scroll planner but never taps the row', () => {
   const directory = mkdtempSync(path.join(tmpdir(), 'seed-reveal-'));
   try {
     const result = spawnSync('bash', ['-euc', `
+${shellFunction('session_name')}
 ${shellFunction('tap_node')}
 dump_ui() { :; }
 python3() { if [[ -f "$EVIDENCE/scrolled" ]]; then echo 'tap 10 20'; else echo 'swipe 10 80 10 20'; fi; }

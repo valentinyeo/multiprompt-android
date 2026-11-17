@@ -120,10 +120,14 @@ if [[ "$feature" == session-routing.md && "$package" == dev.multiprompt.companio
     done
     [[ "$recorder_pid" =~ ^[0-9]+$ ]]
 fi
+session_name() {
+    [[ -f "$EVIDENCE/seed-counts.json" ]] || return 1
+    jq -er --arg name "${1#Robot }" '.session_names | if index($name) != null then $name elif $name == "verify-session" and index("live-verify-session") != null then "live-verify-session" else empty end' "$EVIDENCE/seed-counts.json"
+}
 select_node() {
-    local mode=$1 name=${2#Robot } value=$2 session=
-    if [[ "$mode" =~ ^(contains|text|desc)$ && -f "$EVIDENCE/seed-counts.json" ]]; then
-        session=$(jq -er --arg name "$name" '.session_names | if index($name) != null then $name elif $name == "verify-session" and index("live-verify-session") != null then "live-verify-session" else empty end' "$EVIDENCE/seed-counts.json") || session=
+    local mode=$1 value=$2 session=
+    if [[ "$mode" =~ ^(contains|text|desc)$ ]]; then
+        session=$(session_name "$value") || session=
         if [[ -n "$session" && "$mode" == contains ]]; then mode=text; fi
     fi
     dump_ui || return
@@ -136,9 +140,14 @@ select_node() {
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "$mode" "$value"
 }
 tap_node() {
-    local attempt action x1 y1 x2 y2 direction plan
+    local attempt action x1 y1 x2 y2 direction plan session=
+    if [[ "$1" =~ ^(text|desc)$ ]]; then session=$(session_name "$2") || session=; fi
     for attempt in {1..24}; do
         dump_ui || return
+        if [[ -n "$session" ]] &&
+            python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Inbox >/dev/null 2>&1; then
+            set -- desc "Robot $session" "${3:-tap}"
+        fi
         direction=forward
         if (( attempt > 12 )); then direction=backward; fi
         plan=$(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "reach-$1" "$2" "$direction") || return

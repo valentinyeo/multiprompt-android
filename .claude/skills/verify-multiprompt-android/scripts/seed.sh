@@ -8,6 +8,8 @@ for i in {0..39}; do
     receipt="/home/verifyssh/pins-$name-receipts.txt"
     tmux new-session -d -s "$name" -x 100 -y 32 \
         "env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 -u /home/verifyssh/console.py $receipt"
+    tmux set-window-option -t "=$name:" automatic-rename off
+    tmux rename-window -t "=$name:" "$name"
 done
 tmux list-sessions -F "#{session_name}" | grep -E "^(pin|row)-[0-9][0-9]$" | sort > /home/verifyssh/pins-names.txt
 [[ "$(wc -l < /home/verifyssh/pins-names.txt)" == 40 ]]
