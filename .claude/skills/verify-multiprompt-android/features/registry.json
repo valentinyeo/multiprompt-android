@@ -643,6 +643,24 @@
         "ai-usage-receipts.txt": 3000
       }
     },
+    "skill-pills.md": {
+      "name": "Skills within messages",
+      "description": "insert a skill mid-message, check composer and sent pills, remove a pill and send the remaining text. SOFT-2543.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "skills.pills"
+      ],
+      "evidence": {
+        "skill-pills-state.json": 4000,
+        "skill-pills-receipts.txt": 1000
+      }
+    },
     "clear-ranking.md": {
       "name": "Find and send Claude clear",
       "description": "Type /cl, check name-first command ranking, select /clear and send the exact command with independent host receipts. SOFT-2545.",
@@ -981,11 +999,25 @@
     },
     "skills.pills": {
       "description": "Insert skills mid-message and render visible skill pills.",
-      "journey": null,
-      "sideEffect": false,
+      "journey": "skill-pills.md",
+      "sideEffect": true,
       "match": [
-        "SkillMessageText|skillPill|SkillPill"
-      ]
+        "SkillMessageText|skillPill|SkillPill|SkillSpan|SkillInsertion|NativeSkills\\.(?:token|query|spans|insert)|skills/NativeSkills\\.kt"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tap_text /review-native"
+        },
+        "result": {
+          "file": "skill-pills-state.json",
+          "quote": "\"sent_pill\": \"/review-native\""
+        },
+        "sideEffect": {
+          "file": "skill-pills-receipts.txt",
+          "quote": "VERIFY_RECEIVED:Please /review-native this"
+        }
+      }
     },
     "chat-table.expand": {
       "description": "Expand, scroll and close a chat table.",

@@ -124,7 +124,14 @@ elif [[ "${VERIFY_FEATURE:-}" == clear-ranking.md ]]; then
     sudo install -m 755 "$(dirname "$0")/skills-console.py" /home/verifyssh/skills-console.py
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/skills-console.py /home/verifyssh/receipts.txt clear-ranking'
-elif [[ "${VERIFY_FEATURE:-}" == native-skills.md ]]; then
+elif [[ "${VERIFY_FEATURE:-}" == native-skills.md || "${VERIFY_FEATURE:-}" == skill-pills.md ]]; then
+    if [[ "${VERIFY_FEATURE:-}" == skill-pills.md ]]; then
+        for index in {01..06}; do
+            directory="/home/verifyssh/native-skills-work/.claude/skills/pill-guide-$index"
+            sudo -u verifyssh mkdir -p "$directory"
+            printf '%s\n' '---' "name: pill-guide-$index" 'description: Fixture picker scroll guide' '---' 'BODY_MUST_NOT_BE_INJECTED' | sudo -u verifyssh tee "$directory/SKILL.md" >/dev/null
+        done
+    fi
     sudo install -m 755 "$(dirname "$0")/skills-console.py" /home/verifyssh/skills-console.py
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/skills-console.py /home/verifyssh/receipts.txt'
