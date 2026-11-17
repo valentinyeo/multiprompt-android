@@ -15,3 +15,9 @@ The SSH fixture observes actual history query lines and each snapshot capture. I
 Hosted JVM tests also cover two observers of one owner, closing only the last lease, bounded reconnect after silence, and the older two-reader send-lock failure from #241 (`66e2700e`). `tools/reader-ownership/check.test.py` replays the real ungated implementations before #328 (`39a1b95a`) and #341 (`c3dc2a3b`). These source checks prove the ownership rule rejects those implementations. The SSH journey proves runtime behavior. No old source is copied into the current Android app.
 
 The remote snapshot command must exit on hangup, termination or a broken output pipe. A cleanup-only signal trap does not stop its capture loop. `TmuxCommandsTest.closingTheSnapshotPipeStopsRemoteCapturesWithoutDisconnectingTheHost` runs the generated shell command against an isolated tmux fixture and closes its output pipe. The real SSH journey catches a leaked remote loop even when Android has stopped consuming it.
+
+## Native fixture contracts
+
+The native Codex fixture uses a UUID thread ID and the actual `codex queue --thread … --message …` boundary. Its isolated executable is a copied Python binary named `codex`; the `queue` fixture script validates the requested thread and appends the reply and receipt. This satisfies the existing strict process, open-transcript and owner checks without weakening them. `tools/reader-ownership/codex-fixture.test.py` drives the real connector against this fixture and rejects a different thread. The Claude fixture accepts one bracketed paste, including its correlation tag, as one native transcript occurrence.
+
+`reader-ui.json` retains text and bounds extracted from the numbered XML captures. Missing or duplicate text fails rather than manufacturing a result. The registry prioritizes this witness, lifecycle counts and independent receipts for the verifier. These fixtures prove reader transport and lifetime, not live AI responses.

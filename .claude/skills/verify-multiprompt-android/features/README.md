@@ -17,7 +17,7 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Chat choices](chat-choices.md): latest-reply option taps and live question number keys, with independent SSH/tmux receipts.
   - Outcomes: `chat-choices.journey`. Runner: `verify.yml` (debug).
 - [Codex transcript parity](chat-codex.md): Dispatch `feature=chat-codex.md`. The real Android APK connects through SSH to independent Hax, native Codex, and Claude fixture sessions. Hax and Codex write the same JSONL schemas consumed by desktop. Their terminal output deliberately excludes every transcript reply, ruling out terminal-scrape success.
-  - Outcomes: `codex.transcript`, `reader.lifecycle`. Runner: `verify.yml` (debug).
+  - Outcomes: `codex.transcript`, `reader.lifecycle`. Runner: `verify.yml` (debug). Priority evidence: `reader-ui.json` (6000 characters), `hax-hidden-result.txt` (400 characters), `hax-resumed-result.txt` (400 characters), `hax-switched-result.txt` (400 characters), `claude-hidden-result.txt` (400 characters), `claude-resumed-result.txt` (400 characters), `reader-second-close-receipt.txt` (512 characters), `codex-receipt.txt` (256 characters).
 - [Queued messages](chat-queued.md): Queued host messages stay visible once, receive correlated consumption receipts and become answered without stale delivery labels.
   - Outcomes: `chat-queued.journey`. Runner: `verify.yml` (debug). Priority evidence: `00-queue-ui.json` (1500 characters), `00-queue-receipts.txt` (1500 characters), `queue-pending.json` (1500 characters), `queue-waiting-final.json` (1500 characters), `queue-followup-final.json` (1500 characters), `queue-uncertain-final.json` (1500 characters), `catchup-result.json` (1500 characters).
 - [Claude reactions](chat-reactions.md): quoted sends, one badge, restart identity, fallback and signed update offers.
@@ -49,7 +49,7 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Pinned sessions](session-pins.md): signed scrolling in both list orders. Use `session-favorites.md` with `pins_scroll=true`.
   - Outcomes: `session-pins.journey`. Runner: `verify.yml` (signed). Inputs: `{"feature":"session-favorites.md","pins_scroll":true,"released_chat":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Session reader](session-reader.md): native output, Send, Enter/approve and Interrupt, with independent console receipts.
-  - Outcomes: `reader.send-enter-interrupt`. Runner: `verify.yml` (debug).
+  - Outcomes: `reader.send-enter-interrupt`. Runner: `verify.yml` (debug). Priority evidence: `reader-ui.json` (6000 characters), `receipts.txt` (1500 characters).
 - [Session routing](session-routing.md): Inbox and swipe switching, typed and simulated dictated sends, independent SSH receipts.
   - Outcomes: `session-routing.journey`. Runner: `verify.yml` (debug).
 - [Session settings](session-settings.md): full-screen split switches; saving is blocked without account OTP and a pulled layout.

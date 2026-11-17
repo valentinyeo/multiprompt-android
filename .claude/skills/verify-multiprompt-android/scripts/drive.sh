@@ -1476,6 +1476,7 @@ if [[ "$feature" == chat-codex.md ]]; then
         adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
         wait_for_text "CODEX_REPLY_${name}_$marker" 0
         shot "$name-reader-resumed"
+        python3 tools/reader-ownership/receipts.py ui "$EVIDENCE/$(printf %02d "$step")-$name-reader-resumed.xml" "CODEX_REPLY_${name}_$marker" --append "$EVIDENCE/reader-ui.json"
         reader_counts "$name" "$session" resumed
         python3 tools/reader-ownership/receipts.py resumed "$EVIDENCE/$name-hidden-after.json" "$EVIDENCE/$name-resumed.json" | tee "$EVIDENCE/$name-resumed-result.txt"
     }
@@ -1510,6 +1511,7 @@ if [[ "$feature" == chat-codex.md ]]; then
         printf '%s\n' "$elapsed" > "$EVIDENCE/$mode-visible-ms.txt"
         [[ "$elapsed" -ge 0 && "$elapsed" -le 5000 ]]
         shot "codex-$mode-phone-reply"
+        python3 tools/reader-ownership/receipts.py ui "$EVIDENCE/$(printf %02d "$step")-codex-$mode-phone-reply.xml" "CODEX_REPLY_${mode}_PHONE_CODEX" --append "$EVIDENCE/reader-ui.json"
         if [[ "$mode" == hax ]]; then reader_lifecycle hax verify-session; fi
         if [[ "$mode" == codex ]]; then
             sleep 3
@@ -1534,6 +1536,7 @@ if [[ "$feature" == chat-codex.md ]]; then
     wait_for_text CODEX_REPLY_hax_AFTER_SECOND_READER_CLOSE
     sudo grep -Fx 'VERIFY_RECEIVED:AFTER_SECOND_READER_CLOSE' /home/verifyssh/receipts.txt > "$EVIDENCE/reader-second-close-receipt.txt"
     shot reader-after-second-close
+    python3 tools/reader-ownership/receipts.py ui "$EVIDENCE/$(printf %02d "$step")-reader-after-second-close.xml" CODEX_REPLY_hax_AFTER_SECOND_READER_CLOSE --append "$EVIDENCE/reader-ui.json"
     tap_desc Back
     wait_for_text Inbox
     tap_text claude-control
@@ -2172,18 +2175,21 @@ python3 "$scripts/send-timing.py" "$EVIDENCE/current.xml" "$EVIDENCE/send-timing
 wait_receipt 'VERIFY_RECEIVED:VERIFY_SENT_528'
 wait_for_text 'VERIFY_RECEIVED:VERIFY_SENT_528'
 shot send-result
+if [[ "$feature" == session-reader.md ]]; then python3 tools/reader-ownership/receipts.py ui "$EVIDENCE/$(printf %02d "$step")-send-result.xml" VERIFY_RECEIVED:VERIFY_SENT_528 --append "$EVIDENCE/reader-ui.json"; fi
 tap_desc 'Session actions'
 shot enter-action
 tap_text 'Enter / approve'
 wait_receipt VERIFY_ENTER_528
 wait_for_text VERIFY_ENTER_528
 shot enter-result
+if [[ "$feature" == session-reader.md ]]; then python3 tools/reader-ownership/receipts.py ui "$EVIDENCE/$(printf %02d "$step")-enter-result.xml" VERIFY_ENTER_528 --append "$EVIDENCE/reader-ui.json"; fi
 tap_desc 'Session actions'
 shot interrupt-action
 tap_text 'Interrupt session'
 wait_receipt VERIFY_INTERRUPTED_528
 wait_for_text VERIFY_INTERRUPTED_528
 shot interrupt-result
+if [[ "$feature" == session-reader.md ]]; then python3 tools/reader-ownership/receipts.py ui "$EVIDENCE/$(printf %02d "$step")-interrupt-result.xml" VERIFY_INTERRUPTED_528 --append "$EVIDENCE/reader-ui.json"; fi
 sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt"
 sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt"
 grep -Fx VERIFY_INTERRUPTED_528 "$EVIDENCE/receipts.txt"

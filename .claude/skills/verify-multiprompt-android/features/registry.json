@@ -74,7 +74,17 @@
       "outcomes": [
         "codex.transcript",
         "reader.lifecycle"
-      ]
+      ],
+      "evidence": {
+        "reader-ui.json": 6000,
+        "hax-hidden-result.txt": 400,
+        "hax-resumed-result.txt": 400,
+        "hax-switched-result.txt": 400,
+        "claude-hidden-result.txt": 400,
+        "claude-resumed-result.txt": 400,
+        "reader-second-close-receipt.txt": 512,
+        "codex-receipt.txt": 256
+      }
     },
     "chat-queued.md": {
       "name": "Queued messages",
@@ -340,7 +350,11 @@
       },
       "outcomes": [
         "reader.send-enter-interrupt"
-      ]
+      ],
+      "evidence": {
+        "reader-ui.json": 6000,
+        "receipts.txt": 1500
+      }
     },
     "session-routing.md": {
       "name": "Session routing",

@@ -1,5 +1,6 @@
 import importlib.util
 import io
+import json
 from pathlib import Path
 import subprocess
 import tempfile
@@ -56,6 +57,23 @@ printf 'attempts=%s\\n' "$attempts"
 '''
             result = subprocess.run(["bash", "-c", script], text=True, capture_output=True, check=True)
             self.assertEqual(f"wait={expected}\nattempts=2\n", result.stdout)
+
+    def test_ui_witness_retains_real_rendered_text_and_rejects_missing_or_duplicate_nodes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            saved = root / "reader-ui.json"
+            for index in (1, 2):
+                path = root / f"{index}-reader.xml"
+                node = f'<node package="dev.multiprompt.companion.debug" text="OBSERVED_REPLY_{index}" bounds="[1,2][30,40]"/>'
+                path.write_text("<hierarchy>" + node + "</hierarchy>")
+                subprocess.run(["python3", "-B", str(ROOT / "receipts.py"), "ui", str(path), "OBSERVED_REPLY", "--append", str(saved)], check=True, capture_output=True)
+                with self.assertRaises(ValueError):
+                    receipts.ui_result(path, "MISSING_REPLY")
+                path.write_text("<hierarchy>" + node + node + "</hierarchy>")
+                with self.assertRaises(ValueError):
+                    receipts.ui_result(path, "OBSERVED_REPLY")
+            self.assertEqual(["OBSERVED_REPLY_1", "OBSERVED_REPLY_2"], [row["text"] for row in json.loads(saved.read_text())])
+            self.assertEqual(["1-reader.xml", "2-reader.xml"], [row["source"] for row in json.loads(saved.read_text())])
 
     def test_hidden_gate_requires_positive_controls_and_zero_more_requests(self):
         for before, after in [(dict(history=0, snapshot=0), dict(history=0, snapshot=0)),
