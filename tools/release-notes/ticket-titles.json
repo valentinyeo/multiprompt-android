@@ -91,6 +91,7 @@
   "IGSH-2360": "Android: Stop button in place of Send while the AI works",
   "IGSH-2366": "Android: agent messages in the new format show as a sender card",
   "IGSH-2372": "Android: pin a chat to the top of the list",
+  "IGSH-2371": "Android: copy the chat ID from the chat menu",
   "IGSH-2370": "Android: remove the ETA countdown like desktop",
   "IGSH-2363": "Android: phone chat engine catches up with desktop again",
   "IGSH-2365": "Android: pick the model in a Pi chat",
