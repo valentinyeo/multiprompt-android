@@ -215,7 +215,7 @@ class SessionReaderConnection(
                     if (ready) while (true) {
                         val history = historyConnection ?: break
                         val entry = pendingPrompts.next(selectedFlow.value && history.state.value.ready) ?: break
-                        val admission = history.submit(entry.text)
+                        val admission = history.submit(entry.text, messageId = entry.id)
                         pendingPrompts.complete(entry.id, admission)
                         if (admission is PromptAdmission.Rejected) {
                             if (PendingPrompts.retryable(admission.reason)) delay(1_000L)

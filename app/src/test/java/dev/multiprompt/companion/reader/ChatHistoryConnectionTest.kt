@@ -64,6 +64,24 @@ class ChatHistoryConnectionTest {
     }
 
     @Test
+    fun journalPreservesWaitingIdentityAndRejectsCollisions() {
+        val preferences = RuntimeEnvironment.getApplication().getSharedPreferences("identity-${java.util.UUID.randomUUID()}", 0)
+        val journal = MessageJournal(preferences)
+        val scope = MessageProtocol.Scope("claude", "sid1", "tmux")
+        val id = java.util.UUID.randomUUID().toString()
+        val entry = journal.create("account", scope, "submit", messageId = id, text = "original")
+        assertEquals(id, entry.id)
+        assertEquals(id, entry.messageId)
+        assertThrows(IllegalStateException::class.java) {
+            journal.create("other-account", scope, "submit", messageId = id, text = "replacement")
+        }
+        assertEquals(listOf(entry), journal.entries())
+        assertThrows(IllegalArgumentException::class.java) {
+            journal.create("account", scope, "submit", messageId = "invalid", text = "invalid id")
+        }
+    }
+
+    @Test
     fun nativeSendWithoutFreshConnectionKeepsDraftUnsent() = runBlocking {
         SessionReaderConnection(repository(), host, "tmux", agent = AgentKind.CLAUDE, historyScript = byteArrayOf(),
             historyCache = ChatHistoryCache(temporary.newFolder())).use { reader ->
@@ -293,6 +311,7 @@ class ChatHistoryConnectionTest {
                 assertTrue(reader.pendingPrompts.state.value.isEmpty())
                 withTimeout(10_000L) { while (fake.submissions.none { it == text }) delay(10L) }
                 assertEquals(1, fake.submissions.count { it == text })
+                withTimeout(10_000L) { chat.state.first { it.replica?.messages?.get(waiting.id)?.text == text } }
                 fake.online = false
                 chat.nudge()
             }

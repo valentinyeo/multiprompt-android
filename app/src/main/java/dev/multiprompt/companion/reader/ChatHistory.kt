@@ -68,6 +68,7 @@ data class ChatHistory(
         offline: Boolean = false,
         seen: Map<String, Double> = emptyMap(),
         sent: List<QueuedMessages.SentPrompt>? = null,
+        waiting: List<PendingPrompts.Entry> = emptyList(),
     ): List<ChatHistoryMessage> {
         val scoped = replica?.messages?.values.orEmpty().filter { it.sid == sid }
         val source = rows.toMutableList()
@@ -138,6 +139,7 @@ data class ChatHistory(
         val aliases = HashMap<String, String>()
         host.sentRows.forEach { (id, uuids) -> (uuids + id).forEach { aliases[it] = id } }
         scoped.forEach { aliases[it.id] = it.id }
+        waiting.forEach { aliases.putIfAbsent(it.id, it.id) }
         val projected = LinkedHashMap<String, ChatHistoryMessage>()
         transcript.forEachIndexed { index, message ->
             val card = claimed[index]
@@ -186,6 +188,12 @@ data class ChatHistory(
                 projected[key] = ChatHistoryMessage(key, "user", entry.text.orEmpty(), "", 0, 0, entry.messageId,
                     delivery = if (offline) NOT_SENT else null, unknownId = entry.id)
             }
+        }
+        waiting.distinctBy { it.id }.filter { entry ->
+            entry.id !in canonical && projected.values.none { it.role == "user" && it.requestId == entry.id }
+        }.forEach { entry ->
+            projected["@shared:${entry.id}"] = ChatHistoryMessage("@shared:${entry.id}", "user", entry.text, "", 0, 0, entry.id,
+                pending = entry.error == null, delivery = if (entry.error == null) PendingPrompts.WAITING_LABEL else NOT_SENT)
         }
         unmatched.filter { it.turn == host.turn }.forEach(::appendReply)
         return projected.values.toList()

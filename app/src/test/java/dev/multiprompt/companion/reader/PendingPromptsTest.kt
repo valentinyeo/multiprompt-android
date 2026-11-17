@@ -38,13 +38,24 @@ class PendingPromptsTest {
         assertFalse(queue.remove(entry.id))
         queue.complete(entry.id, PromptAdmission.Rejected("Reset or navigation is pending"))
         assertEquals("keep this", queue.state.value.single().text)
-        assertEquals(ChatHistory.NOT_SENT, queue.state.value.single().message().delivery)
+        assertEquals(ChatHistory.NOT_SENT, ChatHistory().projectMessages(waiting = queue.state.value).single().delivery)
         assertNull(queue.next(true))
         assertTrue(queue.retry(entry.id))
         assertEquals(entry.id, queue.next(true)?.id)
         queue.complete(entry.id, PromptAdmission.Rejected("Chat is disconnected"))
         assertTrue(queue.remove(entry.id))
         assertTrue(queue.state.value.isEmpty())
+        assertTrue(queue.accepted.value.isEmpty())
+    }
+
+    @Test fun admissionCannotReplaceTheWaitingMessageIdentity() {
+        val queue = PendingPrompts()
+        val entry = queue.enqueue("keep this identity")
+        queue.next(true)
+        org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+            queue.complete(entry.id, PromptAdmission.Recorded("different-message-id"))
+        }
+        assertEquals(entry.id, queue.state.value.single().id)
         assertTrue(queue.accepted.value.isEmpty())
     }
 

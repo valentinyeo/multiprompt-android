@@ -60,7 +60,7 @@ class ChatHistoryConnection(
     private val stallMillis: Long = ConversationLoad.TIMEOUT_MS,
 ) : AutoCloseable {
     private sealed interface Command {
-        data class Submit(val text: String, val generation: Long, val result: CompletableDeferred<PromptAdmission>, val replaces: String? = null) : Command
+        data class Submit(val text: String, val generation: Long, val result: CompletableDeferred<PromptAdmission>, val replaces: String? = null, val messageId: String? = null) : Command
         data class Action(val kind: String, val id: String, val epoch: Long?, val attempt: String?, val generation: Long, val result: CompletableDeferred<MessageActionResult>, val target: MessageJournal.Entry? = null, val line: ((Long, String) -> String)? = null) : Command
     }
 
@@ -160,12 +160,12 @@ class ChatHistoryConnection(
         }
     }
 
-    suspend fun submit(text: String, replaces: String? = null): PromptAdmission {
+    suspend fun submit(text: String, replaces: String? = null, messageId: String? = null): PromptAdmission {
         if (text.isBlank() || '\u0000' in text) return PromptAdmission.Rejected("Message is empty or invalid")
         val result = CompletableDeferred<PromptAdmission>()
         synchronized(this) {
             if (freshSid == null || !selected || resetFence) return PromptAdmission.Rejected("Chat is not ready")
-            if (commands.trySend(Command.Submit(text, generation, result, replaces)).isFailure) return PromptAdmission.Rejected("Chat is unavailable")
+            if (commands.trySend(Command.Submit(text, generation, result, replaces, messageId)).isFailure) return PromptAdmission.Rejected("Chat is unavailable")
         }
         wake.trySend(Unit)
         return result.await()
@@ -600,7 +600,7 @@ class ChatHistoryConnection(
                                                     beforeAdmission?.invoke()
                                                     val entry = try { admit(page.sid, command.generation) {
                                                         if (resetFence) error("Reset pending")
-                                                        journalAccess { requireNotNull(journal).create(account, messageScope, "submit", text = command.text, epoch = observed.epoch) }
+                                                        journalAccess { requireNotNull(journal).create(account, messageScope, "submit", messageId = command.messageId, text = command.text, epoch = observed.epoch) }
                                                     } } catch (failure: JournalStorageFailure) { throw failure } catch (_: Exception) { null }
                                                     if (entry == null) command.result.complete(PromptAdmission.Rejected("Could not save message")) else {
                                                         command.result.complete(PromptAdmission.Recorded(entry.id))

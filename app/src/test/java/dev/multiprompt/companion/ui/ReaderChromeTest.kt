@@ -262,7 +262,7 @@ class ReaderChromeTest {
         compose.runOnIdle {
             val entry = connection.pendingPrompts.state.value.single()
             assertEquals("offline hello", entry.text)
-            connection.pendingPrompts.complete(entry.id, dev.multiprompt.companion.reader.PromptAdmission.Recorded("saved"))
+            connection.pendingPrompts.complete(entry.id, dev.multiprompt.companion.reader.PromptAdmission.Recorded(entry.id))
         }
         compose.runOnIdle { scheduler.runCurrent() }
         compose.onNode(hasSetTextAction()).assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))

@@ -5,10 +5,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 class PendingPrompts {
-    data class Entry(val id: String, val text: String, val issuing: Boolean = false, val error: String? = null) {
-        fun message() = ChatHistoryMessage("@pending:$id", "user", text, "", 0, 0,
-            requestId = id, pending = error == null, delivery = if (error == null) WAITING_LABEL else ChatHistory.NOT_SENT)
-    }
+    data class Entry(val id: String, val text: String, val issuing: Boolean = false, val error: String? = null)
 
     private val _state = MutableStateFlow<List<Entry>>(emptyList())
     val state = _state.asStateFlow()
@@ -32,6 +29,7 @@ class PendingPrompts {
                 if (it.id == id) it.copy(issuing = false, error = admission.reason.takeUnless(::retryable)) else it
             }
             is PromptAdmission.Recorded -> {
+                check(admission.messageId == id)
                 _state.value = _state.value.filterNot { it.id == id }
                 _accepted.value = (_accepted.value + id).toList().takeLast(64).toSet()
             }
