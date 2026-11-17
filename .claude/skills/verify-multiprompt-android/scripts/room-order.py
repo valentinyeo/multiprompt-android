@@ -89,8 +89,27 @@ def bounds(node):
     return rect
 
 
-def exact(found, text):
-    return [node for node in found if node.get('text') == text]
+def bubbles(found, text):
+    return [node for node in found if node.get('text') == text and node.get('class') != 'android.widget.EditText']
+
+
+def composer(path):
+    found = package_nodes(path)
+    for node in found:
+        if node.get('class') != 'android.widget.EditText':
+            continue
+        if any('Message Order room' in (item.get('text') or '') or 'Message Order room' in (item.get('content-desc') or '') for item in node.iter()):
+            print('ROOM_COMPOSER')
+            return
+    raise SystemExit('room composer is missing')
+
+
+def holding(path, text):
+    found = package_nodes(path)
+    if any(node.get('class') == 'android.widget.EditText' and (node.get('text') or '') == text for node in found):
+        print('ROOM_DRAFT_HELD')
+        return
+    raise SystemExit(1)
 
 
 def top(found):
@@ -120,16 +139,18 @@ def alpha_only(path):
 
 def first(path):
     found = package_nodes(path)
-    if not exact(found, 'one'):
+    if not bubbles(found, 'one'):
         raise SystemExit('first message is not visible')
-    if exact(found, 'two') or any(HEADER in (node.get('text') or '') for node in found):
+    if any(node.get('class') == 'android.widget.EditText' and (node.get('text') or '') == 'one' for node in found):
+        raise SystemExit('first message is still in the composer')
+    if bubbles(found, 'two') or any(HEADER in (node.get('text') or '') for node in found):
         raise SystemExit('later room text appeared too early')
     print('ROOM_FIRST_MESSAGE')
 
 
 def stacked(path):
     found = package_nodes(path)
-    ones, twos = exact(found, 'one'), exact(found, 'two')
+    ones, twos = bubbles(found, 'one'), bubbles(found, 'two')
     if not ones or not twos:
         raise SystemExit('both room messages are not visible')
     if top(ones) >= top(twos):
@@ -139,8 +160,8 @@ def stacked(path):
 
 def shown(path, earlier=None):
     found = package_nodes(path)
-    contexts = [node for node in found if HEADER in (node.get('text') or '')]
-    twos = exact(found, 'two')
+    contexts = [node for node in found if HEADER in (node.get('text') or '') and node.get('class') != 'android.widget.EditText']
+    twos = bubbles(found, 'two')
     if len(contexts) != 1 or not twos:
         raise SystemExit('ordered room reply is not on screen')
     text = contexts[0].get('text') or ''
@@ -148,7 +169,7 @@ def shown(path, earlier=None):
         raise SystemExit('room reply is missing the earlier answer')
     if top(twos) >= bounds(contexts[0])[1]:
         raise SystemExit('new message is not above its reply')
-    ones = exact(found, 'one')
+    ones = bubbles(found, 'one')
     if ones:
         if top(ones) >= top(twos):
             raise SystemExit('messages are not oldest first')
@@ -178,6 +199,12 @@ def main():
         return
     if command == 'install':
         install()
+        return
+    if command == 'composer':
+        composer(sys.argv[2])
+        return
+    if command == 'holding':
+        holding(sys.argv[2], sys.argv[3])
         return
     if command == 'nothing-sent':
         nothing_sent(sys.argv[2])

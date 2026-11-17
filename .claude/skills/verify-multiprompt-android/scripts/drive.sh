@@ -869,8 +869,37 @@ if [[ "$feature" == room-order.md ]]; then
         : > "$EVIDENCE/room-submits-before.txt"
     fi
     python3 "$scripts/room-order.py" nothing-sent "$EVIDENCE/room-submits-before.txt"
-    fill 'Message Order room' one
-    tap_text Send
+    room_keyboard_closed() {
+        adb shell dumpsys input_method | grep -F 'mInputShown=false' >/dev/null
+    }
+    send_room_text() {
+        local label=$1 attempt dismissed=0
+        fill 'Message Order room' "$label"
+        for attempt in {1..30}; do
+            if [[ "$dismissed" == 0 ]]; then
+                if ! room_keyboard_closed; then
+                    adb shell input keyevent KEYCODE_BACK
+                    sleep 1
+                fi
+                dismissed=1
+            fi
+            dump_ui || true
+            if [[ ! -f "$EVIDENCE/current.xml" ]] || ! python3 "$scripts/room-order.py" composer "$EVIDENCE/current.xml"; then
+                printf 'Left the room while sending %s\n' "$label" >&2
+                return 1
+            fi
+            if ! python3 "$scripts/room-order.py" holding "$EVIDENCE/current.xml" "$label"; then
+                return 0
+            fi
+            if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" reach-text Send forward >/dev/null 2>&1; then
+                tap_text Send || true
+            fi
+            sleep 2
+        done
+        printf 'Room send stayed in the composer: %s\n' "$label" >&2
+        return 1
+    }
+    send_room_text one
     for attempt in {1..30}; do
         if sudo test -f /home/verifyssh/room-submits.jsonl; then
             sudo cat /home/verifyssh/room-submits.jsonl > "$EVIDENCE/room-submits-first.txt"
@@ -886,8 +915,7 @@ if [[ "$feature" == room-order.md ]]; then
     done
     python3 "$scripts/room-order.py" first "$EVIDENCE/current.xml"
     shot room-first-message
-    fill 'Message Order room' two
-    tap_text Send
+    send_room_text two
     stacked_saved=
     for attempt in {1..40}; do
         dump_ui

@@ -50,6 +50,50 @@ class RoomOrderScriptTest(unittest.TestCase):
         self.assertNotEqual(refused.returncode, 0)
         self.assertIn('a room message was submitted', refused.stderr)
 
+    def test_composer_text_is_not_the_message_row(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = ET.Element('hierarchy')
+            editor = ET.SubElement(root, 'node', {
+                'package': PACKAGE,
+                'class': 'android.widget.EditText',
+                'text': 'one',
+                'bounds': '[40,800][700,880]',
+            })
+            ET.SubElement(editor, 'node', {
+                'package': PACKAGE,
+                'class': 'android.view.View',
+                'content-desc': 'Message Order room',
+                'bounds': '[40,800][700,880]',
+            })
+            path = Path(directory) / 'ui.xml'
+            ET.ElementTree(root).write(path, encoding='utf-8')
+            present = self.run_script('composer', str(path))
+            self.assertEqual(present.returncode, 0, present.stderr)
+            self.assertIn('ROOM_COMPOSER', present.stdout)
+            held = self.run_script('holding', str(path), 'one')
+            self.assertEqual(held.returncode, 0, held.stderr)
+            self.assertIn('ROOM_DRAFT_HELD', held.stdout)
+            refused = self.run_script('first', str(path))
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertIn('not visible', refused.stderr)
+            ET.SubElement(root, 'node', {
+                'package': PACKAGE,
+                'class': 'android.widget.TextView',
+                'text': 'one',
+                'bounds': '[40,100][400,160]',
+            })
+            ET.ElementTree(root).write(path, encoding='utf-8')
+            still = self.run_script('first', str(path))
+            self.assertNotEqual(still.returncode, 0)
+            self.assertIn('still in the composer', still.stderr)
+            editor.set('text', '')
+            ET.ElementTree(root).write(path, encoding='utf-8')
+            cleared = self.run_script('first', str(path))
+            self.assertEqual(cleared.returncode, 0, cleared.stderr)
+            self.assertIn('ROOM_FIRST_MESSAGE', cleared.stdout)
+            released = self.run_script('holding', str(path), 'one')
+            self.assertNotEqual(released.returncode, 0)
+
     def test_screen_requires_oldest_message_above_the_context_reply(self):
         with tempfile.TemporaryDirectory() as directory:
             current = write_xml(directory, 'ui.xml', [
