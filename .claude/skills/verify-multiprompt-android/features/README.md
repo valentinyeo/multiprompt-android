@@ -25,9 +25,11 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Legacy resync](chat-resync.md): historical held-queue proof; not host Reset proof.
   - Outcomes: `chat-resync.journey`. Runner: `verify.yml` (debug).
 - [Shared chat store](chat-shared.md): synthetic SSH store admission and host Reset, retaining both drafts.
-  - Outcomes: `chat-shared.journey`. Runner: `verify.yml` (debug). Priority evidence: `shared-before-reset.json` (1000 characters), `shared-after-reset.json` (1000 characters), `shared-codex-before-restart.json` (1000 characters), `shared-codex-after-reset.json` (1000 characters), `05-shared-after-reset.xml` (3000 characters), `07-shared-codex-after-reset.xml` (3000 characters), `shared-terminal.txt` (1000 characters), `shared-result.txt` (500 characters).
+  - Outcomes: `chat-shared.journey`, `chat.link-recovery`. Runner: `verify.yml` (debug). Priority evidence: `shared-before-reset.json` (1000 characters), `shared-after-reset.json` (1000 characters), `shared-codex-before-restart.json` (1000 characters), `shared-codex-after-reset.json` (1000 characters), `05-shared-after-reset.xml` (3000 characters), `07-shared-codex-after-reset.xml` (3000 characters), `shared-terminal.txt` (1000 characters), `shared-result.txt` (500 characters).
 - [Working dots on the signed release](chat-working.md): quiet tools, lock/unlock, real SSH reconnect, recording and timed visible-state samples. Uses `working-dots.yml`.
   - Outcomes: `chat-working.journey`. Runner: `working-dots.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
+- [Copy chat ID](copy-chat-id.md): the chat menu copies the host chat id, or the tmux name when the chat has no host id.
+  - Outcomes: `chat.copy-id`. Runner: `verify.yml` (debug).
 - [Changed host key](host-changed-key.md): compare a rotated identity, persist Not now and refuse authentication.
   - Outcomes: `host-changed-key.journey`. Runner: `verify.yml` (debug). Priority evidence: `host-key-ui.json` (3000 characters), `host-key-auth.json` (2000 characters), `ssh-auth.txt` (1500 characters).
 - [Retired hosts](hosts-retired.md): a saved host at a retired server address is gone after relaunch; account sync never adds it back.
@@ -42,6 +44,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `robot-faces.journey`. Runner: `verify.yml` (signed). Inputs: `{"released_robots":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Inbox draft label](session-drafts.md): unsent composer text shows Draft before the inbox preview, and sending that text removes it.
   - Outcomes: `inbox.draft`. Runner: `verify.yml` (debug).
+- [Starred yellow dot](session-favorite-dot.md): a starred chat shows a yellow dot in All, search and its workspace, and no dot in Favorites.
+  - Outcomes: `inbox.favorite-dot`. Runner: `verify.yml` (debug). Priority evidence: `favorite-dot-all.json` (400 characters), `favorite-dot-search.json` (400 characters), `favorite-dot-workspace.json` (400 characters), `favorite-dot-favorites.json` (400 characters), `favorite-dot-unstarred.json` (400 characters), `favorite-dot-restarred.json` (400 characters), `favorite-dot-favorites-again.json` (400 characters).
 - [Session favorites](session-favorites.md): signed APK, isolated SSH sessions and offline favorite cache; no production sync.
   - Outcomes: `session-favorites.journey`. Runner: `verify.yml` (signed). Inputs: `{"released_chat":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Session gestures](session-gestures.md): no session swipes, bidirectional code scroll, ten replies, back to inbox on the signed APK.
@@ -49,11 +53,13 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Pinned sessions](session-pins.md): signed scrolling in both list orders. Use `session-favorites.md` with `pins_scroll=true`.
   - Outcomes: `session-pins.journey`. Runner: `verify.yml` (signed). Inputs: `{"feature":"session-favorites.md","pins_scroll":true,"released_chat":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Session reader](session-reader.md): native output, Send, Enter/approve and Interrupt, with independent console receipts.
-  - Outcomes: `reader.send-enter-interrupt`. Runner: `verify.yml` (debug).
+  - Outcomes: `reader.send-enter-interrupt`. Runner: `verify.yml` (debug). Priority evidence: `08-send-draft.xml` (1500 characters), `10-send-result.xml` (2500 characters), `11-enter-action.xml` (500 characters), `12-enter-result.xml` (1500 characters), `13-interrupt-action.xml` (500 characters), `14-interrupt-result.xml` (1500 characters), `receipts.txt` (1000 characters), `tmux-final.txt` (1000 characters).
 - [Session routing](session-routing.md): Inbox and swipe switching, typed and simulated dictated sends, independent SSH receipts.
   - Outcomes: `session-routing.journey`. Runner: `verify.yml` (debug).
 - [Session settings](session-settings.md): full-screen split switches; saving is blocked without account OTP and a pulled layout.
   - Outcomes: `session-settings.journey`. Runner: `verify.yml` (manual). Prerequisites: Account email OTP and a pulled account layout.
+- [Stop while the chat works](session-stop.md): Stop replaces Send while a chat is working and the box is empty. Typing brings Send back. Stop interrupts the session.
+  - Outcomes: `reader.stop-while-working`. Runner: `verify.yml` (debug).
 - [Useful inbox summaries](session-summaries.md): Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.
   - Outcomes: `inbox.summaries`. Runner: `verify.yml` (debug).
 - [Sessions](sessions.md): authenticated tmux discovery and search.

@@ -15,6 +15,14 @@ adb logcat -c
 adb logcat -v threadtime > "$EVIDENCE/logcat-stream.txt" 2>&1 &
 logcat_stream_pid=$!
 recorder_pid=
+link_blocked=false
+restore_chat_link() {
+    if [[ "$link_blocked" == true ]]; then
+        sudo iptables -D INPUT -p tcp --dport 2222 -j DROP
+        sudo iptables -D OUTPUT -p tcp --sport 2222 -j DROP
+        link_blocked=false
+    fi
+}
 dump_ui() {
     local attempt output
     rm -f "$EVIDENCE/current.xml"
@@ -54,6 +62,7 @@ finish() {
     code=$?
     trap - EXIT
     set +e
+    restore_chat_link
     {
         date +%T.%N
         timeout 10s adb shell top -b -n 1 -m 15
@@ -460,6 +469,105 @@ if ! wait_for_text verify-session; then
 fi
 shot sessions
 
+if [[ "$feature" == session-favorite-dot.md ]]; then
+    [[ "$package" == dev.multiprompt.companion.debug ]]
+    wait_for_text verify-keep
+    wait_dot() {
+        local mode=$1 attempt
+        for attempt in {1..30}; do
+            dump_ui
+            if python3 "$scripts/favorite-dot.py" "$mode" "$EVIDENCE/current.xml"; then return 0; fi
+            sleep 1
+        done
+        printf 'Timed out waiting for favorite dot mode %s\n' "$mode" >&2
+        return 1
+    }
+    prove_dot() {
+        local mode=$1 name=$2
+        wait_dot "$mode"
+        shot "$name"
+        python3 "$scripts/favorite-dot.py" "$mode" "$EVIDENCE/$(printf '%02d' "$step")-$name.xml" | tee "$EVIDENCE/$name.json"
+    }
+    open_session_menu() {
+        local label=$1 row_x row_y
+        read -r row_x row_y <<< "$(select_node text verify-session)"
+        adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
+        wait_for_text "$label"
+    }
+    prove_dot plain favorite-dot-before
+    python3 -m http.server 8788 > "$FIXTURE/offline-proxy.log" 2>&1 &
+    echo "$!" > "$FIXTURE/offline-proxy.pid"
+    adb shell settings put global http_proxy 10.0.2.2:8788
+    [[ "$(adb shell settings get global http_proxy | tr -d '\r')" == 10.0.2.2:8788 ]]
+    python3 - <<'PYPROXY'
+import socket
+import time
+for attempt in range(20):
+    try:
+        with socket.create_connection(("127.0.0.1", 8788), timeout=1) as connection:
+            connection.sendall(b"CONNECT fixture.invalid:443 HTTP/1.1\r\nHost: fixture.invalid\r\n\r\n")
+            assert b" 501 " in connection.recv(1024).split(b"\r\n", 1)[0]
+        break
+    except OSError:
+        if attempt == 19:
+            raise
+        time.sleep(0.1)
+PYPROXY
+    adb shell am force-stop "$package"
+    adb shell am instrument -w -e class dev.multiprompt.companion.account.FavoriteDotSeedTest#seedsOfflineFavoriteLayout \
+        -e mode favorite-dot-seed \
+        "$package.test/androidx.test.runner.AndroidJUnitRunner" | tr -d '\r' > "$EVIDENCE/favorite-dot-seed.txt"
+    grep -F 'OK (1 test)' "$EVIDENCE/favorite-dot-seed.txt"
+    if grep -F 'FAILURES' "$EVIDENCE/favorite-dot-seed.txt"; then
+        printf 'Favorite dot seed failed\n' >&2
+        exit 1
+    fi
+    relaunch_app
+    wait_for_text verify-session
+    wait_for_text verify-keep
+    prove_dot starred favorite-dot-all
+    tap_desc 'Search sessions'
+    fill 'Search all sessions' verify-session
+    wait_for_text '1 result across all splits'
+    prove_dot search favorite-dot-search
+    tap_desc 'Close session search'
+    wait_for_absence 'Search all sessions'
+    tap_text Fixture
+    wait_for_text verify-session
+    wait_for_text verify-keep
+    prove_dot starred favorite-dot-workspace
+    tap_text Favorites
+    wait_for_text verify-session
+    prove_dot favorites favorite-dot-favorites
+    open_session_menu Unfavorite
+    tap_text Unfavorite
+    tap_text All
+    wait_for_text verify-session
+    wait_for_text verify-keep
+    prove_dot plain favorite-dot-unstarred
+    tap_text Favorites
+    wait_for_text 'No starred sessions'
+    wait_for_absence verify-session
+    tap_text All
+    open_session_menu Favorite
+    tap_text Favorite
+    prove_dot starred favorite-dot-restarred
+    tap_text Favorites
+    wait_for_text verify-session
+    prove_dot favorites favorite-dot-favorites-again
+    if [[ -f /home/verifyssh/receipts.txt ]] && sudo grep -F 'VERIFY_RECEIVED:' /home/verifyssh/receipts.txt; then
+        printf 'Starred-dot journey sent text to the host\n' >&2
+        exit 1
+    fi
+    if [[ -f /home/verifyssh/keep-receipts.txt ]] && sudo grep -F 'VERIFY_RECEIVED:' /home/verifyssh/keep-receipts.txt; then
+        printf 'Starred-dot journey sent text to the host\n' >&2
+        exit 1
+    fi
+    sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
+    printf 'FAVORITE_DOT_OK\n' | tee "$EVIDENCE/favorite-dot-result.txt"
+    exit 0
+fi
+
 if [[ "$feature" == settings-navigation.md ]]; then
     tap_desc 'Session list actions'
     tap_text Settings
@@ -835,6 +943,166 @@ if [[ "$feature" == session-drafts.md ]]; then
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt"
     grep -Fx 'VERIFY_RECEIVED:unsent draft text' "$EVIDENCE/receipts.txt"
     printf 'INBOX_DRAFT_LABEL_OK\n'
+    exit 0
+fi
+if [[ "$feature" == copy-chat-id.md ]]; then
+    hosted_id=$(sudo -u verifyssh tmux show-options -t verify-session -v @mp_host_sid 2>/dev/null | tr -d '\r' || true)
+    [[ "$hosted_id" == copy-chat-id-2371 ]]
+    name_id=$(sudo -u verifyssh tmux show-options -t verify-name -v @mp_host_sid 2>/dev/null | tr -d '\r' || true)
+    [[ -z "$name_id" ]]
+    wait_for_text verify-name
+    copy_chat_id() {
+        local session=$1
+        local chat_id=$2
+        local shot_name=$3
+        local label="Message ${session}"
+        local attempt pasted
+        tap_text "$session"
+        wait_for_text "$label"
+        for attempt in {1..15}; do
+            dump_ui
+            if python3 "$scripts/copy-chat-id.py" empty "$EVIDENCE/current.xml"; then
+                break
+            fi
+            sleep 1
+        done
+        python3 "$scripts/copy-chat-id.py" empty "$EVIDENCE/current.xml"
+        if [[ "$chat_id" != "$session" ]]; then
+            python3 "$scripts/copy-chat-id.py" hidden "$EVIDENCE/current.xml" "$chat_id"
+        fi
+        tap_desc 'Session actions'
+        wait_for_text 'Copy chat ID'
+        shot "$shot_name"
+        tap_text 'Copy chat ID'
+        for attempt in {1..15}; do
+            dump_ui
+            if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent 'Copy chat ID' >/dev/null 2>&1; then
+                break
+            fi
+            sleep 1
+        done
+        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent 'Copy chat ID'
+        pasted=0
+        for attempt in {1..8}; do
+            dump_ui
+            if python3 "$scripts/copy-chat-id.py" pasted "$EVIDENCE/current.xml" "$chat_id"; then
+                pasted=1
+                break
+            fi
+            if select_node focused-field "$label" >/dev/null 2>&1; then
+                adb shell input keyevent KEYCODE_PASTE
+            else
+                tap_node field "$label" || true
+            fi
+            sleep 1
+        done
+        [[ "$pasted" == 1 ]]
+        shot "composer-${shot_name}"
+        python3 "$scripts/copy-chat-id.py" pasted "$EVIDENCE/$(printf '%02d' "$step")-composer-${shot_name}.xml" "$chat_id"
+        if sudo test -f /home/verifyssh/receipts.txt && sudo grep -F "VERIFY_RECEIVED:${chat_id}" /home/verifyssh/receipts.txt; then
+            printf 'Copied chat id reached the host\n' >&2
+            exit 1
+        fi
+        if sudo test -f /home/verifyssh/name-receipts.txt && sudo grep -F "VERIFY_RECEIVED:${chat_id}" /home/verifyssh/name-receipts.txt; then
+            printf 'Copied chat id reached the host\n' >&2
+            exit 1
+        fi
+        tap_desc Back
+        wait_for_text Inbox
+    }
+    copy_chat_id verify-session "$hosted_id" hosted-id
+    copy_chat_id verify-name verify-name tmux-name
+    sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
+    printf 'COPY_CHAT_ID_OK\n'
+    exit 0
+fi
+if [[ "$feature" == session-stop.md ]]; then
+    copy_receipt() {
+        if sudo test -e /home/verifyssh/receipts.txt; then
+            sudo cat /home/verifyssh/receipts.txt > "$1"
+        else
+            : > "$1"
+        fi
+    }
+    mark_hook() {
+        sudo -u verifyssh mkdir -p /home/verifyssh/.local/state/multiprompt
+        sudo -u verifyssh python3 -c 'import json,sys,time; json.dump({"verify-session":{"state":sys.argv[1],"at":int(time.time())}}, open("/home/verifyssh/.local/state/multiprompt/tab-state.json","w"))' "$1"
+    }
+    wait_slot() {
+        local attempt
+        for attempt in {1..30}; do
+            dump_ui || true
+            if [[ -f "$EVIDENCE/current.xml" ]] && python3 "$scripts/composer-slot.py" "$1" "$EVIDENCE/current.xml"; then
+                return 0
+            fi
+            sleep 1
+        done
+        printf 'Timed out waiting for composer %s\n' "$1" >&2
+        return 1
+    }
+    tap_text verify-session
+    wait_for_text 'Message verify-session'
+    wait_for_text VERIFY_READY_528
+    wait_slot send
+    shot composer-send-idle
+    python3 "$scripts/composer-slot.py" send "$EVIDENCE/$(printf '%02d' "$step")-composer-send-idle.xml"
+    copy_receipt "$EVIDENCE/receipts-before.txt"
+    python3 "$scripts/composer-slot.py" quiet "$EVIDENCE/receipts-before.txt"
+    mark_hook active
+    sudo cat /home/verifyssh/.local/state/multiprompt/tab-state.json > "$EVIDENCE/hook-active.json"
+    grep -F '"state": "active"' "$EVIDENCE/hook-active.json"
+    wait_slot stop
+    shot composer-stop
+    python3 "$scripts/composer-slot.py" stop "$EVIDENCE/$(printf '%02d' "$step")-composer-stop.xml"
+    fill 'Message verify-session' KEEP_DRAFT
+    wait_for_text KEEP_DRAFT
+    wait_slot send-ready
+    shot composer-send-draft
+    python3 "$scripts/composer-slot.py" send-ready "$EVIDENCE/$(printf '%02d' "$step")-composer-send-draft.xml"
+    copy_receipt "$EVIDENCE/receipts-draft.txt"
+    python3 "$scripts/composer-slot.py" quiet "$EVIDENCE/receipts-draft.txt"
+    cleared=0
+    for attempt in 1 2 3; do
+        tap_node editor 'KEEP_DRAFT'
+        dump_ui || true
+        if ! python3 "$scripts/ui.py" "$EVIDENCE/current.xml" focused-field 'KEEP_DRAFT' >/dev/null; then
+            continue
+        fi
+        if ! read -r -a clear_keys < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" clear-field 'KEEP_DRAFT'); then
+            continue
+        fi
+        adb shell input keyevent "${clear_keys[@]}"
+        sleep 1
+        dump_ui || true
+        if ! python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'KEEP_DRAFT' >/dev/null; then
+            adb shell input keyevent KEYCODE_BACK
+            cleared=1
+            break
+        fi
+    done
+    [[ "$cleared" == 1 ]]
+    wait_for_text 'Message verify-session'
+    wait_slot stop
+    shot composer-stop-again
+    python3 "$scripts/composer-slot.py" stop "$EVIDENCE/$(printf '%02d' "$step")-composer-stop-again.xml"
+    copy_receipt "$EVIDENCE/receipts-before-stop.txt"
+    python3 "$scripts/composer-slot.py" quiet "$EVIDENCE/receipts-before-stop.txt"
+    tap_desc Stop
+    wait_receipt VERIFY_INTERRUPTED_528
+    wait_for_text VERIFY_INTERRUPTED_528
+    shot composer-interrupted
+    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt"
+    python3 "$scripts/composer-slot.py" interrupted "$EVIDENCE/receipts.txt"
+    mark_hook done
+    sudo cat /home/verifyssh/.local/state/multiprompt/tab-state.json > "$EVIDENCE/hook-done.json"
+    grep -F '"state": "done"' "$EVIDENCE/hook-done.json"
+    wait_slot send
+    shot composer-send-after-stop
+    python3 "$scripts/composer-slot.py" send "$EVIDENCE/$(printf '%02d' "$step")-composer-send-after-stop.xml"
+    sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt"
+    grep -F VERIFY_INTERRUPTED_528 "$EVIDENCE/tmux-final.txt"
+    printf 'COMPOSER_STOP_OK\n'
     exit 0
 fi
 if [[ "$feature" == session-summaries.md ]]; then
@@ -1216,8 +1484,24 @@ if [[ "$feature" == chat-shared.md ]]; then
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py engine-info > "$EVIDENCE/shared-engine-info.json"
     jq -e '.engine_info.generation >= 22 and .bundle_bytes == 224961 and .bundle_sha256 == "999ef191b364af22994311f4d8b168e22c67a7103585a0c22e0e9c1cc7a9c316"' "$EVIDENCE/shared-engine-info.json" >/dev/null
     wait_for_text 'Ready for queued messages.'
+    if [[ "${EXPECT_SHARED_MISSING:-}" != true ]]; then
+        link_blocked=true
+        sudo iptables -I INPUT -p tcp --dport 2222 -j DROP
+        sudo iptables -I OUTPUT -p tcp --sport 2222 -j DROP
+        wait_for_text Retry
+        shot shared-link-down
+    fi
     fill 'Message verify-session' SHARED_PHONE_SYNTHETIC
     tap_desc 'Send prompt'
+    if [[ "$link_blocked" == true ]]; then
+        wait_for_text 'Waiting for chat connection'
+        shot shared-link-waiting
+        sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read > "$EVIDENCE/shared-link-down-host.json"
+        jq -e '[.rows[] | select(.body == "SHARED_PHONE_SYNTHETIC")] | length == 0' "$EVIDENCE/shared-link-down-host.json" >/dev/null
+        sudo iptables -L INPUT -v -n > "$EVIDENCE/shared-link-drop-input.txt"
+        sudo iptables -L OUTPUT -v -n > "$EVIDENCE/shared-link-drop-output.txt"
+        restore_chat_link
+    fi
     for attempt in {1..30}; do
         sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read > "$EVIDENCE/shared-phone.json"
         jq -e '(.epoch | type) == "number" and (.rows | type) == "array"' "$EVIDENCE/shared-phone.json" >/dev/null
@@ -1227,6 +1511,13 @@ if [[ "$feature" == chat-shared.md ]]; then
     if ! jq -e '[.rows[] | select(.body == "SHARED_PHONE_SYNTHETIC" and .state == "queued")] | length == 1' "$EVIDENCE/shared-phone.json" >/dev/null; then
         printf 'SHARED_HOST_ADMISSION_MISSING\n' | tee "$EVIDENCE/shared-negative-marker.txt"
         exit 1
+    fi
+    if [[ "${EXPECT_SHARED_MISSING:-}" != true ]]; then
+        wait_for_absence 'Waiting for chat connection'
+        wait_for_absence Retry
+        shot shared-link-recovered
+        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value 'Message verify-session' ''
+        printf 'CHAT_LINK_RECOVERY_OK\n' | tee "$EVIDENCE/shared-link-recovery.txt"
     fi
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py desktop-submit > "$EVIDENCE/shared-desktop-submit.json"
     if ! wait_for_text SHARED_DESKTOP_SYNTHETIC; then

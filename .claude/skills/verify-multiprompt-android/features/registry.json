@@ -143,7 +143,8 @@
         "driver": true
       },
       "outcomes": [
-        "chat-shared.journey"
+        "chat-shared.journey",
+        "chat.link-recovery"
       ],
       "evidence": {
         "shared-before-reset.json": 1000,
@@ -170,6 +171,20 @@
       },
       "outcomes": [
         "chat-working.journey"
+      ]
+    },
+    "copy-chat-id.md": {
+      "name": "Copy chat ID",
+      "description": "the chat menu copies the host chat id, or the tmux name when the chat has no host id.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "chat.copy-id"
       ]
     },
     "host-changed-key.md": {
@@ -285,6 +300,29 @@
         "inbox.draft"
       ]
     },
+    "session-favorite-dot.md": {
+      "name": "Starred yellow dot",
+      "description": "a starred chat shows a yellow dot in All, search and its workspace, and no dot in Favorites.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "inbox.favorite-dot"
+      ],
+      "evidence": {
+        "favorite-dot-all.json": 400,
+        "favorite-dot-search.json": 400,
+        "favorite-dot-workspace.json": 400,
+        "favorite-dot-favorites.json": 400,
+        "favorite-dot-unstarred.json": 400,
+        "favorite-dot-restarred.json": 400,
+        "favorite-dot-favorites-again.json": 400
+      }
+    },
     "session-favorites.md": {
       "name": "Session favorites",
       "description": "signed APK, isolated SSH sessions and offline favorite cache; no production sync.",
@@ -355,7 +393,17 @@
       },
       "outcomes": [
         "reader.send-enter-interrupt"
-      ]
+      ],
+      "evidence": {
+        "08-send-draft.xml": 1500,
+        "10-send-result.xml": 2500,
+        "11-enter-action.xml": 500,
+        "12-enter-result.xml": 1500,
+        "13-interrupt-action.xml": 500,
+        "14-interrupt-result.xml": 1500,
+        "receipts.txt": 1000,
+        "tmux-final.txt": 1000
+      }
     },
     "session-routing.md": {
       "name": "Session routing",
@@ -385,6 +433,20 @@
       },
       "outcomes": [
         "session-settings.journey"
+      ]
+    },
+    "session-stop.md": {
+      "name": "Stop while the chat works",
+      "description": "Stop replaces Send while a chat is working and the box is empty. Typing brings Send back. Stop interrupts the session.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "reader.stop-while-working"
       ]
     },
     "session-summaries.md": {
@@ -585,6 +647,14 @@
       "sideEffect": false,
       "match": []
     },
+    "chat.copy-id": {
+      "description": "The chat menu copies the host chat id, or the tmux name when the chat has no host id.",
+      "journey": "copy-chat-id.md",
+      "sideEffect": false,
+      "match": [
+        "Copy chat ID|object ChatId"
+      ]
+    },
     "host-changed-key.journey": {
       "description": "compare a rotated identity, persist Not now and refuse authentication.",
       "journey": "host-changed-key.md",
@@ -655,6 +725,14 @@
         "SessionReaderConnection"
       ]
     },
+    "reader.stop-while-working": {
+      "description": "While a chat is working and the message box is empty, Stop replaces Send. Typing brings Send back, and Stop interrupts the session.",
+      "journey": "session-stop.md",
+      "sideEffect": true,
+      "match": [
+        "composerSlot|stopShown"
+      ]
+    },
     "session-routing.journey": {
       "description": "Inbox and swipe switching, typed and simulated dictated sends, independent SSH receipts.",
       "journey": "session-routing.md",
@@ -673,6 +751,14 @@
       "sideEffect": false,
       "match": [
         "observeDrafts|Session draft"
+      ]
+    },
+    "inbox.favorite-dot": {
+      "description": "A starred, read chat shows a yellow dot in every list except Favorites. Unstarring removes it.",
+      "journey": "session-favorite-dot.md",
+      "sideEffect": false,
+      "match": [
+        "RowDotRule|Session favorite dot"
       ]
     },
     "inbox.summaries": {
@@ -860,6 +946,14 @@
       "journey": null,
       "sideEffect": true,
       "match": []
+    },
+    "chat.link-recovery": {
+      "description": "A dropped SSH link shows a host error and Retry; a waiting prompt enters the host store exactly once after the link returns without another Send tap.",
+      "journey": "chat-shared.md",
+      "sideEffect": true,
+      "match": [
+        "ConversationLoad|PendingPrompts|ChatHistoryConnection|WaitingForConnection"
+      ]
     },
     "chat.identity": {
       "description": "Each canonical phone message appears once and keeps its reply across transcript catchup, Fresh start and reconnect.",

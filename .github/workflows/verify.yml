@@ -86,6 +86,7 @@ on:
           - chat-reactions.md
           - chat-resync.md
           - chat-shared.md
+          - copy-chat-id.md
           - host-changed-key.md
           - hosts-retired.md
           - hosts.md
@@ -93,10 +94,12 @@ on:
           - native-skills.md
           - robot-faces.md
           - session-drafts.md
+          - session-favorite-dot.md
           - session-favorites.md
           - session-gestures.md
           - session-reader.md
           - session-routing.md
+          - session-stop.md
           - session-summaries.md
           - sessions.md
           - settings-navigation.md

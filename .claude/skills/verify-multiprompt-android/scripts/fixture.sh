@@ -152,6 +152,12 @@ else
 fi
 sudo -u verifyssh tmux set-window-option -t verify-session automatic-rename off
 sudo -u verifyssh tmux rename-window -t verify-session verify-session
+if [[ "${VERIFY_FEATURE:-}" == copy-chat-id.md ]]; then
+    sudo -u verifyssh tmux set-option -t verify-session @mp_host_sid copy-chat-id-2371
+    sudo -u verifyssh tmux new-session -d -s verify-name -x 100 -y 32 'python3 -u /home/verifyssh/console.py /home/verifyssh/name-receipts.txt'
+    sudo -u verifyssh tmux set-window-option -t verify-name automatic-rename off
+    sudo -u verifyssh tmux rename-window -t verify-name verify-name
+fi
 sudo -u verifyssh tmux display-message -p '#{pid}' > "$FIXTURE/tmux.pid"
 sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/fixture-start.txt"
 if [[ "${VERIFY_FEATURE:-}" == session-routing.md || "${VERIFY_FEATURE:-}" == session-gestures.md ]]; then
@@ -184,5 +190,10 @@ if [[ "${VERIFY_FEATURE:-}" == device-approval.md ]]; then
         sleep 1
     done
     curl -fsS http://127.0.0.1:8787/ready > "$EVIDENCE/device-approval-ready.json"
+fi
+if [[ "${VERIFY_FEATURE:-}" == session-favorite-dot.md ]]; then
+    sudo -u verifyssh tmux new-session -d -s verify-keep -x 100 -y 32 'python3 -u /home/verifyssh/console.py /home/verifyssh/keep-receipts.txt'
+    sudo -u verifyssh tmux set-window-option -t verify-keep automatic-rename off
+    sudo -u verifyssh tmux rename-window -t verify-keep verify-keep
 fi
 printf 'SSH FIXTURE READY\n'

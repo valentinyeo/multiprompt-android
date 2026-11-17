@@ -2255,6 +2255,7 @@ internal fun SessionsScreen(
                             onEnd = { endPromptSession = session },
                             onForget = { onForgetSession(session) },
                             onMoveToGroup = if (tab != null && state.signedIn) ({ groupMoveTarget = tab }) else null,
+                            inFavoritesView = state.selectedWorkspaceId == FAVORITES_SPLIT_ID,
                         )
                     }
                 }
@@ -2481,6 +2482,7 @@ private fun SessionCard(
     muted: Boolean = false,
     onToggleMute: (() -> Unit)? = null,
     onMoveToGroup: (() -> Unit)? = null,
+    inFavoritesView: Boolean = false,
 ) {
     var menuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     val dismissState = rememberSwipeToDismissBoxState(
@@ -2604,6 +2606,9 @@ private fun SessionCard(
                     ) {
                         Text(UnreadCount.label(unreadCount))
                     }
+                }
+                if (RowDotRule.pick(unread, starred, inFavoritesView) == RowDot.YELLOW) {
+                    FavoriteDot(Modifier.testTag("Session favorite dot").semantics { contentDescription = "Session favorite dot" })
                 }
             }
             Box(Modifier.align(Alignment.TopEnd)) {
@@ -3180,7 +3185,8 @@ internal fun ReaderScreen(
     val readerScope = rememberCoroutineScope()
     var speakableReplies by remember { mutableStateOf<List<dev.multiprompt.companion.reader.ReadAloud.Spoken>>(emptyList()) }
     var chatReady by remember(session.hostId, session.name) { mutableStateOf(false) }
-    var waitingSend by remember(session.hostId, session.name) { mutableStateOf<String?>(null) }
+    var queuedDraft by remember(connection) { mutableStateOf<Pair<String, SentDraft>?>(null) }
+    val acceptedQueuedPrompts by connection.pendingPrompts.accepted.collectAsState()
     var replyCursor by remember { mutableStateOf(0) }
     var reading by remember { mutableStateOf(false) }
     var speakingKey by remember { mutableStateOf<String?>(null) }
@@ -3380,6 +3386,17 @@ internal fun ReaderScreen(
         }
     }
 
+    LaunchedEffect(acceptedQueuedPrompts, queuedDraft) {
+        val (id, draft) = queuedDraft ?: return@LaunchedEffect
+        if (id !in acceptedQueuedPrompts) return@LaunchedEffect
+        if (promptField.text == draft.prompt && imageAttachments == draft.images && replyTo == draft.replyTo) {
+            setPrompt("")
+            mentionPicks = emptyList()
+            imageAttachments = emptyList()
+            replyTo = null
+        }
+        queuedDraft = null
+    }
     LaunchedEffect(reader.completedActions) {
         val pending = pendingPromptAction
         if (pending != null && reader.completedActions > pending) {
@@ -3471,13 +3488,11 @@ internal fun ReaderScreen(
                 if (editing != null) editingMessageId = null
                 when (val admission = sent) {
                     is dev.multiprompt.companion.reader.PromptAdmission.Rejected -> {
-                        val reason = admission.reason
-                        if (reason == "Chat is disconnected" || (reason == "Chat is not ready" && !chatReady)) {
-                            waitingSend = draftText
-                            android.widget.Toast.makeText(context, "Will send when back online", android.widget.Toast.LENGTH_SHORT).show()
-                        } else {
-                            android.widget.Toast.makeText(context, reason, android.widget.Toast.LENGTH_SHORT).show()
-                        }
+                        android.widget.Toast.makeText(context, admission.reason, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    is dev.multiprompt.companion.reader.PromptAdmission.WaitingForConnection -> {
+                        queuedDraft = admission.id to draft
+                        android.widget.Toast.makeText(context, "Will send when the chat reconnects", android.widget.Toast.LENGTH_SHORT).show()
                     }
                     else -> {
                         SendTiming.mark("message_added")
@@ -3499,13 +3514,6 @@ internal fun ReaderScreen(
                 recordingPrompt = false
             }
         }
-    }
-    LaunchedEffect(chatReady, waitingSend) {
-        val text = waitingSend ?: return@LaunchedEffect
-        if (!chatReady) return@LaunchedEffect
-        delay(1_000)
-        waitingSend = null
-        sendDraft(text)
     }
     val applyPiModel: (PiModel) -> Unit = { model ->
         readerScope.launch {
@@ -4003,6 +4011,17 @@ internal fun ReaderScreen(
                                             renameDraft = session.displayName
                                             renameError = null
                                             renameDialogVisible = true
+                                        },
+                                    )
+                                }
+                                dev.multiprompt.companion.model.ChatId.of(session)?.let { chatId ->
+                                    KitMenuRow(
+                                        label = "Copy chat ID",
+                                        onClick = {
+                                            menuExpanded = false
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            clipboard.setPrimaryClip(ClipData.newPlainText("$displayName chat ID", chatId))
+                                            android.widget.Toast.makeText(context, dev.multiprompt.companion.model.ChatId.COPIED, android.widget.Toast.LENGTH_SHORT).show()
                                         },
                                     )
                                 }
@@ -4524,6 +4543,11 @@ internal fun ReaderScreen(
                             pendingPromptAction == null &&
                             !sendAfterDictation &&
                             (prompt.isNotBlank() || imageAttachments.isNotEmpty() || dictationActive)
+                        val stopShown = composerSlot(
+                            working = working,
+                            busy = reader.sending || sendAfterDictation || pendingPromptAction != null || recordingPrompt,
+                            draftEmpty = prompt.isEmpty() && imageAttachments.isEmpty(),
+                        ) == ComposerSlot.STOP
                         val composerText = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
                         val skillSpans = remember(prompt, reader.nativeSkills) { NativeSkills.spans(prompt, reader.nativeSkills) }
                         var composerLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
@@ -4592,11 +4616,24 @@ internal fun ReaderScreen(
                                         Modifier.size(ReaderSendSize)
                                             .clip(CircleShape)
                                             .background(if (sunlightMode) MaterialTheme.colorScheme.surfaceContainerHigh else Color(0xFF353535))
-                                            .clickable(enabled = sendEnabled, role = Role.Button, onClick = submitPrompt)
-                                            .semantics { contentDescription = "Send prompt" },
+                                            .clickable(
+                                                enabled = stopShown || sendEnabled,
+                                                role = Role.Button,
+                                                onClick = {
+                                                    if (stopShown) {
+                                                        onSessionInteraction()
+                                                        if (!connection.interruptHost()) connection.interrupt()
+                                                    } else {
+                                                        submitPrompt()
+                                                    }
+                                                },
+                                            )
+                                            .semantics { contentDescription = if (stopShown) "Stop" else "Send prompt" },
                                         contentAlignment = Alignment.Center,
                                     ) {
-                                        if (reader.sending || sendAfterDictation) {
+                                        if (stopShown) {
+                                            Icon(Icons.Default.Stop, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
+                                        } else if (reader.sending || sendAfterDictation) {
                                             CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
                                         } else {
                                             Icon(
