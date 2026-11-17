@@ -122,5 +122,6 @@
   "IGSH-2543": "Android phone test inserts skills within messages",
   "IGSH-2568": "Feature freeze until each repo's verification is complete",
   "IGSH-2544": "Android phone test expands and scrolls tables",
+  "IGSH-2638": "Phone tests cover every menu control",
   "IGSH-2545": "Android phone test finds and sends clear"
 }

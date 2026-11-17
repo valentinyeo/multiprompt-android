@@ -296,8 +296,9 @@
         "claude.skills-model-effort"
       ],
       "evidence": {
-        "native-result.json": 1500,
-        "native-receipts.txt": 1500
+        "native-menu-state.txt": 5000,
+        "native-receipts.txt": 2500,
+        "native-result.json": 1000
       }
     },
     "robot-faces.md": {
@@ -874,7 +875,8 @@
       "journey": "native-skills.md",
       "sideEffect": true,
       "match": [
-        "NativeSkills|SkillsLoader"
+        "NativeSkills|SkillsLoader",
+        "HostChange|HostSettings|ReaderMenuPage\\.MODEL|sendModelCommand|Use Claude|Set effort:|Open model picker|attachMenuSection"
       ]
     },
     "robot-faces.journey": {
