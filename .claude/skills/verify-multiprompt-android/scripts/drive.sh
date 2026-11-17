@@ -798,6 +798,11 @@ PYINFO
     exit 0
 fi
 
+if [[ "$feature" == chat-search.md ]]; then
+    source "$scripts/chat-search-drive.sh"
+    exit 0
+fi
+
 if [[ "$feature" == session-drafts.md ]]; then
     wait_for_text 'Inbox preview stays.'
     python3 "$scripts/draft-label.py" absent "$EVIDENCE/current.xml"

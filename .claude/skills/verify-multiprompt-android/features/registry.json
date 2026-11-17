@@ -507,6 +507,30 @@
         "projection-state-reconnect.json": 500,
         "projection-proof.txt": 500
       }
+    },
+    "chat-search.md": {
+      "name": "Find words inside a chat",
+      "description": "search real chat replies, check highlighted matches, jump, wrap, handle no matches and close. SOFT-2540.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "chat-search.open"
+      ],
+      "evidence": {
+        "search-newest.json": 1000,
+        "search-previous.json": 1000,
+        "search-wrap-previous.json": 1000,
+        "search-wrap-next.json": 1000,
+        "search-next.json": 1000,
+        "search-no-match.json": 500,
+        "search-closed.json": 500,
+        "search-proof.txt": 200
+      }
     }
   },
   "outcomes": {
@@ -746,10 +770,11 @@
     },
     "chat-search.open": {
       "description": "Open chat search, count and mark hits, navigate, wrap and close.",
-      "journey": null,
+      "journey": "chat-search.md",
       "sideEffect": false,
       "match": [
-        "ChatFind|chatFind|findInChat"
+        "ChatFind|chatFind|findInChat",
+        "ReaderSearchBar|Search in chat|Search this chat|searchIndex|searchHits|searchOpen|findQuery|findHits|activeHit|marking\\("
       ]
     },
     "claude.remote-control": {

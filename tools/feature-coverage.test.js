@@ -131,6 +131,34 @@ test('tooling-only work needs no Android feature proof or artificial failing par
   assert.deepEqual(gate.featureErrors({ plan, sha }).errors, []);
 });
 
+test('chat search changes require their own phone journey even when the model omits it', () => {
+  const outcome = 'chat-search.open';
+  const journey = 'chat-search.md';
+  assert.equal(gate.baseline[outcome], undefined);
+  assert.equal(gate.registry.outcomes[outcome].journey, journey);
+  assert.ok(gate.debugJourneys.includes(journey));
+  const diffs = [read('tools/fixtures/feature-coverage/pr-380.diff'), ...[
+    ['ui/ChatFind.kt', 'ChatFind'],
+    ['ui/ChatFindMarks.kt', 'marking('],
+    ['ui/ChatHistoryList.kt', 'findQuery'],
+    ['ui/MultipromptApp.kt', 'ReaderSearchBar'],
+    ['ui/MultipromptApp.kt', 'Search in chat'],
+    ['ui/MultipromptApp.kt', 'searchIndex'],
+  ].map(([file, text]) => productDiff(file, text))];
+  for (const diff of diffs) {
+    const plan = gate.planChange(diff, []);
+    assert.ok(plan.outcomes.includes(outcome));
+    for (const features of [[], ['native-skills.md', 'session-reader.md', 'terminal.md']]) {
+      const picked = verifier.includeRequiredJourneys({ features, dropped: [], smoke: true }, plan);
+      assert.ok(picked.features.includes(journey));
+      assert.equal(picked.smoke, false);
+      assert.ok(picked.features.length <= verifier.MAX_JOURNEYS);
+    }
+    const proof = gate.featureErrors({ plan, sha, conclusions: { 'session-reader.md': 'success' } });
+    assert.match(proof.errors.join('\n'), /FEATURE_NOT_EXERCISED: chat-search.open/);
+  }
+});
+
 test('the ratchet tracks exact IDs, not the number of missing journeys', () => {
   assert.deepEqual(gate.validateRegistry(), []);
   const changed = structuredClone(gate.registry);
