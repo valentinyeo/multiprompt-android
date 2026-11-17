@@ -505,3 +505,79 @@ test('the real picker schedules AI switch even when the model omits it or fills 
     assert.ok(gate.debugJourneys.includes('ai-switch.md'));
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
+
+test('the real picker schedules Claude remote control even when the model omits it or fills all three slots', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-control-pick-'));
+  try {
+    const fixture = { headSha: sha };
+    const product = path.join(directory, 'product.diff');
+    fs.writeFileSync(product, productDiff('assets/chat_history_reader.py', 'def host_claude_open(): remote_control'));
+    const gh = path.join(directory, 'gh');
+    fs.writeFileSync(gh, `#!${process.execPath}\nconst fs = require('node:fs');\nconst args = process.argv.slice(2);\nif (args.includes('Accept: application/vnd.github.diff')) process.stdout.write(fs.readFileSync(process.env.FIXTURE_DIFF));\nelse if (args[1].includes('/compare/')) console.log(JSON.stringify({merge_base_commit:{sha:'b'.repeat(40)}}));\nelse console.log(JSON.stringify({number:366,state:'open',head:{sha:process.env.EVENT_HEAD_SHA,repo:{full_name:'example/repo'}},base:{ref:'main'}}));\n`);
+    fs.chmodSync(gh, 0o755);
+    const stub = path.join(directory, 'model.cjs');
+    fs.writeFileSync(stub, `global.fetch = async () => ({status:200,ok:true,json:async () => ({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:JSON.parse(process.env.MODEL_FEATURES),changed_outcomes:[],change_kind:process.env.CHANGE_KIND,reason:'Model omitted Claude remote control.'})}}]})});`);
+    const recipeDiff = path.join(directory, 'recipe.diff');
+    fs.writeFileSync(recipeDiff, `diff --git a/${gate.REGISTRY_PATH}/claude-remote-control.md b/${gate.REGISTRY_PATH}/claude-remote-control.md\n+Open Claude remote control\n`);
+    for (const diff of [product, recipeDiff]) {
+      for (const modelFeatures of [[], ['native-skills.md', 'session-reader.md', 'terminal.md']]) {
+        const output = path.join(directory, 'outputs');
+        fs.writeFileSync(output, '');
+        const result = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
+          cwd: root,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${directory}:${process.env.PATH}`,
+            NODE_OPTIONS: `--require=${stub}`,
+            DEEPSEEK_API_KEY: 'test-only',
+            REPO: 'example/repo',
+            PR_NUMBER: '366',
+            EVENT_HEAD_SHA: fixture.headSha,
+            FIXTURE_DIFF: diff,
+            MODEL_FEATURES: JSON.stringify(modelFeatures),
+            CHANGE_KIND: diff === recipeDiff ? 'tooling' : 'product',
+            GITHUB_OUTPUT: output,
+          },
+        });
+        assert.equal(result.status, 0, result.stderr);
+        const values = fs.readFileSync(output, 'utf8');
+        const features = JSON.parse(values.match(/^features=(.+)$/m)[1]);
+        assert.ok(features.includes('claude-remote-control.md'), values);
+        assert.ok(features.length <= verifier.MAX_JOURNEYS);
+        assert.match(values, /^smoke=no$/m);
+        if (diff !== recipeDiff) assert.match(values, /changed_outcomes=.*claude.remote-control/);
+      }
+    }
+    assert.equal(gate.baseline['claude.remote-control'], undefined);
+    assert.equal(gate.registry.outcomes['claude.remote-control'].journey, 'claude-remote-control.md');
+    assert.ok(gate.debugJourneys.includes('claude-remote-control.md'));
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+
+test('Claude remote-control proof requires its action, connected UI, independent host receipt and exact head', () => {
+  const outcome = 'claude.remote-control';
+  const journey = 'claude-remote-control.md';
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-control-proof-'));
+  const claim = { outcome, journey, ...gate.registry.outcomes[outcome].citations };
+  try {
+    const priority = gate.registry.journeys[journey].evidence;
+    assert.ok(priority['remote-control-state.json']);
+    assert.ok(priority['remote-control-host.json']);
+    fs.writeFileSync(path.join(directory, 'app-source-sha.txt'), sha);
+    for (const ref of [claim.action, claim.result, claim.sideEffect]) fs.writeFileSync(path.join(directory, ref.file), ref.quote);
+    const args = { plan: { product: true, outcomes: [outcome] }, coverage: [claim], directories: { [journey]: directory }, conclusions: { [journey]: 'success' }, sha };
+    assert.deepEqual(gate.featureErrors(args).errors, []);
+    for (const ref of [claim.action, claim.result, claim.sideEffect]) {
+      fs.writeFileSync(path.join(directory, ref.file), 'unrelated proof');
+      assert.match(gate.featureErrors(args).errors.join(' '), /FEATURE_NOT_EXERCISED: claude.remote-control/);
+      fs.writeFileSync(path.join(directory, ref.file), ref.quote);
+    }
+    fs.writeFileSync(path.join(directory, 'app-source-sha.txt'), 'b'.repeat(40));
+    assert.match(gate.featureErrors(args).errors.join(' '), /exact PR head SHA/);
+    for (const name of ['remote_control', 'host_claude_open', 'remoteControl', 'RemoteControl', 'remote-control']) {
+      assert.ok(gate.changedOutcomes(productDiff('assets/chat_history_reader.py', name)).includes(outcome), name);
+    }
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});

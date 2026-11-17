@@ -3,10 +3,6 @@
     "sourcePr": 374,
     "cleanupTicket": "SOFT-2539"
   },
-  "claude.remote-control": {
-    "sourcePr": 366,
-    "cleanupTicket": "SOFT-2541"
-  },
   "ai.usage": {
     "sourcePr": 377,
     "cleanupTicket": "SOFT-2542"
