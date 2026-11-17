@@ -1,9 +1,21 @@
+from functools import lru_cache
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import subprocess
 import sys
+
+try:
+    import pwd
+except ImportError:
+    pwd = None
+
+OWNER_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_-]{0,31}\Z")
+OWNER_ROOTS = ("/", "home")
+OWNER_PROGRAM = ("import sys;s=sys.stdin.buffer.read().decode();"
+                 "exec(compile(s,'<native-skills>','exec'),"
+                 "{'__name__':'__main__','NATIVE_SKILLS_SOURCE':s,'NATIVE_SKILLS_OWNER':True})")
 
 
 def metadata(path, fallback, use_name):
@@ -88,13 +100,22 @@ def discover(home, cwd, config=None):
     return sorted(result.values(), key=lambda row: row["name"].lower())
 
 
-def usable(value):
+def loose(value):
     if not isinstance(value, str) or not value.strip():
         return None
     path = Path(value.strip()).expanduser()
-    return path if path.is_absolute() and path.is_dir() else None
+    return path if path.is_absolute() else None
 
 
+def usable(value):
+    path = loose(value)
+    try:
+        return path if path is not None and path.is_dir() else None
+    except OSError:
+        return None
+
+
+@lru_cache(maxsize=None)
 def tmux_directory(session):
     try:
         output = subprocess.check_output(
@@ -105,6 +126,7 @@ def tmux_directory(session):
     return usable(output)
 
 
+@lru_cache(maxsize=None)
 def hosted_directory(session):
     reader = Path.home() / ".multiprompt-runtime/reader.py"
     try:
@@ -115,20 +137,84 @@ def hosted_directory(session):
         return None
     for chat in chats if isinstance(chats, list) else []:
         if isinstance(chat, dict) and chat.get("name") == session:
-            return usable(chat.get("cwd"))
+            return chat.get("cwd")
     return None
 
 
 def project_directory(session, requested):
-    path = tmux_directory(session) or usable(requested) or hosted_directory(session)
+    path = tmux_directory(session) or usable(requested) or usable(hosted_directory(session))
     if path is None:
         raise SystemExit("The session project directory is unavailable")
     return path
 
 
+def owner_for_cwd(cwd, home=None, lookup=None):
+    lookup = lookup or (pwd.getpwnam if pwd is not None else None)
+    if lookup is None:
+        return None
+    parts = PurePosixPath(str(cwd or "")).parts
+    if len(parts) < 3 or parts[:2] != OWNER_ROOTS or ".." in parts:
+        return None
+    if not OWNER_NAME.fullmatch(parts[2]):
+        return None
+    try:
+        user = lookup(parts[2])
+    except KeyError:
+        return None
+    folder = PurePosixPath(str(user.pw_dir))
+    if user.pw_uid == 0 or folder != PurePosixPath(*OWNER_ROOTS) / parts[2]:
+        return None
+    if home is not None and folder == PurePosixPath(str(home)):
+        return None
+    return user.pw_name
+
+
+def own_source():
+    source = globals().get("NATIVE_SKILLS_SOURCE")
+    if isinstance(source, str) and source:
+        return source
+    try:
+        return Path(__file__).read_text(encoding="utf-8")
+    except (OSError, NameError):
+        return None
+
+
+def owner_output(user, session, requested):
+    source = own_source()
+    if source is None:
+        return None
+    try:
+        result = subprocess.run(
+            ["sudo", "-n", "-H", "-u", user, "--", "python3", "-c", OWNER_PROGRAM, session, requested],
+            input=source, capture_output=True, text=True, encoding="utf-8", timeout=8, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    try:
+        rows = json.loads(result.stdout)
+    except ValueError:
+        return None
+    return result.stdout if isinstance(rows, list) else None
+
+
+def answer_as_owner(session, requested):
+    path = tmux_directory(session) or loose(requested) or loose(hosted_directory(session))
+    user = owner_for_cwd(path, Path.home()) if path else None
+    return owner_output(user, session, requested) if user else None
+
+
 def main():
-    cwd = project_directory(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "")
-    config = Path(os.environ["CLAUDE_CONFIG_DIR"]).expanduser() if os.environ.get("CLAUDE_CONFIG_DIR") else None
+    session = sys.argv[1]
+    requested = sys.argv[2] if len(sys.argv) > 2 else ""
+    if not globals().get("NATIVE_SKILLS_OWNER"):
+        answer = answer_as_owner(session, requested)
+        if answer is not None:
+            sys.stdout.write(answer)
+            return
+    cwd = project_directory(session, requested)
+    configured = None if globals().get("NATIVE_SKILLS_OWNER") else os.environ.get("CLAUDE_CONFIG_DIR")
+    config = Path(configured).expanduser() if configured else None
     print(json.dumps(discover(Path.home(), cwd, config), ensure_ascii=False))
 
 

@@ -19,10 +19,12 @@ class TmuxCommandsTest {
 
     @Test
     fun nativeSkillsQuotesTheSessionAndTheWorkingDirectory() {
-        assertEquals("python3 - 'live-abc'", TmuxCommands.nativeSkills("live-abc"))
-        assertEquals("python3 - 'live-abc'", TmuxCommands.nativeSkills("live-abc", "  "))
+        val prefix = "python3 -c 'import sys;s=sys.stdin.buffer.read().decode();" +
+            "exec(compile(s,\"<native-skills>\",\"exec\"),{\"__name__\":\"__main__\",\"NATIVE_SKILLS_SOURCE\":s})'"
+        assertEquals("$prefix 'live-abc'", TmuxCommands.nativeSkills("live-abc"))
+        assertEquals("$prefix 'live-abc'", TmuxCommands.nativeSkills("live-abc", "  "))
         val command = TmuxCommands.nativeSkills("live-abc", "/home/me/it's here; reboot")
-        assertEquals("python3 - 'live-abc' '/home/me/it'\"'\"'s here; reboot'", command)
+        assertEquals("$prefix 'live-abc' '/home/me/it'\"'\"'s here; reboot'", command)
     }
 
     @Test
