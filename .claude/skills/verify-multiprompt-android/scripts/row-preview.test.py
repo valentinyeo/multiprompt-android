@@ -69,6 +69,23 @@ class RowPreviewTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Rewrite the inbox row", result.stderr)
 
+    def test_retain_keeps_both_row_texts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "ui.xml"
+            dest = Path(directory) / "inbox-row-ui.xml"
+            ET.ElementTree(hierarchy(question="Which target should ship?", step="Rewrite the inbox row")).write(source, encoding="utf-8")
+            result = subprocess.run([sys.executable, str(SCRIPT), "retain", str(source), str(dest)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            kept = dest.read_text(encoding="utf-8")
+            self.assertIn("Which target should ship?", kept)
+            self.assertIn("Rewrite the inbox row", kept)
+            self.assertNotIn("Pane reply stays.", kept)
+            self.assertLess(len(kept), 4000)
+            question = subprocess.run([sys.executable, str(SCRIPT), "question", str(dest)], capture_output=True, text=True)
+            step = subprocess.run([sys.executable, str(SCRIPT), "step", str(dest)], capture_output=True, text=True)
+            self.assertEqual(question.returncode, 0, question.stderr)
+            self.assertEqual(step.returncode, 0, step.stderr)
+
     def test_question_on_the_step_row_fails(self):
         result = self.run_mode("step", hierarchy(
             question="Which target should ship?",

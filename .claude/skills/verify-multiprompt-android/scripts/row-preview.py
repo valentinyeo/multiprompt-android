@@ -29,12 +29,8 @@ def session_row(root, name):
     return row
 
 
-def main():
-    mode, path = sys.argv[1], sys.argv[2]
-    if mode not in MODES:
-        raise SystemExit("row preview mode must be question or step")
+def check(mode, root):
     name, expected, banned, marker = MODES[mode]
-    root = ET.parse(path).getroot()
     row = session_row(root, name)
     texts = [node.get("text", "") for node in row.iter("node")]
     if texts.count(expected) != 1:
@@ -43,6 +39,40 @@ def main():
         if text in texts:
             raise SystemExit(f"{text!r} is still on the {name} row")
     print(marker)
+
+
+def compact_tree(root):
+    hierarchy = ET.Element("hierarchy")
+    for name in ("verify-session", "live-rowstep"):
+        row = session_row(root, name)
+        parent = ET.SubElement(hierarchy, "node", {
+            "package": row.get("package") or "",
+            "clickable": "true",
+            "text": "",
+        })
+        for node in row.iter("node"):
+            text = node.get("text") or ""
+            if not text:
+                continue
+            ET.SubElement(parent, "node", {
+                "package": node.get("package") or "",
+                "text": text,
+            })
+    return hierarchy
+
+
+def main():
+    mode = sys.argv[1]
+    if mode == "retain":
+        source, dest = sys.argv[2], sys.argv[3]
+        compact = compact_tree(ET.parse(source).getroot())
+        check("question", compact)
+        check("step", compact)
+        ET.ElementTree(compact).write(dest, encoding="utf-8", xml_declaration=False)
+        return
+    if mode not in MODES:
+        raise SystemExit("row preview mode must be question, step, or retain")
+    check(mode, ET.parse(sys.argv[2]).getroot())
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ The fixture starts two sessions before the phone connects:
 ## Journey
 
 1. On Inbox, wait until the `verify-session` row shows `Which target should ship?` and no longer shows `Pane reply stays.`
-2. Wait until the `live-rowstep` row shows `Rewrite the inbox row`. Capture `inbox-rows`.
+2. Wait until the `live-rowstep` row shows `Rewrite the inbox row`. Capture `inbox-rows`, then write `inbox-row-ui.xml` with only those two row texts so the retained excerpt quotes the question and the step.
 3. Save the Claude transcript and the live history. Require `AskUserQuestion` and the question in the transcript, and `TodoWrite` and the step in the history.
 4. Capture both panes. The question pane still contains `Pane reply stays.` and not the question. The step pane does not contain the step.
 

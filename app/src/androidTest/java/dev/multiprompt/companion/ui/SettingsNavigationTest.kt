@@ -69,12 +69,13 @@ class SettingsNavigationTest {
         screenshot("$name-settings")
         compose.onNodeWithText("Host mapping").performClick()
         compose.onNodeWithText("Desktop tmux hosts").assertIsDisplayed()
-        shell("input keyevent 4")
+        compose.onNodeWithText("Done").performScrollTo().performClick()
         compose.onNodeWithText("Session list settings").assertIsDisplayed()
+        compose.onNodeWithText("Desktop tmux hosts").assertDoesNotExist()
         compose.onNodeWithText("Host mapping").performClick()
-        compose.onNodeWithText("0 · Hetzner: Not mapped").performClick()
+        compose.onNodeWithText("0 · Hetzner: Not mapped").performScrollTo().performClick()
         compose.onNodeWithText("Automatic").assertIsDisplayed()
-        shell("input keyevent 4")
+        compose.onNodeWithText("Back").performScrollTo().performClick()
         compose.onNodeWithText("0 · Hetzner: Not mapped").assertIsDisplayed()
         compose.onNodeWithText("0 · Hetzner: Not mapped").performClick()
         compose.onNodeWithText("Fixture server · valentin@example.invalid").performClick()
@@ -88,13 +89,13 @@ class SettingsNavigationTest {
         compose.onNodeWithText("Done").performClick()
         compose.onNodeWithText("Update").performClick()
         compose.onNodeWithText("Update", substring = false).assertIsDisplayed()
-        shell("input keyevent 4")
+        pressBack()
         compose.onNodeWithText("Inbox").assertIsDisplayed()
         openSettings()
         compose.onNodeWithText("Switch / renew login").performClick()
         compose.waitUntil(10_000) { app.secretStore.get(AccountAuth.PENDING) != null }
         screenshot("$name-renew-browser")
-        shell("input keyevent 4")
+        pressBack()
         compose.onNodeWithText("Session list settings").assertIsDisplayed()
         compose.onNodeWithText("Sign out").performClick()
         compose.onNodeWithText("Sign in").assertIsDisplayed()
@@ -105,9 +106,31 @@ class SettingsNavigationTest {
         screenshot("$name-sign-in-browser")
     }
 
-    private fun shell(command: String) {
+    private fun shell(command: String) = shellText(command)
+
+    private fun shellText(command: String): String {
         val output = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command)
-        ParcelFileDescriptor.AutoCloseInputStream(output).use { it.readBytes() }
+        return ParcelFileDescriptor.AutoCloseInputStream(output).use { it.readBytes().toString(Charsets.UTF_8) }
+    }
+
+    private fun pressBack() {
+        dismissSystemAnr()
+        shell("input keyevent 4")
+        compose.waitForIdle()
+    }
+
+    private fun dismissSystemAnr() {
+        val dumped = shellText("uiautomator dump /sdcard/settings-anr.xml")
+        if (!dumped.contains("dumped to", ignoreCase = true)) return
+        val xml = shellText("cat /sdcard/settings-anr.xml")
+        if (!xml.contains("isn't responding")) return
+        val node = xml.split("<node").firstOrNull { it.contains("text=\"Wait\"") } ?: return
+        val match = Regex("\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]").find(node) ?: return
+        val nums = match.groupValues.drop(1)
+        val x = (nums[0].toInt() + nums[2].toInt()) / 2
+        val y = (nums[1].toInt() + nums[3].toInt()) / 2
+        shell("input tap $x $y")
+        compose.waitForIdle()
     }
 
     private fun screenshot(name: String) {

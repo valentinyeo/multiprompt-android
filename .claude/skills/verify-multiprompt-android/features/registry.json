@@ -367,7 +367,10 @@
       },
       "outcomes": [
         "inbox.row"
-      ]
+      ],
+      "evidence": {
+        "inbox-row-ui.xml": 4000
+      }
     },
     "session-settings.md": {
       "name": "Session settings",
@@ -864,7 +867,7 @@
       "journey": "chat-identity.md",
       "sideEffect": true,
       "match": [
-        "ChatHistory\\.kt|HostStream\\.kt|MessageProtocol\\.kt|projectMessages|LegacyMessageIdentity"
+        "HostStream\\.kt|MessageProtocol\\.kt|projectMessages|LegacyMessageIdentity"
       ]
     }
   }

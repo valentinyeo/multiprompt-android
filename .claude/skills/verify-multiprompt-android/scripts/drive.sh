@@ -857,6 +857,9 @@ if [[ "$feature" == session-rows.md ]]; then
     shot inbox-rows
     python3 "$scripts/row-preview.py" question "$EVIDENCE/$(printf '%02d' "$step")-inbox-rows.xml"
     python3 "$scripts/row-preview.py" step "$EVIDENCE/$(printf '%02d' "$step")-inbox-rows.xml"
+    python3 "$scripts/row-preview.py" retain "$EVIDENCE/$(printf '%02d' "$step")-inbox-rows.xml" "$EVIDENCE/inbox-row-ui.xml"
+    python3 "$scripts/row-preview.py" question "$EVIDENCE/inbox-row-ui.xml"
+    python3 "$scripts/row-preview.py" step "$EVIDENCE/inbox-row-ui.xml"
     question_transcript=$(sudo sed -n 's/^question_transcript=//p' /home/verifyssh/row-layout.txt)
     step_history=$(sudo sed -n 's/^step_history=//p' /home/verifyssh/row-layout.txt)
     [[ -n "$question_transcript" && -n "$step_history" ]]
