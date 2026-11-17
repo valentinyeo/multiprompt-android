@@ -723,6 +723,6 @@ test('proof uploads survive the same-run retry that failed PR392 at c2f673c6', (
     });
     assert.ok(found > 0);
   };
-  for (const file of ['.github/workflows/pstack-verifier.yml', '.github/workflows/verify.yml', '.github/workflows/test.yml', '.github/actions/android-proof/action.yml']) requireReplayable(read(file));
+  for (const file of ['.github/workflows/pstack-verifier.yml', '.github/workflows/verify.yml', '.github/workflows/test.yml', '.github/workflows/account-journey.yml', '.github/actions/android-proof/action.yml']) requireReplayable(read(file));
   assert.throws(() => requireReplayable('uses: actions/upload-artifact@v4\nwith:\n  name: verifier-tooling-proof\n  path: tooling-proof.txt\n'));
 });
