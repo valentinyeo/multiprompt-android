@@ -417,7 +417,9 @@ function journeyEvidence(directory, feature) {
   for (const file of files.filter(file => /shared-link-(?:down|waiting|recovered)\.xml$|shared-(?:phone|link-down-host)\.json$/.test(file))) take(file, 2_500);
   for (const name of priority) if (files.includes(name)) take(name, proof[name] ?? (name === 'driver-transcript.txt' ? TRANSCRIPT_TAIL_CHARS : SMALL_FILE_BYTES));
   if (files.includes('driver-transcript.txt')) {
-    const actions = fs.readFileSync(path.join(directory, 'driver-transcript.txt'), 'utf8').split('\n').filter(line => /^\++ (?:tap_text|tap_desc|fill |set_composer|adb shell input)/.test(line));
+    const actions = fs.readFileSync(path.join(directory, 'driver-transcript.txt'), 'utf8').split('\n')
+      .filter(line => /^\++ (?:tap_text|tap_desc|fill |set_composer|adb shell input)/.test(line))
+      .filter(line => !/^\++ adb shell input text (?:\S|'.'|"."|%s)$/.test(line));
     append(`--- driver-transcript.txt (user actions)\n${actions.slice(-60).join('\n').slice(-TRANSCRIPT_TAIL_CHARS)}`);
   }
   const xml = files.filter(file => file.endsWith('.xml') && !priority.includes(file)).slice(-4);

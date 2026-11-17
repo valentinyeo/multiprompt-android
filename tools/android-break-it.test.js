@@ -119,6 +119,14 @@ test('draft readback survives lost focus without relying on an empty-field place
   }
 });
 
+test('fresh character input does not crowd the named journey actions out of verifier evidence', t => {
+  const fixture = retained(t);
+  fs.writeFileSync(path.join(fixture.root, 'driver-transcript.txt'), "+ tap_text Pi\n" + '+ adb shell input text X\n'.repeat(200) + "+ tap_desc 'Send prompt'\n");
+  const evidence = verifier.journeyEvidence(fixture.root, 'ai-switch.md');
+  assert.match(evidence, /\+ tap_text Pi/);
+  assert.match(evidence, /\+ tap_desc 'Send prompt'/);
+});
+
 test('a fresh replay restores the same APK and its install-time permissions after clearing data', () => {
   const source = fs.readFileSync(path.join(__dirname, 'android-break-it/run.sh'), 'utf8');
   assert.match(source, /adb shell pm clear dev\.multiprompt\.companion\.debug \| grep -Fx Success\nadb install -r -g "\$VERIFY_APK"\n"\$scripts\/fixture\.sh"/);
