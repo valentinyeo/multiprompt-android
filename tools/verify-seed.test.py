@@ -33,7 +33,7 @@ class VerifySeedTest(unittest.TestCase):
         _, self.transcript = long_chat.create(self.home)
         self.source = self.home / 'long-chat-source.json'
         self.source.write_text(json.dumps(dict(path=str(self.transcript), bytes=self.transcript.stat().st_size,
-                                              rows=1882, sid=long_chat.SID)))
+                                              rows=1882, sid=long_chat.SID, latest=long_chat.LATEST)))
         self.names = ['verify-session', 'cl-long-chat'] + seed.BULK_NAMES
         self.tmux = patch.object(seed.subprocess, 'check_output', side_effect=lambda *args, **kwargs: '\n'.join(self.names) + '\n')
         self.tmux.start()
@@ -89,6 +89,33 @@ class VerifySeedTest(unittest.TestCase):
         self.source.write_text(json.dumps(source))
         with self.assertRaisesRegex(AssertionError, 'SEED_SOURCE_MISMATCH'):
             seed.check(self.home, self.evidence)
+
+    def test_deep_target_comes_from_the_recorded_first_page_not_session_order(self):
+        page = self.home / '04-seed-deep-before.xml'
+        page.write_bytes((ROOT / 'tools/fixtures/verify-seed/04-seed-deep-before.xml').read_bytes())
+        chosen = seed.target(self.home)
+        self.assertIn('row-27', chosen['initial_names'])
+        self.assertEqual('cl-long-chat', chosen['name'])
+        self.assertEqual('Robot cl-long-chat', chosen['description'])
+        self.assertEqual('Message cl-long-chat', chosen['reader_label'])
+        self.assertEqual(long_chat.LATEST, chosen['ready_text'])
+        self.assertEqual(page.name, chosen['initial_xml'])
+        self.names[:] = ['row-02', 'row-01'] + [name for name in self.names if name not in ('row-02', 'row-01')]
+        counts = json.loads(self.evidence.read_text())
+        counts['session_names'] = self.names
+        self.evidence.write_text(json.dumps(counts))
+        chosen = seed.target(self.home)
+        self.assertEqual('row-02', chosen['name'])
+        self.assertEqual('VERIFY_READY_528', chosen['ready_text'])
+
+    def test_deep_target_fails_setup_when_every_seeded_name_is_in_the_dump(self):
+        page = self.home / '04-seed-deep-before.xml'
+        page.write_text('<hierarchy>' + ''.join(f'<node content-desc="Robot {name}"/>' for name in self.names) + '</hierarchy>')
+        with self.assertRaisesRegex(ValueError, 'SEED_DEEP_SETUP_FAILED: every seeded session'):
+            seed.target(self.home)
+        page.unlink()
+        with self.assertRaisesRegex(ValueError, 'SEED_DEEP_SETUP_FAILED: expected one initial inbox dump'):
+            seed.target(self.home)
 
     def inbox_pages(self):
         (self.home / 'seed-check.json').write_text(self.evidence.read_text())

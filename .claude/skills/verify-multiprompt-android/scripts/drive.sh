@@ -1430,11 +1430,15 @@ PYORACLE
 fi
 if [[ "$feature" == sessions.md ]]; then
     shot seed-deep-before
-    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent row-27
-    wait_for_text row-27
-    tap_text row-27
-    wait_for_text 'Message row-27'
-    wait_for_text VERIFY_READY_528
+    setup_failure=1
+    python3 tools/verify-seed.py target "$EVIDENCE" | tee "$EVIDENCE/seed-deep-choice.json"
+    setup_failure=0
+    deep_target=$(jq -er .name "$EVIDENCE/seed-deep-choice.json")
+    deep_description=$(jq -er .description "$EVIDENCE/seed-deep-choice.json")
+    wait_for_text "$deep_target"
+    tap_desc "$deep_description"
+    wait_for_text "$(jq -er .reader_label "$EVIDENCE/seed-deep-choice.json")"
+    wait_for_text "$(jq -er .ready_text "$EVIDENCE/seed-deep-choice.json")"
     shot seed-deep-target
     cp "$EVIDENCE/current.xml" "$EVIDENCE/seed-deep-target.xml"
     tap_desc Back
@@ -1444,11 +1448,17 @@ if [[ "$feature" == sessions.md ]]; then
     fill 'Search all sessions' Verify
     seed_count=$(jq -er .sessions "$EVIDENCE/seed-counts.json")
     wait_for_text "$seed_count results across all splits"
-    for attempt in {1..16}; do
-        shot "seed-inbox-$attempt"
-        if python3 tools/verify-seed.py inbox "$EVIDENCE" > "$EVIDENCE/seed-inbox.json" 2> "$EVIDENCE/seed-inbox-pending.txt"; then break; fi
-        read -r x1 y1 x2 y2 <<< "$(select_node scroll-back '')"
-        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 500
+    for direction in backward forward; do
+        for attempt in {1..16}; do
+            shot "seed-inbox-$direction-$attempt"
+            if python3 tools/verify-seed.py inbox "$EVIDENCE" > "$EVIDENCE/seed-inbox.json" 2> "$EVIDENCE/seed-inbox-pending.txt"; then break 2; fi
+            read -r x1 y1 x2 y2 <<< "$(select_node scroll-back '')"
+            if [[ "$direction" == backward ]]; then
+                adb shell input swipe "$x1" "$y1" "$x2" "$y2" 500
+            else
+                adb shell input swipe "$x2" "$y2" "$x1" "$y1" 500
+            fi
+        done
     done
     python3 tools/verify-seed.py inbox "$EVIDENCE" > "$EVIDENCE/seed-inbox.json"
     cat "$EVIDENCE/seed-inbox.json"

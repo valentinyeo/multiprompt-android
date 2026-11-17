@@ -121,6 +121,44 @@ tap_text ${target}
   });
 }
 
+for (const initialPage of [0, 3, 6]) {
+  test(`42-result proof scans both directions from page ${initialPage} in reversed inbox order`, () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'seed-unordered-inbox-'));
+    try {
+      const names = ['cl-long-chat', 'verify-session', ...Array.from({ length: 40 }, (_, i) => `seed-${i}`)];
+      const counts = JSON.stringify({ sessions: 42, session_names: names });
+      writeFileSync(path.join(directory, 'seed-counts.json'), counts);
+      writeFileSync(path.join(directory, 'seed-check.json'), counts);
+      const reversed = [...names].reverse();
+      for (let page = 0; page < 7; page++) {
+        const rows = reversed.slice(page * 6, page * 6 + 6).map((name, i) => `<node content-desc="Robot ${name}" bounds="[20,${300 + i * 100}][100,${380 + i * 100}]"/>`).join('');
+        writeFileSync(path.join(directory, `page-${page}.xml`), `<hierarchy><node bounds="[0,0][1080,1920]"><node text="42 results across all splits" bounds="[0,100][1000,200]"/><node scrollable="true" bounds="[0,250][1080,1800]">${rows}</node></node></hierarchy>`);
+      }
+      const scan = driver.match(/fill 'Search all sessions' Verify\n([\s\S]*?)    fill Verify verify-session/)[1];
+      const result = spawnSync('bash', ['-euc', `
+EVIDENCE=${JSON.stringify(directory)}
+page=${initialPage}
+step=0
+wait_for_text() { [[ "$1" == '42 results across all splits' ]]; }
+shot() { step=$((step + 1)); cp "$EVIDENCE/page-$page.xml" "$EVIDENCE/$step-$1.xml"; }
+select_node() { printf '540 300 540 1700\\n'; }
+adb() {
+    if (( $5 > $7 )); then page=$((page < 6 ? page + 1 : 6)); else page=$((page > 0 ? page - 1 : 0)); fi
+}
+${scan}
+`], { cwd: root, encoding: 'utf8', timeout: 30000 });
+      assert.equal(result.status, 0, result.stderr);
+      const proof = JSON.parse(readFileSync(path.join(directory, 'seed-inbox.json'), 'utf8'));
+      assert.equal(proof.sessions_visible, 42);
+      assert.deepEqual(proof.session_names, names.sort());
+      assert.equal(proof.displayed_count, '42 results across all splits');
+      assert.ok(proof.pages.length >= 7);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+}
+
 test('reveal uses the existing scroll planner but never taps the row', () => {
   const directory = mkdtempSync(path.join(tmpdir(), 'seed-reveal-'));
   try {

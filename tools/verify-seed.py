@@ -25,13 +25,29 @@ def inventory(home):
     assert rows == 1882, 'SEED_TRANSCRIPT_ROWS'
     assert (source['bytes'], source['rows'], source['sid']) == (size, rows, LONG_SID), 'SEED_SOURCE_MISMATCH'
     return dict(sessions=len(names), bulk_sessions=len(BULK_NAMES), session_names=names,
-                transcript=dict(session=LONG_SESSION, bytes=size, rows=rows, sid=LONG_SID, path=str(path)))
+                transcript=dict(session=LONG_SESSION, bytes=size, rows=rows, sid=LONG_SID, path=str(path), latest=source['latest']))
 
 
 def check(home, evidence):
     recorded = json.load(sys.stdin) if str(evidence) == '-' else json.loads(evidence.read_text())
     assert recorded == inventory(home), 'SEED_EVIDENCE_MISMATCH'
     return recorded
+
+
+def target(evidence):
+    counts = json.loads((evidence / 'seed-counts.json').read_text())
+    pages = list(evidence.glob('*-seed-deep-before.xml'))
+    if len(pages) != 1:
+        raise ValueError('SEED_DEEP_SETUP_FAILED: expected one initial inbox dump')
+    root = ET.parse(pages[0]).getroot()
+    present = {value for node in root.iter('node') for value in
+               (node.get('text', ''), node.get('content-desc', '').removeprefix('Robot '))}
+    name = next((name for name in counts['session_names'] if name not in present), None)
+    if name is None:
+        raise ValueError('SEED_DEEP_SETUP_FAILED: every seeded session is present in the initial dump; no off-screen target')
+    return dict(name=name, description='Robot ' + name, reader_label='Message ' + name,
+                ready_text=counts['transcript']['latest'] if name == counts['transcript']['session'] else 'VERIFY_READY_528',
+                initial_xml=pages[0].name, initial_names=[name for name in counts['session_names'] if name in present])
 
 
 def inbox(evidence):
@@ -80,9 +96,11 @@ def inbox(evidence):
 
 if __name__ == '__main__':
     mode = sys.argv[1]
-    assert mode in ('record', 'check', 'inbox')
+    assert mode in ('record', 'check', 'inbox', 'target')
     if mode == 'inbox':
         counts = inbox(Path(sys.argv[2]))
+    elif mode == 'target':
+        counts = target(Path(sys.argv[2]))
     else:
         counts = inventory(Path.home()) if mode == 'record' else check(Path.home(), Path(sys.argv[2]))
     print(json.dumps(counts, indent=2))

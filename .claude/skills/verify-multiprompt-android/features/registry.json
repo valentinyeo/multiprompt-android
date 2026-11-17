@@ -478,7 +478,7 @@
     },
     "sessions.md": {
       "name": "Sessions",
-      "description": "Full default seed proof: checked seed-counts.json, 42 rendered inbox sessions across captured scroll pages, exact off-screen row-27 reader entry, and search/clear.",
+      "description": "Full default seed proof: checked seed-counts.json, 42 rendered inbox sessions across captured scroll pages in any order, runtime-selected off-screen reader entry, and search/clear.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -493,7 +493,8 @@
         "seed-counts.json": 2500,
         "seed-check.json": 2500,
         "seed-inbox.json": 3000,
-        "seed-deep-target.xml": 1500
+        "seed-deep-target.xml": 1500,
+        "seed-deep-choice.json": 1500
       }
     },
     "settings-navigation.md": {

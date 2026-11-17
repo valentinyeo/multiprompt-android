@@ -64,8 +64,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `reader.stop-while-working`. Runner: `verify.yml` (debug).
 - [Useful inbox summaries](session-summaries.md): Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.
   - Outcomes: `inbox.summaries`. Runner: `verify.yml` (debug).
-- [Sessions](sessions.md): Full default seed proof: checked seed-counts.json, 42 rendered inbox sessions across captured scroll pages, exact off-screen row-27 reader entry, and search/clear.
-  - Outcomes: `inbox.search`. Runner: `verify.yml` (debug). Priority evidence: `seed-counts.json` (2500 characters), `seed-check.json` (2500 characters), `seed-inbox.json` (3000 characters), `seed-deep-target.xml` (1500 characters).
+- [Sessions](sessions.md): Full default seed proof: checked seed-counts.json, 42 rendered inbox sessions across captured scroll pages in any order, runtime-selected off-screen reader entry, and search/clear.
+  - Outcomes: `inbox.search`. Runner: `verify.yml` (debug). Priority evidence: `seed-counts.json` (2500 characters), `seed-check.json` (2500 characters), `seed-inbox.json` (3000 characters), `seed-deep-target.xml` (1500 characters), `seed-deep-choice.json` (1500 characters).
 - [Settings navigation](settings-navigation.md): sessions-first settings, host mapping and account handoff on the signed APK.
   - Outcomes: `settings-navigation.journey`. Runner: `verify.yml` (signed). Inputs: `{"release_choices":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Sign in](sign-in.md): real account browser handoff; OTP remains manual.
