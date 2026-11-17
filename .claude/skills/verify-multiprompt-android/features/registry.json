@@ -718,6 +718,46 @@
         "clear-selected-host.txt": 200,
         "clear-proof.txt": 200
       }
+    },
+    "signed-out-sync.md": {
+      "name": "Signed-out sync row",
+      "description": "Reader Session actions, then More, shows Sign in to sync. The journey does not sign in.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "legacy.igsh-413"
+      ],
+      "evidence": {
+        "reader-sync.json": 200,
+        "sync-menu-proof.txt": 80
+      }
+    },
+    "version-labels.md": {
+      "name": "Version label",
+      "description": "The version label on Inbox, settings, the reader and the shell, and the Update screen it opens.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "legacy.igsh-426"
+      ],
+      "evidence": {
+        "inbox-version.json": 300,
+        "update-screen.json": 400,
+        "settings-version.json": 300,
+        "reader-version.json": 300,
+        "shell-version.json": 300,
+        "version-proof.txt": 80
+      }
     }
   },
   "outcomes": {
@@ -1138,10 +1178,22 @@
       "match": []
     },
     "legacy.igsh-426": {
-      "description": "prefix checks Sign in's exact version only. No credential blocks local-screen layout inspection; navigation/bounds proof is unimplemented. Inspect the label on Inbox, reader, shell, Hosts, editor and Settings; tap for **Update**. Workspaces need OTP. Sign in's label is bottom-centred, not beside three dots.",
-      "journey": null,
-      "sideEffect": true,
-      "match": []
+      "description": "The version label on Inbox, Session list settings, the reader and the live shell. Tapping it opens App updates. Hosts and the host editor no longer show this label.",
+      "journey": "version-labels.md",
+      "sideEffect": false,
+      "match": [
+        "open release notes"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "open release notes"
+        },
+        "result": {
+          "file": "update-screen.json",
+          "quote": "\"required\": [\n    \"App updates\""
+        }
+      }
     },
     "legacy.igsh-424": {
       "description": "a supported agent (Claude) transcript on the SSH host, including tables/nested lists and model/effort state. Open from Inbox, scroll the complete transcript, inspect tables horizontally and top-bar subtitle; no **Conversation** header/status row. **Session actions \u2192 Session history** opens alternate-screen history. Console output proves none of this.",
@@ -1168,10 +1220,22 @@
       "match": []
     },
     "legacy.igsh-413": {
-      "description": "no credential blocks comparing signed-out **Sign in to sync** in Inbox **Session list actions** and reader **Session actions**; that comparison is unimplemented. OTP is needed for **Sync: signed in \u2014 sign out** and synced splits. Compare both menus, then complete sign-in manually.",
-      "journey": null,
-      "sideEffect": true,
-      "match": []
+      "description": "Signed out, reader Session actions, then More, shows Sign in to sync. The journey does not complete sign-in. Inbox Session list actions does not contain that row.",
+      "journey": "signed-out-sync.md",
+      "sideEffect": false,
+      "match": [
+        "Sign in to sync"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tap_text More"
+        },
+        "result": {
+          "file": "reader-sync.json",
+          "quote": "\"row\": \"Sign in to sync\""
+        }
+      }
     },
     "chat.link-recovery": {
       "description": "A dropped SSH link shows a host error and Retry; a waiting prompt enters the host store exactly once after the link returns without another Send tap.",

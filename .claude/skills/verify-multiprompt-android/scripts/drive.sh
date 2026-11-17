@@ -962,6 +962,16 @@ if [[ "$feature" == chat-table.md ]]; then
     exit 0
 fi
 
+if [[ "$feature" == version-labels.md ]]; then
+    source "$scripts/version-labels-drive.sh"
+    exit 0
+fi
+
+if [[ "$feature" == signed-out-sync.md ]]; then
+    source "$scripts/signed-out-sync-drive.sh"
+    exit 0
+fi
+
 if [[ "$feature" == chat-search.md ]]; then
     source "$scripts/chat-search-drive.sh"
     exit 0
