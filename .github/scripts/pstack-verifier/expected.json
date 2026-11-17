@@ -1,0 +1,8 @@
+{
+  "cedar": "FAIL",
+  "maple": "FAIL",
+  "birch": "FAIL",
+  "willow": "FAIL",
+  "aspen": "PASS",
+  "elm": "PASS"
+}

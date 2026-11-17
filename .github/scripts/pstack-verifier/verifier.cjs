@@ -532,6 +532,19 @@ function readSideFiles(directory) {
   return out;
 }
 
+function judgeContext({ pr, diff, plan, toolingProof, features, smoke = false, pickReason, parents, parentConclusions, conclusions, directories, parentDirectories }) {
+  const side = (label, feature, text) => `--- ${label}, journey ${feature}\n${text}`;
+  const journeyBlock = feature => [
+    `=== Journey ${feature}`,
+    side('PARENT (app before the change, merge base)', feature, `result: ${parents[feature]} (job conclusion ${parentConclusions[feature] ?? 'no result'})\n${journeyEvidence(parentDirectories[feature], feature)}`),
+    side('HEAD (app after the change)', feature, `result: ${conclusions[feature] === 'success' ? 'passed' : 'not passed'} (job conclusion ${conclusions[feature] ?? 'no result'})\n${journeyEvidence(directories[feature], feature)}`),
+  ].join('\n');
+  const journeyText = features.length
+    ? (smoke ? `Only the smoke journey was driven because no journey fits this change. Reason: ${oneLine(pickReason, 300) || 'none given'}\n\n` : '') + features.map(journeyBlock).join('\n\n')
+    : `No journey was driven. Reason: ${oneLine(pickReason, 300) || 'none given'}`;
+  return `${prContext(pr, diff, JUDGE_DIFF_CHARS)}\n\nRegistry:\n${coverageGate.catalog()}\n\nRequired changed outcomes: ${JSON.stringify(plan.outcomes)}\n\nHosted non-UI validation (node --test tools/feature-coverage.test.js tools/pstack-verifier.test.js):\n${toolingProof}\n\nJourney evidence:\n${journeyText}`;
+}
+
 async function judge(env) {
   if (env.PICK_RESULT !== 'success') throw new Error(`the journey picker ended as ${env.PICK_RESULT || 'unknown'}, so there is no verdict`);
   const key = requireKey(env);
@@ -580,18 +593,9 @@ async function judge(env) {
       const files = readSideFiles(parentDirectories[feature]);
       parents[feature] = parentResult({ conclusion: parentConclusions[feature], result: files.result, sourceSha: files.sourceSha, mergeBase });
     }
-    const side = (label, feature, text) => `--- ${label}, journey ${feature}\n${text}`;
-    const journeyBlock = feature => [
-      `=== Journey ${feature}`,
-      side('PARENT (app before the change, merge base)', feature, `result: ${parents[feature]} (job conclusion ${parentConclusions[feature] ?? 'no result'})\n${journeyEvidence(parentDirectories[feature], feature)}`),
-      side('HEAD (app after the change)', feature, `result: ${conclusions[feature] === 'success' ? 'passed' : 'not passed'} (job conclusion ${conclusions[feature] ?? 'no result'})\n${journeyEvidence(directories[feature], feature)}`),
-    ].join('\n');
-    const journeyText = features.length
-      ? (smoke ? `Only the smoke journey was driven because no journey fits this change. Reason: ${oneLine(env.PICK_REASON, 300) || 'none given'}\n\n` : '') + features.map(journeyBlock).join('\n\n')
-      : `No journey was driven. Reason: ${oneLine(env.PICK_REASON, 300) || 'none given'}`;
     const reported = JSON.parse(env.CHANGED_OUTCOMES || 'null');
     const plan = coverageGate.planChange(diff, reported);
-    content = `${prContext(pr, diff, JUDGE_DIFF_CHARS)}\n\nRegistry:\n${coverageGate.catalog()}\n\nRequired changed outcomes: ${JSON.stringify(plan.outcomes)}\n\nHosted non-UI validation (node --test tools/feature-coverage.test.js tools/pstack-verifier.test.js):\n${toolingProof}\n\nJourney evidence:\n${journeyText}`;
+    content = judgeContext({ pr, diff, plan, toolingProof, features, smoke, pickReason: env.PICK_REASON, parents, parentConclusions, conclusions, directories, parentDirectories });
     model = await askParsed({ ask: () => callDeepSeek({ key, system: JUDGE_INSTRUCTIONS, user: content }), parse: parseVerdict });
     const finalPlan = coverageGate.planChange(diff, [...plan.outcomes, ...model.changedOutcomes]);
     featureProof = coverageGate.featureErrors({ plan: finalPlan, coverage: model.coverage, directories, conclusions, sha });
@@ -631,7 +635,7 @@ async function judge(env) {
 }
 
 module.exports = {
-  ALLOWLIST, MODEL, ENDPOINT, MARKER_PREFIX, VERDICTS, MAX_JOURNEYS, SMOKE_JOURNEY, PRODUCT_ASSERTION,
+  JUDGE_INSTRUCTIONS, judgeContext, ALLOWLIST, MODEL, ENDPOINT, MARKER_PREFIX, VERDICTS, MAX_JOURNEYS, SMOKE_JOURNEY, PRODUCT_ASSERTION,
   SIDES, RESULT_FILE, escapeText, validateFeatures, parseJson, askParsed, parsePick, parseVerdict, applyRules, parentResult, buildComment,
   saysBug, loadTicketTitles, isBugFix, noProductChange,
   artifactName, readSideFiles, fetchMergeBase, findOwnComment, jobConclusions, callDeepSeek, doneWhen, journeyEvidence, journeyCatalog, requireKey, includeRequiredJourneys,
