@@ -2,7 +2,7 @@
 
 A bug-fix journey must pass normally, then pass again under five stresses on the same hosted emulator. Retain a screenshot, UI XML and text evidence for each checkpoint. Missing checkpoints fail rather than count as coverage.
 
-The checkpoints rotate during a draft, background and return, switch chats and back, throttle the emulator network, and send while a reply is still streaming. The normal journey's product assertions must still pass after these actions.
+The checkpoints rotate during a draft, background and return, switch chats and back, throttle the emulator network, and send while a reply is still streaming. The normal journey's product assertions must still pass after these actions. `fill` issues fresh per-character input commands because Android drops the tail of an old, slow key-event batch during a busy stream; exact final readback remains mandatory.
 
 The independent verifier reads the retained checkpoint evidence. A broken or missing checkpoint overrides a model PASS. This PR also schedules the stressed replay in its own verifier run, without claiming an Android parent repro for a tooling-only change.
 
