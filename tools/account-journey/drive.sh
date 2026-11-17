@@ -56,7 +56,7 @@ tap_split() {
         dump_ui
         direction=backward
         if (( attempt > 6 )); then direction=forward; fi
-        point=$(python3 "$selector" "$EVIDENCE/current.xml" reach-text "$1" "$direction") || continue
+        point=$(python3 "$selector" "$EVIDENCE/current.xml" reach-text "$1" "$direction" horizontal) || continue
         read -r action x y x2 y2 <<< "$point"
         if [[ "$action" == tap ]]; then
             adb shell input tap "$x" "$y"

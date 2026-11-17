@@ -13,7 +13,7 @@ if mode == "snapshot":
 if mode.startswith("reach-"):
     from journey_action import Unreachable, plan
     try:
-        print(plan(root, mode.removeprefix("reach-"), value, sys.argv[4] if len(sys.argv) > 4 else "forward"))
+        print(plan(root, mode.removeprefix("reach-"), value, sys.argv[4] if len(sys.argv) > 4 else "forward", sys.argv[5] if len(sys.argv) > 5 else None))
     except Unreachable as error:
         raise SystemExit(f"JOURNEY_ACTION_UNREACHABLE: {value or mode.removeprefix('reach-')!r}: {error}")
     raise SystemExit(0)

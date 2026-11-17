@@ -44,6 +44,12 @@ class ActionTest(unittest.TestCase):
         self.assertEqual(y1, y2)
         self.assertTrue(1710 < y1 < 1836)
 
+    def test_hidden_favorites_scrolls_split_strip_not_session_list(self):
+        xml = (Path(__file__).parent / "fixtures/9cce26ad-hidden-favorites.xml").read_text()
+        result = subprocess.run(['python3', str(SCRIPTS / 'ui.py'), str(Path(__file__).parent / 'fixtures/9cce26ad-hidden-favorites.xml'), 'reach-text', 'Favorites', 'forward', 'horizontal'], capture_output=True, text=True, check=True)
+        self.assertEqual(result.stdout.strip(), 'swipe 845 1773 235 1773')
+        self.assertEqual(self.plan(xml, value='Favorites'), 'swipe 540 1536 540 384')
+
     def test_terminal_typing_area_is_reachable_without_a_clickable_text_node(self):
         xml = window('<node content-desc="Show keyboard" bounds="[900,40][1000,140]" /><node class="android.widget.HorizontalScrollView" scrollable="true" bounds="[0,1000][1080,1100]"><node content-desc="Esc key" bounds="[10,1010][100,1090]" /></node>')
         self.assertEqual(self.plan(xml, mode='terminal', value=''), 'tap 505 575')
