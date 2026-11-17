@@ -16,8 +16,28 @@ wait_for_text PI_HANDOVER_READY_2538
 shot ai-switch-reattached
 fill 'Message verify-session' PHONE_AFTER_SWITCH_2538
 shot ai-switch-draft
+sudo -u verifyssh touch /home/verifyssh/ai-switch-hold-2569
 tap_desc 'Send prompt'
 wait_for_text PI_REPLY_PHONE_AFTER_SWITCH_2538
+shot ai-switch-before-catchup
+sudo -u verifyssh rm /home/verifyssh/ai-switch-hold-2569
+sudo -u verifyssh env HOME=/home/verifyssh python3 - <<'PYCATCHUP'
+import importlib.util
+import time
+spec = importlib.util.spec_from_file_location('reader', '/home/verifyssh/ai-switch-reader.py')
+reader = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(reader)
+provider, sid = reader.host_switch_follow('c001c001-2538-4000-8000-000000002538')
+path = reader.host_paths(provider, sid)['history']
+for attempt in range(100):
+    if 'PI_REPLY_PHONE_AFTER_SWITCH_2538' in path.read_text():
+        break
+    time.sleep(0.1)
+assert 'PI_REPLY_PHONE_AFTER_SWITCH_2538' in path.read_text(), 'Host did not archive the reply'
+reader.host_history_append(provider, sid, dict(state=dict(display_history=True)),
+    dict(role='assistant', text='PI_HISTORY_CAUGHT_UP_2569', id='fixture-history-barrier-2569'))
+PYCATCHUP
+wait_for_text PI_HISTORY_CAUGHT_UP_2569
 shot ai-switch-reply
 tap_desc 'Session actions'
 tap_text 'Switch AI'
@@ -81,5 +101,69 @@ for phase in ('before', 'picker', 'reattached', 'draft', 'reply', 'current-pi'):
         text=[text for text in texts if text in ('Claude', 'Codex', 'Pi') or '2538' in text or 'Switched AI:' in text])
 root.joinpath('ai-switch-state.json').write_text(json.dumps(states, indent=2) + '\n')
 PYUI
+adb shell input keyevent KEYCODE_BACK
+fill 'Message verify-session' PHONE_STREAM_2569
+tap_desc 'Send prompt'
+wait_for_text PI_REPLY_PHONE_STREAM_2569
+shot ai-switch-streaming
+fill 'Message verify-session' PHONE_DURING_STREAM_2569
+shot ai-switch-during-stream-draft
+tap_desc 'Send prompt'
+adb shell input keyevent KEYCODE_HOME
+shot ai-switch-background
+adb shell am start -n "$package/dev.multiprompt.companion.MainActivity"
+wait_for_text PI_REPLY_PHONE_DURING_STREAM_2569
+shot ai-switch-resumed
+tap_desc 'Session actions'
+tap_text 'Switch AI'
+wait_for_text Claude
+tap_text Claude
+wait_for_text 'Switched AI: Pi to Claude'
+wait_for_text CLAUDE_HANDOVER_READY_2569
+shot ai-switch-second-handover
+fill 'Message verify-session' PHONE_SECOND_SWITCH_2569
+tap_desc 'Send prompt'
+wait_for_text CLAUDE_REPLY_PHONE_SECOND_SWITCH_2569
+shot ai-switch-second-reply
+sudo cat /home/verifyssh/ai-switch-provider-receipts.jsonl > "$EVIDENCE/ai-switch-provider-receipts.jsonl"
+sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 - > "$EVIDENCE/ai-switch-stress-host.json" <<'PYSTRESSHOST'
+import json
+from pathlib import Path
+import sqlite3
+home = Path('/home/verifyssh')
+root = home / '.local/state/multiprompt'
+receipts = [json.loads(line) for line in (home / 'ai-switch-provider-receipts.jsonl').read_text().splitlines()]
+assert len(receipts) == 6, receipts
+assert [row['provider'] for row in receipts] == ['pi'] * 4 + ['claude'] * 2, receipts
+assert [row['text'] for row in receipts[1:4]] == ['PHONE_AFTER_SWITCH_2538', 'PHONE_STREAM_2569', 'PHONE_DURING_STREAM_2569'], receipts
+assert receipts[5]['text'] == 'PHONE_SECOND_SWITCH_2569', receipts
+assert 'This chat ran on Pi until now and continues on Claude.' in receipts[4]['text'], receipts
+assert receipts[4]['sid'] == receipts[5]['sid'] != receipts[0]['sid'], receipts
+assert not (home / 'ai-switch-wrong-provider.txt').exists()
+with sqlite3.connect(root / 'shared-messages/store.sqlite3') as db:
+    events = [json.loads(raw) for raw, in db.execute('SELECT body FROM message_events WHERE sid=? ORDER BY seq', (receipts[2]['sid'],))]
+    turn = next(event['turn'] for event in events if event.get('kind') == 'turn.started' and event['payload'].get('message_id') == receipts[2]['id'])
+    completed = next(event['at'] for event in events if event.get('kind') == 'text.done' and event.get('turn') == turn)
+    submitted = db.execute('SELECT created FROM shared_messages WHERE id=?', (receipts[3]['id'],)).fetchone()[0] * 1000
+    assert submitted < completed, (submitted, completed)
+configs = [json.loads(path.read_text()) for path in (root / 'agent-host').glob('*.config.json')]
+assert [config['provider'] for config in configs if config['enabled']] == ['claude'], configs
+print(json.dumps(dict(switches=2, followup_submitted_while_streaming=True, submitted=submitted, completed=completed, receipts=receipts[1:4] + receipts[5:])))
+PYSTRESSHOST
+python3 - "$EVIDENCE" <<'PYSTRESSUI'
+import json
+from pathlib import Path
+import sys
+import xml.etree.ElementTree as ET
+root = Path(sys.argv[1])
+state = json.loads((root / 'ai-switch-state.json').read_text())
+for phase, reply in (('streaming', 'PI_REPLY_PHONE_STREAM_2569'), ('resumed', 'PI_REPLY_PHONE_DURING_STREAM_2569'), ('second-handover', 'CLAUDE_HANDOVER_READY_2569'), ('second-reply', 'CLAUDE_REPLY_PHONE_SECOND_SWITCH_2569')):
+    file, = root.glob(f'[0-9][0-9]-ai-switch-{phase}.xml')
+    texts = [node.get('text', '') for node in ET.parse(file).getroot().iter('node')]
+    assert texts.count(reply) == 1, f'AI_SWITCH_REPLY_DUPLICATE: {reply} observed {texts.count(reply)}'
+    state[phase] = dict(xml=file.name, reply=reply, count=texts.count(reply))
+(root / 'ai-switch-state.json').write_text(json.dumps(state, indent=2) + '\n')
+PYSTRESSUI
 printf 'AI_SWITCH_CLAUDE_TO_PI_AND_SEND_OK\n'
+printf 'AI_SWITCH_TWICE_STREAM_SEND_BACKGROUND_OK\n'
 exit 0
