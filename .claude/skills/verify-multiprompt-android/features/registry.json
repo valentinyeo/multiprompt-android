@@ -1,6 +1,24 @@
 {
   "smoke": "native-skills.md",
   "journeys": {
+    "ai-switch.md": {
+      "name": "Switch AI",
+      "description": "Claude-to-Pi handover, reattached chat, and a new phone message with independent provider receipts.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "ai.switch"
+      ],
+      "evidence": {
+        "ai-switch-state.json": 3500,
+        "ai-switch-host.json": 3000
+      }
+    },
     "app-name.md": {
       "name": "App name and update",
       "description": "published signed Android in-app update proof.",
@@ -785,10 +803,10 @@
     },
     "ai.switch": {
       "description": "Switch AI and reattach to the chosen provider.",
-      "journey": null,
+      "journey": "ai-switch.md",
       "sideEffect": true,
       "match": [
-        "switchAi|Switch AI|switchAgent|SwitchAgent"
+        "switchAi|SwitchAi|Switch AI|switchAgent|SwitchAgent|host_switch_|HOST_SWITCH_|switch_ai"
       ]
     },
     "pi.model-switch": {
