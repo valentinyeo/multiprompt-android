@@ -57,10 +57,14 @@ sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-native-skills-work/a1b
 python3 - "$EVIDENCE" <<'PYPILLS'
 import json
 from pathlib import Path
+import re
 import sys
 root = Path(sys.argv[1])
 expected = ['Please /review-native this', 'Keep this']
-assert root.joinpath('skill-pills-receipts.txt').read_text().splitlines() == ['VERIFY_RECEIVED:' + text for text in expected]
+receipts = root.joinpath('skill-pills-receipts.txt').read_text().splitlines()
+markers = [line for line in receipts if re.fullmatch(r'VERIFY_RECEIVED:\[mp:[0-9a-f]{16}\]', line)]
+assert len(markers) == 2 and len(set(markers)) == 2, markers
+assert [line for line in receipts if line not in markers] == ['VERIFY_RECEIVED:' + text for text in expected]
 turns = [json.loads(line) for line in root.joinpath('skill-pills-transcript.jsonl').read_text().splitlines()]
 assert [turn['message']['content'] for turn in turns if turn['type'] == 'user'] == ['VERIFY_READY_528', *expected]
 assert 'BODY_MUST_NOT_BE_INJECTED' not in root.joinpath('skill-pills-transcript.jsonl').read_text()

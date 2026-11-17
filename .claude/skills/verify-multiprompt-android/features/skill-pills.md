@@ -16,6 +16,6 @@ Dispatch `verify.yml` with `feature=skill-pills.md`. The fresh GitHub emulator i
 
 Every step retains a PNG and UI XML. `skill-pills-state.json` records exact observed text, screenshots and visual assertions. The screenshot check looks for paired horizontal pill-outline strokes inside the composer, excluding the field border. It also checks the sent pill's own bounds. Its tests reject plain slash text without a pill, a surviving outline after removal, and a pill outside the sent message.
 
-`skill-pills-receipts.txt` must contain exactly the two messages above. `skill-pills-transcript.jsonl` independently confirms the native user turns, with no injected skill body. The registry supplies action, UI-state and receipt citation hints. The picker must schedule this journey for matching skill-pill changes and changes to this recipe, even when the model omits it.
+`skill-pills-receipts.txt` must contain exactly the two messages above and two distinct phone correlation markers. The console retains those transport lines raw without turning metadata into extra chat replies. `skill-pills-transcript.jsonl` independently confirms the native user turns, with no injected skill body. The registry supplies action, UI-state and receipt citation hints. The picker must schedule this journey for matching skill-pill changes and changes to this recipe, even when the model omits it.
 
 Live provider execution, account sync, signed releases, multiline pills and multiple simultaneous pills are outside this recipe.
