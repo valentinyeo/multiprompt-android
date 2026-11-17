@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const proof = require('../.github/scripts/pstack-verifier/break-it.cjs');
 const verifier = require('../.github/scripts/pstack-verifier/verifier.cjs');
 
@@ -74,6 +75,32 @@ test('repro-first success and a model PASS cannot override broken or missing str
   assert.ok(passed.notes.some(line => line.includes('break-it/stream-send.txt')));
   fs.rmSync(path.join(fixture.dir, 'rotate.png'));
   assert.equal(verifier.applyRules({ ...options, stressProof: fixture.inspect() }).verdict, 'FAIL');
+});
+
+test('draft readback survives lost focus without relying on an empty-field placeholder', t => {
+  for (const observed of ['PHONE_AFTER_SWITCH_2538', '']) {
+    const fixture = retained(t);
+    const script = `
+      source tools/android-break-it/drive.sh
+      scripts="$PWD/.claude/skills/verify-multiprompt-android/scripts"
+      focused=false
+      dump_ui() {
+        printf '<hierarchy><node package="dev.multiprompt.companion.debug" class="android.widget.EditText" text="%s" content-desc="Message verify-session" focused="%s" bounds="[0,0][100,100]"/></hierarchy>' "$OBSERVED" "$focused" > "$EVIDENCE/current.xml"
+      }
+      select_node() { dump_ui; python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "$1" "$2"; }
+      tap_node() { focused=true; }
+      adb() { :; }
+      break_it_require_draft 'Message verify-session' PHONE_AFTER_SWITCH_2538
+    `;
+    const run = spawnSync('bash', ['-euo', 'pipefail', '-c', script], { cwd: path.join(__dirname, '..'), env: { ...process.env, EVIDENCE: fixture.dir, OBSERVED: observed }, encoding: 'utf8' });
+    if (observed) {
+      assert.equal(run.status, 0, run.stderr);
+      assert.match(run.stdout, /FIELD_VALUE_VERIFIED/);
+    } else {
+      assert.notEqual(run.status, 0);
+      assert.match(run.stderr, /expected 'PHONE_AFTER_SWITCH_2538'/);
+    }
+  }
 });
 
 test('verification tooling is not an Android repair merely because its ticket mentions bugs', () => {

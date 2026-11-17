@@ -45,6 +45,8 @@ jobs:
             .github/scripts
             .claude/skills/verify-multiprompt-android/features
             tools/android-break-it.test.js
+            tools/android-break-it
+            .claude/skills/verify-multiprompt-android/scripts/ui.py
             tools/pstack-verifier.test.js
             tools/pstack-verifier-eval.test.js
             tools/feature-coverage.test.js

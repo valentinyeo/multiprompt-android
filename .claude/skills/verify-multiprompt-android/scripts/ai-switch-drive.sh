@@ -111,6 +111,10 @@ for phase in ('before', 'picker', 'reattached', 'draft', 'reply', 'current-pi'):
 root.joinpath('ai-switch-state.json').write_text(json.dumps(states, indent=2) + '\n')
 PYUI
 adb shell input keyevent KEYCODE_BACK
+if [[ "${BREAK_IT_MODE:-}" == true ]]; then
+    break_it_active=stream-send
+    printf '::group::Break-it 5/5 Send while a reply streams\n'
+fi
 sudo -u verifyssh touch /home/verifyssh/ai-switch-hold-stream-2569
 fill 'Message verify-session' PHONE_STREAM_2569
 tap_desc 'Send prompt'
