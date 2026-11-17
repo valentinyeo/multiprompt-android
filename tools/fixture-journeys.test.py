@@ -53,6 +53,13 @@ class FixtureJourneyTest(unittest.TestCase):
                 configs = [json.loads(path.read_text()) for path in (home / '.local/state/multiprompt/agent-host').glob('*.config.json')]
                 self.assertEqual(1, len(configs))
                 self.assertEqual(('claude', fixture.SID, 'verify-session', True), tuple(configs[0][key] for key in ('provider', 'sid', 'tmux', 'enabled')))
+                reader = load('ai_switch_reader', ROOT / 'app/src/main/assets/chat_history_reader.py')
+                with patch.object(reader, 'HOME', home), patch.object(reader, 'host_owned', return_value=False), patch.object(reader, 'host_start', return_value=dict(status='started')):
+                    switched = reader.host_switch_ai('claude', fixture.SID, 'pi')
+                    self.assertEqual('switched', switched['status'], switched)
+                    history = reader.host_paths('pi', switched['sid'])['history'].read_text()
+                    self.assertIn('Switched AI: Claude to Pi', history)
+                    self.assertIn('CLAUDE_BEFORE_SWITCH_2538', history)
             finally:
                 os.chdir(previous)
                 subprocess.run(['sudo', 'chown', '-R', f'{os.getuid()}:{os.getgid()}', str(home)], check=True)
