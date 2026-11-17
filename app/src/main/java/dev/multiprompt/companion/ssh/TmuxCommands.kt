@@ -369,16 +369,17 @@ object TmuxCommands {
         } else {
             "printf 'tmux session is no longer available\\n' >&2; exit 1; "
         }
-        return "if ! tmux has-session -t $session 2>/dev/null; then " +
+        return "trap 'exit 0' HUP INT TERM PIPE; " +
+            "if ! tmux has-session -t $session 2>/dev/null; then " +
             missing + "fi; " +
             "mp_snapshot=\$(mktemp) || exit 2; " +
-            "trap 'rm -f \"\$mp_snapshot\"' EXIT HUP INT TERM; " +
+            "trap 'rm -f \"\$mp_snapshot\"' EXIT; " +
             "mp_previous=''; " +
             "if command -v gzip >/dev/null 2>&1 && command -v base64 >/dev/null 2>&1; " +
             "then mp_packed=1; else mp_packed=0; fi; " +
             "while tmux has-session -t $session 2>/dev/null; do " +
             "mp_alternate=\$(tmux display-message -p -t $target '#{alternate_on}' 2>/dev/null); " +
-            "printf '${ALT_PREFIX}%s\\n' \"\$mp_alternate\"; " +
+            "printf '${ALT_PREFIX}%s\\n' \"\$mp_alternate\" || exit; " +
             "if [ \"\$(tmux display-message -p -t $target '#{pane_in_mode}' 2>/dev/null)\" = 1 ]; " +
             "then sleep 1; continue; fi; " +
             "{ ${captureCommand(target)} ; } 2>/dev/null | " +

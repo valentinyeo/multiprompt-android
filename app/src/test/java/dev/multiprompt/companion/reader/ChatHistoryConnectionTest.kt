@@ -40,8 +40,9 @@ class ChatHistoryConnectionTest {
         val key = listOf(host.id, host.hostname, host.port.toString(), host.username,
             identity.agent.name, identity.tmux, identity.cwd).joinToString("\u0000")
         cache.save(key, history)
-        ChatHistoryConnection(repository(), host, identity, byteArrayOf(), cache).use { connection ->
+        ChatHistoryConnection(repository(), host, identity, byteArrayOf(), cache, pollGate = ChatPollGate()).use { connection ->
             assertFalse(connection.state.value.loaded)
+            connection.pollGate.acquire()
             connection.start()
             val failed = withTimeout(10_000L) { connection.state.first { it.retrying } }
             assertTrue(failed.loaded)
@@ -253,8 +254,8 @@ class ChatHistoryConnectionTest {
         val fake = FakeHost().apply { hangSnapshot = true }
         ChatHistoryConnection(repository(), host, ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd"),
             byteArrayOf(), ChatHistoryCache(temporary.newFolder()), gate = MessageGate(),
-            connectedExchange = { fake.connect(it) }, stallMillis = 500L).use { chat ->
-            chat.select(true)
+            connectedExchange = { fake.connect(it) }, stallMillis = 500L, pollGate = ChatPollGate()).use { chat ->
+            chat.pollGate.acquire()
             chat.start()
             val loaded = withTimeout(5_000L) { chat.state.first { it.loaded } }
             assertEquals("question", loaded.history.rows.single().text)
@@ -273,8 +274,8 @@ class ChatHistoryConnectionTest {
     fun failedEngineHandshakeRetriesInsteadOfDisablingMessagingForTheConnection(): Unit = runBlocking {
         val fake = FakeHost().apply { rejectEngine = true }
         ChatHistoryConnection(repository(), host, ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd"),
-            byteArrayOf(), ChatHistoryCache(temporary.newFolder()), gate = MessageGate(), connectedExchange = { fake.connect(it) }).use { chat ->
-            chat.select(true)
+            byteArrayOf(), ChatHistoryCache(temporary.newFolder()), gate = MessageGate(), connectedExchange = { fake.connect(it) }, pollGate = ChatPollGate()).use { chat ->
+            chat.pollGate.acquire()
             chat.start()
             val failed = withTimeout(5_000L) { chat.state.first { it.retrying } }
             assertTrue(failed.loaded)
@@ -289,16 +290,40 @@ class ChatHistoryConnectionTest {
     }
 
     @Test
+    fun automaticReaderNudgeDoesNotInterruptAHealthyHistoryConnection(): Unit = runBlocking {
+        val fake = FakeHost()
+        val attempts = java.util.concurrent.atomic.AtomicInteger()
+        val cache = ChatHistoryCache(temporary.newFolder())
+        SessionReaderConnection(repository(), host, "tmux", AgentKind.CLAUDE, byteArrayOf(), cache).use { reader ->
+            val chat = ChatHistoryConnection(repository(), host, ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd"),
+                byteArrayOf(), cache, gate = MessageGate(), connectedExchange = { block ->
+                    if (attempts.incrementAndGet() > 1) kotlinx.coroutines.awaitCancellation()
+                    fake.connect(block)
+                }, pollGate = ReflectionHelpers.getField<ChatPollGate>(reader, "pollGate"))
+            ReflectionHelpers.setField(reader, "historyConnection", chat)
+            reader.nudge()
+            reader.observe()
+            chat.start()
+            withTimeout(5_000L) { chat.state.first { it.ready } }
+            reader.nudge()
+            assertNull(withTimeoutOrNull(1_000L) { chat.state.first { it.connectionError != null } })
+            assertTrue(chat.state.value.ready)
+            assertEquals(1, attempts.get())
+        }
+    }
+
+    @Test
     fun readerFlushesWaitingMessagesAfterInitialFailureAndAfterAnotherDroppedLink(): Unit = runBlocking {
         val fake = FakeHost().apply { online = false }
         val cache = ChatHistoryCache(temporary.newFolder())
         val preferences = RuntimeEnvironment.getApplication().getSharedPreferences("pending-${java.util.UUID.randomUUID()}", 0)
-        val chat = ChatHistoryConnection(repository(), host, ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd"),
-            byteArrayOf(), cache, journal = MessageJournal(preferences), gate = MessageGate(), connectedExchange = { fake.connect(it) })
         SessionReaderConnection(repository(), host, "tmux", AgentKind.CLAUDE, byteArrayOf(), cache).use { reader ->
+            val chat = ChatHistoryConnection(repository(), host, ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd"),
+                byteArrayOf(), cache, journal = MessageJournal(preferences), gate = MessageGate(), connectedExchange = { fake.connect(it) },
+                pollGate = ReflectionHelpers.getField<ChatPollGate>(reader, "pollGate"))
             ReflectionHelpers.setField(reader, "historyConnection", chat)
             ReflectionHelpers.getField<MutableStateFlow<ChatHistoryConnection?>>(reader, "histories").value = chat
-            reader.select(true)
+            reader.observe()
             reader.start()
             chat.start()
             for (text in listOf("/clear", "after dropped link")) {
@@ -324,9 +349,9 @@ class ChatHistoryConnectionTest {
         val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd")
         val fake = FakeHost().apply { events = List(5_000) { hostEvent("host.status", JSONObject().put("state", "running")) } + hostEvent("turn.started") }
         val chat = ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()),
-            gate = MessageGate(), connectedExchange = { block -> fake.connect(block) })
+            gate = MessageGate(), connectedExchange = { block -> fake.connect(block) }, pollGate = ChatPollGate())
         chat.use {
-            chat.select(true)
+            chat.pollGate.acquire()
             chat.start()
             withTimeout(10_000L) { chat.state.first { it.replica?.host?.running == true } }
             assertEquals(5_001L - ChatHistoryConnection.HOST_REPLAY_TAIL, fake.afters.first())
@@ -338,9 +363,9 @@ class ChatHistoryConnectionTest {
         val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd")
         val fake = FakeHost().apply { events = listOf(hostEvent("turn.started")); dropAt = 2 }
         val chat = ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()),
-            gate = MessageGate(), connectedExchange = { block -> fake.connect(block) })
+            gate = MessageGate(), connectedExchange = { block -> fake.connect(block) }, pollGate = ChatPollGate())
         chat.use {
-            chat.select(true)
+            chat.pollGate.acquire()
             chat.start()
             withTimeout(15_000L) { chat.state.first { it.replica?.host?.running == true } }
             assertEquals(listOf(0L), fake.afters.filter { it == 0L })
@@ -353,9 +378,9 @@ class ChatHistoryConnectionTest {
         val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd")
         val fake = FakeHost().apply { events = listOf(hostEvent("turn.started")); hangAt = 2 }
         val chat = ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()),
-            gate = MessageGate(), connectedExchange = { block -> fake.connect(block) }, stallMillis = 1_000L)
+            gate = MessageGate(), connectedExchange = { block -> fake.connect(block) }, stallMillis = 1_000L, pollGate = ChatPollGate())
         chat.use {
-            chat.select(true)
+            chat.pollGate.acquire()
             chat.start()
             withTimeout(10_000L) { chat.state.first { it.retrying } }
             withTimeout(15_000L) { chat.state.first { !it.retrying && it.replica?.host?.running == true && fake.afters.size > 2 } }
@@ -368,9 +393,9 @@ class ChatHistoryConnectionTest {
         val fake = FakeHost().apply { events = listOf(hostEvent("turn.started"),
             hostEvent("approval.request", JSONObject().put("request_id", "req_1").put("tool", "Bash").put("title", "Run tests"))) }
         val chat = ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()),
-            gate = MessageGate(), connectedExchange = { block -> fake.connect(block) })
+            gate = MessageGate(), connectedExchange = { block -> fake.connect(block) }, pollGate = ChatPollGate())
         chat.use {
-            chat.select(true)
+            chat.pollGate.acquire()
             chat.start()
             withTimeout(10_000L) { chat.state.first { it.replica?.host?.request?.id == "req_1" } }
             assertTrue(chat.interruptHost())
@@ -384,10 +409,10 @@ class ChatHistoryConnectionTest {
         val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd")
         val fake = FakeHost().apply { events = listOf(hostEvent("turn.started")) }
         val chat = ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()),
-            gate = MessageGate(), connectedExchange = { block -> fake.connect(block) })
+            gate = MessageGate(), connectedExchange = { block -> fake.connect(block) }, pollGate = ChatPollGate())
         chat.use {
             assertFalse(chat.interruptHost())
-            chat.select(true)
+            chat.pollGate.acquire()
             chat.start()
             withTimeout(10_000L) { chat.state.first { it.replica?.host?.running == true } }
             var fellBack = false
@@ -406,14 +431,14 @@ class ChatHistoryConnectionTest {
         val fake = FakeHost()
         val other = FakeHost()
         val visible = ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()),
-            gate = gate, connectedExchange = { block -> fake.connect(block) })
+            gate = gate, connectedExchange = { block -> fake.connect(block) }, pollGate = ChatPollGate())
         val second = ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()),
-            gate = gate, connectedExchange = { block -> other.connect(block) })
+            gate = gate, connectedExchange = { block -> other.connect(block) }, pollGate = ChatPollGate())
         visible.use {
-            visible.select(true)
+            visible.pollGate.acquire()
             visible.start()
             withTimeout(10_000L) { visible.state.first { it.engine != null && it.history.rows.size == 1 } }
-            second.select(true)
+            second.pollGate.acquire()
             second.start()
             withTimeout(10_000L) { second.state.first { it.engine != null && it.history.rows.size == 1 } }
             second.close()
@@ -428,21 +453,49 @@ class ChatHistoryConnectionTest {
         }
     }
 
+    @Test
+    fun closingASecondObserverKeepsPublishingAndLastCloseStopsAllHistoryRequests() = runBlocking {
+        val identity = ChatHistoryProtocol.Identity(AgentKind.HAX, "tmux", "/cwd")
+        val fake = FakeHost("codex")
+        val gate = ChatPollGate()
+        val first = gate.acquire()
+        val second = gate.acquire()
+        val chat = ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()),
+            gate = MessageGate(), connectedExchange = { block -> fake.connect(block) }, pollGate = gate)
+        chat.use {
+            chat.start()
+            withTimeout(10_000L) { chat.state.first { it.history.rows.size == 1 } }
+            second.close()
+            fake.answered = true
+            chat.nearTop(true)
+            val shown = withTimeout(5_000L) { chat.state.first { it.history.rows.size == 2 } }
+            assertEquals(listOf("question", "answer"), shown.history.rows.map { it.text })
+            first.close()
+            delay(300L)
+            val settled = fake.calls.get()
+            delay(3_000L)
+            assertEquals("HIDDEN_READER_IO: history request without an active lease", settled, fake.calls.get())
+            gate.acquire().use {
+                withTimeout(1_000L) { while (fake.calls.get() == settled) delay(5L) }
+            }
+        }
+    }
+
     private fun hiddenThenOpened(agent: AgentKind, wireAgent: String): Unit = runBlocking {
         val identity = ChatHistoryProtocol.Identity(agent, "tmux", "/cwd")
         val fake = FakeHost(wireAgent)
         val chat = ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()),
-            gate = MessageGate(), connectedExchange = { block -> fake.connect(block) })
+            gate = MessageGate(), connectedExchange = { block -> fake.connect(block) }, pollGate = ChatPollGate())
         chat.use {
             chat.start()
             delay(10_000L)
-            assertEquals("hidden $agent chat polled", 0, fake.polls.get())
+            assertEquals("hidden $agent chat opened a history stream", 0, fake.calls.get())
             val opened = System.nanoTime()
-            chat.select(true)
+            val chatLease = chat.pollGate.acquire()
             withTimeout(5_000L) { while (fake.polls.get() == 0) delay(5L) }
             val waitedMillis = (System.nanoTime() - opened) / 1_000_000L
             assertTrue("opened $agent chat polled after $waitedMillis ms", waitedMillis <= 250L)
-            chat.select(false)
+            chatLease.close()
             delay(300L)
             val settled = fake.polls.get()
             delay(3_000L)

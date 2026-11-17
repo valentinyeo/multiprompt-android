@@ -1,0 +1,28 @@
+{
+  "run": "https://github.com/valentinyeo/multiprompt-android/actions/runs/44054076913",
+  "sha": "773101d341635eebd3a2ba93c2c428d9a0dda613",
+  "files": {
+    "app-source-sha.txt": "773101d341635eebd3a2ba93c2c428d9a0dda613\n",
+    "receipts.txt": "VERIFY_RECEIVED:VERIFY_SENT_528\nVERIFY_ENTER_528\nVERIFY_INTERRUPTED_528\n",
+    "tmux-final.txt": "VERIFY_READY_528\nVERIFY_SENT_528\nVERIFY_RECEIVED:VERIFY_SENT_528\n\nVERIFY_ENTER_528\n^CVERIFY_INTERRUPTED_528\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+    "12-enter-result.xml": "<node text=\"VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_SENT_528&#10;VERIFY_RECEIVED:VERIFY_SENT_528&#10;&#10;VERIFY_ENTER_528\"/>",
+    "14-interrupt-result.xml": "<node text=\"VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_READY_528&#10;VERIFY_SENT_528&#10;VERIFY_RECEIVED:VERIFY_SENT_528&#10;&#10;VERIFY_ENTER_528&#10;^CVERIFY_INTERRUPTED_528\"/>",
+    "driver-transcript.txt": "+ tap_desc 'Send prompt'\n+ tap_text 'Enter / approve'\n+ tap_text 'Interrupt session'\n"
+  },
+  "coverage": {
+    "outcome": "reader.send-enter-interrupt",
+    "journey": "session-reader.md",
+    "action": {
+      "file": "driver-transcript.txt",
+      "quote": "+ tap_text 'Interrupt session'"
+    },
+    "result": {
+      "file": "14-interrupt-result.xml",
+      "quote": "VERIFY_INTERRUPTED_528"
+    },
+    "sideEffect": {
+      "file": "receipts.txt",
+      "quote": "VERIFY_RECEIVED:VERIFY_SENT_528\nVERIFY_ENTER_528\nVERIFY_INTERRUPTED_528"
+    }
+  }
+}
