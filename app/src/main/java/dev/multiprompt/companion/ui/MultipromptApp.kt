@@ -603,6 +603,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onSetMuted = { tab, value -> viewModel.editAccountLayout { it.setMuted(tab.identity, value) } },
                     onRefresh = viewModel::refresh,
                     onRefreshRooms = { viewModel.refreshRooms() },
+                    onRestartIdleChats = viewModel::restartIdleChats,
                     onSelectSection = viewModel::select,
                     onReleaseNotes = viewModel::openReleaseNotes,
                     onOpenRoom = viewModel::openRoom,
@@ -1313,6 +1314,7 @@ internal fun SessionsScreen(
     onRenameSession: (TmuxSession, String) -> String?,
     onSetFavorite: (AccountTab, Boolean) -> Unit,
     onRefresh: () -> Unit,
+    onRestartIdleChats: (((String) -> Unit) -> Unit)? = null,
     onSelectSection: (AppSection) -> Unit,
     onReleaseNotes: () -> Unit = { onSelectSection(AppSection.UPDATE) },
     onSetMuted: (AccountTab, Boolean) -> Unit = { _, _ -> },
@@ -2120,6 +2122,13 @@ internal fun SessionsScreen(
                             onRefresh = {
                                 onRefresh()
                                 onRefreshRooms()
+                            },
+                            onRestartIdleChats = onRestartIdleChats?.let { restart ->
+                                {
+                                    restart { message ->
+                                        android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+                                    }
+                                }
                             },
                             onAiUsage = onShowAiUsage,
                             onReleaseNotes = onReleaseNotes,
@@ -4089,6 +4098,20 @@ internal fun ReaderScreen(
                                                 context,
                                                 if (sent) dev.multiprompt.companion.reader.FreshStart.REQUESTED else "Fresh start is unavailable",
                                                 android.widget.Toast.LENGTH_SHORT,
+                                            ).show()
+                                        },
+                                    )
+                                }
+                                if (dev.multiprompt.companion.reader.HostRestart.supported(ChatHistoryProtocol.hostedProvider(session.agent, session.hostSessionId), session.hostSessionId)) {
+                                    KitMenuRow(
+                                        label = dev.multiprompt.companion.reader.HostRestart.LABEL,
+                                        onClick = {
+                                            menuExpanded = false
+                                            val sent = connection.restartHost()
+                                            android.widget.Toast.makeText(
+                                                context,
+                                                if (sent) dev.multiprompt.companion.reader.HostRestart.REQUESTED else "Restart is unavailable",
+                                                android.widget.Toast.LENGTH_LONG,
                                             ).show()
                                         },
                                     )

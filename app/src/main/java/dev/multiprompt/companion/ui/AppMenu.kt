@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import dev.multiprompt.companion.BuildConfig
+import dev.multiprompt.companion.reader.HostRestart
 
 @Composable
 internal fun ColumnScope.AppMenuItems(
@@ -54,6 +55,7 @@ internal fun InboxOverflowMenu(
     onRefresh: () -> Unit,
     onAiUsage: () -> Unit = {},
     onReleaseNotes: () -> Unit = {},
+    onRestartIdleChats: (() -> Unit)? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
@@ -93,6 +95,15 @@ internal fun InboxOverflowMenu(
                     onRefresh()
                 },
             )
+            if (onRestartIdleChats != null) {
+                KitMenuRow(
+                    label = HostRestart.ALL_LABEL,
+                    onClick = {
+                        expanded = false
+                        onRestartIdleChats()
+                    },
+                )
+            }
             KitMenuRow(
                 label = "AI usage",
                 onClick = {

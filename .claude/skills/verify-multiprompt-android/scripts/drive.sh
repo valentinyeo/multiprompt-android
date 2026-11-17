@@ -837,6 +837,55 @@ if [[ "$feature" == session-drafts.md ]]; then
     printf 'INBOX_DRAFT_LABEL_OK\n'
     exit 0
 fi
+if [[ "$feature" == chat-restart.md ]]; then
+    proof="$scripts/restart-proof.py"
+    if ! sudo -u verifyssh python3 "$proof" absent; then
+        printf 'Restart file existed before the menu tap\n' >&2
+        exit 1
+    fi
+    stamp=$(python3 -c 'import time; print(f"{time.time():.3f}")')
+    tap_desc 'Session list actions'
+    wait_for_text 'Restart all idle chats'
+    shot restart-idle-menu
+    tap_text 'Restart all idle chats'
+    wrote=0
+    for attempt in {1..40}; do
+        if sudo -u verifyssh python3 "$proof" written "$stamp"; then
+            wrote=1
+            break
+        fi
+        sleep 1
+    done
+    [[ "$wrote" == 1 ]]
+    sudo -u verifyssh python3 "$proof" show > "$EVIDENCE/idle-restart.json"
+    sleep 4
+    dump_ui
+    python3 "$proof" clear-ui "$EVIDENCE/current.xml" verify-session
+    shot restart-idle-done
+    previous=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["at"])' "$EVIDENCE/idle-restart.json")
+    tap_text verify-session
+    wait_for_text 'Message verify-session'
+    tap_desc 'Session actions'
+    wait_for_text 'Restart on newest version'
+    shot restart-menu
+    wrote=0
+    for attempt in {1..40}; do
+        if sudo -u verifyssh python3 "$proof" newer "$previous"; then
+            wrote=1
+            break
+        fi
+        sleep 1
+    done
+    [[ "$wrote" == 1 ]]
+    sudo -u verifyssh python3 "$proof" show > "$EVIDENCE/chat-restart.json"
+    sleep 6
+    dump_ui
+    python3 "$proof" clear-ui "$EVIDENCE/current.xml" 'Message verify-session'
+    shot restart-done
+    sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
+    printf 'CHAT_RESTART_OK\n'
+    exit 0
+fi
 if [[ "$feature" == copy-chat-id.md ]]; then
     hosted_id=$(sudo -u verifyssh tmux show-options -t verify-session -v @mp_host_sid 2>/dev/null | tr -d '\r' || true)
     [[ "$hosted_id" == copy-chat-id-2371 ]]

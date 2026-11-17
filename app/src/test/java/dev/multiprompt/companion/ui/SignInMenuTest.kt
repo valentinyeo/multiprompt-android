@@ -56,4 +56,30 @@ class SignInMenuTest {
         compose.onNodeWithTag("app-version").assertDoesNotExist()
         compose.runOnIdle { assertEquals(1, calls) }
     }
+
+    @Test fun restartAllIdleRowIsHiddenUntilItIsWired() {
+        compose.setContent {
+            MaterialTheme {
+                InboxOverflowMenu(onSettings = {}, onArrangeSplits = {}, onNewWorkspace = {}, onRefresh = {})
+            }
+        }
+        compose.onNodeWithContentDescription("Session list actions").performClick()
+        compose.onNodeWithText("Restart all idle chats").assertDoesNotExist()
+    }
+
+    @Test fun restartAllIdleRowAsksOnceAndCloses() {
+        var calls = 0
+        compose.setContent {
+            MaterialTheme {
+                InboxOverflowMenu(
+                    onSettings = {}, onArrangeSplits = {}, onNewWorkspace = {}, onRefresh = {},
+                    onRestartIdleChats = { calls++ },
+                )
+            }
+        }
+        compose.onNodeWithContentDescription("Session list actions").performClick()
+        compose.onNodeWithText("Restart all idle chats").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithText("Restart all idle chats").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(1, calls) }
+    }
 }

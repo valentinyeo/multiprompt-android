@@ -37,6 +37,7 @@ import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.reader.ChatHistoryPrefetch
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
+import dev.multiprompt.companion.reader.HostRestart
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.reader.SwitchAi
@@ -1426,6 +1427,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
         }
         return null
+    }
+
+    fun restartIdleChats(onDone: (String) -> Unit) {
+        val current = _state.value
+        val targets = current.sessions
+            .filter { HostRestart.supported(ChatHistoryProtocol.hostedProvider(it.agent, it.hostSessionId), it.hostSessionId) }
+            .map { it.hostId }
+            .distinct()
+            .mapNotNull { id -> current.hosts.firstOrNull { it.id == id } }
+        if (targets.isEmpty()) {
+            onDone(HostRestart.NO_CHATS)
+            return
+        }
+        viewModelScope.launch {
+            var total = HostRestart.Counts()
+            for (host in targets) {
+                total += try {
+                    ssh.restartIdleChats(host, app.chatHistoryScript)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Throwable) {
+                    HostRestart.Counts(unanswered = 1)
+                }
+            }
+            onDone(HostRestart.summary(total))
+        }
     }
 
     fun readerFontScale(session: TmuxSession): Float = sessionReads.fontScale(session)
