@@ -3,7 +3,13 @@ name: Android name and in-app update
 on:
   pull_request:
     paths:
-      - 'app/**'
+      - 'app/src/main/**'
+      - 'app/src/debug/**'
+      - 'app/src/m3/**'
+      - 'app/src/release/**'
+      - 'app/*.gradle.kts'
+      - 'app/proguard-rules.pro'
+      - 'app/src/androidTest/AndroidManifest.xml'
       - '.github/actions/android-proof/**'
       - 'gradle.properties'
       - '*.gradle.kts'
@@ -13,7 +19,6 @@ on:
       - 'tools/app-name/**'
       - 'tools/release-choices/**'
       - '.github/workflows/app-name.yml'
-      - '.claude/skills/verify-multiprompt-android/features/**'
   schedule:
     - cron: '43 4 * * *'
   workflow_dispatch:
