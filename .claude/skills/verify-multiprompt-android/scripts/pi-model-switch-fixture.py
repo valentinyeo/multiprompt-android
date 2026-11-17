@@ -52,7 +52,9 @@ def pi():
     assert '--mode' in sys.argv and sys.argv[sys.argv.index('--mode') + 1] == 'rpc'
     sid = sys.argv[sys.argv.index('--session-id') + 1]
     assert sid == SID
-    model = INITIAL
+    provider = sys.argv[sys.argv.index('--provider') + 1]
+    model = provider + '/' + sys.argv[sys.argv.index('--model') + 1]
+    assert model == INITIAL, model
     directory = HOME / '.pi/agent/sessions' / ('--' + str(CWD).lstrip('/').replace('/', '-') + '--')
     directory.mkdir(parents=True, exist_ok=True)
     transcript = directory / ('2026-01-01_' + sid + '.jsonl')
