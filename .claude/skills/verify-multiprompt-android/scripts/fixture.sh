@@ -160,6 +160,19 @@ if [[ "${VERIFY_FEATURE:-}" == copy-chat-id.md ]]; then
 fi
 sudo -u verifyssh tmux display-message -p '#{pid}' > "$FIXTURE/tmux.pid"
 sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/fixture-start.txt"
+if [[ "${VERIFY_FEATURE:-}" == dictation-cancel.md ]]; then
+    python3 "$(dirname "$0")/deepgram-stand-in.py" 8765 "$FIXTURE/deepgram-stand-in.pid" >> "$EVIDENCE/deepgram-stand-in.log" 2>&1
+    ready=0
+    for _ in {1..50}; do
+        if python3 -c 'import socket; s=socket.create_connection(("127.0.0.1", 8765), 1); s.close()'; then
+            ready=1
+            break
+        fi
+        sleep 0.1
+    done
+    [[ "$ready" == 1 ]]
+    [[ $(cat "$FIXTURE/deepgram-stand-in.pid") =~ ^[0-9]+$ ]]
+fi
 if [[ "${VERIFY_FEATURE:-}" == session-routing.md || "${VERIFY_FEATURE:-}" == session-gestures.md ]]; then
     sudo -u verifyssh tmux new-session -d -s verify-other -x 100 -y 32 'python3 -u /home/verifyssh/console.py /home/verifyssh/other-receipts.txt'
     sudo -u verifyssh tmux set-window-option -t verify-other automatic-rename off

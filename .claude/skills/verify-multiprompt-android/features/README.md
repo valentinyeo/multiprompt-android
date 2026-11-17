@@ -70,6 +70,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `terminal.journey`. Runner: `verify.yml` (debug).
 - [Message identity and replies](chat-identity.md): Phone send receipts, delayed transcript catchup, Fresh start format and reconnect keep each message with its reply once.
   - Outcomes: `chat.identity`. Runner: `verify.yml` (debug). Priority evidence: `projection-receipts-before.json` (2500 characters), `projection-receipts-reconnect.json` (5500 characters), `projection-state-before.json` (500 characters), `projection-state-fresh.json` (500 characters), `projection-state-catchup.json` (500 characters), `projection-state-reconnect.json` (500 characters), `projection-proof.txt` (500 characters).
+- [Cancel dictation](dictation-cancel.md): start a dictation in a chat, cancel it, and the composer stays empty with nothing sent.
+  - Outcomes: `dictation.cancel`. Runner: `verify.yml` (debug).
 
 ## Initial coverage gaps
 

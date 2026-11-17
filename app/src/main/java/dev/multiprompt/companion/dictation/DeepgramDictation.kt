@@ -118,7 +118,7 @@ class DeepgramDictation(
     private suspend fun checkWithDeepgram(key: String): Int? = withContext(Dispatchers.IO) {
         runCatching {
             val request = Request.Builder()
-                .url("https://${DeepgramEndpoint.HOSTS.last()}/v1/listen?model=nova-3")
+                .url(DictationLinks.keyCheckUrl())
                 .header("Authorization", "Token $key")
                 .post(ByteArray(0).toRequestBody("audio/wav".toMediaType()))
                 .build()
@@ -352,7 +352,7 @@ class DeepgramDictation(
 
     private fun openSocket(apiKey: String, hostIndex: Int, stream: Stream) {
         val request = Request.Builder()
-            .url(DeepgramEndpoint.url(hostIndex))
+            .url(DictationLinks.listenUrl(hostIndex))
             .header("Authorization", "Token $apiKey")
             .build()
         val listener = Listener(apiKey, hostIndex)

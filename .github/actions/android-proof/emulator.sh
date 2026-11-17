@@ -29,4 +29,20 @@ mv "$RUNNER_TEMP/android-proof-sdk/emulator" "$ANDROID_HOME/emulator"
 "$ANDROID_HOME/emulator/emulator" -version | tee "$RUNNER_TEMP/android-proof/emulator-version.txt"
 grep -F 'Android emulator version 35.6.11' "$RUNNER_TEMP/android-proof/emulator-version.txt"
 LD_LIBRARY_PATH="$ANDROID_HOME/emulator/lib64:$ANDROID_HOME/emulator/lib64/qt/lib:${LD_LIBRARY_PATH:-}" "$ANDROID_HOME/emulator/qemu/linux-x86_64/qemu-system-x86_64" -version
+if [[ "${VERIFY_FEATURE:-}" == dictation-cancel.md ]]; then
+  avd_root="${ANDROID_AVD_HOME:-${ANDROID_USER_HOME:-$HOME/.android}/avd}"
+  shopt -s nullglob
+  for config in "$avd_root"/*.avd/config.ini; do
+    if grep -q '^hw.audioInput=' "$config"; then
+      sed -i 's/^hw.audioInput=.*/hw.audioInput=yes/' "$config"
+    else
+      printf '\nhw.audioInput=yes\n' >> "$config"
+    fi
+    if grep -q '^hw.audioOutput=' "$config"; then
+      sed -i 's/^hw.audioOutput=.*/hw.audioOutput=yes/' "$config"
+    else
+      printf '\nhw.audioOutput=yes\n' >> "$config"
+    fi
+  done
+fi
 echo PINNED_EMULATOR_READY

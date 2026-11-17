@@ -52,6 +52,9 @@ android {
             manifestPlaceholders["accountRedirectScheme"] = "dev.multiprompt.companion.debug"
             versionNameSuffix = "-debug"
             providers.gradleProperty("accountOrigin").orNull?.let { buildConfigField("String", "ACCOUNT_ORIGIN", "\"$it\"") }
+            val dictationListenUrl = providers.gradleProperty("dictationListenUrl").orNull.orEmpty()
+            require(dictationListenUrl.none { it == '"' || it == '\\' || it == '\n' || it == '\r' })
+            buildConfigField("String", "DICTATION_LISTEN_URL", "\"$dictationListenUrl\"")
         }
         release {
             isMinifyEnabled = true

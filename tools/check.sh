@@ -31,6 +31,8 @@ source_checks() {
   python3 -B tools/account-journey/ui.test.py
   python3 -B tools/check-day-theme-images.test.py
   python3 -B tools/emulator.test.py
+  python3 -B .claude/skills/verify-multiprompt-android/scripts/deepgram-stand-in.test.py
+  python3 -B .claude/skills/verify-multiprompt-android/scripts/dictation-cancel.test.py
   python3 -B tools/startup-time/report.test.py
   python3 -B tools/long-chat/check.test.py
   python3 -B tools/app-name/drive.test.py

@@ -789,6 +789,127 @@ PYINFO
     exit 0
 fi
 
+if [[ "$feature" == dictation-cancel.md ]]; then
+    adb shell pm grant "$package" android.permission.RECORD_AUDIO
+    timeout 5s adb emu avd hostmicon > "$EVIDENCE/microphone.txt" 2>&1 || true
+    blocked=0
+    while read -r ip; do
+        [[ "$ip" =~ ^[0-9A-Fa-f:.]+$ ]] || continue
+        tool=iptables
+        [[ "$ip" == *:* ]] && tool=ip6tables
+        if ! sudo "$tool" -C OUTPUT -d "$ip" -p tcp -j REJECT --reject-with tcp-reset 2>/dev/null; then
+            sudo "$tool" -I OUTPUT -d "$ip" -p tcp -j REJECT --reject-with tcp-reset
+        fi
+        blocked=1
+    done < <(python3 - <<'PY'
+import socket, subprocess
+found = set()
+for host in ("api.deepgram.com", "api.eu.deepgram.com"):
+    try:
+        for item in socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM):
+            found.add(item[4][0])
+    except socket.gaierror:
+        pass
+    try:
+        ping = subprocess.run(["timeout", "5", "adb", "shell", "ping", "-c", "1", "-W", "2", host], capture_output=True, text=True)
+    except OSError:
+        ping = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="")
+    for raw in ping.stdout.replace("(", " ").replace(")", " ").split():
+        token = raw.strip(".,")
+        if token.count(".") == 3 and all(part.isdigit() and int(part) < 256 for part in token.split(".")):
+            found.add(token)
+        elif token.count(":") >= 2 and all(part == "" or all(ch in "0123456789abcdefABCDEF" for ch in part) for part in token.split(":")):
+            found.add(token)
+for ip in sorted(found):
+    print(ip)
+PY
+)
+    [[ "$blocked" == 1 ]]
+    sudo iptables -S OUTPUT > "$EVIDENCE/deepgram-blocked.txt"
+    sudo ip6tables -S OUTPUT >> "$EVIDENCE/deepgram-blocked.txt" || true
+    copy_host_receipts() {
+        if sudo test -f /home/verifyssh/receipts.txt; then
+            sudo cat /home/verifyssh/receipts.txt > "$1"
+        else
+            : > "$1"
+        fi
+    }
+    copy_host_receipts "$EVIDENCE/receipts-before.txt"
+    tap_text verify-session
+    wait_for_text 'Message verify-session'
+    started=0
+    for attempt in {1..30}; do
+        dump_ui || true
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" desc 'Start dictation' >/dev/null 2>&1; then
+            started=1
+            break
+        fi
+        sleep 1
+    done
+    [[ "$started" == 1 ]]
+    shot composer-before
+    python3 "$scripts/dictation-cancel.py" empty "$EVIDENCE/$(printf '%02d' "$step")-composer-before.xml"
+    tap_desc 'Start dictation'
+    wait_for_text 'API key'
+    type_dictation_key() {
+        set +x
+        local key
+        key=$(python3 -c 'import secrets; print(secrets.token_hex(20))')
+        fill 'API key' "$key"
+        unset key
+        set -x
+    }
+    type_dictation_key
+    tap_text 'Save and dictate'
+    cancel_visible=0
+    for attempt in {1..40}; do
+        dump_ui || true
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" desc 'Cancel dictation' >/dev/null 2>&1; then
+            cancel_visible=1
+            break
+        fi
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'Deepgram rejected' >/dev/null 2>&1; then
+            printf 'Deepgram rejected the throwaway value, so dictation did not start\n' >&2
+            exit 1
+        fi
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'not a Deepgram API key' >/dev/null 2>&1; then
+            printf 'The throwaway value was not accepted as a key shape\n' >&2
+            exit 1
+        fi
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'could not be initialized' >/dev/null 2>&1; then
+            printf 'The emulator microphone did not start, so the cancel control never stayed up\n' >&2
+            exit 1
+        fi
+        sleep 1
+    done
+    [[ "$cancel_visible" == 1 ]]
+    shot dictation-bar
+    python3 "$scripts/dictation-cancel.py" bar "$EVIDENCE/$(printf '%02d' "$step")-dictation-bar.xml"
+    tap_desc 'Cancel dictation'
+    wait_for_text 'Message verify-session'
+    cleared=0
+    for attempt in {1..30}; do
+        dump_ui || true
+        if python3 "$scripts/dictation-cancel.py" empty "$EVIDENCE/current.xml"; then
+            cleared=1
+            break
+        fi
+        sleep 1
+    done
+    [[ "$cleared" == 1 ]]
+    shot composer-after-cancel
+    python3 "$scripts/dictation-cancel.py" empty "$EVIDENCE/$(printf '%02d' "$step")-composer-after-cancel.xml"
+    copy_host_receipts "$EVIDENCE/receipts-after.txt"
+    cmp "$EVIDENCE/receipts-before.txt" "$EVIDENCE/receipts-after.txt"
+    if grep -F 'VERIFY_RECEIVED' "$EVIDENCE/receipts-after.txt"; then
+        printf 'Dictation cancel sent text to the host\n' >&2
+        exit 1
+    fi
+    sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
+    printf 'DICTATION_CANCEL_OK\n'
+    exit 0
+fi
+
 if [[ "$feature" == session-drafts.md ]]; then
     wait_for_text 'Inbox preview stays.'
     python3 "$scripts/draft-label.py" absent "$EVIDENCE/current.xml"
