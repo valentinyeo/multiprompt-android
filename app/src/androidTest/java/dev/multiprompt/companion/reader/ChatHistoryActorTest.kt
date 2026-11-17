@@ -7,6 +7,8 @@ import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.model.HostProfile
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -84,6 +86,8 @@ class ChatHistoryActorTest {
         val resetRequested = CompletableDeferred<Unit>()
         var historyPause: CompletableDeferred<Unit>? = null
         val historyPaused = CompletableDeferred<Unit>()
+        var historyCleanup: CompletableDeferred<Unit>? = null
+        val historyCleanupStarted = CompletableDeferred<Unit>()
         var growingEvents = false
         @Volatile var nativeRows: List<JSONObject>? = null
         val nativeDelivered = CompletableDeferred<Unit>()
@@ -226,7 +230,17 @@ class ChatHistoryActorTest {
                     result(JSONObject().put("epoch", epoch).put("seq", 0).put("message", row))
                 }
                 else -> {
-                    historyPause?.let { historyPaused.complete(Unit); it.await() }
+                    historyPause?.let { pause ->
+                        historyPaused.complete(Unit)
+                        try { pause.await() } finally {
+                            historyCleanup?.let { cleanup ->
+                                withContext(NonCancellable) {
+                                    historyCleanupStarted.complete(Unit)
+                                    cleanup.await()
+                                }
+                            }
+                        }
+                    }
                     val wire = "@mp\t$id\thistory\tok\t$sid\t0\t0\t1\t0\t$provider\tchat\t1\t${"a".repeat(64)}\ttail\t0\n${TranscriptProtocol.END}\n"
                     JSONObject().put("id", id).put("wire", wire).toString()
                 }
@@ -315,14 +329,18 @@ class ChatHistoryActorTest {
             owner.nearTop(true)
             withTimeout(10_000) { f.historyPaused.await() }
             f.growingEvents = true
+            f.historyCleanup = CompletableDeferred()
             val old = owner.actionToken()
-            ownerLease.close(); ownerLease = owner.pollGate.acquire()
+            ownerLease.close()
+            withTimeout(10_000) { f.historyCleanupStarted.await() }
+            ownerLease = owner.pollGate.acquire()
             val stale = async(start = CoroutineStart.UNDISPATCHED) { owner.checkStatus(messageId, old) }
             val send = async(start = CoroutineStart.UNDISPATCHED) { owner.submit("must not send") }
             val status = async(start = CoroutineStart.UNDISPATCHED) { owner.checkStatus(messageId) }
             val replay = async(start = CoroutineStart.UNDISPATCHED) { owner.replayUnknown(messageId) }
             val remove = async(start = CoroutineStart.UNDISPATCHED) { owner.dismiss(row) }
             f.historyPause!!.complete(Unit)
+            f.historyCleanup!!.complete(Unit)
             assertEquals("Chat changed", (withTimeout(10_000) { stale.await() } as MessageActionResult.Rejected).reason)
             assertEquals("Chat is catching up", (withTimeout(10_000) { send.await() } as PromptAdmission.Rejected).reason)
             for (command in listOf(status, replay, remove)) {
@@ -335,7 +353,11 @@ class ChatHistoryActorTest {
             assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
             assertEquals(1, f.resetCalls)
             assertTrue(owner.state.value.history.projectMessages(owner.state.value.replica, owner.state.value.unresolved).none { it.text == "hello" })
-        } finally { owner.close() }
+        } finally {
+            f.historyPause?.complete(Unit)
+            f.historyCleanup?.complete(Unit)
+            owner.close()
+        }
     }
 
     @Test fun malformedNativeIdentityKeepsOwnerCursorAndJournalThenAcceptsReplacement() = runBlocking {
