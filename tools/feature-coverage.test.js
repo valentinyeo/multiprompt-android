@@ -125,6 +125,31 @@ test('PR #391 reader lifecycle exposes citable actions, resumed UI and independe
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
+test('PR #391 session-reader citations match multiline UI text and independent receipts verbatim', () => {
+  const fixture = JSON.parse(read('tools/fixtures/feature-coverage/pr-391-session-reader.json'));
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'session-reader-proof-'));
+  const claim = fixture.coverage;
+  try {
+    for (const [name, text] of Object.entries(fixture.files)) fs.writeFileSync(path.join(directory, name), text);
+    const catalog = gate.catalog();
+    const evidence = verifier.journeyEvidence(directory, claim.journey);
+    for (const ref of [claim.action, claim.result, claim.sideEffect]) {
+      assert.ok(catalog.includes(ref.file), `${ref.file} needs an outcome citation`);
+      assert.ok(evidence.includes(ref.quote), ref.file);
+    }
+    for (const marker of ['VERIFY_RECEIVED:VERIFY_SENT_528', 'VERIFY_ENTER_528', 'VERIFY_INTERRUPTED_528']) {
+      assert.ok(catalog.includes(marker), `${marker} needs a literal outcome citation`);
+    }
+    const args = {
+      plan: { product: true, outcomes: [claim.outcome] }, coverage: [claim],
+      directories: { [claim.journey]: directory }, conclusions: { [claim.journey]: 'success' }, sha: fixture.sha,
+    };
+    assert.deepEqual(gate.featureErrors(args).errors, []);
+    args.coverage = [{ ...claim, result: { ...claim.result, quote: 'text="VERIFY_INTERRUPTED_528"' } }];
+    assert.equal(gate.featureErrors(args).errors.length, 1);
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
 test('missing, fabricated, stale, cross-journey and unretained proof fails even with a model PASS', () => {
   const mutations = [
     args => { args.coverage = []; },
