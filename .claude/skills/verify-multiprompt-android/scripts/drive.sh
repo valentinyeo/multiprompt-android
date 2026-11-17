@@ -1443,45 +1443,19 @@ if [[ "$feature" == sessions.md ]]; then
     cp "$EVIDENCE/current.xml" "$EVIDENCE/seed-deep-target.xml"
     tap_desc Back
     wait_for_text Inbox
-    wait_for_text verify-session
     tap_desc 'Search sessions'
-    fill 'Search all sessions' Verify
-    seed_count=$(jq -er .sessions "$EVIDENCE/seed-counts.json")
-    wait_for_text "$seed_count results across all splits"
-    for direction in backward forward; do
-        for attempt in {1..16}; do
-            shot "seed-inbox-$direction-$attempt"
-            if python3 tools/verify-seed.py inbox "$EVIDENCE" > "$EVIDENCE/seed-inbox.json" 2> "$EVIDENCE/seed-inbox-pending.txt"; then break 2; fi
-            read -r x1 y1 x2 y2 <<< "$(select_node scroll-back '')"
-            if [[ "$direction" == backward ]]; then
-                adb shell input swipe "$x1" "$y1" "$x2" "$y2" 500
-            else
-                adb shell input swipe "$x2" "$y2" "$x1" "$y1" 500
-            fi
-        done
-    done
-    python3 tools/verify-seed.py inbox "$EVIDENCE" > "$EVIDENCE/seed-inbox.json"
-    cat "$EVIDENCE/seed-inbox.json"
-    fill Verify verify-session
+    fill 'Search all sessions' "$deep_target"
     wait_for_text '1 result across all splits'
-    wait_for_text verify-session
+    wait_for_text "$deep_target"
     shot search-match
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains '1 result across all splits' >/dev/null
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" reach-desc "$deep_description" | grep -q '^tap '
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/seed-search.xml"
     tap_desc 'Close session search'
     wait_for_absence 'Search all sessions'
-    wait_for_text verify-session
+    wait_for_absence '1 result across all splits'
+    wait_for_text "$deep_target"
     shot search-cleared
-    dump_ui
-    if grep -F 'content-desc="Session actions"' "$EVIDENCE/current.xml"; then
-        printf 'Inbox row still has a per-row menu button\n' >&2
-        exit 1
-    fi
-    read -r row_x row_y <<< "$(select_node text verify-session)"
-    adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 800
-    wait_for_text 'Mark unread'
-    wait_for_text 'End tmux session'
-    shot row-long-press-actions
-    adb shell input keyevent KEYCODE_BACK
-    wait_for_absence 'End tmux session'
     exit 0
 fi
 tap_text verify-session

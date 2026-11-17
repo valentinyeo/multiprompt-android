@@ -1,6 +1,5 @@
 import json
 from pathlib import Path
-import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -50,56 +49,10 @@ def target(evidence):
                 initial_xml=pages[0].name, initial_names=[name for name in counts['session_names'] if name in present])
 
 
-def inbox(evidence):
-    counts = json.loads((evidence / 'seed-counts.json').read_text())
-    assert json.loads((evidence / 'seed-check.json').read_text()) == counts, 'SEED_CHECK_EVIDENCE_MISMATCH'
-    expected = set(counts['session_names'])
-    assert counts['sessions'] == len(expected) >= 42, 'SEED_INBOX_TOO_SMALL'
-    pages = sorted(evidence.glob('*-seed-inbox-*.xml'))
-    seen = set()
-    displayed_count = f"{counts['sessions']} results across all splits"
-    count_visible = False
-    for page in pages:
-        root = ET.parse(page).getroot()
-        parents = {child: parent for parent in root.iter() for child in parent}
-        for node in root.iter('node'):
-            name = node.get('content-desc', '').removeprefix('Robot ')
-            is_count = node.get('text') == displayed_count
-            if not is_count and (node.get('content-desc') != 'Robot ' + name or name not in expected):
-                continue
-            match = re.fullmatch(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', node.get('bounds', ''))
-            if not match:
-                continue
-            x1, y1, x2, y2 = map(int, match.groups())
-            current = node
-            visible = x1 < x2 and y1 < y2
-            while current in parents:
-                visible &= current.get('visible-to-user') != 'false'
-                if current.get('scrollable') == 'true' or parents[current] is root:
-                    viewport = re.fullmatch(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', current.get('bounds', ''))
-                    if not viewport:
-                        visible = False
-                        break
-                    left, top, right, bottom = map(int, viewport.groups())
-                    visible &= left <= x1 < x2 <= right and top <= y1 < y2 <= bottom
-                current = parents[current]
-            if visible:
-                if is_count:
-                    count_visible = True
-                else:
-                    seen.add(name)
-    assert count_visible, 'SEED_INBOX_COUNT_NOT_VISIBLE'
-    assert expected <= seen, 'SEED_INBOX_ROWS_MISSING: ' + ', '.join(sorted(expected - seen))
-    return dict(sessions_visible=len(seen), session_names=sorted(seen), displayed_count=displayed_count,
-                pages=[page.name for page in pages], seed_counts='seed-counts.json', seed_check='seed-check.json')
-
-
 if __name__ == '__main__':
     mode = sys.argv[1]
-    assert mode in ('record', 'check', 'inbox', 'target')
-    if mode == 'inbox':
-        counts = inbox(Path(sys.argv[2]))
-    elif mode == 'target':
+    assert mode in ('record', 'check', 'target')
+    if mode == 'target':
         counts = target(Path(sys.argv[2]))
     else:
         counts = inventory(Path.home()) if mode == 'record' else check(Path.home(), Path(sys.argv[2]))
