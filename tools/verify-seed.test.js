@@ -8,7 +8,8 @@ const { spawnSync } = require('node:child_process');
 const root = path.resolve(__dirname, '..');
 const scripts = path.join(root, '.claude/skills/verify-multiprompt-android/scripts');
 const driver = readFileSync(path.join(scripts, 'drive.sh'), 'utf8');
-const shellFunction = name => driver.match(new RegExp(`^${name}\\(\\) \\{[\\s\\S]*?^\\}`, 'm'))[0];
+const shellFunction = name => driver.match(new RegExp(`^${name}\\(\\) \\{[^\\n]*\\}$`, 'm'))?.[0]
+  || driver.match(new RegExp(`^${name}\\(\\) \\{[\\s\\S]*?^\\}`, 'm'))[0];
 
 for (const content of [null, '{', '{"sessions":400}']) {
   test(`driver rejects ${content === null ? 'missing' : content === '{' ? 'malformed' : 'fabricated'} seed evidence before any adb action`, () => {
@@ -35,20 +36,84 @@ for (const content of [null, '{', '{"sessions":400}']) {
   });
 }
 
-test('an off-screen named target is revealed without opening it', () => {
-  const result = spawnSync('bash', ['-euc', `
+for (const seededName of ['verify-session', 'live-verify-session', 'verify-keep', 'verify-other', 'verify-name', 'codex-native', 'claude-control', 'cl-long-chat']) {
+  const target = seededName === 'live-verify-session' ? 'verify-session' : seededName;
+  test(`finds exact ${seededName} past 41 inbox rows, including after switching readers`, () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'seed-target-'));
+    try {
+      const names = [`${target}-neighbor`, ...Array.from({ length: 40 }, (_, i) => `row-${i}`), target];
+      writeFileSync(path.join(directory, 'seed-counts.json'), JSON.stringify({ session_names: names.map(name => name === target ? seededName : name) }));
+      for (let page = 0; page < 11; page++) {
+        const rows = names.slice(page * 4, page * 4 + 4).map((name, index) => {
+          const bounds = `[20,${300 + index * 120}][1000,${400 + index * 120}]`;
+          return `<node clickable="true" content-desc="Robot ${name === target ? seededName : name}" bounds="${bounds}"><node text="${name}" bounds="${bounds}" /></node>`;
+        }).join('');
+        writeFileSync(path.join(directory, `page-${page}.xml`), `<hierarchy><node package="dev.multiprompt.companion.debug" bounds="[0,0][1080,1920]"><node text="Inbox" bounds="[0,0][1000,100]"/><node scrollable="true" bounds="[0,200][1080,1800]">${rows}</node></node></hierarchy>`);
+      }
+      const lastPage = readFileSync(path.join(directory, 'page-10.xml'), 'utf8');
+      writeFileSync(path.join(directory, 'page-10-query.xml'), lastPage.replace('<node scrollable=', `<node class="android.widget.EditText" text="${target}" bounds="[0,110][1000,190]"/><node scrollable=`));
+      const result = spawnSync('bash', ['-euc', `
+${shellFunction('select_node')}
+${shellFunction('tap_node')}
+${shellFunction('tap_text')}
 ${shellFunction('wait_for_text')}
-select_node() { return 1; }
+dump_ui() { cp "$EVIDENCE/page-$page.xml" "$EVIDENCE/current.xml"; }
 dismiss_system_anr() { :; }
 sleep() { :; }
-python3() { [[ "$*" == *'text Inbox' ]]; }
-tap_node() { [[ "$*" == 'text verify-session reveal' ]]; printf 'NAMED_TARGET_REVEALED\\n'; }
-scripts=unused
-EVIDENCE=unused
-wait_for_text verify-session
-`], { encoding: 'utf8' });
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout.trim(), 'NAMED_TARGET_REVEALED');
+adb() {
+    if [[ "$3" == swipe ]]; then
+        if (( $5 > $7 )); then page=$((page < 10 ? page + 1 : 10)); else page=$((page > 0 ? page - 1 : 0)); fi
+    else
+        printf 'TAPPED_PAGE=%s\\n' "$page"
+    fi
+}
+scripts=${JSON.stringify(scripts)}
+EVIDENCE=${JSON.stringify(directory)}
+page=0
+wait_for_text ${target}
+[[ "$page" == 10 ]]
+cp "$EVIDENCE/page-10.xml" "$EVIDENCE/page-10-original.xml"
+cp "$EVIDENCE/page-10-query.xml" "$EVIDENCE/page-10.xml"
+wait_for_text ${target}
+select_node text ${target} >/dev/null
+select_node desc 'Robot ${seededName}' >/dev/null
+cp "$EVIDENCE/page-10-original.xml" "$EVIDENCE/page-10.xml"
+page=10
+wait_for_text ${target}-neighbor
+[[ "$page" == 0 ]]
+page=0
+tap_text ${target}
+`], { encoding: 'utf8', timeout: 30000 });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout.trim(), 'TAPPED_PAGE=10');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+}
+
+test('gesture proof still requires the exact second session after returning to the inbox', () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'seed-gestures-'));
+  const proof = driver.match(/<<'PYGESTURES'\n([\s\S]*?)\nPYGESTURES/)[1];
+  try {
+    for (const name of ['verify-other-neighbor', 'verify-other']) {
+      writeFileSync(path.join(directory, 'current.xml'), `<hierarchy><node text="Inbox"/><node text="${name}"/></hierarchy>`);
+      writeFileSync(path.join(directory, 'gesture-result.json'), JSON.stringify({ status: 'reader-passed', backToInbox: true, replies: 10, secondSession: false }));
+      const result = spawnSync('python3', ['-I', '-', directory], { input: proof, encoding: 'utf8' });
+      const evidence = JSON.parse(readFileSync(path.join(directory, 'gesture-result.json'), 'utf8'));
+      if (name === 'verify-other') {
+        assert.equal(result.status, 0, result.stderr);
+        assert.equal(evidence.status, 'passed');
+        assert.equal(evidence.secondSession, true);
+      } else {
+        assert.notEqual(result.status, 0);
+        assert.equal(evidence.status, 'reader-passed');
+        assert.equal(evidence.secondSession, false);
+      }
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('reveal uses the existing scroll planner but never taps the row', () => {

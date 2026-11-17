@@ -9,7 +9,7 @@ node "$scripts/../../../../.github/scripts/pstack-verifier/coverage.cjs" journey
 mkdir -p "$EVIDENCE"
 exec > >(tee -a "$EVIDENCE/driver-transcript.txt") 2>&1
 set -x
-sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/verify-seed.py check "$EVIDENCE/seed-counts.json"
+sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/verify-seed.py check - < "$EVIDENCE/seed-counts.json"
 package=${VERIFY_PACKAGE:-dev.multiprompt.companion.debug}
 step=0
 product_checks=0
@@ -119,15 +119,26 @@ if [[ "$feature" == session-routing.md && "$package" == dev.multiprompt.companio
     [[ "$recorder_pid" =~ ^[0-9]+$ ]]
 fi
 select_node() {
+    local mode=$1 name=${2#Robot } value=$2 session=
+    if [[ "$mode" =~ ^(contains|text|desc)$ ]]; then
+        session=$(jq -er --arg name "$name" '.session_names | if index($name) != null then $name elif $name == "verify-session" and index("live-verify-session") != null then "live-verify-session" else empty end' "$EVIDENCE/seed-counts.json") || session=
+        if [[ -n "$session" && "$mode" == contains ]]; then mode=text; fi
+    fi
     dump_ui || return
-    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "$1" "$2"
+    if [[ -n "$session" ]] &&
+        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Inbox >/dev/null 2>&1; then
+        mode=desc
+        value="Robot $session"
+        tap_node "$mode" "$value" reveal || return
+    fi
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "$mode" "$value"
 }
 tap_node() {
     local attempt action x1 y1 x2 y2 direction plan
-    for attempt in {1..18}; do
+    for attempt in {1..24}; do
         dump_ui || return
         direction=forward
-        if (( attempt > 6 )); then direction=backward; fi
+        if (( attempt > 12 )); then direction=backward; fi
         plan=$(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "reach-$1" "$2" "$direction") || return
         read -r action x1 y1 x2 y2 <<< "$plan"
         if [[ "$action" == tap && "${3:-tap}" == reveal ]]; then return; fi
@@ -137,7 +148,7 @@ tap_node() {
             *) return 1 ;;
         esac
     done
-    printf 'JOURNEY_ACTION_UNREACHABLE: %s: not reachable after 18 scrolls in the active container\n' "$2" >&2
+    printf 'JOURNEY_ACTION_UNREACHABLE: %s: not reachable after 24 scrolls in the active container\n' "$2" >&2
     return 1
 }
 tap_text() { tap_node text "$1"; }
@@ -193,10 +204,6 @@ wait_for_text() {
     local attempt
     for attempt in {1..30}; do
         if select_node contains "$1" >/dev/null 2>&1; then return; fi
-        if [[ "$attempt" == 3 && "$1" =~ ^(verify-(session|keep|other|name)|cl-long-chat)$ ]] &&
-            python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Inbox >/dev/null 2>&1; then
-            if tap_node text "$1" reveal; then return; fi
-        fi
         dismiss_system_anr
         sleep "${2:-1}"
     done
@@ -935,6 +942,7 @@ if [[ "$feature" == chat-search.md ]]; then
 fi
 
 if [[ "$feature" == session-drafts.md ]]; then
+    wait_for_text verify-session
     wait_for_text 'Inbox preview stays.'
     python3 "$scripts/draft-label.py" absent "$EVIDENCE/current.xml"
     shot inbox-before-draft
@@ -948,6 +956,7 @@ if [[ "$feature" == session-drafts.md ]]; then
     fi
     tap_desc Back
     wait_for_text Inbox
+    wait_for_text verify-session
     wait_for_text Draft
     wait_for_text 'Inbox preview stays.'
     shot inbox-draft
@@ -968,6 +977,7 @@ if [[ "$feature" == session-drafts.md ]]; then
     wait_receipt 'VERIFY_RECEIVED:unsent draft text'
     tap_desc Back
     wait_for_text Inbox
+    wait_for_text verify-session
     wait_for_text 'Inbox preview stays.'
     for attempt in {1..30}; do
         dump_ui
@@ -1666,6 +1676,24 @@ fi
 if [[ "$feature" == session-gestures.md || "$feature" == session-summaries.md ]]; then
     wait_for_text GESTURE_REPLY_TARGET
     python3 tools/session-gestures/drive.py
+    wait_for_text verify-other
+    shot gestures-inbox
+    cp "$EVIDENCE/$(printf '%02d' "$step")-gestures-inbox.png" "$EVIDENCE/gestures-inbox.png"
+    python3 - "$EVIDENCE" <<'PYGESTURES'
+import json
+from pathlib import Path
+import sys
+import xml.etree.ElementTree as ET
+root = Path(sys.argv[1])
+texts = [node.get('text') for node in ET.parse(root / 'current.xml').getroot().iter('node')]
+assert 'Inbox' in texts and 'verify-other' in texts, 'Second session missing'
+path = root / 'gesture-result.json'
+result = json.loads(path.read_text())
+assert result['status'] == 'reader-passed' and result['backToInbox'] and result['replies'] == 10
+result.update(status='passed', secondSession=True)
+path.write_text(json.dumps(result, indent=2))
+print('RELEASED_SESSION_GESTURES_PROVEN', json.dumps(result))
+PYGESTURES
     exit 0
 fi
 if [[ "$feature" == chat-choices.md ]]; then

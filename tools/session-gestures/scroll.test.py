@@ -1,7 +1,12 @@
+import importlib.util
 import unittest
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageChops
-from scroll import displacement
+
+spec = importlib.util.spec_from_file_location('scroll', Path(__file__).with_name('scroll.py'))
+scroll = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(scroll)
+displacement = scroll.displacement
 
 
 class ScrollTest(unittest.TestCase):

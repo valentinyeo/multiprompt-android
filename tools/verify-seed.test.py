@@ -90,6 +90,28 @@ class VerifySeedTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'SEED_SOURCE_MISMATCH'):
             seed.check(self.home, self.evidence)
 
+    def test_driver_checks_private_runner_evidence_as_the_fixture_user(self):
+        self.home.chmod(0o755)
+        private = self.home / 'runner-private'
+        private.mkdir(mode=0o700)
+        evidence = private / 'seed-counts.json'
+        evidence.write_text(self.evidence.read_text())
+        denied = subprocess.run(['sudo', '-u', 'nobody', 'cat', str(evidence)], capture_output=True, text=True)
+        self.assertNotEqual(0, denied.returncode)
+        self.assertIn('Permission denied', denied.stderr)
+        (self.home / 'verify-seed.py').write_bytes((ROOT / 'tools/verify-seed.py').read_bytes())
+        binary = self.home / 'bin'
+        binary.mkdir()
+        tmux = binary / 'tmux'
+        tmux.write_text('#!/bin/sh\nprintf "%s\\n" ' + shlex.join(self.names) + '\n')
+        tmux.chmod(0o755)
+        command = next(line for line in (SCRIPTS / 'drive.sh').read_text().splitlines() if 'verify-seed.py check' in line)
+        command = command.replace('-u verifyssh', '-u nobody').replace('/home/verifyssh', str(self.home))
+        command = command.replace('env HOME=', 'env PATH=' + shlex.quote(str(binary) + os.pathsep + os.environ['PATH']) + ' HOME=')
+        result = subprocess.run(['bash', '-euc', command], env=dict(os.environ, EVIDENCE=str(private)), capture_output=True, text=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(42, json.loads(result.stdout)['sessions'])
+
     def test_shared_seed_starts_real_sessions_and_a_discoverable_long_chat(self):
         self.tmux.stop()
         socket = 'verify-seed-' + uuid.uuid4().hex

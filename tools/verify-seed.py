@@ -27,7 +27,7 @@ def inventory(home):
 
 
 def check(home, evidence):
-    recorded = json.loads(evidence.read_text())
+    recorded = json.load(sys.stdin) if str(evidence) == '-' else json.loads(evidence.read_text())
     assert recorded == inventory(home), 'SEED_EVIDENCE_MISMATCH'
     return recorded
 
