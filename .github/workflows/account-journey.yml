@@ -5,13 +5,22 @@ on:
     - cron: '23 3 * * *'
   pull_request:
     paths:
-      - 'app/**'
+      - 'app/src/main/**'
+      - 'app/src/debug/**'
+      - 'app/src/m3/**'
+      - 'app/src/release/**'
+      - 'app/*.gradle.kts'
+      - 'app/proguard-rules.pro'
+      - 'app/src/androidTest/AndroidManifest.xml'
+      - 'app/src/androidTest/java/dev/multiprompt/companion/account/SeedAccountDeviceTest.kt'
+      - 'app/src/androidTest/java/dev/multiprompt/companion/account/SeedHostDeviceTest.kt'
       - 'gradle.properties'
       - '*.gradle.kts'
       - 'gradlew.bat'
       - 'gradlew'
       - 'gradle/**'
       - 'tools/account-journey/**'
+      - 'app/src/test/java/dev/multiprompt/companion/account/AccountSplitParityTest.kt'
       - '.github/workflows/account-journey.yml'
       - '.github/actions/android-proof/**'
   workflow_dispatch:
