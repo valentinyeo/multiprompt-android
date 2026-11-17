@@ -15,6 +15,10 @@ if [[ -d "$FIXTURE" ]]; then
         sudo cat "/home/verifyssh/$provider-receipts.txt" > "$EVIDENCE/$provider-receipts.txt" 2>/dev/null || true
     done
     sudo cat /home/verifyssh/reader-requests.jsonl > "$EVIDENCE/reader-requests.jsonl" 2>/dev/null || true
+    if [[ "${VERIFY_FEATURE:-}" == ai-usage.md ]]; then
+        sudo cat /home/verifyssh/ai-usage-receipts.txt > "$EVIDENCE/ai-usage-receipts.txt" 2>/dev/null || true
+        sudo cat /home/verifyssh/.local/state/token-ladder/status.json > "$EVIDENCE/ai-usage-host.json" 2>/dev/null || true
+    fi
     if [[ "${VERIFY_FEATURE:-}" == claude-remote-control.md ]]; then
         sudo cat /home/verifyssh/remote-control-receipts.jsonl > "$EVIDENCE/remote-control-receipts.jsonl" 2>/dev/null || true
         sudo cat /home/verifyssh/remote-control-work/desktop-counter.txt > "$EVIDENCE/remote-control-desktop.txt" 2>/dev/null || true

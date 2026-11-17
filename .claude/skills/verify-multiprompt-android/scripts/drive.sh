@@ -892,6 +892,11 @@ PYINFO
     exit 0
 fi
 
+if [[ "$feature" == ai-usage.md ]]; then
+    source "$scripts/ai-usage-drive.sh"
+    exit 0
+fi
+
 if [[ "$feature" == skill-pills.md ]]; then
     source "$scripts/skill-pills-drive.sh"
     exit 0
