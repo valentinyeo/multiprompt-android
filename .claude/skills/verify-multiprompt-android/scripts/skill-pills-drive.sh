@@ -14,14 +14,21 @@ wait_for_text VERIFY_READY_528
 fill 'Message verify-session' 'Please%sthis'
 pills_state draft 'Please this'
 tap_node editor ''
-adb shell input keyevent KEYCODE_MOVE_HOME
-for position in {1..7}; do adb shell input keyevent KEYCODE_DPAD_RIGHT; done
+select_node focused-field '' >/dev/null
+adb shell input keyevent KEYCODE_MOVE_END
+adb shell input keycombination -t 100 KEYCODE_CTRL_LEFT KEYCODE_DPAD_LEFT
 adb shell input text /%s
 adb shell input keyevent KEYCODE_DPAD_LEFT
 wait_for_text '/pill-guide-01'
 pills_state picker 'Please / this'
-plan=$(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" reach-text '/review-native')
-[[ "$plan" == swipe\ * ]]
+python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent '/review-native'
+for attempt in {1..4}; do
+    read -r x1 y1 x2 y2 < <(python3 tools/skill-pills/ui.py scroll "$EVIDENCE/current.xml")
+    adb shell input swipe "$x1" "$y1" "$x2" "$y2" 500
+    dump_ui
+    if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text '/review-native' >/dev/null 2>&1; then break; fi
+done
+pills_state scrolled 'Please / this'
 tap_text '/review-native'
 dump_ui
 python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value composer 'Please /review-native this'
@@ -32,8 +39,10 @@ wait_for_text 'Received Please /review-native this.'
 pills_state sent 'Please /review-native this'
 fill 'Message verify-session' 'Keep%s/rev%sthis'
 tap_node editor ''
-adb shell input keyevent KEYCODE_MOVE_HOME
-for position in {1..9}; do adb shell input keyevent KEYCODE_DPAD_RIGHT; done
+select_node focused-field '' >/dev/null
+adb shell input keyevent KEYCODE_MOVE_END
+adb shell input keycombination -t 100 KEYCODE_CTRL_LEFT KEYCODE_DPAD_LEFT
+adb shell input keyevent KEYCODE_DPAD_LEFT
 wait_for_text '/review-native'
 tap_text '/review-native'
 pills_state removable 'Keep /review-native this'

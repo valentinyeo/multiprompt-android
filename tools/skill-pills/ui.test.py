@@ -63,6 +63,24 @@ class SkillPillsUiTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'inline skill pill'):
             self.check('sent')
 
+    def test_scroll_uses_the_skill_picker_when_the_chat_also_scrolls(self):
+        window = self.node(bounds='[0,0][400,400]')
+        self.node(parent=window, bounds='[0,0][400,400]', scrollable='true')
+        picker = self.node(parent=window, bounds='[10,80][390,180]', scrollable='true',
+                           **{'class': 'android.widget.ScrollView'})
+        self.node(parent=picker, text='/pill-guide-01', bounds='[20,90][200,110]')
+        ET.ElementTree(self.root).write(self.xml)
+        self.assertEqual(ui.picker_swipe(self.xml), (200, 160, 200, 100))
+        picker.set('enabled', 'false')
+        ET.ElementTree(self.root).write(self.xml)
+        with self.assertRaises(AssertionError):
+            ui.picker_swipe(self.xml)
+        picker.set('enabled', 'true')
+        picker.set('bounds', '[10,80][410,180]')
+        ET.ElementTree(self.root).write(self.xml)
+        with self.assertRaisesRegex(AssertionError, 'clipped'):
+            ui.picker_swipe(self.xml)
+
     def test_wrong_draft_missing_picker_and_uncleared_send_fail(self):
         self.pill()
         with self.assertRaisesRegex(AssertionError, 'Wrong composer'):

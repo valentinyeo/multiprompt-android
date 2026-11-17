@@ -36,6 +36,27 @@ def outlines(image, box, inset):
     return pairs
 
 
+def picker_swipe(xml):
+    root = ET.parse(xml).getroot()
+    parents = {child: parent for parent in root.iter() for child in parent}
+    windows = [node for node in root if node.tag == 'node' and node.get('visible-to-user') != 'false']
+    assert windows, 'Active window is missing'
+    window = windows[-1]
+    labels = [node for node in window.iter('node') if node.get('text', '').startswith('/pill-guide-')
+              and node.get('package') == 'dev.multiprompt.companion.debug']
+    assert labels, 'Visible skill guide is missing'
+    node = labels[0]
+    while node is not window and node.get('scrollable') != 'true':
+        assert node.get('enabled') != 'false', 'Picker is disabled'
+        node = parents[node]
+    assert node is not window and node.get('class') == 'android.widget.ScrollView', 'Skill picker scroll area is missing'
+    x1, y1, x2, y2 = bounds(node)
+    wx1, wy1, wx2, wy2 = bounds(window)
+    assert wx1 <= x1 < x2 <= wx2 and wy1 <= y1 < y2 <= wy2, 'Skill picker is clipped'
+    assert node.get('enabled') != 'false' and y2 - y1 >= 20
+    return (x1 + x2) // 2, y2 - (y2 - y1) // 5, (x1 + x2) // 2, y1 + (y2 - y1) // 5
+
+
 def check(xml, screenshot, phase, text):
     nodes = [node for node in ET.parse(xml).getroot().iter('node')
              if node.get('package') == 'dev.multiprompt.companion.debug']
@@ -58,8 +79,9 @@ def check(xml, screenshot, phase, text):
             result['sent_pill'] = '/review-native'
     else:
         assert editor.get('text') == text, ('Wrong composer text', editor.get('text'), text)
-        if phase == 'picker':
-            assert any(node.get('text') == '/pill-guide-01' for node in nodes), 'Skill picker is missing'
+        if phase in ('picker', 'scrolled'):
+            label = '/pill-guide-01' if phase == 'picker' else '/review-native'
+            assert any(node.get('text') == label for node in nodes), 'Skill picker is missing'
         else:
             pairs = outlines(image, bounds(editor), True)
             expected = phase in ('inserted', 'removable')
@@ -69,6 +91,9 @@ def check(xml, screenshot, phase, text):
 
 
 if __name__ == '__main__':
+    if sys.argv[1] == 'scroll':
+        print(*picker_swipe(Path(sys.argv[2])))
+        raise SystemExit(0)
     xml, screenshot, phase, text, output = sys.argv[1:]
     result = check(Path(xml), Path(screenshot), phase, text)
     path = Path(output)
