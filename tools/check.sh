@@ -9,7 +9,7 @@ gradle_run() {
 source_checks() {
   python3 -B tools/kit-controls/history.test.py
   python3 -B tools/kit-controls/journeys.test.py
-  node --test tools/ci/phone-routing.test.mjs tools/root-files.test.js tools/strip-comments.test.js tools/release-status.test.js tools/verify-published.test.mjs tools/workflow-inputs.test.js tools/pr-checks.test.js tools/branch-protection.test.js tools/release-notes/notes.test.mjs tools/baseline-profile.test.mjs tools/pstack-verifier.test.js tools/feature-coverage.test.js
+  node --test tools/ci/phone-routing.test.mjs tools/root-files.test.js tools/strip-comments.test.js tools/release-status.test.js tools/verify-published.test.mjs tools/workflow-inputs.test.js tools/release-proof.test.js tools/pr-checks.test.js tools/branch-protection.test.js tools/release-notes/notes.test.mjs tools/baseline-profile.test.mjs tools/pstack-verifier.test.js tools/feature-coverage.test.js
   python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.test.py
   python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.py check
   python3 -B tools/message-projection/check.py

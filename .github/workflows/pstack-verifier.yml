@@ -51,6 +51,9 @@ jobs:
             tools/pr-checks.test.js
             tools/fixtures/pr-checks
             tools/workflow-inputs.test.js
+            tools/release-proof.test.js
+            tools/release-proof.sh
+            tools/release-choices/prepare.sh
             tools/fixtures/feature-coverage
             tools/release-notes/ticket-titles.json
             .claude/skills/verify-multiprompt-android/scripts/drive.sh
@@ -61,7 +64,7 @@ jobs:
         with:
           node-version: 22
       - name: Prove the verifier on real historical mistakes
-        run: node --test tools/feature-coverage.test.js tools/pstack-verifier.test.js tools/workflow-inputs.test.js tools/pr-checks.test.js tools/branch-protection.test.js > "$RUNNER_TEMP/tooling-proof.txt" 2>&1
+        run: node --test tools/feature-coverage.test.js tools/pstack-verifier.test.js tools/workflow-inputs.test.js tools/release-proof.test.js tools/pr-checks.test.js tools/branch-protection.test.js > "$RUNNER_TEMP/tooling-proof.txt" 2>&1
       - name: Retain non-UI verifier proof
         if: always()
         uses: actions/upload-artifact@v4
