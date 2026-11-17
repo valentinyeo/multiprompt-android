@@ -95,6 +95,7 @@ on:
           - sign-in.md
           - terminal.md
           - chat-identity.md
+          - chat-search.md
           - room-order.md
       expect_settings_missing:
         description: Require signed Android 301 to reject the settings navigation journey
@@ -273,6 +274,11 @@ jobs:
         run: |
           python3 -m pip install Pillow
           python3 .claude/skills/verify-multiprompt-android/scripts/reactions.test.py
+      - name: Check chat search screenshot assertions
+        id: chat-search-oracle
+        continue-on-error: ${{ inputs.side == 'parent' }}
+        if: env.VERIFY_FEATURE == 'chat-search.md'
+        run: python3 -B tools/chat-search/ui.test.py
       - name: Check terminal input oracle and selectors
         id: terminal-input-oracle
         continue-on-error: ${{ inputs.side == 'parent' }}
