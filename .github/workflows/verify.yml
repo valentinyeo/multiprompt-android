@@ -536,7 +536,10 @@ jobs:
           mkdir -p "$EVIDENCE"
           driver=$(cat "$EVIDENCE/parent-driver-exit.txt" 2>/dev/null || true)
           [[ "$driver" =~ ^[0-9]+$ ]] || driver=-1
-          jq -n --argjson steps "$STEPS_JSON" --argjson driver "$driver" '{side: "parent", passed: (($driver == 0) and ($steps["native-ui"].outcome == "success") and ([$steps[] | .outcome] | all(. == "success" or . == "skipped"))), driverExit: $driver, steps: ($steps | map_values(.outcome))}' > "$EVIDENCE/side-result.json"
+          class=$(cat "$EVIDENCE/failure-class.txt" 2>/dev/null || true)
+          product=false
+          if [[ "$class" == "PRODUCT_ASSERTION_FAILED" ]]; then product=true; fi
+          jq -n --argjson steps "$STEPS_JSON" --argjson driver "$driver" --argjson product "$product" '{side: "parent", passed: (($driver == 0) and ($steps["native-ui"].outcome == "success") and ([$steps[] | .outcome] | all(. == "success" or . == "skipped"))), productAssertion: $product, driverExit: $driver, steps: ($steps | map_values(.outcome))}' > "$EVIDENCE/side-result.json"
       - name: Upload evidence even on failure
         continue-on-error: ${{ inputs.side == 'parent' }}
         if: always()
