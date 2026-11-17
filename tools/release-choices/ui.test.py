@@ -31,6 +31,14 @@ class FieldReadbackTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('FIELD_VALUE_VERIFIED', result.stdout)
 
+    def test_masked_field_must_still_be_empty_before_typing(self):
+        for actual in ('', '••••'):
+            with self.subTest(actual=actual), tempfile.TemporaryDirectory() as folder:
+                path = Path(folder) / 'ui.xml'
+                path.write_text(f'<hierarchy><node class="android.widget.EditText" focused="true" password="true" text="{actual}" bounds="[0,0][100,100]" /></hierarchy>')
+                result = subprocess.run(['python3', str(self.script), str(path), 'field-value', 'Secret', ''], capture_output=True, text=True)
+                self.assertEqual(result.returncode == 0, actual == '')
+
     def test_unfocused_field_rejected_before_typing(self):
         self.assertNotEqual(self.select('focused-field', '', focused='false').returncode, 0)
 

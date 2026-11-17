@@ -131,6 +131,74 @@ test('tooling-only work needs no Android feature proof or artificial failing par
   assert.deepEqual(gate.featureErrors({ plan, sha }).errors, []);
 });
 
+test('chat search changes require their own phone journey even when the model omits it', () => {
+  const outcome = 'chat-search.open';
+  const journey = 'chat-search.md';
+  assert.equal(gate.baseline[outcome], undefined);
+  assert.equal(gate.registry.outcomes[outcome].journey, journey);
+  assert.ok(gate.debugJourneys.includes(journey));
+  const diffs = [read('tools/fixtures/feature-coverage/pr-380.diff'), ...[
+    ['ui/ChatFind.kt', 'ChatFind'],
+    ['ui/ChatFindMarks.kt', 'marking('],
+    ['ui/ChatHistoryList.kt', 'findQuery'],
+    ['ui/MultipromptApp.kt', 'ReaderSearchBar'],
+    ['ui/MultipromptApp.kt', 'Search in chat'],
+    ['ui/MultipromptApp.kt', 'searchIndex'],
+  ].map(([file, text]) => productDiff(file, text))];
+  for (const diff of diffs) {
+    const plan = gate.planChange(diff, []);
+    assert.ok(plan.outcomes.includes(outcome));
+    for (const features of [[], ['native-skills.md', 'session-reader.md', 'terminal.md']]) {
+      const picked = verifier.includeRequiredJourneys({ features, dropped: [], smoke: true }, plan);
+      assert.ok(picked.features.includes(journey));
+      assert.equal(picked.smoke, false);
+      assert.ok(picked.features.length <= verifier.MAX_JOURNEYS);
+    }
+    const proof = gate.featureErrors({ plan, sha, conclusions: { 'session-reader.md': 'success' } });
+    assert.match(proof.errors.join('\n'), /FEATURE_NOT_EXERCISED: chat-search.open/);
+  }
+});
+
+test('the real picker schedules the changed chat search recipe for a tooling-only PR', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'search-recipe-pick-'));
+  try {
+    const diff = path.join(directory, 'recipe.diff');
+    fs.writeFileSync(diff, `diff --git a/${gate.REGISTRY_PATH}/chat-search.md b/${gate.REGISTRY_PATH}/chat-search.md\n+Find words inside a chat\n`);
+    const gh = path.join(directory, 'gh');
+    fs.writeFileSync(gh, `#!${process.execPath}\nconst fs=require('node:fs');const args=process.argv.slice(2);if(args.includes('Accept: application/vnd.github.diff'))process.stdout.write(fs.readFileSync(process.env.FIXTURE_DIFF));else if(args[1].includes('/compare/'))console.log(JSON.stringify({merge_base_commit:{sha:'b'.repeat(40)}}));else console.log(JSON.stringify({number:397,state:'open',head:{sha:process.env.EVENT_HEAD_SHA,repo:{full_name:'example/repo'}},base:{ref:'main'}}));`);
+    fs.chmodSync(gh, 0o755);
+    const stub = path.join(directory, 'model.cjs');
+    fs.writeFileSync(stub, `global.fetch=async()=>({status:200,ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:JSON.parse(process.env.MODEL_FEATURES),changed_outcomes:[],change_kind:'tooling',reason:'Tooling only.'})}}]})});`);
+    for (const features of [[], ['native-skills.md', 'session-reader.md', 'terminal.md']]) {
+      const output = path.join(directory, 'outputs');
+      fs.writeFileSync(output, '');
+      const result = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${directory}:${process.env.PATH}`,
+          NODE_OPTIONS: `--require=${stub}`,
+          DEEPSEEK_API_KEY: 'test-only',
+          REPO: 'example/repo',
+          PR_NUMBER: '397',
+          EVENT_HEAD_SHA: sha,
+          FIXTURE_DIFF: diff,
+          MODEL_FEATURES: JSON.stringify(features),
+          GITHUB_OUTPUT: output,
+        },
+      });
+      assert.equal(result.status, 0, result.stderr);
+      const values = fs.readFileSync(output, 'utf8');
+      const selected = JSON.parse(values.match(/^features=(.+)$/m)[1]);
+      assert.equal(selected[0], 'chat-search.md', values);
+      assert.ok(selected.length <= verifier.MAX_JOURNEYS);
+      assert.match(values, /^smoke=no$/m);
+      assert.match(values, /^changed_outcomes=\[\]$/m);
+    }
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
 test('the ratchet tracks exact IDs, not the number of missing journeys', () => {
   assert.deepEqual(gate.validateRegistry(), []);
   const changed = structuredClone(gate.registry);
