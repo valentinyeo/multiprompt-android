@@ -39,7 +39,7 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Launcher icon](launcher-icon.md): the robot launcher icon in the emulator's app drawer, with the themed-icon layer present in the built APK.
   - Outcomes: `launcher-icon.journey`. Runner: `verify.yml` (debug).
 - [Native Claude controls](native-skills.md): slash filtering, shared plus entry, actual session model/effort and retained image picker.
-  - Outcomes: `claude.skills-model-effort`. Runner: `verify.yml` (debug).
+  - Outcomes: `claude.skills-model-effort`. Runner: `verify.yml` (debug). Priority evidence: `native-result.json` (1500 characters), `native-receipts.txt` (1500 characters).
 - [Robot inbox and chat](robot-faces.md): Run `verify.yml` with `feature=robot-faces.md`. For the signed candidate, set `released_robots=true` and `candidate=true`. For the published update, set `released_robots=true` and `expected_commit` to the released SHA.
   - Outcomes: `robot-faces.journey`. Runner: `verify.yml` (signed). Inputs: `{"released_robots":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Inbox draft label](session-drafts.md): unsent composer text shows Draft before the inbox preview, and sending that text removes it.

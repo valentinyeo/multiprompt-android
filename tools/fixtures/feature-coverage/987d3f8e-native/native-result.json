@@ -1,0 +1,13 @@
+{
+  "status": "passed",
+  "slash": true,
+  "filtered": true,
+  "plus_same_list": true,
+  "fresh_native_skills": true,
+  "native_only": true,
+  "model": "Sonnet 5.5",
+  "effort": "high",
+  "draft_preserved": true,
+  "image_picker": true,
+  "upload_exercised": false
+}

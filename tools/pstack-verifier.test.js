@@ -672,6 +672,22 @@ test('required journeys replace a smoke fallback without inventing coverage for 
   assert.deepEqual(verifier.includeRequiredJourneys(picked, { outcomes: ['session-settings.journey'] }), picked);
 });
 
+test('PR392 native model and effort receipts reach the judge before diagnostic evidence fills its budget', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-native-proof-'));
+  try {
+    const fixture = path.join(root, 'tools/fixtures/feature-coverage/987d3f8e-native');
+    fs.cpSync(fixture, directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, 'driver-transcript.txt'), 'diagnostic line\n'.repeat(5000));
+    for (let index = 0; index < 30; index += 1) fs.writeFileSync(path.join(directory, `aux-${String(index).padStart(2, '0')}.txt`), 'diagnostic '.repeat(100));
+    const evidence = verifier.journeyEvidence(directory, 'native-skills.md');
+    assert.match(evidence, /--- native-result\.json\n[\s\S]*"model": "Sonnet 5\.5"/);
+    assert.match(evidence, /--- native-receipts\.txt\n[\s\S]*VERIFY_RECEIVED:\/model sonnet/);
+    assert.match(evidence, /VERIFY_RECEIVED:\/effort high/);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('proof uploads survive the same-run retry that failed PR392 at c2f673c6', () => {
   const requireReplayable = source => {
     const lines = source.split('\n');

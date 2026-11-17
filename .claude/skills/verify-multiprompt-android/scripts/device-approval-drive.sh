@@ -32,7 +32,8 @@ ssh "${ssh_args[@]}" -i "$FIXTURE/denied-device" verifyssh@127.0.0.1 'printf "ST
 
 tap_text No
 wait_for_absence 'Approve this device?'
-wait_for_text Inbox
+wait_for_text 'Session list settings'
+wait_for_text 'Switch / renew login'
 shot device-decisions-complete
 python3 "$scripts/ui.py" "$EVIDENCE/current.xml" snapshot "" > "$EVIDENCE/device-decisions-ui.json"
 if ssh "${ssh_args[@]}" -i "$FIXTURE/denied-device" verifyssh@127.0.0.1 'printf SHOULD_NOT_AUTHENTICATE' > "$EVIDENCE/device-after-denial.txt" 2>&1; then

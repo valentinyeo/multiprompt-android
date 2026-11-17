@@ -20,6 +20,26 @@ class ControlJourneyTest(unittest.TestCase):
         self.assertNotIn("refresh_inbox", before_warning)
         self.assertIn("wait_for_text 'Mark as unread'", source)
 
+    def test_device_denial_returns_to_the_screen_that_started_sign_in(self):
+        source = (SCRIPTS / 'device-approval-drive.sh').read_text()
+        after_no = source.split('tap_text No\n', 1)[1].split('if ssh', 1)[0]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'current.xml').write_text((Path(__file__).parent / 'fixtures/987d3f8e-after-device-denial.xml').read_text())
+            script = '''set -euo pipefail
+EVIDENCE="$1"
+scripts="$2"
+wait_for_text() { python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text "$1"; }
+wait_for_absence() { python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent "$1"; }
+shot() { :; }
+''' + after_no
+            result = subprocess.run(['bash', '-c', script, 'device-denial', directory, str(SCRIPTS)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            state = json.loads((root / 'device-decisions-ui.json').read_text())
+            self.assertIn('Session list settings', state['texts'])
+            self.assertIn('Switch / renew login', state['texts'])
+            self.assertNotIn('Approve this device?', state['texts'])
+
     def test_device_fixture_requires_pkce_and_observes_real_authorized_key_changes(self):
         spec = importlib.util.spec_from_file_location("approval_fixture", SCRIPTS / "device-approval.py")
         module = importlib.util.module_from_spec(spec)

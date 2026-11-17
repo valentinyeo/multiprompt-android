@@ -265,7 +265,11 @@
       },
       "outcomes": [
         "claude.skills-model-effort"
-      ]
+      ],
+      "evidence": {
+        "native-result.json": 1500,
+        "native-receipts.txt": 1500
+      }
     },
     "robot-faces.md": {
       "name": "Robot inbox and chat",
