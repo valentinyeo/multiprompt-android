@@ -7,10 +7,6 @@
     "sourcePr": 373,
     "cleanupTicket": "SOFT-2538"
   },
-  "pi.model-switch": {
-    "sourcePr": 374,
-    "cleanupTicket": "SOFT-2539"
-  },
   "chat-search.open": {
     "sourcePr": 380,
     "cleanupTicket": "SOFT-2540"

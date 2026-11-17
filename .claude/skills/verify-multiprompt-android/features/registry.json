@@ -530,6 +530,24 @@
         "projection-state-reconnect.json": 500,
         "projection-proof.txt": 500
       }
+    },
+    "pi-model-switch.md": {
+      "name": "Switch Pi models",
+      "description": "Phone model picker, Pi model switch, and the next reply with independent provider receipts.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "pi.model-switch"
+      ],
+      "evidence": {
+        "pi-model-switch-state.json": 3500,
+        "pi-model-switch-receipts.txt": 3000
+      }
     }
   },
   "outcomes": {
@@ -769,10 +787,10 @@
     },
     "pi.model-switch": {
       "description": "Discover Pi models, switch them and retry.",
-      "journey": null,
+      "journey": "pi-model-switch.md",
       "sideEffect": true,
       "match": [
-        "PiModels|piModels|piModel"
+        "PiModels|piModels|piModel|host_pi_set_model|pi_set_model|PI_MODEL_PART|host_pi_choice"
       ]
     },
     "chat-search.open": {
