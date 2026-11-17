@@ -847,7 +847,12 @@ if [[ "$feature" == room-order.md ]]; then
         -e device_id verify-phone \
         "$package.test/androidx.test.runner.AndroidJUnitRunner" > "$EVIDENCE/room-account-seed.txt"
     grep -F 'OK (1 test)' "$EVIDENCE/room-account-seed.txt"
-    sudo -u verifyssh env HOME=/home/verifyssh python3 "$scripts/room-order.py" install
+    room_stage=$(mktemp -d)
+    mkdir -p "$room_stage/.claude/skills/verify-multiprompt-android/scripts" "$room_stage/app/src/main/assets"
+    cp "$scripts/room-order.py" "$scripts/room-runtime.py" "$room_stage/.claude/skills/verify-multiprompt-android/scripts/"
+    cp -R "$scripts/../../../../app/src/main/assets/rooms" "$room_stage/app/src/main/assets/"
+    chmod -R a+rX "$room_stage"
+    sudo -u verifyssh env HOME=/home/verifyssh python3 "$room_stage/.claude/skills/verify-multiprompt-android/scripts/room-order.py" install
     relaunch_app
     for attempt in {1..45}; do
         if select_node contains 'Order room' >/dev/null 2>&1; then break; fi
