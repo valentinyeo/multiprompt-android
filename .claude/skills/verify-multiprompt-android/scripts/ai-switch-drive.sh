@@ -21,21 +21,30 @@ tap_desc 'Send prompt'
 wait_for_text PI_REPLY_PHONE_AFTER_SWITCH_2538
 shot ai-switch-before-catchup
 sudo -u verifyssh rm /home/verifyssh/ai-switch-hold-2569
-sudo -u verifyssh env HOME=/home/verifyssh python3 - <<'PYCATCHUP'
+sudo -u verifyssh env HOME=/home/verifyssh python3 - > "$EVIDENCE/ai-switch-replay.json" <<'PYCATCHUP'
 import importlib.util
+import json
 import time
 spec = importlib.util.spec_from_file_location('reader', '/home/verifyssh/ai-switch-reader.py')
 reader = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(reader)
 provider, sid = reader.host_switch_follow('c001c001-2538-4000-8000-000000002538')
 path = reader.host_paths(provider, sid)['history']
-for attempt in range(100):
-    if 'PI_REPLY_PHONE_AFTER_SWITCH_2538' in path.read_text():
-        break
-    time.sleep(0.1)
-assert 'PI_REPLY_PHONE_AFTER_SWITCH_2538' in path.read_text(), 'Host did not archive the reply'
+with reader.message_store_db('live-verify-session') as db:
+    for attempt in range(100):
+        events = [json.loads(raw) for raw, in db.execute('SELECT body FROM message_events WHERE provider=? AND sid=? ORDER BY seq', (provider, sid))]
+        done = next((event for event in reversed(events) if event.get('kind') == 'text.done' and event.get('payload', {}).get('text') == 'PI_REPLY_PHONE_AFTER_SWITCH_2538'), None)
+        if done and 'PI_REPLY_PHONE_AFTER_SWITCH_2538' in path.read_text():
+            break
+        time.sleep(0.1)
+    assert done, 'Host did not complete and archive the reply'
+    started = next(event for event in events if event.get('kind') == 'turn.started' and event.get('turn') == done['turn'])
+    assert started['payload'].get('message_id'), started
+    reader.message_event(db, provider, sid, started)
+    reader.message_event(db, provider, sid, done)
 reader.host_history_append(provider, sid, dict(state=dict(display_history=True)),
     dict(role='assistant', text='PI_HISTORY_CAUGHT_UP_2569', id='fixture-history-barrier-2569'))
+print(json.dumps(dict(sid=sid, replayed=[started, done])))
 PYCATCHUP
 wait_for_text PI_HISTORY_CAUGHT_UP_2569
 shot ai-switch-reply

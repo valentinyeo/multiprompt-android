@@ -163,6 +163,21 @@ class MessageProjectionTest {
         assertEquals(0, after.count { it.key.startsWith("@live:") })
     }
 
+    @Test fun handoverRepliesMatchOnlyArchivesAfterTheirDivider() {
+        for (text in listOf("---\nSwitched AI: Pi to Claude\n---", "---\nFresh start\n---")) {
+            val replica = MessageReplica(1, 1, host = HostStream(turn = "handover", blocks = listOf(
+                HostBlock("handover:text:0", "text", "same reply", true, messageId = "fresh-handover"))))
+            val old = ChatHistoryProtocol.Row("assistant", "same reply", "history-old", "", 0, 50)
+            val divider = ChatHistoryProtocol.Row("assistant", text, "history-divider", "", 100, 140)
+            val history = ChatHistory(sid = sid, inode = 7, rows = listOf(old, divider))
+            once(history.projectMessages(replica), listOf("same reply", text, "same reply"))
+            val archived = ChatHistoryProtocol.Row("assistant", "same reply", "history-handover", "", 150, 190)
+            val projected = history.copy(rows = history.rows + archived).projectMessages(replica)
+            once(projected, listOf("same reply", text, "same reply"))
+            assertEquals(0, projected.count { it.key.startsWith("@live:") })
+        }
+    }
+
     @Test fun equalBlocksWithinOneTurnEachNeedTheirOwnArchivedOccurrence() {
         val first = replica(listOf(row(1)), host(1))
         val replica = first.copy(host = first.host.copy(blocks = first.host.blocks +

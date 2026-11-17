@@ -142,6 +142,8 @@ data class ChatHistory(
         scoped.forEach { aliases[it.id] = it.id }
         waitingIds.forEach { aliases.putIfAbsent(it, it) }
         val projected = LinkedHashMap<String, ChatHistoryMessage>()
+        val replyOwners = HashMap<Int, ChatHistoryMessage>()
+        var replyOwner: ChatHistoryMessage? = null
         transcript.forEachIndexed { index, message ->
             val card = claimed[index]
             val phoneId = aliases[message.requestId].takeIf { message.role == "user" }
@@ -151,17 +153,24 @@ data class ChatHistory(
                 else -> message
             }
             projected[occurrence.key] = occurrence
+            if (LegacyMessageIdentity.replyBoundary(occurrence)) replyOwner = occurrence
+            else replyOwner?.let { replyOwners[index] = it }
         }
         val blocks = (host.earlier + host.spoken.map { it.copy(turn = host.turn) }).distinctBy { it.turn to it.item }
         val anchors = cards.filter { it.message.requestId.isNotEmpty() }.associate { it.message.requestId to it.message.key }.toMutableMap()
         projected.values.filter { it.role == "user" && it.requestId.isNotEmpty() }.forEach { anchors[it.requestId] = it.key }
         val replies = LinkedHashMap<String, MutableList<HostBlock>>()
         val unmatched = mutableListOf<HostBlock>()
+        val matchedReplies = HashSet<Int>()
         for (block in blocks) {
-            val index = transcript.indexOfFirst { message -> message.role == "assistant" &&
-                (message.requestId.isNotEmpty() && rowKey(message.requestId) == rowKey(block.item) ||
-                    LegacyMessageIdentity.reply(message, block)) }
-            if (index >= 0) {
+            val index = transcript.indices.firstOrNull { index ->
+                val message = transcript[index]
+                index !in matchedReplies && message.role == "assistant" &&
+                    (message.requestId.isNotEmpty() && rowKey(message.requestId) == rowKey(block.item) ||
+                        LegacyMessageIdentity.reply(message, block, replyOwners[index]))
+            }
+            if (index != null) {
+                matchedReplies.add(index)
                 block.messageId?.let { anchors[it] = transcript[index].key }
             } else {
                 val anchor = block.messageId?.let { anchors[it] }

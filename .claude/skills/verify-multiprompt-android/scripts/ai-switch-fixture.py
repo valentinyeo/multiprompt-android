@@ -84,8 +84,6 @@ def pi():
         reply = 'PI_HANDOVER_READY_2538' if handover else 'PI_REPLY_' + text
         hold = HOME / ('ai-switch-hold-stream-2569' if text == 'PHONE_STREAM_2569' else 'ai-switch-hold-2569')
         controlled = text == 'PHONE_STREAM_2569' or text == 'PHONE_AFTER_SWITCH_2538' and hold.exists()
-        if controlled:
-            time.sleep(3)
         emit(dict(type='response', command='prompt', id=request['id'], success=True))
         emit(dict(type='agent_start'))
         emit(dict(type='message_start'))
