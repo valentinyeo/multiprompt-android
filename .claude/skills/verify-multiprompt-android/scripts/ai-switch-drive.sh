@@ -102,6 +102,7 @@ for phase in ('before', 'picker', 'reattached', 'draft', 'reply', 'current-pi'):
 root.joinpath('ai-switch-state.json').write_text(json.dumps(states, indent=2) + '\n')
 PYUI
 adb shell input keyevent KEYCODE_BACK
+sudo -u verifyssh touch /home/verifyssh/ai-switch-hold-stream-2569
 fill 'Message verify-session' PHONE_STREAM_2569
 tap_desc 'Send prompt'
 wait_for_text PI_REPLY_PHONE_STREAM_2569
@@ -109,6 +110,19 @@ shot ai-switch-streaming
 fill 'Message verify-session' PHONE_DURING_STREAM_2569
 shot ai-switch-during-stream-draft
 tap_desc 'Send prompt'
+sudo -u verifyssh env HOME=/home/verifyssh python3 - <<'PYADMITTED'
+from pathlib import Path
+import sqlite3
+import time
+with sqlite3.connect(Path.home() / '.local/state/multiprompt/shared-messages/store.sqlite3') as db:
+    for attempt in range(100):
+        admitted = db.execute("SELECT id FROM shared_messages WHERE text='PHONE_DURING_STREAM_2569'").fetchone()
+        if admitted:
+            break
+        time.sleep(0.1)
+    assert admitted, 'Follow-up was not admitted while the reply streamed'
+(Path.home() / 'ai-switch-hold-stream-2569').unlink()
+PYADMITTED
 adb shell input keyevent KEYCODE_HOME
 shot ai-switch-background
 adb shell am start -n "$package/dev.multiprompt.companion.MainActivity"

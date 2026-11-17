@@ -82,23 +82,23 @@ def pi():
             output.write(json.dumps(dict(provider='pi', sid=sid, id=request['id'], text=text)) + '\n')
         handover = 'This chat ran on Claude until now and continues on Pi.' in text
         reply = 'PI_HANDOVER_READY_2538' if handover else 'PI_REPLY_' + text
+        hold = HOME / ('ai-switch-hold-stream-2569' if text == 'PHONE_STREAM_2569' else 'ai-switch-hold-2569')
+        controlled = text == 'PHONE_STREAM_2569' or text == 'PHONE_AFTER_SWITCH_2538' and hold.exists()
+        if controlled:
+            time.sleep(3)
         emit(dict(type='response', command='prompt', id=request['id'], success=True))
         emit(dict(type='agent_start'))
         emit(dict(type='message_start'))
-        hold = HOME / 'ai-switch-hold-2569'
-        controlled = text == 'PHONE_STREAM_2569' or text == 'PHONE_AFTER_SWITCH_2538' and hold.exists()
         for delta in reply if controlled else [reply]:
             emit(dict(type='message_update', assistantMessageEvent=dict(type='text_delta', contentIndex=0, delta=delta)))
             if controlled:
                 time.sleep(0.2)
-        if text == 'PHONE_AFTER_SWITCH_2538' and hold.exists():
-            for attempt in range(120):
+        if controlled:
+            for attempt in range(480):
                 if not hold.exists():
                     break
                 time.sleep(0.25)
-            assert not hold.exists(), 'Phone did not observe the streamed reply'
-        if text == 'PHONE_STREAM_2569':
-            time.sleep(20)
+            assert not hold.exists(), 'Phone did not release the streamed reply'
         emit(dict(type='message_update', assistantMessageEvent=dict(type='text_end', contentIndex=0, content=reply)))
         emit(dict(type='message_end', message=dict(role='assistant', stopReason='stop')))
         emit(dict(type='agent_settled'))

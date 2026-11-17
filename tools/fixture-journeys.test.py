@@ -155,6 +155,8 @@ class FixtureJourneyTest(unittest.TestCase):
             hold.touch()
             output = io.StringIO()
             def release(seconds):
+                if seconds == 3:
+                    return
                 events = list(map(json.loads, output.getvalue().splitlines()))
                 self.assertEqual('text_delta', events[-1]['assistantMessageEvent']['type'])
                 if seconds == 0.25:
@@ -171,7 +173,8 @@ class FixtureJourneyTest(unittest.TestCase):
             home = Path(temporary)
             with patch.object(fixture, 'HOME', home), patch.object(fixture, 'boundary'), patch.object(fixture.time, 'sleep') as delay, patch.object(sys, 'argv', ['pi', '--mode', 'rpc', '--session-id', 'second-session']), patch.object(sys, 'stdin', io.StringIO(''.join(json.dumps(row) + '\n' for row in requests))), redirect_stdout(io.StringIO()) as output:
                 fixture.pi()
-            delay.assert_any_call(20)
+            delay.assert_any_call(3)
+            delay.assert_any_call(0.2)
             replies = [event['assistantMessageEvent']['content'] for event in map(json.loads, output.getvalue().splitlines()) if event.get('assistantMessageEvent', {}).get('type') == 'text_end']
             self.assertEqual(['PI_REPLY_PHONE_STREAM_2569', 'PI_REPLY_PHONE_DURING_STREAM_2569'], replies)
             self.assertEqual(2, len((home / 'ai-switch-provider-receipts.jsonl').read_text().splitlines()))
