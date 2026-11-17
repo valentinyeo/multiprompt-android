@@ -16,10 +16,22 @@ def bounds(node):
     return values
 
 
-def tagged(root, tag):
-    matches = [node for node in root.iter('node') if node.get('resource-id') == tag and node.get('package') == PACKAGE]
-    assert len(matches) == 1, f'Missing or ambiguous {tag}'
+def table(root):
+    matches = [node for node in root.iter('node') if node.get('package') == PACKAGE
+               and node.get('class') == 'android.widget.HorizontalScrollView'
+               and any(re.fullmatch(r'R\d{2}-C\d{2} (orchard|harvest)', child.get('text', '')) for child in node.iter('node'))]
+    assert len(matches) == 1, 'Missing or ambiguous table scroll container'
     return matches[0]
+
+
+def viewport(root):
+    parents = {child: parent for parent in root.iter() for child in parent}
+    node = table(root)
+    while node in parents:
+        node = parents[node]
+        if node.get('scrollable') == 'true' and node.get('class') != 'android.widget.HorizontalScrollView':
+            return node
+    raise AssertionError('Table has no vertical scroll container')
 
 
 def visible(root, text):
@@ -43,23 +55,20 @@ def visible(root, text):
 
 
 def swipe(root, axis):
-    if axis == 'older':
-        nodes = [node for node in root.iter('node') if node.get('package') == PACKAGE
-                 and node.get('scrollable') == 'true' and node.get('class') != 'android.widget.HorizontalScrollView']
-        assert len(nodes) == 1, 'Missing or ambiguous chat scroll container'
-        node = nodes[0]
-    else:
-        node = tagged(root, 'table-sheet-scroll')
-        assert node.get('scrollable') == 'true', 'Expanded table is not scrollable'
+    assert axis in ('older', 'sideways', 'down'), 'Unknown scroll direction'
+    node = viewport(root)
     x1, y1, x2, y2 = bounds(node)
     assert x2 - x1 > 100 and y2 - y1 > 100, 'Scroll viewport is too small'
+    if axis != 'older':
+        assert any(child.get('content-desc') == 'Close' for child in root.iter('node')), 'Expanded table is not open'
+        a, b, c, d = bounds(table(root))
+        x1, y1, x2, y2 = max(x1, a), max(y1, b), min(x2, c), min(y2, d)
     dx, dy = (x2 - x1) // 5, (y2 - y1) // 5
     x, y = (x1 + x2) // 2, (y1 + y2) // 2
     if axis == 'sideways':
         return [x2 - dx, y, x1 + dx, y]
     if axis == 'down':
         return [x, y2 - dy, x, y1 + dy]
-    assert axis == 'older', 'Unknown scroll direction'
     return [x, y1 + dy, x, y2 - dy]
 
 
@@ -68,25 +77,22 @@ def check(xml, screenshot, state, target, hidden=''):
     nodes = [node for node in root.iter('node') if node.get('package') == PACKAGE]
     assert nodes, 'Chat UI is missing'
     texts = [node.get('text') for node in nodes]
-    tags = [node.get('resource-id') for node in nodes]
     descriptions = [node.get('content-desc') for node in nodes]
     image = Image.open(screenshot).convert('RGB')
     assert image.width >= 100 and image.height >= 100, 'Invalid screenshot'
+    scroll = table(root)
     if state in ('inline', 'closed'):
-        assert 'table-sheet' not in tags and 'table-close' not in tags, 'Expanded sheet remains open'
+        assert 'Close' not in descriptions, 'Expanded sheet remains open'
         assert 'Message verify-session' in texts and 'Session actions' in descriptions, 'Chat did not return'
-        assert 'Expand table' in descriptions and 'md-table' in tags, 'Inline table is missing'
+        assert 'Expand table' in descriptions, 'Inline expand action is missing'
     else:
         assert state in ('open', 'sideways', 'down')
         assert 'Garden harvest table' in texts, 'Table title is missing'
-        assert 'Close' in descriptions, 'Close action is missing'
-        for tag in ('table-sheet', 'table-close', 'table-sheet-scroll', 'md-table-expanded'):
-            tagged(root, tag)
-        sheet = bounds(tagged(root, 'table-sheet'))
-        assert sheet[2] - sheet[0] >= image.width * 0.8, 'Table did not expand to full width'
-        assert sheet[3] - sheet[1] >= image.height * 0.5, 'Expanded table is too short'
-        table = tagged(root, 'md-table-expanded')
-        assert any(node.get('text') == target for node in table.iter('node')), 'Target is outside the expanded table'
+        assert 'Close' in descriptions and 'Expand table' not in descriptions, 'Expanded table is not open'
+        area = bounds(viewport(root))
+        assert area[2] - area[0] >= image.width * 0.8, 'Table did not expand to full width'
+        assert area[3] - area[1] >= image.height * 0.5, 'Expanded table is too short'
+    assert any(node.get('text') == target for node in scroll.iter('node')), 'Target is outside the table'
     cell = visible(root, target)
     x1, y1, x2, y2 = cell
     assert x2 <= image.width and y2 <= image.height, 'Cell is outside the screenshot'

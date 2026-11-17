@@ -990,7 +990,7 @@
       "journey": "chat-table.md",
       "sideEffect": false,
       "match": [
-        "ExpandedChatTable|expandTable|expandedTable|ChatTable|MarkdownTable|table-expand|table-sheet|table-close"
+        "ui/MarkdownText\\.kt|ExpandedChatTable|expandTable|expandedTable|ChatTable|MarkdownTable|table-expand|table-sheet|table-close"
       ],
       "citations": {
         "action": {

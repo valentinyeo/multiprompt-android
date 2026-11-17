@@ -19,11 +19,11 @@ class TableUiTest(unittest.TestCase):
         self.png = self.xml.with_suffix('.png')
         self.root = ET.Element('hierarchy')
         self.window = self.node(self.root, bounds='[0,0][400,800]')
-        self.sheet = self.node(self.window, **{'resource-id': 'table-sheet', 'bounds': '[10,100][390,750]'})
+        self.sheet = self.node(self.window, bounds='[10,100][390,750]')
         self.node(self.sheet, text='Garden harvest table')
-        self.close = self.node(self.sheet, **{'resource-id': 'table-close', 'content-desc': 'Close'})
-        self.viewport = self.node(self.sheet, **{'resource-id': 'table-sheet-scroll', 'bounds': '[20,180][380,720]', 'scrollable': 'true'})
-        self.table = self.node(self.viewport, **{'resource-id': 'md-table-expanded', 'bounds': '[20,180][380,720]'})
+        self.close = self.node(self.sheet, **{'content-desc': 'Close'})
+        self.viewport = self.node(self.sheet, **{'bounds': '[20,180][380,720]', 'scrollable': 'true'})
+        self.table = self.node(self.viewport, **{'class': 'android.widget.HorizontalScrollView', 'bounds': '[20,180][380,720]'})
         self.cell = self.node(self.table, text='R24-C06 harvest', bounds='[40,600][210,630]')
         self.hidden = self.node(self.table, text='R01-C06 harvest', bounds='[40,-400][210,-370]')
         self.image = Image.new('RGB', (400, 800), (16, 16, 16))
@@ -54,7 +54,7 @@ class TableUiTest(unittest.TestCase):
     def test_cell_in_background_does_not_prove_expanded_table(self):
         self.table.remove(self.cell)
         self.window.append(self.cell)
-        with self.assertRaisesRegex(AssertionError, 'outside the expanded table'):
+        with self.assertRaisesRegex(AssertionError, 'outside the table'):
             self.check()
 
     def test_blank_screenshot_is_rejected(self):
@@ -70,7 +70,7 @@ class TableUiTest(unittest.TestCase):
     def test_sheet_title_close_and_full_size_are_required(self):
         for node, attr, value in [(self.sheet[0], 'text', 'Wrong title'),
                                   (self.close, 'content-desc', 'Wrong action'),
-                                  (self.sheet, 'bounds', '[10,100][200,300]')]:
+                                  (self.viewport, 'bounds', '[20,180][200,300]')]:
             old = node.get(attr)
             node.set(attr, value)
             with self.subTest(attr=attr), self.assertRaises(AssertionError):
@@ -84,7 +84,7 @@ class TableUiTest(unittest.TestCase):
         self.node(self.window, text='Message verify-session')
         self.node(self.window, **{'content-desc': 'Session actions'})
         self.node(self.window, **{'content-desc': 'Expand table'})
-        table = self.node(self.window, **{'resource-id': 'md-table', 'bounds': '[20,180][380,720]'})
+        table = self.node(self.window, **{'class': 'android.widget.HorizontalScrollView', 'bounds': '[20,180][380,720]'})
         self.node(table, text='R24-C06 harvest', bounds='[40,600][210,630]')
         self.assertEqual(self.check('closed', hidden='')['state'], 'closed')
         self.window.remove(self.window[0])
@@ -99,7 +99,7 @@ class TableUiTest(unittest.TestCase):
         self.assertEqual(x1, x2)
         self.assertTrue(180 < y2 < y1 < 720)
         self.viewport.set('scrollable', 'false')
-        with self.assertRaisesRegex(AssertionError, 'not scrollable'):
+        with self.assertRaisesRegex(AssertionError, 'no vertical scroll container'):
             ui.swipe(self.root, 'down')
 
 

@@ -663,7 +663,9 @@ test('the real picker schedules chat table even when the model omits it or fills
     fs.writeFileSync(stub, `global.fetch = async () => ({status:200,ok:true,json:async () => ({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:JSON.parse(process.env.MODEL_FEATURES),changed_outcomes:[],change_kind:process.env.CHANGE_KIND,reason:'Model omitted chat table.'})}}]})});`);
     const recipeDiff = path.join(directory, 'recipe.diff');
     fs.writeFileSync(recipeDiff, `diff --git a/${gate.REGISTRY_PATH}/chat-table.md b/${gate.REGISTRY_PATH}/chat-table.md\n+Expand and scroll a chat table\n`);
-    for (const diff of [path.join(root, 'tools/fixtures/feature-coverage/pr-379.diff'), recipeDiff]) {
+    const rendererDiff = path.join(directory, 'renderer.diff');
+    fs.writeFileSync(rendererDiff, productDiff('java/dev/multiprompt/companion/ui/MarkdownText.kt', 'val widths = listOf(120)'));
+    for (const diff of [path.join(root, 'tools/fixtures/feature-coverage/pr-379.diff'), recipeDiff, rendererDiff]) {
       for (const modelFeatures of [[], ['native-skills.md', 'session-reader.md', 'terminal.md']]) {
         const output = path.join(directory, 'outputs');
         fs.writeFileSync(output, '');
@@ -717,6 +719,7 @@ test('table proof needs its expand action, far-cell result and exact head', () =
     }
     fs.writeFileSync(path.join(directory, 'app-source-sha.txt'), 'b'.repeat(40));
     assert.match(gate.featureErrors(args).errors.join(' '), /exact PR head SHA/);
+    assert.ok(gate.changedOutcomes(productDiff('java/dev/multiprompt/companion/ui/MarkdownText.kt', 'val widths = listOf(120)')).includes(outcome));
     for (const name of ['ExpandedChatTable', 'ChatTable', 'MarkdownTable', 'table-expand', 'table-sheet', 'table-close']) {
       assert.ok(gate.changedOutcomes(productDiff('ui/MarkdownText.kt', name)).includes(outcome), name);
     }
