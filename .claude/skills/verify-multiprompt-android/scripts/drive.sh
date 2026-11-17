@@ -961,6 +961,16 @@ if [[ "$feature" == room-order.md ]]; then
     cp -R "$scripts/../../../../app/src/main/assets/rooms" "$room_stage/app/src/main/assets/"
     chmod -R a+rX "$room_stage"
     sudo -u verifyssh env HOME=/home/verifyssh python3 "$room_stage/.claude/skills/verify-multiprompt-android/scripts/room-order.py" install
+    getent ahosts account.multiprompt.dev | awk '{print $1}' | sort -u > "$EVIDENCE/account-origin-ips.txt"
+    python3 "$scripts/room-order.py" block-rules "$EVIDENCE/account-origin-ips.txt" > "$EVIDENCE/account-origin-blocked.txt"
+    while read -r family ip; do
+        if [[ "$family" == v6 ]]; then
+            sudo ip6tables -I OUTPUT -d "$ip" -p tcp --dport 443 -j REJECT --reject-with tcp-reset
+        else
+            [[ "$family" == v4 ]]
+            sudo iptables -I OUTPUT -d "$ip" -p tcp --dport 443 -j REJECT --reject-with tcp-reset
+        fi
+    done < "$EVIDENCE/account-origin-blocked.txt"
     relaunch_app
     for attempt in {1..45}; do
         if select_node contains 'Order room' >/dev/null 2>&1; then break; fi

@@ -94,6 +94,51 @@ class RoomOrderScriptTest(unittest.TestCase):
             released = self.run_script('holding', str(path), 'one')
             self.assertNotEqual(released.returncode, 0)
 
+    def test_sibling_placeholder_and_filled_field_stay_in_the_room(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = ET.Element('hierarchy')
+            ET.SubElement(root, 'node', {'package': PACKAGE, 'class': 'android.widget.TextView', 'text': 'Order room', 'bounds': '[40,80][400,140]'})
+            editor = ET.SubElement(root, 'node', {'package': PACKAGE, 'class': 'android.widget.EditText', 'text': '', 'bounds': '[40,800][700,880]'})
+            ET.SubElement(root, 'node', {'package': PACKAGE, 'class': 'android.widget.TextView', 'text': 'Message Order room', 'bounds': '[48,820][400,860]'})
+            ET.SubElement(root, 'node', {'package': PACKAGE, 'class': 'android.widget.TextView', 'text': 'Send', 'bounds': '[720,820][800,860]'})
+            path = Path(directory) / 'ui.xml'
+            ET.ElementTree(root).write(path, encoding='utf-8')
+            empty = self.run_script('composer', str(path))
+            self.assertEqual(empty.returncode, 0, empty.stderr)
+            self.assertIn('ROOM_COMPOSER', empty.stdout)
+            editor.set('text', 'one')
+            for node in list(root):
+                if node.get('text') == 'Message Order room':
+                    root.remove(node)
+            ET.ElementTree(root).write(path, encoding='utf-8')
+            filled = self.run_script('composer', str(path))
+            self.assertEqual(filled.returncode, 0, filled.stderr)
+            held = self.run_script('holding', str(path), 'one')
+            self.assertEqual(held.returncode, 0, held.stderr)
+            inbox = ET.Element('hierarchy')
+            ET.SubElement(inbox, 'node', {'package': PACKAGE, 'class': 'android.widget.TextView', 'text': 'Order room', 'bounds': '[40,200][400,260]'})
+            inbox_path = Path(directory) / 'inbox.xml'
+            ET.ElementTree(inbox).write(inbox_path, encoding='utf-8')
+            left = self.run_script('composer', str(inbox_path))
+            self.assertNotEqual(left.returncode, 0)
+            self.assertIn('room composer is missing', left.stderr)
+
+    def test_account_block_accepts_each_resolved_address_once(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'ips.txt'
+            path.write_text('1.2.3.4\n1.2.3.4\n2606:4700:4700::1111\n')
+            result = self.run_script('block-rules', str(path))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.splitlines(), ['v4 1.2.3.4', 'v6 2606:4700:4700::1111'])
+            path.write_text('account.multiprompt.dev\n')
+            refused = self.run_script('block-rules', str(path))
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertIn('not an ip', refused.stderr)
+            path.write_text('\n')
+            empty = self.run_script('block-rules', str(path))
+            self.assertNotEqual(empty.returncode, 0)
+            self.assertIn('did not resolve', empty.stderr)
+
     def test_screen_requires_oldest_message_above_the_context_reply(self):
         with tempfile.TemporaryDirectory() as directory:
             current = write_xml(directory, 'ui.xml', [

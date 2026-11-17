@@ -93,15 +93,39 @@ def bubbles(found, text):
     return [node for node in found if node.get('text') == text and node.get('class') != 'android.widget.EditText']
 
 
+PLACEHOLDER = 'Message Order room'
+
+
+def ip_family(ip):
+    if re.fullmatch(r'(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}', ip):
+        return 'v4'
+    if re.fullmatch(r'(?:[0-9A-Fa-f]{0,4}:){2,7}[0-9A-Fa-f]{0,4}', ip) and re.search(r'[0-9A-Fa-f]', ip):
+        return 'v6'
+    raise SystemExit('account address is not an ip')
+
+
+def block_lines(text):
+    seen = []
+    lines = []
+    for raw in text.split():
+        if raw in seen:
+            continue
+        seen.append(raw)
+        lines.append(f'{ip_family(raw)} {raw}')
+    if not lines:
+        raise SystemExit('account origin did not resolve')
+    return lines
+
+
 def composer(path):
     found = package_nodes(path)
-    for node in found:
-        if node.get('class') != 'android.widget.EditText':
-            continue
-        if any('Message Order room' in (item.get('text') or '') or 'Message Order room' in (item.get('content-desc') or '') for item in node.iter()):
-            print('ROOM_COMPOSER')
-            return
-    raise SystemExit('room composer is missing')
+    if not any(node.get('class') == 'android.widget.EditText' for node in found):
+        raise SystemExit('room composer is missing')
+    labeled = any(PLACEHOLDER in (node.get('text') or '') or PLACEHOLDER in (node.get('content-desc') or '') for node in found)
+    in_room = any(node.get('text') == 'Order room' for node in found) and any(node.get('text') == 'Send' for node in found)
+    if not labeled and not in_room:
+        raise SystemExit('room composer is missing')
+    print('ROOM_COMPOSER')
 
 
 def holding(path, text):
@@ -199,6 +223,9 @@ def main():
         return
     if command == 'install':
         install()
+        return
+    if command == 'block-rules':
+        print('\n'.join(block_lines(Path(sys.argv[2]).read_text())))
         return
     if command == 'composer':
         composer(sys.argv[2])

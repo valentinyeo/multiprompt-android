@@ -17,4 +17,8 @@ The app before this change delivers Beta `two` without the earlier answer, so th
 
 The room keyboard covers Send while it is still opening. The driver closes the keyboard and taps Send again until the draft leaves the composer. Text still inside the composer is not a message row.
 
+The fixture login is stored already expired. Launch refreshes it at `account.multiprompt.dev`. A live `invalid_grant` clears that login and the screen returns to Sign in, so **Order room** never stays up. Before relaunch the runner rejects TCP port 443 to every address that name resolves to. The refresh fails as a network error, the local login stays, and the room still loads through the fixture SSH host.
+
+**Message Order room** is a sibling of the field and disappears once the draft is typed. The composer is still on screen when **Order room** and **Send** are both visible.
+
 Account OTP, a live Claude session, mention-only delivery, an agent that stays offline until later, restart without a repeat send, and the longest message that still fits in one delivery are outside this recipe.
