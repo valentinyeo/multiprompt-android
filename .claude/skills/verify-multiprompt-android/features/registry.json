@@ -620,6 +620,28 @@
         "remote-control-host.json": 3500,
         "remote-control-before.txt": 200
       }
+    },
+    "ai-usage.md": {
+      "name": "AI usage",
+      "description": "Open AI usage, compare Claude and Codex numbers with independent SSH receipts, then close. SOFT-2542.",
+      "outcomes": [
+        "ai.usage"
+      ],
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "driver": true,
+        "inputs": {},
+        "prerequisites": []
+      },
+      "evidence": {
+        "ai-usage-menu.json": 1500,
+        "ai-usage-open.json": 2000,
+        "ai-usage-closed.json": 1000,
+        "ai-usage-proof.txt": 200,
+        "ai-usage-host.json": 2000,
+        "ai-usage-receipts.txt": 3000
+      }
     }
   },
   "outcomes": {
@@ -912,11 +934,26 @@
     },
     "ai.usage": {
       "description": "Open AI usage and render live, stale and missing status.",
-      "journey": null,
-      "sideEffect": false,
+      "journey": "ai-usage.md",
+      "sideEffect": true,
       "match": [
-        "AiUsage|PlanUsage|planUsage"
-      ]
+        "AiUsage|PlanUsage|planUsage",
+        "aiUsage|AI usage|tokenLadderStatus|readTokenLadderStatus|token-ladder/status\\.json"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tap_text 'AI usage'"
+        },
+        "result": {
+          "file": "ai-usage-open.json",
+          "quote": "\"week\": \"37.5%\""
+        },
+        "sideEffect": {
+          "file": "ai-usage-receipts.txt",
+          "quote": "cat ~/.local/state/token-ladder/status.json"
+        }
+      }
     },
     "skills.pills": {
       "description": "Insert skills mid-message and render visible skill pills.",

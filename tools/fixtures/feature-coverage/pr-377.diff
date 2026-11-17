@@ -1,0 +1,720 @@
+diff --git a/app/src/main/java/dev/multiprompt/companion/MainViewModel.kt b/app/src/main/java/dev/multiprompt/companion/MainViewModel.kt
+index aafd8c128..d430f8f79 100644
+--- a/app/src/main/java/dev/multiprompt/companion/MainViewModel.kt
++++ b/app/src/main/java/dev/multiprompt/companion/MainViewModel.kt
+@@ -9,6 +9,7 @@ import dev.multiprompt.companion.account.VisitDwell
+ import androidx.lifecycle.AndroidViewModel
+ import androidx.lifecycle.viewModelScope
+ import dev.multiprompt.companion.model.HostDraft
++import dev.multiprompt.companion.model.PlanUsage
+ import dev.multiprompt.companion.network.NetworkReturnWatcher
+ import dev.multiprompt.companion.model.HostProfile
+ import dev.multiprompt.companion.model.AgentHarness
+@@ -153,6 +154,7 @@ data class AppUiState(
+     val etaAccuracy: List<TmuxText.AgentAccuracy>? = null,
+     val etaAccuracyLoading: Boolean = false,
+     val etaAccuracyError: String? = null,
++    val aiUsage: AiUsageState? = null,
+     val newestSessionsAtBottom: Boolean = true,
+     val allSplitOnRight: Boolean = true,
+     val readerDefaultFontScale: Float = 1f,
+@@ -181,6 +183,12 @@ data class AppUiState(
+     }
+ }
+ 
++data class AiUsageState(
++    val loading: Boolean = false,
++    val error: String? = null,
++    val plans: List<PlanUsage.Plan> = emptyList(),
++)
++
+ enum class NewSessionStep { HOST, PATH, HARNESS, EXISTING }
+ 
+ enum class NewSessionMode { NEW, EXISTING }
+@@ -411,6 +419,68 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
+         _state.update { it.copy(etaAccuracy = null, etaAccuracyLoading = false, etaAccuracyError = null) }
+     }
+ 
++    private var aiUsageGeneration = 0
++
++    fun showAiUsage() {
++        val generation = ++aiUsageGeneration
++        val hosts = usageHosts(_state.value)
++        _state.update { it.copy(aiUsage = AiUsageState(loading = true)) }
++        viewModelScope.launch {
++            val result = withContext(Dispatchers.IO) { fetchAiUsage(hosts) }
++            if (generation != aiUsageGeneration) return@launch
++            _state.update { state ->
++                if (state.aiUsage == null) state else state.copy(
++                    aiUsage = when (result) {
++                        is AiUsageFetch.Ready -> AiUsageState(plans = result.plans)
++                        is AiUsageFetch.Failed -> AiUsageState(error = result.message)
++                    },
++                )
++            }
++        }
++    }
++
++    fun dismissAiUsage() {
++        aiUsageGeneration++
++        _state.update { it.copy(aiUsage = null) }
++    }
++
++    private fun usageHosts(state: AppUiState): List<HostProfile> {
++        val trusted = (state.hosts + state.accountHosts.values)
++            .distinctBy { it.id }
++            .filter { it.hostKeyFingerprint != null || it.hostKeys.isNotEmpty() }
++        return trusted.sortedWith(compareBy { host ->
++            if (host.label == "remote-2" || host.hostname == "remote-2") 0 else 1
++        })
++    }
++
++    private suspend fun fetchAiUsage(hosts: List<HostProfile>): AiUsageFetch {
++        if (hosts.isEmpty()) return AiUsageFetch.Failed("Could not read AI usage")
++        var sawStale = false
++        var lastError = "Could not read AI usage"
++        val now = System.currentTimeMillis() / 1000
++        for (host in hosts) {
++            try {
++                val parsed = PlanUsage.parse(ssh.readTokenLadderStatus(host), now)
++                if (parsed == null) continue
++                if (parsed.fresh) return AiUsageFetch.Ready(parsed.plans)
++                sawStale = true
++            } catch (cancelled: CancellationException) {
++                throw cancelled
++            } catch (_: SshProblem.HostKeyRequired) {
++                continue
++            } catch (thrown: Throwable) {
++                val message = thrown.message?.takeIf { it.isNotBlank() }
++                if (message != null) lastError = message
++            }
++        }
++        return if (sawStale) AiUsageFetch.Failed("Usage is out of date") else AiUsageFetch.Failed(lastError)
++    }
++
++    private sealed interface AiUsageFetch {
++        data class Ready(val plans: List<PlanUsage.Plan>) : AiUsageFetch
++        data class Failed(val message: String) : AiUsageFetch
++    }
++
+     fun clearSessionActionError() {
+         _state.update { it.copy(sessionActionError = null) }
+     }
+diff --git a/app/src/main/java/dev/multiprompt/companion/model/PlanUsage.kt b/app/src/main/java/dev/multiprompt/companion/model/PlanUsage.kt
+new file mode 100644
+index 000000000..0b9147418
+--- /dev/null
++++ b/app/src/main/java/dev/multiprompt/companion/model/PlanUsage.kt
+@@ -0,0 +1,234 @@
++package dev.multiprompt.companion.model
++
++import org.json.JSONArray
++import org.json.JSONObject
++import java.time.DateTimeException
++import java.time.DayOfWeek
++import java.time.Instant
++import java.time.OffsetDateTime
++import java.time.ZoneId
++import kotlin.math.round
++
++object PlanUsage {
++    const val MAX_AGE_SECONDS = 1_800L
++
++    data class Window(
++        val usedPercent: Double? = null,
++        val resetsAtEpochSeconds: Long? = null,
++        val timeGonePercent: Double? = null,
++        val emptyHours: Double? = null,
++    )
++
++    data class Plan(
++        val name: String,
++        val stale: Boolean,
++        val week: Window,
++        val fiveHour: Window,
++        val bonusResetEpochSeconds: Long? = null,
++    ) {
++        fun presentation(nowEpochSeconds: Long, zone: ZoneId): Presentation {
++            val weekPercent = percentText(week.usedPercent)
++            val headline = when {
++                week.usedPercent == null -> "unknown"
++                stale -> "STALE"
++                else -> weekPercent
++            }
++            val fraction = week.usedPercent?.takeIf { it.isFinite() }?.let {
++                (it.coerceIn(0.0, 100.0) / 100.0).toFloat()
++            }
++            val pace = paceWord(week.usedPercent, week.timeGonePercent)
++            val weeklyReset = week.resetsAtEpochSeconds?.let { resetDetail(it, nowEpochSeconds, zone) }
++            val paceLine = buildList {
++                if (stale && week.usedPercent == null) add("STALE")
++                add(pace)
++                if (weeklyReset != null) add(weeklyReset)
++            }.joinToString(" | ")
++            val fiveHourLine = buildList {
++                add("5H ${percentText(fiveHour.usedPercent)}")
++                fiveHour.resetsAtEpochSeconds?.let { add("RESET ${countdown(it, nowEpochSeconds)}") }
++                bonusResetEpochSeconds?.takeIf { it > nowEpochSeconds }?.let { add(bonusText(it, zone)) }
++            }.joinToString(" | ")
++            val detailLine = listOf("WEEK $weekPercent", fiveHourLine, forecastText(week.emptyHours)).joinToString(" | ")
++            return Presentation(headline, fraction, paceLine, detailLine)
++        }
++    }
++
++    data class Presentation(
++        val percent: String,
++        val fraction: Float?,
++        val paceLine: String,
++        val detailLine: String,
++    )
++
++    data class Snapshot(
++        val fresh: Boolean,
++        val plans: List<Plan>,
++    )
++
++    fun percentText(value: Double?): String {
++        if (value == null || !value.isFinite()) return "-"
++        val tenths = round(value.coerceIn(0.0, 100.0) * 10.0).toInt()
++        val whole = tenths / 10
++        val fraction = tenths % 10
++        return if (fraction == 0) "$whole%" else "$whole.$fraction%"
++    }
++
++    fun paceWord(usedPercent: Double?, timeGonePercent: Double?): String {
++        if (usedPercent == null || timeGonePercent == null) return "unknown"
++        if (!usedPercent.isFinite() || !timeGonePercent.isFinite()) return "unknown"
++        val difference = timeGonePercent - usedPercent
++        return when {
++            difference > 5.0 -> "BEHIND"
++            difference < -5.0 -> "AHEAD"
++            else -> "ON PACE"
++        }
++    }
++
++    fun countdown(resetEpochSeconds: Long, nowEpochSeconds: Long): String {
++        if (resetEpochSeconds <= nowEpochSeconds) return "DUE"
++        val remainingMinutes = (resetEpochSeconds - nowEpochSeconds + 60 - 1) / 60
++        val days = remainingMinutes / (24 * 60)
++        val hours = remainingMinutes / 60
++        val minutes = remainingMinutes % 60
++        return when {
++            days > 0 -> "${days}D ${hours % 24}H"
++            hours > 0 -> "${hours}H ${minutes}M"
++            else -> "${minutes}M"
++        }
++    }
++
++    fun resetDetail(resetEpochSeconds: Long, nowEpochSeconds: Long, zone: ZoneId): String {
++        val local = Instant.ofEpochSecond(resetEpochSeconds).atZone(zone)
++        return "RESETS ${weekday(local.dayOfWeek)} ${clock(local.hour, local.minute)}, IN ${countdown(resetEpochSeconds, nowEpochSeconds)}"
++    }
++
++    fun bonusText(resetEpochSeconds: Long, zone: ZoneId): String {
++        val local = Instant.ofEpochSecond(resetEpochSeconds).atZone(zone)
++        return "BONUS %02d-%02d".format(local.monthValue, local.dayOfMonth)
++    }
++
++    fun forecastText(emptyHours: Double?): String {
++        if (emptyHours == null || !emptyHours.isFinite() || emptyHours < 0.0) return "-"
++        return "EMPTY IN ${round(emptyHours).toLong()}H"
++    }
++
++    fun parse(json: String, nowEpochSeconds: Long): Snapshot? {
++        val start = json.indexOf('{')
++        val end = json.lastIndexOf('}')
++        if (start < 0 || end <= start) return null
++        val root = try {
++            JSONObject(json.substring(start, end + 1))
++        } catch (_: Exception) {
++            return null
++        }
++        val checkedAt = finite(root, "ts") ?: return null
++        val plans = plans(root, nowEpochSeconds)
++        val fresh = nowEpochSeconds - checkedAt <= MAX_AGE_SECONDS
++        return Snapshot(fresh = fresh, plans = plans)
++    }
++
++    private fun plans(root: JSONObject, nowEpochSeconds: Long): List<Plan> {
++        val accounts = root.opt("accounts")
++        if (accounts is JSONArray) return accountPlans(accounts, nowEpochSeconds)
++        if (accounts != null) return emptyList()
++        return listOfNotNull(
++            plan(root.optJSONObject("claude"), "Claude", "claude", nowEpochSeconds),
++            plan(root.optJSONObject("codex"), "Codex", "codex", nowEpochSeconds),
++        )
++    }
++
++    private fun accountPlans(accounts: JSONArray, nowEpochSeconds: Long): List<Plan> = buildList {
++        for (index in 0 until accounts.length()) {
++            val item = accounts.optJSONObject(index) ?: continue
++            plan(item, "", "", nowEpochSeconds)?.let(::add)
++        }
++    }
++
++    private fun plan(item: JSONObject?, fallbackName: String, fallbackProvider: String, nowEpochSeconds: Long): Plan? {
++        if (item == null) return null
++        val provider = text(item, "provider") ?: fallbackProvider
++        val cluster = text(item, "cluster").orEmpty()
++        val configured = text(item, "label")
++            ?: text(item, "name")
++            ?: text(item, "display_name")
++            ?: text(item, "id")
++            ?: fallbackName.takeIf { it.isNotBlank() }
++            ?: return null
++        val name = shortName(configured, cluster).ifBlank { providerTitle(provider) }
++        if (name.isBlank()) return null
++        val week = window(item.optJSONObject("week"))
++        val fiveHour = window(item.optJSONObject("five_hour"))
++        val stale = item.opt("stale") == true || !text(item, "error").isNullOrBlank() || week.usedPercent == null
++        return Plan(
++            name = name,
++            stale = stale,
++            week = week,
++            fiveHour = fiveHour,
++            bonusResetEpochSeconds = soonestReset(item.optJSONArray("resets"), nowEpochSeconds),
++        )
++    }
++
++    private fun window(item: JSONObject?): Window {
++        if (item == null) return Window()
++        return Window(
++            usedPercent = finite(item, "used"),
++            resetsAtEpochSeconds = finite(item, "resets_at")?.takeIf { it in 0.0..4_000_000_000.0 }?.toLong(),
++            timeGonePercent = finite(item, "time_gone"),
++            emptyHours = finite(item.optJSONObject("pace"), "empty_hours")?.takeIf { it >= 0.0 },
++        )
++    }
++
++    private fun soonestReset(resets: JSONArray?, nowEpochSeconds: Long): Long? {
++        if (resets == null) return null
++        var soonest: Long? = null
++        for (index in 0 until resets.length()) {
++            val expires = text(resets.optJSONObject(index), "expires") ?: continue
++            val epoch = try {
++                OffsetDateTime.parse(expires).toEpochSecond()
++            } catch (_: DateTimeException) {
++                continue
++            }
++            if (epoch <= nowEpochSeconds) continue
++            if (soonest == null || epoch < soonest) soonest = epoch
++        }
++        return soonest
++    }
++
++    private fun shortName(label: String, cluster: String): String {
++        val suffix = " ($cluster)"
++        if (cluster.isEmpty() || !label.endsWith(suffix) || label.length <= suffix.length) return label
++        return label.dropLast(suffix.length)
++    }
++
++    private fun providerTitle(provider: String): String = when (provider) {
++        "claude" -> "Claude"
++        "codex" -> "Codex"
++        "kimi" -> "Kimi"
++        else -> "AI"
++    }
++
++    private fun finite(item: JSONObject?, key: String): Double? {
++        if (item == null || !item.has(key) || item.isNull(key)) return null
++        val number = item.opt(key) as? Number ?: return null
++        val value = number.toDouble()
++        return value.takeIf { it.isFinite() }
++    }
++
++    private fun text(item: JSONObject?, key: String): String? {
++        if (item == null || !item.has(key) || item.isNull(key)) return null
++        val value = item.opt(key)
++        return (value as? String)?.takeIf { it.isNotBlank() }
++    }
++
++    private fun weekday(day: DayOfWeek): String = when (day) {
++        DayOfWeek.SUNDAY -> "SUN"
++        DayOfWeek.MONDAY -> "MON"
++        DayOfWeek.TUESDAY -> "TUE"
++        DayOfWeek.WEDNESDAY -> "WED"
++        DayOfWeek.THURSDAY -> "THU"
++        DayOfWeek.FRIDAY -> "FRI"
++        DayOfWeek.SATURDAY -> "SAT"
++    }
++
++    private fun clock(hour: Int, minute: Int): String = "%02d:%02d".format(hour, minute)
++}
+diff --git a/app/src/main/java/dev/multiprompt/companion/ssh/SshRepository.kt b/app/src/main/java/dev/multiprompt/companion/ssh/SshRepository.kt
+index 4c0bac515..299f9160a 100644
+--- a/app/src/main/java/dev/multiprompt/companion/ssh/SshRepository.kt
++++ b/app/src/main/java/dev/multiprompt/companion/ssh/SshRepository.kt
+@@ -31,6 +31,7 @@ import kotlinx.coroutines.delay
+ import kotlinx.coroutines.isActive
+ import kotlinx.coroutines.launch
+ import kotlinx.coroutines.withContext
++import kotlinx.coroutines.TimeoutCancellationException
+ import kotlinx.coroutines.withTimeout
+ import kotlinx.coroutines.withTimeoutOrNull
+ import org.connectbot.sshlib.AuthResult
+@@ -657,6 +658,22 @@ class SshRepository(private val secrets: SecretStorage) {
+             }
+         }
+ 
++    suspend fun readTokenLadderStatus(host: HostProfile): String =
++        withContext(Dispatchers.IO) {
++            try {
++                withTimeout(CONNECTION_TIMEOUT_MS) {
++                    withAuthenticatedClient(host) { client ->
++                        val result = execute(client, TmuxCommands.tokenLadderStatus())
++                        result.requireSuccess("read AI usage")
++                        result.stdout
++                    }
++                }
++            } catch (cancelled: CancellationException) {
++                if (cancelled is TimeoutCancellationException) throw SshProblem.Connection("Could not read AI usage")
++                throw cancelled
++            }
++        }
++
+     suspend fun etaAccuracy(host: HostProfile): List<TmuxText.AgentAccuracy> =
+         withContext(Dispatchers.IO) {
+             withTimeout(CONNECTION_TIMEOUT_MS) {
+diff --git a/app/src/main/java/dev/multiprompt/companion/ssh/TmuxCommands.kt b/app/src/main/java/dev/multiprompt/companion/ssh/TmuxCommands.kt
+index 88dfb1d83..09a5abc25 100644
+--- a/app/src/main/java/dev/multiprompt/companion/ssh/TmuxCommands.kt
++++ b/app/src/main/java/dev/multiprompt/companion/ssh/TmuxCommands.kt
+@@ -76,6 +76,8 @@ object TmuxCommands {
+             "if [ -f \"\$mp_dir/eta-log.jsonl\" ]; then " +
+             "tail -c 65536 \"\$mp_dir/eta-log.jsonl\" | od -An -v -tx1 | tr -d ' \\n'; fi"
+ 
++    fun tokenLadderStatus(): String = "cat ~/.local/state/token-ladder/status.json"
++
+     fun capture(sessionName: String): String = captureCommand(target(sessionName))
+ 
+     private fun captureCommand(target: String): String =
+diff --git a/app/src/main/java/dev/multiprompt/companion/ui/AiUsageSheet.kt b/app/src/main/java/dev/multiprompt/companion/ui/AiUsageSheet.kt
+new file mode 100644
+index 000000000..b7f719f71
+--- /dev/null
++++ b/app/src/main/java/dev/multiprompt/companion/ui/AiUsageSheet.kt
+@@ -0,0 +1,56 @@
++package dev.multiprompt.companion.ui
++
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.heightIn
++import androidx.compose.foundation.rememberScrollState
++import androidx.compose.foundation.verticalScroll
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Modifier
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.ui.unit.dp
++import dev.multiprompt.companion.AiUsageState
++import dev.multiprompt.companion.model.PlanUsage
++import java.time.ZoneId
++import kotlinx.coroutines.delay
++
++@Composable
++internal fun AiUsageSheet(state: AiUsageState, onDismiss: () -> Unit) {
++    var now by remember { mutableStateOf(System.currentTimeMillis() / 1000) }
++    LaunchedEffect(state.plans) {
++        while (true) {
++            now = System.currentTimeMillis() / 1000
++            delay(30_000)
++        }
++    }
++    val zone = remember { ZoneId.systemDefault() }
++    val error = state.error
++    KitSheet(onDismiss = onDismiss) {
++        Text("AI usage", style = Kit.Heading, color = Kit.Text)
++        when {
++            state.loading -> Text("Loading usage", style = Kit.Hint, color = Kit.TextMuted)
++            error != null -> Text(error, style = Kit.Hint, color = Kit.TextMuted)
++            state.plans.isEmpty() -> Text("No usage yet", style = Kit.Hint, color = Kit.TextMuted)
++            else -> Column(
++                Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
++                verticalArrangement = Arrangement.spacedBy(12.dp),
++            ) {
++                state.plans.forEach { plan ->
++                    val view = plan.presentation(now, zone)
++                    KitPlanBlock(
++                        name = plan.name,
++                        percent = view.percent,
++                        fraction = view.fraction,
++                        paceLine = view.paceLine,
++                        detailLine = view.detailLine,
++                    )
++                }
++            }
++        }
++    }
++}
+diff --git a/app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt b/app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt
+index 2772f3764..35c335e4c 100644
+--- a/app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt
++++ b/app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt
+@@ -52,6 +52,7 @@ internal fun InboxOverflowMenu(
+     onArrangeSplits: () -> Unit,
+     onNewWorkspace: () -> Unit,
+     onRefresh: () -> Unit,
++    onAiUsage: () -> Unit = {},
+     onReleaseNotes: () -> Unit = {},
+ ) {
+     var expanded by remember { mutableStateOf(false) }
+@@ -92,6 +93,13 @@ internal fun InboxOverflowMenu(
+                     onRefresh()
+                 },
+             )
++            KitMenuRow(
++                label = "AI usage",
++                onClick = {
++                    expanded = false
++                    onAiUsage()
++                },
++            )
+             KitMenuRow(
+                 label = BuildConfig.VERSION_NAME,
+                 modifier = Modifier.testTag("app-version").semantics {
+diff --git a/app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt b/app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt
+index 672646f41..fa07e24b8 100644
+--- a/app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt
++++ b/app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt
+@@ -259,6 +259,43 @@ internal fun KitDivider(modifier: Modifier = Modifier) {
+     Box(modifier.fillMaxWidth().height(1.dp).background(Kit.Divider))
+ }
+ 
++@Composable
++internal fun KitUsageBar(fraction: Float?, modifier: Modifier = Modifier) {
++    val fill = fraction?.takeIf { it.isFinite() }?.coerceIn(0f, 1f)
++    Box(modifier.fillMaxWidth().height(8.dp).clip(Kit.PillShape).background(Kit.Outline)) {
++        if (fill != null && fill > 0f) {
++            Box(Modifier.fillMaxWidth(fill).height(8.dp).background(Kit.Text))
++        }
++    }
++}
++
++@Composable
++internal fun KitPlanBlock(
++    name: String,
++    percent: String,
++    fraction: Float?,
++    paceLine: String,
++    detailLine: String,
++    modifier: Modifier = Modifier,
++) {
++    Column(
++        modifier.fillMaxWidth().kitSurface(Kit.CardShape).padding(horizontal = 16.dp, vertical = 12.dp),
++        verticalArrangement = Arrangement.spacedBy(6.dp),
++    ) {
++        Row(
++            Modifier.fillMaxWidth(),
++            horizontalArrangement = Arrangement.spacedBy(12.dp),
++            verticalAlignment = Alignment.CenterVertically,
++        ) {
++            Text(name, style = Kit.BodyStrong, color = Kit.Text, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
++            Text(percent, style = Kit.BodyStrong, color = Kit.Text, maxLines = 1)
++        }
++        KitUsageBar(fraction)
++        Text(paceLine, style = Kit.Hint, color = Kit.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
++        Text(detailLine, style = Kit.Hint, color = Kit.TextMuted, maxLines = 3, overflow = TextOverflow.Ellipsis)
++    }
++}
++
+ @Composable
+ internal fun KitSectionLabel(text: String, modifier: Modifier = Modifier) {
+     Text(
+diff --git a/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt b/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt
+index a9feb27ca..540aaa592 100644
+--- a/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt
++++ b/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt
+@@ -622,6 +622,8 @@ private fun AppScreens(viewModel: MainViewModel) {
+                     onClearCrashReport = viewModel::clearCrashReport,
+                     material3 = BuildConfig.MATERIAL3,
+                     onMapAccountHost = viewModel::mapAccountHost,
++                    onShowAiUsage = viewModel::showAiUsage,
++                    onDismissAiUsage = viewModel::dismissAiUsage,
+                 )
+                 AppSection.UPDATE -> UpdateScreen(
+                     state = updateState,
+@@ -1336,6 +1338,8 @@ internal fun SessionsScreen(
+     onSetUnreadOnly: (Boolean) -> Unit = {},
+     onSetChatGroup: (AccountTab, String?, Boolean) -> String? = { _, _, _ -> null },
+     onUngroup: (String, Boolean) -> String? = { _, _ -> null },
++    onShowAiUsage: () -> Unit = {},
++    onDismissAiUsage: () -> Unit = {},
+ ) = MultipromptTheme(
+     sunlight = when (appTheme) {
+         AppTheme.SYSTEM -> !isSystemInDarkTheme()
+@@ -1903,6 +1907,9 @@ internal fun SessionsScreen(
+             KitPrimaryButton("Done", onClick = { splitOrderDialogVisible = false }, modifier = Modifier.fillMaxWidth())
+         }
+     }
++    state.aiUsage?.let { usage ->
++        AiUsageSheet(usage, onDismissAiUsage)
++    }
+     if (workspaceDialogVisible) {
+         KitSheet(onDismiss = { workspaceDialogVisible = false }) {
+             Text("New workspace", style = Kit.Heading, color = Kit.Text)
+@@ -2103,6 +2110,7 @@ internal fun SessionsScreen(
+                                 onRefresh()
+                                 onRefreshRooms()
+                             },
++                            onAiUsage = onShowAiUsage,
+                             onReleaseNotes = onReleaseNotes,
+                         )
+                     }
+diff --git a/app/src/test/java/dev/multiprompt/companion/model/PlanUsageTest.kt b/app/src/test/java/dev/multiprompt/companion/model/PlanUsageTest.kt
+new file mode 100644
+index 000000000..c020a0f3c
+--- /dev/null
++++ b/app/src/test/java/dev/multiprompt/companion/model/PlanUsageTest.kt
+@@ -0,0 +1,79 @@
++package dev.multiprompt.companion.model
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import java.time.ZoneOffset
++
++class PlanUsageTest {
++    private val zone = ZoneOffset.UTC
++    private val now = 1_700_000_000L
++
++    @Test
++    fun desktopSampleKeepsWeeklyFiveHourPaceAndForecast() {
++        val raw = """
++            noise
++            {"ts":$now,"mode":"claude","why":"Claude is behind","accounts":[
++            {"id":"claude","label":"Claude (Primary / Secondary)","cluster":"Primary / Secondary","provider":"claude","week":{"used":35,"resets_at":1791738000,"time_gone":80.5,"pace":{"empty_hours":40}},"five_hour":{"used":4,"resets_at":${now + 90}},"resets":[{"expires":"2026-10-22T22:30:00Z"},{"expires":"invalid"},{"expires":"2026-10-19T23:59:00+02:00"}]},
++            {"id":"codex","name":"Codex","provider":"codex","week":{"used":60,"resets_at":${now + 47 * 3600},"time_gone":45.7,"pace":{"empty_hours":null}}},
++            {"id":"x","label":"Broken","provider":"claude","stale":true,"week":{"used":null}}]}
++        """.trimIndent()
++        val snapshot = PlanUsage.parse(raw, now)
++        assertEquals(true, snapshot?.fresh)
++        assertEquals(3, snapshot?.plans?.size)
++        val claude = snapshot!!.plans[0].presentation(now, zone)
++        val codex = snapshot.plans[1].presentation(now, zone)
++        val broken = snapshot.plans[2].presentation(now, zone)
++        assertEquals("Claude", snapshot.plans[0].name)
++        assertEquals("35%", claude.percent)
++        assertEquals(0.35f, requireNotNull(claude.fraction), 0.001f)
++        assertEquals("BEHIND", PlanUsage.paceWord(35.0, 80.5))
++        assertTrue(claude.paceLine.startsWith("BEHIND | RESETS "))
++        assertTrue(claude.detailLine.startsWith("WEEK 35% | 5H 4% | RESET 2M | BONUS 10-19 | EMPTY IN 40H"))
++        assertEquals("60%", codex.percent)
++        assertEquals("AHEAD | RESETS THU 21:13, IN 1D 23H", codex.paceLine)
++        assertEquals("WEEK 60% | 5H - | -", codex.detailLine)
++        assertEquals("unknown", broken.percent)
++        assertNull(broken.fraction)
++        assertEquals("STALE | unknown", broken.paceLine)
++        assertEquals("WEEK - | 5H - | -", broken.detailLine)
++        assertEquals("0%", PlanUsage.percentText(0.0))
++    }
++
++    @Test
++    fun paceThresholdMatchesTheDesktopCard() {
++        assertEquals("ON PACE", PlanUsage.paceWord(55.0, 50.0))
++        assertEquals("ON PACE", PlanUsage.paceWord(50.0, 55.0))
++        assertEquals("BEHIND", PlanUsage.paceWord(66.0, 72.1))
++        assertEquals("AHEAD", PlanUsage.paceWord(61.0, 55.0))
++        assertEquals("unknown", PlanUsage.paceWord(null, 40.0))
++        assertEquals("unknown", PlanUsage.paceWord(40.0, null))
++        assertEquals("-", PlanUsage.percentText(null))
++        assertEquals("52.5%", PlanUsage.percentText(52.5))
++        assertEquals("100%", PlanUsage.percentText(150.0))
++        assertEquals("DUE", PlanUsage.countdown(now, now))
++        assertEquals("2H 5M", PlanUsage.countdown(now + 2 * 3600 + 5 * 60, now))
++        assertEquals("-", PlanUsage.forecastText(null))
++        assertEquals("EMPTY IN 0H", PlanUsage.forecastText(0.0))
++    }
++
++    @Test
++    fun missingAndUnknownValuesDoNotCrash() {
++        assertNull(PlanUsage.parse("", now))
++        assertNull(PlanUsage.parse("not json", now))
++        assertNull(PlanUsage.parse("""{"accounts":[]}""", now))
++        val stale = PlanUsage.parse("""{"ts":1000,"accounts":[{"id":"claude","label":"Claude","week":{"used":"nope"},"five_hour":{"used":4}}]}""", 1000 + PlanUsage.MAX_AGE_SECONDS + 1)
++        assertEquals(false, stale?.fresh)
++        assertEquals("unknown", stale?.plans?.single()?.presentation(now, zone)?.percent)
++        assertEquals("4%", PlanUsage.percentText(stale?.plans?.single()?.fiveHour?.usedPercent))
++        val legacy = PlanUsage.parse("""{"ts":$now,"mode":"codex","claude":{"week":{"used":10}},"codex":{"label":"Codex Pro","week":{"used":20,"time_gone":20}}}""", now)
++        assertEquals(listOf("Claude", "Codex Pro"), legacy?.plans?.map { it.name })
++        assertEquals("ON PACE", legacy?.plans?.get(1)?.presentation(now, zone)?.paceLine)
++        val extra = PlanUsage.parse("""{"ts":$now,"accounts":{"claude":{"week":{"used":1}}}}""", now)
++        assertEquals(emptyList<PlanUsage.Plan>(), extra?.plans)
++        val blank = PlanUsage.parse("""{"ts":$now,"accounts":[{},{"id":"kimi","provider":"kimi","week":{"used":12,"time_gone":12}}]}""", now)
++        assertEquals(listOf("kimi"), blank?.plans?.map { it.name })
++        assertEquals("ON PACE", blank?.plans?.single()?.presentation(now, zone)?.paceLine)
++    }
++}
+diff --git a/app/src/test/java/dev/multiprompt/companion/ssh/TmuxCommandsTest.kt b/app/src/test/java/dev/multiprompt/companion/ssh/TmuxCommandsTest.kt
+index 07ccd1971..3a7e8858b 100644
+--- a/app/src/test/java/dev/multiprompt/companion/ssh/TmuxCommandsTest.kt
++++ b/app/src/test/java/dev/multiprompt/companion/ssh/TmuxCommandsTest.kt
+@@ -12,6 +12,11 @@ import java.nio.file.Files
+ import java.security.MessageDigest
+ 
+ class TmuxCommandsTest {
++    @Test
++    fun tokenLadderStatusIsAFixedCommand() {
++        assertEquals("cat ~/.local/state/token-ladder/status.json", TmuxCommands.tokenLadderStatus())
++    }
++
+     @Test
+     fun nativeSkillsQuotesTheSessionAndTheWorkingDirectory() {
+         assertEquals("python3 - 'live-abc'", TmuxCommands.nativeSkills("live-abc"))
+diff --git a/app/src/test/java/dev/multiprompt/companion/ui/DesignKitTest.kt b/app/src/test/java/dev/multiprompt/companion/ui/DesignKitTest.kt
+index 50db6a9bd..027ed04e2 100644
+--- a/app/src/test/java/dev/multiprompt/companion/ui/DesignKitTest.kt
++++ b/app/src/test/java/dev/multiprompt/companion/ui/DesignKitTest.kt
+@@ -280,6 +280,34 @@ class DesignKitTest {
+         compose.runOnIdle { assertEquals(1, clicks) }
+     }
+ 
++    @Test
++    fun usageBarFillsWithTextAndPlanBlockSitsOnTheSurface() {
++        compose.setContent {
++            Page {
++                KitUsageBar(0.5f, Modifier.testTag("usage"))
++                KitUsageBar(null, Modifier.testTag("usage-empty"))
++                KitPlanBlock(
++                    name = "Claude",
++                    percent = "35%",
++                    fraction = 0.35f,
++                    paceLine = "BEHIND | RESETS THU 21:13, IN 1D 23H",
++                    detailLine = "WEEK 35% | 5H 4% | EMPTY IN 40H",
++                    modifier = Modifier.testTag("plan"),
++                )
++            }
++        }
++        val bar = capture("usage")
++        assertPixel(bar, bar.width / 4, bar.height / 2, Kit.Text, "usage fill")
++        assertPixel(bar, bar.width * 3 / 4, bar.height / 2, Kit.Outline, "usage track")
++        val empty = capture("usage-empty")
++        assertPixel(empty, empty.width / 4, empty.height / 2, Kit.Outline, "empty usage track")
++        val plan = capture("plan")
++        assertPixel(plan, 20, plan.height - 6, Kit.Surface, "plan fill")
++        compose.onNodeWithText("Claude").assertExists()
++        compose.onNodeWithText("BEHIND | RESETS THU 21:13, IN 1D 23H").assertExists()
++        compose.onNodeWithText("AHEAD | RESETS THU 21:13, IN 1D 23H").assertDoesNotExist()
++    }
++
+     @Test
+     fun savedNoteIsASurfacePillWithAnOutline() {
+         compose.setContent {
+diff --git a/tools/release-notes/ticket-titles.json b/tools/release-notes/ticket-titles.json
+index 46fd771e6..223e6ae3e 100644
+--- a/tools/release-notes/ticket-titles.json
++++ b/tools/release-notes/ticket-titles.json
+@@ -92,6 +92,7 @@
+   "IGSH-2379": "A second AI tests every Android change before merge",
+   "IGSH-2432": "Second AI question test matches how answers send now",
+   "IGSH-2293": "Android: open a chat table full screen",
+-  "IGSH-2308": "Android: saved snippets in the message box",
+-  "IGSH-2290": "Android: skills in a message show as a pill"
++  "IGSH-2290": "Android: skills in a message show as a pill",
++  "IGSH-2294": "Android: usage and plan pace card",
++  "IGSH-2308": "Android: saved snippets in the message box"
+ }

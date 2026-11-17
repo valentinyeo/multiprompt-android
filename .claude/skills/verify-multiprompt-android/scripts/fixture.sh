@@ -228,4 +228,10 @@ if [[ "${VERIFY_FEATURE:-}" == session-favorite-dot.md ]]; then
     sudo -u verifyssh tmux set-window-option -t verify-keep automatic-rename off
     sudo -u verifyssh tmux rename-window -t verify-keep verify-keep
 fi
+if [[ "${VERIFY_FEATURE:-}" == ai-usage.md ]]; then
+    [[ "${GITHUB_ACTIONS:-}" == true ]]
+    sudo install -m 644 tools/ai-usage/host.py /home/verifyssh/ai-usage-host.py
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/ai-usage-host.py seed
+    { printf 'command="env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/ai-usage-host.py" '; cat "$FIXTURE/user-key.pub"; } | sudo tee /home/verifyssh/.ssh/authorized_keys >/dev/null
+fi
 printf 'SSH FIXTURE READY\n'
