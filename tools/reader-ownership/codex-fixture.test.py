@@ -1,8 +1,12 @@
+import contextlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
+import runpy
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -79,6 +83,31 @@ class CodexFixtureTest(unittest.TestCase):
                     process.kill()
                     process.communicate()
                     raise
+
+    def test_shared_codex_evidence_reads_the_native_fixture_thread(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            subprocess.run([sys.executable, str(SCRIPTS / "codex-console.py"), str(home / "receipts.txt"), "codex"],
+                           input="", env=dict(os.environ, HOME=temporary), text=True, capture_output=True, check=True, timeout=5)
+            transcript = next((home / ".codex/sessions").rglob("*.jsonl"))
+            sid = json.loads(transcript.read_text().splitlines()[0])["payload"]["id"]
+            database = home / "store.sqlite3"
+            with sqlite3.connect(database) as db:
+                db.execute("CREATE TABLE message_chats(provider, sid, epoch, seq)")
+                db.execute("CREATE TABLE shared_messages(provider, sid, id, attempt, state, epoch, text, position)")
+                db.execute("INSERT INTO message_chats VALUES('codex', ?, 0, 1)", (sid,))
+                db.execute("INSERT INTO shared_messages VALUES('codex', ?, 'phone-id', 'attempt', 'queued', 0, 'SHARED_CODEX_PHONE', 1)", (sid,))
+            connect = sqlite3.connect
+            output = io.StringIO()
+            with patch.dict(os.environ, GITHUB_ACTIONS="true", HOME="/home/verifyssh"), patch.object(os, "getuid", return_value=1000), \
+                    patch.object(sys, "argv", ["shared-evidence.py", "read", "codex"]), \
+                    patch.object(sqlite3, "connect", side_effect=lambda *args, **kwargs: connect(database)), contextlib.redirect_stdout(output):
+                runpy.run_path(str(SCRIPTS / "shared-evidence.py"), run_name="__main__")
+            evidence = json.loads(output.getvalue())
+            self.assertEqual(sid, evidence["sid"])
+            self.assertEqual(["SHARED_CODEX_PHONE"], [row["body"] for row in evidence["rows"]])
+            for name in ("fixture.sh", "shared-lock.py", "drive.sh"):
+                self.assertIn(sid, (SCRIPTS / name).read_text(), f"{name} must use the native fixture thread")
 
     def test_claude_fixture_keeps_the_phone_correlation_tag_in_one_native_occurrence(self):
         with tempfile.TemporaryDirectory() as temporary:

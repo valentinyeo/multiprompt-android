@@ -1593,7 +1593,7 @@ PYSHARED
     python3 - "$EVIDENCE/shared-codex-before-restart.json" "$EVIDENCE/shared-codex-after-reset.json" <<'PYCODEXSHARED'
 import json, sys
 before, after = [json.load(open(path)) for path in sys.argv[1:]]
-assert before['provider'] == after['provider'] == 'codex' and before['sid'] == after['sid'] == 'verify-codex'
+assert before['provider'] == after['provider'] == 'codex' and before['sid'] == after['sid'] == '25340000-0000-4000-8000-000000000001'
 assert after['epoch'] == before['epoch'] + 1
 assert len(before['rows']) == len(after['rows']) == 2
 assert all(row['state'] == 'cancelled' for row in after['rows'])

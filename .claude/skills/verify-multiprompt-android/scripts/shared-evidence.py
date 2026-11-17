@@ -13,7 +13,7 @@ assert os.environ.get('HOME') == '/home/verifyssh' and os.getuid() != 0
 home = Path('/home/verifyssh')
 provider = sys.argv[2] if len(sys.argv) > 2 else 'claude'
 assert provider in ('claude', 'codex', 'neighbor', 'codex-neighbor')
-sid = {'claude': 'a1b2c3d4-1008-4000-8000-000000001008', 'codex': 'verify-codex', 'neighbor': 'a1b2c3d4-1008-4000-8000-000000001009', 'codex-neighbor': 'verify-codex-neighbor'}[provider]
+sid = {'claude': 'a1b2c3d4-1008-4000-8000-000000001008', 'codex': '25340000-0000-4000-8000-000000000001', 'neighbor': 'a1b2c3d4-1008-4000-8000-000000001009', 'codex-neighbor': 'verify-codex-neighbor'}[provider]
 wire_provider = {'neighbor': 'claude', 'codex-neighbor': 'codex'}.get(provider, provider)
 tmux = 'codex-native' if wire_provider == 'codex' else 'verify-session'
 dbpath = home / '.local/state/multiprompt/shared-messages/store.sqlite3'
