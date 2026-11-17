@@ -186,32 +186,27 @@ wait_for_text() {
     printf 'Timed out waiting for %s\n' "$1" >&2
     return 1
 }
+clear_field() {
+    select_node focused-field '' >/dev/null || return
+    adb shell input keycombination -t 100 KEYCODE_CTRL_LEFT KEYCODE_A || return
+    adb shell input keyevent KEYCODE_DEL || return
+    dump_ui || return
+    if ! python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value "$1" ''; then
+        printf 'JOURNEY_FIELD_CLEAR_FAILED: %s: select-all/delete did not empty the focused field; no text typed\n' "$1" >&2
+        return 1
+    fi
+}
 fill() {
-    local attempt index character
-    local -a clear_keys
-    tap_node field "$1"
-    select_node focused-field "$1" >/dev/null
-    for attempt in 1 2 3; do
-        dump_ui
-        read -r -a clear_keys < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" clear-field "")
-        adb shell input keyevent "${clear_keys[@]}"
-        if (( attempt == 1 )); then
-            adb shell input text "$2"
-        else
-            for ((index = 0; index < ${#2}; index++)); do
-                character=${2:index:1}
-                if [[ "${2:index:2}" == '%s' ]]; then character='%s'; index=$((index + 1)); fi
-                adb shell input text "$character"
-            done
-        fi
-        dump_ui
-        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value "$1" "${2//%s/ }"; then
-            adb shell input keyevent KEYCODE_BACK
-            return
-        fi
-    done
-    printf 'Field input did not match: %s\n' "$1" >&2
-    return 1
+    tap_node field "$1" || return
+    select_node focused-field "$1" >/dev/null || return
+    clear_field "$1" || return
+    if [[ -n "$2" ]]; then adb shell input text "$2" || return; fi
+    dump_ui || return
+    if ! python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value "$1" "${2//%s/ }"; then
+        printf 'JOURNEY_FIELD_INPUT_FAILED: %s: typed text did not equal the requested value\n' "$1" >&2
+        return 1
+    fi
+    adb shell input keyevent KEYCODE_BACK
 }
 
 scroll_to_newest() {
@@ -1066,26 +1061,7 @@ if [[ "$feature" == session-stop.md ]]; then
     python3 "$scripts/composer-slot.py" send-ready "$EVIDENCE/$(printf '%02d' "$step")-composer-send-draft.xml"
     copy_receipt "$EVIDENCE/receipts-draft.txt"
     python3 "$scripts/composer-slot.py" quiet "$EVIDENCE/receipts-draft.txt"
-    cleared=0
-    for attempt in 1 2 3; do
-        tap_node editor 'KEEP_DRAFT'
-        dump_ui || true
-        if ! python3 "$scripts/ui.py" "$EVIDENCE/current.xml" focused-field 'KEEP_DRAFT' >/dev/null; then
-            continue
-        fi
-        if ! read -r -a clear_keys < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" clear-field 'KEEP_DRAFT'); then
-            continue
-        fi
-        adb shell input keyevent "${clear_keys[@]}"
-        sleep 1
-        dump_ui || true
-        if ! python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'KEEP_DRAFT' >/dev/null; then
-            adb shell input keyevent KEYCODE_BACK
-            cleared=1
-            break
-        fi
-    done
-    [[ "$cleared" == 1 ]]
+    fill KEEP_DRAFT ''
     wait_for_text 'Message verify-session'
     wait_slot stop
     shot composer-stop-again
