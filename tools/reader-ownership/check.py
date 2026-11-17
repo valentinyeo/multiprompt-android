@@ -33,6 +33,9 @@ def violations(files, baseline):
             if count > allowed.get(method, 0):
                 failures.append(f"{path}: {count} {method} read sites exceed {allowed.get(method, 0)}; route reads through SessionReaderConnection and ChatPollGate, not a screen loop")
     reader = "app/src/main/java/dev/multiprompt/companion/reader/"
+    history = reader + "ChatHistoryConnection.kt"
+    if re.search(r"\b(?:command|queued|it)\.result\.complete\(MessageActionResult\.Unknown\)", files.get(history, "")):
+        failures.append(f"{history}: use Command.Action.interrupted(generation); canceled actions not yet issued must be rejected, not reported as unknown")
     requirements = {
         reader + "SessionReaderConnection.kt": [
             r"private\s+val\s+pollGate\s*=\s*ChatPollGate\(",

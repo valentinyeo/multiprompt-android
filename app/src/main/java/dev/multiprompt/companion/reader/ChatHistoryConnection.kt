@@ -420,7 +420,7 @@ class ChatHistoryConnection(
                                                             queued.result.complete(MessageActionResult.Rejected("Chat is not ready"))
                                                         } else lock.withLock {
                                                             val outcome = try { performAction(queued, previous, messageScope, exchange) { ++requestId } }
-                                                            catch (failure: Exception) { queued.result.complete(MessageActionResult.Unknown); throw failure }
+                                                            catch (failure: Exception) { queued.result.complete(queued.interrupted(generation)); throw failure }
                                                             synchronized(this@ChatHistoryConnection) {
                                                                 if (queued.kind == "reset" && outcome == MessageActionResult.Applied && queued.generation == generation && owns(page.sid)) {
                                                                     resetReply = queued.result
@@ -614,7 +614,7 @@ class ChatHistoryConnection(
                                                 val result = try {
                                                     performAction(command, observed, messageScope, exchange) { ++requestId }
                                                 } catch (failure: Exception) {
-                                                    command.result.complete(MessageActionResult.Unknown)
+                                                    command.result.complete(command.interrupted(generation))
                                                     throw failure
                                                 }
                                                 synchronized(this@ChatHistoryConnection) {
@@ -858,7 +858,7 @@ class ChatHistoryConnection(
         generateSequence { commands.tryReceive().getOrNull() }.forEach {
             when (it) {
                 is Command.Submit -> it.result.complete(PromptAdmission.Rejected("Chat closed"))
-                is Command.Action -> it.result.complete(MessageActionResult.Unknown)
+                is Command.Action -> it.result.complete(it.interrupted(generation))
             }
         }
         scope.cancel()

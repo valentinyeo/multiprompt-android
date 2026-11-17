@@ -51,6 +51,14 @@ class ReaderOwnershipTest(unittest.TestCase):
         self.assertTrue(any(path in f and "ChatPollGate" in f for f in failures), failures)
         print("PR_341_PAST_MISTAKE_REJECTED: c3dc2a3b^ has a snapshot loop without a selected-session owner")
 
+    def test_real_inner_cancellation_handlers_from_ed853214_cannot_override_the_owner(self):
+        path = "app/src/main/java/dev/multiprompt/companion/reader/ChatHistoryConnection.kt"
+        files = check.source_files()
+        files[path] = subprocess.check_output(["git", "show", f"ed853214:{path}"], cwd=ROOT, text=True)
+        failures = check.violations(files, BASELINE)
+        self.assertTrue(any("Command.Action.interrupted" in f for f in failures), failures)
+        print("ED853214_CANCELLATION_REJECTED: inner handlers cannot turn unissued navigation cancellations into Unknown")
+
     def test_real_remote_capture_loop_from_pr_341_does_not_exit_on_close(self):
         path = "app/src/main/java/dev/multiprompt/companion/ssh/TmuxCommands.kt"
         source = subprocess.check_output(["git", "show", f"c3dc2a3b:{path}"], cwd=ROOT, text=True)
