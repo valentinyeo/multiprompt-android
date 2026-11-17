@@ -79,6 +79,19 @@ class MenuUiTest(unittest.TestCase):
         with self.assertRaises(AssertionError):
             self.check('draft', 'keep this draft')
 
+    def test_host_reply_is_visible_without_a_legacy_model_subtitle(self):
+        fixture = Path(__file__).with_name('fixtures') / 'bfe15180-model-reply'
+        xml, png = fixture.with_suffix('.xml'), fixture.with_suffix('.png')
+        result = ui.check(xml, png, 'reply', 'Received /model opus. Claude Opus 5.5 high')
+        self.assertEqual(result['mode'], 'reply')
+        ui.check(xml, png, 'draft', 'keep this draft')
+        with self.assertRaises(AssertionError):
+            ui.check(xml, png, 'visible', 'Opus 5.5 · high')
+        with self.assertRaises(AssertionError):
+            ui.check(xml, png, 'reply', 'Received /model opus. Claude Sonnet 5.5 high')
+        with self.assertRaises(AssertionError):
+            ui.check(xml, png, 'reply', 'Received /model opus. Claude Opus 5.5 low')
+
     def test_screenshot_required(self):
         self.png.write_bytes(b'')
         with self.assertRaises(AssertionError):

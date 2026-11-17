@@ -297,7 +297,7 @@ test('priority evidence paths and per-file limits fit the journey budget', () =>
 });
 
 test('Claude menu changes and the extended recipe schedule native-skills through verify.yml', () => {
-  for (const text of ['modelMenuExpanded = false', 'ReaderMenuPage.MODEL -> {', 'Use Claude Opus',
+  for (const text of ['ReaderMenuPage.MODEL -> {', 'Use Claude Opus',
     'Set effort: max', 'Open model picker (/model)', 'HostChange.OPUS', 'attachMenuSection = null']) {
     const diff = productDiff('java/dev/multiprompt/companion/ui/MultipromptApp.kt', text);
     const plan = gate.planChange(diff, []);

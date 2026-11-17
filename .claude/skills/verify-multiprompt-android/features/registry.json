@@ -804,7 +804,7 @@
       "sideEffect": true,
       "match": [
         "NativeSkills|SkillsLoader",
-        "HostChange|HostSettings|ReaderMenuPage\\.MODEL|modelMenuExpanded|onModelCommand|sendModelCommand|Use Claude|Set effort:|Open model picker|attachMenuSection"
+        "HostChange|HostSettings|ReaderMenuPage\\.MODEL|sendModelCommand|Use Claude|Set effort:|Open model picker|attachMenuSection"
       ]
     },
     "robot-faces.journey": {

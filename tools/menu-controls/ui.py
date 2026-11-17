@@ -48,6 +48,9 @@ def check(xml, png, mode, value, before=None):
         assert len(matches) == 1 and visible(matches[0]), 'Missing current model'
         assert value in matches[0].get('text'), matches[0].attrib
         assert any(n.get('enabled') == 'false' for n in chain(matches[0])), 'Current model must be disabled'
+    elif mode == 'reply':
+        matches = [n for n in nodes if n.get('text') == value and visible(n)]
+        assert len(matches) == 1, 'Expected visible host reply'
     elif mode == 'draft':
         matches = [n for n in nodes if n.get('class') == 'android.widget.EditText' and n.get('text') == value]
         assert len(matches) == 1 and visible(matches[0]), 'Draft changed or hidden'

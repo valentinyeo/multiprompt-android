@@ -268,6 +268,18 @@
     "dissolved-sessions.resume",
     "chat-header.back.2",
     "chat-header.double-tap-header-to-open-terminal",
+    "chat-header.open-model-menu",
+    "chat-header.dismiss-chat-header",
+    "chat-header.current-model-display-only",
+    "chat-header.open-model-picker-model",
+    "chat-header.use-claude-opus",
+    "chat-header.use-claude-sonnet",
+    "chat-header.use-claude-fable",
+    "chat-header.low-effort",
+    "chat-header.medium-effort",
+    "chat-header.high-effort",
+    "chat-header.extra-high-effort",
+    "chat-header.max-effort",
     "chat-header.version-open-release-notes",
     "reader-rename-session.dismiss-reader-rename-session",
     "reader-rename-session.session-name",
@@ -415,6 +427,7 @@
     "update-navigation.dismiss-update-navigation.scroll",
     "inbox-bucket-menu.dismiss-inbox-bucket-menu.scroll",
     "inbox-session-actions.dismiss-inbox-session-actions.scroll",
+    "chat-header.dismiss-chat-header.scroll",
     "attach-menu.dismiss-attach-menu.scroll"
   ]
 }
