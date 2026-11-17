@@ -331,7 +331,7 @@ exit "$code"
 
     def test_driver_scrolls_then_redumps_and_taps_once(self):
         source = (SCRIPTS / 'drive.sh').read_text()
-        helper = 'tap_node() {' + source.split('tap_node() {', 1)[1].split('\ntap_text()', 1)[0]
+        helper = source[source.index('session_name() {'):source.index('\ntap_text()')]
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
             (folder / 'before.xml').write_text(TERMINAL)

@@ -9,6 +9,9 @@ node "$scripts/../../../../.github/scripts/pstack-verifier/coverage.cjs" journey
 mkdir -p "$EVIDENCE"
 exec > >(tee -a "$EVIDENCE/driver-transcript.txt") 2>&1
 set -x
+if [[ "${PIN_SCROLL_PROOF:-}" != true ]]; then
+    sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/verify-seed.py check - < "$EVIDENCE/seed-counts.json" | tee "$EVIDENCE/seed-check.json"
+fi
 package=${VERIFY_PACKAGE:-dev.multiprompt.companion.debug}
 step=0
 product_checks=0
@@ -117,25 +120,46 @@ if [[ "$feature" == session-routing.md && "$package" == dev.multiprompt.companio
     done
     [[ "$recorder_pid" =~ ^[0-9]+$ ]]
 fi
+session_name() {
+    [[ -f "$EVIDENCE/seed-counts.json" ]] || return 1
+    jq -er --arg name "${1#Robot }" '.session_names | if index($name) != null then $name elif $name == "verify-session" and index("live-verify-session") != null then "live-verify-session" else empty end' "$EVIDENCE/seed-counts.json"
+}
 select_node() {
+    local mode=$1 value=$2 session=
+    if [[ "$mode" =~ ^(contains|text|desc)$ ]]; then
+        session=$(session_name "$value") || session=
+        if [[ -n "$session" && "$mode" == contains ]]; then mode=text; fi
+    fi
     dump_ui || return
-    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "$1" "$2"
+    if [[ -n "$session" ]] &&
+        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Inbox >/dev/null 2>&1; then
+        mode=desc
+        value="Robot $session"
+        tap_node "$mode" "$value" reveal || return
+    fi
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "$mode" "$value"
 }
 tap_node() {
-    local attempt action x1 y1 x2 y2 direction plan
-    for attempt in {1..18}; do
+    local attempt action x1 y1 x2 y2 direction plan session=
+    if [[ "$1" =~ ^(text|desc)$ ]]; then session=$(session_name "$2") || session=; fi
+    for attempt in {1..24}; do
         dump_ui || return
+        if [[ -n "$session" ]] &&
+            python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Inbox >/dev/null 2>&1; then
+            set -- desc "Robot $session" "${3:-tap}"
+        fi
         direction=forward
-        if (( attempt > 6 )); then direction=backward; fi
+        if (( attempt > 12 )); then direction=backward; fi
         plan=$(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "reach-$1" "$2" "$direction") || return
         read -r action x1 y1 x2 y2 <<< "$plan"
+        if [[ "$action" == tap && "${3:-tap}" == reveal ]]; then return; fi
         case "$action" in
             tap) adb shell input tap "$x1" "$y1"; return ;;
             swipe) adb shell input swipe "$x1" "$y1" "$x2" "$y2" 500 ;;
             *) return 1 ;;
         esac
     done
-    printf 'JOURNEY_ACTION_UNREACHABLE: %s: not reachable after 18 scrolls in the active container\n' "$2" >&2
+    printf 'JOURNEY_ACTION_UNREACHABLE: %s: not reachable after 24 scrolls in the active container\n' "$2" >&2
     return 1
 }
 tap_text() { tap_node text "$1"; }
@@ -1435,25 +1459,44 @@ PYORACLE
     exit 0
 fi
 if [[ "$feature" == sessions.md ]]; then
+    shot seed-deep-before
+    setup_failure=1
+    python3 tools/verify-seed.py target "$EVIDENCE" | tee "$EVIDENCE/seed-deep-choice.json"
+    setup_failure=0
+    deep_target=$(jq -er .name "$EVIDENCE/seed-deep-choice.json")
+    deep_description=$(jq -er .description "$EVIDENCE/seed-deep-choice.json")
+    wait_for_text "$deep_target"
+    tap_desc "$deep_description"
+    wait_for_text "$(jq -er .reader_label "$EVIDENCE/seed-deep-choice.json")"
+    wait_for_text "$(jq -er .ready_text "$EVIDENCE/seed-deep-choice.json")"
+    shot seed-deep-target
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/seed-deep-target.xml"
+    tap_desc Back
+    wait_for_text Inbox
     tap_desc 'Search sessions'
-    fill 'Search all sessions' verify-session
+    fill 'Search all sessions' "$deep_target"
     wait_for_text '1 result across all splits'
-    wait_for_text verify-session
+    wait_for_text "$deep_target"
     shot search-match
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains '1 result across all splits' >/dev/null
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" reach-desc "$deep_description" | grep -q '^tap '
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/seed-search.xml"
     tap_desc 'Close session search'
     wait_for_absence 'Search all sessions'
-    wait_for_text verify-session
+    wait_for_absence '1 result across all splits'
+    wait_for_text "$deep_target"
     shot search-cleared
     dump_ui
     if grep -F 'content-desc="Session actions"' "$EVIDENCE/current.xml"; then
         printf 'Inbox row still has a per-row menu button\n' >&2
         exit 1
     fi
-    read -r row_x row_y <<< "$(select_node text verify-session)"
+    read -r row_x row_y <<< "$(select_node desc "$deep_description")"
     adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 800
     wait_for_text 'Mark as unread'
     wait_for_text 'End tmux session'
     shot row-long-press-actions
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/row-long-press-actions.xml"
     adb shell input keyevent KEYCODE_BACK
     wait_for_absence 'End tmux session'
     sudo -u verifyssh tmux list-sessions -F '#{session_name}' > "$EVIDENCE/sessions-before-agent-picker.txt"
@@ -1464,9 +1507,11 @@ if [[ "$feature" == sessions.md ]]; then
     wait_for_text 'Claude Code'
     wait_for_text Shell
     shot start-agent-picker
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/start-agent-picker.xml"
     tap_text Back
     wait_for_text 'Use this folder'
     shot start-agent-back-to-folder
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/start-agent-back-to-folder.xml"
     sudo -u verifyssh tmux list-sessions -F '#{session_name}' > "$EVIDENCE/sessions-after-agent-picker.txt"
     cmp "$EVIDENCE/sessions-before-agent-picker.txt" "$EVIDENCE/sessions-after-agent-picker.txt"
     exit 0

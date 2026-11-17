@@ -24,6 +24,18 @@ test('app source, build inputs, shared emulator and routing changes run all phon
   assert.deepEqual(phoneProofJobs([]), all(true));
 });
 
+test('shared journey fixtures and drivers run all required phones', () => {
+  for (const path of [
+    '.claude/skills/verify-multiprompt-android/scripts/fixture.sh',
+    '.claude/skills/verify-multiprompt-android/scripts/seed.sh',
+    '.claude/skills/verify-multiprompt-android/scripts/drive.sh',
+    '.claude/skills/verify-multiprompt-android/scripts/console.py',
+    '.claude/skills/verify-multiprompt-android/scripts/chat-search-drive.sh',
+    'tools/verify-seed.py',
+    'tools/long-chat/fixture.py',
+  ]) assert.deepEqual(phoneProofJobs([path]), all(true), path);
+});
+
 test('a changed proof runs only its owning jobs', () => {
   assert.deepEqual(phoneProofJobs(['tools/check-session-rows.sh']), selected('session-rows-emulator'));
   assert.deepEqual(phoneProofJobs(['tools/session-pins/HistoricalPinsOracle.kt']), selected('session-pins-emulator'));
