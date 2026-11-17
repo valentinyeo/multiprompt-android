@@ -1403,6 +1403,9 @@ if [[ "$feature" == sessions.md ]]; then
     exit 0
 fi
 tap_text verify-session
+if [[ "$feature" == claude-remote-control.md ]]; then
+    source "$scripts/remote-control-drive.sh"
+fi
 if [[ "$feature" == ai-switch.md ]]; then
     source "$scripts/ai-switch-drive.sh"
 fi
