@@ -4469,6 +4469,19 @@
       "missing": "No automated journey exercises this control and checks its result."
     },
     {
+      "screen": "Skill picker",
+      "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:NativeSkillPicker:clickable:f5d780fe65d7af78:1",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:6060",
+      "id": "skill-picker.clear-command",
+      "label": "/clear",
+      "journey": "clear-ranking.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/clear-ranking.md",
+        "action": "Type /cl, require /clear before /client and description-only /aaa-paper, then tap /clear",
+        "result": "Exact /clear draft sends once with independent host receipt in clear-receipts.txt. SOFT-2545."
+      }
+    },
+    {
       "id": "skill-picker.insert-slash-command-or-skill",
       "screen": "Skill picker",
       "label": "Insert slash command or skill",

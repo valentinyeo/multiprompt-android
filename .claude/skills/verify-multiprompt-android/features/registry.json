@@ -682,6 +682,30 @@
         "table-closed.json": 1200,
         "table-proof.txt": 200
       }
+    },
+    "clear-ranking.md": {
+      "name": "Find and send Claude clear",
+      "description": "Type /cl, check name-first command ranking, select /clear and send the exact command with independent host receipts. SOFT-2545.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "claude.clear-ranking"
+      ],
+      "evidence": {
+        "clear-query.json": 1800,
+        "clear-selected.json": 700,
+        "clear-sent.json": 700,
+        "clear-receipts.txt": 700,
+        "clear-host.json": 700,
+        "clear-before.txt": 200,
+        "clear-selected-host.txt": 200,
+        "clear-proof.txt": 200
+      }
     }
   },
   "outcomes": {
@@ -1037,11 +1061,26 @@
     },
     "claude.clear-ranking": {
       "description": "Type /cl, select /clear and check name-first slash ranking.",
-      "journey": null,
+      "journey": "clear-ranking.md",
       "sideEffect": true,
       "match": [
-        "BUILT_IN_COMMANDS|builtInCommands|nameRank|/clear"
-      ]
+        "NativeSkills\\.kt|NativeSkills\\.menu|NativeSkillPicker",
+        "claudeCommands|BUILT_IN_COMMANDS|builtInCommands|nameRank|/clear"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tap_text /clear"
+        },
+        "result": {
+          "file": "clear-query.json",
+          "quote": "\"order\": [\n    \"/clear\",\n    \"/client\",\n    \"/aaa-paper\""
+        },
+        "sideEffect": {
+          "file": "clear-receipts.txt",
+          "quote": "VERIFY_RECEIVED:/clear"
+        }
+      }
     },
     "legacy.igsh-449": {
       "description": "OTP, a second pending device and trusted SSH access to every saved host. Sign in on the new device; on the approving phone compare **Approve this device?** and fingerprint, tap **Approve**, then connect from the new device.",
