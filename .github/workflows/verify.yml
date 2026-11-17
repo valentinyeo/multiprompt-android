@@ -100,6 +100,7 @@ on:
           - chat-search.md
           - claude-remote-control.md
           - ai-usage.md
+          - skill-pills.md
       expect_settings_missing:
         description: Require signed Android 301 to reject the settings navigation journey
         type: boolean
@@ -287,6 +288,13 @@ jobs:
         continue-on-error: ${{ inputs.side == 'parent' }}
         if: env.VERIFY_FEATURE == 'ai-usage.md'
         run: python3 -B tools/ai-usage/ui.test.py
+      - name: Check skill pill screenshot assertions
+        id: skill-pills-oracle
+        continue-on-error: ${{ inputs.side == 'parent' }}
+        if: env.VERIFY_FEATURE == 'skill-pills.md'
+        run: |
+          python3 -B tools/skill-pills/ui.test.py
+          python3 -B tools/skill-pills/console.test.py
       - name: Check terminal input oracle and selectors
         id: terminal-input-oracle
         continue-on-error: ${{ inputs.side == 'parent' }}

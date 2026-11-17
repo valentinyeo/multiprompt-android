@@ -1,0 +1,537 @@
+diff --git a/app/src/main/java/dev/multiprompt/companion/skills/NativeSkills.kt b/app/src/main/java/dev/multiprompt/companion/skills/NativeSkills.kt
+index 13cba88b1..ea2fa1be1 100644
+--- a/app/src/main/java/dev/multiprompt/companion/skills/NativeSkills.kt
++++ b/app/src/main/java/dev/multiprompt/companion/skills/NativeSkills.kt
+@@ -4,6 +4,12 @@ import org.json.JSONArray
+ 
+ data class NativeSkill(val name: String, val description: String)
+ 
++data class SlashToken(val start: Int, val end: Int, val text: String)
++
++data class SkillSpan(val start: Int, val end: Int, val name: String)
++
++data class SkillInsertion(val text: String, val cursor: Int)
++
+ object NativeSkills {
+     private val NAME = Regex("[A-Za-z0-9][A-Za-z0-9_./:-]*")
+ 
+@@ -19,10 +25,38 @@ object NativeSkills {
+         }.distinctBy { it.name }.sortedBy { it.name.lowercase() }
+     }
+ 
+-    fun query(text: String, cursor: Int): String? {
+-        if (!text.startsWith('/') || cursor !in 1..text.length) return null
+-        val query = text.substring(1, cursor)
+-        return query.takeUnless { it.any(Char::isWhitespace) }
++    fun token(text: String, cursor: Int): SlashToken? {
++        if (cursor !in 1..text.length) return null
++        var start = cursor
++        while (start > 0 && !wordBreak(text[start - 1])) start--
++        if (start == cursor || text[start] != '/') return null
++        return SlashToken(start, cursor, text.substring(start + 1, cursor))
++    }
++
++    fun query(text: String, cursor: Int): String? = token(text, cursor)?.text
++
++    fun spans(text: String, skills: List<NativeSkill>): List<SkillSpan> {
++        if (text.isEmpty() || skills.isEmpty()) return emptyList()
++        val names = skills.map { it.name }.filter { it.isNotEmpty() }.distinct().sortedByDescending { it.length }
++        if (names.isEmpty()) return emptyList()
++        val found = ArrayList<SkillSpan>()
++        var index = 0
++        while (index < text.length) {
++            if (text[index] == '/' && (index == 0 || wordBreak(text[index - 1]))) {
++                val name = names.firstOrNull { candidate ->
++                    val end = index + 1 + candidate.length
++                    end <= text.length && text.startsWith(candidate, index + 1) && (end == text.length || wordBreak(text[end]))
++                }
++                if (name != null) {
++                    val end = index + 1 + name.length
++                    found.add(SkillSpan(index, end, name))
++                    index = end
++                    continue
++                }
++            }
++            index++
++        }
++        return found
+     }
+ 
+     fun matches(skills: List<NativeSkill>, query: String): List<NativeSkill> = skills.filter {
+@@ -36,4 +70,17 @@ object NativeSkills {
+         val rest = text.substring(end).trimStart()
+         return "/$name $rest"
+     }
++
++    fun insert(text: String, name: String, cursor: Int): SkillInsertion {
++        val slash = token(text, cursor) ?: return SkillInsertion(text, cursor.coerceIn(0, text.length))
++        var wordEnd = slash.start
++        while (wordEnd < text.length && !wordBreak(text[wordEnd])) wordEnd++
++        val rest = text.substring(wordEnd).trimStart()
++        val prefix = text.substring(0, slash.start)
++        val head = "/$name"
++        val value = if (rest.isEmpty()) "$prefix$head " else "$prefix$head $rest"
++        return SkillInsertion(value, prefix.length + head.length + 1)
++    }
++
++    private fun wordBreak(c: Char) = c == ' ' || c == '\t' || c == '\r' || c == '\n'
+ }
+diff --git a/app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt b/app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt
+index 80af4f1d1..2300e8ffa 100644
+--- a/app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt
++++ b/app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt
+@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.Dp
+ import androidx.compose.ui.unit.dp
+ import androidx.compose.ui.unit.sp
+ import dev.multiprompt.companion.model.AgentKind
++import dev.multiprompt.companion.skills.NativeSkill
+ import dev.multiprompt.companion.reader.ChatMention
+ import dev.multiprompt.companion.reader.ChatReactions
+ import dev.multiprompt.companion.reader.ReaderStatus
+@@ -142,6 +143,7 @@ internal fun ChatHistoryView(
+             loaded = state.loaded,
+             hasOlder = !state.loaded || state.history.start > 0 || state.history.more,
+             agent = agent,
++            skills = reader.nativeSkills,
+             fontScale = fontScale,
+             sunlight = sunlight,
+             replyGate = replyGate,
+@@ -208,6 +210,7 @@ internal fun ChatHistoryList(
+     focusKey: String? = null,
+     loaded: Boolean = true,
+     agent: AgentKind = AgentKind.CLAUDE,
++    skills: List<NativeSkill> = emptyList(),
+     fontScale: Float = 1f,
+     sunlight: Boolean = false,
+     replyGate: ReplySwipeGate = remember { ReplySwipeGate() },
+@@ -354,7 +357,7 @@ internal fun ChatHistoryList(
+                 }
+                 val previous = presentation.messages.getOrNull(presentation.messages.lastIndex - index - 1)
+                 if (LocalReaderStyle.current && previous != null && previous.role != message.role) Spacer(Modifier.height(10.dp))
+-                HistoryBubble(if (message.role == "user") ChatMention.visible(message.text) else message.text, message.role, message.pending, fontScale, sunlight, replyGate, onReply,
++                HistoryBubble(if (message.role == "user") ChatMention.visible(message.text) else message.text, message.role, message.pending, fontScale, sunlight, replyGate, onReply, skills,
+                     messageId = message.requestId, sessionName = sessionName, onMarkUnread = { openHold = false; onMarkUnread(message.key) },
+                     key = message.key, highlighted = highlightedKey == message.key,
+                     onJump = { pendingJump = ReplyJump(message, it) },
+@@ -397,6 +400,7 @@ private fun HistoryBubble(
+     sunlight: Boolean,
+     gate: ReplySwipeGate,
+     onReply: (String, Boolean) -> Unit,
++    skills: List<NativeSkill> = emptyList(),
+     messageId: String = "",
+     sessionName: String = "",
+     onMarkUnread: () -> Unit = {},
+@@ -438,8 +442,14 @@ private fun HistoryBubble(
+             }
+             if (isUser) {
+                 ChatLinkText(reply?.body ?: text) { line ->
+-                    Text(terminalLinks(line, sunlight), fontFamily = chatFontFamily(), fontSize = fontSize,
+-                        lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, fontScale), color = chatTextColor(sunlight))
++                    SkillMessageText(
++                        text = line,
++                        skills = skills,
++                        color = chatTextColor(sunlight),
++                        fontSize = fontSize,
++                        lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, fontScale),
++                        sunlight = sunlight,
++                    )
+                 }
+             } else {
+                 MarkdownText(text = text, fontSize = fontSize, color = chatTextColor(sunlight), linkColor = chatLinkColor(terminalBlue(sunlight)), imagePreviews = true)
+diff --git a/app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt b/app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt
+index daeda4a67..c216b028e 100644
+--- a/app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt
++++ b/app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt
+@@ -125,6 +125,18 @@ internal fun KitTitlePill(text: String, modifier: Modifier = Modifier, onClick:
+     }
+ }
+ 
++@Composable
++internal fun KitSkillPill(text: String, modifier: Modifier = Modifier, style: TextStyle = Kit.Body) {
++    Text(
++        text,
++        modifier.kitSurface().padding(horizontal = 8.dp, vertical = 1.dp),
++        style = style,
++        color = Kit.Text,
++        maxLines = 1,
++        softWrap = false,
++    )
++}
++
+ @Composable
+ internal fun KitPrimaryButton(
+     text: String,
+diff --git a/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt b/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt
+index d19828112..ce4a7ec6a 100644
+--- a/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt
++++ b/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt
+@@ -185,6 +185,7 @@ import androidx.compose.ui.focus.focusRequester
+ import androidx.core.content.ContextCompat
+ import androidx.core.content.res.ResourcesCompat
+ import androidx.compose.ui.text.AnnotatedString
++import androidx.compose.ui.text.TextLayoutResult
+ import androidx.compose.ui.text.buildAnnotatedString
+ import androidx.compose.ui.text.withLink
+ import androidx.compose.ui.text.LinkAnnotation
+@@ -196,6 +197,7 @@ import androidx.compose.ui.text.input.ImeAction
+ import androidx.compose.ui.text.input.KeyboardType
+ import androidx.compose.ui.text.input.PasswordVisualTransformation
+ import androidx.compose.ui.text.input.TextFieldValue
++import androidx.compose.ui.text.input.VisualTransformation
+ import androidx.compose.ui.text.TextRange
+ import androidx.compose.ui.text.style.TextAlign
+ import androidx.compose.ui.text.style.TextOverflow
+@@ -3417,6 +3419,9 @@ internal fun ReaderScreen(
+         }
+     }
+     val loadSkills = { connection.loadSkills(context.assets.open("native_skills.py").use { it.readBytes() }, session.workingDirectory) }
++    LaunchedEffect(connection) {
++        if (session.agent == AgentKind.CLAUDE) loadSkills()
++    }
+     LaunchedEffect(connection, skillQuery != null) {
+         if (skillQuery != null) loadSkills()
+     }
+@@ -4159,7 +4164,8 @@ internal fun ReaderScreen(
+                         error = reader.skillsError,
+                         onRetry = loadSkills,
+                         onSelect = { skill ->
+-                            promptField = TextFieldValue(NativeSkills.insert(prompt, skill.name), selection = TextRange(skill.name.length + 2))
++                            val inserted = NativeSkills.insert(prompt, skill.name, promptField.selection.start)
++                            promptField = TextFieldValue(inserted.text, selection = TextRange(inserted.cursor.coerceIn(0, inserted.text.length)))
+                             promptFocusRequester.requestFocus()
+                         },
+                     )
+@@ -4398,6 +4404,9 @@ internal fun ReaderScreen(
+                             !sendAfterDictation &&
+                             (prompt.isNotBlank() || imageAttachments.isNotEmpty() || dictationActive)
+                         val composerText = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
++                        val skillSpans = remember(prompt, reader.nativeSkills) { NativeSkills.spans(prompt, reader.nativeSkills) }
++                        var composerLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
++                        val skillText = remember(skillSpans) { if (skillSpans.isEmpty()) VisualTransformation.None else SkillPillText(skillSpans) }
+                         Box(Modifier.weight(1f).padding(vertical = 2.dp)) {
+                         BasicTextField(
+                             value = promptField,
+@@ -4414,6 +4423,8 @@ internal fun ReaderScreen(
+                                 },
+                             textStyle = composerText,
+                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
++                            visualTransformation = skillText,
++                            onTextLayout = { composerLayout = it },
+                             minLines = 1,
+                             maxLines = 6,
+                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+@@ -4433,7 +4444,7 @@ internal fun ReaderScreen(
+                                     Modifier.heightIn(min = ReaderControlSize).padding(start = 16.dp, end = 8.dp),
+                                     verticalAlignment = Alignment.CenterVertically,
+                                 ) {
+-                                    Box(Modifier.weight(1f).padding(vertical = 10.dp)) {
++                                    Box(Modifier.weight(1f).padding(vertical = 10.dp).skillPills(skillSpans, composerLayout)) {
+                                         if (prompt.isEmpty()) {
+                                             Text(
+                                                 "Message ${session.displayName}",
+@@ -4793,12 +4804,14 @@ internal fun ReaderScreen(
+                         ) {
+                             if (isUser) {
+                                 ChatLinkText(message.text) { line ->
+-                                    Text(
+-                                        terminalLinks(line, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
+-                                        fontFamily = chatFontFamily(),
++                                    SkillMessageText(
++                                        text = line,
++                                        skills = reader.nativeSkills,
++                                        color = bodyColor,
+                                         fontSize = transcriptFontSize,
+                                         lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
+-                                        color = bodyColor,
++                                        sunlight = sunlightMode,
++                                        linkColor = chatLinkColor(terminalBlue(sunlightMode)),
+                                     )
+                                 }
+                             } else {
+@@ -4869,12 +4882,14 @@ internal fun ReaderScreen(
+                                 onMarkUnread = { onMarkUnreadFrom("block:${blockKey.hashCode()}") },
+                             ) {
+                                 ChatLinkText(block.text) { line ->
+-                                    Text(
+-                                        terminalLinks(line, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))),
+-                                        fontFamily = chatFontFamily(),
++                                    SkillMessageText(
++                                        text = line,
++                                        skills = reader.nativeSkills,
++                                        color = chatTextColor(sunlightMode),
+                                         fontSize = transcriptFontSize,
+                                         lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
+-                                        color = chatTextColor(sunlightMode),
++                                        sunlight = sunlightMode,
++                                        linkColor = chatLinkColor(terminalBlue(sunlightMode)),
+                                     )
+                                 }
+                             }
+diff --git a/app/src/main/java/dev/multiprompt/companion/ui/SkillMessageText.kt b/app/src/main/java/dev/multiprompt/companion/ui/SkillMessageText.kt
+new file mode 100644
+index 000000000..4729bcbf1
+--- /dev/null
++++ b/app/src/main/java/dev/multiprompt/companion/ui/SkillMessageText.kt
+@@ -0,0 +1,149 @@
++package dev.multiprompt.companion.ui
++
++import androidx.compose.foundation.text.BasicText
++import androidx.compose.foundation.text.InlineTextContent
++import androidx.compose.foundation.text.appendInlineContent
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.remember
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.drawBehind
++import androidx.compose.ui.geometry.CornerRadius
++import androidx.compose.ui.geometry.Rect
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.drawscope.Stroke
++import androidx.compose.ui.platform.LocalDensity
++import androidx.compose.ui.text.AnnotatedString
++import androidx.compose.ui.text.Placeholder
++import androidx.compose.ui.text.PlaceholderVerticalAlign
++import androidx.compose.ui.text.SpanStyle
++import androidx.compose.ui.text.TextLayoutResult
++import androidx.compose.ui.text.TextStyle
++import androidx.compose.ui.text.buildAnnotatedString
++import androidx.compose.ui.text.input.OffsetMapping
++import androidx.compose.ui.text.input.TransformedText
++import androidx.compose.ui.text.input.VisualTransformation
++import androidx.compose.ui.text.rememberTextMeasurer
++import androidx.compose.ui.unit.TextUnit
++import androidx.compose.ui.unit.dp
++import dev.multiprompt.companion.skills.NativeSkill
++import dev.multiprompt.companion.skills.NativeSkills
++import dev.multiprompt.companion.skills.SkillSpan
++
++internal class SkillPillText(private val spans: List<SkillSpan>) : VisualTransformation {
++    override fun filter(text: AnnotatedString): TransformedText {
++        if (spans.isEmpty()) return TransformedText(text, OffsetMapping.Identity)
++        val styled = buildAnnotatedString {
++            append(text)
++            spans.forEach { span ->
++                if (span.start in 0 until span.end && span.end <= length) {
++                    addStyle(SpanStyle(color = Kit.Text), span.start, span.end)
++                }
++            }
++        }
++        return TransformedText(styled, OffsetMapping.Identity)
++    }
++}
++
++@Composable
++internal fun Modifier.skillPills(spans: List<SkillSpan>, layout: TextLayoutResult?): Modifier {
++    if (spans.isEmpty() || layout == null) return this
++    val padX = with(LocalDensity.current) { 2.dp.toPx() }
++    val padY = with(LocalDensity.current) { 1.dp.toPx() }
++    val stroke = with(LocalDensity.current) { Kit.OutlineWidth.toPx() }
++    return drawBehind {
++        val shown = layout.layoutInput.text.length
++        spans.forEach { span ->
++            if (span.start < 0 || span.end > shown || span.end <= span.start) return@forEach
++            val first = layout.getLineForOffset(span.start)
++            val last = layout.getLineForOffset(span.end - 1)
++            for (line in first..last) {
++                val start = maxOf(span.start, layout.getLineStart(line))
++                val nextLine = if (line + 1 < layout.lineCount) layout.getLineStart(line + 1) else shown
++                var end = minOf(span.end, nextLine)
++                if (end > start && layout.layoutInput.text[end - 1] == '\n') end--
++                if (end <= start) continue
++                val leftBox = layout.getBoundingBox(start)
++                val rightBox = layout.getBoundingBox(end - 1)
++                val rect = Rect(
++                    left = minOf(leftBox.left, rightBox.left) - padX,
++                    top = minOf(leftBox.top, rightBox.top) - padY,
++                    right = maxOf(leftBox.right, rightBox.right) + padX,
++                    bottom = maxOf(leftBox.bottom, rightBox.bottom) + padY,
++                )
++                val radius = CornerRadius(rect.height / 2f)
++                drawRoundRect(Kit.Surface, rect.topLeft, rect.size, radius)
++                drawRoundRect(Kit.Outline, rect.topLeft, rect.size, radius, style = Stroke(stroke))
++            }
++        }
++    }
++}
++
++@Composable
++internal fun SkillMessageText(
++    text: String,
++    skills: List<NativeSkill>,
++    color: Color,
++    fontSize: TextUnit,
++    lineHeight: TextUnit,
++    sunlight: Boolean,
++    modifier: Modifier = Modifier,
++    linkColor: Color? = null,
++) {
++    val spans = remember(text, skills) { NativeSkills.spans(text, skills) }
++    if (spans.isEmpty()) {
++        Text(
++            if (linkColor == null) terminalLinks(text, sunlight) else terminalLinks(text, sunlight, linkColor = linkColor),
++            modifier = modifier,
++            fontFamily = chatFontFamily(),
++            fontSize = fontSize,
++            lineHeight = lineHeight,
++            color = color,
++        )
++        return
++    }
++    val measurer = rememberTextMeasurer()
++    val density = LocalDensity.current
++    val fontFamily = chatFontFamily()
++    val pillStyle = TextStyle(fontFamily = fontFamily, fontSize = fontSize, lineHeight = fontSize, color = Kit.Text)
++    val annotated = remember(text, spans, sunlight, linkColor) { skillAnnotated(text, spans, sunlight, linkColor) }
++    val padX = with(density) { 8.dp.roundToPx() }
++    val padY = with(density) { 1.dp.roundToPx() }
++    val inline = spans.mapIndexed { index, span ->
++        val label = text.substring(span.start, span.end)
++        val measured = measurer.measure(AnnotatedString(label), style = pillStyle).size
++        val width = with(density) { (measured.width + padX * 2).toSp() }
++        val height = with(density) { (measured.height + padY * 2).coerceAtLeast(1).toSp() }
++        "skill$index" to InlineTextContent(
++            Placeholder(width, height, PlaceholderVerticalAlign.TextCenter),
++        ) { _ ->
++            KitSkillPill(label, style = pillStyle)
++        }
++    }.toMap()
++    BasicText(
++        text = annotated,
++        modifier = modifier,
++        style = TextStyle(color = color, fontSize = fontSize, lineHeight = lineHeight, fontFamily = fontFamily),
++        inlineContent = inline,
++    )
++}
++
++internal fun skillAnnotated(
++    text: String,
++    spans: List<SkillSpan>,
++    sunlight: Boolean,
++    linkColor: Color?,
++): AnnotatedString = buildAnnotatedString {
++    var from = 0
++    spans.forEachIndexed { index, span ->
++        if (span.start > from) appendLinked(text.substring(from, span.start), sunlight, linkColor)
++        appendInlineContent("skill$index", text.substring(span.start, span.end.coerceAtMost(text.length)))
++        from = span.end
++    }
++    if (from < text.length) appendLinked(text.substring(from), sunlight, linkColor)
++}
++
++private fun AnnotatedString.Builder.appendLinked(slice: String, sunlight: Boolean, linkColor: Color?) {
++    if (slice.isEmpty()) return
++    append(if (linkColor == null) terminalLinks(slice, sunlight) else terminalLinks(slice, sunlight, linkColor = linkColor))
++}
+diff --git a/app/src/test/java/dev/multiprompt/companion/skills/NativeSkillsTest.kt b/app/src/test/java/dev/multiprompt/companion/skills/NativeSkillsTest.kt
+index 206b91095..622a3023c 100644
+--- a/app/src/test/java/dev/multiprompt/companion/skills/NativeSkillsTest.kt
++++ b/app/src/test/java/dev/multiprompt/companion/skills/NativeSkillsTest.kt
+@@ -28,23 +28,55 @@ class NativeSkillsTest {
+         assertEquals(listOf(skills[0]), NativeSkills.matches(skills, "REV"))
+         assertEquals(listOf(skills[1]), NativeSkills.matches(skills, "checks"))
+         assertEquals(emptyList<NativeSkill>(), NativeSkills.matches(skills, "missing"))
+-        for (text in listOf("ordinary", "http://example.com", "/review task", " /review")) {
++        for (text in listOf("ordinary", "http://example.com", "/review task")) {
+             assertNull(NativeSkills.query(text, text.length))
+         }
++        assertEquals("review", NativeSkills.query(" /review", " /review".length))
+     }
+ 
+-    @Test fun plusAndTypingShareTheSameQueryAndNativeInsertion() {
++    @Test fun leadingSlashInsertStillReplacesTheFirstWord() {
+         val opened = NativeSkills.open("keep this draft")
+-        assertEquals("", NativeSkills.query(opened, 1))
+         assertEquals("/review keep this draft", NativeSkills.insert(opened, "review"))
+         assertEquals("/review ", NativeSkills.insert("/rev", "review"))
+         assertEquals("/qa:test same text", NativeSkills.insert("/old same text", "qa:test"))
+         assertEquals("/review ", NativeSkills.insert(NativeSkills.open(""), "review"))
++        assertEquals("/deploy task", NativeSkills.insert("/review task", "deploy"))
++    }
++
++    @Test fun plusAndTypingShareTheSameQueryAndNativeInsertion() {
++        val opened = NativeSkills.open("keep this draft")
++        assertEquals("", NativeSkills.query(opened, 1))
++        assertEquals("/review keep this draft", NativeSkills.insert(opened, "review", 1).text)
++        assertEquals("/review ", NativeSkills.insert("/rev", "review", 4).text)
++        assertEquals(8, NativeSkills.insert("/rev", "review", 4).cursor)
++        assertEquals("/qa:test same text", NativeSkills.insert("/old same text", "qa:test", 1).text)
++        assertEquals("/review ", NativeSkills.insert(NativeSkills.open(""), "review", 1).text)
+     }
+ 
+     @Test fun movingInsideFirstTokenCanReopenWithoutDroppingTheRest() {
+         assertEquals("re", NativeSkills.query("/review task", 3))
+-        assertEquals("/deploy task", NativeSkills.insert("/review task", "deploy"))
++        assertEquals("/deploy task", NativeSkills.insert("/review task", "deploy", 3).text)
+         assertEquals("/review task", NativeSkills.open("/review task"))
+     }
++
++    @Test fun slashWordMatchesOnlyAKnownSkill() {
++        val known = listOf(NativeSkill("review", "Check"), NativeSkill("home/x", "Path skill"))
++        assertEquals(listOf(SkillSpan(0, 7, "review")), NativeSkills.spans("/review", listOf(known[0])))
++        assertEquals(listOf(SkillSpan(7, 14, "review")), NativeSkills.spans("please /review this", listOf(known[0])))
++        assertEquals(listOf(SkillSpan(7, 14, "review")), NativeSkills.spans("please\n/review", listOf(known[0])))
++        assertEquals(emptyList<SkillSpan>(), NativeSkills.spans("/home/x", listOf(known[0])))
++        assertEquals(emptyList<SkillSpan>(), NativeSkills.spans("a/b", known))
++        assertEquals(emptyList<SkillSpan>(), NativeSkills.spans("http://x/y", known))
++        assertEquals(emptyList<SkillSpan>(), NativeSkills.spans("./run", known))
++        assertEquals(emptyList<SkillSpan>(), NativeSkills.spans("/reviewer", listOf(known[0])))
++        assertEquals(listOf(SkillSpan(0, 7, "home/x")), NativeSkills.spans("/home/x", listOf(known[1])))
++        assertEquals("rev", NativeSkills.query("please /rev now", 11))
++        assertNull(NativeSkills.query("http://x/y", "http://x/y".length))
++        assertNull(NativeSkills.query("./run", "./run".length))
++        assertNull(NativeSkills.query("a/b", "a/b".length))
++        assertEquals("home/x", NativeSkills.query("/home/x", "/home/x".length))
++        val picked = NativeSkills.insert("please /rev now", "review", 11)
++        assertEquals("please /review now", picked.text)
++        assertEquals(15, picked.cursor)
++    }
+ }
+diff --git a/app/src/test/java/dev/multiprompt/companion/ui/DesignKitTest.kt b/app/src/test/java/dev/multiprompt/companion/ui/DesignKitTest.kt
+index bff93009d..d5e12c0f2 100644
+--- a/app/src/test/java/dev/multiprompt/companion/ui/DesignKitTest.kt
++++ b/app/src/test/java/dev/multiprompt/companion/ui/DesignKitTest.kt
+@@ -225,6 +225,17 @@ class DesignKitTest {
+         assertPixel(bitmap, bitmap.width / 4, 14, Kit.Sheet, "sheet beside handle")
+     }
+ 
++    @Test
++    fun skillPillUsesTheSurfaceAndOutline() {
++        compose.setContent {
++            Page { KitSkillPill("/ship", Modifier.testTag("skill")) }
++        }
++        val bitmap = capture("skill")
++        assertPixel(bitmap, bitmap.width / 2, 0, Kit.Outline, "skill outline")
++        assertPixel(bitmap, 4, bitmap.height / 2, Kit.Surface, "skill fill")
++        compose.onNodeWithText("/ship").assertExists()
++    }
++
+     @Test
+     fun unreadBadgeIsTheOnlyBlue() {
+         compose.setContent {
+diff --git a/app/src/test/java/dev/multiprompt/companion/ui/PromptComposerTest.kt b/app/src/test/java/dev/multiprompt/companion/ui/PromptComposerTest.kt
+index e705806b2..bd0a3d901 100644
+--- a/app/src/test/java/dev/multiprompt/companion/ui/PromptComposerTest.kt
++++ b/app/src/test/java/dev/multiprompt/companion/ui/PromptComposerTest.kt
+@@ -15,6 +15,10 @@ class PromptComposerTest {
+             "> Earlier reply\n\n/reviewer my task",
+             PromptComposer.composeMessage("/reviewer my task", emptyList(), "Earlier reply", skills),
+         )
++        assertEquals(
++            "please /review this",
++            PromptComposer.composeMessage("please /review this", emptyList(), null, skills),
++        )
+     }
+ 
+     @Test
+diff --git a/tools/release-notes/ticket-titles.json b/tools/release-notes/ticket-titles.json
+index f740304f5..d91de51d3 100644
+--- a/tools/release-notes/ticket-titles.json
++++ b/tools/release-notes/ticket-titles.json
+@@ -91,5 +91,6 @@
+   "IGSH-2364": "Android: switch a chat to another AI",
+   "IGSH-2379": "A second AI tests every Android change before merge",
+   "IGSH-2432": "Second AI question test matches how answers send now",
+-  "IGSH-2293": "Android: open a chat table full screen"
++  "IGSH-2293": "Android: open a chat table full screen",
++  "IGSH-2290": "Android: skills in a message show as a pill"
+ }
