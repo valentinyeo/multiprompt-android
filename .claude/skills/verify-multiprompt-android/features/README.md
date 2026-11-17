@@ -90,10 +90,6 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `claude.clear-ranking`. Runner: `verify.yml` (debug). Priority evidence: `clear-query.json` (1800 characters), `clear-selected.json` (700 characters), `clear-sent.json` (700 characters), `clear-receipts.txt` (700 characters), `clear-host.json` (700 characters), `clear-before.txt` (200 characters), `clear-selected-host.txt` (200 characters), `clear-proof.txt` (200 characters).
 - [Reply to a message](message-reply.md): Long-press a Claude bubble, cancel the reply bar, then send a quoted reply with a host receipt.
   - Outcomes: `legacy.igsh-418`. Runner: `verify.yml` (debug). Priority evidence: `reply-open.json` (400 characters), `reply-cancelled.json` (200 characters), `reply-sent.json` (200 characters), `reply-receipts.txt` (800 characters), `reply-proof.txt` (80 characters).
-- [Signed-out sync row](signed-out-sync.md): Reader Session actions, then More, shows Sign in to sync. The journey does not sign in.
-  - Outcomes: `legacy.igsh-413`. Runner: `verify.yml` (debug). Priority evidence: `reader-sync.json` (200 characters), `sync-menu-proof.txt` (80 characters).
-- [Version label](version-labels.md): The version label on Inbox, settings, the reader and the shell, and the Update screen it opens.
-  - Outcomes: `legacy.igsh-426`. Runner: `verify.yml` (debug). Priority evidence: `inbox-version.json` (300 characters), `update-screen.json` (400 characters), `settings-version.json` (300 characters), `reader-version.json` (300 characters), `shell-version.json` (300 characters), `version-proof.txt` (80 characters).
 
 ## Initial coverage gaps
 
@@ -109,7 +105,9 @@ These IDs are an inventory, not exemptions for future changes. Untouched gaps do
 | `legacy.igsh-434` | IGSH-434 | IGSH-434 |
 | `legacy.igsh-423` | IGSH-423 | IGSH-423 |
 | `legacy.igsh-415` | IGSH-415 | IGSH-415 |
+| `legacy.igsh-426` | IGSH-426 | IGSH-426 |
 | `legacy.igsh-425` | IGSH-425 | IGSH-425 |
+| `legacy.igsh-413` | IGSH-413 | IGSH-413 |
 | `app-name.journey` | app-name.md | SOFT-2531 |
 | `bot-photo-refresh.journey` | bot-photo-refresh.md | SOFT-2531 |
 | `chat-working.journey` | chat-working.md | SOFT-2531 |
