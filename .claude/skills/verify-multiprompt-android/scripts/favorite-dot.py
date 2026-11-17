@@ -22,17 +22,22 @@ def clickable_row(node, parents):
     return row
 
 
+def is_editor(node):
+    return (node.get("class") or "").endswith("EditText")
+
+
 def named_rows(root, name):
     parents = parents_of(root)
     rows = []
     seen = set()
     for node in root.iter("node"):
-        if node.get("text") != name or not (node.get("package") or "").startswith(PACKAGE):
+        if node.get("text") != name or not (node.get("package") or "").startswith(PACKAGE) or is_editor(node):
             continue
         row = clickable_row(node, parents)
-        if id(row) not in seen:
-            seen.add(id(row))
-            rows.append(row)
+        if is_editor(row) or id(row) in seen:
+            continue
+        seen.add(id(row))
+        rows.append(row)
     return rows
 
 
@@ -97,6 +102,8 @@ def main():
     if mode == "search":
         if plain:
             raise SystemExit("search still shows the unstarred chat")
+        if not any(node.get("text") == "1 result across all splits" for node in root.iter("node")):
+            raise SystemExit("search did not report one result")
         require_only_starred(root, starred)
         emit("FAVORITE_DOT_IN_SEARCH", True)
         return

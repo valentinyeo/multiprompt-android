@@ -10,9 +10,25 @@ SCRIPT = Path(__file__).with_name("favorite-dot.py")
 PACKAGE = "dev.multiprompt.companion.debug"
 
 
-def hierarchy(star_dot=False, keep=True, keep_dot=False, loose_dot=False):
+def hierarchy(star_dot=False, keep=True, keep_dot=False, loose_dot=False, query_field=False, one_result=False):
     root = ET.Element("hierarchy")
     window = ET.SubElement(root, "node", {"package": PACKAGE, "class": "android.widget.FrameLayout"})
+    if query_field:
+        ET.SubElement(window, "node", {
+            "package": PACKAGE,
+            "class": "android.widget.EditText",
+            "clickable": "true",
+            "focused": "true",
+            "text": "verify-session",
+            "bounds": "[0,40][1080,96]",
+        })
+    if one_result:
+        ET.SubElement(window, "node", {
+            "package": PACKAGE,
+            "class": "android.widget.TextView",
+            "text": "1 result across all splits",
+            "bounds": "[16,100][480,132]",
+        })
 
     def row(name, dot):
         item = ET.SubElement(window, "node", {
@@ -74,9 +90,14 @@ class FavoriteDotTest(unittest.TestCase):
         self.assertIn("outside the starred chat", result.stderr)
 
     def test_search_hides_the_other_chat(self):
-        result = self.run_mode("search", hierarchy(star_dot=True, keep=False))
+        result = self.run_mode("search", hierarchy(star_dot=True, keep=False, query_field=True, one_result=True))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("FAVORITE_DOT_IN_SEARCH", result.stdout)
+
+    def test_search_requires_the_one_result_label(self):
+        result = self.run_mode("search", hierarchy(star_dot=True, keep=False, query_field=True))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("search did not report one result", result.stderr)
 
     def test_search_with_both_chats_fails(self):
         result = self.run_mode("search", hierarchy(star_dot=True, keep=True))
