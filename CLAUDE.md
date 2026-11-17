@@ -45,7 +45,7 @@ Requires JDK 17 and Android SDK 36. Before every push run `tools/check.sh`: it i
 
 ## Git workflow
 
-- `main` requires all eight always-on app/security checks. Updated base required; administrators cannot bypass. Never push directly.
+- `main` must require all 18 checks in `tools/pr-checks.mjs`, including `pstack-verifier`. Check live settings with `node tools/branch-protection.mjs --check`. Updated base required; administrators cannot bypass. Never push directly.
 - Before merge: `node tools/pr-checks.mjs <PR> --wait`. Recheck once with `node tools/pr-checks.mjs <PR>`. Missing checks never pass. Failed checks and unexpected skips stop immediately. The six path-routed emulator checks may be skipped. Ticket closure requires merged, complete-green proof.
 - One wait per PR; five-minute polls; thirty-minute maximum. Head/base changes stop the wait. Never use bare `gh pr checks --watch` or `gh-green` as complete-check proof.
 - Merge the checked head with `gh pr merge <PR> --squash --delete-branch --match-head-commit <checked-sha>`.

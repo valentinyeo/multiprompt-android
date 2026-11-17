@@ -413,19 +413,34 @@ function requireRepo(env) {
   return env.REPO;
 }
 
+function noProductChange(files, count) {
+  if (!Array.isArray(files) || !count || files.length !== count) throw new Error('Incomplete pull request file list');
+  const tooling = /^(?:(?:docs|tools|\.github)\/|[^/]+\.md$)/;
+  return files.every(file => typeof file.filename === 'string' && tooling.test(file.filename)
+    && (!file.previous_filename || tooling.test(file.previous_filename)));
+}
+
 async function pick(env) {
-  const key = requireKey(env);
   const repo = requireRepo(env);
   const number = requireNumber(env);
   const pr = fetchPr(repo, number);
   if (pr.state !== 'open') throw new Error(`pull request ${number} is not open`);
-  if (pr.head.repo?.full_name !== repo) throw new Error('pull requests from forks are never verified');
   const dispatched = env.EVENT_NAME === 'workflow_dispatch';
   const head = dispatched ? pr.head.sha : String(env.EVENT_HEAD_SHA ?? '');
   if (!/^[0-9a-f]{40}$/.test(head)) throw new Error('no head commit to verify');
   if (dispatched && env.GITHUB_SHA !== pr.head.sha) {
     throw new Error(`dispatch this workflow on the pull request branch at its head ${pr.head.sha}: the journeys build the dispatched commit ${env.GITHUB_SHA}`);
   }
+  if (pr.head.sha !== head) throw new Error('pull request head moved; a newer run must verify it');
+  const files = JSON.parse(gh(['api', '--paginate', '--slurp', `repos/${repo}/pulls/${number}/files?per_page=100`])).flat();
+  if (noProductChange(files, pr.changed_files)) {
+    const reason = 'No product change. Only documentation or verification tooling changed. Hosted Node checks passed. No Android journey or second-AI product verdict was run.';
+    console.log(reason);
+    setOutputs({ no_product_change: 'true', features: '[]', smoke: 'no', reason, number, head_sha: head, changed_outcomes: '[]' });
+    return;
+  }
+  if (pr.head.repo?.full_name !== repo) throw new Error('Product changes from forks cannot be verified with repository secrets');
+  const key = requireKey(env);
   const mergeBase = fetchMergeBase(repo, pr.base.ref, head);
   const diff = fetchDiff(repo, number);
   if (!/^diff --git /m.test(diff)) throw new Error('no patch text came back for the pull request');
@@ -579,7 +594,7 @@ async function judge(env) {
 module.exports = {
   ALLOWLIST, MODEL, ENDPOINT, MARKER_PREFIX, VERDICTS, MAX_JOURNEYS, SMOKE_JOURNEY,
   SIDES, RESULT_FILE, escapeText, validateFeatures, parseJson, askParsed, parsePick, parseVerdict, applyRules, parentResult, buildComment,
-  artifactName, readSideFiles, fetchMergeBase, findOwnComment, jobConclusions, callDeepSeek, doneWhen, journeyEvidence, journeyCatalog, requireKey, includeRequiredJourneys,
+  artifactName, readSideFiles, fetchMergeBase, noProductChange, findOwnComment, jobConclusions, callDeepSeek, doneWhen, journeyEvidence, journeyCatalog, requireKey, includeRequiredJourneys,
 };
 
 if (require.main === module) {
