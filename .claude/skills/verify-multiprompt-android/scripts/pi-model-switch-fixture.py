@@ -26,6 +26,7 @@ def emit(event):
 def setup():
     assert os.environ.get('GITHUB_ACTIONS') == 'true'
     CWD.mkdir(exist_ok=True)
+    os.chdir(CWD)
     command = [sys.executable, str(HOME / 'pi-model-switch-reader.py'), 'host']
     for args, statuses in [(['enable', 'pi', SID, '--tmux', 'verify-session', '--cwd', str(CWD)], ('enabled',)),
                            (['start', 'pi', SID], ('started',)),

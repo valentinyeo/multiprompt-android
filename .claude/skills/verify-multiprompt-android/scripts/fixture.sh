@@ -54,7 +54,8 @@ if [[ "${VERIFY_FEATURE:-}" == pi-model-switch.md ]]; then
     sudo -u verifyssh mkdir -p /home/verifyssh/.local/bin /home/verifyssh/.local/share/zigshell
     sudo install -m 755 "$(dirname "$0")/pi-model-switch-fixture.py" /home/verifyssh/.local/bin/pi
     sudo install -m 644 "$(dirname "$0")/pi-model-switch-fixture.py" /home/verifyssh/.local/share/zigshell/mp_complete.py
-    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 -u /home/verifyssh/pi-model-switch-fixture.py setup > /home/verifyssh/pi-model-switch-setup.log 2>&1'
+    sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/pi
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'env GITHUB_ACTIONS=true HOME=/home/verifyssh /home/verifyssh/pi -u /home/verifyssh/pi-model-switch-fixture.py setup > /home/verifyssh/pi-model-switch-setup.log 2>&1'
     for attempt in {1..30}; do
         if sudo grep -Fxq PI_MODEL_FIXTURE_READY_2539 /home/verifyssh/pi-model-switch-setup.log; then break; fi
         if ! sudo -u verifyssh tmux has-session -t '=verify-session'; then break; fi
