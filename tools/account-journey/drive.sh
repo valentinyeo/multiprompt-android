@@ -50,12 +50,23 @@ wait_gone() {
     done
 }
 tap_split() {
-    local point x y x2 y2 action direction attempt
+    local point x y x2 y2 action attempt viewport previous='' direction=backward
     local selector="$here/../../.claude/skills/verify-multiprompt-android/scripts/ui.py"
     for attempt in {1..12}; do
         dump_ui
-        direction=backward
-        if (( attempt > 6 )); then direction=forward; fi
+        viewport=$(python3 - "$EVIDENCE/current.xml" <<'PYSTRIP'
+import sys
+import xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+strips = [node for node in root.iter('node') if node.get('class') == 'android.widget.HorizontalScrollView' and node.get('scrollable') == 'true']
+assert len(strips) <= 1, 'Ambiguous split strip'
+print(ET.tostring(strips[0], encoding='unicode') if strips else '')
+PYSTRIP
+        )
+        if [[ -n "$previous" && "$viewport" == "$previous" ]]; then
+            if [[ "$direction" == backward ]]; then direction=forward; else direction=backward; fi
+        fi
+        previous=$viewport
         point=$(python3 "$selector" "$EVIDENCE/current.xml" reach-text "$1" "$direction" horizontal) || continue
         read -r action x y x2 y2 <<< "$point"
         if [[ "$action" == tap ]]; then

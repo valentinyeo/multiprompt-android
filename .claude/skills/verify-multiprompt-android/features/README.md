@@ -80,6 +80,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `chat-search.open`. Runner: `verify.yml` (debug). Priority evidence: `search-newest.json` (1000 characters), `search-previous.json` (1000 characters), `search-wrap-previous.json` (1000 characters), `search-wrap-next.json` (1000 characters), `search-next.json` (1000 characters), `search-no-match.json` (500 characters), `search-closed.json` (500 characters), `search-proof.txt` (200 characters).
 - [Saved snippets](snippets.md): save, restart, replace a draft with a saved snippet, send it, and delete it permanently.
   - Outcomes: `snippets.save-reuse-delete`. Runner: `verify.yml` (debug). Priority evidence: `snippets-state.json` (3000 characters), `snippets-receipts.txt` (1000 characters).
+- [Claude remote control](claude-remote-control.md): Open a hosted Claude chat, enable remote control from the phone, and share phone and desktop turns with independent host receipts. SOFT-2541.
+  - Outcomes: `claude.remote-control`. Runner: `verify.yml` (debug). Priority evidence: `remote-control-state.json` (2000 characters), `remote-control-host.json` (3500 characters), `remote-control-before.txt` (200 characters).
 
 ## Initial coverage gaps
 
@@ -88,7 +90,6 @@ These IDs are an inventory, not exemptions for future changes. Untouched gaps do
 | Outcome | Existing case | Cleanup ticket |
 |---|---|---|
 | `pi.model-switch` | [#374](https://github.com/valentinyeo/multiprompt-android/pull/374) | SOFT-2539 |
-| `claude.remote-control` | [#366](https://github.com/valentinyeo/multiprompt-android/pull/366) | SOFT-2541 |
 | `ai.usage` | [#377](https://github.com/valentinyeo/multiprompt-android/pull/377) | SOFT-2542 |
 | `skills.pills` | [#378](https://github.com/valentinyeo/multiprompt-android/pull/378) | SOFT-2543 |
 | `chat-table.expand` | [#379](https://github.com/valentinyeo/multiprompt-android/pull/379) | SOFT-2544 |

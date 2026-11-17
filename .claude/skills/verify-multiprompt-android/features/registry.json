@@ -653,6 +653,25 @@
         "snippets-state.json": 3000,
         "snippets-receipts.txt": 1000
       }
+    },
+    "claude-remote-control.md": {
+      "name": "Claude remote control",
+      "description": "Open a hosted Claude chat, enable remote control from the phone, and share phone and desktop turns with independent host receipts. SOFT-2541.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "claude.remote-control"
+      ],
+      "evidence": {
+        "remote-control-state.json": 2000,
+        "remote-control-host.json": 3500,
+        "remote-control-before.txt": 200
+      }
     }
   },
   "outcomes": {
@@ -923,11 +942,25 @@
     },
     "claude.remote-control": {
       "description": "Start Claude remote control and run its bundled operations.",
-      "journey": null,
+      "journey": "claude-remote-control.md",
       "sideEffect": true,
       "match": [
-        "RemoteControl|remoteControl|remote-control"
-      ]
+        "RemoteControl|remoteControl|remote-control|remote_control|host_claude_open"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "+ tap_desc 'Send prompt'"
+        },
+        "result": {
+          "file": "remote-control-state.json",
+          "quote": "REMOTE_CONTROL_CONNECTED_2541 desktop_counter=1"
+        },
+        "sideEffect": {
+          "file": "remote-control-host.json",
+          "quote": "\"subtype\": \"remote_control\""
+        }
+      }
     },
     "ai.usage": {
       "description": "Open AI usage and render live, stale and missing status.",

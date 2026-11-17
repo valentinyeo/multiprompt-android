@@ -2570,11 +2570,11 @@
       "label": "Open session",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:SessionCard:combinedClickable:f08e23cd9c031907:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2543",
-      "journey": "session-reader.md",
+      "journey": "claude-remote-control.md",
       "proof": {
-        "recipe": ".claude/skills/verify-multiprompt-android/features/session-reader.md",
-        "action": "Tap verify-session",
-        "result": "Native reader title and composer appear"
+        "recipe": ".claude/skills/verify-multiprompt-android/features/claude-remote-control.md",
+        "action": "Tap verify-session to open the hosted Claude desktop chat",
+        "result": "CLAUDE_DESKTOP_SESSION_2541 is visible; its first phone turn enables remote control and receives REMOTE_CONTROL_CONNECTED_2541 desktop_counter=1"
       }
     },
     {

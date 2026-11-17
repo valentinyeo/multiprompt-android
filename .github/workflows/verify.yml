@@ -99,6 +99,7 @@ on:
           - device-approval.md
           - chat-search.md
           - snippets.md
+          - claude-remote-control.md
       expect_settings_missing:
         description: Require signed Android 301 to reject the settings navigation journey
         type: boolean

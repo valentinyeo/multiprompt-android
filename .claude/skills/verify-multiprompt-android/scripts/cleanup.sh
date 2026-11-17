@@ -15,6 +15,11 @@ if [[ -d "$FIXTURE" ]]; then
         sudo cat "/home/verifyssh/$provider-receipts.txt" > "$EVIDENCE/$provider-receipts.txt" 2>/dev/null || true
     done
     sudo cat /home/verifyssh/reader-requests.jsonl > "$EVIDENCE/reader-requests.jsonl" 2>/dev/null || true
+    if [[ "${VERIFY_FEATURE:-}" == claude-remote-control.md ]]; then
+        sudo cat /home/verifyssh/remote-control-receipts.jsonl > "$EVIDENCE/remote-control-receipts.jsonl" 2>/dev/null || true
+        sudo cat /home/verifyssh/remote-control-work/desktop-counter.txt > "$EVIDENCE/remote-control-desktop.txt" 2>/dev/null || true
+        sudo cat /home/verifyssh/remote-control-startup.txt > "$EVIDENCE/remote-control-startup.txt" 2>/dev/null || true
+    fi
     if [[ "${VERIFY_FEATURE:-}" == ai-switch.md ]]; then
         sudo -u verifyssh python3 - > "$EVIDENCE/ai-switch-host-debug.json" <<'PYHOST'
 import json
