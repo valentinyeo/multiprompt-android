@@ -101,6 +101,7 @@ on:
           - claude-remote-control.md
           - ai-usage.md
           - skill-pills.md
+          - chat-table.md
           - clear-ranking.md
       expect_settings_missing:
         description: Require signed Android 301 to reject the settings navigation journey
@@ -284,6 +285,11 @@ jobs:
         continue-on-error: ${{ inputs.side == 'parent' }}
         if: env.VERIFY_FEATURE == 'chat-search.md'
         run: python3 -B tools/chat-search/ui.test.py
+      - name: Check chat table assertions
+        id: chat-table-oracle
+        continue-on-error: ${{ inputs.side == 'parent' }}
+        if: env.VERIFY_FEATURE == 'chat-table.md'
+        run: python3 -B tools/chat-table/ui.test.py
       - name: Check AI usage assertions
         id: ai-usage-oracle
         continue-on-error: ${{ inputs.side == 'parent' }}

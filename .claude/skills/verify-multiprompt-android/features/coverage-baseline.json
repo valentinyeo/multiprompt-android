@@ -3,10 +3,6 @@
     "sourcePr": 374,
     "cleanupTicket": "SOFT-2539"
   },
-  "chat-table.expand": {
-    "sourcePr": 379,
-    "cleanupTicket": "SOFT-2544"
-  },
   "legacy.igsh-449": {
     "sourceTicket": "IGSH-449",
     "cleanupTicket": "IGSH-449"
