@@ -4496,8 +4496,12 @@
       "label": "Scroll Composer suggestions",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ComposerList:verticalScroll:74f9c94015fb4c77:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:6096",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "skill-pills.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/skill-pills.md",
+        "action": "Scroll Composer suggestions and tap /review-native",
+        "result": "Exact Please /review-native this appears with a painted composer pill"
+      }
     },
     {
       "id": "chat-question.choose-answer-option",

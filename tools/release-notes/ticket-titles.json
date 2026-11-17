@@ -117,5 +117,7 @@
   "IGSH-2560": "Server overload: worker caps, heavy checks in the cloud, cloud workers",
   "IGSH-2541": "Android phone test opens Claude remote control",
   "IGSH-2542": "Android phone test opens AI usage",
+  "IGSH-2543": "Android phone test inserts skills within messages",
+  "IGSH-2568": "Feature freeze until each repo's verification is complete",
   "IGSH-2544": "Android phone test expands and scrolls tables"
 }

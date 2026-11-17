@@ -11,6 +11,8 @@ exec > >(tee -a "$EVIDENCE/driver-transcript.txt") 2>&1
 set -x
 package=${VERIFY_PACKAGE:-dev.multiprompt.companion.debug}
 step=0
+product_checks=0
+setup_failure=0
 adb logcat -c
 adb logcat -v threadtime > "$EVIDENCE/logcat-stream.txt" 2>&1 &
 logcat_stream_pid=$!
@@ -94,6 +96,11 @@ finish() {
     shot "exit-$code"
     timeout 15s adb logcat -d > "$EVIDENCE/logcat.txt"
     kill "$logcat_stream_pid" 2>/dev/null
+    if [[ "$code" != 0 && "$product_checks" == 1 && "$setup_failure" != 1 ]]; then
+        printf 'PRODUCT_ASSERTION_FAILED\n' | tee "$EVIDENCE/failure-class.txt"
+    elif [[ "$code" != 0 ]]; then
+        printf 'SETUP_FAILED\n' | tee "$EVIDENCE/failure-class.txt"
+    fi
     printf 'DRIVER EXIT: %s\n' "$code"
     exit "$code"
 }
@@ -160,6 +167,7 @@ dismiss_system_anr() {
 }
 doctor() {
     local attempt
+    setup_failure=1
     for attempt in 1 2 3; do
         dump_ui
         dismiss_system_anr
@@ -169,7 +177,10 @@ doctor() {
         sleep 3
     done
     for attempt in {1..30}; do
-        if "$scripts/ssh-ready.sh"; then return; fi
+        if "$scripts/ssh-ready.sh"; then
+            setup_failure=0
+            return
+        fi
         printf 'Emulator network not up yet, attempt %s/30\n' "$attempt" | tee -a "$EVIDENCE/network-wait.txt"
         sleep 2
     done
@@ -314,6 +325,7 @@ launcher_icon() {
 
 adb shell settings put global hide_error_dialogs 1
 adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
+product_checks=1
 if [[ "$feature" == launcher-icon.md ]]; then
     launcher_icon
     exit 0
@@ -339,8 +351,10 @@ if [[ "$package" == dev.multiprompt.companion.debug ]]; then tap_text 'Use witho
 wait_for_text Inbox
 if [[ "$feature" == settings-navigation.md ]]; then
     adb shell am force-stop "$package"
+    setup_failure=1
     adb shell am instrument -w -e mode workspace-colors-seed dev.multiprompt.verification/dev.multiprompt.verification.Seed > "$EVIDENCE/workspace-colors-seed.txt"
     grep -F 'ISOLATED_WORKSPACE_COLORS_SEEDED' "$EVIDENCE/workspace-colors-seed.txt"
+    setup_failure=0
     relaunch_app
     wait_for_text Inbox
     tap_desc 'Session list actions'
@@ -395,6 +409,7 @@ if [[ "$feature" == settings-navigation.md ]]; then
 fi
 tap_text All
 seed_host() {
+    setup_failure=1
     adb shell am force-stop "$package"
     set +x
     if [[ "$package" == dev.multiprompt.companion.debug ]]; then
@@ -416,6 +431,7 @@ seed_host() {
         grep -F 'OK (1 test)' "$EVIDENCE/host-seed.txt"
         cp "$EVIDENCE/host-seed.txt" "$EVIDENCE/retired-profile-present.txt"
     fi
+    setup_failure=0
     relaunch_app "${5:-Trust $1?}"
 }
 if [[ "$feature" == hosts-retired.md ]]; then
@@ -490,6 +506,7 @@ if [[ "$feature" == session-favorite-dot.md ]]; then
         wait_for_text "$label"
     }
     prove_dot plain favorite-dot-before
+    setup_failure=1
     python3 -m http.server 8788 > "$FIXTURE/offline-proxy.log" 2>&1 &
     echo "$!" > "$FIXTURE/offline-proxy.pid"
     adb shell settings put global http_proxy 10.0.2.2:8788
@@ -509,6 +526,7 @@ for attempt in range(20):
         time.sleep(0.1)
 PYPROXY
     adb shell am force-stop "$package"
+    setup_failure=1
     adb shell am instrument -w -e class dev.multiprompt.companion.account.FavoriteDotSeedTest#seedsOfflineFavoriteLayout \
         -e mode favorite-dot-seed \
         "$package.test/androidx.test.runner.AndroidJUnitRunner" | tr -d '\r' > "$EVIDENCE/favorite-dot-seed.txt"
@@ -517,6 +535,7 @@ PYPROXY
         printf 'Favorite dot seed failed\n' >&2
         exit 1
     fi
+    setup_failure=0
     relaunch_app
     wait_for_text verify-session
     wait_for_text verify-keep
@@ -634,9 +653,11 @@ if [[ "$feature" == session-favorites.md ]]; then
         tmux has-session -t verify-session && tmux has-session -t verify-keep
     '
     adb shell am force-stop "$package"
+    setup_failure=1
     adb shell am instrument -w -e mode favorites-seed dev.multiprompt.verification/dev.multiprompt.verification.Seed | tr -d '\r' > "$FIXTURE/favorites-seed.txt"
     grep -Fx 'INSTRUMENTATION_RESULT: result=ISOLATED_FAVORITES_SEEDED' "$FIXTURE/favorites-seed.txt"
     grep -Fx 'INSTRUMENTATION_CODE: -1' "$FIXTURE/favorites-seed.txt"
+    setup_failure=0
     relaunch_app
     tap_text Favorites
     wait_for_text verify-session
@@ -894,6 +915,11 @@ fi
 
 if [[ "$feature" == ai-usage.md ]]; then
     source "$scripts/ai-usage-drive.sh"
+    exit 0
+fi
+
+if [[ "$feature" == skill-pills.md ]]; then
+    source "$scripts/skill-pills-drive.sh"
     exit 0
 fi
 
