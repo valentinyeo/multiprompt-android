@@ -5,7 +5,13 @@ on:
     - cron: '23 3 * * *'
   pull_request:
     paths:
-      - 'app/**'
+      - 'app/src/main/**'
+      - 'app/src/debug/**'
+      - 'app/src/m3/**'
+      - 'app/src/release/**'
+      - 'app/*.gradle.kts'
+      - 'app/proguard-rules.pro'
+      - 'app/src/androidTest/AndroidManifest.xml'
       - '.github/actions/android-proof/**'
       - 'gradle.properties'
       - '*.gradle.kts'

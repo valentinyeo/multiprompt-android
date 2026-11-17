@@ -59,12 +59,34 @@ test('missing and empty check graphs never pass', async () => {
   assert.throws(() => checkStatus({ ...pr, statusCheckRollup: null }), /Missing or truncated/);
 });
 
-test('failed, cancelled, skipped and neutral jobs never pass', async () => {
+test('failed, cancelled, neutral and unexpectedly skipped jobs never pass', async () => {
   const { checkStatus } = await gate;
   for (const conclusion of ['FAILURE', 'CANCELLED', 'SKIPPED', 'NEUTRAL', 'TIMED_OUT', 'ACTION_REQUIRED', null]) {
     const pr = await green();
     pr.statusCheckRollup[0].conclusion = conclusion;
     assert.throws(() => checkStatus(pr), /Checks not green/, String(conclusion));
+  }
+});
+
+test('only the six path-routed phone checks may report skipped', async () => {
+  const { checkStatus, skippableChecks } = await gate;
+  assert.deepEqual(skippableChecks, [
+    'image-preview-emulator', 'reply-notifications-emulator', 'session-rows-emulator',
+    'session-pins-emulator', 'message-actions-emulator', 'approved-style-emulator',
+  ]);
+  const pr = await green();
+  for (const check of pr.statusCheckRollup) {
+    const skipped = { ...pr, statusCheckRollup: pr.statusCheckRollup.map(c => c === check ? { ...c, conclusion: 'SKIPPED' } : c) };
+    if (skippableChecks.includes(check.name)) assert.equal(checkStatus(skipped).ready, true, check.name);
+    else assert.throws(() => checkStatus(skipped), /Checks not green/, check.name);
+  }
+  const skipped = pr.statusCheckRollup.map(c => skippableChecks.includes(c.name) ? { ...c, conclusion: 'SKIPPED' } : c);
+  assert.equal(checkStatus({ ...pr, statusCheckRollup: skipped }).ready, true);
+  for (const name of skippableChecks) {
+    assert.equal(checkStatus({ ...pr, statusCheckRollup: skipped.filter(c => c.name !== name) }).ready, false, name);
+    for (const conclusion of ['FAILURE', 'CANCELLED', 'NEUTRAL', 'TIMED_OUT']) {
+      assert.throws(() => checkStatus({ ...pr, statusCheckRollup: skipped.map(c => c.name === name ? { ...c, conclusion } : c) }), /Checks not green/, name);
+    }
   }
 });
 
