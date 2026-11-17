@@ -773,6 +773,20 @@
       "description": "Save, reuse, delete and retain snippets.",
       "journey": "snippets.md",
       "sideEffect": true,
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tap_text VERIFY_SNIPPET_2537"
+        },
+        "result": {
+          "file": "snippets-state.json",
+          "quote": "\"composer\": [\n      \"VERIFY_SNIPPET_2537\"\n    ]"
+        },
+        "sideEffect": {
+          "file": "snippets-receipts.txt",
+          "quote": "VERIFY_RECEIVED:VERIFY_SNIPPET_2537"
+        }
+      },
       "match": [
         "SnippetStore|snippet|Snippet"
       ]

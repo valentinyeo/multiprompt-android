@@ -17,6 +17,6 @@ Dispatch `verify.yml` with `feature=snippets.md`. The driver imports the debug S
 
 ## Evidence
 
-`snippets-state.json` extracts the observed menu text and composer values from the captured XML, asserts each state, and links its screenshot. `snippets-receipts.txt` must contain exactly one receipt for the reused text. The registry prioritizes both files for the independent verifier. Product changes matching the snippet outcome schedule this journey before optional AI-picked journeys.
+`snippets-state.json` extracts the observed menu text and composer values from the captured XML, asserts each state, and links its screenshot. `snippets-receipts.txt` must contain exactly one receipt for the reused text. The registry prioritizes both files for the independent verifier and supplies exact action, UI-state, and receipt citation hints. Hints do not count as proof: the gate still requires those quotes in the successful head journey's retained artifact at the exact APK source SHA. Product changes matching the snippet outcome schedule this journey before optional AI-picked journeys.
 
 Account sync, signed releases, multiline snippets, duplicate saves, and the snippet count limit are outside this recipe.

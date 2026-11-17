@@ -79,7 +79,7 @@ function featureErrors({ plan, coverage = [], directories = {}, conclusions = {}
 
 function catalog() {
   const journeys = Object.entries(registry.journeys).map(([name, journey]) => `- ${name}: ${journey.name}: ${journey.description} [${journey.runner.kind}; outcomes ${journey.outcomes.join(', ')}]`);
-  const outcomes = Object.entries(registry.outcomes).map(([id, outcome]) => `- ${id}: ${outcome.description} Journey: ${outcome.journey ?? 'MISSING; must fail if changed'}. Independent side effect required: ${outcome.sideEffect}.`);
+  const outcomes = Object.entries(registry.outcomes).map(([id, outcome]) => `- ${id}: ${outcome.description} Journey: ${outcome.journey ?? 'MISSING; must fail if changed'}. Independent side effect required: ${outcome.sideEffect}.${outcome.citations ? ` Citation hints (verify exact quotes against retained head artifacts before citing): ${JSON.stringify(outcome.citations)}.` : ''}`);
   return `${journeys.join('\n')}\n\nOutcome catalog:\n${outcomes.join('\n')}`;
 }
 

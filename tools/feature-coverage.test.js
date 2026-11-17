@@ -286,3 +286,35 @@ test('the real picker schedules snippets even when the model omits it or fills a
     assert.ok(gate.debugJourneys.includes('snippets.md'));
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
+
+test('snippet citation hints reach the judge and require exact retained head actions, UI and receipts', () => {
+  const outcome = 'snippets.save-reuse-delete';
+  const journey = 'snippets.md';
+  const citations = gate.registry.outcomes[outcome].citations;
+  assert.ok(citations, 'Register explicit snippet action, result and side-effect citations');
+  assert.ok(gate.catalog().includes(JSON.stringify(citations)), 'The judge must receive the registered citation hints');
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'snippets-citations-'));
+  try {
+    fs.writeFileSync(path.join(directory, 'app-source-sha.txt'), sha);
+    fs.writeFileSync(path.join(directory, 'driver-transcript.txt'), '++ tap_text VERIFY_SNIPPET_2537\n');
+    fs.writeFileSync(path.join(directory, 'snippets-state.json'), JSON.stringify({ reused: { composer: ['VERIFY_SNIPPET_2537'] } }, null, 2));
+    fs.writeFileSync(path.join(directory, 'snippets-receipts.txt'), 'VERIFY_RECEIVED:VERIFY_SNIPPET_2537\n');
+    const args = {
+      plan: { product: true, outcomes: [outcome] },
+      coverage: [{ outcome, journey, ...citations }],
+      directories: { [journey]: directory },
+      conclusions: { [journey]: 'success' },
+      sha,
+    };
+    assert.equal(gate.featureErrors(args).accepted.length, 1);
+    assert.equal(gate.featureErrors({ ...args, coverage: [] }).errors.length, 1);
+    assert.equal(gate.featureErrors({ ...args, sha: 'b'.repeat(40) }).errors.length, 1);
+    for (const file of ['driver-transcript.txt', 'snippets-state.json', 'snippets-receipts.txt']) {
+      const full = path.join(directory, file);
+      const original = fs.readFileSync(full, 'utf8');
+      fs.writeFileSync(full, 'Missing snippet proof');
+      assert.equal(gate.featureErrors(args).errors.length, 1, file);
+      fs.writeFileSync(full, original);
+    }
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
