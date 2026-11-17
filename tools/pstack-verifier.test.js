@@ -819,6 +819,12 @@ test('PR392 native model and effort receipts reach the judge before diagnostic e
   }
 });
 
+test('journey builds reuse cached fixed-version dependencies during repository outages', () => {
+  const build = stepBlocks(read('.github/workflows/verify.yml')).find(step => /id: build-apk/.test(step));
+  assert.match(build, /gradle -p "\$app_source"/);
+  assert.doesNotMatch(build, /--refresh-dependencies/);
+});
+
 test('proof uploads survive the same-run retry that failed PR392 at c2f673c6', () => {
   const requireReplayable = source => {
     const lines = source.split('\n');

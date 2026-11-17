@@ -147,6 +147,75 @@ class FixtureJourneyTest(unittest.TestCase):
             self.assertEqual(['PI_HANDOVER_READY_2538', 'PI_REPLY_PHONE_AFTER_SWITCH_2538'], replies)
             self.assertEqual(2, sum(event['type'] == 'agent_settled' for event in events))
 
+    def test_ai_switch_catchup_replays_real_ownership_and_completion_without_another_reply(self):
+        program = (SCRIPTS / 'ai-switch-drive.sh').read_text().split("<<'PYCATCHUP'\n", 1)[1].split('\nPYCATCHUP', 1)[0]
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            (home / 'ai-switch-reader.py').write_bytes((ROOT / 'app/src/main/assets/chat_history_reader.py').read_bytes())
+            bootstrap = '''import importlib.util
+spec = importlib.util.spec_from_file_location('seed_reader', 'READER')
+reader = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(reader)
+provider, sid = 'pi', 'switched-2569'
+reader.host_write(reader.host_switched_path(), {'c001c001-2538-4000-8000-000000002538': [provider, sid]})
+session = dict(state=dict(display_history=True), turn='t-2569')
+reader.host_event(provider, sid, 'live-verify-session', session, 'turn.started', dict(message_id='phone-000000002569'))
+reader.host_event(provider, sid, 'live-verify-session', session, 'text.done', dict(text='PI_REPLY_PHONE_AFTER_SWITCH_2538'), 'pi-2:text:0')
+session['db'].close()
+'''.replace('READER', str(home / 'ai-switch-reader.py'))
+            result = subprocess.run([sys.executable, '-B', '-c', bootstrap + program.replace('/home/verifyssh', str(home))], env=dict(os.environ, HOME=str(home)), capture_output=True, text=True)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            with sqlite3.connect(home / '.local/state/multiprompt/shared-messages/store.sqlite3') as db:
+                events = [json.loads(raw) for raw, in db.execute('SELECT body FROM message_events ORDER BY seq')]
+            self.assertEqual(4, len(events))
+            self.assertEqual(events[:2], events[2:])
+            history, = (home / '.local/state/multiprompt/agent-host').glob('*.history.jsonl')
+            rows = [json.loads(line)['row'] for line in history.read_text().splitlines()]
+            self.assertEqual(['PI_REPLY_PHONE_AFTER_SWITCH_2538', 'PI_HISTORY_CAUGHT_UP_2569'], [row['text'] for row in rows])
+
+    def test_ai_switch_holds_completion_until_the_phone_observes_the_stream(self):
+        fixture = load('ai_switch_catchup', SCRIPTS / 'ai-switch-fixture.py')
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            hold = home / 'ai-switch-hold-2569'
+            hold.touch()
+            output = io.StringIO()
+            def release(seconds):
+                events = list(map(json.loads, output.getvalue().splitlines()))
+                self.assertEqual('text_delta', events[-1]['assistantMessageEvent']['type'])
+                if seconds == 0.25:
+                    hold.unlink()
+            request = json.dumps(dict(id='phone-2569', type='prompt', message='PHONE_AFTER_SWITCH_2538')) + '\n'
+            with patch.object(fixture, 'HOME', home), patch.object(fixture, 'boundary'), patch.object(fixture.time, 'sleep', side_effect=release), patch.object(sys, 'argv', ['pi', '--mode', 'rpc', '--session-id', 'switched-session']), patch.object(sys, 'stdin', io.StringIO(request)), redirect_stdout(output):
+                fixture.pi()
+            self.assertEqual('agent_settled', json.loads(output.getvalue().splitlines()[-1])['type'])
+
+    def test_ai_switch_pi_keeps_a_reply_streaming_before_the_followup(self):
+        fixture = load('ai_switch_stream', SCRIPTS / 'ai-switch-fixture.py')
+        requests = [dict(id=f'prompt-{n}', type='prompt', message=text) for n, text in enumerate(('PHONE_STREAM_2569', 'PHONE_DURING_STREAM_2569'))]
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            with patch.object(fixture, 'HOME', home), patch.object(fixture, 'boundary'), patch.object(fixture.time, 'sleep') as delay, patch.object(sys, 'argv', ['pi', '--mode', 'rpc', '--session-id', 'second-session']), patch.object(sys, 'stdin', io.StringIO(''.join(json.dumps(row) + '\n' for row in requests))), redirect_stdout(io.StringIO()) as output:
+                fixture.pi()
+            delay.assert_any_call(0.2)
+            replies = [event['assistantMessageEvent']['content'] for event in map(json.loads, output.getvalue().splitlines()) if event.get('assistantMessageEvent', {}).get('type') == 'text_end']
+            self.assertEqual(['PI_REPLY_PHONE_STREAM_2569', 'PI_REPLY_PHONE_DURING_STREAM_2569'], replies)
+            self.assertEqual(2, len((home / 'ai-switch-provider-receipts.jsonl').read_text().splitlines()))
+
+    def test_ai_switch_back_to_claude_uses_the_new_session(self):
+        fixture = load('ai_switch_reverse', SCRIPTS / 'ai-switch-fixture.py')
+        texts = ['This chat ran on Pi until now and continues on Claude.', 'PHONE_SECOND_SWITCH_2569']
+        requests = [dict(type='user', message=dict(content=text)) for text in texts]
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            with patch.object(fixture, 'HOME', home), patch.object(fixture, 'boundary'), patch.object(sys, 'argv', ['claude', '--session-id', 'reverse-session']), patch.object(sys, 'stdin', io.StringIO(''.join(json.dumps(row) + '\n' for row in requests))), redirect_stdout(io.StringIO()) as output:
+                fixture.claude()
+            receipts = [json.loads(line) for line in (home / 'ai-switch-provider-receipts.jsonl').read_text().splitlines()]
+            self.assertEqual([dict(provider='claude', sid='reverse-session', text=text) for text in texts], receipts)
+            events = list(map(json.loads, output.getvalue().splitlines()))
+            self.assertEqual(['CLAUDE_HANDOVER_READY_2569', 'CLAUDE_REPLY_PHONE_SECOND_SWITCH_2569'], [event['message']['content'][0]['text'] for event in events if event['type'] == 'assistant'])
+            self.assertFalse((home / 'ai-switch-wrong-provider.txt').exists())
+
     def test_real_generation_22_bundle_is_prepared_without_relabeling_current_source(self):
         with tempfile.TemporaryDirectory() as temporary:
             destination = Path(temporary)
