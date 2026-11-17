@@ -56,6 +56,13 @@ test('unknown product changes fail closed and cannot be called tooling', () => {
   assert.throws(() => gate.planChange(diff, null), /FEATURE_UNMAPPED/);
 });
 
+test('a ChatHistory step field does not require message identity', () => {
+  const step = productDiff('java/dev/multiprompt/companion/reader/ChatHistory.kt', 'val step: String = ""');
+  assert.equal(gate.changedOutcomes(step).includes('chat.identity'), false);
+  const identity = productDiff('java/dev/multiprompt/companion/reader/ChatHistory.kt', 'projectMessages(sent)');
+  assert.ok(gate.changedOutcomes(identity).includes('chat.identity'));
+});
+
 test('only product additions and removals identify outcomes, not test code or patch context', () => {
   const diff = 'diff --git a/app/src/test/ChatFindTest.kt b/app/src/test/ChatFindTest.kt\n+ChatFind\n';
   assert.deepEqual(gate.changedOutcomes(diff), []);

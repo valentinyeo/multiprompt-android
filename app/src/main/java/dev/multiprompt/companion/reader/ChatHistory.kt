@@ -30,6 +30,7 @@ data class ChatHistory(
     val deliveries: Map<String, QueuedMessages.Delivery> = emptyMap(),
     val held: List<QueuedMessages.SentPrompt> = emptyList(),
     val pendingQuestions: List<PendingQuestion> = emptyList(),
+    val step: String = "",
 ) {
     val messages: List<ChatHistoryMessage> by lazy { transcript(rows) }
 
@@ -238,9 +239,9 @@ data class ChatHistory(
         val terminal = setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
         val mergedDeliveries = previousDeliveries + page.deliveries + previousDeliveries.filterValues { it in terminal }
         return if (mode == "older") {
-            copy(start = page.oldest, rows = merged, deliveries = mergedDeliveries, held = page.held, pendingQuestions = page.pendingQuestions)
+            copy(start = page.oldest, rows = merged, deliveries = mergedDeliveries, held = page.held, pendingQuestions = page.pendingQuestions, step = page.step)
         } else {
-            ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged, mergedDeliveries, page.held, page.pendingQuestions)
+            ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged, mergedDeliveries, page.held, page.pendingQuestions, page.step)
         }
     }
 

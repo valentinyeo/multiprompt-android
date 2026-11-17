@@ -31,3 +31,5 @@ Preconditions: fresh fixture; use `feature=sessions.md`. The driver performs the
 ## Gotchas
 
 The app prefers a useful tmux window title over the session name. The fixture explicitly names its window `verify-session` and disables automatic renaming; otherwise Python becomes the visible `python3` label. Search can match previews as well as names. A matching screenshot must contain the actual session card, not just the search input. Discovery uses real tmux, not a seeded session cache. Empty-query, no-match, refresh failure, stale cache, buckets, creation and management paths remain unverified by this recipe. Every invocation starts empty; do not reuse a previously imported host or shared emulator.
+
+The row line prefers the waiting question, then the current step while the chat works, then the last reply, taken from the chat history of recent chats. Plain tmux chats without history, as in this fixture, keep the screen text line.

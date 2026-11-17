@@ -141,6 +141,26 @@ elif [[ "${VERIFY_FEATURE:-}" == session-favorites.md ]]; then
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'exec env GITHUB_ACTIONS=true HOME=/home/verifyssh VERIFY_INFORMATION_1015=true python3 -u /home/verifyssh/console.py /home/verifyssh/receipts.txt'
 elif [[ "${VERIFY_FEATURE:-}" == session-drafts.md ]]; then
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'python3 -c "import sys; sys.stdout.write(\"\u23fa Inbox preview stays.\n\"); sys.stdout.flush()"; exec python3 -u /home/verifyssh/console.py /home/verifyssh/receipts.txt'
+elif [[ "${VERIFY_FEATURE:-}" == session-rows.md ]]; then
+    [[ "${GITHUB_ACTIONS:-}" == true ]]
+    sudo install -m 755 "$(dirname "$0")/row-console.py" /home/verifyssh/row-console.py
+    sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'env GITHUB_ACTIONS=true HOME=/home/verifyssh /home/verifyssh/claude -u /home/verifyssh/row-console.py'
+    for attempt in {1..30}; do
+        if sudo test -s /home/verifyssh/row-layout.txt; then break; fi
+        sleep 1
+    done
+    sudo test -s /home/verifyssh/row-layout.txt
+    sudo -u verifyssh tmux new-session -d -s live-rowstep -x 100 -y 32 'sleep infinity'
+    sudo -u verifyssh tmux set-option -t live-rowstep @mp_host_sid a1b2c3d4-2361-4000-8000-000000002362
+    sudo -u verifyssh tmux set-window-option -t live-rowstep automatic-rename off
+    sudo -u verifyssh tmux rename-window -t live-rowstep live-rowstep
+    sudo -u verifyssh tmux display-message -p -t verify-session '#{pane_current_command}' > "$EVIDENCE/row-question-command.txt"
+    grep -Fx claude "$EVIDENCE/row-question-command.txt"
+    sudo -u verifyssh tmux display-message -p -t live-rowstep '#{pane_current_command}' > "$EVIDENCE/row-live-command.txt"
+    grep -Fx sleep "$EVIDENCE/row-live-command.txt"
+    sudo -u verifyssh tmux show-options -t live-rowstep > "$EVIDENCE/row-live-options.txt"
+    grep -F 'a1b2c3d4-2361-4000-8000-000000002362' "$EVIDENCE/row-live-options.txt"
 elif [[ "${VERIFY_FEATURE:-}" == chat-resync.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true ]]
     sudo install -m 644 app/src/main/assets/chat_history_reader.py /home/verifyssh/recovery-reader.py

@@ -86,6 +86,7 @@ object ChatHistoryProtocol {
         val deliveries: Map<String, QueuedMessages.Delivery> = emptyMap(),
         val held: List<QueuedMessages.SentPrompt> = emptyList(),
         val pendingQuestions: List<PendingQuestion> = emptyList(),
+        val step: String = "",
     )
 
     fun hostedProvider(agent: AgentKind, sid: String): String? = if (sid.isEmpty()) null else agent.hostProvider
@@ -137,10 +138,12 @@ object ChatHistoryProtocol {
         val deliveries = mutableMapOf<String, QueuedMessages.Delivery>()
         val held = mutableListOf<QueuedMessages.SentPrompt>()
         var pendingQuestions = emptyList<PendingQuestion>()
+        var step = ""
         val rows = lines.subList(1, lines.lastIndex).mapNotNull { line ->
             val row = JSONObject(line)
             if (row.optString("role") == "status") {
                 pendingQuestions = parseQuestionSnapshot(row.optJSONObject("question"), fields[9])
+                step = currentStep(row.optJSONArray("todos"))
             }
             row.optJSONArray("held")?.let { values ->
                 for (index in 0 until values.length()) {
@@ -162,7 +165,16 @@ object ChatHistoryProtocol {
         }
         require(rows.zipWithNext().all { (a, b) -> a.offset <= b.offset })
         return Page(fields[4], base, end, fields[7].toLong(), fields[8] == "1", fields[11].toLong(),
-            fields[12], fields[13], oldest, rows, deliveries, held, pendingQuestions)
+            fields[12], fields[13], oldest, rows, deliveries, held, pendingQuestions, step)
+    }
+
+    private fun currentStep(todos: org.json.JSONArray?): String {
+        if (todos == null) return ""
+        for (index in 0 until todos.length()) {
+            val todo = todos.optJSONObject(index) ?: continue
+            if (todo.optString("status") == "in_progress") return todo.optString("text").trim()
+        }
+        return ""
     }
 
     private fun newHostedChat(sid: String): Page {

@@ -837,6 +837,53 @@ if [[ "$feature" == session-drafts.md ]]; then
     printf 'INBOX_DRAFT_LABEL_OK\n'
     exit 0
 fi
+if [[ "$feature" == session-rows.md ]]; then
+    question_ok=0
+    step_ok=0
+    for attempt in {1..90}; do
+        dump_ui
+        if [[ "$question_ok" == 0 ]] && python3 "$scripts/row-preview.py" question "$EVIDENCE/current.xml"; then
+            question_ok=1
+        fi
+        if [[ "$step_ok" == 0 ]] && python3 "$scripts/row-preview.py" step "$EVIDENCE/current.xml"; then
+            step_ok=1
+        fi
+        if [[ "$question_ok" == 1 && "$step_ok" == 1 ]]; then
+            break
+        fi
+        sleep 1
+    done
+    [[ "$question_ok" == 1 && "$step_ok" == 1 ]]
+    shot inbox-rows
+    python3 "$scripts/row-preview.py" question "$EVIDENCE/$(printf '%02d' "$step")-inbox-rows.xml"
+    python3 "$scripts/row-preview.py" step "$EVIDENCE/$(printf '%02d' "$step")-inbox-rows.xml"
+    python3 "$scripts/row-preview.py" retain "$EVIDENCE/$(printf '%02d' "$step")-inbox-rows.xml" "$EVIDENCE/inbox-row-ui.xml"
+    python3 "$scripts/row-preview.py" question "$EVIDENCE/inbox-row-ui.xml"
+    python3 "$scripts/row-preview.py" step "$EVIDENCE/inbox-row-ui.xml"
+    question_transcript=$(sudo sed -n 's/^question_transcript=//p' /home/verifyssh/row-layout.txt)
+    step_history=$(sudo sed -n 's/^step_history=//p' /home/verifyssh/row-layout.txt)
+    [[ -n "$question_transcript" && -n "$step_history" ]]
+    sudo cat "$question_transcript" > "$EVIDENCE/row-transcript.jsonl"
+    sudo cat "$step_history" > "$EVIDENCE/row-step-history.jsonl"
+    grep -F 'AskUserQuestion' "$EVIDENCE/row-transcript.jsonl"
+    grep -F 'Which target should ship?' "$EVIDENCE/row-transcript.jsonl"
+    grep -F 'TodoWrite' "$EVIDENCE/row-step-history.jsonl"
+    grep -F 'Rewrite the inbox row' "$EVIDENCE/row-step-history.jsonl"
+    sudo -u verifyssh tmux capture-pane -p -J -t verify-session > "$EVIDENCE/row-pane.txt"
+    grep -F 'Pane reply stays.' "$EVIDENCE/row-pane.txt"
+    if grep -F 'Which target should ship?' "$EVIDENCE/row-pane.txt"; then
+        printf 'Waiting question was on the pane\n' >&2
+        exit 1
+    fi
+    sudo -u verifyssh tmux capture-pane -p -J -t live-rowstep > "$EVIDENCE/row-step-pane.txt"
+    if grep -F 'Rewrite the inbox row' "$EVIDENCE/row-step-pane.txt"; then
+        printf 'Current step was on the pane\n' >&2
+        exit 1
+    fi
+    sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
+    printf 'INBOX_ROW_QUESTION_AND_STEP_OK\n'
+    exit 0
+fi
 if [[ "$feature" == copy-chat-id.md ]]; then
     hosted_id=$(sudo -u verifyssh tmux show-options -t verify-session -v @mp_host_sid 2>/dev/null | tr -d '\r' || true)
     [[ "$hosted_id" == copy-chat-id-2371 ]]

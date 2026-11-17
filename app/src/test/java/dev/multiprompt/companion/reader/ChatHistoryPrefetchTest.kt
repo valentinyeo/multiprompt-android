@@ -63,13 +63,23 @@ class ChatHistoryPrefetchTest {
     }
 
     @Test
+    fun everyRefreshedHistoryIsHandedToTheCaller() = runBlocking {
+        val cache = ChatHistoryCache(temporary.newFolder())
+        val seen = mutableListOf<Pair<String, List<String>>>()
+        ChatHistoryPrefetch.refresh(cache, host, listOf(identity), { line -> reply(JSONObject(line).getLong("id"), true) }) { who, history ->
+            seen.add(who.tmux to history.rows.map { it.text })
+        }
+        assertEquals(listOf("tmux" to listOf("question", "answer")), seen)
+    }
+
+    @Test
     fun aFailedRefreshKeepsTheSavedMessages() = runBlocking {
         val cache = ChatHistoryCache(temporary.newFolder())
         val key = ChatHistoryConnection.cacheKey(host, identity)
         val saved = ChatHistory("sid", 1, 100, 0, 1, "a".repeat(64), rows = listOf(ChatHistoryProtocol.Row("user", "kept", "id", "", 0, 100)))
         cache.save(key, saved)
         val failure = runCatching {
-            ChatHistoryPrefetch.refresh(cache, host, listOf(identity)) { throw java.io.IOException("offline") }
+            ChatHistoryPrefetch.refresh(cache, host, listOf(identity), exchange = { throw java.io.IOException("offline") })
         }
         assertTrue(failure.isFailure)
         assertEquals(saved, cache.peek(key))

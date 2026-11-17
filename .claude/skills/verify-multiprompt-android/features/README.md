@@ -54,6 +54,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `reader.send-enter-interrupt`. Runner: `verify.yml` (debug).
 - [Session routing](session-routing.md): Inbox and swipe switching, typed and simulated dictated sends, independent SSH receipts.
   - Outcomes: `session-routing.journey`. Runner: `verify.yml` (debug).
+- [Inbox question and step](session-rows.md): a waiting question replaces the pane reply on the inbox row, and a working live chat shows its current step.
+  - Outcomes: `inbox.row`. Runner: `verify.yml` (debug). Priority evidence: `inbox-row-ui.xml` (4000 characters).
 - [Session settings](session-settings.md): full-screen split switches; saving is blocked without account OTP and a pulled layout.
   - Outcomes: `session-settings.journey`. Runner: `verify.yml` (manual). Prerequisites: Account email OTP and a pulled account layout.
 - [Stop while the chat works](session-stop.md): Stop replaces Send while a chat is working and the box is empty. Typing brings Send back. Stop interrupts the session.
