@@ -41,6 +41,60 @@ class MessageProjectionTest {
         assertFalse("MESSAGE_PROJECTION_DUPLICATE: phone message produced two visible rows. Reconcile it in ChatHistory; do not append an independent echo. $phones", phones.any { it.value > 1 })
     }
 
+    @Test fun waitingPromptsBecomeJournalAndHostRowsWithoutAnIndependentEcho() {
+        for (provider in listOf("claude", "codex", "pi", "hax", "cursor")) {
+            val waiting = listOf(PendingPrompts.Entry(id(1), "same"), PendingPrompts.Entry(id(2), "same"))
+            val empty = ChatHistory(sid = sid, inode = 7)
+            val before = empty.projectMessages(waiting = waiting + waiting.first())
+            once(before, listOf("same", "same"))
+            assertEquals(waiting.map { "@shared:${it.id}" }, before.map { it.key })
+            assertEquals(listOf(PendingPrompts.WAITING_LABEL, PendingPrompts.WAITING_LABEL), before.map { it.delivery })
+            val journal = MessageJournal.Entry(id(1), "account", MessageProtocol.Scope(provider, sid, "verify-session"), "submit", id(1), "same")
+            val issuing = listOf(waiting.first().copy(issuing = true), waiting.last())
+            val recorded = empty.projectMessages(unresolved = listOf(journal), waiting = issuing)
+            once(recorded, listOf("same", "same"))
+            assertEquals(before.map { it.key }, recorded.map { it.key })
+            val queued = replica(listOf(row(1, provider).copy(state = MessageProtocol.State.QUEUED)), emptyList())
+            val admitted = empty.projectMessages(queued, listOf(journal), waiting = issuing)
+            once(admitted, listOf("same", "same"))
+            assertEquals(before.map { it.key }, admitted.map { it.key })
+            assertEquals(null, admitted.first().delivery)
+            val accepted = replica(listOf(row(1, provider)), host(1, provider))
+            val landed = empty.copy(rows = listOf(user(1), reply(1)))
+            val caughtUp = landed.projectMessages(accepted, listOf(journal), waiting = issuing)
+            once(caughtUp, listOf("same", "answer 1", "same"))
+            assertEquals(before.map { it.key }, caughtUp.filter { it.role == "user" }.map { it.key })
+            val afterLocalRemoval = landed.projectMessages(accepted, waiting = waiting.drop(1))
+            assertEquals(caughtUp, afterLocalRemoval)
+        }
+    }
+
+    @Test fun aTranscriptReceiptCanReplaceTheWaitingRowBeforeTheHostSnapshotArrives() {
+        val waiting = listOf(PendingPrompts.Entry(id(1), "same"), PendingPrompts.Entry(id(2), "same"))
+        val history = ChatHistory(sid = sid, inode = 7, rows = listOf(user(1, id(1)), reply(1)))
+        val projected = history.projectMessages(waiting = waiting)
+        once(projected, listOf("same", "answer 1", "same"))
+        assertEquals(listOf("@shared:${id(1)}", "@shared:${id(2)}"), projected.filter { it.role == "user" }.map { it.key })
+        assertEquals(null, projected.first().delivery)
+        assertEquals(PendingPrompts.WAITING_LABEL, projected.last().delivery)
+    }
+
+    @Test fun knownWaitingIdentityCannotBeClaimedByAnEqualBodyHostCard() {
+        val waiting = listOf(PendingPrompts.Entry(id(2), "same"))
+        val queued = replica(listOf(row(1).copy(state = MessageProtocol.State.QUEUED)), emptyList())
+        val history = ChatHistory(sid = sid, inode = 7, rows = listOf(user(2, id(2)), reply(2)))
+        val projected = history.projectMessages(queued, waiting = waiting)
+        once(projected, listOf("same", "answer 2", "same"))
+        assertEquals(listOf(id(2), id(1)), projected.filter { it.role == "user" }.map { it.requestId })
+        assertEquals(null, projected.first().delivery)
+        assertFalse(projected.first().pending)
+    }
+
+    @Test fun cancelledHostRowsCannotBeResurrectedByAWaitingStateSnapshot() {
+        val cancelled = replica(listOf(row(1).copy(state = MessageProtocol.State.CANCELLED)), emptyList())
+        once(ChatHistory(sid = sid).projectMessages(cancelled, waiting = listOf(PendingPrompts.Entry(id(1), "same"))), emptyList())
+    }
+
     @Test fun supportedProtocolsReplaySendReceiptTranscriptFreshStartAndReconnect() {
         for (provider in listOf("claude", "codex", "pi", "hax", "cursor")) {
             val first = row(1, provider)

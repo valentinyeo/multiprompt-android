@@ -9,6 +9,11 @@ import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasSetTextAction
@@ -87,7 +92,8 @@ class ReaderChromeTest {
         ReflectionHelpers.setField(connection, "historyIdentity", identity)
         ReflectionHelpers.setField(connection, "historyConnection", chat)
         history = f.field(chat, "_state")
-        history.value = ChatHistoryState(loaded = true, history = ChatHistory(sid = "chrome", rows =
+        connection.select(true)
+        history.value = ChatHistoryState(loaded = true, connected = true, history = ChatHistory(sid = "chrome", rows =
             List(messageCount) { index ->
                 ChatHistoryProtocol.Row(if (index % 2 == 0) "user" else "assistant",
                     "Message $index" + if (index == messageCount - 1) "\n\n1. First option\n2. Second option" else "",
@@ -244,33 +250,38 @@ class ReaderChromeTest {
         compose.onNodeWithText("waiting for input", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
     }
 
-    @Test fun sendWhileDisconnectedWaitsAndGoesOutOnceOnReconnect() {
+    @Test fun waitingSendKeepsTheDraftUntilTheConnectionRecordsIt() {
         render()
-        compose.runOnIdle { history.value = history.value.copy(retrying = true) }
+        compose.runOnIdle { history.value = history.value.copy(retrying = true, connected = false) }
         compose.onNode(hasSetTextAction()).performTextInput("offline hello")
         compose.onNodeWithContentDescription("Send prompt").performClick()
-        compose.runOnIdle { assertEquals("Will send when back online", ShadowToast.getTextOfLatestToast()) }
+        compose.runOnIdle { assertEquals("Will send when the chat reconnects", ShadowToast.getTextOfLatestToast()) }
+        compose.onNode(hasSetTextAction()).assertTextEquals("offline hello")
+        compose.onNodeWithText(dev.multiprompt.companion.reader.PendingPrompts.WAITING_LABEL).assertIsDisplayed()
+        compose.onNodeWithContentDescription("Send prompt").performClick()
         compose.runOnIdle {
-            ReflectionHelpers.setField(chat, "selected", true)
-            ReflectionHelpers.setField(chat, "freshSid", "chrome")
-            history.value = history.value.copy(retrying = false)
+            val entry = connection.pendingPrompts.state.value.single()
+            assertEquals("offline hello", entry.text)
+            connection.pendingPrompts.complete(entry.id, dev.multiprompt.companion.reader.PromptAdmission.Recorded(entry.id))
         }
-        compose.runOnIdle { scheduler.advanceTimeBy(3_000); scheduler.runCurrent() }
-        compose.runOnIdle {
-            val commands = f.field<Channel<Any>>(chat, "commands")
-            val sent = generateSequence { commands.tryReceive().getOrNull() }.map { it.toString() }.toList()
-            assertEquals(1, sent.count { "offline hello" in it })
-        }
+        compose.runOnIdle { scheduler.runCurrent() }
+        compose.onNode(hasSetTextAction()).assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
     }
 
-    @Test fun retryingShowsNoDisconnectWarning() {
+    @Test fun failedInitialLoadShowsRetryInsteadOfLoadingForever() {
+        history.value = ChatHistoryState(retrying = true,
+            connectionError = dev.multiprompt.companion.reader.ConversationLoad.TIMED_OUT)
         render()
-        compose.runOnIdle { history.value = history.value.copy(retrying = true) }
-        compose.onNodeWithText("Disconnected · retrying").assertDoesNotExist()
-        compose.onNodeWithText("Reconnect").assertDoesNotExist()
-        compose.onNodeWithText("Conversation").assertDoesNotExist()
-        compose.runOnIdle { history.value = history.value.copy(retrying = false) }
-        compose.onNodeWithText("Disconnected · retrying").assertDoesNotExist()
+        compose.onNodeWithText(dev.multiprompt.companion.reader.ConversationLoad.TIMED_OUT).assertIsDisplayed()
+        assertTrue(compose.onNodeWithText(dev.multiprompt.companion.reader.ConversationLoad.TIMED_OUT).getUnclippedBoundsInRoot().top >=
+            compose.onNodeWithContentDescription("Session actions").getUnclippedBoundsInRoot().bottom)
+        compose.onNodeWithText("Loading conversation…").assertDoesNotExist()
+        compose.onNodeWithText("Retry").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertTrue(f.field<Channel<Unit>>(chat, "retryNudge").tryReceive().isSuccess) }
+        compose.runOnIdle {
+            history.value = ChatHistoryState(ChatHistory(sid = "chrome"), loaded = true, connected = true)
+        }
+        compose.onNodeWithText("Retry").assertDoesNotExist()
     }
 
     private fun screenshot(name: String = "chat-view") {

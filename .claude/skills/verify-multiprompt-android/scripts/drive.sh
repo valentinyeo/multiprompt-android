@@ -15,6 +15,14 @@ adb logcat -c
 adb logcat -v threadtime > "$EVIDENCE/logcat-stream.txt" 2>&1 &
 logcat_stream_pid=$!
 recorder_pid=
+link_blocked=false
+restore_chat_link() {
+    if [[ "$link_blocked" == true ]]; then
+        sudo iptables -D INPUT -p tcp --dport 2222 -j DROP
+        sudo iptables -D OUTPUT -p tcp --sport 2222 -j DROP
+        link_blocked=false
+    fi
+}
 dump_ui() {
     local attempt output
     rm -f "$EVIDENCE/current.xml"
@@ -54,6 +62,7 @@ finish() {
     code=$?
     trap - EXIT
     set +e
+    restore_chat_link
     {
         date +%T.%N
         timeout 10s adb shell top -b -n 1 -m 15
@@ -1364,8 +1373,24 @@ if [[ "$feature" == chat-shared.md ]]; then
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py engine-info > "$EVIDENCE/shared-engine-info.json"
     jq -e '.engine_info.generation >= 22 and .bundle_bytes == 224961 and .bundle_sha256 == "999ef191b364af22994311f4d8b168e22c67a7103585a0c22e0e9c1cc7a9c316"' "$EVIDENCE/shared-engine-info.json" >/dev/null
     wait_for_text 'Ready for queued messages.'
+    if [[ "${EXPECT_SHARED_MISSING:-}" != true ]]; then
+        link_blocked=true
+        sudo iptables -I INPUT -p tcp --dport 2222 -j DROP
+        sudo iptables -I OUTPUT -p tcp --sport 2222 -j DROP
+        wait_for_text Retry
+        shot shared-link-down
+    fi
     fill 'Message verify-session' SHARED_PHONE_SYNTHETIC
     tap_desc 'Send prompt'
+    if [[ "$link_blocked" == true ]]; then
+        wait_for_text 'Waiting for chat connection'
+        shot shared-link-waiting
+        sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read > "$EVIDENCE/shared-link-down-host.json"
+        jq -e '[.rows[] | select(.body == "SHARED_PHONE_SYNTHETIC")] | length == 0' "$EVIDENCE/shared-link-down-host.json" >/dev/null
+        sudo iptables -L INPUT -v -n > "$EVIDENCE/shared-link-drop-input.txt"
+        sudo iptables -L OUTPUT -v -n > "$EVIDENCE/shared-link-drop-output.txt"
+        restore_chat_link
+    fi
     for attempt in {1..30}; do
         sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read > "$EVIDENCE/shared-phone.json"
         jq -e '(.epoch | type) == "number" and (.rows | type) == "array"' "$EVIDENCE/shared-phone.json" >/dev/null
@@ -1375,6 +1400,13 @@ if [[ "$feature" == chat-shared.md ]]; then
     if ! jq -e '[.rows[] | select(.body == "SHARED_PHONE_SYNTHETIC" and .state == "queued")] | length == 1' "$EVIDENCE/shared-phone.json" >/dev/null; then
         printf 'SHARED_HOST_ADMISSION_MISSING\n' | tee "$EVIDENCE/shared-negative-marker.txt"
         exit 1
+    fi
+    if [[ "${EXPECT_SHARED_MISSING:-}" != true ]]; then
+        wait_for_absence 'Waiting for chat connection'
+        wait_for_absence Retry
+        shot shared-link-recovered
+        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value 'Message verify-session' ''
+        printf 'CHAT_LINK_RECOVERY_OK\n' | tee "$EVIDENCE/shared-link-recovery.txt"
     fi
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py desktop-submit > "$EVIDENCE/shared-desktop-submit.json"
     if ! wait_for_text SHARED_DESKTOP_SYNTHETIC; then
