@@ -32,7 +32,7 @@ def setup():
                            (['send', 'pi', SID, '--text', 'PI_MODEL_READY_2539'], ('sent', 'queued'))]:
         result = subprocess.check_output(command + args, text=True)
         assert json.loads(result)['status'] in statuses, result
-    print('Pi\nPI_MODEL_READY_2539\nReady', flush=True)
+    print('PI_MODEL_FIXTURE_READY_2539', flush=True)
     for line in sys.stdin:
         receipt(dict(type='wrong_terminal_input', text=line))
 

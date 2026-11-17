@@ -54,7 +54,15 @@ if [[ "${VERIFY_FEATURE:-}" == pi-model-switch.md ]]; then
     sudo install -d -m 755 -o verifyssh -g verifyssh /home/verifyssh/.local/bin /home/verifyssh/.local/share/zigshell
     sudo install -m 755 "$(dirname "$0")/pi-model-switch-fixture.py" /home/verifyssh/.local/bin/pi
     sudo install -m 644 "$(dirname "$0")/pi-model-switch-fixture.py" /home/verifyssh/.local/share/zigshell/mp_complete.py
-    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 -u /home/verifyssh/pi-model-switch-fixture.py setup'
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 -u /home/verifyssh/pi-model-switch-fixture.py setup > /home/verifyssh/pi-model-switch-setup.log 2>&1'
+    for attempt in {1..30}; do
+        if sudo grep -Fxq PI_MODEL_FIXTURE_READY_2539 /home/verifyssh/pi-model-switch-setup.log; then break; fi
+        if ! sudo -u verifyssh tmux has-session -t '=verify-session'; then break; fi
+        sleep 1
+    done
+    sudo cat /home/verifyssh/pi-model-switch-setup.log > "$EVIDENCE/pi-model-switch-setup.txt"
+    sudo sh -c 'cat /home/verifyssh/.local/state/multiprompt/agent-host/*.stderr.log' > "$EVIDENCE/pi-model-switch-host-errors.txt" 2>/dev/null || true
+    grep -Fx PI_MODEL_FIXTURE_READY_2539 "$EVIDENCE/pi-model-switch-setup.txt"
 elif [[ "${VERIFY_FEATURE:-}" == chat-codex.md ]]; then
     sudo install -m 755 "$(dirname "$0")/codex-console.py" /home/verifyssh/codex-console.py
     sudo install -m 755 "$(dirname "$0")/resync-console.py" /home/verifyssh/resync-console.py
