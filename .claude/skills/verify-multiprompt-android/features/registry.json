@@ -166,6 +166,20 @@
         "chat-working.journey"
       ]
     },
+    "copy-chat-id.md": {
+      "name": "Copy chat ID",
+      "description": "the chat menu copies the host chat id, or the tmux name when the chat has no host id.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "chat.copy-id"
+      ]
+    },
     "host-changed-key.md": {
       "name": "Changed host key",
       "description": "compare a rotated identity, persist Not now and refuse authentication.",
@@ -572,6 +586,14 @@
       "journey": "chat-working.md",
       "sideEffect": false,
       "match": []
+    },
+    "chat.copy-id": {
+      "description": "The chat menu copies the host chat id, or the tmux name when the chat has no host id.",
+      "journey": "copy-chat-id.md",
+      "sideEffect": false,
+      "match": [
+        "Copy chat ID|object ChatId"
+      ]
     },
     "host-changed-key.journey": {
       "description": "compare a rotated identity, persist Not now and refuse authentication.",
