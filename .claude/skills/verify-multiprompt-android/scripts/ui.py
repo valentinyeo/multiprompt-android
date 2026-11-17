@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 import os
+import json
 import re
 import sys
 import xml.etree.ElementTree as ET
 
 root = ET.parse(sys.argv[1]).getroot()
 mode, value = sys.argv[2:4]
+if mode == "snapshot":
+    print(json.dumps(dict(texts=[node.get("text") for node in root.iter("node") if node.get("text")], descriptions=[node.get("content-desc") for node in root.iter("node") if node.get("content-desc")]), indent=2))
+    raise SystemExit(0)
 if mode.startswith("reach-"):
     from journey_action import Unreachable, plan
     try:

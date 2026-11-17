@@ -1,5 +1,8 @@
 from pathlib import Path
 import json
+import importlib.util
+import hashlib
+import base64
 import os
 import subprocess
 import tempfile
@@ -10,6 +13,44 @@ SCRIPTS = ROOT / ".claude/skills/verify-multiprompt-android/scripts"
 
 
 class ControlJourneyTest(unittest.TestCase):
+    def test_changed_key_waits_for_the_sheet_before_using_underlying_controls(self):
+        source = (SCRIPTS / "drive.sh").read_text()
+        rotated = source.split('> "$EVIDENCE/rotated-sshd-pid.txt"', 1)[1]
+        before_warning = rotated.split("wait_for_text 'SSH host key changed'", 1)[0]
+        self.assertNotIn("refresh_inbox", before_warning)
+        self.assertIn("wait_for_text 'Mark as unread'", source)
+
+    def test_device_fixture_requires_pkce_and_observes_real_authorized_key_changes(self):
+        spec = importlib.util.spec_from_file_location("approval_fixture", SCRIPTS / "device-approval.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / '.ssh').mkdir()
+            authorized = root / '.ssh/authorized_keys'
+            authorized.write_text('ssh-ed25519 ORIGINAL\n')
+            (root / 'pending-device.pub').write_text('ssh-ed25519 APPROVE comment')
+            (root / 'denied-device.pub').write_text('ssh-ed25519 DENY comment')
+            fixture = module.ApprovalFixture(root, root)
+            verifier = 'v' * 43
+            fixture.codes['code'] = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip('=')
+            status, reply = fixture.request('POST', '/oauth/token', dict(grant_type='authorization_code', code='code', code_verifier=verifier, redirect_uri='dev.multiprompt.companion.debug://auth/callback'), None)
+            self.assertEqual(status, 200)
+            auth = 'Bearer ' + reply['access_token']
+            approve = '/v1/device-keys/fixture-approve/approve'
+            self.assertEqual(fixture.request('POST', approve, {}, auth)[0], 409)
+            authorized.write_text(authorized.read_text() + 'ssh-ed25519 APPROVE\n')
+            self.assertEqual(fixture.request('POST', approve, {}, auth), (200, dict(status='approved')))
+            self.assertIn('ssh-ed25519 DENY', authorized.read_text())
+            deny = '/v1/device-keys/fixture-deny/deny'
+            self.assertEqual(fixture.request('POST', deny, {}, auth)[0], 409)
+            authorized.write_text('ssh-ed25519 ORIGINAL\nssh-ed25519 APPROVE\n')
+            self.assertEqual(fixture.request('POST', deny, {}, auth), (200, dict(status='denied')))
+            self.assertEqual(fixture.request('GET', '/v1/device-keys', {}, None)[0], 401)
+            self.assertEqual(fixture.request('POST', '/oauth/token', dict(grant_type='authorization_code', code='code', code_verifier=verifier), None)[0], 400)
+            receipts = [json.loads(line) for line in (root / 'device-approval-receipts.jsonl').read_text().splitlines()]
+            self.assertEqual([row['action'] for row in receipts], ['browser_pkce_exchange', 'approve', 'deny'])
+
     def test_reaction_fixture_consumes_the_prompt_and_delivery_marker_as_one_turn(self):
         wire = "👍 to: First reply [mp:6d8e353d25c5fe23]"
         marker = "[mp:5e5cdaa77f3dcfe4]"

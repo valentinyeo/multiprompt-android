@@ -21,7 +21,7 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Queued messages](chat-queued.md): Queued host messages stay visible once, receive correlated consumption receipts and become answered without stale delivery labels.
   - Outcomes: `chat-queued.journey`. Runner: `verify.yml` (debug). Priority evidence: `00-queue-ui.json` (1500 characters), `00-queue-receipts.txt` (1500 characters), `queue-pending.json` (1500 characters), `queue-waiting-final.json` (1500 characters), `queue-followup-final.json` (1500 characters), `queue-uncertain-final.json` (1500 characters), `catchup-result.json` (1500 characters).
 - [Claude reactions](chat-reactions.md): quoted sends, one badge, restart identity, fallback and signed update offers.
-  - Outcomes: `chat-reactions.journey`. Runner: `verify.yml` (debug).
+  - Outcomes: `chat-reactions.journey`. Runner: `verify.yml` (debug). Priority evidence: `reaction-receipts.txt` (1500 characters), `reaction-transport.json` (1500 characters), `reactions-result.json` (3500 characters), `10-reactions-mixed.xml` (5000 characters).
 - [Legacy resync](chat-resync.md): historical held-queue proof; not host Reset proof.
   - Outcomes: `chat-resync.journey`. Runner: `verify.yml` (debug).
 - [Shared chat store](chat-shared.md): synthetic SSH store admission and host Reset, retaining both drafts.
@@ -29,11 +29,11 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Working dots on the signed release](chat-working.md): quiet tools, lock/unlock, real SSH reconnect, recording and timed visible-state samples. Uses `working-dots.yml`.
   - Outcomes: `chat-working.journey`. Runner: `working-dots.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Changed host key](host-changed-key.md): compare a rotated identity, persist Not now and refuse authentication.
-  - Outcomes: `host-changed-key.journey`. Runner: `verify.yml` (debug).
+  - Outcomes: `host-changed-key.journey`. Runner: `verify.yml` (debug). Priority evidence: `host-key-ui.json` (3000 characters), `host-key-auth.json` (2000 characters), `ssh-auth.txt` (1500 characters).
 - [Retired hosts](hosts-retired.md): a saved host at a retired server address is gone after relaunch; account sync never adds it back.
   - Outcomes: `hosts-retired.journey`. Runner: `verify.yml` (debug).
 - [Hosts](hosts.md): add VPS, import encrypted-at-rest key, compare/trust and retain the host identity.
-  - Outcomes: `hosts.journey`. Runner: `verify.yml` (debug).
+  - Outcomes: `hosts.journey`. Runner: `verify.yml` (debug). Priority evidence: `hosts-ui.json` (4000 characters), `ssh-auth.txt` (1500 characters), `host-fingerprint.txt` (300 characters).
 - [Launcher icon](launcher-icon.md): the robot launcher icon in the emulator's app drawer, with the themed-icon layer present in the built APK.
   - Outcomes: `launcher-icon.journey`. Runner: `verify.yml` (debug).
 - [Native Claude controls](native-skills.md): slash filtering, shared plus entry, actual session model/effort and retained image picker.
@@ -57,7 +57,7 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Useful inbox summaries](session-summaries.md): Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.
   - Outcomes: `inbox.summaries`. Runner: `verify.yml` (debug).
 - [Sessions](sessions.md): authenticated tmux discovery and search.
-  - Outcomes: `inbox.search`. Runner: `verify.yml` (debug).
+  - Outcomes: `inbox.search`. Runner: `verify.yml` (debug). Priority evidence: `06-row-long-press-actions.xml` (4000 characters), `ssh-auth.txt` (1500 characters).
 - [Settings navigation](settings-navigation.md): sessions-first settings, host mapping and account handoff on the signed APK.
   - Outcomes: `settings-navigation.journey`. Runner: `verify.yml` (signed). Inputs: `{"release_choices":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Sign in](sign-in.md): real account browser handoff; OTP remains manual.
@@ -66,6 +66,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `terminal.journey`. Runner: `verify.yml` (debug).
 - [Message identity and replies](chat-identity.md): Phone send receipts, delayed transcript catchup, Fresh start format and reconnect keep each message with its reply once.
   - Outcomes: `chat.identity`. Runner: `verify.yml` (debug). Priority evidence: `projection-receipts-before.json` (2500 characters), `projection-receipts-reconnect.json` (5500 characters), `projection-state-before.json` (500 characters), `projection-state-fresh.json` (500 characters), `projection-state-catchup.json` (500 characters), `projection-state-reconnect.json` (500 characters), `projection-proof.txt` (500 characters).
+- [Approve a pending device](device-approval.md): Shipping Approve/No controls, real browser PKCE, HTTP decisions and independently verified SSH key installation/removal. Local account fixture; not live email OTP.
+  - Outcomes: `legacy.igsh-449`. Runner: `verify.yml` (debug). Prerequisites: Local authenticated account fixture; live production email OTP is not exercised. Priority evidence: `device-approve-ui.json` (2000 characters), `device-deny-ui.json` (2000 characters), `device-decisions-ui.json` (2000 characters), `device-approval-receipts.txt` (1500 characters), `device-approved-ssh.txt` (500 characters), `device-after-denial.txt` (1000 characters).
 
 ## Initial coverage gaps
 
@@ -82,7 +84,6 @@ These IDs are an inventory, not exemptions for future changes. Untouched gaps do
 | `skills.pills` | [#378](https://github.com/valentinyeo/multiprompt-android/pull/378) | SOFT-2543 |
 | `chat-table.expand` | [#379](https://github.com/valentinyeo/multiprompt-android/pull/379) | SOFT-2544 |
 | `claude.clear-ranking` | [#381](https://github.com/valentinyeo/multiprompt-android/pull/381) | SOFT-2545 |
-| `legacy.igsh-449` | IGSH-449 | IGSH-449 |
 | `legacy.igsh-429` | IGSH-429 | IGSH-429 |
 | `legacy.igsh-422` | IGSH-422 | IGSH-422 |
 | `legacy.igsh-432` | IGSH-432 | IGSH-432 |

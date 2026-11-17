@@ -35,10 +35,6 @@
     "sourcePr": 381,
     "cleanupTicket": "SOFT-2545"
   },
-  "legacy.igsh-449": {
-    "sourceTicket": "IGSH-449",
-    "cleanupTicket": "IGSH-449"
-  },
   "legacy.igsh-429": {
     "sourceTicket": "IGSH-429",
     "cleanupTicket": "IGSH-429"

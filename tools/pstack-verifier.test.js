@@ -635,5 +635,5 @@ test('SOFT-2536 schedules all five required journeys beyond the suggestion limit
 test('required journeys replace a smoke fallback without inventing coverage for manual gaps', () => {
   const picked = { features: [verifier.SMOKE_JOURNEY], smoke: true };
   assert.deepEqual(verifier.requiredJourneys(picked, { outcomes: ['sign-in.journey'] }).features, ['sign-in.md']);
-  assert.deepEqual(verifier.requiredJourneys(picked, { outcomes: ['legacy.igsh-449'] }), picked);
+  assert.deepEqual(verifier.requiredJourneys(picked, { outcomes: ['session-settings.journey'] }), picked);
 });
