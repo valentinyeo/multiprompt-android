@@ -10,11 +10,13 @@ Dispatch `verify.yml` with `feature=ai-switch.md`. The fresh GitHub emulator imp
 2. Open **Session actions**, then **Switch AI**. Require **Codex** and **Pi**, without **Claude**. Capture `ai-switch-picker`.
 3. Tap **Pi**. Require `Switched AI: Claude to Pi` and `PI_HANDOVER_READY_2538` in the reattached chat. Capture `ai-switch-reattached`.
 4. Type `PHONE_AFTER_SWITCH_2538`. Require that exact editor value. Capture `ai-switch-draft`.
-5. Tap **Send prompt**. Require `PI_REPLY_PHONE_AFTER_SWITCH_2538`. Capture `ai-switch-reply`.
+5. Tap **Send prompt**. The fixture holds completion until the streamed reply is visible. Release it, replay the host's recorded ownership and completion events through the real message store, and append a history-only `PI_HISTORY_CAUGHT_UP_2569` marker after the archived reply. The replay supplies both representations regardless of snapshot timing; it neither sends another prompt nor appends another reply. Wait for that marker, proving the phone read the saved copy. Require exactly one `PI_REPLY_PHONE_AFTER_SWITCH_2538` reply, not two. Capture `ai-switch-reply`. This is the SOFT-2569 regression assertion.
 6. Reopen **Session actions → Switch AI**. Require **Claude** and **Codex**, without **Pi**. Capture `ai-switch-current-pi`.
+7. Close the picker. Send `PHONE_STREAM_2569`. Its fixture reply streams until the next phone send reaches the host store. While that reply is visible and unfinished, send `PHONE_DURING_STREAM_2569`. Release completion only after the host records that send. Background the app, capture the launcher, and return. Require the follow-up reply once.
+8. Switch back to **Claude**. Require the second handover and send `PHONE_SECOND_SWITCH_2569`. Require its reply once. `ai-switch-stress-host.json` checks six provider receipts, the two new session IDs, the final enabled provider, and that the follow-up was submitted before the streamed reply completed.
 
 Every capture retains PNG and XML. `ai-switch-state.json` extracts and checks the observed UI text from each capture. `ai-switch-provider-receipts.jsonl` independently records the handover and phone message received by Pi. `ai-switch-host.json` checks the changed host identity, disabled old configuration, enabled Pi configuration, and unchanged tmux chat. Both receipts must target the new Pi session. The old Claude console must receive nothing.
 
 The registry removes `ai.switch` from the missing-coverage baseline. The verifier schedules this journey for matching AI-switch product changes and changes to this recipe, even when the model selects unrelated journeys.
 
-Live provider authentication, Codex, reverse switching, busy refusal, and signed releases are outside this recipe.
+Live provider authentication, Codex, busy refusal, and signed releases are outside this recipe.

@@ -14,6 +14,15 @@ internal object LegacyMessageIdentity {
         prompt.sid.isNotEmpty() && prompt.sid == sid && prompt.inode == inode && message.role == "user" &&
             message.offset >= prompt.afterOffset && same(message.text, prompt.text)
 
-    fun reply(message: ChatHistoryMessage, block: HostBlock): Boolean =
-        block.done && block.messageId == null && message.role == "assistant" && same(message.text, block.text)
+    fun replyBoundary(message: ChatHistoryMessage): Boolean = message.role == "user" ||
+        message.role == "assistant" && message.requestId.startsWith("history-") &&
+            (message.text == "---\nFresh start\n---" || message.text.startsWith("---\nSwitched AI: ") && message.text.endsWith("\n---"))
+
+    fun reply(message: ChatHistoryMessage, block: HostBlock, owner: ChatHistoryMessage?): Boolean =
+        block.done && message.role == "assistant" && same(message.text, block.text) &&
+            (block.messageId == null || message.requestId.startsWith("history-") && when (owner?.role) {
+                "user" -> block.messageId == owner.requestId
+                "assistant" -> block.messageId.startsWith("fresh-")
+                else -> false
+            })
 }

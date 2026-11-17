@@ -25,10 +25,10 @@ def verify(xml, receipt, phase):
     for item in accepted:
         assert item["receipt"] == "fixture-receipt-" + item["phone_id"]
         assert any(event.get("kind") == "turn.started" and event["payload"]["message_id"] == item["phone_id"] for event in receipt["events"])
-        assert any(row["uuid"] == item["native_id"] and row["message"]["content"] == item["text"] for row in receipt["transcript"])
+        assert any(row.get("uuid") == item["native_id"] and row["message"]["content"] == item["text"] for row in receipt["transcript"])
     if phase in ("catchup", "reconnect"):
         for phase_name in ("BEFORE", "AFTER"):
-            assert sum(row["message"]["content"] == f"REPLY_{phase_name}_2532" for row in receipt["transcript"]) == 1
+            assert sum(row.get("row", {}).get("text", row.get("message", {}).get("content")) == f"REPLY_{phase_name}_2532" for row in receipt["transcript"]) == 1
     return dict(phase=phase, phone_ids=[item["phone_id"] for item in accepted], visible=expected, occurrences=1)
 
 

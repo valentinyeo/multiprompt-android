@@ -149,6 +149,45 @@ class MessageProjectionTest {
         once(history.projectMessages(replica), listOf("answer 1", "same", "answer 1"))
     }
 
+    @Test fun anOwnedStreamCannotClaimAnOlderArchiveOrADistinctNativeReply() {
+        val replica = replica(listOf(row(1)), host(1))
+        val older = ChatHistoryProtocol.Row("assistant", "answer 1", "history-older", "", 0, 50)
+        val native = ChatHistoryProtocol.Row("assistant", "answer 1", "different-native-reply", "", 175, 190)
+        val history = ChatHistory(sid = sid, inode = 7, rows = listOf(older, user(1), native))
+        val before = history.projectMessages(replica)
+        once(before, listOf("answer 1", "same", "answer 1", "answer 1"))
+        assertEquals(1, before.count { it.key.startsWith("@live:") })
+        val archived = reply(1).copy(id = "history-current")
+        val after = history.copy(rows = history.rows + archived).projectMessages(replica)
+        once(after, listOf("answer 1", "same", "answer 1", "answer 1"))
+        assertEquals(0, after.count { it.key.startsWith("@live:") })
+    }
+
+    @Test fun handoverRepliesMatchOnlyArchivesAfterTheirDivider() {
+        for (text in listOf("---\nSwitched AI: Pi to Claude\n---", "---\nFresh start\n---")) {
+            val replica = MessageReplica(1, 1, host = HostStream(turn = "handover", blocks = listOf(
+                HostBlock("handover:text:0", "text", "same reply", true, messageId = "fresh-handover"))))
+            val old = ChatHistoryProtocol.Row("assistant", "same reply", "history-old", "", 0, 50)
+            val divider = ChatHistoryProtocol.Row("assistant", text, "history-divider", "", 100, 140)
+            val history = ChatHistory(sid = sid, inode = 7, rows = listOf(old, divider))
+            once(history.projectMessages(replica), listOf("same reply", text, "same reply"))
+            val archived = ChatHistoryProtocol.Row("assistant", "same reply", "history-handover", "", 150, 190)
+            val projected = history.copy(rows = history.rows + archived).projectMessages(replica)
+            once(projected, listOf("same reply", text, "same reply"))
+            assertEquals(0, projected.count { it.key.startsWith("@live:") })
+        }
+    }
+
+    @Test fun equalBlocksWithinOneTurnEachNeedTheirOwnArchivedOccurrence() {
+        val first = replica(listOf(row(1)), host(1))
+        val replica = first.copy(host = first.host.copy(blocks = first.host.blocks +
+            HostBlock("different-item:text:0", "text", "answer 1", true, messageId = id(1))))
+        val history = ChatHistory(sid = sid, inode = 7, rows = listOf(user(1), reply(1).copy(id = "history-first")))
+        once(history.projectMessages(replica), listOf("same", "answer 1", "answer 1"))
+        val second = reply(1).copy(id = "history-second", offset = 191, end = 199)
+        once(history.copy(rows = history.rows + second).projectMessages(replica), listOf("same", "answer 1", "answer 1"))
+    }
+
     @Test fun knownIdsNeverClaimADifferentMessageWithEqualText() {
         val replica = replica(listOf(row(1)), host(1))
         val history = ChatHistory(sid = sid, inode = 7, rows = listOf(user(1, "different-id")))
