@@ -152,7 +152,7 @@ class SessionReaderConnection(
 
     fun nudge() {
         if (ReconnectBackoff.shouldNudge(_state.value.status is ReaderStatus.Failed)) streamNudge.trySend(Unit)
-        historyConnection?.nudge()
+        historyConnection?.takeIf { pollGate.active.value && it.state.value.retrying }?.nudge()
     }
 
     fun hostSettings(): HostSettings? = historyConnection?.state?.value?.replica?.host?.settings

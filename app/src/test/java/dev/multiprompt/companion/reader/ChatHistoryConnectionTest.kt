@@ -290,6 +290,29 @@ class ChatHistoryConnectionTest {
     }
 
     @Test
+    fun automaticReaderNudgeDoesNotInterruptAHealthyHistoryConnection(): Unit = runBlocking {
+        val fake = FakeHost()
+        val attempts = AtomicInteger()
+        val cache = ChatHistoryCache(temporary.newFolder())
+        SessionReaderConnection(repository(), host, "tmux", AgentKind.CLAUDE, byteArrayOf(), cache).use { reader ->
+            val chat = ChatHistoryConnection(repository(), host, ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd"),
+                byteArrayOf(), cache, gate = MessageGate(), connectedExchange = { block ->
+                    if (attempts.incrementAndGet() > 1) kotlinx.coroutines.awaitCancellation()
+                    fake.connect(block)
+                }, pollGate = ReflectionHelpers.getField<ChatPollGate>(reader, "pollGate"))
+            ReflectionHelpers.setField(reader, "historyConnection", chat)
+            reader.nudge()
+            reader.observe()
+            chat.start()
+            withTimeout(5_000L) { chat.state.first { it.ready } }
+            reader.nudge()
+            assertNull(withTimeoutOrNull(1_000L) { chat.state.first { it.connectionError != null } })
+            assertTrue(chat.state.value.ready)
+            assertEquals(1, attempts.get())
+        }
+    }
+
+    @Test
     fun readerFlushesWaitingMessagesAfterInitialFailureAndAfterAnotherDroppedLink(): Unit = runBlocking {
         val fake = FakeHost().apply { online = false }
         val cache = ChatHistoryCache(temporary.newFolder())
