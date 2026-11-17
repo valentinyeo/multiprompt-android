@@ -181,4 +181,9 @@ if [[ "${VERIFY_FEATURE:-}" == session-favorites.md ]]; then
         tmux has-session -t verify-keep
     '
 fi
+if [[ "${VERIFY_FEATURE:-}" == session-favorite-dot.md ]]; then
+    sudo -u verifyssh tmux new-session -d -s verify-keep -x 100 -y 32 'python3 -u /home/verifyssh/console.py /home/verifyssh/keep-receipts.txt'
+    sudo -u verifyssh tmux set-window-option -t verify-keep automatic-rename off
+    sudo -u verifyssh tmux rename-window -t verify-keep verify-keep
+fi
 printf 'SSH FIXTURE READY\n'
