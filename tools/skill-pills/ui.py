@@ -75,8 +75,16 @@ def check(xml, screenshot, phase, text):
             pills = [child for message in messages for child in message.iter('node')
                      if child.get('text') == '/review-native']
             assert len(pills) == 1, 'Sent message must contain one inline skill pill'
-            assert outlines(image, bounds(pills[0]), False), 'Sent skill pill outline is missing'
-            result['sent_pill'] = '/review-native'
+            text_bounds = bounds(pills[0])
+            message_bounds = bounds(next(message for message in messages if pills[0] in message.iter('node')))
+            height = text_bounds[3] - text_bounds[1]
+            pad_x, pad_y = (height + 1) // 2, (height + 15) // 16
+            pill_bounds = [max(message_bounds[0], text_bounds[0] - pad_x),
+                           max(message_bounds[1], text_bounds[1] - pad_y),
+                           min(message_bounds[2], text_bounds[2] + pad_x),
+                           min(message_bounds[3], text_bounds[3] + pad_y)]
+            assert outlines(image, pill_bounds, False), 'Sent skill pill outline is missing'
+            result.update(sent_pill='/review-native', sent_pill_bounds=pill_bounds)
     else:
         assert editor.get('text') == text, ('Wrong composer text', editor.get('text'), text)
         if phase in ('picker', 'scrolled'):

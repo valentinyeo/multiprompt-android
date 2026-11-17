@@ -63,6 +63,20 @@ class SkillPillsUiTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'inline skill pill'):
             self.check('sent')
 
+    def test_real_sent_pill_extends_beyond_its_accessibility_text_bounds(self):
+        fixture = Path(__file__).with_name('fixtures') / 'a4470175-sent.xml'
+        result = ui.check(fixture, fixture.with_suffix('.png'), 'sent', 'Please /review-native this')
+        self.assertEqual(result['sent_pill'], '/review-native')
+        image = Image.open(fixture.with_suffix('.png')).convert('RGB')
+        x1, y1, x2, y2 = result['sent_pill_bounds']
+        for y in range(y1, y2):
+            for x in range(x1, x2):
+                if all(abs(channel - 46) <= 2 for channel in image.getpixel((x, y))):
+                    image.putpixel((x, y), (31, 31, 31))
+        image.save(self.png)
+        with self.assertRaisesRegex(AssertionError, 'outline'):
+            ui.check(fixture, self.png, 'sent', 'Please /review-native this')
+
     def test_scroll_uses_the_skill_picker_when_the_chat_also_scrolls(self):
         window = self.node(bounds='[0,0][400,400]')
         self.node(parent=window, bounds='[0,0][400,400]', scrollable='true')
