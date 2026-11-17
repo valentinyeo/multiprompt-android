@@ -36,6 +36,34 @@ ui = load('queue_ui', SCRIPTS / 'queued.py')
 
 
 class FixtureJourneyTest(unittest.TestCase):
+    def test_remote_control_fixture_requires_enable_before_phone_and_desktop_turns(self):
+        fixture = load('remote_control_fixture', SCRIPTS / 'remote-control-fixture.py')
+        control = dict(type='control_request', request_id='host-phone-2541', request=dict(subtype='remote_control', enabled=True))
+        users = [dict(type='user', message=dict(content=[dict(type='text', text=text)])) for text in ('PHONE_REMOTE_CONTROL_2541', 'DESKTOP_REMOTE_CONTROL_2541')]
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            counter = home / 'desktop-counter.txt'
+            for controls in ([], [dict(control, request=dict(subtype='remote_control', enabled=False))], [control]):
+                counter.write_text('0\n')
+                receipt = home / 'remote-control-receipts.jsonl'
+                receipt.write_text('')
+                with patch.object(fixture, 'HOME', home), patch.object(fixture, 'CWD', home), patch.object(fixture, 'boundary'), patch.object(fixture.Path, 'cwd', return_value=home), patch.object(sys, 'argv', ['claude', '--resume', fixture.SID]), patch.object(sys, 'stdin', io.StringIO(''.join(json.dumps(row) + '\n' for row in controls + users))), redirect_stdout(io.StringIO()) as output:
+                    if controls != [control]:
+                        with self.assertRaisesRegex(AssertionError, 'without enabling remote control'):
+                            fixture.claude()
+                        self.assertEqual('0\n', counter.read_text())
+                        continue
+                    fixture.claude()
+                rows = [json.loads(line) for line in receipt.read_text().splitlines()]
+                self.assertEqual(['remote_control', 'user', 'user'], [row['kind'] for row in rows])
+                self.assertEqual(control, rows[0]['frame'])
+                self.assertEqual([fixture.SID] * 3, [row['sid'] for row in rows])
+                self.assertEqual(['PHONE_REMOTE_CONTROL_2541', 'DESKTOP_REMOTE_CONTROL_2541'], [row['text'] for row in rows[1:]])
+                self.assertEqual('2\n', counter.read_text())
+                events = [json.loads(line) for line in output.getvalue().splitlines()]
+                replies = [event['message']['content'][0]['text'] for event in events if event['type'] == 'assistant']
+                self.assertEqual(['REMOTE_CONTROL_CONNECTED_2541 desktop_counter=1', 'DESKTOP_REPLY_2541 desktop_counter=2'], replies)
+
     def test_ai_switch_fixture_user_can_enable_the_initial_chat(self):
         fixture = load('ai_switch_fixture', SCRIPTS / 'ai-switch-fixture.py')
         branch = (SCRIPTS / 'fixture.sh').read_text().split('== ai-switch.md ]]; then', 1)[1].split('elif', 1)[0]
