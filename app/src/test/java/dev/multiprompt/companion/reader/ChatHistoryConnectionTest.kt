@@ -292,7 +292,7 @@ class ChatHistoryConnectionTest {
     @Test
     fun automaticReaderNudgeDoesNotInterruptAHealthyHistoryConnection(): Unit = runBlocking {
         val fake = FakeHost()
-        val attempts = AtomicInteger()
+        val attempts = java.util.concurrent.atomic.AtomicInteger()
         val cache = ChatHistoryCache(temporary.newFolder())
         SessionReaderConnection(repository(), host, "tmux", AgentKind.CLAUDE, byteArrayOf(), cache).use { reader ->
             val chat = ChatHistoryConnection(repository(), host, ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd"),
