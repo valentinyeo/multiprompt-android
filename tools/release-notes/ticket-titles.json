@@ -54,7 +54,6 @@
   "IGSH-2297": "Android: load rooms only when the rooms screen is open",
   "IGSH-2298": "Android: stop rereading the saved chat list every refresh",
   "IGSH-2287": "Android: phone chat engine catches up with desktop",
-  "IGSH-2287": "Android: phone chat engine catches up with desktop",
   "IGSH-2284": "Android: start Codex, Pi, Hax and Cursor as live chats",
   "IGSH-2304": "Android: pick Fable as the chat model",
   "IGSH-2305": "Android: pick the model in a Codex chat",
@@ -107,5 +106,6 @@
   "IGSH-2294": "Android: usage and plan pace card",
   "IGSH-2486": "Android shell gets Esc, Tab, Ctrl and arrow keys",
   "IGSH-2532": "Android chat shows each message once, with its reply",
-  "IGSH-2533": "Android old-screen check stops breaking on every change"
+  "IGSH-2533": "Android old-screen check stops breaking on every change",
+  "IGSH-2560": "Server overload: worker caps, heavy checks in the cloud, cloud workers"
 }
