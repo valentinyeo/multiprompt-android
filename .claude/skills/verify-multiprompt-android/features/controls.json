@@ -140,7 +140,7 @@
       "screen": "Bot look",
       "label": "Dismiss Bot look",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookSheet:KitSheet:90073eaacdef9f43:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:45",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:46",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -153,7 +153,7 @@
       "screen": "Bot look",
       "label": "Use picture / change picture",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:KitSecondaryButton:eb80e1f7d3263066:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:72",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:73",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -162,7 +162,7 @@
       "screen": "Bot look",
       "label": "Remove picture",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:KitSecondaryButton:26a3d609bd760091:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:73",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:74",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -171,7 +171,7 @@
       "screen": "Bot look",
       "label": "Scroll Bot look",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:verticalScroll:74f9c94015fb4c77:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:75",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:76",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -184,7 +184,7 @@
       "screen": "Bot look",
       "label": "Face 1",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:85",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -197,7 +197,7 @@
       "screen": "Bot look",
       "label": "Face 2",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:85",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -210,7 +210,7 @@
       "screen": "Bot look",
       "label": "Face 3",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:85",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -223,7 +223,7 @@
       "screen": "Bot look",
       "label": "Face 4",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:85",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -236,7 +236,7 @@
       "screen": "Bot look",
       "label": "Face 5",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:85",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -249,7 +249,7 @@
       "screen": "Bot look",
       "label": "Face 6",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:85",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -262,7 +262,7 @@
       "screen": "Bot look",
       "label": "Face 7",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:85",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -275,7 +275,7 @@
       "screen": "Bot look",
       "label": "Face 8",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:85",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -288,7 +288,7 @@
       "screen": "Bot look",
       "label": "Face 9",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:85",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -301,7 +301,7 @@
       "screen": "Bot look",
       "label": "Face 10",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:85",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -314,7 +314,7 @@
       "screen": "Bot look",
       "label": "Face 11",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:85",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -327,7 +327,7 @@
       "screen": "Bot look",
       "label": "Face 12",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:85",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -340,7 +340,7 @@
       "screen": "Bot look",
       "label": "Face 13",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:85",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -353,7 +353,7 @@
       "screen": "Bot look",
       "label": "Face 14",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:85",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -366,7 +366,7 @@
       "screen": "Bot look",
       "label": "Face 15",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:85",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -379,7 +379,7 @@
       "screen": "Bot look",
       "label": "Face 16",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:85",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -392,7 +392,7 @@
       "screen": "Bot look",
       "label": "Face 17",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:85",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -405,7 +405,7 @@
       "screen": "Bot look",
       "label": "Face 18",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:85",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -418,7 +418,7 @@
       "screen": "Bot look",
       "label": "Face 19",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:85",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -431,7 +431,7 @@
       "screen": "Bot look",
       "label": "Face 20",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:85",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -444,7 +444,7 @@
       "screen": "Bot look",
       "label": "Colour 1",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:f60ffb92b7cffe28:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:121",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:116",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -457,7 +457,7 @@
       "screen": "Bot look",
       "label": "Colour 2",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:f60ffb92b7cffe28:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:121",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:116",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -470,7 +470,7 @@
       "screen": "Bot look",
       "label": "Colour 3",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:f60ffb92b7cffe28:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:121",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:116",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -483,7 +483,7 @@
       "screen": "Bot look",
       "label": "Colour 4",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:f60ffb92b7cffe28:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:121",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:116",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -496,7 +496,7 @@
       "screen": "Bot look",
       "label": "Colour 5",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:f60ffb92b7cffe28:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:121",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:116",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -509,7 +509,7 @@
       "screen": "Bot look",
       "label": "Colour 6",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:f60ffb92b7cffe28:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:121",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:116",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -522,7 +522,7 @@
       "screen": "Bot look",
       "label": "Colour 7",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:f60ffb92b7cffe28:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:121",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:116",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -535,7 +535,7 @@
       "screen": "Bot look",
       "label": "Colour 8",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:f60ffb92b7cffe28:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:121",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:116",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -548,7 +548,7 @@
       "screen": "Bot look",
       "label": "Automatic colour",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:288ddc035ee32828:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:134",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:141",
       "journey": "bot-look.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
@@ -6182,7 +6182,7 @@
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt",
       "label": "Audited screen composition, labels and finite choice domains",
-      "sha256": "a7b080ffa347fdc036b59230ac8c6f3f92a0cea68e99217e436337edc0c7f27d"
+      "sha256": "ed0709f41c0f31c7c547f535ae68ceed890573eaf5f6a9bcf61e93881b316525"
     },
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/ChatBubble.kt",
@@ -6443,7 +6443,7 @@
     {
       "id": "bot-look",
       "screen": "Bot look",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:45",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:46",
       "entry": "See controls with this screen name; shared screens list their entry contexts."
     },
     {

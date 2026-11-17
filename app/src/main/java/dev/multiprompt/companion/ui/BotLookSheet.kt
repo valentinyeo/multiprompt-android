@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -111,19 +112,24 @@ internal fun BotLookContent(
                     row.forEach { index ->
                         Box(
                             Modifier
-                                .size(28.dp)
-                                .background(botColor(index), CircleShape)
-                                .border(
-                                    if (pickedColor == index) 3.dp else 1.dp,
-                                    if (pickedColor == index) Kit.Text else Kit.Outline,
-                                    CircleShape,
-                                )
+                                .size(48.dp)
                                 .clickable { onPickColor(index) }
                                 .semantics {
                                     contentDescription = "Colour ${index + 1}"
                                     selected = pickedColor == index
                                 },
-                        )
+                        ) {
+                            Box(
+                                Modifier.align(Alignment.Center)
+                                    .size(28.dp)
+                                    .background(botColor(index), CircleShape)
+                                    .border(
+                                        if (pickedColor == index) 3.dp else 1.dp,
+                                        if (pickedColor == index) Kit.Text else Kit.Outline,
+                                        CircleShape,
+                                    ),
+                            )
+                        }
                     }
                 }
             }
@@ -131,6 +137,7 @@ internal fun BotLookContent(
                 Text(
                     "Auto",
                     modifier = Modifier
+                        .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                         .clickable { onPickColor(null) }
                         .semantics { selected = pickedColor == null }
                         .padding(start = 4.dp),
