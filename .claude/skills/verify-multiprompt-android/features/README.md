@@ -8,6 +8,8 @@ A product change must name every changed outcome. The second-AI verifier require
 
 ## Features
 
+- [Switch AI](ai-switch.md): Claude-to-Pi handover, reattached chat, and a new phone message with independent provider receipts.
+  - Outcomes: `ai.switch`. Runner: `verify.yml` (debug). Priority evidence: `ai-switch-state.json` (3500 characters), `ai-switch-host.json` (3000 characters).
 - [App name and update](app-name.md): published signed Android in-app update proof.
   - Outcomes: `app-name.journey`. Runner: `app-name.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Late account bot pictures](bot-photo-refresh.md): hosted ViewModel and Compose regressions; seeded picture, not live account sync.
@@ -76,6 +78,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `legacy.igsh-449`. Runner: `verify.yml` (debug). Prerequisites: Local authenticated account fixture; live production email OTP is not exercised. Priority evidence: `device-approve-ui.json` (2000 characters), `device-deny-ui.json` (2000 characters), `device-decisions-ui.json` (2000 characters), `device-approval-receipts.txt` (1500 characters), `device-approved-ssh.txt` (500 characters), `device-after-denial.txt` (1000 characters).
 - [Find words inside a chat](chat-search.md): search real chat replies, check highlighted matches, jump, wrap, handle no matches and close. SOFT-2540.
   - Outcomes: `chat-search.open`. Runner: `verify.yml` (debug). Priority evidence: `search-newest.json` (1000 characters), `search-previous.json` (1000 characters), `search-wrap-previous.json` (1000 characters), `search-wrap-next.json` (1000 characters), `search-next.json` (1000 characters), `search-no-match.json` (500 characters), `search-closed.json` (500 characters), `search-proof.txt` (200 characters).
+- [Saved snippets](snippets.md): save, restart, replace a draft with a saved snippet, send it, and delete it permanently.
+  - Outcomes: `snippets.save-reuse-delete`. Runner: `verify.yml` (debug). Priority evidence: `snippets-state.json` (3000 characters), `snippets-receipts.txt` (1000 characters).
 
 ## Initial coverage gaps
 
@@ -83,8 +87,6 @@ These IDs are an inventory, not exemptions for future changes. Untouched gaps do
 
 | Outcome | Existing case | Cleanup ticket |
 |---|---|---|
-| `snippets.save-reuse-delete` | [#376](https://github.com/valentinyeo/multiprompt-android/pull/376) | SOFT-2537 |
-| `ai.switch` | [#373](https://github.com/valentinyeo/multiprompt-android/pull/373) | SOFT-2538 |
 | `pi.model-switch` | [#374](https://github.com/valentinyeo/multiprompt-android/pull/374) | SOFT-2539 |
 | `claude.remote-control` | [#366](https://github.com/valentinyeo/multiprompt-android/pull/366) | SOFT-2541 |
 | `ai.usage` | [#377](https://github.com/valentinyeo/multiprompt-android/pull/377) | SOFT-2542 |

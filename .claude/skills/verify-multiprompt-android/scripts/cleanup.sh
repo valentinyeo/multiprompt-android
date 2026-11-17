@@ -11,6 +11,17 @@ fi
 if [[ -d "$FIXTURE" ]]; then
     sudo cat "$FIXTURE/sshd.log" > "$EVIDENCE/sshd.log" 2>/dev/null || true
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt" 2>/dev/null || true
+    if [[ "${VERIFY_FEATURE:-}" == ai-switch.md ]]; then
+        sudo -u verifyssh python3 - > "$EVIDENCE/ai-switch-host-debug.json" <<'PYHOST'
+import json
+from pathlib import Path
+home = Path('/home/verifyssh')
+root = home / '.local/state/multiprompt/agent-host'
+files = [path for path in root.glob('*') if path.is_file() and path.suffix in ('.json', '.jsonl', '.log')]
+files += list(home.glob('ai-switch-*.txt')) + list(home.glob('ai-switch-*.jsonl'))
+print(json.dumps({str(path.relative_to(home)): path.read_text()[-64000:] for path in files}, indent=2))
+PYHOST
+    fi
     for name in tmux sshd; do
         if [[ -f "$FIXTURE/$name.pid" ]]; then
             pid=$(cat "$FIXTURE/$name.pid")

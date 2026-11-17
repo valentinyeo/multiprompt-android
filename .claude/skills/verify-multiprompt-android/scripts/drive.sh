@@ -84,7 +84,7 @@ finish() {
         sudo cat /home/verifyssh/canary-receipts.txt > "$EVIDENCE/canary-receipts-final.txt" 2>/dev/null
         sudo cat /home/verifyssh/other-receipts.txt > "$EVIDENCE/session-b-receipts-final.txt" 2>/dev/null
     fi
-    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt" 2>/dev/null
+    sudo -u verifyssh tmux capture-pane -pt "${fixture_session:-verify-session}" > "$EVIDENCE/tmux-final.txt" 2>/dev/null
     if [[ "$recorder_pid" =~ ^[0-9]+$ ]]; then
         if [[ "$feature" == session-routing.md ]] && ! adb shell kill -0 "$recorder_pid"; then code=1; fi
         adb shell kill -INT "$recorder_pid"
@@ -892,6 +892,11 @@ PYINFO
     exit 0
 fi
 
+if [[ "$feature" == snippets.md ]]; then
+    source "$scripts/snippets-drive.sh"
+    exit 0
+fi
+
 if [[ "$feature" == chat-search.md ]]; then
     source "$scripts/chat-search-drive.sh"
     exit 0
@@ -1413,6 +1418,9 @@ if [[ "$feature" == sessions.md ]]; then
     exit 0
 fi
 tap_text verify-session
+if [[ "$feature" == ai-switch.md ]]; then
+    source "$scripts/ai-switch-drive.sh"
+fi
 if [[ "$feature" == chat-identity.md ]]; then
     wait_for_text PROJECTION_READY_2532
     projection_event() {

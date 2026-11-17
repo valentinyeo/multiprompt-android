@@ -68,6 +68,7 @@ on:
         required: true
         type: choice
         options:
+          - ai-switch.md
           - chat-cancel.md
           - chat-choices.md
           - chat-codex.md
@@ -97,6 +98,7 @@ on:
           - chat-identity.md
           - device-approval.md
           - chat-search.md
+          - snippets.md
       expect_settings_missing:
         description: Require signed Android 301 to reject the settings navigation journey
         type: boolean
