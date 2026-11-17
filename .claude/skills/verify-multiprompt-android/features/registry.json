@@ -510,8 +510,12 @@
         "inbox.search"
       ],
       "evidence": {
-        "06-row-long-press-actions.xml": 4000,
-        "ssh-auth.txt": 1500
+        "04-search-match.xml": 2000,
+        "06-row-long-press-actions.xml": 2000,
+        "07-start-agent-picker.xml": 1500,
+        "08-start-agent-back-to-folder.xml": 1500,
+        "sessions-before-agent-picker.txt": 500,
+        "sessions-after-agent-picker.txt": 500
       }
     },
     "settings-navigation.md": {

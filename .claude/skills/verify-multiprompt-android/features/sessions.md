@@ -12,7 +12,7 @@ Inbox lists the real tmux sessions on saved trusted hosts, with output previews 
 - `sessions-badge`: new assistant message count, not just an unread dot; requires an agent transcript (not automated).
 - `sessions-settings`: **Session list actions → Settings** opens **Session list settings**; see [split switch journey](session-settings.md), blocked without OTP/layout.
 - `sessions-muted`: a tab with `muted: true` in the account layout never appears in any Inbox split, bucket, count or unread badge, yet stays in the workspace list and in Favorites, and a search finds it so its menu can Unmute it (not automated).
-- `sessions-new`: New session host/folder/mode picker (not automated).
+- `sessions-new`: With one trusted host, open New session, choose its home folder, reveal the start-agent sheet and use Back without creating a session (automated). Agent creation and other host/mode choices are not automated.
 
 ## How to get to it (user POV)
 
@@ -26,6 +26,7 @@ Preconditions: fresh fixture; use `feature=sessions.md`. The driver performs the
 - `tap_desc 'Search sessions'` opens search. `fill 'Search all sessions' verify-session` enters the fixture name through adb input. `wait_for_text '1 result across all splits'`, `wait_for_text verify-session` and `shot search-match` capture query and matching result.
 - `tap_desc 'Close session search'` removes the query and search field; the driver asserts `Search all sessions` is absent. `shot search-cleared` captures the original discovered list again.
 - After the search is cleared the driver asserts the Inbox row has no per-row `Session actions` button, long-presses the `verify-session` row, waits for `Mark as unread` and `End session`, takes `shot row-long-press-actions`, then presses back to close the menu. The row shows the name, a dim one-line preview and the time.
+- After closing the row menu, tap **New session → Use this folder**. Require **Claude Code** and **Shell** in the start-agent sheet and capture `start-agent-picker`. The shared action planner reveals the complete **Back** control, scrolling its container if needed. Tap **Back**, require **Use this folder** again, and capture `start-agent-back-to-folder`. Compare independent tmux session lists before and after; opening and leaving the picker must not create an agent.
 - Results start beneath the search box and above the keyboard; current automation closes the keyboard before its shot, so inspect that layout manually. Inspect the XML as well as the screenshot: the typed query alone must not be mistaken for a matching card.
 
 ## Gotchas

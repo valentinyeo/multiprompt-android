@@ -65,7 +65,7 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Useful inbox summaries](session-summaries.md): Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.
   - Outcomes: `inbox.summaries`. Runner: `verify.yml` (debug).
 - [Sessions](sessions.md): authenticated tmux discovery and search.
-  - Outcomes: `inbox.search`. Runner: `verify.yml` (debug). Priority evidence: `06-row-long-press-actions.xml` (4000 characters), `ssh-auth.txt` (1500 characters).
+  - Outcomes: `inbox.search`. Runner: `verify.yml` (debug). Priority evidence: `04-search-match.xml` (2000 characters), `06-row-long-press-actions.xml` (2000 characters), `07-start-agent-picker.xml` (1500 characters), `08-start-agent-back-to-folder.xml` (1500 characters), `sessions-before-agent-picker.txt` (500 characters), `sessions-after-agent-picker.txt` (500 characters).
 - [Settings navigation](settings-navigation.md): sessions-first settings, host mapping and account handoff on the signed APK.
   - Outcomes: `settings-navigation.journey`. Runner: `verify.yml` (signed). Inputs: `{"release_choices":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Sign in](sign-in.md): real account browser handoff; OTP remains manual.

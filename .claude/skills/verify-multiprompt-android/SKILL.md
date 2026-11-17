@@ -26,6 +26,30 @@ For button or menu migrations, run `tools/check.sh lint` on GitHub. It checks re
 Do not count kit-component tests as screen proof. `DesignKitTest.deviceApprovalScreenUsesKitButtonPixelsAndActions` captures the actual approval screen's button fills and checks both callbacks. `DeviceApprovalPromptTest` checks busy, error and explicit-choice behavior. These are hosted screen regressions, not live account approval proof.
 
 Dispatch `hosts.md` and `host-changed-key.md` for trust-sheet changes. Inspect the fingerprint, Trust and connect, Not now and independent SSH receipts. Dispatch `sign-in.md` for the Sign in button. Dispatch `device-approval.md` for Approve/No. It uses the real browser callback and PKCE exchange against a local account fixture, then verifies both device keys with independent SSH clients. It does not prove production email OTP; keep that limitation visible. Run the existing reader/menu journeys for reader button changes. New kit components or colours still require the design approval in `CLAUDE.md`.
+## Android control inventory
+
+[features/controls.json](features/controls.json) lists screens and individual controls from `app/src/main`, with stable IDs, plain labels and source `file:line` citations. Each control names an existing automated journey and its action/result, or has `journey: null` with a missing reason. [features/control-gaps.json](features/control-gaps.json) records the initial missing controls. This complements the outcome registry; it does not change the shared verifier.
+
+Run these source-only checks locally or on GitHub. They do not launch Android:
+
+```bash
+python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.py check
+python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.py report
+python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.py inventory
+python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.test.py
+```
+
+`check` prints `N of M controls have a live journey` and every missing control. The number measures mapped automated recipes, not successful runs at the current APK SHA. It excludes manual recipes and does not imply production accounts, speech recognition or physical-phone coverage. This inventory-only pass adds no journeys and makes no new live-app claim.
+
+Count one source-defined control variant, including conditional and disabled sheet items, text fields, keyboard actions, notifications and gestures. Enumerated choices have separate IDs. User-supplied rows, such as saved snippets, sessions and discovered Pi models, have one template per action. Shared components list every screen context. Separate source sites for signed/debug and layout variants remain separate. `forwarding` records shared implementations and their counted callers, rather than counting the same button twice. `screens` is a navigation index, not an additional coverage denominator.
+
+The scanner checks Kotlin calls and modifiers across `app/src/main`. It rejects added or changed interaction sites, stale locations and invalid journey references. Audited UI-file and external-enum digests also reject choice-list changes that leave a loop's button call unchanged. Those broad checks intentionally require source review for non-control edits too. After reviewing a changed file, update its mapped sites, finite options and digest. Never replace that review with an automatic map or baseline rewrite. Keep IDs when moving controls. For line-only movement, run:
+
+```bash
+python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.py locations
+```
+
+On pull requests, CI runs `check --base <PR-base-sha>` and forbids growing the initial gap list, even when an older gap disappears. New controls require journeys. CI retains `android-control-coverage` with the count and missing list. `tools/check.sh source` runs the same check and its tests. The historical test reads the actual parent and merged source of [PR #380](https://github.com/valentinyeo/multiprompt-android/pull/380), commit `50eb80bbcc560ee2813d0eb869ab2364663275a8`, and rejects its previously unmapped chat-search controls.
 
 ## Launch
 

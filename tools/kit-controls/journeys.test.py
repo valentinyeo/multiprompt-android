@@ -40,6 +40,30 @@ shot() { :; }
             self.assertIn('Switch / renew login', state['texts'])
             self.assertNotIn('Approve this device?', state['texts'])
 
+    def test_agent_picker_navigation_requires_an_unchanged_tmux_session_list(self):
+        source = (SCRIPTS / 'drive.sh').read_text()
+        start = source.index("    sudo -u verifyssh tmux list-sessions -F '#{session_name}' > \"$EVIDENCE/sessions-before-agent-picker.txt\"")
+        phase = source[start:source.index('    exit 0', start)]
+        for changed in (False, True):
+            with self.subTest(changed=changed), tempfile.TemporaryDirectory() as directory:
+                script = '''set -euo pipefail
+EVIDENCE="$1"
+changed="$2"
+tap_desc() { [[ "$1" == 'New session' ]]; }
+tap_text() { [[ "$1" == 'Use this folder' || "$1" == Back ]]; }
+wait_for_text() { :; }
+shot() { :; }
+adb() { [[ "$*" == 'shell input keyevent KEYCODE_BACK' ]]; }
+sudo() {
+    [[ "$*" == '-u verifyssh tmux list-sessions -F #{session_name}' ]]
+    printf 'verify-session\n'
+    if [[ -e "$EVIDENCE/listed" && "$changed" == True ]]; then printf 'unexpected-agent\n'; fi
+    touch "$EVIDENCE/listed"
+}
+''' + phase
+                result = subprocess.run(['bash', '-c', script, 'agent-picker', directory, str(changed)], capture_output=True, text=True)
+                self.assertEqual(result.returncode == 0, not changed, result.stderr)
+
     def test_device_fixture_requires_pkce_and_observes_real_authorized_key_changes(self):
         spec = importlib.util.spec_from_file_location("approval_fixture", SCRIPTS / "device-approval.py")
         module = importlib.util.module_from_spec(spec)

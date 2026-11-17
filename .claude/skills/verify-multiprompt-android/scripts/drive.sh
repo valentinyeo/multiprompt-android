@@ -1415,6 +1415,19 @@ if [[ "$feature" == sessions.md ]]; then
     shot row-long-press-actions
     adb shell input keyevent KEYCODE_BACK
     wait_for_absence 'End tmux session'
+    sudo -u verifyssh tmux list-sessions -F '#{session_name}' > "$EVIDENCE/sessions-before-agent-picker.txt"
+    tap_desc 'New session'
+    wait_for_text 'Use this folder'
+    adb shell input keyevent KEYCODE_BACK
+    tap_text 'Use this folder'
+    wait_for_text 'Claude Code'
+    wait_for_text Shell
+    shot start-agent-picker
+    tap_text Back
+    wait_for_text 'Use this folder'
+    shot start-agent-back-to-folder
+    sudo -u verifyssh tmux list-sessions -F '#{session_name}' > "$EVIDENCE/sessions-after-agent-picker.txt"
+    cmp "$EVIDENCE/sessions-before-agent-picker.txt" "$EVIDENCE/sessions-after-agent-picker.txt"
     exit 0
 fi
 tap_text verify-session
