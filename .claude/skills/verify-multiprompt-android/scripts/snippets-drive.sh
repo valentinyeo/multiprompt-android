@@ -31,7 +31,6 @@ select_node focused-field "$snippet" >/dev/null
 python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value composer "$snippet"
 wait_for_absence 'Save current text'
 shot snippets-reused
-adb shell input keyevent KEYCODE_BACK
 tap_desc 'Send prompt'
 wait_receipt "VERIFY_RECEIVED:$snippet"
 wait_for_text "VERIFY_RECEIVED:$snippet"
