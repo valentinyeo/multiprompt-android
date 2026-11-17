@@ -14,6 +14,14 @@ def check(xml, screenshot, phase, value=''):
     assert width >= 100 and height >= 100, 'Empty screenshot'
     nodes = [n for n in ET.parse(xml).getroot().iter('node')
              if n.get('package') == 'dev.multiprompt.companion.debug']
+    parents = {child: parent for parent in nodes for child in parent}
+
+    def selected(node):
+        while node.get('clickable') != 'true' and node in parents:
+            node = parents[node]
+        return (node.get('selected') == 'true'
+                or (node.get('checkable') == 'true' and node.get('checked') == 'true'))
+
     texts = [n.get('text', '') for n in nodes]
     descriptions = [n.get('content-desc', '') for n in nodes]
     assert nodes, 'Missing app UI'
@@ -28,9 +36,9 @@ def check(xml, screenshot, phase, value=''):
         label = {'face': f'Face {value}', 'colour': f'Colour {value}', 'auto': 'Auto'}[phase]
         matches = [n for n in nodes if n.get('content-desc') == label or n.get('text') == label]
         assert len(matches) == 1 and visible(matches[0]), f'Choice not visible: {label}'
-        assert matches[0].get('selected') == 'true', f'Choice not selected: {label}'
+        assert selected(matches[0]), f'Choice not selected: {label}'
         prefix = 'Face ' if phase == 'face' else 'Colour '
-        assert not any(n is not matches[0] and n.get('selected') == 'true'
+        assert not any(n is not matches[0] and selected(n)
                        and (n.get('content-desc', '').startswith(prefix)
                             or (phase != 'face' and n.get('text') == 'Auto')) for n in nodes), 'Multiple selections'
     elif phase == 'scroll-top':
@@ -53,7 +61,8 @@ def check(xml, screenshot, phase, value=''):
         raise AssertionError(f'Unknown state: {phase}')
     return dict(phase=phase, value=value, screenshot=Path(screenshot).name,
                 texts=[t for t in texts if t], selected=[n.get('content-desc') or n.get('text')
-                                                        for n in nodes if n.get('selected') == 'true'])
+                                                        for n in nodes if selected(n)
+                                                        and (n.get('content-desc') or n.get('text'))])
 
 
 if __name__ == '__main__':

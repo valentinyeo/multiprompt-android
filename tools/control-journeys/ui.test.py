@@ -23,7 +23,16 @@ class ControlUiTest(unittest.TestCase):
         self.xml.write_text('<hierarchy><node package="dev.multiprompt.companion.debug" text="Bot look">' + body + '</node></hierarchy>')
 
     def choice(self, label, selected='true', bounds='[40,100][180,240]'):
-        return f'<node package="dev.multiprompt.companion.debug" content-desc="{label}" selected="{selected}" bounds="{bounds}"/>'
+        return f'<node package="dev.multiprompt.companion.debug" content-desc="{label}" clickable="true" selected="{selected}" bounds="{bounds}"/>'
+
+    def test_retained_android_checked_choice_on_clickable_parent(self):
+        fixture = Path(__file__).parent / 'fixtures/aeb9153c-face-1'
+        self.assertEqual(ui.check(fixture.with_suffix('.xml'), fixture.with_suffix('.png'), 'face', '1')['selected'], ['Face 1'])
+        with self.assertRaises(AssertionError):
+            ui.check(fixture.with_suffix('.xml'), fixture.with_suffix('.png'), 'face', '2')
+        self.xml.write_text(fixture.with_suffix('.xml').read_text().replace('checked="true"', 'checked="false"'))
+        with self.assertRaises(AssertionError):
+            ui.check(self.xml, fixture.with_suffix('.png'), 'face', '1')
 
     def test_chosen_face_is_selected_and_visible(self):
         self.write(self.choice('Face 7') + self.choice('Face 6', 'false'))
@@ -40,7 +49,7 @@ class ControlUiTest(unittest.TestCase):
                 ui.check(self.xml, self.png, 'face', '7')
 
     def test_auto_must_clear_explicit_colour(self):
-        auto = '<node package="dev.multiprompt.companion.debug" text="Auto" selected="true" bounds="[40,100][180,240]"/>'
+        auto = '<node package="dev.multiprompt.companion.debug" text="Auto" clickable="true" selected="true" bounds="[40,100][180,240]"/>'
         self.write(auto + self.choice('Colour 8', 'false'))
         ui.check(self.xml, self.png, 'auto')
         self.write(auto + self.choice('Colour 8'))

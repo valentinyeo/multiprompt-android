@@ -18,7 +18,8 @@ a Claude-named executable. No account or provider credentials are required.
    exact `verify-session|VERIFY_RENAMED_2653` tmux window state in
    `reader-controls-window.txt`.
 4. Open Session actions → Display and assert Show terminal details and Use default font
-   size. Toggle details on, capture the returned reader, reopen Display and assert Hide
+   size. If the system starts in light mode, turn Sunlight mode off first. Toggle details
+   on, capture the returned reader, reopen Display and assert Hide
    terminal details. Toggle back and assert Show terminal details.
 5. Tap Sunlight mode on, capture the reader, reopen Display and assert Sunlight mode off.
    Toggle off, reopen and assert Sunlight mode on. Every result retains text assertions,

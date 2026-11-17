@@ -80,6 +80,12 @@ sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/reader-controls-host.txt"
 open_control_menu Display
 wait_for_text 'Show terminal details'
 control_state reader-controls-display display 'Show terminal details'
+if select_node contains 'Sunlight mode off' >/dev/null 2>&1; then
+    tap_text 'Sunlight mode off'
+    wait_for_absence 'Use default font size'
+    open_control_menu Display
+    wait_for_text 'Sunlight mode on'
+fi
 tap_text 'Show terminal details'
 wait_for_absence 'Use default font size'
 control_state reader-controls-details reader VERIFY_RENAMED_2653
