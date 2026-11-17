@@ -1,0 +1,9 @@
+# Break Android repairs before merge
+
+A bug-fix journey must pass normally, then pass again under five stresses on the same hosted emulator. Retain a screenshot, UI XML and text evidence for each checkpoint. Missing checkpoints fail rather than count as coverage.
+
+The checkpoints rotate during a draft, background and return, switch chats and back, throttle the emulator network, and send while a reply is still streaming. The normal journey's product assertions must still pass after these actions.
+
+The independent verifier reads the retained checkpoint evidence. A broken or missing checkpoint overrides a model PASS.
+
+Hosted controls use PR 408's doubled-reply repair at `75c43b90864ef8479ba1dda52a1f04d4d0e3d968`. A second run plants draft loss during activity recreation in a complete checkout of that revision. The normal journey must pass before rotation rejects that candidate.
