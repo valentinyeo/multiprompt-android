@@ -940,8 +940,12 @@
       "label": "Expand table",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MarkdownText.kt:ChatTable:KitExpandButton:cb88f111839f0c64:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MarkdownText.kt:267",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "chat-table.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/chat-table.md",
+        "action": "Tap Expand on the inline chat table",
+        "result": "Title, Close and R01-C01 orchard appear in table-open.json"
+      }
     },
     {
       "id": "chat-markdown-and-tables.dismiss-chat-markdown-and-tables",
@@ -958,8 +962,12 @@
       "label": "Close expanded table",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MarkdownText.kt:ExpandedChatTable:KitRoundButton:0db31244d3a5a9ea:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MarkdownText.kt:311",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "chat-table.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/chat-table.md",
+        "action": "Tap Close on the expanded table",
+        "result": "Message verify-session returns without the sheet in table-closed.json"
+      }
     },
     {
       "id": "chat-markdown-and-tables.scroll-chat-markdown-and-tables",
@@ -967,8 +975,12 @@
       "label": "Scroll Chat Markdown and tables",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MarkdownText.kt:ExpandedChatTable:verticalScroll:ad066ea761b4a91d:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MarkdownText.kt:318",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "chat-table.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/chat-table.md",
+        "action": "Swipe up inside the expanded table",
+        "result": "R24-C06 harvest becomes fully visible in table-down.json"
+      }
     },
     {
       "id": "chat-markdown-and-tables.scroll-horizontally.2",
@@ -976,8 +988,12 @@
       "label": "Scroll horizontally",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MarkdownText.kt:ExpandedChatTable:horizontalScroll:55387adc64a2cb1d:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MarkdownText.kt:319",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "chat-table.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/chat-table.md",
+        "action": "Swipe left inside the expanded table",
+        "result": "R01-C06 harvest becomes fully visible in table-sideways.json"
+      }
     },
     {
       "id": "chat-markdown-and-tables.scroll-horizontally.3",
@@ -1923,7 +1939,7 @@
     {
       "id": "select-bots.move-to",
       "screen": "Select bots",
-      "label": "Move to\u2026",
+      "label": "Move to…",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitPrimaryButton:e8d1dbd1d4d7ce32:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1726",
       "journey": null,
@@ -2675,7 +2691,7 @@
     {
       "id": "inbox-session-actions.remind-me",
       "screen": "Inbox session actions",
-      "label": "Remind Me\u2026",
+      "label": "Remind Me…",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:SessionCard:KitMenuRow:9ef47acdfd388b08:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2781",
       "journey": null,
@@ -3156,7 +3172,7 @@
     {
       "id": "session-actions.back",
       "screen": "Session actions",
-      "label": "\u2039 Back",
+      "label": "‹ Back",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:04daaf2cf4a09c36:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3956",
       "journey": null,
@@ -3315,7 +3331,7 @@
     {
       "id": "session-actions.remind-me",
       "screen": "Session actions",
-      "label": "Remind Me\u2026",
+      "label": "Remind Me…",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:89bc78dfa896860f:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4137",
       "journey": null,
