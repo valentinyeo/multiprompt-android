@@ -119,7 +119,7 @@ class MessageProtocolTest {
             ChatHistoryProtocol.Row("user", "hello", "one", "", 1, 2),
             ChatHistoryProtocol.Row("user", "hello", "two", "", 3, 4),
         ))
-        val messages = history.managedMessages(MessageReplica(1, 2, mapOf(id to row)), emptyList())
+        val messages = history.projectMessages(MessageReplica(1, 2, mapOf(id to row)), emptyList())
         assertEquals(3, messages.size)
         assertTrue(messages.all { it.delivery == null })
         assertEquals(2, messages.map { it.key }.take(2).distinct().size)
@@ -206,7 +206,7 @@ class MessageProtocolTest {
     @Test fun cancelledCopiesStayInReplicaButDisappearFromChat() {
         val cancelled = MessageProtocol.Row(id, "codex", "sid", "hello", 1, "attempt", MessageProtocol.State.CANCELLED, null, null, 1, 1.0)
         val replica = MessageReplica(1, 2, mapOf(id to cancelled))
-        assertTrue(ChatHistory(sid = "sid").managedMessages(replica, emptyList()).isEmpty())
+        assertTrue(ChatHistory(sid = "sid").projectMessages(replica, emptyList()).isEmpty())
         assertEquals(cancelled, replica.messages[id])
     }
 
@@ -218,7 +218,7 @@ class MessageProtocolTest {
             ChatHistoryProtocol.Row("assistant", "Other", "native@4", "", 4, 5, normalized = """{"read_id":"other","segment":0}"""),
             ChatHistoryProtocol.Row("assistant", "continued", "native@5", "", 5, 6, normalized = """{"read_id":"r","segment":0}""")
         ))
-        assertEquals(listOf("Hello world\ncontinued", "More", "Other"), history.managedMessages(null, emptyList()).map { it.text })
+        assertEquals(listOf("Hello world\ncontinued", "More", "Other"), history.projectMessages(null, emptyList()).map { it.text })
         assertEquals(5, history.rows.size)
     }
 
@@ -228,7 +228,7 @@ class MessageProtocolTest {
             ChatHistoryProtocol.Row("assistant", "Second", "native@20", "", 2, 3, normalized = """{"read_id":"stable","segment":0}"""),
             ChatHistoryProtocol.Row("assistant", "Separate", "native@30", "", 3, 4, normalized = """{"read_id":"stable","segment":1}""")
         ))
-        assertEquals(listOf("First\nSecond", "Separate"), history.managedMessages(null, emptyList()).map { it.text })
+        assertEquals(listOf("First\nSecond", "Separate"), history.projectMessages(null, emptyList()).map { it.text })
         assertEquals(listOf("native@10", "native@20", "native@30"), history.rows.map { it.id })
     }
 

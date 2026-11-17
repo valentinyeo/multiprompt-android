@@ -13,6 +13,7 @@ export const requiredChecks = [
   'm3-unit-tests',
   'lint',
   'phone-routing',
+  'message-projection-proof',
   'image-preview-emulator',
   'reply-notifications-emulator',
   'session-rows-emulator',

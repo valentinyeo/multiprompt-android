@@ -88,6 +88,7 @@
   "IGSH-2313": "Android: measure app start time with and without startup profile",
   "IGSH-2354": "No false live view error in desktop hosted chats",
   "IGSH-2357": "Android: Draft label on chats with unsent text",
+  "IGSH-2360": "Android: Stop button in place of Send while the AI works",
   "IGSH-2366": "Android: agent messages in the new format show as a sender card",
   "IGSH-2372": "Android: pin a chat to the top of the list",
   "IGSH-2370": "Android: remove the ETA countdown like desktop",
@@ -103,5 +104,6 @@
   "IGSH-2475": "Android: Claude commands like /clear in the slash menu",
   "IGSH-2294": "Android: usage and plan pace card",
   "IGSH-2486": "Android shell gets Esc, Tab, Ctrl and arrow keys",
+  "IGSH-2532": "Android chat shows each message once, with its reply",
   "IGSH-2533": "Android old-screen check stops breaking on every change"
 }
