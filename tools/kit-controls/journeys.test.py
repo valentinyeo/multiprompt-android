@@ -52,7 +52,7 @@ changed="$2"
 tap_desc() { [[ "$1" == 'New session' ]]; }
 tap_text() { [[ "$1" == 'Use this folder' || "$1" == Back ]]; }
 wait_for_text() { :; }
-shot() { :; }
+shot() { printf '<hierarchy />' > "$EVIDENCE/current.xml"; }
 adb() { [[ "$*" == 'shell input keyevent KEYCODE_BACK' ]]; }
 sudo() {
     [[ "$*" == '-u verifyssh tmux list-sessions -F #{session_name}' ]]
