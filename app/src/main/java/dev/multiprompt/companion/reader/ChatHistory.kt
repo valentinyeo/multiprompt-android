@@ -71,6 +71,7 @@ data class ChatHistory(
         waiting: List<PendingPrompts.Entry> = emptyList(),
     ): List<ChatHistoryMessage> {
         val scoped = replica?.messages?.values.orEmpty().filter { it.sid == sid }
+        val waitingIds = waiting.map { it.id }.toSet()
         val source = rows.toMutableList()
         replica?.nativeFacts?.values?.filter { it.sid == sid }?.forEach { fact ->
             if (fact.inode == inode && fact.offset != null && fact.offset >= offset) {
@@ -123,7 +124,7 @@ data class ChatHistory(
         var floor = -1
         for (card in cards.filter { it.message.key !in placed }) {
             val index = transcript.indices.firstOrNull { index ->
-                index !in claimed && when {
+                index !in claimed && transcript[index].requestId !in waitingIds && when {
                     card.shared != null && host.sentRows[card.shared.id].isNullOrEmpty() ->
                         index > floor && LegacyMessageIdentity.shared(transcript[index], card.shared)
                     card.legacy != null -> LegacyMessageIdentity.delivered(transcript[index], card.legacy, sid, inode)
@@ -139,7 +140,7 @@ data class ChatHistory(
         val aliases = HashMap<String, String>()
         host.sentRows.forEach { (id, uuids) -> (uuids + id).forEach { aliases[it] = id } }
         scoped.forEach { aliases[it.id] = it.id }
-        waiting.forEach { aliases.putIfAbsent(it.id, it.id) }
+        waitingIds.forEach { aliases.putIfAbsent(it, it) }
         val projected = LinkedHashMap<String, ChatHistoryMessage>()
         transcript.forEachIndexed { index, message ->
             val card = claimed[index]

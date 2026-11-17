@@ -79,6 +79,17 @@ class MessageProjectionTest {
         assertEquals(PendingPrompts.WAITING_LABEL, projected.last().delivery)
     }
 
+    @Test fun knownWaitingIdentityCannotBeClaimedByAnEqualBodyHostCard() {
+        val waiting = listOf(PendingPrompts.Entry(id(2), "same"))
+        val queued = replica(listOf(row(1).copy(state = MessageProtocol.State.QUEUED)), emptyList())
+        val history = ChatHistory(sid = sid, inode = 7, rows = listOf(user(2, id(2)), reply(2)))
+        val projected = history.projectMessages(queued, waiting = waiting)
+        once(projected, listOf("same", "answer 2", "same"))
+        assertEquals(listOf(id(2), id(1)), projected.filter { it.role == "user" }.map { it.requestId })
+        assertEquals(null, projected.first().delivery)
+        assertFalse(projected.first().pending)
+    }
+
     @Test fun cancelledHostRowsCannotBeResurrectedByAWaitingStateSnapshot() {
         val cancelled = replica(listOf(row(1).copy(state = MessageProtocol.State.CANCELLED)), emptyList())
         once(ChatHistory(sid = sid).projectMessages(cancelled, waiting = listOf(PendingPrompts.Entry(id(1), "same"))), emptyList())
