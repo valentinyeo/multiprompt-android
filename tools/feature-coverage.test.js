@@ -38,7 +38,7 @@ if (args.includes('Accept: application/vnd.github.diff')) {
 `, { mode: 0o755 });
 }
 
-for (const [pr, outcome] of [[380, 'chat-search.open'], [376, 'snippets.save-reuse-delete'], [373, 'ai.switch'], [377, 'ai.usage']]) {
+for (const [pr, outcome] of [[380, 'chat-search.open'], [376, 'snippets.save-reuse-delete'], [373, 'ai.switch'], [377, 'ai.usage'], [379, 'chat-table.expand']]) {
   test(`real PR #${pr} is rejected despite its successful unrelated head journeys`, () => {
     const fixture = JSON.parse(read(`tools/fixtures/feature-coverage/pr-${pr}.json`));
     const diff = read(`tools/fixtures/feature-coverage/pr-${pr}.diff`);
@@ -649,6 +649,76 @@ test('AI usage proof requires its action, displayed numbers, independent host re
     assert.match(gate.featureErrors(args).errors.join(' '), /exact PR head SHA/);
     for (const name of ['AiUsage', 'PlanUsage', 'aiUsage', 'AI usage', 'tokenLadderStatus', 'readTokenLadderStatus', 'token-ladder/status.json']) {
       assert.ok(gate.changedOutcomes(productDiff('ui/AiUsageSheet.kt', name)).includes(outcome), name);
+    }
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('the real picker schedules chat table even when the model omits it or fills all three slots', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-table-pick-'));
+  try {
+    const fixture = JSON.parse(read('tools/fixtures/feature-coverage/pr-379.json'));
+    const gh = path.join(directory, 'gh');
+    mockPickerGithub(gh);
+    const stub = path.join(directory, 'model.cjs');
+    fs.writeFileSync(stub, `global.fetch = async () => ({status:200,ok:true,json:async () => ({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:JSON.parse(process.env.MODEL_FEATURES),changed_outcomes:[],change_kind:process.env.CHANGE_KIND,reason:'Model omitted chat table.'})}}]})});`);
+    const recipeDiff = path.join(directory, 'recipe.diff');
+    fs.writeFileSync(recipeDiff, `diff --git a/${gate.REGISTRY_PATH}/chat-table.md b/${gate.REGISTRY_PATH}/chat-table.md\n+Expand and scroll a chat table\n`);
+    for (const diff of [path.join(root, 'tools/fixtures/feature-coverage/pr-379.diff'), recipeDiff]) {
+      for (const modelFeatures of [[], ['native-skills.md', 'session-reader.md', 'terminal.md']]) {
+        const output = path.join(directory, 'outputs');
+        fs.writeFileSync(output, '');
+        const result = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
+          cwd: root,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${directory}:${process.env.PATH}`,
+            NODE_OPTIONS: `--require=${stub}`,
+            DEEPSEEK_API_KEY: 'test-only',
+            REPO: 'example/repo',
+            PR_NUMBER: '379',
+            EVENT_HEAD_SHA: fixture.headSha,
+            FIXTURE_DIFF: diff,
+            MODEL_FEATURES: JSON.stringify(modelFeatures),
+            CHANGE_KIND: diff === recipeDiff ? 'tooling' : 'product',
+            GITHUB_OUTPUT: output,
+          },
+        });
+        assert.equal(result.status, 0, result.stderr);
+        const values = fs.readFileSync(output, 'utf8');
+        const features = JSON.parse(values.match(/^features=(.+)$/m)[1]);
+        assert.ok(features.includes('chat-table.md'), values);
+        assert.ok(features.length <= verifier.MAX_JOURNEYS);
+        assert.match(values, /^smoke=no$/m);
+        if (diff !== recipeDiff) assert.match(values, /changed_outcomes=.*chat-table.expand/);
+      }
+    }
+    assert.equal(gate.baseline['chat-table.expand'], undefined);
+    assert.equal(gate.registry.outcomes['chat-table.expand'].journey, 'chat-table.md');
+    assert.ok(gate.debugJourneys.includes('chat-table.md'));
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+
+test('table proof needs its expand action, far-cell result and exact head', () => {
+  const outcome = 'chat-table.expand';
+  const journey = 'chat-table.md';
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-table-proof-'));
+  const claim = { outcome, journey, ...gate.registry.outcomes[outcome].citations };
+  try {
+    fs.writeFileSync(path.join(directory, 'app-source-sha.txt'), sha);
+    for (const ref of [claim.action, claim.result]) fs.writeFileSync(path.join(directory, ref.file), ref.quote);
+    const args = { plan: { product: true, outcomes: [outcome] }, coverage: [claim], directories: { [journey]: directory }, conclusions: { [journey]: 'success' }, sha };
+    assert.deepEqual(gate.featureErrors(args).errors, []);
+    for (const ref of [claim.action, claim.result]) {
+      fs.writeFileSync(path.join(directory, ref.file), 'unrelated proof');
+      assert.match(gate.featureErrors(args).errors.join(' '), /FEATURE_NOT_EXERCISED: chat-table.expand/);
+      fs.writeFileSync(path.join(directory, ref.file), ref.quote);
+    }
+    fs.writeFileSync(path.join(directory, 'app-source-sha.txt'), 'b'.repeat(40));
+    assert.match(gate.featureErrors(args).errors.join(' '), /exact PR head SHA/);
+    for (const name of ['ExpandedChatTable', 'ChatTable', 'MarkdownTable', 'table-expand', 'table-sheet', 'table-close']) {
+      assert.ok(gate.changedOutcomes(productDiff('ui/MarkdownText.kt', name)).includes(outcome), name);
     }
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });

@@ -902,6 +902,11 @@ if [[ "$feature" == snippets.md ]]; then
     exit 0
 fi
 
+if [[ "$feature" == chat-table.md ]]; then
+    source "$scripts/chat-table-drive.sh"
+    exit 0
+fi
+
 if [[ "$feature" == chat-search.md ]]; then
     source "$scripts/chat-search-drive.sh"
     exit 0

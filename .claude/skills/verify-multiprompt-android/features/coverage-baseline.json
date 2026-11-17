@@ -7,10 +7,6 @@
     "sourcePr": 378,
     "cleanupTicket": "SOFT-2543"
   },
-  "chat-table.expand": {
-    "sourcePr": 379,
-    "cleanupTicket": "SOFT-2544"
-  },
   "claude.clear-ranking": {
     "sourcePr": 381,
     "cleanupTicket": "SOFT-2545"
