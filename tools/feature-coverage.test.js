@@ -296,6 +296,23 @@ test('priority evidence paths and per-file limits fit the journey budget', () =>
   }
 });
 
+test('Claude menu changes and the extended recipe schedule native-skills through verify.yml', () => {
+  for (const text of ['ReaderMenuPage.MODEL -> {', 'Use Claude Opus',
+    'Set effort: max', 'Open model picker (/model)', 'HostChange.OPUS', 'attachMenuSection = null']) {
+    const diff = productDiff('java/dev/multiprompt/companion/ui/MultipromptApp.kt', text);
+    const plan = gate.planChange(diff, []);
+    assert.ok(plan.outcomes.includes('claude.skills-model-effort'), text);
+    const selected = verifier.includeRequiredJourneys({ features: [], dropped: [], smoke: true }, plan, diff);
+    assert.ok(selected.features.includes('native-skills.md'), text);
+    assert.equal(selected.smoke, false);
+  }
+  const recipe = `${gate.REGISTRY_PATH}/native-skills.md`;
+  const diff = `diff --git a/${recipe} b/${recipe}\n--- a/${recipe}\n+++ b/${recipe}\n@@ -1 +1 @@\n-old\n+Extended menu journey\n`;
+  const selected = verifier.includeRequiredJourneys({ features: [], dropped: [], smoke: true }, { outcomes: [] }, diff);
+  assert.deepEqual(selected.features, ['native-skills.md']);
+  assert.equal(gate.registry.journeys[selected.features[0]].runner.workflow, 'verify.yml');
+});
+
 test('every recipe is registered and generated index and dispatch choices cannot drift', () => {
   const recipes = fs.readdirSync(path.join(root, gate.REGISTRY_PATH)).filter(name => name.endsWith('.md') && name !== 'README.md');
   assert.deepEqual(recipes.sort(), Object.keys(gate.registry.journeys).sort());
