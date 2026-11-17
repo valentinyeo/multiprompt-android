@@ -29,6 +29,7 @@ source_checks() {
   python3 -B tools/codex-sync.test.py
   python3 -B tools/structured-questions.test.py
   python3 -B tools/native-skills.test.py
+  python3 -B tools/clear-ranking/ui.test.py
   python3 -B tools/release-choices/ui.test.py
   python3 -B tools/check-approved-style-source.test.py
   python3 -B tools/historical_control.test.py
