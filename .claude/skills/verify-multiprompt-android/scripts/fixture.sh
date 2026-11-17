@@ -234,4 +234,12 @@ if [[ "${VERIFY_FEATURE:-}" == ai-usage.md ]]; then
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/ai-usage-host.py seed
     { printf 'command="env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/ai-usage-host.py" '; cat "$FIXTURE/user-key.pub"; } | sudo tee /home/verifyssh/.ssh/authorized_keys >/dev/null
 fi
+sudo install -m 755 "$(dirname "$0")/seed.sh" /home/verifyssh/seed.sh
+sudo install -m 755 tools/long-chat/fixture.py /home/verifyssh/long-chat-fixture.py
+sudo install -m 644 tools/verify-seed.py /home/verifyssh/verify-seed.py
+sudo -u verifyssh mkdir -p /home/verifyssh/long-chat-bin
+sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/long-chat-bin/claude
+sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh bash /home/verifyssh/seed.sh "$fixture_session"
+sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/verify-seed.py record > "$EVIDENCE/seed-counts.json"
+sudo cat /home/verifyssh/pins-names.txt > "$EVIDENCE/pins-tmux-names.txt"
 printf 'SSH FIXTURE READY\n'

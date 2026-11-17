@@ -9,6 +9,7 @@ node "$scripts/../../../../.github/scripts/pstack-verifier/coverage.cjs" journey
 mkdir -p "$EVIDENCE"
 exec > >(tee -a "$EVIDENCE/driver-transcript.txt") 2>&1
 set -x
+sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/verify-seed.py check "$EVIDENCE/seed-counts.json"
 package=${VERIFY_PACKAGE:-dev.multiprompt.companion.debug}
 step=0
 product_checks=0
@@ -129,6 +130,7 @@ tap_node() {
         if (( attempt > 6 )); then direction=backward; fi
         plan=$(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "reach-$1" "$2" "$direction") || return
         read -r action x1 y1 x2 y2 <<< "$plan"
+        if [[ "$action" == tap && "${3:-tap}" == reveal ]]; then return; fi
         case "$action" in
             tap) adb shell input tap "$x1" "$y1"; return ;;
             swipe) adb shell input swipe "$x1" "$y1" "$x2" "$y2" 500 ;;
@@ -191,6 +193,10 @@ wait_for_text() {
     local attempt
     for attempt in {1..30}; do
         if select_node contains "$1" >/dev/null 2>&1; then return; fi
+        if [[ "$attempt" == 3 && "$1" =~ ^(verify-(session|keep|other|name)|cl-long-chat)$ ]] &&
+            python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Inbox >/dev/null 2>&1; then
+            if tap_node text "$1" reveal; then return; fi
+        fi
         dismiss_system_anr
         sleep "${2:-1}"
     done

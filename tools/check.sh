@@ -13,6 +13,8 @@ source_checks() {
   python3 -B tools/message-projection/check.py
   python3 -B tools/message-projection/check.test.py
   python3 -B tools/message-projection/ui.test.py
+  node --test tools/verify-seed.test.js
+  python3 -I tools/verify-seed.test.py
   python3 -B tools/fixture-journeys.test.py
   python3 -B tools/journey-actions/check.py
   python3 -B tools/journey-actions/action.test.py

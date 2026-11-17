@@ -36,7 +36,7 @@ public class Observe extends Instrumentation {
         if (node == null) return null;
         Rect bounds = new Rect();
         node.getBoundsInScreen(bounds);
-        if (node.isVisibleToUser() && !bounds.isEmpty()
+        if (node.isVisibleToUser() && !node.isEditable() && !bounds.isEmpty()
                 && (value.contentEquals(node.getText() == null ? "" : node.getText())
                 || value.contentEquals(node.getContentDescription() == null ? "" : node.getContentDescription()))) return node;
         for (int i = 0; i < node.getChildCount(); i++) {
@@ -114,8 +114,22 @@ public class Observe extends Instrumentation {
         }
     }
 
+    private void findSession(String name) {
+        if (node("Close session search") != null) click("Close session search");
+        click("Search sessions");
+        click("Search all sessions");
+        AccessibilityNodeInfo field = getUiAutomation().getRootInActiveWindow().findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+        if (field == null || (field.getText() != null && field.getText().length() != 0)) throw new AssertionError("Session search must start empty");
+        Bundle text = new Bundle();
+        text.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, name);
+        if (!field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, text) || !field.refresh()
+                || !name.contentEquals(field.getText())) throw new AssertionError("Session search failed");
+        waitFor(name, SystemClock.elapsedRealtime() + 30000);
+        sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+    }
+
     private void open(String stage, long budget) throws Exception {
-        waitFor("cl-long-chat", SystemClock.elapsedRealtime() + 30000);
+        findSession("cl-long-chat");
         AccessibilityNodeInfo target = node("cl-long-chat");
         while (target != null && !target.isClickable()) target = target.getParent();
         if (target == null) throw new AssertionError("Session target missing");
@@ -174,6 +188,7 @@ public class Observe extends Instrumentation {
             open(phase, phase.equals("initial") ? 15000 : phase.equals("smoke") ? 2000 : 1000);
             if (phase.equals("initial")) {
                 click("Back");
+                findSession("verify-session");
                 click("verify-session");
                 waitFor("VERIFY_READY_528", SystemClock.elapsedRealtime() + 30000);
                 click("Back");
