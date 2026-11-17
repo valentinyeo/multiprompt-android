@@ -20,7 +20,11 @@ fi
 relaunch_app
 tap_text verify-session
 wait_for_text "$snippet"
-fill "$snippet" replacement%sdraft
+tap_node editor ''
+adb shell input keycombination 113 29
+adb shell input text replacement%sdraft
+dump_ui
+python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value composer 'replacement draft'
 tap_desc Attach
 tap_text Snippets
 wait_for_text "$snippet"
