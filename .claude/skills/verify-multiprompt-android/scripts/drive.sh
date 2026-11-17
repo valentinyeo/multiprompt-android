@@ -918,8 +918,18 @@ if [[ "$feature" == ai-usage.md ]]; then
     exit 0
 fi
 
+if [[ "$feature" == skill-pills.md ]]; then
+    source "$scripts/skill-pills-drive.sh"
+    exit 0
+fi
+
 if [[ "$feature" == snippets.md ]]; then
     source "$scripts/snippets-drive.sh"
+    exit 0
+fi
+
+if [[ "$feature" == chat-table.md ]]; then
+    source "$scripts/chat-table-drive.sh"
     exit 0
 fi
 

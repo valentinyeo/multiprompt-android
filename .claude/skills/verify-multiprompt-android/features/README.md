@@ -82,6 +82,10 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `claude.remote-control`. Runner: `verify.yml` (debug). Priority evidence: `remote-control-state.json` (2000 characters), `remote-control-host.json` (3500 characters), `remote-control-before.txt` (200 characters).
 - [AI usage](ai-usage.md): Open AI usage, compare Claude and Codex numbers with independent SSH receipts, then close. SOFT-2542.
   - Outcomes: `ai.usage`. Runner: `verify.yml` (debug). Priority evidence: `ai-usage-menu.json` (1500 characters), `ai-usage-open.json` (2000 characters), `ai-usage-closed.json` (1000 characters), `ai-usage-proof.txt` (200 characters), `ai-usage-host.json` (2000 characters), `ai-usage-receipts.txt` (3000 characters).
+- [Skills within messages](skill-pills.md): insert a skill mid-message, check composer and sent pills, remove a pill and send the remaining text. SOFT-2543.
+  - Outcomes: `skills.pills`. Runner: `verify.yml` (debug). Priority evidence: `skill-pills-state.json` (4000 characters), `skill-pills-receipts.txt` (1000 characters).
+- [Expand and scroll a chat table](chat-table.md): Open a wide chat table, scroll sideways and down to a known far cell, then close. SOFT-2544.
+  - Outcomes: `chat-table.expand`. Runner: `verify.yml` (debug). Priority evidence: `table-inline.json` (1200 characters), `table-open.json` (1200 characters), `table-sideways.json` (1200 characters), `table-down.json` (1200 characters), `table-closed.json` (1200 characters), `table-proof.txt` (200 characters).
 
 ## Initial coverage gaps
 
@@ -90,8 +94,6 @@ These IDs are an inventory, not exemptions for future changes. Untouched gaps do
 | Outcome | Existing case | Cleanup ticket |
 |---|---|---|
 | `pi.model-switch` | [#374](https://github.com/valentinyeo/multiprompt-android/pull/374) | SOFT-2539 |
-| `skills.pills` | [#378](https://github.com/valentinyeo/multiprompt-android/pull/378) | SOFT-2543 |
-| `chat-table.expand` | [#379](https://github.com/valentinyeo/multiprompt-android/pull/379) | SOFT-2544 |
 | `claude.clear-ranking` | [#381](https://github.com/valentinyeo/multiprompt-android/pull/381) | SOFT-2545 |
 | `legacy.igsh-449` | IGSH-449 | IGSH-449 |
 | `legacy.igsh-429` | IGSH-429 | IGSH-429 |

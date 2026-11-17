@@ -29,7 +29,14 @@ mkdir -p "$RUNNER_TEMP/release-choices/classes" "$RUNNER_TEMP/release-choices/de
 work="$RUNNER_TEMP/release-choices"
 tools="$ANDROID_HOME/build-tools/35.0.0"
 printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$work/signing.jks"
-if [[ "${CANDIDATE:-false}" == true ]]; then
+app_apk="$EVIDENCE/app.apk"
+if [[ -n "${CANDIDATE_APK:-}" ]]; then
+    [[ "$EXPECTED_COMMIT" == "$GITHUB_SHA" && "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+    app_apk=$CANDIDATE_APK
+    test -s "$app_apk"
+    printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/app-source-sha.txt"
+    printf '%s\n' "${EXPECTED_VERSION:?}" > "$EVIDENCE/version.txt"
+elif [[ "${CANDIDATE:-false}" == true ]]; then
     if [[ "${VERIFY_FEATURE:-}" == settings-navigation.md ]]; then
         [[ "${EXPECTED_COMMIT:-}" == "$GITHUB_SHA" && "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
     fi
@@ -40,27 +47,27 @@ keyAlias=$ANDROID_KEY_ALIAS
 keyPassword=$ANDROID_KEY_PASSWORD
 EOF
     gradle --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2g -PversionCode=1000000000 -PversionName=0.1.2-candidate "$task"
-    cp "$apk" "$EVIDENCE/app.apk"
+    cp "$apk" "$app_apk"
     printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/app-source-sha.txt"
     printf '%s\n' "0.1.2-candidate$suffix" > "$EVIDENCE/version.txt"
 else
     curl -fsSL "$manifest_url" -o "$EVIDENCE/manifest.json"
     [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
     jq -e --arg commit "$EXPECTED_COMMIT" --arg apk_url "$apk_url" '.schemaVersion == 1 and .commit == $commit and .sizeBytes > 0 and (.sha256 | length) == 64 and .apkUrl == $apk_url' "$EVIDENCE/manifest.json"
-    curl -fsSL "$(jq -er '.apkUrl' "$EVIDENCE/manifest.json")" -o "$EVIDENCE/app.apk"
-    printf '%s  %s\n' "$(jq -er '.sha256' "$EVIDENCE/manifest.json")" "$EVIDENCE/app.apk" | sha256sum --check
-    test "$(stat -c%s "$EVIDENCE/app.apk")" = "$(jq -er '.sizeBytes' "$EVIDENCE/manifest.json")"
+    curl -fsSL "$(jq -er '.apkUrl' "$EVIDENCE/manifest.json")" -o "$app_apk"
+    printf '%s  %s\n' "$(jq -er '.sha256' "$EVIDENCE/manifest.json")" "$app_apk" | sha256sum --check
+    test "$(stat -c%s "$app_apk")" = "$(jq -er '.sizeBytes' "$EVIDENCE/manifest.json")"
     if [[ "${VERIFY_FEATURE:-}" == session-routing.md && "${RELEASE_CHANNEL:-}" == android-m3-latest && "$EXPECTED_COMMIT" == 056ee39de07940f27c16123b3652ae4f3017bf5a ]]; then
         [[ "$(jq -er '.sha256' "$EVIDENCE/manifest.json")" == d70eb97be6c633198058db524e4b2d336d7aa818a5cddf1b46ea1fa6c2e57a42 ]]
     fi
     jq -er '.commit' "$EVIDENCE/manifest.json" > "$EVIDENCE/app-source-sha.txt"
     jq -er '.versionName' "$EVIDENCE/manifest.json" > "$EVIDENCE/version.txt"
 fi
-sha256sum "$EVIDENCE/app.apk" > "$EVIDENCE/app-apk-sha256.txt"
-stat -c%s "$EVIDENCE/app.apk" > "$EVIDENCE/app-apk-size.txt"
+sha256sum "$app_apk" > "$EVIDENCE/app-apk-sha256.txt"
+stat -c%s "$app_apk" > "$EVIDENCE/app-apk-size.txt"
 test "$(cat "$EVIDENCE/app-apk-size.txt")" -gt 0
-"$tools/apksigner" verify --print-certs "$EVIDENCE/app.apk" > "$EVIDENCE/apk-certificate.txt"
-"$tools/aapt" dump badging "$EVIDENCE/app.apk" > "$EVIDENCE/apk-package.txt"
+"$tools/apksigner" verify --print-certs "$app_apk" > "$EVIDENCE/apk-certificate.txt"
+"$tools/aapt" dump badging "$app_apk" > "$EVIDENCE/apk-package.txt"
 grep -F "package: name='$package'" "$EVIDENCE/apk-package.txt"
 if [[ "${VERIFY_FEATURE:-}" == session-routing.md || "${VERIFY_FEATURE:-}" == settings-navigation.md ]]; then
     grep -F "versionName='$(cat "$EVIDENCE/version.txt")'" "$EVIDENCE/apk-package.txt"
