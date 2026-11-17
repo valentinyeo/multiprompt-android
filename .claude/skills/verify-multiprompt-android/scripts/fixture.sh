@@ -254,4 +254,13 @@ if [[ "${BREAK_IT_MODE:-}" == true ]]; then
     sudo -u verifyssh tmux set-window-option -t verify-breakit-other automatic-rename off
     sudo -u verifyssh tmux rename-window -t verify-breakit-other verify-breakit-other
 fi
+if [[ "${VERIFY_FEATURE:-}" != long-chat.md && "${PIN_SCROLL_PROOF:-}" != true ]]; then
+    sudo install -m 755 "$(dirname "$0")/seed.sh" /home/verifyssh/seed.sh
+    sudo install -m 755 tools/long-chat/fixture.py /home/verifyssh/long-chat-fixture.py
+    sudo install -m 644 tools/verify-seed.py /home/verifyssh/verify-seed.py
+    sudo -u verifyssh mkdir -p /home/verifyssh/long-chat-bin
+    sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/long-chat-bin/claude
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh bash /home/verifyssh/seed.sh "$fixture_session"
+    sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/verify-seed.py record > "$EVIDENCE/seed-counts.json"
+fi
 printf 'SSH FIXTURE READY\n'

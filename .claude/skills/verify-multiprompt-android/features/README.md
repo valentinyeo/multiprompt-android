@@ -64,8 +64,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `reader.stop-while-working`. Runner: `verify.yml` (debug).
 - [Useful inbox summaries](session-summaries.md): Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.
   - Outcomes: `inbox.summaries`. Runner: `verify.yml` (debug).
-- [Sessions](sessions.md): authenticated tmux discovery and search.
-  - Outcomes: `inbox.search`. Runner: `verify.yml` (debug).
+- [Sessions](sessions.md): Default seed readback: 42 real tmux sessions and a large transcript, runtime-selected off-screen reader entry, and an exact search result for that same session. Does not assert all 42 rows render.
+  - Outcomes: `inbox.search`. Runner: `verify.yml` (debug). Priority evidence: `seed-counts.json` (2500 characters), `seed-check.json` (2500 characters), `seed-search.xml` (3000 characters), `seed-deep-target.xml` (1500 characters), `seed-deep-choice.json` (1500 characters).
 - [Settings navigation](settings-navigation.md): sessions-first settings, host mapping and account handoff on the signed APK.
   - Outcomes: `settings-navigation.journey`. Runner: `verify.yml` (signed). Inputs: `{"release_choices":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Sign in](sign-in.md): real account browser handoff; OTP remains manual.

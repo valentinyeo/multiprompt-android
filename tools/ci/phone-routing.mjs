@@ -58,6 +58,9 @@ const sharedPaths = [
   'gradlew.bat',
   '.github/actions/android-proof/',
   '.github/workflows/test.yml',
+  '.claude/skills/verify-multiprompt-android/scripts/',
+  'tools/verify-seed.py',
+  'tools/long-chat/fixture.py',
   'tools/ci/phone-routing.mjs',
   'tools/ci/phone-routing.test.mjs',
 ];
