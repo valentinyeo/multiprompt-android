@@ -103,6 +103,11 @@ test('draft readback survives lost focus without relying on an empty-field place
   }
 });
 
+test('a fresh replay restores the same APK and its install-time permissions after clearing data', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'android-break-it/run.sh'), 'utf8');
+  assert.match(source, /adb shell pm clear dev\.multiprompt\.companion\.debug \| grep -Fx Success\nadb install -r -g "\$VERIFY_APK"\n"\$scripts\/fixture\.sh"/);
+});
+
 test('verification tooling is not an Android repair merely because its ticket mentions bugs', () => {
   assert.equal(verifier.isBugFix({ title: 'IGSH-2658: stress checks', changeKind: 'tooling', tickets: { 'IGSH-2658': 'Agents try to break every Android bug fix' } }), false);
   assert.equal(verifier.isBugFix({ title: 'IGSH-2658: stress checks', changeKind: 'product', tickets: { 'IGSH-2658': 'Agents try to break every Android bug fix' } }), true);

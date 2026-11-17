@@ -36,6 +36,7 @@ trap record EXIT
 trap 'exit 124' TERM INT
 adb shell am force-stop dev.multiprompt.companion.debug
 adb shell pm clear dev.multiprompt.companion.debug | grep -Fx Success
+adb install -r -g "$VERIFY_APK"
 "$scripts/fixture.sh"
 "$scripts/drive.sh" "$VERIFY_FEATURE"
 python3 - "$root" "$VERIFY_FEATURE" "$((SECONDS - started))" <<'PY'
