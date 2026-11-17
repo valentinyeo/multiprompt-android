@@ -330,7 +330,11 @@ test('DeepSeek is not retried on a client error, and gives up after one retry', 
   assert.equal(calls, 2);
   calls = 0;
   await assert.rejects(verifier.callDeepSeek({ key: 'k', system: 's', user: 'u', fetchImpl: async () => { calls += 1; return reply(200, { choices: [{ message: { content: '{' }, finish_reason: 'length' }] }); }, sleep: async () => {} }), /cut the answer off/);
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
+  calls = 0;
+  const recovered = await verifier.callDeepSeek({ key: 'k', system: 's', user: 'u', fetchImpl: async () => { calls += 1; return calls === 1 ? reply(200, { choices: [{ message: { content: '{' }, finish_reason: 'length' }] }) : reply(200, { choices: [{ message: { content: '{"ok":true}' }, finish_reason: 'stop' }] }); }, sleep: async () => {} });
+  assert.equal(recovered, '{"ok":true}');
+  assert.equal(calls, 2);
 });
 
 test('both steps stop with a clear error when the secret is empty', () => {
