@@ -549,6 +549,24 @@
         "projection-proof.txt": 500
       }
     },
+    "snippets.md": {
+      "name": "Saved snippets",
+      "description": "save, restart, replace a draft with a saved snippet, send it, and delete it permanently.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "snippets.save-reuse-delete"
+      ],
+      "evidence": {
+        "snippets-state.json": 3000,
+        "snippets-receipts.txt": 1000
+      }
+    },
     "chat-search.md": {
       "name": "Find words inside a chat",
       "description": "search real chat replies, check highlighted matches, jump, wrap, handle no matches and close. SOFT-2540.",
@@ -795,8 +813,22 @@
     },
     "snippets.save-reuse-delete": {
       "description": "Save, reuse, delete and retain snippets.",
-      "journey": null,
+      "journey": "snippets.md",
       "sideEffect": true,
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tap_text VERIFY_SNIPPET_2537"
+        },
+        "result": {
+          "file": "snippets-state.json",
+          "quote": "\"composer\": [\n      \"VERIFY_SNIPPET_2537\"\n    ]"
+        },
+        "sideEffect": {
+          "file": "snippets-receipts.txt",
+          "quote": "VERIFY_RECEIVED:VERIFY_SNIPPET_2537"
+        }
+      },
       "match": [
         "SnippetStore|snippet|Snippet"
       ]
