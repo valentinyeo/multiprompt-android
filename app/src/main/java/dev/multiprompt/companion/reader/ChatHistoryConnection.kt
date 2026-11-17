@@ -176,7 +176,10 @@ class ChatHistoryConnection(
     suspend fun editWaiting(id: String, text: String): QueuedEdit.Outcome =
         QueuedEdit.run(_state.value.replica?.messages?.get(id), text, { dismiss(it) }, { newText, replaces -> submit(newText, replaces) })
     suspend fun removeUnknown(id: String, observed: Long = generation) = action("removeUnknown", id, observed = observed)
-    suspend fun recoverReset(observed: Long = generation) = action("reset", "", observed = observed)
+    suspend fun recoverReset(id: String, observed: Long = generation): MessageActionResult {
+        require(id.isNotEmpty())
+        return action("reset", id, observed = observed)
+    }
 
     @Synchronized fun resetConversation(): Deferred<MessageActionResult> {
         if (freshSid == null || !selected) return CompletableDeferred(MessageActionResult.Rejected("Chat is not ready"))
@@ -599,6 +602,7 @@ class ChatHistoryConnection(
                                                 }
                                             }
                                             is Command.Action -> {
+                                                connectionGeneration = command.generation
                                                 val result = try {
                                                     performAction(command, observed, messageScope, exchange) { ++requestId }
                                                 } catch (failure: Exception) {
@@ -767,13 +771,14 @@ class ChatHistoryConnection(
                     if (command.generation != generation || !selected || ownedKey != key(wire.sid)) null
                     else gate?.ifOwned(key(wire.sid), token) {
                         val current = pending(wire.sid)
+                        if (command.id.isNotEmpty() && current.none { it.id == command.id && it.operation == "reset" }) return@ifOwned null
                         val unresolved = current.filter { it.operation != "reset" }
                         if (unresolved.any { it.issued }) {
                             blocked = true
                             null
                         } else {
                             unresolved.forEach { journalAccess { requireNotNull(journal).remove(it.id) } }
-                            current.firstOrNull { it.operation == "reset" }
+                            current.firstOrNull { it.operation == "reset" && (command.id.isEmpty() || it.id == command.id) }
                                 ?: journalAccess { requireNotNull(journal).create(account, wire, "reset", epoch = replica.epoch) }
                         }
                     }

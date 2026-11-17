@@ -110,13 +110,14 @@ internal fun ChatHistoryView(
     }
     val seen = remember(history) { HashMap<String, Double>() }
     state.replica?.messages?.values?.forEach { if (it.state == MessageProtocol.State.QUEUED || it.state == MessageProtocol.State.SENT) seen.getOrPut(it.id) { System.currentTimeMillis() / 1000.0 } }
-    val messages = if (managed) state.history.managedMessages(state.replica, state.unresolved, now, state.retrying, seen) else state.history.displayMessages(reader.sentRecord)
+    val messages = state.history.projectMessages(state.replica.takeIf { managed }, state.unresolved, now, state.retrying, seen,
+        sent = reader.sentRecord.takeUnless { managed })
     val speakable = remember(messages) { dev.multiprompt.companion.reader.ReadAloud.replies(messages) }
     LaunchedEffect(speakable) { onSpeakableReplies(speakable) }
     LaunchedEffect(state.loaded, state.history.sid, state.retrying) { onChatReady(state.loaded && state.history.sid.isNotEmpty() && !state.retrying) }
     val pendingReset = if (managed) state.unresolved.firstOrNull { it.operation == "reset" }?.id else null
     LaunchedEffect(history, pendingReset) {
-        while (pendingReset != null && history.recoverReset(history.actionToken()) != dev.multiprompt.companion.reader.MessageActionResult.Applied) delay(5_000)
+        while (pendingReset != null && history.recoverReset(pendingReset, history.actionToken()) != dev.multiprompt.companion.reader.MessageActionResult.Applied) delay(5_000)
     }
     SideEffect {
         history.awaitingMessages(messages.any { it.pending })

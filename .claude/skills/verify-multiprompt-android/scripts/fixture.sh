@@ -56,6 +56,11 @@ if [[ "${VERIFY_FEATURE:-}" == chat-codex.md ]]; then
     sudo -u verifyssh tmux new-session -d -s claude-control -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/codex-console.py /home/verifyssh/claude-receipts.txt claude'
     sudo -u verifyssh tmux set-window-option -t claude-control automatic-rename off
     sudo -u verifyssh tmux rename-window -t claude-control claude-control
+elif [[ "${VERIFY_FEATURE:-}" == chat-identity.md ]]; then
+    sudo install -m 755 tools/message-projection/fixture.py /home/verifyssh/projection-fixture.py
+    sudo install -m 644 app/src/main/assets/chat_history_reader.py /home/verifyssh/projection-reader.py
+    sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'env GITHUB_ACTIONS=true HOME=/home/verifyssh /home/verifyssh/claude -u /home/verifyssh/projection-fixture.py console'
 elif [[ "${VERIFY_FEATURE:-}" == session-summaries.md ]]; then
     sudo install -m 755 tools/session-summaries/console.py /home/verifyssh/summary-console.py
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
@@ -91,11 +96,18 @@ elif [[ "${VERIFY_FEATURE:-}" == chat-queued.md || "${VERIFY_FEATURE:-}" == chat
     [[ "${GITHUB_ACTIONS:-}" == true ]]
     sudo install -m 755 "$(dirname "$0")/queued-console.py" /home/verifyssh/queued-console.py
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
-    sudo -u verifyssh env GITHUB_ACTIONS="$GITHUB_ACTIONS" tmux new-session -d -s verify-session -x 100 -y 32 'env GITHUB_ACTIONS=true HOME=/home/verifyssh /home/verifyssh/claude -u /home/verifyssh/queued-console.py'
+    if [[ "${VERIFY_FEATURE:-}" == chat-queued.md ]]; then
+        sudo install -m 644 app/src/main/assets/chat_history_reader.py /home/verifyssh/queue-reader.py
+        for provider in claude codex; do
+            sudo install -m 644 "app/src/main/assets/chat_connectors/$provider.py" "/home/verifyssh/queue-$provider.py"
+        done
+    fi
+    sudo -u verifyssh env GITHUB_ACTIONS="$GITHUB_ACTIONS" VERIFY_FEATURE="${VERIFY_FEATURE:-}" tmux new-session -d -s verify-session -x 100 -y 32 'env GITHUB_ACTIONS=true HOME=/home/verifyssh /home/verifyssh/claude -u /home/verifyssh/queued-console.py'
     if [[ "${VERIFY_FEATURE:-}" == chat-shared.md ]]; then
-        sudo install -m 644 app/src/main/assets/chat_history_reader.py /home/verifyssh/shared-reader.py
-        sudo install -m 644 app/src/main/assets/chat_connectors/claude.py /home/verifyssh/shared-claude.py
-        sudo install -m 644 app/src/main/assets/chat_connectors/codex.py /home/verifyssh/shared-codex.py
+        python3 tools/shared-fixture-runtime.py "$FIXTURE/shared-runtime"
+        for asset in reader claude codex; do
+            sudo install -m 644 "$FIXTURE/shared-runtime/shared-$asset.py" "/home/verifyssh/shared-$asset.py"
+        done
         sudo install -m 755 "$(dirname "$0")/shared-evidence.py" /home/verifyssh/shared-evidence.py
         sudo install -m 755 "$(dirname "$0")/shared-lock.py" /home/verifyssh/shared-lock.py
         sudo install -m 755 "$(dirname "$0")/codex-console.py" /home/verifyssh/codex-console.py

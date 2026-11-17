@@ -40,7 +40,7 @@ class PendingMessageReceiptTest {
                 history.sid, history.inode, 0)
             fun assertUnresolved(value: ChatHistory) {
                 assertEquals(listOf(intention), unconfirmedAfterResync(value, listOf(intention)))
-                val managed = value.displayMessages(listOf(intention)).single { it.requestId == intention.messageId }
+                val managed = value.projectMessages(sent = listOf(intention)).single { it.requestId == intention.messageId }
                 assertTrue(managed.pending)
                 assertEquals("Queued", managed.delivery)
             }
@@ -49,7 +49,7 @@ class PendingMessageReceiptTest {
             for (terminal in listOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)) {
                 val offPage = history.copy(rows = emptyList(), deliveries = mapOf(intention.messageId to terminal))
                 assertTrue(unconfirmedAfterResync(offPage, listOf(intention)).isEmpty())
-                val managed = offPage.displayMessages(listOf(intention)).single()
+                val managed = offPage.projectMessages(sent = listOf(intention)).single()
                 assertFalse(managed.pending)
                 assertEquals(terminal.name.lowercase().replaceFirstChar { it.uppercase() }, managed.delivery)
             }

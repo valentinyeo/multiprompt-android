@@ -4651,6 +4651,11 @@ internal fun ReaderScreen(
                             pendingPromptAction == null &&
                             !sendAfterDictation &&
                             (prompt.isNotBlank() || imageAttachments.isNotEmpty() || dictationActive)
+                        val stopShown = composerSlot(
+                            working = working,
+                            busy = reader.sending || sendAfterDictation || pendingPromptAction != null || recordingPrompt,
+                            draftEmpty = prompt.isEmpty() && imageAttachments.isEmpty(),
+                        ) == ComposerSlot.STOP
                         val composerText = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
                         val skillSpans = remember(prompt, reader.nativeSkills) { NativeSkills.spans(prompt, reader.nativeSkills) }
                         var composerLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
@@ -4734,11 +4739,24 @@ internal fun ReaderScreen(
                                         Modifier.size(ReaderSendSize)
                                             .clip(CircleShape)
                                             .background(if (sunlightMode) MaterialTheme.colorScheme.surfaceContainerHigh else Color(0xFF353535))
-                                            .clickable(enabled = sendEnabled, role = Role.Button, onClick = submitPrompt)
-                                            .semantics { contentDescription = "Send prompt" },
+                                            .clickable(
+                                                enabled = stopShown || sendEnabled,
+                                                role = Role.Button,
+                                                onClick = {
+                                                    if (stopShown) {
+                                                        onSessionInteraction()
+                                                        if (!connection.interruptHost()) connection.interrupt()
+                                                    } else {
+                                                        submitPrompt()
+                                                    }
+                                                },
+                                            )
+                                            .semantics { contentDescription = if (stopShown) "Stop" else "Send prompt" },
                                         contentAlignment = Alignment.Center,
                                     ) {
-                                        if (reader.sending || sendAfterDictation) {
+                                        if (stopShown) {
+                                            Icon(Icons.Default.Stop, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
+                                        } else if (reader.sending || sendAfterDictation) {
                                             CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
                                         } else {
                                             Icon(
