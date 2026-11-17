@@ -74,7 +74,8 @@ for phase in ('before', 'picker', 'reattached', 'draft', 'reply', 'current-pi'):
         assert any('Switched AI: Claude to Pi' in text for text in texts)
         assert any('PI_HANDOVER_READY_2538' in text for text in texts)
     else:
-        assert any('PI_REPLY_PHONE_AFTER_SWITCH_2538' in text for text in texts)
+        replies = [text for text in texts if text == 'PI_REPLY_PHONE_AFTER_SWITCH_2538']
+        assert len(replies) == 1, f'AI_SWITCH_REPLY_DUPLICATE: expected one reply, observed {len(replies)}'
     assert file.with_suffix('.png').stat().st_size > 100
     states[phase] = dict(xml=file.name, screenshot=file.with_suffix('.png').name,
         text=[text for text in texts if text in ('Claude', 'Codex', 'Pi') or '2538' in text or 'Switched AI:' in text])
