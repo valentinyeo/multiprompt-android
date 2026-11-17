@@ -84,6 +84,15 @@ test('break-it tooling changes exercise the real stress gate without inventing a
   assert.equal(verifier.applyRules({ ...options, stressProof: fixture.inspect() }).verdict, 'PASS');
 });
 
+test('tooling proof selects its complete adapter without dropping journeys for Android repairs', () => {
+  const picked = { features: ['native-skills.md'], dropped: [], smoke: true };
+  const diff = 'diff --git a/tools/android-break-it/drive.sh b/tools/android-break-it/drive.sh\n';
+  const tooling = verifier.includeRequiredJourneys(picked, { product: false, outcomes: [] }, diff);
+  assert.deepEqual(tooling.features, ['ai-switch.md']);
+  assert.equal(tooling.smoke, false);
+  assert.deepEqual(verifier.includeRequiredJourneys(picked, { product: true, outcomes: [] }, diff).features, ['native-skills.md']);
+});
+
 test('draft readback survives lost focus without relying on an empty-field placeholder', t => {
   for (const observed of ['PHONE_AFTER_SWITCH_2538', '']) {
     const fixture = retained(t);
