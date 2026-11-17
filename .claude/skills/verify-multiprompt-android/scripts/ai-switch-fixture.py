@@ -85,8 +85,12 @@ def pi():
         emit(dict(type='response', command='prompt', id=request['id'], success=True))
         emit(dict(type='agent_start'))
         emit(dict(type='message_start'))
-        emit(dict(type='message_update', assistantMessageEvent=dict(type='text_delta', contentIndex=0, delta=reply)))
         hold = HOME / 'ai-switch-hold-2569'
+        controlled = text == 'PHONE_STREAM_2569' or text == 'PHONE_AFTER_SWITCH_2538' and hold.exists()
+        for delta in reply if controlled else [reply]:
+            emit(dict(type='message_update', assistantMessageEvent=dict(type='text_delta', contentIndex=0, delta=delta)))
+            if controlled:
+                time.sleep(0.2)
         if text == 'PHONE_AFTER_SWITCH_2538' and hold.exists():
             for attempt in range(120):
                 if not hold.exists():
