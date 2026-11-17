@@ -1,8 +1,4 @@
 {
-  "ai.switch": {
-    "sourcePr": 373,
-    "cleanupTicket": "SOFT-2538"
-  },
   "pi.model-switch": {
     "sourcePr": 374,
     "cleanupTicket": "SOFT-2539"

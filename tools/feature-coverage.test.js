@@ -13,7 +13,7 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const tool = path.join(root, '.github/scripts/pstack-verifier/coverage.cjs');
 const productDiff = (file, text) => `diff --git a/app/src/main/${file} b/app/src/main/${file}\n--- a/app/src/main/${file}\n+++ b/app/src/main/${file}\n@@ -1 +1 @@\n-old\n+${text}\n`;
 
-for (const [pr, outcome] of [[380, 'chat-search.open'], [376, 'snippets.save-reuse-delete']]) {
+for (const [pr, outcome] of [[380, 'chat-search.open'], [376, 'snippets.save-reuse-delete'], [373, 'ai.switch']]) {
   test(`real PR #${pr} is rejected despite its successful unrelated head journeys`, () => {
     const fixture = JSON.parse(read(`tools/fixtures/feature-coverage/pr-${pr}.json`));
     const diff = read(`tools/fixtures/feature-coverage/pr-${pr}.diff`);
@@ -384,5 +384,52 @@ test('snippet citation hints reach the judge and require exact retained head act
       assert.equal(gate.featureErrors(args).errors.length, 1, file);
       fs.writeFileSync(full, original);
     }
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('the real picker schedules AI switch even when the model omits it or fills all three slots', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-switch-pick-'));
+  try {
+    const fixture = JSON.parse(read('tools/fixtures/feature-coverage/pr-373.json'));
+    const gh = path.join(directory, 'gh');
+    fs.writeFileSync(gh, `#!${process.execPath}\nconst fs = require('node:fs');\nconst args = process.argv.slice(2);\nif (args.includes('Accept: application/vnd.github.diff')) process.stdout.write(fs.readFileSync(process.env.FIXTURE_DIFF));\nelse if (args[1].includes('/compare/')) console.log(JSON.stringify({merge_base_commit:{sha:'b'.repeat(40)}}));\nelse console.log(JSON.stringify({number:373,state:'open',head:{sha:process.env.EVENT_HEAD_SHA,repo:{full_name:'example/repo'}},base:{ref:'main'}}));\n`);
+    fs.chmodSync(gh, 0o755);
+    const stub = path.join(directory, 'model.cjs');
+    fs.writeFileSync(stub, `global.fetch = async () => ({status:200,ok:true,json:async () => ({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:JSON.parse(process.env.MODEL_FEATURES),changed_outcomes:[],change_kind:process.env.CHANGE_KIND,reason:'Model omitted AI switch.'})}}]})});`);
+    const recipeDiff = path.join(directory, 'recipe.diff');
+    fs.writeFileSync(recipeDiff, `diff --git a/${gate.REGISTRY_PATH}/ai-switch.md b/${gate.REGISTRY_PATH}/ai-switch.md\n+Switch Claude to Pi and send a message\n`);
+    for (const diff of [path.join(root, 'tools/fixtures/feature-coverage/pr-373.diff'), recipeDiff]) {
+      for (const modelFeatures of [[], ['native-skills.md', 'session-reader.md', 'terminal.md']]) {
+        const output = path.join(directory, 'outputs');
+        fs.writeFileSync(output, '');
+        const result = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
+          cwd: root,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${directory}:${process.env.PATH}`,
+            NODE_OPTIONS: `--require=${stub}`,
+            DEEPSEEK_API_KEY: 'test-only',
+            REPO: 'example/repo',
+            PR_NUMBER: '373',
+            EVENT_HEAD_SHA: fixture.headSha,
+            FIXTURE_DIFF: diff,
+            MODEL_FEATURES: JSON.stringify(modelFeatures),
+            CHANGE_KIND: diff === recipeDiff ? 'tooling' : 'product',
+            GITHUB_OUTPUT: output,
+          },
+        });
+        assert.equal(result.status, 0, result.stderr);
+        const values = fs.readFileSync(output, 'utf8');
+        const features = JSON.parse(values.match(/^features=(.+)$/m)[1]);
+        assert.ok(features.includes('ai-switch.md'), values);
+        assert.ok(features.length <= verifier.MAX_JOURNEYS);
+        assert.match(values, /^smoke=no$/m);
+        if (diff !== recipeDiff) assert.match(values, /changed_outcomes=.*ai.switch/);
+      }
+    }
+    assert.equal(gate.baseline['ai.switch'], undefined);
+    assert.equal(gate.registry.outcomes['ai.switch'].journey, 'ai-switch.md');
+    assert.ok(gate.debugJourneys.includes('ai-switch.md'));
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
