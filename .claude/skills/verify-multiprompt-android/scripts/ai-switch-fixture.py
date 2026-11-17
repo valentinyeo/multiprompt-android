@@ -10,6 +10,7 @@ import uuid
 HOME = Path('/home/verifyssh')
 SID = 'c001c001-2538-4000-8000-000000002538'
 CWD = HOME / 'ai-switch-work'
+TMUX = 'live-verify-session'
 
 
 def boundary():
@@ -32,12 +33,10 @@ def console():
                 timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 message=dict(role=role, content=text, id='msg_' + uuid.uuid4().hex))) + '\n')
     enabled = subprocess.check_output([sys.executable, str(HOME / 'ai-switch-reader.py'), 'host', 'enable',
-        'claude', SID, '--tmux', 'verify-session', '--cwd', str(CWD)], text=True)
+        'claude', SID, '--tmux', TMUX, '--cwd', str(CWD)], text=True)
     assert json.loads(enabled)['status'] == 'enabled', enabled
-    print('Claude Code\nAI_SWITCH_READY_2538\nReady\n❯ ', flush=True)
-    for line in sys.stdin:
-        with (HOME / 'ai-switch-wrong-provider.txt').open('a') as output:
-            output.write(line)
+    print('Claude Code\nAI_SWITCH_READY_2538\nReady', flush=True)
+    os.execvp('sleep', ['sleep', 'infinity'])
 
 
 def emit(event):

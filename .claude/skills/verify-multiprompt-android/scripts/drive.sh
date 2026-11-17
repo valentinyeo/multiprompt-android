@@ -84,7 +84,7 @@ finish() {
         sudo cat /home/verifyssh/canary-receipts.txt > "$EVIDENCE/canary-receipts-final.txt" 2>/dev/null
         sudo cat /home/verifyssh/other-receipts.txt > "$EVIDENCE/session-b-receipts-final.txt" 2>/dev/null
     fi
-    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt" 2>/dev/null
+    sudo -u verifyssh tmux capture-pane -pt "${fixture_session:-verify-session}" > "$EVIDENCE/tmux-final.txt" 2>/dev/null
     if [[ "$recorder_pid" =~ ^[0-9]+$ ]]; then
         if [[ "$feature" == session-routing.md ]] && ! adb shell kill -0 "$recorder_pid"; then code=1; fi
         adb shell kill -INT "$recorder_pid"

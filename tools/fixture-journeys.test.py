@@ -47,12 +47,13 @@ class FixtureJourneyTest(unittest.TestCase):
                 subprocess.run(shlex.split(command), check=True)
                 self.assertTrue(os.access(home / '.local', os.W_OK), 'the fixture user must own the parent needed for host state')
                 (home / 'ai-switch-reader.py').write_bytes((ROOT / 'app/src/main/assets/chat_history_reader.py').read_bytes())
-                with patch.object(fixture, 'HOME', home), patch.object(fixture, 'CWD', home / 'ai-switch-work'), patch.object(fixture, 'boundary'), patch.object(sys, 'stdin', io.StringIO('')), patch.dict(os.environ, HOME=str(home), GITHUB_ACTIONS='true'), redirect_stdout(io.StringIO()) as output:
+                with patch.object(fixture, 'HOME', home), patch.object(fixture, 'CWD', home / 'ai-switch-work'), patch.object(fixture, 'boundary'), patch.object(fixture.os, 'execvp') as launch, patch.object(sys, 'stdin', io.StringIO('')), patch.dict(os.environ, HOME=str(home), GITHUB_ACTIONS='true'), redirect_stdout(io.StringIO()) as output:
                     fixture.console()
                 self.assertIn('AI_SWITCH_READY_2538', output.getvalue())
+                launch.assert_called_once_with('sleep', ['sleep', 'infinity'])
                 configs = [json.loads(path.read_text()) for path in (home / '.local/state/multiprompt/agent-host').glob('*.config.json')]
                 self.assertEqual(1, len(configs))
-                self.assertEqual(('claude', fixture.SID, 'verify-session', True), tuple(configs[0][key] for key in ('provider', 'sid', 'tmux', 'enabled')))
+                self.assertEqual(('claude', fixture.SID, 'live-verify-session', True), tuple(configs[0][key] for key in ('provider', 'sid', 'tmux', 'enabled')))
                 reader = load('ai_switch_reader', ROOT / 'app/src/main/assets/chat_history_reader.py')
                 with patch.object(reader, 'HOME', home), patch.object(reader, 'host_owned', return_value=False), patch.object(reader, 'host_start', return_value=dict(status='started')):
                     switched = reader.host_switch_ai('claude', fixture.SID, 'pi')

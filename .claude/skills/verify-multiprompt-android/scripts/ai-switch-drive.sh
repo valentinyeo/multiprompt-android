@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+fixture_session=live-verify-session
 wait_for_text CLAUDE_BEFORE_SWITCH_2538
 shot ai-switch-before
 tap_desc 'Session actions'
@@ -38,7 +39,7 @@ configs = [json.loads(file.read_text()) for file in root.glob('*.config.json')]
 old = next(config for config in configs if config['sid'] == sid)
 new = next(config for config in configs if config['sid'] == moved[1])
 assert old['enabled'] is False and old['switched_to'] == dict(provider='pi', sid=moved[1]), old
-assert new['enabled'] is True and new['provider'] == 'pi' and new['tmux'] == 'verify-session', new
+assert new['enabled'] is True and new['provider'] == 'pi' and new['tmux'] == 'live-verify-session', new
 receipts = [json.loads(line) for line in (home / 'ai-switch-provider-receipts.jsonl').read_text().splitlines()]
 assert len(receipts) == 2, receipts
 assert all(row['provider'] == 'pi' and row['sid'] == moved[1] for row in receipts), receipts

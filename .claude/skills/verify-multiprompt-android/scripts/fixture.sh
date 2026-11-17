@@ -47,7 +47,9 @@ CONFIG
 sudo /usr/sbin/sshd -t -f "$FIXTURE/sshd_config"
 sudo /usr/sbin/sshd -f "$FIXTURE/sshd_config" -E "$FIXTURE/sshd.log"
 sudo install -m 755 "$(dirname "$0")/console.py" /home/verifyssh/console.py
+fixture_session=verify-session
 if [[ "${VERIFY_FEATURE:-}" == ai-switch.md ]]; then
+    fixture_session=live-verify-session
     [[ "${GITHUB_ACTIONS:-}" == true ]]
     sudo install -m 755 "$(dirname "$0")/ai-switch-fixture.py" /home/verifyssh/ai-switch-fixture.py
     sudo install -m 644 app/src/main/assets/chat_history_reader.py /home/verifyssh/ai-switch-reader.py
@@ -56,11 +58,12 @@ if [[ "${VERIFY_FEATURE:-}" == ai-switch.md ]]; then
         sudo install -m 755 "$(dirname "$0")/ai-switch-fixture.py" "/home/verifyssh/.local/bin/$binary"
     done
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
-    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'env GITHUB_ACTIONS=true HOME=/home/verifyssh /home/verifyssh/claude -u /home/verifyssh/ai-switch-fixture.py console 2>/home/verifyssh/ai-switch-startup.txt'
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s live-verify-session -x 100 -y 32 'env GITHUB_ACTIONS=true HOME=/home/verifyssh /home/verifyssh/claude -u /home/verifyssh/ai-switch-fixture.py console 2>/home/verifyssh/ai-switch-startup.txt'
     ready=false
     for attempt in {1..30}; do
-        if sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/ai-switch-startup-pane.txt"; then
-            if grep -Fq AI_SWITCH_READY_2538 "$EVIDENCE/ai-switch-startup-pane.txt"; then ready=true; break; fi
+        if sudo -u verifyssh tmux capture-pane -pt live-verify-session > "$EVIDENCE/ai-switch-startup-pane.txt"; then
+            if grep -Fq AI_SWITCH_READY_2538 "$EVIDENCE/ai-switch-startup-pane.txt" &&
+                [[ $(sudo -u verifyssh tmux display-message -p -t live-verify-session '#{pane_current_command}') == sleep ]]; then ready=true; break; fi
         else
             break
         fi
@@ -73,8 +76,10 @@ if [[ "${VERIFY_FEATURE:-}" == ai-switch.md ]]; then
     fi
     sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/ai-switch-reader.py host start claude c001c001-2538-4000-8000-000000002538 > "$EVIDENCE/ai-switch-host-start.json"
     jq -e '.status == "started" or .status == "already"' "$EVIDENCE/ai-switch-host-start.json"
-    sudo -u verifyssh tmux show-option -v -t verify-session @mp_host_sid > "$EVIDENCE/ai-switch-initial-sid.txt"
+    sudo -u verifyssh tmux show-option -v -t live-verify-session @mp_host_sid > "$EVIDENCE/ai-switch-initial-sid.txt"
     grep -Fx c001c001-2538-4000-8000-000000002538 "$EVIDENCE/ai-switch-initial-sid.txt"
+    sudo -u verifyssh tmux display-message -p -t live-verify-session '#{session_name}|#{pane_current_command}' > "$EVIDENCE/ai-switch-initial-pane.txt"
+    grep -Fx 'live-verify-session|sleep' "$EVIDENCE/ai-switch-initial-pane.txt"
 elif [[ "${VERIFY_FEATURE:-}" == chat-codex.md ]]; then
     sudo install -m 755 "$(dirname "$0")/codex-console.py" /home/verifyssh/codex-console.py
     sudo install -m 755 "$(dirname "$0")/resync-console.py" /home/verifyssh/resync-console.py
@@ -182,8 +187,8 @@ elif [[ "${VERIFY_FEATURE:-}" == chat-resync.md ]]; then
 else
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'python3 -u /home/verifyssh/console.py /home/verifyssh/receipts.txt'
 fi
-sudo -u verifyssh tmux set-window-option -t verify-session automatic-rename off
-sudo -u verifyssh tmux rename-window -t verify-session verify-session
+sudo -u verifyssh tmux set-window-option -t "$fixture_session" automatic-rename off
+sudo -u verifyssh tmux rename-window -t "$fixture_session" verify-session
 if [[ "${VERIFY_FEATURE:-}" == copy-chat-id.md ]]; then
     sudo -u verifyssh tmux set-option -t verify-session @mp_host_sid copy-chat-id-2371
     sudo -u verifyssh tmux new-session -d -s verify-name -x 100 -y 32 'python3 -u /home/verifyssh/console.py /home/verifyssh/name-receipts.txt'
@@ -191,7 +196,7 @@ if [[ "${VERIFY_FEATURE:-}" == copy-chat-id.md ]]; then
     sudo -u verifyssh tmux rename-window -t verify-name verify-name
 fi
 sudo -u verifyssh tmux display-message -p '#{pid}' > "$FIXTURE/tmux.pid"
-sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/fixture-start.txt"
+sudo -u verifyssh tmux capture-pane -pt "$fixture_session" > "$EVIDENCE/fixture-start.txt"
 if [[ "${VERIFY_FEATURE:-}" == session-routing.md || "${VERIFY_FEATURE:-}" == session-gestures.md ]]; then
     sudo -u verifyssh tmux new-session -d -s verify-other -x 100 -y 32 'python3 -u /home/verifyssh/console.py /home/verifyssh/other-receipts.txt'
     sudo -u verifyssh tmux set-window-option -t verify-other automatic-rename off
