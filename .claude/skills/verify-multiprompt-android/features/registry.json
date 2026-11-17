@@ -137,7 +137,8 @@
         "driver": true
       },
       "outcomes": [
-        "chat-shared.journey"
+        "chat-shared.journey",
+        "chat.link-recovery"
       ],
       "evidence": {
         "shared-before-reset.json": 1000,
@@ -353,7 +354,17 @@
       },
       "outcomes": [
         "reader.send-enter-interrupt"
-      ]
+      ],
+      "evidence": {
+        "08-send-draft.xml": 1500,
+        "10-send-result.xml": 2500,
+        "11-enter-action.xml": 500,
+        "12-enter-result.xml": 1500,
+        "13-interrupt-action.xml": 500,
+        "14-interrupt-result.xml": 1500,
+        "receipts.txt": 1000,
+        "tmux-final.txt": 1000
+      }
     },
     "session-routing.md": {
       "name": "Session routing",
@@ -858,6 +869,14 @@
       "journey": null,
       "sideEffect": true,
       "match": []
+    },
+    "chat.link-recovery": {
+      "description": "A dropped SSH link shows a host error and Retry; a waiting prompt enters the host store exactly once after the link returns without another Send tap.",
+      "journey": "chat-shared.md",
+      "sideEffect": true,
+      "match": [
+        "ConversationLoad|PendingPrompts|ChatHistoryConnection|WaitingForConnection"
+      ]
     },
     "chat.identity": {
       "description": "Each canonical phone message appears once and keeps its reply across transcript catchup, Fresh start and reconnect.",
