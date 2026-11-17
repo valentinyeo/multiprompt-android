@@ -513,8 +513,7 @@ test('the real picker schedules Claude remote control even when the model omits 
     const product = path.join(directory, 'product.diff');
     fs.writeFileSync(product, productDiff('assets/chat_history_reader.py', 'def host_claude_open(): remote_control'));
     const gh = path.join(directory, 'gh');
-    fs.writeFileSync(gh, `#!${process.execPath}\nconst fs = require('node:fs');\nconst args = process.argv.slice(2);\nif (args.includes('Accept: application/vnd.github.diff')) process.stdout.write(fs.readFileSync(process.env.FIXTURE_DIFF));\nelse if (args[1].includes('/compare/')) console.log(JSON.stringify({merge_base_commit:{sha:'b'.repeat(40)}}));\nelse console.log(JSON.stringify({number:366,state:'open',head:{sha:process.env.EVENT_HEAD_SHA,repo:{full_name:'example/repo'}},base:{ref:'main'}}));\n`);
-    fs.chmodSync(gh, 0o755);
+    mockPickerGithub(gh);
     const stub = path.join(directory, 'model.cjs');
     fs.writeFileSync(stub, `global.fetch = async () => ({status:200,ok:true,json:async () => ({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:JSON.parse(process.env.MODEL_FEATURES),changed_outcomes:[],change_kind:process.env.CHANGE_KIND,reason:'Model omitted Claude remote control.'})}}]})});`);
     const recipeDiff = path.join(directory, 'recipe.diff');
