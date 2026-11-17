@@ -2,7 +2,6 @@
   "introduced_from": "c268b21a596644451b4a147eed980276af4b9c32",
   "missing": [
     "android-reply-notification.reply-notification",
-    "ai-usage.dismiss-ai-usage",
     "ai-usage.scroll-ai-usage",
     "reader-more.sign-in-to-sync-sign-out",
     "reader-more.update",
@@ -10,7 +9,6 @@
     "inbox-menu.arrange-splits",
     "inbox-menu.new-workspace",
     "inbox-menu.refresh",
-    "inbox-menu.ai-usage",
     "inbox-menu.version-open-release-notes",
     "bot-look.dismiss-bot-look",
     "bot-look.use-picture-change-picture",

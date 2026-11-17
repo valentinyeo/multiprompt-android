@@ -35,6 +35,7 @@ jobs:
       head_sha: ${{ steps.pick.outputs.head_sha }}
       merge_base: ${{ steps.pick.outputs.merge_base }}
       changed_outcomes: ${{ steps.pick.outputs.changed_outcomes }}
+      change_kind: ${{ steps.pick.outputs.change_kind }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -51,6 +52,8 @@ jobs:
             tools/fixtures/pr-checks
             tools/workflow-inputs.test.js
             tools/fixtures/feature-coverage
+            tools/release-notes/ticket-titles.json
+            .claude/skills/verify-multiprompt-android/scripts/drive.sh
             .github/workflows
             .github/actions/android-proof
           persist-credentials: false
@@ -136,6 +139,7 @@ jobs:
           sparse-checkout: |
             .github/scripts
             .claude/skills/verify-multiprompt-android/features
+            tools/release-notes/ticket-titles.json
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         if: needs.pick.outputs.no_product_change != 'true'
@@ -152,6 +156,7 @@ jobs:
           MERGE_BASE: ${{ needs.pick.outputs.merge_base }}
           FEATURES: ${{ needs.pick.outputs.features }}
           CHANGED_OUTCOMES: ${{ needs.pick.outputs.changed_outcomes }}
+          CHANGE_KIND: ${{ needs.pick.outputs.change_kind }}
           COVERAGE_REPORT: ${{ runner.temp }}/feature-coverage.json
           SMOKE: ${{ needs.pick.outputs.smoke }}
           PICK_REASON: ${{ needs.pick.outputs.reason }}

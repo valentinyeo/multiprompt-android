@@ -17,8 +17,12 @@
       "label": "Dismiss AI usage",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/AiUsageSheet.kt:AiUsageSheet:KitSheet:90073eaacdef9f43:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/AiUsageSheet.kt:33",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "ai-usage.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/ai-usage.md",
+        "action": "Press Android Back from AI usage",
+        "result": "Inbox and verify-session return without AI usage or provider blocks in ai-usage-closed.json"
+      }
     },
     {
       "id": "ai-usage.scroll-ai-usage",
@@ -115,8 +119,12 @@
       "label": "AI usage",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt:InboxOverflowMenu:KitMenuRow:6801f29850afc2d5:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt:94",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "ai-usage.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/ai-usage.md",
+        "action": "Open Session list actions, then AI usage",
+        "result": "Claude and Codex usage matches independent host receipts in ai-usage-open.json"
+      }
     },
     {
       "id": "inbox-menu.version-open-release-notes",

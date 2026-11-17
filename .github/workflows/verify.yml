@@ -100,6 +100,7 @@ on:
           - chat-search.md
           - snippets.md
           - claude-remote-control.md
+          - ai-usage.md
       expect_settings_missing:
         description: Require signed Android 301 to reject the settings navigation journey
         type: boolean
@@ -282,6 +283,11 @@ jobs:
         continue-on-error: ${{ inputs.side == 'parent' }}
         if: env.VERIFY_FEATURE == 'chat-search.md'
         run: python3 -B tools/chat-search/ui.test.py
+      - name: Check AI usage assertions
+        id: ai-usage-oracle
+        continue-on-error: ${{ inputs.side == 'parent' }}
+        if: env.VERIFY_FEATURE == 'ai-usage.md'
+        run: python3 -B tools/ai-usage/ui.test.py
       - name: Check terminal input oracle and selectors
         id: terminal-input-oracle
         continue-on-error: ${{ inputs.side == 'parent' }}
@@ -528,7 +534,10 @@ jobs:
           mkdir -p "$EVIDENCE"
           driver=$(cat "$EVIDENCE/parent-driver-exit.txt" 2>/dev/null || true)
           [[ "$driver" =~ ^[0-9]+$ ]] || driver=-1
-          jq -n --argjson steps "$STEPS_JSON" --argjson driver "$driver" '{side: "parent", passed: (($driver == 0) and ($steps["native-ui"].outcome == "success") and ([$steps[] | .outcome] | all(. == "success" or . == "skipped"))), driverExit: $driver, steps: ($steps | map_values(.outcome))}' > "$EVIDENCE/side-result.json"
+          class=$(cat "$EVIDENCE/failure-class.txt" 2>/dev/null || true)
+          product=false
+          if [[ "$class" == "PRODUCT_ASSERTION_FAILED" ]]; then product=true; fi
+          jq -n --argjson steps "$STEPS_JSON" --argjson driver "$driver" --argjson product "$product" '{side: "parent", passed: (($driver == 0) and ($steps["native-ui"].outcome == "success") and ([$steps[] | .outcome] | all(. == "success" or . == "skipped"))), productAssertion: $product, driverExit: $driver, steps: ($steps | map_values(.outcome))}' > "$EVIDENCE/side-result.json"
       - name: Upload evidence even on failure
         continue-on-error: ${{ inputs.side == 'parent' }}
         if: always()

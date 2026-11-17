@@ -82,6 +82,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `snippets.save-reuse-delete`. Runner: `verify.yml` (debug). Priority evidence: `snippets-state.json` (3000 characters), `snippets-receipts.txt` (1000 characters).
 - [Claude remote control](claude-remote-control.md): Open a hosted Claude chat, enable remote control from the phone, and share phone and desktop turns with independent host receipts. SOFT-2541.
   - Outcomes: `claude.remote-control`. Runner: `verify.yml` (debug). Priority evidence: `remote-control-state.json` (2000 characters), `remote-control-host.json` (3500 characters), `remote-control-before.txt` (200 characters).
+- [AI usage](ai-usage.md): Open AI usage, compare Claude and Codex numbers with independent SSH receipts, then close. SOFT-2542.
+  - Outcomes: `ai.usage`. Runner: `verify.yml` (debug). Priority evidence: `ai-usage-menu.json` (1500 characters), `ai-usage-open.json` (2000 characters), `ai-usage-closed.json` (1000 characters), `ai-usage-proof.txt` (200 characters), `ai-usage-host.json` (2000 characters), `ai-usage-receipts.txt` (3000 characters).
 
 ## Initial coverage gaps
 
@@ -90,7 +92,6 @@ These IDs are an inventory, not exemptions for future changes. Untouched gaps do
 | Outcome | Existing case | Cleanup ticket |
 |---|---|---|
 | `pi.model-switch` | [#374](https://github.com/valentinyeo/multiprompt-android/pull/374) | SOFT-2539 |
-| `ai.usage` | [#377](https://github.com/valentinyeo/multiprompt-android/pull/377) | SOFT-2542 |
 | `skills.pills` | [#378](https://github.com/valentinyeo/multiprompt-android/pull/378) | SOFT-2543 |
 | `chat-table.expand` | [#379](https://github.com/valentinyeo/multiprompt-android/pull/379) | SOFT-2544 |
 | `claude.clear-ranking` | [#381](https://github.com/valentinyeo/multiprompt-android/pull/381) | SOFT-2545 |

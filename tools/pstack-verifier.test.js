@@ -100,6 +100,22 @@ test('a well formed model answer parses, caps its lists and ignores extra keys',
   assert.equal(fenced.verdict, 'PASS');
 });
 
+test('the picker can classify a bug fix, and only fix or bug words count', () => {
+  const picked = verifier.parsePick(JSON.stringify({ features: ['hosts.md'], changed_outcomes: [], change_kind: 'bug', reason: 'Send drops the draft.' }));
+  assert.equal(picked.changeKind, 'bug');
+  assert.throws(() => verifier.parsePick(JSON.stringify({ features: ['hosts.md'], changed_outcomes: [], change_kind: 'feature', reason: 'x' })));
+  const tickets = { 'IGSH-9': 'Checks and fixes, no visible change', 'IGSH-2': 'Add inbox folders' };
+  assert.equal(verifier.isBugFix({ title: 'Fix the crash' }), true);
+  assert.equal(verifier.isBugFix({ title: 'IGSH-9: tidy the checks', tickets }), true);
+  assert.equal(verifier.isBugFix({ title: 'IGSH-2: tidy', body: 'See IGSH-9.', tickets }), true);
+  assert.equal(verifier.isBugFix({ title: 'IGSH-2: Add folders', changeKind: 'product', tickets }), false);
+  for (const title of ['Update the fixture', 'Debug logging', 'A prefix change', 'Leave it unfixed']) {
+    assert.equal(verifier.saysBug(title), false, title);
+  }
+  assert.equal(verifier.loadTicketTitles()['IGSH-2568'], 'Feature freeze until each repo\'s verification is complete');
+  assert.equal(verifier.saysBug(verifier.loadTicketTitles()['IGSH-2568']), false);
+});
+
 test('unknown journey names are dropped and at most three run', () => {
   const picked = verifier.parsePick(JSON.stringify({
     features: ['hosts.md', 'made-up.md', 'settings-navigation.md', '../etc/passwd', 'hosts.md', 'terminal.md', 'sessions.md', 'chat-cancel.md'],
@@ -473,14 +489,82 @@ test('the model is a flash model, never a pro one', () => {
   assert.doesNotMatch(read('.github/scripts/pstack-verifier/verifier.cjs'), /v4-pro/);
 });
 
-test('a parent that did not pass never changes the verdict', () => {
-  for (const parent of ['not passed', 'passed', 'no result']) {
+test('a feature parent result never changes the verdict', () => {
+  for (const parent of ['not passed', 'passed', 'no result', 'product assertion']) {
     for (const modelVerdict of ['PASS', 'PASS+NOTES', 'FAIL']) {
       const ruled = verifier.applyRules({ modelVerdict, features: ['hosts.md'], conclusions: { 'hosts.md': 'success' }, parents: { 'hosts.md': parent } });
       assert.equal(ruled.verdict, modelVerdict, `${parent} ${modelVerdict}`);
       assert.equal(ruled.journeys[0].parent, parent);
     }
   }
+});
+
+test('a bug fix can pass when the parent failed a product assertion and head passed', () => {
+  const proven = verifier.applyRules({
+    modelVerdict: 'PASS',
+    bugFix: true,
+    features: ['hosts.md'],
+    conclusions: { 'hosts.md': 'success' },
+    parents: { 'hosts.md': 'product assertion' },
+  });
+  assert.equal(proven.verdict, 'PASS');
+  assert.equal(verifier.applyRules({
+    modelVerdict: 'FAIL',
+    bugFix: true,
+    features: ['hosts.md'],
+    conclusions: { 'hosts.md': 'success' },
+    parents: { 'hosts.md': 'product assertion' },
+  }).verdict, 'FAIL');
+  assert.equal(verifier.applyRules({
+    modelVerdict: 'PASS',
+    bugFix: true,
+    features: ['hosts.md'],
+    conclusions: { 'hosts.md': 'failure' },
+    parents: { 'hosts.md': 'product assertion' },
+  }).verdict, 'FAIL');
+});
+
+test('a bug fix fails when the parent passed', () => {
+  const ruled = verifier.applyRules({
+    modelVerdict: 'PASS',
+    bugFix: true,
+    features: ['hosts.md', 'terminal.md'],
+    conclusions: { 'hosts.md': 'success', 'terminal.md': 'success' },
+    parents: { 'hosts.md': 'product assertion', 'terminal.md': 'passed' },
+  });
+  assert.equal(ruled.verdict, 'FAIL');
+  assert.match(ruled.notes.join(' '), /terminal\.md parent passed/);
+  assert.match(ruled.notes.join(' '), /not a repro/);
+});
+
+test('a bug fix fails when the parent failed in setup rather than a product assertion', () => {
+  for (const parent of ['not passed', 'no result']) {
+    const ruled = verifier.applyRules({
+      modelVerdict: 'PASS',
+      bugFix: true,
+      features: ['hosts.md'],
+      conclusions: { 'hosts.md': 'success' },
+      parents: { 'hosts.md': parent },
+    });
+    assert.equal(ruled.verdict, 'FAIL', parent);
+    assert.match(ruled.notes.join(' '), /setup, build or fixture/);
+  }
+  assert.equal(verifier.applyRules({ modelVerdict: 'PASS', bugFix: true, features: [], conclusions: {} }).verdict, 'FAIL');
+});
+
+test('a feature is unaffected by the bug-fix repro rule', () => {
+  const ruled = verifier.applyRules({
+    modelVerdict: 'PASS',
+    bugFix: false,
+    features: ['hosts.md'],
+    conclusions: { 'hosts.md': 'success' },
+    parents: { 'hosts.md': 'passed' },
+  });
+  assert.equal(ruled.verdict, 'PASS');
+  assert.deepEqual(ruled.notes, []);
+  const title = 'Add inbox folders';
+  assert.equal(verifier.isBugFix({ title, changeKind: 'product', tickets: { 'IGSH-1': 'Add inbox folders' } }), false);
+  assert.equal(verifier.isBugFix({ title, changeKind: 'bug' }), true);
 });
 
 test('a head journey that failed still forces FAIL whatever the parent did', () => {
@@ -511,6 +595,9 @@ test('the parent result comes from the recorded result file, the job conclusion 
   assert.equal(result({ conclusion: null, result: null }), 'no result');
   assert.equal(verifier.parentResult({ mergeBase: base, sourceSha: sha, conclusion: 'success', result: { passed: true } }), 'no result');
   assert.equal(verifier.parentResult({ mergeBase: base, sourceSha: '', conclusion: 'success', result: { passed: false } }), 'not passed');
+  assert.equal(result({ conclusion: 'success', result: { passed: false, productAssertion: true } }), 'product assertion');
+  assert.equal(result({ conclusion: 'failure', result: { passed: false, productAssertion: false } }), 'not passed');
+  assert.equal(verifier.parentResult({ mergeBase: base, sourceSha: sha, conclusion: 'success', result: { passed: false, productAssertion: true } }), 'no result');
 });
 
 test('the result file and source sha are read from the parent artifact only when well formed', () => {
@@ -527,6 +614,11 @@ test('the result file and source sha are read from the parent artifact only when
     assert.equal(verifier.readSideFiles(directory).result, null);
     fs.writeFileSync(path.join(directory, verifier.RESULT_FILE), 'not json');
     assert.equal(verifier.readSideFiles(directory).result, null);
+    fs.writeFileSync(path.join(directory, 'failure-class.txt'), `${verifier.PRODUCT_ASSERTION}\n`);
+    assert.deepEqual(verifier.readSideFiles(directory).result, { passed: false, productAssertion: true });
+    fs.writeFileSync(path.join(directory, 'failure-class.txt'), 'SETUP_FAILED\n');
+    fs.writeFileSync(path.join(directory, verifier.RESULT_FILE), '{"passed":false}');
+    assert.deepEqual(verifier.readSideFiles(directory).result, { passed: false, productAssertion: false });
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
@@ -644,7 +736,24 @@ test('the parent result is written into the artifact by an always step before th
   assert.match(steps[record], /\$steps\["native-ui"\]\.outcome == "success"/);
   assert.match(steps[record], /\$driver == 0/);
   assert.match(steps[record], /parent-driver-exit\.txt/);
+  assert.match(steps[record], /failure-class\.txt/);
+  assert.match(steps[record], /PRODUCT_ASSERTION_FAILED/);
+  assert.match(steps[record], /productAssertion: \$product/);
   assert.match(steps[upload], /if: always\(\)/);
+});
+
+test('drive.sh prints a product-assertion marker and keeps setup failures separate', () => {
+  const drive = read('.claude/skills/verify-multiprompt-android/scripts/drive.sh');
+  assert.match(drive, /^product_checks=1$/m);
+  assert.match(drive, /printf 'PRODUCT_ASSERTION_FAILED\\n' \| tee "\$EVIDENCE\/failure-class\.txt"/);
+  assert.match(drive, /printf 'SETUP_FAILED\\n' \| tee "\$EVIDENCE\/failure-class\.txt"/);
+  assert.match(drive, /if \[\[ "\$code" != 0 && "\$product_checks" == 1 && "\$setup_failure" != 1 \]\]; then/);
+  const workflow = read('.github/workflows/pstack-verifier.yml');
+  assert.match(jobBlock(workflow, 'pick'), /change_kind: \$\{\{ steps\.pick\.outputs\.change_kind \}\}/);
+  assert.match(jobBlock(workflow, 'pstack-verifier'), /CHANGE_KIND: \$\{\{ needs\.pick\.outputs\.change_kind \}\}/);
+  assert.match(jobBlock(workflow, 'pick'), /tools\/release-notes\/ticket-titles\.json/);
+  assert.match(jobBlock(workflow, 'pick'), /\.claude\/skills\/verify-multiprompt-android\/scripts\/drive\.sh/);
+  assert.match(jobBlock(workflow, 'pstack-verifier'), /tools\/release-notes\/ticket-titles\.json/);
 });
 
 test('verify.yml pins the parent app source to a full sha and takes it through app_ref', () => {
