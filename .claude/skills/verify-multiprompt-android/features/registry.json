@@ -155,7 +155,8 @@
         "driver": true
       },
       "outcomes": [
-        "chat-shared.journey"
+        "chat-shared.journey",
+        "chat.link-recovery"
       ],
       "evidence": {
         "shared-before-reset.json": 1000,
@@ -301,6 +302,29 @@
         "inbox.draft"
       ]
     },
+    "session-favorite-dot.md": {
+      "name": "Starred yellow dot",
+      "description": "a starred chat shows a yellow dot in All, search and its workspace, and no dot in Favorites.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "inbox.favorite-dot"
+      ],
+      "evidence": {
+        "favorite-dot-all.json": 400,
+        "favorite-dot-search.json": 400,
+        "favorite-dot-workspace.json": 400,
+        "favorite-dot-favorites.json": 400,
+        "favorite-dot-unstarred.json": 400,
+        "favorite-dot-restarred.json": 400,
+        "favorite-dot-favorites-again.json": 400
+      }
+    },
     "session-favorites.md": {
       "name": "Session favorites",
       "description": "signed APK, isolated SSH sessions and offline favorite cache; no production sync.",
@@ -371,7 +395,17 @@
       },
       "outcomes": [
         "reader.send-enter-interrupt"
-      ]
+      ],
+      "evidence": {
+        "08-send-draft.xml": 1500,
+        "10-send-result.xml": 2500,
+        "11-enter-action.xml": 500,
+        "12-enter-result.xml": 1500,
+        "13-interrupt-action.xml": 500,
+        "14-interrupt-result.xml": 1500,
+        "receipts.txt": 1000,
+        "tmux-final.txt": 1000
+      }
     },
     "session-routing.md": {
       "name": "Session routing",
@@ -513,6 +547,30 @@
         "projection-state-catchup.json": 500,
         "projection-state-reconnect.json": 500,
         "projection-proof.txt": 500
+      }
+    },
+    "chat-search.md": {
+      "name": "Find words inside a chat",
+      "description": "search real chat replies, check highlighted matches, jump, wrap, handle no matches and close. SOFT-2540.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "chat-search.open"
+      ],
+      "evidence": {
+        "search-newest.json": 1000,
+        "search-previous.json": 1000,
+        "search-wrap-previous.json": 1000,
+        "search-wrap-next.json": 1000,
+        "search-next.json": 1000,
+        "search-no-match.json": 500,
+        "search-closed.json": 500,
+        "search-proof.txt": 200
       }
     }
   },
@@ -693,6 +751,14 @@
         "observeDrafts|Session draft"
       ]
     },
+    "inbox.favorite-dot": {
+      "description": "A starred, read chat shows a yellow dot in every list except Favorites. Unstarring removes it.",
+      "journey": "session-favorite-dot.md",
+      "sideEffect": false,
+      "match": [
+        "RowDotRule|Session favorite dot"
+      ]
+    },
     "inbox.summaries": {
       "description": "Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.",
       "journey": "session-summaries.md",
@@ -753,10 +819,11 @@
     },
     "chat-search.open": {
       "description": "Open chat search, count and mark hits, navigate, wrap and close.",
-      "journey": null,
+      "journey": "chat-search.md",
       "sideEffect": false,
       "match": [
-        "ChatFind|chatFind|findInChat"
+        "ChatFind|chatFind|findInChat",
+        "ReaderSearchBar|Search in chat|Search this chat|searchIndex|searchHits|searchOpen|findQuery|findHits|activeHit|marking\\("
       ]
     },
     "claude.remote-control": {
@@ -876,6 +943,14 @@
       "journey": null,
       "sideEffect": true,
       "match": []
+    },
+    "chat.link-recovery": {
+      "description": "A dropped SSH link shows a host error and Retry; a waiting prompt enters the host store exactly once after the link returns without another Send tap.",
+      "journey": "chat-shared.md",
+      "sideEffect": true,
+      "match": [
+        "ConversationLoad|PendingPrompts|ChatHistoryConnection|WaitingForConnection"
+      ]
     },
     "chat.identity": {
       "description": "Each canonical phone message appears once and keeps its reply across transcript catchup, Fresh start and reconnect.",

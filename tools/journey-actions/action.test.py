@@ -191,6 +191,101 @@ class ActionTest(unittest.TestCase):
         xml = window('<node text="Open live terminal" package="com.android.documentsui" bounds="[20,500][500,580]" />')
         self.assertEqual(self.plan(xml), 'tap 260 540')
 
+    def fill(self, text='NO_MATCH_2540', target='orchard', blocked_clear=False, blocked_type=False):
+        source = (SCRIPTS / 'drive.sh').read_text()
+        helpers = '\n'.join(name + '() {' + source.split(name + '() {', 1)[1].split('\n}', 1)[0] + '\n}'
+                            for name in ('clear_field', 'fill') if name + '() {' in source)
+        shell = '''set -eu
+scripts=$SCRIPTS
+EVIDENCE=$TEST_DIR
+text=$INITIAL
+cursor=8
+selected=false
+typed=0
+back=false
+dump_ui() {
+    FIELD_TEXT="$text" python3 - "$EVIDENCE/current.xml" <<'PYXML'
+import os,sys,xml.etree.ElementTree as ET
+root=ET.Element('hierarchy')
+ET.SubElement(root,'node',{'text':os.environ['FIELD_TEXT'],'class':'android.widget.EditText','package':'dev.multiprompt.companion.debug','focused':'true','enabled':'true','bounds':'[0,0][500,100]'})
+ET.ElementTree(root).write(sys.argv[1])
+PYXML
+}
+tap_node() { :; }
+select_node() { dump_ui; python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "$@"; }
+adb() {
+    case "$3" in
+        keycombination) if [[ "$*" == *'KEYCODE_CTRL_LEFT KEYCODE_A' ]]; then selected=true; fi ;;
+        keyevent)
+            if [[ "$4" == KEYCODE_BACK ]]; then
+                back=true
+            elif [[ "$BLOCK_CLEAR" != true ]]; then
+                if [[ "$selected" == true ]]; then
+                    text=''
+                else
+                    text=${text:cursor}
+                fi
+                cursor=0
+                selected=false
+            fi
+            ;;
+        text)
+            typed=$((typed + 1))
+            if [[ "$BLOCK_TYPE" != true ]]; then
+                insertion=${4//%s/ }
+                text="${text:0:cursor}$insertion${text:cursor}"
+                cursor=$((cursor + ${#insertion}))
+            fi
+            ;;
+    esac
+}
+'''
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(['bash', '-c', shell + helpers + '''
+set +e
+fill "$INITIAL" "$TARGET"
+code=$?
+printf 'FINAL=%s\\nTYPED=%s\\nBACK=%s\\n' "$text" "$typed" "$back"
+exit "$code"
+'''], env={**os.environ, 'SCRIPTS': str(SCRIPTS), 'TEST_DIR': directory, 'INITIAL': text,
+           'TARGET': target, 'BLOCK_CLEAR': str(blocked_clear).lower(), 'BLOCK_TYPE': str(blocked_type).lower(),
+           'PYTHONDONTWRITEBYTECODE': '1'}, capture_output=True, text=True)
+        return result
+
+    def test_restore_query_replaces_every_character_even_with_cursor_in_middle(self):
+        result = self.fill()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('FINAL=orchard\n', result.stdout)
+        self.assertIn('BACK=true', result.stdout)
+
+    def test_replace_multiline_draft_and_clear_draft_share_verified_input(self):
+        for target, expected in [('saved%ssnippet', 'saved snippet'), ('', '')]:
+            with self.subTest(target=target):
+                result = self.fill(text='old draft\nsecond line', target=target)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(f'FINAL={expected}\n', result.stdout)
+
+    def test_numeric_fields_are_replaced_and_emptied_without_old_digits(self):
+        for text in ('22', '22222222222222', ''):
+            for target in ('2222', ''):
+                with self.subTest(text=text, target=target):
+                    result = self.fill(text=text, target=target)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn(f'FINAL={target}\n', result.stdout)
+
+    def test_failed_clear_never_types_or_continues(self):
+        result = self.fill(blocked_clear=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('JOURNEY_FIELD_CLEAR_FAILED', result.stderr)
+        self.assertIn('TYPED=0', result.stdout)
+        self.assertIn('BACK=false', result.stdout)
+
+    def test_wrong_typed_value_fails_instead_of_continuing(self):
+        result = self.fill(blocked_type=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('JOURNEY_FIELD_INPUT_FAILED', result.stderr)
+        self.assertIn('BACK=false', result.stdout)
+
     def test_driver_scrolls_then_redumps_and_taps_once(self):
         source = (SCRIPTS / 'drive.sh').read_text()
         helper = 'tap_node() {' + source.split('tap_node() {', 1)[1].split('\ntap_text()', 1)[0]

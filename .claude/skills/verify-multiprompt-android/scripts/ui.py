@@ -41,8 +41,8 @@ for node in root.iter("node"):
         matches.append(node)
     elif mode == "field-value" and node.get("class") == "android.widget.EditText" and node.get("focused") == "true":
         matches.append(node)
-    elif mode in ("field", "focused-field", "clear-field") and node.get("class") == "android.widget.EditText":
-        if value == "" and mode == "clear-field":
+    elif mode in ("field", "focused-field") and node.get("class") == "android.widget.EditText":
+        if value == "" and mode == "focused-field":
             if node.get("focused") == "true" and node.get("package") == package:
                 matches.append(node)
         elif any(value == item.get("text") or value == item.get("content-desc") for item in node.iter()):
@@ -67,11 +67,11 @@ if mode == "key-row":
         node = parents[node]
     if node.get("scrollable") != "true":
         raise SystemExit("Terminal key row is not scrollable")
-if mode in ("focused-field", "clear-field") and node.get("focused") != "true":
+if mode == "focused-field" and node.get("focused") != "true":
     raise SystemExit(f"Field is not focused: {value}")
 if mode == "field-value":
     expected = sys.argv[4]
-    if node.get("password") != "true" and node.get("text") != expected:
+    if (not expected or node.get("password") != "true") and node.get("text") != expected:
         raise SystemExit(f"Field {value} has {node.get('text')!r}, expected {expected!r}")
     print("FIELD_VALUE_VERIFIED")
     raise SystemExit(0)
@@ -84,7 +84,7 @@ if mode in ("checked", "unchecked"):
         raise SystemExit(f"Expected {mode}: {value}")
 if node.get("enabled") == "false":
     raise SystemExit("Selector is disabled")
-if mode not in ("field", "focused-field", "editor", "version", "checked", "unchecked", "scroll-back", "clear-field", "key-row"):
+if mode not in ("field", "focused-field", "editor", "version", "checked", "unchecked", "scroll-back", "key-row"):
     ancestor = node
     while ancestor.get("clickable") != "true" and ancestor in parents:
         ancestor = parents[ancestor]
@@ -95,9 +95,7 @@ if mode not in ("field", "focused-field", "editor", "version", "checked", "unche
 numbers = list(map(int, re.findall(r"\d+", node.get("bounds", ""))))
 if len(numbers) != 4 or numbers[2] <= numbers[0] or numbers[3] <= numbers[1]:
     raise SystemExit("Empty selector bounds")
-if mode == "clear-field":
-    print("123", *("67" for _ in node.get("text", "")))
-elif mode == "key-row":
+if mode == "key-row":
     inset = (numbers[2] - numbers[0]) // 5
     y = (numbers[1] + numbers[3]) // 2
     print(numbers[0] + inset, y, numbers[2] - inset, y)

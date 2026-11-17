@@ -139,19 +139,19 @@ class FixtureJourneyTest(unittest.TestCase):
                 self.assertEqual(1, state[0]['claims'])
                 self.assertEqual(['VERIFY_RECEIVED:WAITING_ONE', 'VERIFY_RECEIVED:WAITING_TWO'], (home / 'receipts.txt').read_text().splitlines())
 
-    def test_focused_field_can_be_cleared_after_the_hint_disappears(self):
+    def test_focused_field_is_found_after_the_hint_disappears(self):
         with tempfile.TemporaryDirectory() as temporary:
             xml = Path(temporary) / 'current.xml'
             attributes = dict(text='SHARED_PHONE_SYNTH', **{'class': 'android.widget.EditText', 'package': 'dev.multiprompt.companion.debug', 'focused': 'true', 'enabled': 'true', 'bounds': '[179,872][1048,998]'})
             root = ET.Element('hierarchy')
             ET.SubElement(root, 'node', attributes)
             xml.write_text(ET.tostring(root, encoding='unicode'))
-            result = subprocess.run([sys.executable, str(SCRIPTS / 'ui.py'), str(xml), 'clear-field', ''], capture_output=True, text=True)
+            result = subprocess.run([sys.executable, str(SCRIPTS / 'ui.py'), str(xml), 'focused-field', ''], capture_output=True, text=True)
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertEqual(['123'] + ['67'] * len(attributes['text']), result.stdout.split())
+            self.assertEqual(['613', '935'], result.stdout.split())
             root[0].set('focused', 'false')
             xml.write_text(ET.tostring(root, encoding='unicode'))
-            result = subprocess.run([sys.executable, str(SCRIPTS / 'ui.py'), str(xml), 'clear-field', ''], capture_output=True, text=True)
+            result = subprocess.run([sys.executable, str(SCRIPTS / 'ui.py'), str(xml), 'focused-field', ''], capture_output=True, text=True)
             self.assertNotEqual(0, result.returncode)
 
     def test_answered_phase_requires_the_actual_visible_reply(self):

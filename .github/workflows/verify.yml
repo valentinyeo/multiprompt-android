@@ -1,21 +1,10 @@
 name: Verify real Android UI
 
 on:
+  push:
+    branches: [main]
   schedule:
     - cron: '23 3 * * *'
-  pull_request:
-    paths:
-      - 'app/**'
-      - 'gradle.properties'
-      - '*.gradle.kts'
-      - 'gradlew.bat'
-      - 'gradlew'
-      - 'gradle/**'
-      - 'tools/native-skills.test.py'
-      - 'tools/release-choices/**'
-      - '.claude/skills/verify-multiprompt-android/**'
-      - '.github/workflows/verify.yml'
-      - '.github/actions/android-proof/**'
   workflow_call:
     inputs:
       feature:
@@ -95,6 +84,7 @@ on:
           - native-skills.md
           - robot-faces.md
           - session-drafts.md
+          - session-favorite-dot.md
           - session-favorites.md
           - session-gestures.md
           - session-reader.md
@@ -106,6 +96,7 @@ on:
           - sign-in.md
           - terminal.md
           - chat-identity.md
+          - chat-search.md
       expect_settings_missing:
         description: Require signed Android 301 to reject the settings navigation journey
         type: boolean
@@ -283,6 +274,11 @@ jobs:
         run: |
           python3 -m pip install Pillow
           python3 .claude/skills/verify-multiprompt-android/scripts/reactions.test.py
+      - name: Check chat search screenshot assertions
+        id: chat-search-oracle
+        continue-on-error: ${{ inputs.side == 'parent' }}
+        if: env.VERIFY_FEATURE == 'chat-search.md'
+        run: python3 -B tools/chat-search/ui.test.py
       - name: Check terminal input oracle and selectors
         id: terminal-input-oracle
         continue-on-error: ${{ inputs.side == 'parent' }}

@@ -15,6 +15,14 @@ adb logcat -c
 adb logcat -v threadtime > "$EVIDENCE/logcat-stream.txt" 2>&1 &
 logcat_stream_pid=$!
 recorder_pid=
+link_blocked=false
+restore_chat_link() {
+    if [[ "$link_blocked" == true ]]; then
+        sudo iptables -D INPUT -p tcp --dport 2222 -j DROP
+        sudo iptables -D OUTPUT -p tcp --sport 2222 -j DROP
+        link_blocked=false
+    fi
+}
 dump_ui() {
     local attempt output
     rm -f "$EVIDENCE/current.xml"
@@ -54,6 +62,7 @@ finish() {
     code=$?
     trap - EXIT
     set +e
+    restore_chat_link
     {
         date +%T.%N
         timeout 10s adb shell top -b -n 1 -m 15
@@ -177,32 +186,27 @@ wait_for_text() {
     printf 'Timed out waiting for %s\n' "$1" >&2
     return 1
 }
+clear_field() {
+    select_node focused-field '' >/dev/null || return
+    adb shell input keycombination -t 100 KEYCODE_CTRL_LEFT KEYCODE_A || return
+    adb shell input keyevent KEYCODE_DEL || return
+    dump_ui || return
+    if ! python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value "$1" ''; then
+        printf 'JOURNEY_FIELD_CLEAR_FAILED: %s: select-all/delete did not empty the focused field; no text typed\n' "$1" >&2
+        return 1
+    fi
+}
 fill() {
-    local attempt index character
-    local -a clear_keys
-    tap_node field "$1"
-    select_node focused-field "$1" >/dev/null
-    for attempt in 1 2 3; do
-        dump_ui
-        read -r -a clear_keys < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" clear-field "")
-        adb shell input keyevent "${clear_keys[@]}"
-        if (( attempt == 1 )); then
-            adb shell input text "$2"
-        else
-            for ((index = 0; index < ${#2}; index++)); do
-                character=${2:index:1}
-                if [[ "${2:index:2}" == '%s' ]]; then character='%s'; index=$((index + 1)); fi
-                adb shell input text "$character"
-            done
-        fi
-        dump_ui
-        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value "$1" "${2//%s/ }"; then
-            adb shell input keyevent KEYCODE_BACK
-            return
-        fi
-    done
-    printf 'Field input did not match: %s\n' "$1" >&2
-    return 1
+    tap_node field "$1" || return
+    select_node focused-field "$1" >/dev/null || return
+    clear_field "$1" || return
+    if [[ -n "$2" ]]; then adb shell input text "$2" || return; fi
+    dump_ui || return
+    if ! python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value "$1" "${2//%s/ }"; then
+        printf 'JOURNEY_FIELD_INPUT_FAILED: %s: typed text did not equal the requested value\n' "$1" >&2
+        return 1
+    fi
+    adb shell input keyevent KEYCODE_BACK
 }
 
 scroll_to_newest() {
@@ -459,6 +463,105 @@ if ! wait_for_text verify-session; then
     exit 1
 fi
 shot sessions
+
+if [[ "$feature" == session-favorite-dot.md ]]; then
+    [[ "$package" == dev.multiprompt.companion.debug ]]
+    wait_for_text verify-keep
+    wait_dot() {
+        local mode=$1 attempt
+        for attempt in {1..30}; do
+            dump_ui
+            if python3 "$scripts/favorite-dot.py" "$mode" "$EVIDENCE/current.xml"; then return 0; fi
+            sleep 1
+        done
+        printf 'Timed out waiting for favorite dot mode %s\n' "$mode" >&2
+        return 1
+    }
+    prove_dot() {
+        local mode=$1 name=$2
+        wait_dot "$mode"
+        shot "$name"
+        python3 "$scripts/favorite-dot.py" "$mode" "$EVIDENCE/$(printf '%02d' "$step")-$name.xml" | tee "$EVIDENCE/$name.json"
+    }
+    open_session_menu() {
+        local label=$1 row_x row_y
+        read -r row_x row_y <<< "$(select_node text verify-session)"
+        adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
+        wait_for_text "$label"
+    }
+    prove_dot plain favorite-dot-before
+    python3 -m http.server 8788 > "$FIXTURE/offline-proxy.log" 2>&1 &
+    echo "$!" > "$FIXTURE/offline-proxy.pid"
+    adb shell settings put global http_proxy 10.0.2.2:8788
+    [[ "$(adb shell settings get global http_proxy | tr -d '\r')" == 10.0.2.2:8788 ]]
+    python3 - <<'PYPROXY'
+import socket
+import time
+for attempt in range(20):
+    try:
+        with socket.create_connection(("127.0.0.1", 8788), timeout=1) as connection:
+            connection.sendall(b"CONNECT fixture.invalid:443 HTTP/1.1\r\nHost: fixture.invalid\r\n\r\n")
+            assert b" 501 " in connection.recv(1024).split(b"\r\n", 1)[0]
+        break
+    except OSError:
+        if attempt == 19:
+            raise
+        time.sleep(0.1)
+PYPROXY
+    adb shell am force-stop "$package"
+    adb shell am instrument -w -e class dev.multiprompt.companion.account.FavoriteDotSeedTest#seedsOfflineFavoriteLayout \
+        -e mode favorite-dot-seed \
+        "$package.test/androidx.test.runner.AndroidJUnitRunner" | tr -d '\r' > "$EVIDENCE/favorite-dot-seed.txt"
+    grep -F 'OK (1 test)' "$EVIDENCE/favorite-dot-seed.txt"
+    if grep -F 'FAILURES' "$EVIDENCE/favorite-dot-seed.txt"; then
+        printf 'Favorite dot seed failed\n' >&2
+        exit 1
+    fi
+    relaunch_app
+    wait_for_text verify-session
+    wait_for_text verify-keep
+    prove_dot starred favorite-dot-all
+    tap_desc 'Search sessions'
+    fill 'Search all sessions' verify-session
+    wait_for_text '1 result across all splits'
+    prove_dot search favorite-dot-search
+    tap_desc 'Close session search'
+    wait_for_absence 'Search all sessions'
+    tap_text Fixture
+    wait_for_text verify-session
+    wait_for_text verify-keep
+    prove_dot starred favorite-dot-workspace
+    tap_text Favorites
+    wait_for_text verify-session
+    prove_dot favorites favorite-dot-favorites
+    open_session_menu Unfavorite
+    tap_text Unfavorite
+    tap_text All
+    wait_for_text verify-session
+    wait_for_text verify-keep
+    prove_dot plain favorite-dot-unstarred
+    tap_text Favorites
+    wait_for_text 'No starred sessions'
+    wait_for_absence verify-session
+    tap_text All
+    open_session_menu Favorite
+    tap_text Favorite
+    prove_dot starred favorite-dot-restarred
+    tap_text Favorites
+    wait_for_text verify-session
+    prove_dot favorites favorite-dot-favorites-again
+    if [[ -f /home/verifyssh/receipts.txt ]] && sudo grep -F 'VERIFY_RECEIVED:' /home/verifyssh/receipts.txt; then
+        printf 'Starred-dot journey sent text to the host\n' >&2
+        exit 1
+    fi
+    if [[ -f /home/verifyssh/keep-receipts.txt ]] && sudo grep -F 'VERIFY_RECEIVED:' /home/verifyssh/keep-receipts.txt; then
+        printf 'Starred-dot journey sent text to the host\n' >&2
+        exit 1
+    fi
+    sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
+    printf 'FAVORITE_DOT_OK\n' | tee "$EVIDENCE/favorite-dot-result.txt"
+    exit 0
+fi
 
 if [[ "$feature" == settings-navigation.md ]]; then
     tap_desc 'Session list actions'
@@ -789,6 +892,11 @@ PYINFO
     exit 0
 fi
 
+if [[ "$feature" == chat-search.md ]]; then
+    source "$scripts/chat-search-drive.sh"
+    exit 0
+fi
+
 if [[ "$feature" == session-drafts.md ]]; then
     wait_for_text 'Inbox preview stays.'
     python3 "$scripts/draft-label.py" absent "$EVIDENCE/current.xml"
@@ -953,26 +1061,7 @@ if [[ "$feature" == session-stop.md ]]; then
     python3 "$scripts/composer-slot.py" send-ready "$EVIDENCE/$(printf '%02d' "$step")-composer-send-draft.xml"
     copy_receipt "$EVIDENCE/receipts-draft.txt"
     python3 "$scripts/composer-slot.py" quiet "$EVIDENCE/receipts-draft.txt"
-    cleared=0
-    for attempt in 1 2 3; do
-        tap_node editor 'KEEP_DRAFT'
-        dump_ui || true
-        if ! python3 "$scripts/ui.py" "$EVIDENCE/current.xml" focused-field 'KEEP_DRAFT' >/dev/null; then
-            continue
-        fi
-        if ! read -r -a clear_keys < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" clear-field 'KEEP_DRAFT'); then
-            continue
-        fi
-        adb shell input keyevent "${clear_keys[@]}"
-        sleep 1
-        dump_ui || true
-        if ! python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'KEEP_DRAFT' >/dev/null; then
-            adb shell input keyevent KEYCODE_BACK
-            cleared=1
-            break
-        fi
-    done
-    [[ "$cleared" == 1 ]]
+    fill KEEP_DRAFT ''
     wait_for_text 'Message verify-session'
     wait_slot stop
     shot composer-stop-again
@@ -1364,8 +1453,24 @@ if [[ "$feature" == chat-shared.md ]]; then
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py engine-info > "$EVIDENCE/shared-engine-info.json"
     jq -e '.engine_info.generation >= 22 and .bundle_bytes == 224961 and .bundle_sha256 == "999ef191b364af22994311f4d8b168e22c67a7103585a0c22e0e9c1cc7a9c316"' "$EVIDENCE/shared-engine-info.json" >/dev/null
     wait_for_text 'Ready for queued messages.'
+    if [[ "${EXPECT_SHARED_MISSING:-}" != true ]]; then
+        link_blocked=true
+        sudo iptables -I INPUT -p tcp --dport 2222 -j DROP
+        sudo iptables -I OUTPUT -p tcp --sport 2222 -j DROP
+        wait_for_text Retry
+        shot shared-link-down
+    fi
     fill 'Message verify-session' SHARED_PHONE_SYNTHETIC
     tap_desc 'Send prompt'
+    if [[ "$link_blocked" == true ]]; then
+        wait_for_text 'Waiting for chat connection'
+        shot shared-link-waiting
+        sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read > "$EVIDENCE/shared-link-down-host.json"
+        jq -e '[.rows[] | select(.body == "SHARED_PHONE_SYNTHETIC")] | length == 0' "$EVIDENCE/shared-link-down-host.json" >/dev/null
+        sudo iptables -L INPUT -v -n > "$EVIDENCE/shared-link-drop-input.txt"
+        sudo iptables -L OUTPUT -v -n > "$EVIDENCE/shared-link-drop-output.txt"
+        restore_chat_link
+    fi
     for attempt in {1..30}; do
         sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py read > "$EVIDENCE/shared-phone.json"
         jq -e '(.epoch | type) == "number" and (.rows | type) == "array"' "$EVIDENCE/shared-phone.json" >/dev/null
@@ -1375,6 +1480,13 @@ if [[ "$feature" == chat-shared.md ]]; then
     if ! jq -e '[.rows[] | select(.body == "SHARED_PHONE_SYNTHETIC" and .state == "queued")] | length == 1' "$EVIDENCE/shared-phone.json" >/dev/null; then
         printf 'SHARED_HOST_ADMISSION_MISSING\n' | tee "$EVIDENCE/shared-negative-marker.txt"
         exit 1
+    fi
+    if [[ "${EXPECT_SHARED_MISSING:-}" != true ]]; then
+        wait_for_absence 'Waiting for chat connection'
+        wait_for_absence Retry
+        shot shared-link-recovered
+        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value 'Message verify-session' ''
+        printf 'CHAT_LINK_RECOVERY_OK\n' | tee "$EVIDENCE/shared-link-recovery.txt"
     fi
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/shared-evidence.py desktop-submit > "$EVIDENCE/shared-desktop-submit.json"
     if ! wait_for_text SHARED_DESKTOP_SYNTHETIC; then

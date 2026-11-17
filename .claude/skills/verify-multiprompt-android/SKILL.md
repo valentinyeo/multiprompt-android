@@ -19,7 +19,7 @@ The second-AI verdict must include `coverage` entries for every changed ID. Each
 
 ## Launch
 
-If the diff misses `on.pull_request.paths`, dispatch `verify.yml` yourself and treat a missing pull-request job as unrun.
+`pstack-verifier.yml` owns pull-request journeys. It picks at most three and runs each on head and parent through `verify.yml`; each pair counts as one journey. `verify.yml` also runs on main pushes and nightly, and supports manual dispatch. Tooling-only work can use the retained hosted Node test proof.
 
 From a pushed branch containing this workflow:
 
@@ -98,6 +98,7 @@ All helpers are executable. These setup/interaction commands are **GitHub-job-on
 .claude/skills/verify-multiprompt-android/scripts/drive.sh host-changed-key.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh sessions.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh session-drafts.md
+.claude/skills/verify-multiprompt-android/scripts/drive.sh session-favorite-dot.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh copy-chat-id.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh session-reader.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh session-routing.md

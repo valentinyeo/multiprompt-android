@@ -1,4 +1,5 @@
 {
+  "IGSH-2560": "Server overload: worker caps, heavy checks in the cloud, cloud workers",
   "IGSH-2535": "Android phone tests tap what a person can really reach",
   "IGSH-2531": "Android checks prove the feature that changed, not another one",
   "IGSH-2440": "Ten checks that stop today's advisor mistakes",
@@ -54,7 +55,6 @@
   "IGSH-2297": "Android: load rooms only when the rooms screen is open",
   "IGSH-2298": "Android: stop rereading the saved chat list every refresh",
   "IGSH-2287": "Android: phone chat engine catches up with desktop",
-  "IGSH-2287": "Android: phone chat engine catches up with desktop",
   "IGSH-2284": "Android: start Codex, Pi, Hax and Cursor as live chats",
   "IGSH-2304": "Android: pick Fable as the chat model",
   "IGSH-2305": "Android: pick the model in a Codex chat",
@@ -83,6 +83,7 @@
   "IGSH-2288": "Android: archive and delete workspaces",
   "IGSH-2342": "Android: add a chat to a group and remove it",
   "IGSH-2352": "Android: skills list fails with no reason shown",
+  "IGSH-2362": "Android: yellow dot on starred chats in every list",
   "IGSH-2311": "Android: hidden warm chats stop pulling screen updates",
   "IGSH-2296": "Android: keep one server link open for the chat list",
   "IGSH-2313": "Android: measure app start time with and without startup profile",
@@ -100,11 +101,14 @@
   "IGSH-2293": "Android: open a chat table full screen",
   "IGSH-2306": "Android: search inside one chat",
   "IGSH-2308": "Android: saved snippets in the message box",
+  "IGSH-2547": "Android: Poteto chat stuck on Loading conversation while online",
   "IGSH-2290": "Android: skills in a message show as a pill",
   "IGSH-2475": "Android: Claude commands like /clear in the slash menu",
   "IGSH-2294": "Android: usage and plan pace card",
   "IGSH-2486": "Android shell gets Esc, Tab, Ctrl and arrow keys",
   "IGSH-2532": "Android chat shows each message once, with its reply",
   "IGSH-2533": "Android old-screen check stops breaking on every change",
-  "IGSH-2538": "Android phone test switches AI"
+  "IGSH-2538": "Android phone test switches AI",
+  "IGSH-2540": "Android phone test finds words inside chats",
+  "IGSH-2560": "Server overload: worker caps, heavy checks in the cloud, cloud workers"
 }

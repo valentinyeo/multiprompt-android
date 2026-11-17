@@ -266,7 +266,7 @@ async function callDeepSeek({ key, system, user, fetchImpl = fetch, sleep = ms =
         const payload = await response.json();
         const choice = payload?.choices?.[0];
         const content = choice?.message?.content;
-        if (choice?.finish_reason === 'length') throw Object.assign(new Error('DeepSeek cut the answer off'), { fatal: true });
+        if (choice?.finish_reason === 'length') throw Object.assign(new Error('DeepSeek cut the answer off'), { fatal: attempt >= 2 });
         if (typeof content !== 'string' || !content.trim()) throw Object.assign(new Error('DeepSeek returned no content'), { fatal: true });
         return content;
       }
@@ -345,24 +345,31 @@ function journeyEvidence(directory, feature) {
   const screenshots = files.filter(file => /\.png$/i.test(file)).length;
   const parts = [`Files: ${files.length} in the artifact, ${screenshots} screenshots you cannot see. Names: ${files.slice(0, 60).join(', ')}`];
   let used = parts[0].length;
+  const included = new Set();
   const append = block => {
     if (used + block.length + 1 > PER_SIDE_CHARS) return;
     used += block.length + 1;
     parts.push(block);
   };
   const take = (file, limit) => {
+    if (included.has(file)) return;
     const full = path.join(directory, file);
     let text;
     try {
-      text = readText(full, limit);
+      text = file.endsWith('.xml')
+        ? (fs.readFileSync(full, 'utf8').match(/\b(?:text|content-desc)="[^"]+"/g) ?? []).join('\n').slice(0, limit)
+        : readText(full, limit);
     } catch {
       return;
     }
     if (!text || !text.trim()) return;
+    const before = parts.length;
     append(`--- ${file}${file === 'driver-transcript.txt' ? ' (tail)' : ''}\n${text.trim()}`);
+    if (parts.length > before) included.add(file);
   };
   const proof = coverageGate.registry.journeys[feature]?.evidence ?? {};
   const priority = [...new Set([...PRIORITY_FILES.slice(0, 2), ...Object.keys(proof), ...PRIORITY_FILES.slice(2)])];
+  for (const file of files.filter(file => /shared-link-(?:down|waiting|recovered)\.xml$|shared-(?:phone|link-down-host)\.json$/.test(file))) take(file, 2_500);
   for (const name of priority) if (files.includes(name)) take(name, proof[name] ?? (name === 'driver-transcript.txt' ? TRANSCRIPT_TAIL_CHARS : SMALL_FILE_BYTES));
   if (files.includes('driver-transcript.txt')) {
     const actions = fs.readFileSync(path.join(directory, 'driver-transcript.txt'), 'utf8').split('\n').filter(line => /^\++ (?:tap_text|tap_desc|fill |set_composer|adb shell input)/.test(line));
@@ -376,6 +383,17 @@ function journeyEvidence(directory, feature) {
     take(file, SMALL_FILE_BYTES);
   }
   return parts.join('\n');
+}
+
+function includeRequiredJourneys(picked, plan, diff = '') {
+  const required = [...new Set([
+    ...plan.outcomes.map(id => coverageGate.registry.outcomes[id].journey),
+    ...ALLOWLIST.filter(name => diff.includes(`b/${coverageGate.REGISTRY_PATH}/${name}\n`)),
+  ].filter(name => ALLOWLIST.includes(name)))];
+  if (required.length > MAX_JOURNEYS) throw new Error('Required outcomes need more than three journeys; split the change.');
+  if (!required.length) return picked;
+  const selected = validateFeatures([...required, ...picked.features]);
+  return { ...picked, features: selected.features, dropped: [...picked.dropped, ...selected.dropped], smoke: false };
 }
 
 function setOutputs(values) {
@@ -415,16 +433,10 @@ async function pick(env) {
   const picked = await askParsed({ ask: () => callDeepSeek({ key, system: PICK_INSTRUCTIONS, user }), parse: parsePick });
   const plan = coverageGate.planChange(diff, picked.changedOutcomes);
   if (plan.product && picked.changeKind !== 'product') throw new Error('FEATURE_UNMAPPED: product source changes cannot use tooling-only validation.');
-  const required = [...new Set([
-    ...plan.outcomes.map(id => coverageGate.registry.outcomes[id].journey),
-    ...ALLOWLIST.filter(name => diff.includes(`b/${coverageGate.REGISTRY_PATH}/${name}\n`)),
-  ])].filter(name => ALLOWLIST.includes(name));
-  if (required.length > MAX_JOURNEYS) throw new Error('Split this change: its required feature journeys exceed the three-journey limit.');
-  const { features, dropped } = validateFeatures([...required, ...picked.features]);
-  const smoke = picked.smoke && !required.length;
+  const selected = includeRequiredJourneys(picked, plan, diff);
   const reason = picked.reason || 'Journeys chosen for this change.';
-  console.log(`pstack-verifier pick: PR #${number} features=${JSON.stringify(features)} smoke=${smoke} dropped=${JSON.stringify([...picked.dropped, ...dropped])} reason=${reason}`);
-  setOutputs({ features: JSON.stringify(features), smoke: smoke ? 'yes' : 'no', reason, number, head_sha: head, merge_base: mergeBase, changed_outcomes: JSON.stringify(plan.outcomes) });
+  console.log(`pstack-verifier pick: PR #${number} features=${JSON.stringify(selected.features)} smoke=${selected.smoke} dropped=${JSON.stringify(selected.dropped)} reason=${reason}`);
+  setOutputs({ features: JSON.stringify(selected.features), smoke: selected.smoke ? 'yes' : 'no', reason, number, head_sha: head, merge_base: mergeBase, changed_outcomes: JSON.stringify(plan.outcomes) });
 }
 
 function ownComments(repo, number) {
@@ -567,7 +579,7 @@ async function judge(env) {
 module.exports = {
   ALLOWLIST, MODEL, ENDPOINT, MARKER_PREFIX, VERDICTS, MAX_JOURNEYS, SMOKE_JOURNEY,
   SIDES, RESULT_FILE, escapeText, validateFeatures, parseJson, askParsed, parsePick, parseVerdict, applyRules, parentResult, buildComment,
-  artifactName, readSideFiles, fetchMergeBase, findOwnComment, jobConclusions, callDeepSeek, doneWhen, journeyEvidence, journeyCatalog, requireKey,
+  artifactName, readSideFiles, fetchMergeBase, findOwnComment, jobConclusions, callDeepSeek, doneWhen, journeyEvidence, journeyCatalog, requireKey, includeRequiredJourneys,
 };
 
 if (require.main === module) {

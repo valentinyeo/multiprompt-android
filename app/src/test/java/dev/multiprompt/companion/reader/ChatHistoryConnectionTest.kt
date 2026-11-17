@@ -7,6 +7,7 @@ import dev.multiprompt.companion.security.SecretStore
 import dev.multiprompt.companion.ssh.SshRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -20,6 +21,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import org.robolectric.util.ReflectionHelpers
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class)
@@ -58,6 +60,24 @@ class ChatHistoryConnectionTest {
             assertNotSame(claude, codex)
             assertSame(codex, reader.chatHistory(AgentKind.CODEX, "/cwd"))
             assertNotSame(codex, reader.chatHistory(AgentKind.CODEX, "/other"))
+        }
+    }
+
+    @Test
+    fun journalPreservesWaitingIdentityAndRejectsCollisions() {
+        val preferences = RuntimeEnvironment.getApplication().getSharedPreferences("identity-${java.util.UUID.randomUUID()}", 0)
+        val journal = MessageJournal(preferences)
+        val scope = MessageProtocol.Scope("claude", "sid1", "tmux")
+        val id = java.util.UUID.randomUUID().toString()
+        val entry = journal.create("account", scope, "submit", messageId = id, text = "original")
+        assertEquals(id, entry.id)
+        assertEquals(id, entry.messageId)
+        assertThrows(IllegalStateException::class.java) {
+            journal.create("other-account", scope, "submit", messageId = id, text = "replacement")
+        }
+        assertEquals(listOf(entry), journal.entries())
+        assertThrows(IllegalArgumentException::class.java) {
+            journal.create("account", scope, "submit", messageId = "invalid", text = "invalid id")
         }
     }
 
@@ -159,6 +179,11 @@ class ChatHistoryConnectionTest {
         val afters = java.util.concurrent.CopyOnWriteArrayList<Long>()
         @Volatile var dropAt = -1
         @Volatile var hangAt = -1
+        @Volatile var online = true
+        @Volatile var hangSnapshot = false
+        @Volatile var rejectEngine = false
+        val submissions = java.util.concurrent.CopyOnWriteArrayList<String>()
+        private val submitted = java.util.concurrent.CopyOnWriteArrayList<JSONObject>()
         private val digest = "b".repeat(64)
 
         private fun row(role: String, text: String, offset: Long, end: Long) =
@@ -176,16 +201,34 @@ class ChatHistoryConnectionTest {
             JSONObject().put("id", id).put("message_protocol", 1).put("result", value).toString()
 
         suspend fun connect(block: suspend (suspend (String) -> String) -> Unit) {
+            if (!online) throw java.io.IOException("Link down")
             block { line ->
+                if (!online) throw java.io.IOException("Link down")
                 if (calls.incrementAndGet() > 3_000) throw java.io.IOException("Request flood")
                 val request = JSONObject(line)
                 val id = request.getLong("id")
                 when (request.optString("op")) {
-                    "engine_info" -> JSONObject().put("id", id)
-                        .put("engine_info", JSONObject().put("protocol", 1).put("generation", 53).put("sha256", digest))
-                        .put("message_protocols", JSONArray().put(1)).toString()
-                    "message_snapshot" -> result(id, JSONObject().put("snapshot_id", "snap").put("epoch", 1).put("seq", head)
-                        .put("items", JSONArray()).put("next_cursor", JSONObject.NULL))
+                    "engine_info" -> {
+                        if (rejectEngine) throw java.io.IOException("Engine handshake failed")
+                        JSONObject().put("id", id)
+                            .put("engine_info", JSONObject().put("protocol", 1).put("generation", 53).put("sha256", digest))
+                            .put("message_protocols", JSONArray().put(1)).toString()
+                    }
+                    "message_snapshot" -> {
+                        if (hangSnapshot) kotlinx.coroutines.awaitCancellation()
+                        result(id, JSONObject().put("snapshot_id", "snap").put("epoch", 1).put("seq", head)
+                            .put("items", JSONArray(submitted.map { JSONObject().put("message", it) })).put("next_cursor", JSONObject.NULL))
+                    }
+                    "message_status" -> result(id, JSONObject().put("epoch", 1).put("seq", head)
+                        .put("message", submitted.firstOrNull { it.getString("id") == request.getString("message_id") } ?: JSONObject.NULL))
+                    "message_submit" -> {
+                        submissions.add(request.getString("text"))
+                        val row = JSONObject().put("id", request.getString("message_id")).put("provider", "claude").put("sid", "sid1")
+                            .put("text", request.getString("text")).put("position", submitted.size + 1).put("attempt", "attempt1")
+                            .put("state", "queued").put("deadline", JSONObject.NULL).put("receipt", JSONObject.NULL).put("epoch", 1).put("created", 1.0)
+                        submitted.add(row)
+                        result(id, JSONObject().put("epoch", 1).put("seq", head).put("message", row))
+                    }
                     "message_events" -> {
                         afters.add(request.optLong("after"))
                         if (afters.size == dropAt) throw java.io.IOException("Dropped")
@@ -204,6 +247,77 @@ class ChatHistoryConnectionTest {
 
     private fun hostEvent(kind: String, payload: JSONObject = JSONObject()) =
         JSONObject().put("v", 1).put("sid", "sid1").put("turn", "t1").put("kind", kind).put("at", 1).put("payload", payload)
+
+    @Test
+    fun conversationAppearsBeforeMessagingFinishesAndAStallShowsAnError(): Unit = runBlocking {
+        val fake = FakeHost().apply { hangSnapshot = true }
+        ChatHistoryConnection(repository(), host, ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd"),
+            byteArrayOf(), ChatHistoryCache(temporary.newFolder()), gate = MessageGate(),
+            connectedExchange = { fake.connect(it) }, stallMillis = 500L).use { chat ->
+            chat.select(true)
+            chat.start()
+            val loaded = withTimeout(5_000L) { chat.state.first { it.loaded } }
+            assertEquals("question", loaded.history.rows.single().text)
+            assertFalse(loaded.ready)
+            val failed = withTimeout(5_000L) { chat.state.first { it.connectionError != null } }
+            assertEquals(ConversationLoad.TIMED_OUT, failed.connectionError)
+            assertTrue(failed.retrying)
+            fake.hangSnapshot = false
+            chat.nudge()
+            withTimeout(5_000L) { chat.state.first { it.ready } }
+            assertNull(chat.state.value.connectionError)
+        }
+    }
+
+    @Test
+    fun failedEngineHandshakeRetriesInsteadOfDisablingMessagingForTheConnection(): Unit = runBlocking {
+        val fake = FakeHost().apply { rejectEngine = true }
+        ChatHistoryConnection(repository(), host, ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd"),
+            byteArrayOf(), ChatHistoryCache(temporary.newFolder()), gate = MessageGate(), connectedExchange = { fake.connect(it) }).use { chat ->
+            chat.select(true)
+            chat.start()
+            val failed = withTimeout(5_000L) { chat.state.first { it.retrying } }
+            assertTrue(failed.loaded)
+            assertEquals("question", failed.history.rows.single().text)
+            assertFalse(failed.ready)
+            assertNotNull(failed.connectionError)
+            fake.rejectEngine = false
+            chat.nudge()
+            withTimeout(5_000L) { chat.state.first { it.ready && it.engine != null } }
+            assertNull(chat.state.value.messageError)
+        }
+    }
+
+    @Test
+    fun readerFlushesWaitingMessagesAfterInitialFailureAndAfterAnotherDroppedLink(): Unit = runBlocking {
+        val fake = FakeHost().apply { online = false }
+        val cache = ChatHistoryCache(temporary.newFolder())
+        val preferences = RuntimeEnvironment.getApplication().getSharedPreferences("pending-${java.util.UUID.randomUUID()}", 0)
+        val chat = ChatHistoryConnection(repository(), host, ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd"),
+            byteArrayOf(), cache, journal = MessageJournal(preferences), gate = MessageGate(), connectedExchange = { fake.connect(it) })
+        SessionReaderConnection(repository(), host, "tmux", AgentKind.CLAUDE, byteArrayOf(), cache).use { reader ->
+            ReflectionHelpers.setField(reader, "historyConnection", chat)
+            ReflectionHelpers.getField<MutableStateFlow<ChatHistoryConnection?>>(reader, "histories").value = chat
+            reader.select(true)
+            reader.start()
+            chat.start()
+            for (text in listOf("/clear", "after dropped link")) {
+                withTimeout(5_000L) { chat.state.first { it.retrying } }
+                val waiting = reader.sendPrompt(text) as PromptAdmission.WaitingForConnection
+                assertFalse(reader.pendingPrompts.state.value.isEmpty())
+                fake.online = true
+                chat.nudge()
+                withTimeout(10_000L) { reader.pendingPrompts.accepted.first { waiting.id in it } }
+                assertTrue(reader.pendingPrompts.state.value.isEmpty())
+                withTimeout(10_000L) { while (fake.submissions.none { it == text }) delay(10L) }
+                assertEquals(1, fake.submissions.count { it == text })
+                withTimeout(10_000L) { chat.state.first { it.replica?.messages?.get(waiting.id)?.text == text } }
+                fake.online = false
+                chat.nudge()
+            }
+            assertEquals(listOf("/clear", "after dropped link"), fake.submissions.toList())
+        }
+    }
 
     @Test
     fun longLiveChatLoadsFromRecentHostEventsOnly() = runBlocking {

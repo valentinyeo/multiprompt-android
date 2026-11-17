@@ -7,10 +7,6 @@
     "sourcePr": 374,
     "cleanupTicket": "SOFT-2539"
   },
-  "chat-search.open": {
-    "sourcePr": 380,
-    "cleanupTicket": "SOFT-2540"
-  },
   "claude.remote-control": {
     "sourcePr": 366,
     "cleanupTicket": "SOFT-2541"

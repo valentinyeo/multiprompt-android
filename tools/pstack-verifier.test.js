@@ -115,6 +115,57 @@ test('unknown journey names are dropped and at most three run', () => {
   assert.deepEqual(verifier.validateFeatures(null).features, []);
 });
 
+test('the three picked journeys are shared by head and parent, not picked twice', () => {
+  assert.equal(verifier.MAX_JOURNEYS, 3);
+  const picked = verifier.parsePick(JSON.stringify({
+    features: verifier.ALLOWLIST,
+    changed_outcomes: [],
+    change_kind: 'tooling',
+    reason: 'Exercise the cap.',
+  }));
+  assert.equal(picked.features.length, 3);
+  const workflow = read('.github/workflows/pstack-verifier.yml');
+  for (const [job, side, ref] of [['journeys', 'head', 'head_sha'], ['parents', 'parent', 'merge_base']]) {
+    const block = jobBlock(workflow, job);
+    assert.match(block, /^ {4}needs: pick$/m);
+    assert.ok(block.includes('        feature: ${{ fromJSON(needs.pick.outputs.features) }}'));
+    assert.ok(block.includes('      feature: ${{ matrix.feature }}'));
+    assert.ok(block.includes(`      side: ${side}`));
+    assert.ok(block.includes(`      app_ref: \${{ needs.pick.outputs.${ref} }}`));
+    assert.doesNotMatch(block, /^ {8}(?:include|side):/m);
+  }
+});
+
+test('required outcome journeys cannot be omitted by the model picker', () => {
+  const picked = { features: ['chat-shared.md'], dropped: [], smoke: false, reason: 'chat recovery' };
+  const selected = verifier.includeRequiredJourneys(picked, { outcomes: ['reader.send-enter-interrupt', 'chat.link-recovery'] });
+  assert.deepEqual(selected.features, ['session-reader.md', 'chat-shared.md']);
+  assert.equal(selected.smoke, false);
+  assert.throws(() => verifier.includeRequiredJourneys(picked, { outcomes: ['reader.send-enter-interrupt', 'chat.link-recovery', 'inbox.search', 'terminal.journey'] }), /more than three/);
+});
+
+test('the judge receives recovery UI and host receipts before large diagnostic files', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-link-proof-'));
+  try {
+    fs.writeFileSync(path.join(directory, 'driver-transcript.txt'), '+ tap_desc Send prompt\n' + 'diagnostic line\n'.repeat(5000));
+    for (const [file, text] of [['04-shared-link-down.xml', 'Retry'], ['05-shared-link-waiting.xml', 'Waiting for chat connection'], ['06-shared-link-recovered.xml', 'SHARED_PHONE_SYNTHETIC']]) {
+      fs.writeFileSync(path.join(directory, file), `<hierarchy><node text="${text}" bounds="[0,100][400,200]" />${'<node text="" />'.repeat(3000)}</hierarchy>`);
+    }
+    fs.writeFileSync(path.join(directory, 'shared-link-down-host.json'), '{"rows":[]}');
+    fs.writeFileSync(path.join(directory, 'shared-phone.json'), '{"rows":[{"body":"SHARED_PHONE_SYNTHETIC","state":"queued"}]}');
+    for (let i = 0; i < 30; i++) fs.writeFileSync(path.join(directory, `99-noise-${i}.xml`), '<node text="diagnostic" />'.repeat(2000));
+    const text = verifier.journeyEvidence(directory);
+    assert.ok(text.includes('text="Retry"'));
+    assert.ok(text.includes('text="Waiting for chat connection"'));
+    assert.ok(text.includes('text="SHARED_PHONE_SYNTHETIC"'));
+    assert.ok(text.includes('--- shared-link-down-host.json\n{"rows":[]}'));
+    assert.ok(text.includes('--- shared-phone.json\n{"rows":[{"body":"SHARED_PHONE_SYNTHETIC","state":"queued"}]}'));
+    assert.ok(text.length < 21_000);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('the comment starts with the verdict and the full head sha', () => {
   for (const verdict of ['PASS', 'PASS+NOTES', 'FAIL']) {
     const body = verifier.buildComment({ sha, verdict, summary: 'Ok.', journeys: [], evidence: [], notCovered: [], notes: [], runUrl });
@@ -279,7 +330,11 @@ test('DeepSeek is not retried on a client error, and gives up after one retry', 
   assert.equal(calls, 2);
   calls = 0;
   await assert.rejects(verifier.callDeepSeek({ key: 'k', system: 's', user: 'u', fetchImpl: async () => { calls += 1; return reply(200, { choices: [{ message: { content: '{' }, finish_reason: 'length' }] }); }, sleep: async () => {} }), /cut the answer off/);
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
+  calls = 0;
+  const recovered = await verifier.callDeepSeek({ key: 'k', system: 's', user: 'u', fetchImpl: async () => { calls += 1; return calls === 1 ? reply(200, { choices: [{ message: { content: '{' }, finish_reason: 'length' }] }) : reply(200, { choices: [{ message: { content: '{"ok":true}' }, finish_reason: 'stop' }] }); }, sleep: async () => {} });
+  assert.equal(recovered, '{"ok":true}');
+  assert.equal(calls, 2);
 });
 
 test('both steps stop with a clear error when the secret is empty', () => {
@@ -379,12 +434,13 @@ test('the caller grants the permissions verify.yml asks for, and dispatch adds n
   assert.deepEqual(inputs, ['pr']);
 });
 
-test('verify.yml can be called with one required feature and keeps its own triggers', () => {
+test('verify.yml keeps non-PR triggers and delegates PR journeys to the capped picker', () => {
   const verify = read('.github/workflows/verify.yml');
   const triggers = topBlock(verify, 'on').join('\n');
-  for (const trigger of ['schedule', 'pull_request', 'workflow_dispatch', 'workflow_call']) {
+  for (const trigger of ['push', 'schedule', 'workflow_dispatch', 'workflow_call']) {
     assert.match(triggers, new RegExp(`^ {2}${trigger}:`, 'm'), trigger);
   }
+  assert.doesNotMatch(triggers, /^ {2}pull_request:/m);
   const call = triggers.slice(triggers.indexOf('  workflow_call:'), triggers.indexOf('  workflow_dispatch:'));
   assert.match(call, /^ {6}feature:\n {8}description: .+\n {8}required: true\n {8}type: string\n/m);
   assert.deepEqual([...call.matchAll(/^ {6}(\w+):$/gm)].map(match => match[1]), ['feature', 'side', 'app_ref']);
