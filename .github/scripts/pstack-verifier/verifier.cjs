@@ -415,9 +415,16 @@ async function pick(env) {
   const picked = await askParsed({ ask: () => callDeepSeek({ key, system: PICK_INSTRUCTIONS, user }), parse: parsePick });
   const plan = coverageGate.planChange(diff, picked.changedOutcomes);
   if (plan.product && picked.changeKind !== 'product') throw new Error('FEATURE_UNMAPPED: product source changes cannot use tooling-only validation.');
+  const required = [...new Set([
+    ...plan.outcomes.map(id => coverageGate.registry.outcomes[id].journey),
+    ...ALLOWLIST.filter(name => diff.includes(`b/${coverageGate.REGISTRY_PATH}/${name}\n`)),
+  ])].filter(name => ALLOWLIST.includes(name));
+  if (required.length > MAX_JOURNEYS) throw new Error('Split this change: its required feature journeys exceed the three-journey limit.');
+  const { features, dropped } = validateFeatures([...required, ...picked.features]);
+  const smoke = picked.smoke && !required.length;
   const reason = picked.reason || 'Journeys chosen for this change.';
-  console.log(`pstack-verifier pick: PR #${number} features=${JSON.stringify(picked.features)} smoke=${picked.smoke} dropped=${JSON.stringify(picked.dropped)} reason=${reason}`);
-  setOutputs({ features: JSON.stringify(picked.features), smoke: picked.smoke ? 'yes' : 'no', reason, number, head_sha: head, merge_base: mergeBase, changed_outcomes: JSON.stringify(plan.outcomes) });
+  console.log(`pstack-verifier pick: PR #${number} features=${JSON.stringify(features)} smoke=${smoke} dropped=${JSON.stringify([...picked.dropped, ...dropped])} reason=${reason}`);
+  setOutputs({ features: JSON.stringify(features), smoke: smoke ? 'yes' : 'no', reason, number, head_sha: head, merge_base: mergeBase, changed_outcomes: JSON.stringify(plan.outcomes) });
 }
 
 function ownComments(repo, number) {

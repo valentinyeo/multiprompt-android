@@ -8,6 +8,8 @@ A product change must name every changed outcome. The second-AI verifier require
 
 ## Features
 
+- [Switch AI](ai-switch.md): Claude-to-Pi handover, reattached chat, and a new phone message with independent provider receipts.
+  - Outcomes: `ai.switch`. Runner: `verify.yml` (debug). Priority evidence: `ai-switch-state.json` (3500 characters), `ai-switch-host.json` (3000 characters).
 - [App name and update](app-name.md): published signed Android in-app update proof.
   - Outcomes: `app-name.journey`. Runner: `app-name.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Late account bot pictures](bot-photo-refresh.md): hosted ViewModel and Compose regressions; seeded picture, not live account sync.
@@ -76,7 +78,6 @@ These IDs are an inventory, not exemptions for future changes. Untouched gaps do
 | Outcome | Existing case | Cleanup ticket |
 |---|---|---|
 | `snippets.save-reuse-delete` | [#376](https://github.com/valentinyeo/multiprompt-android/pull/376) | SOFT-2537 |
-| `ai.switch` | [#373](https://github.com/valentinyeo/multiprompt-android/pull/373) | SOFT-2538 |
 | `pi.model-switch` | [#374](https://github.com/valentinyeo/multiprompt-android/pull/374) | SOFT-2539 |
 | `chat-search.open` | [#380](https://github.com/valentinyeo/multiprompt-android/pull/380) | SOFT-2540 |
 | `claude.remote-control` | [#366](https://github.com/valentinyeo/multiprompt-android/pull/366) | SOFT-2541 |

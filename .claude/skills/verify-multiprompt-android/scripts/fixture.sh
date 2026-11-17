@@ -47,7 +47,15 @@ CONFIG
 sudo /usr/sbin/sshd -t -f "$FIXTURE/sshd_config"
 sudo /usr/sbin/sshd -f "$FIXTURE/sshd_config" -E "$FIXTURE/sshd.log"
 sudo install -m 755 "$(dirname "$0")/console.py" /home/verifyssh/console.py
-if [[ "${VERIFY_FEATURE:-}" == chat-codex.md ]]; then
+if [[ "${VERIFY_FEATURE:-}" == ai-switch.md ]]; then
+    [[ "${GITHUB_ACTIONS:-}" == true ]]
+    sudo install -m 755 "$(dirname "$0")/ai-switch-fixture.py" /home/verifyssh/ai-switch-fixture.py
+    sudo install -m 644 app/src/main/assets/chat_history_reader.py /home/verifyssh/ai-switch-reader.py
+    sudo install -d -m 755 -o verifyssh -g verifyssh /home/verifyssh/.local/bin
+    sudo install -m 755 "$(dirname "$0")/ai-switch-fixture.py" /home/verifyssh/.local/bin/pi
+    sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'env GITHUB_ACTIONS=true HOME=/home/verifyssh /home/verifyssh/claude -u /home/verifyssh/ai-switch-fixture.py console'
+elif [[ "${VERIFY_FEATURE:-}" == chat-codex.md ]]; then
     sudo install -m 755 "$(dirname "$0")/codex-console.py" /home/verifyssh/codex-console.py
     sudo install -m 755 "$(dirname "$0")/resync-console.py" /home/verifyssh/resync-console.py
     for binary in hax codex claude; do sudo -u verifyssh ln -s "$(command -v python3)" "/home/verifyssh/$binary"; done

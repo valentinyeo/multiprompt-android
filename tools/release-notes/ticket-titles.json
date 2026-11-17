@@ -104,5 +104,6 @@
   "IGSH-2294": "Android: usage and plan pace card",
   "IGSH-2486": "Android shell gets Esc, Tab, Ctrl and arrow keys",
   "IGSH-2532": "Android chat shows each message once, with its reply",
-  "IGSH-2533": "Android old-screen check stops breaking on every change"
+  "IGSH-2533": "Android old-screen check stops breaking on every change",
+  "IGSH-2538": "Android phone test switches AI"
 }

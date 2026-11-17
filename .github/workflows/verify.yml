@@ -79,6 +79,7 @@ on:
         required: true
         type: choice
         options:
+          - ai-switch.md
           - chat-cancel.md
           - chat-choices.md
           - chat-codex.md
