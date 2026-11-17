@@ -13,6 +13,31 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const tool = path.join(root, '.github/scripts/pstack-verifier/coverage.cjs');
 const productDiff = (file, text) => `diff --git a/app/src/main/${file} b/app/src/main/${file}\n--- a/app/src/main/${file}\n+++ b/app/src/main/${file}\n@@ -1 +1 @@\n-old\n+${text}\n`;
 
+function mockPickerGithub(file) {
+  fs.writeFileSync(file, `#!${process.execPath}
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+const pull = 'repos/example/repo/pulls/' + process.env.PR_NUMBER;
+const diff = fs.readFileSync(process.env.FIXTURE_DIFF, 'utf8');
+const files = [...diff.matchAll(/^diff --git a\\/.+ b\\/(.+)$/gm)].map(([, filename]) => ({ filename }));
+if (args.includes('Accept: application/vnd.github.diff')) {
+  assert.deepEqual(args, ['api', pull, '-H', 'Accept: application/vnd.github.diff']);
+  process.stdout.write(diff);
+} else if (args.at(-1).includes('/files?')) {
+  assert.deepEqual(args, ['api', '--paginate', '--slurp', pull + '/files?per_page=100']);
+  console.log(JSON.stringify([files]));
+} else if (args[1].includes('/compare/')) {
+  assert.deepEqual(args, ['api', 'repos/example/repo/compare/main...' + process.env.EVENT_HEAD_SHA]);
+  console.log(JSON.stringify({ merge_base_commit: { sha: 'b'.repeat(40) } }));
+} else {
+  assert.deepEqual(args, ['api', pull]);
+  console.log(JSON.stringify({ number: Number(process.env.PR_NUMBER), state: 'open', changed_files: files.length,
+    head: { sha: process.env.EVENT_HEAD_SHA, repo: { full_name: 'example/repo' } }, base: { ref: 'main' } }));
+}
+`, { mode: 0o755 });
+}
+
 for (const [pr, outcome] of [[380, 'chat-search.open'], [376, 'snippets.save-reuse-delete'], [373, 'ai.switch']]) {
   test(`real PR #${pr} is rejected despite its successful unrelated head journeys`, () => {
     const fixture = JSON.parse(read(`tools/fixtures/feature-coverage/pr-${pr}.json`));
@@ -165,8 +190,7 @@ test('the real picker schedules the changed chat search recipe for a tooling-onl
     const diff = path.join(directory, 'recipe.diff');
     fs.writeFileSync(diff, `diff --git a/${gate.REGISTRY_PATH}/chat-search.md b/${gate.REGISTRY_PATH}/chat-search.md\n+Find words inside a chat\n`);
     const gh = path.join(directory, 'gh');
-    fs.writeFileSync(gh, `#!${process.execPath}\nconst fs=require('node:fs');const args=process.argv.slice(2);if(args.includes('Accept: application/vnd.github.diff'))process.stdout.write(fs.readFileSync(process.env.FIXTURE_DIFF));else if(args.at(-1).includes('/files?'))console.log(JSON.stringify([[{filename:'${gate.REGISTRY_PATH}/chat-search.md'}]]));else if(args[1].includes('/compare/'))console.log(JSON.stringify({merge_base_commit:{sha:'b'.repeat(40)}}));else console.log(JSON.stringify({number:397,state:'open',changed_files:1,head:{sha:process.env.EVENT_HEAD_SHA,repo:{full_name:'example/repo'}},base:{ref:'main'}}));`);
-    fs.chmodSync(gh, 0o755);
+    mockPickerGithub(gh);
     const stub = path.join(directory, 'model.cjs');
     fs.writeFileSync(stub, `global.fetch=async()=>({status:200,ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:JSON.parse(process.env.MODEL_FEATURES),changed_outcomes:[],change_kind:'tooling',reason:'Tooling only.'})}}]})});`);
     for (const features of [[], ['native-skills.md', 'session-reader.md', 'terminal.md']]) {
@@ -313,8 +337,7 @@ test('the real picker schedules snippets even when the model omits it or fills a
   try {
     const fixture = JSON.parse(read('tools/fixtures/feature-coverage/pr-376.json'));
     const gh = path.join(directory, 'gh');
-    fs.writeFileSync(gh, `#!${process.execPath}\nconst fs = require('node:fs');\nconst args = process.argv.slice(2);\nif (args.includes('Accept: application/vnd.github.diff')) process.stdout.write(fs.readFileSync(process.env.FIXTURE_DIFF));\nelse if (args[1].includes('/compare/')) console.log(JSON.stringify({merge_base_commit:{sha:'b'.repeat(40)}}));\nelse console.log(JSON.stringify({number:376,state:'open',head:{sha:process.env.EVENT_HEAD_SHA,repo:{full_name:'example/repo'}},base:{ref:'main'}}));\n`);
-    fs.chmodSync(gh, 0o755);
+    mockPickerGithub(gh);
     const stub = path.join(directory, 'model.cjs');
     fs.writeFileSync(stub, `global.fetch = async () => ({status:200,ok:true,json:async () => ({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:JSON.parse(process.env.MODEL_FEATURES),changed_outcomes:[],change_kind:process.env.CHANGE_KIND,reason:'Model omitted snippets.'})}}]})});`);
     const recipeDiff = path.join(directory, 'recipe.diff');
@@ -392,8 +415,7 @@ test('the real picker schedules AI switch even when the model omits it or fills 
   try {
     const fixture = JSON.parse(read('tools/fixtures/feature-coverage/pr-373.json'));
     const gh = path.join(directory, 'gh');
-    fs.writeFileSync(gh, `#!${process.execPath}\nconst fs = require('node:fs');\nconst args = process.argv.slice(2);\nconst files = JSON.parse(process.env.CHANGED_FILES);\nif (args.includes('Accept: application/vnd.github.diff')) process.stdout.write(fs.readFileSync(process.env.FIXTURE_DIFF));\nelse if (args.at(-1).includes('/files?')) console.log(JSON.stringify([files]));\nelse if (args[1].includes('/compare/')) console.log(JSON.stringify({merge_base_commit:{sha:'b'.repeat(40)}}));\nelse console.log(JSON.stringify({number:373,state:'open',changed_files:files.length,head:{sha:process.env.EVENT_HEAD_SHA,repo:{full_name:'example/repo'}},base:{ref:'main'}}));\n`);
-    fs.chmodSync(gh, 0o755);
+    mockPickerGithub(gh);
     const stub = path.join(directory, 'model.cjs');
     fs.writeFileSync(stub, `global.fetch = async () => ({status:200,ok:true,json:async () => ({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:JSON.parse(process.env.MODEL_FEATURES),changed_outcomes:[],change_kind:process.env.CHANGE_KIND,reason:'Model omitted AI switch.'})}}]})});`);
     const recipeDiff = path.join(directory, 'recipe.diff');
@@ -414,7 +436,6 @@ test('the real picker schedules AI switch even when the model omits it or fills 
             PR_NUMBER: '373',
             EVENT_HEAD_SHA: fixture.headSha,
             FIXTURE_DIFF: diff,
-            CHANGED_FILES: JSON.stringify([...fs.readFileSync(diff, 'utf8').matchAll(/^diff --git a\/.+ b\/(.+)$/gm)].map(([, filename]) => ({ filename }))),
             MODEL_FEATURES: JSON.stringify(modelFeatures),
             CHANGE_KIND: diff === recipeDiff ? 'tooling' : 'product',
             GITHUB_OUTPUT: output,
