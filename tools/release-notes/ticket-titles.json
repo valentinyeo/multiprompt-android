@@ -87,6 +87,11 @@
   "IGSH-2296": "Android: keep one server link open for the chat list",
   "IGSH-2313": "Android: measure app start time with and without startup profile",
   "IGSH-2354": "No false live view error in desktop hosted chats",
+<<<<<<< HEAD
+=======
+  "IGSH-2357": "Android: Draft label on chats with unsent text",
+  "IGSH-2360": "Android: Stop button in place of Send while the AI works",
+>>>>>>> origin/main
   "IGSH-2366": "Android: agent messages in the new format show as a sender card",
   "IGSH-2367": "Android: rooms keep messages in order like desktop",
   "IGSH-2357": "Android: Draft label on chats with unsent text",
