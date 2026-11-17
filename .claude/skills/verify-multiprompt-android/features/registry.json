@@ -166,9 +166,9 @@
         "chat-working.journey"
       ]
     },
-    "dictation-cancel.md": {
-      "name": "Cancel dictation",
-      "description": "start a dictation in a chat, cancel it, and the composer stays empty with nothing sent.",
+    "copy-chat-id.md": {
+      "name": "Copy chat ID",
+      "description": "the chat menu copies the host chat id, or the tmux name when the chat has no host id.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -177,7 +177,7 @@
         "driver": true
       },
       "outcomes": [
-        "dictation.cancel"
+        "chat.copy-id"
       ]
     },
     "host-changed-key.md": {
@@ -496,6 +496,20 @@
         "projection-state-reconnect.json": 500,
         "projection-proof.txt": 500
       }
+    },
+    "dictation-cancel.md": {
+      "name": "Cancel dictation",
+      "description": "start a dictation in a chat, cancel it, and the composer stays empty with nothing sent.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "dictation.cancel"
+      ]
     }
   },
   "outcomes": {
@@ -568,6 +582,14 @@
       "journey": "chat-working.md",
       "sideEffect": false,
       "match": []
+    },
+    "chat.copy-id": {
+      "description": "The chat menu copies the host chat id, or the tmux name when the chat has no host id.",
+      "journey": "copy-chat-id.md",
+      "sideEffect": false,
+      "match": [
+        "Copy chat ID|object ChatId"
+      ]
     },
     "host-changed-key.journey": {
       "description": "compare a rotated identity, persist Not now and refuse authentication.",
@@ -658,15 +680,6 @@
       "journey": "session-settings.md",
       "sideEffect": false,
       "match": []
-    },
-    "dictation.cancel": {
-      "description": "Cancel dictation drops the in-progress recording and restores the composer without that transcript or a send.",
-      "journey": "dictation-cancel.md",
-      "sideEffect": false,
-      "match": [
-        "dictation-cancel|Cancel dictation",
-        "DictationLinks|DICTATION_LISTEN_URL"
-      ]
     },
     "inbox.draft": {
       "description": "Inbox rows show Draft before the preview while a chat has unsent text, and hide it once that text is sent.",
@@ -866,6 +879,15 @@
       "sideEffect": true,
       "match": [
         "ChatHistory\\.kt|HostStream\\.kt|MessageProtocol\\.kt|projectMessages|LegacyMessageIdentity"
+      ]
+    },
+    "dictation.cancel": {
+      "description": "Cancel dictation drops the in-progress recording and restores the composer without that transcript or a send.",
+      "journey": "dictation-cancel.md",
+      "sideEffect": false,
+      "match": [
+        "dictation-cancel|Cancel dictation",
+        "DictationLinks|DICTATION_LISTEN_URL"
       ]
     }
   }

@@ -86,7 +86,7 @@ on:
           - chat-reactions.md
           - chat-resync.md
           - chat-shared.md
-          - dictation-cancel.md
+          - copy-chat-id.md
           - host-changed-key.md
           - hosts-retired.md
           - hosts.md
@@ -105,6 +105,7 @@ on:
           - sign-in.md
           - terminal.md
           - chat-identity.md
+          - dictation-cancel.md
       expect_settings_missing:
         description: Require signed Android 301 to reject the settings navigation journey
         type: boolean
@@ -374,11 +375,7 @@ jobs:
           app_source="$GITHUB_WORKSPACE"
           if [ -d "$GITHUB_WORKSPACE/app-source" ]; then app_source="$GITHUB_WORKSPACE/app-source"; fi
           git -C "$app_source" rev-parse HEAD > "$EVIDENCE/app-source-sha.txt"
-          listen_arg=()
-          if [[ "$VERIFY_FEATURE" == dictation-cancel.md ]]; then
-            listen_arg=(-PdictationListenUrl=ws://10.0.2.2:8765/v1/listen)
-          fi
-          gradle -p "$app_source" --refresh-dependencies --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="0.1.2-verify.$GITHUB_RUN_NUMBER" "${listen_arg[@]}" assembleDebug 2>&1 | tee "$EVIDENCE/build.txt"
+          gradle -p "$app_source" --refresh-dependencies --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="0.1.2-verify.$GITHUB_RUN_NUMBER" assembleDebug 2>&1 | tee "$EVIDENCE/build.txt"
           echo "VERIFY_APK=$app_source/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
           sha256sum "$app_source/app/build/outputs/apk/debug/app-debug.apk" > "$EVIDENCE/app-apk-sha256.txt"
       - name: Build fixture instrumentation
@@ -406,7 +403,6 @@ jobs:
         with:
           stage: stage-1${{ inputs.side && format('-{0}-{1}', inputs.side, inputs.feature) || '' }}
           target: default
-          audio: ${{ env.VERIFY_FEATURE == 'dictation-cancel.md' && 'true' || 'false' }}
           script: |
             proof() {
               adb install -r -g "$VERIFY_APK"
