@@ -3,6 +3,7 @@ import datetime
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import uuid
 
@@ -31,6 +32,16 @@ plugins.write_text(json.dumps(dict(plugins={"qa@fixture": [dict(scope="user", in
 (home / ".claude/settings.json").write_text(json.dumps(dict(enabledPlugins={"qa@fixture": True})))
 model, effort = "Opus", "medium"
 receipts = Path(sys.argv[1])
+if sys.argv[2:] == ['clear-ranking']:
+    receipts.touch()
+    for name, description in (
+        ('client', 'A session skill'),
+        ('aaa-paper', 'Clear the log'),
+        ('clear', 'Session duplicate must not replace built-in'),
+    ):
+        path = cwd / '.claude/skills' / name / 'SKILL.md'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f'---\nname: {name}\ndescription: {description}\n---\nBODY_MUST_NOT_BE_INJECTED\n')
 
 
 def event(role, text):
@@ -54,6 +65,8 @@ for line in sys.stdin:
     text = line.rstrip("\r\n")
     with receipts.open("a", encoding="utf-8") as output:
         output.write("VERIFY_RECEIVED:" + text + "\n")
+    if re.fullmatch(r"\[mp:[0-9a-f]{16}\]", text):
+        continue
     if text == "/review-native investigation":
         late = cwd / ".claude/skills/late-native/SKILL.md"
         late.parent.mkdir(parents=True, exist_ok=True)

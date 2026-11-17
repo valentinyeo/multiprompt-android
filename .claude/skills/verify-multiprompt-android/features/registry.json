@@ -278,7 +278,12 @@
       },
       "outcomes": [
         "claude.skills-model-effort"
-      ]
+      ],
+      "evidence": {
+        "native-menu-state.txt": 5000,
+        "native-receipts.txt": 2500,
+        "native-result.json": 1000
+      }
     },
     "robot-faces.md": {
       "name": "Robot inbox and chat",
@@ -649,6 +654,70 @@
         "ai-usage-host.json": 2000,
         "ai-usage-receipts.txt": 3000
       }
+    },
+    "skill-pills.md": {
+      "name": "Skills within messages",
+      "description": "insert a skill mid-message, check composer and sent pills, remove a pill and send the remaining text. SOFT-2543.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "skills.pills"
+      ],
+      "evidence": {
+        "skill-pills-state.json": 4000,
+        "skill-pills-receipts.txt": 1000
+      }
+    },
+    "chat-table.md": {
+      "name": "Expand and scroll a chat table",
+      "description": "Open a wide chat table, scroll sideways and down to a known far cell, then close. SOFT-2544.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "chat-table.expand"
+      ],
+      "evidence": {
+        "table-inline.json": 1200,
+        "table-open.json": 1200,
+        "table-sideways.json": 1200,
+        "table-down.json": 1200,
+        "table-closed.json": 1200,
+        "table-proof.txt": 200
+      }
+    },
+    "clear-ranking.md": {
+      "name": "Find and send Claude clear",
+      "description": "Type /cl, check name-first command ranking, select /clear and send the exact command with independent host receipts. SOFT-2545.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "claude.clear-ranking"
+      ],
+      "evidence": {
+        "clear-query.json": 1800,
+        "clear-selected.json": 700,
+        "clear-sent.json": 700,
+        "clear-receipts.txt": 700,
+        "clear-host.json": 700,
+        "clear-before.txt": 200,
+        "clear-selected-host.txt": 200,
+        "clear-proof.txt": 200
+      }
     }
   },
   "outcomes": {
@@ -765,7 +834,8 @@
       "journey": "native-skills.md",
       "sideEffect": true,
       "match": [
-        "NativeSkills|SkillsLoader"
+        "NativeSkills|SkillsLoader",
+        "HostChange|HostSettings|ReaderMenuPage\\.MODEL|sendModelCommand|Use Claude|Set effort:|Open model picker|attachMenuSection"
       ]
     },
     "robot-faces.journey": {
@@ -964,27 +1034,66 @@
     },
     "skills.pills": {
       "description": "Insert skills mid-message and render visible skill pills.",
-      "journey": null,
-      "sideEffect": false,
+      "journey": "skill-pills.md",
+      "sideEffect": true,
       "match": [
-        "SkillMessageText|skillPill|SkillPill"
-      ]
+        "SkillMessageText|skillPill|SkillPill|SkillSpan|SkillInsertion|NativeSkills\\.(?:token|query|spans|insert)|skills/NativeSkills\\.kt"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tap_text /review-native"
+        },
+        "result": {
+          "file": "skill-pills-state.json",
+          "quote": "\"sent_pill\": \"/review-native\""
+        },
+        "sideEffect": {
+          "file": "skill-pills-receipts.txt",
+          "quote": "VERIFY_RECEIVED:Please /review-native this"
+        }
+      }
     },
     "chat-table.expand": {
       "description": "Expand, scroll and close a chat table.",
-      "journey": null,
+      "journey": "chat-table.md",
       "sideEffect": false,
       "match": [
-        "ExpandedChatTable|expandTable|expandedTable"
-      ]
+        "ui/MarkdownText\\.kt|ExpandedChatTable|expandTable|expandedTable|ChatTable|MarkdownTable|table-expand|table-sheet|table-close"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tap_desc 'Expand table'"
+        },
+        "result": {
+          "file": "table-down.json",
+          "quote": "R24-C06 harvest"
+        }
+      }
     },
     "claude.clear-ranking": {
       "description": "Type /cl, select /clear and check name-first slash ranking.",
-      "journey": null,
+      "journey": "clear-ranking.md",
       "sideEffect": true,
       "match": [
-        "BUILT_IN_COMMANDS|builtInCommands|nameRank|/clear"
-      ]
+        "NativeSkills\\.kt|NativeSkills\\.menu|NativeSkillPicker",
+        "claudeCommands|BUILT_IN_COMMANDS|builtInCommands|nameRank|/clear"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tap_text /clear"
+        },
+        "result": {
+          "file": "clear-query.json",
+          "quote": "\"order\": [\n    \"/clear\",\n    \"/client\",\n    \"/aaa-paper\""
+        },
+        "sideEffect": {
+          "file": "clear-receipts.txt",
+          "quote": "VERIFY_RECEIVED:/clear"
+        }
+      }
     },
     "legacy.igsh-449": {
       "description": "OTP, a second pending device and trusted SSH access to every saved host. Sign in on the new device; on the approving phone compare **Approve this device?** and fingerprint, tap **Approve**, then connect from the new device.",

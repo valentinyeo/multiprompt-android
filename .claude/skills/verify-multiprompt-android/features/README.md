@@ -41,7 +41,7 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Launcher icon](launcher-icon.md): the robot launcher icon in the emulator's app drawer, with the themed-icon layer present in the built APK.
   - Outcomes: `launcher-icon.journey`. Runner: `verify.yml` (debug).
 - [Native Claude controls](native-skills.md): slash filtering, shared plus entry, actual session model/effort and retained image picker.
-  - Outcomes: `claude.skills-model-effort`. Runner: `verify.yml` (debug).
+  - Outcomes: `claude.skills-model-effort`. Runner: `verify.yml` (debug). Priority evidence: `native-menu-state.txt` (5000 characters), `native-receipts.txt` (2500 characters), `native-result.json` (1000 characters).
 - [Robot inbox and chat](robot-faces.md): Run `verify.yml` with `feature=robot-faces.md`. For the signed candidate, set `released_robots=true` and `candidate=true`. For the published update, set `released_robots=true` and `expected_commit` to the released SHA.
   - Outcomes: `robot-faces.journey`. Runner: `verify.yml` (signed). Inputs: `{"released_robots":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Inbox draft label](session-drafts.md): unsent composer text shows Draft before the inbox preview, and sending that text removes it.
@@ -82,6 +82,12 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `claude.remote-control`. Runner: `verify.yml` (debug). Priority evidence: `remote-control-state.json` (2000 characters), `remote-control-host.json` (3500 characters), `remote-control-before.txt` (200 characters).
 - [AI usage](ai-usage.md): Open AI usage, compare Claude and Codex numbers with independent SSH receipts, then close. SOFT-2542.
   - Outcomes: `ai.usage`. Runner: `verify.yml` (debug). Priority evidence: `ai-usage-menu.json` (1500 characters), `ai-usage-open.json` (2000 characters), `ai-usage-closed.json` (1000 characters), `ai-usage-proof.txt` (200 characters), `ai-usage-host.json` (2000 characters), `ai-usage-receipts.txt` (3000 characters).
+- [Skills within messages](skill-pills.md): insert a skill mid-message, check composer and sent pills, remove a pill and send the remaining text. SOFT-2543.
+  - Outcomes: `skills.pills`. Runner: `verify.yml` (debug). Priority evidence: `skill-pills-state.json` (4000 characters), `skill-pills-receipts.txt` (1000 characters).
+- [Expand and scroll a chat table](chat-table.md): Open a wide chat table, scroll sideways and down to a known far cell, then close. SOFT-2544.
+  - Outcomes: `chat-table.expand`. Runner: `verify.yml` (debug). Priority evidence: `table-inline.json` (1200 characters), `table-open.json` (1200 characters), `table-sideways.json` (1200 characters), `table-down.json` (1200 characters), `table-closed.json` (1200 characters), `table-proof.txt` (200 characters).
+- [Find and send Claude clear](clear-ranking.md): Type /cl, check name-first command ranking, select /clear and send the exact command with independent host receipts. SOFT-2545.
+  - Outcomes: `claude.clear-ranking`. Runner: `verify.yml` (debug). Priority evidence: `clear-query.json` (1800 characters), `clear-selected.json` (700 characters), `clear-sent.json` (700 characters), `clear-receipts.txt` (700 characters), `clear-host.json` (700 characters), `clear-before.txt` (200 characters), `clear-selected-host.txt` (200 characters), `clear-proof.txt` (200 characters).
 
 ## Initial coverage gaps
 
@@ -90,9 +96,6 @@ These IDs are an inventory, not exemptions for future changes. Untouched gaps do
 | Outcome | Existing case | Cleanup ticket |
 |---|---|---|
 | `pi.model-switch` | [#374](https://github.com/valentinyeo/multiprompt-android/pull/374) | SOFT-2539 |
-| `skills.pills` | [#378](https://github.com/valentinyeo/multiprompt-android/pull/378) | SOFT-2543 |
-| `chat-table.expand` | [#379](https://github.com/valentinyeo/multiprompt-android/pull/379) | SOFT-2544 |
-| `claude.clear-ranking` | [#381](https://github.com/valentinyeo/multiprompt-android/pull/381) | SOFT-2545 |
 | `legacy.igsh-449` | IGSH-449 | IGSH-449 |
 | `legacy.igsh-429` | IGSH-429 | IGSH-429 |
 | `legacy.igsh-422` | IGSH-422 | IGSH-422 |

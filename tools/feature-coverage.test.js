@@ -38,7 +38,7 @@ if (args.includes('Accept: application/vnd.github.diff')) {
 `, { mode: 0o755 });
 }
 
-for (const [pr, outcome] of [[380, 'chat-search.open'], [376, 'snippets.save-reuse-delete'], [373, 'ai.switch'], [377, 'ai.usage']]) {
+for (const [pr, outcome] of [[380, 'chat-search.open'], [376, 'snippets.save-reuse-delete'], [373, 'ai.switch'], [377, 'ai.usage'], [378, 'skills.pills'], [379, 'chat-table.expand'], [381, 'claude.clear-ranking']]) {
   test(`real PR #${pr} is rejected despite its successful unrelated head journeys`, () => {
     const fixture = JSON.parse(read(`tools/fixtures/feature-coverage/pr-${pr}.json`));
     const diff = read(`tools/fixtures/feature-coverage/pr-${pr}.diff`);
@@ -294,6 +294,23 @@ test('priority evidence paths and per-file limits fit the journey budget', () =>
     changed.journeys['chat-queued.md'].evidence = evidence;
     assert.match(gate.validateRegistry(changed).join('\n'), /evidence must map at most eight artifact text filenames to character limits/);
   }
+});
+
+test('Claude menu changes and the extended recipe schedule native-skills through verify.yml', () => {
+  for (const text of ['ReaderMenuPage.MODEL -> {', 'Use Claude Opus',
+    'Set effort: max', 'Open model picker (/model)', 'HostChange.OPUS', 'attachMenuSection = null']) {
+    const diff = productDiff('java/dev/multiprompt/companion/ui/MultipromptApp.kt', text);
+    const plan = gate.planChange(diff, []);
+    assert.ok(plan.outcomes.includes('claude.skills-model-effort'), text);
+    const selected = verifier.includeRequiredJourneys({ features: [], dropped: [], smoke: true }, plan, diff);
+    assert.ok(selected.features.includes('native-skills.md'), text);
+    assert.equal(selected.smoke, false);
+  }
+  const recipe = `${gate.REGISTRY_PATH}/native-skills.md`;
+  const diff = `diff --git a/${recipe} b/${recipe}\n--- a/${recipe}\n+++ b/${recipe}\n@@ -1 +1 @@\n-old\n+Extended menu journey\n`;
+  const selected = verifier.includeRequiredJourneys({ features: [], dropped: [], smoke: true }, { outcomes: [] }, diff);
+  assert.deepEqual(selected.features, ['native-skills.md']);
+  assert.equal(gate.registry.journeys[selected.features[0]].runner.workflow, 'verify.yml');
 });
 
 test('every recipe is registered and generated index and dispatch choices cannot drift', () => {
@@ -650,5 +667,226 @@ test('AI usage proof requires its action, displayed numbers, independent host re
     for (const name of ['AiUsage', 'PlanUsage', 'aiUsage', 'AI usage', 'tokenLadderStatus', 'readTokenLadderStatus', 'token-ladder/status.json']) {
       assert.ok(gate.changedOutcomes(productDiff('ui/AiUsageSheet.kt', name)).includes(outcome), name);
     }
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('skill-pill changes and recipe edits schedule their journey even when the picker omits it', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-pills-pick-'));
+  try {
+    const fixture = JSON.parse(read('tools/fixtures/feature-coverage/pr-378.json'));
+    mockPickerGithub(path.join(directory, 'gh'));
+    const stub = path.join(directory, 'model.cjs');
+    fs.writeFileSync(stub, `global.fetch = async () => ({status:200,ok:true,json:async () => ({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:JSON.parse(process.env.MODEL_FEATURES),changed_outcomes:[],change_kind:process.env.CHANGE_KIND,reason:'Model omitted skill pills.'})}}]})});`);
+    const recipeDiff = path.join(directory, 'recipe.diff');
+    fs.writeFileSync(recipeDiff, `diff --git a/${gate.REGISTRY_PATH}/skill-pills.md b/${gate.REGISTRY_PATH}/skill-pills.md\n+Insert and remove a skill pill\n`);
+    for (const diff of [path.join(root, 'tools/fixtures/feature-coverage/pr-378.diff'), recipeDiff]) {
+      for (const modelFeatures of [[], ['native-skills.md', 'session-reader.md', 'terminal.md']]) {
+        const output = path.join(directory, 'outputs');
+        fs.writeFileSync(output, '');
+        const result = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
+          cwd: root,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${directory}:${process.env.PATH}`,
+            NODE_OPTIONS: `--require=${stub}`,
+            DEEPSEEK_API_KEY: 'test-only',
+            REPO: 'example/repo',
+            PR_NUMBER: '378',
+            EVENT_HEAD_SHA: fixture.headSha,
+            FIXTURE_DIFF: diff,
+            MODEL_FEATURES: JSON.stringify(modelFeatures),
+            CHANGE_KIND: diff === recipeDiff ? 'tooling' : 'product',
+            GITHUB_OUTPUT: output,
+          },
+        });
+        assert.equal(result.status, 0, result.stderr);
+        const values = fs.readFileSync(output, 'utf8');
+        const features = JSON.parse(values.match(/^features=(.+)$/m)[1]);
+        assert.ok(features.includes('skill-pills.md'), values);
+        assert.ok(features.length <= verifier.MAX_JOURNEYS);
+        assert.match(values, /^smoke=no$/m);
+        if (diff !== recipeDiff) assert.match(values, /changed_outcomes=.*skills.pills/);
+      }
+    }
+    assert.equal(gate.baseline['skills.pills'], undefined);
+    assert.equal(gate.registry.outcomes['skills.pills'].journey, 'skill-pills.md');
+    for (const [file, text] of [['ui/SkillMessageText.kt', 'paint'], ['ui/DesignKit.kt', 'KitSkillPill'], ['skills/NativeSkills.kt', 'fun insert'], ['ui/MultipromptApp.kt', 'NativeSkills.insert']]) {
+      assert.ok(gate.changedOutcomes(productDiff(file, text)).includes('skills.pills'), file);
+    }
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('skill-pill coverage requires exact head action, painted UI and independent send citations', () => {
+  const outcome = 'skills.pills';
+  const journey = 'skill-pills.md';
+  const citations = gate.registry.outcomes[outcome].citations;
+  assert.ok(gate.catalog().includes(JSON.stringify(citations)));
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-pills-citations-'));
+  try {
+    fs.writeFileSync(path.join(directory, 'app-source-sha.txt'), sha);
+    for (const ref of Object.values(citations)) fs.writeFileSync(path.join(directory, ref.file), ref.quote);
+    const args = {
+      plan: { product: true, outcomes: [outcome] },
+      coverage: [{ outcome, journey, ...citations }],
+      directories: { [journey]: directory },
+      conclusions: { [journey]: 'success' },
+      sha,
+    };
+    assert.equal(gate.featureErrors(args).accepted.length, 1);
+    assert.match(gate.featureErrors({ ...args, coverage: [] }).errors.join(' '), /FEATURE_NOT_EXERCISED: skills.pills/);
+    for (const ref of Object.values(citations)) {
+      fs.writeFileSync(path.join(directory, ref.file), 'Missing skill-pill proof');
+      assert.equal(gate.featureErrors(args).errors.length, 1, ref.file);
+      fs.writeFileSync(path.join(directory, ref.file), ref.quote);
+    }
+    assert.match(gate.featureErrors({ ...args, sha: 'b'.repeat(40) }).errors.join(' '), /exact PR head SHA/);
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('the real picker schedules chat table even when the model omits it or fills all three slots', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-table-pick-'));
+  try {
+    const fixture = JSON.parse(read('tools/fixtures/feature-coverage/pr-379.json'));
+    const gh = path.join(directory, 'gh');
+    mockPickerGithub(gh);
+    const stub = path.join(directory, 'model.cjs');
+    fs.writeFileSync(stub, `global.fetch = async () => ({status:200,ok:true,json:async () => ({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:JSON.parse(process.env.MODEL_FEATURES),changed_outcomes:[],change_kind:process.env.CHANGE_KIND,reason:'Model omitted chat table.'})}}]})});`);
+    const recipeDiff = path.join(directory, 'recipe.diff');
+    fs.writeFileSync(recipeDiff, `diff --git a/${gate.REGISTRY_PATH}/chat-table.md b/${gate.REGISTRY_PATH}/chat-table.md\n+Expand and scroll a chat table\n`);
+    const rendererDiff = path.join(directory, 'renderer.diff');
+    fs.writeFileSync(rendererDiff, productDiff('java/dev/multiprompt/companion/ui/MarkdownText.kt', 'val widths = listOf(120)'));
+    for (const diff of [path.join(root, 'tools/fixtures/feature-coverage/pr-379.diff'), recipeDiff, rendererDiff]) {
+      for (const modelFeatures of [[], ['native-skills.md', 'session-reader.md', 'terminal.md']]) {
+        const output = path.join(directory, 'outputs');
+        fs.writeFileSync(output, '');
+        const result = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
+          cwd: root,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${directory}:${process.env.PATH}`,
+            NODE_OPTIONS: `--require=${stub}`,
+            DEEPSEEK_API_KEY: 'test-only',
+            REPO: 'example/repo',
+            PR_NUMBER: '379',
+            EVENT_HEAD_SHA: fixture.headSha,
+            FIXTURE_DIFF: diff,
+            MODEL_FEATURES: JSON.stringify(modelFeatures),
+            CHANGE_KIND: diff === recipeDiff ? 'tooling' : 'product',
+            GITHUB_OUTPUT: output,
+          },
+        });
+        assert.equal(result.status, 0, result.stderr);
+        const values = fs.readFileSync(output, 'utf8');
+        const features = JSON.parse(values.match(/^features=(.+)$/m)[1]);
+        assert.ok(features.includes('chat-table.md'), values);
+        assert.ok(features.length <= verifier.MAX_JOURNEYS);
+        assert.match(values, /^smoke=no$/m);
+        if (diff !== recipeDiff) assert.match(values, /changed_outcomes=.*chat-table.expand/);
+      }
+    }
+    assert.equal(gate.baseline['chat-table.expand'], undefined);
+    assert.equal(gate.registry.outcomes['chat-table.expand'].journey, 'chat-table.md');
+    assert.ok(gate.debugJourneys.includes('chat-table.md'));
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+
+test('table proof needs its expand action, far-cell result and exact head', () => {
+  const outcome = 'chat-table.expand';
+  const journey = 'chat-table.md';
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-table-proof-'));
+  const claim = { outcome, journey, ...gate.registry.outcomes[outcome].citations };
+  try {
+    fs.writeFileSync(path.join(directory, 'app-source-sha.txt'), sha);
+    for (const ref of [claim.action, claim.result]) fs.writeFileSync(path.join(directory, ref.file), ref.quote);
+    const args = { plan: { product: true, outcomes: [outcome] }, coverage: [claim], directories: { [journey]: directory }, conclusions: { [journey]: 'success' }, sha };
+    assert.deepEqual(gate.featureErrors(args).errors, []);
+    for (const ref of [claim.action, claim.result]) {
+      fs.writeFileSync(path.join(directory, ref.file), 'unrelated proof');
+      assert.match(gate.featureErrors(args).errors.join(' '), /FEATURE_NOT_EXERCISED: chat-table.expand/);
+      fs.writeFileSync(path.join(directory, ref.file), ref.quote);
+    }
+    fs.writeFileSync(path.join(directory, 'app-source-sha.txt'), 'b'.repeat(40));
+    assert.match(gate.featureErrors(args).errors.join(' '), /exact PR head SHA/);
+    assert.ok(gate.changedOutcomes(productDiff('java/dev/multiprompt/companion/ui/MarkdownText.kt', 'val widths = listOf(120)')).includes(outcome));
+    for (const name of ['ExpandedChatTable', 'ChatTable', 'MarkdownTable', 'table-expand', 'table-sheet', 'table-close']) {
+      assert.ok(gate.changedOutcomes(productDiff('ui/MarkdownText.kt', name)).includes(outcome), name);
+    }
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('the real picker schedules clear-ranking code and recipe edits even when the model omits it', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'clear-ranking-pick-'));
+  try {
+    const fixture = JSON.parse(read('tools/fixtures/feature-coverage/pr-381.json'));
+    const gh = path.join(directory, 'gh');
+    mockPickerGithub(gh);
+    const stub = path.join(directory, 'model.cjs');
+    fs.writeFileSync(stub, `global.fetch = async () => ({status:200,ok:true,json:async () => ({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:JSON.parse(process.env.MODEL_FEATURES),changed_outcomes:[],change_kind:process.env.CHANGE_KIND,reason:'Model omitted clear ranking.'})}}]})});`);
+    const recipeDiff = path.join(directory, 'recipe.diff');
+    fs.writeFileSync(recipeDiff, `diff --git a/${gate.REGISTRY_PATH}/clear-ranking.md b/${gate.REGISTRY_PATH}/clear-ranking.md\n+Find and send Claude clear\n`);
+    const rankingDiff = path.join(directory, 'ranking.diff');
+    fs.writeFileSync(rankingDiff, productDiff('skills/NativeSkills.kt', 'val rank = score(skill.name, skill.description, query)'));
+    const historicalPlan = gate.planChange(read('tools/fixtures/feature-coverage/pr-381.diff'), []);
+    assert.throws(() => verifier.includeRequiredJourneys({ features: [], dropped: [], smoke: true }, historicalPlan), /Required outcomes need more than three journeys/);
+    for (const diff of [rankingDiff, recipeDiff]) {
+      for (const features of [[], ['native-skills.md', 'session-reader.md', 'terminal.md']]) {
+        const output = path.join(directory, 'outputs');
+        fs.writeFileSync(output, '');
+        const result = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
+          cwd: root, encoding: 'utf8',
+          env: {
+            ...process.env, PATH: `${directory}:${process.env.PATH}`, NODE_OPTIONS: `--require=${stub}`,
+            DEEPSEEK_API_KEY: 'test-only', REPO: 'example/repo', PR_NUMBER: '381', EVENT_HEAD_SHA: fixture.headSha,
+            FIXTURE_DIFF: diff, MODEL_FEATURES: JSON.stringify(features), CHANGE_KIND: diff === recipeDiff ? 'tooling' : 'product',
+            GITHUB_OUTPUT: output,
+          },
+        });
+        assert.equal(result.status, 0, result.stderr);
+        const values = fs.readFileSync(output, 'utf8');
+        const selected = JSON.parse(values.match(/^features=(.+)$/m)[1]);
+        assert.ok(selected.includes('clear-ranking.md'), values);
+        assert.ok(selected.length <= verifier.MAX_JOURNEYS);
+        assert.match(values, /^smoke=no$/m);
+        if (diff !== recipeDiff) assert.match(values, /changed_outcomes=.*claude.clear-ranking/);
+      }
+    }
+    assert.equal(gate.baseline['claude.clear-ranking'], undefined);
+    assert.equal(gate.registry.outcomes['claude.clear-ranking'].journey, 'clear-ranking.md');
+    assert.ok(gate.debugJourneys.includes('clear-ranking.md'));
+    for (const [file, text] of [['skills/NativeSkills.kt', 'score(name, description, query)'],
+      ['ui/MultipromptApp.kt', 'NativeSkills.menu(reader.nativeSkills, skillQuery)'],
+      ['ui/MultipromptApp.kt', 'NativeSkillPicker']]) {
+      const plan = gate.planChange(productDiff(file, text), []);
+      assert.ok(plan.outcomes.includes('claude.clear-ranking'));
+      assert.ok(verifier.includeRequiredJourneys({ features: [], dropped: [], smoke: true }, plan).features.includes('clear-ranking.md'));
+    }
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('clear ranking citations require retained head ranking, action and exact independent receipt', () => {
+  const outcome = 'claude.clear-ranking';
+  const journey = 'clear-ranking.md';
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'clear-ranking-proof-'));
+  const claim = { outcome, journey, ...gate.registry.outcomes[outcome].citations };
+  try {
+    const priority = gate.registry.journeys[journey].evidence;
+    assert.ok(priority['clear-query.json']);
+    assert.ok(priority['clear-receipts.txt']);
+    assert.ok(gate.catalog().includes(JSON.stringify(gate.registry.outcomes[outcome].citations)));
+    fs.writeFileSync(path.join(directory, 'app-source-sha.txt'), sha);
+    for (const ref of [claim.action, claim.result, claim.sideEffect]) fs.writeFileSync(path.join(directory, ref.file), ref.quote);
+    const args = { plan: { product: true, outcomes: [outcome] }, coverage: [claim], directories: { [journey]: directory }, conclusions: { [journey]: 'success' }, sha };
+    assert.deepEqual(gate.featureErrors(args).errors, []);
+    for (const ref of [claim.action, claim.result, claim.sideEffect]) {
+      fs.writeFileSync(path.join(directory, ref.file), 'unrelated proof');
+      assert.match(gate.featureErrors(args).errors.join(' '), /FEATURE_NOT_EXERCISED: claude.clear-ranking/);
+      fs.writeFileSync(path.join(directory, ref.file), ref.quote);
+    }
+    assert.equal(gate.featureErrors({ ...args, coverage: [] }).errors.length, 1);
+    assert.equal(gate.featureErrors({ ...args, sha: 'b'.repeat(40) }).errors.length, 1);
+    assert.equal(gate.featureErrors({ ...args, conclusions: { 'native-skills.md': 'success' } }).errors.length, 1);
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });

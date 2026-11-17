@@ -121,7 +121,13 @@ def console():
                             for n, receipt in enumerate(accepted, 1):
                                 if event["uuid"] == receipt["native_id"]:
                                     phase = "BEFORE" if n == 1 else "AFTER"
-                                    append("assistant", f"REPLY_{phase}_2532", f"msg_reply_{n}")
+                                    if n == 1:
+                                        append("assistant", f"REPLY_{phase}_2532", f"msg_reply_{n}")
+                                    else:
+                                        archived = dict(type="multiprompt_history", row=dict(role="assistant", text=f"REPLY_{phase}_2532",
+                                            id="history-" + os.urandom(16).hex(), timestamp=datetime.datetime.now().isoformat()))
+                                        with TRANSCRIPT.open("a") as output:
+                                            output.write(json.dumps(archived) + "\n")
                     else:
                         assert name == "read", name
                     result = dict(sid=SID, accepted=accepted, transcript=[json.loads(line) for line in TRANSCRIPT.read_text().splitlines()],

@@ -942,8 +942,23 @@ if [[ "$feature" == ai-usage.md ]]; then
     exit 0
 fi
 
+if [[ "$feature" == skill-pills.md ]]; then
+    source "$scripts/skill-pills-drive.sh"
+    exit 0
+fi
+
+if [[ "$feature" == clear-ranking.md ]]; then
+    source "$scripts/clear-ranking-drive.sh"
+    exit 0
+fi
+
 if [[ "$feature" == snippets.md ]]; then
     source "$scripts/snippets-drive.sh"
+    exit 0
+fi
+
+if [[ "$feature" == chat-table.md ]]; then
+    source "$scripts/chat-table-drive.sh"
     exit 0
 fi
 
@@ -2192,7 +2207,8 @@ if [[ "$feature" == native-skills.md ]]; then
     tap_text Effort
     wait_for_text '✓'
     shot native-model-effort-observed
-    adb shell input keyevent KEYCODE_BACK
+    tap_text Effort
+    source "$scripts/native-menu-drive.sh"
     tap_desc Attach
     tap_text 'Add image'
     wait_for_text 'Screencast2 uploads'
@@ -2214,7 +2230,10 @@ import xml.etree.ElementTree as ET
 root = Path(sys.argv[1])
 import re
 rows = [row for row in (root / 'native-receipts.txt').read_text().splitlines() if not re.fullmatch(r'VERIFY_RECEIVED:\[mp:[0-9a-f]{16}\]', row)]
-assert rows == ['VERIFY_RECEIVED:/review-native investigation', 'VERIFY_RECEIVED:/qa:verify-native draft stays', 'VERIFY_RECEIVED:/model sonnet', 'VERIFY_RECEIVED:/effort high'], rows
+expected = ['VERIFY_RECEIVED:/review-native investigation', 'VERIFY_RECEIVED:/qa:verify-native draft stays', 'VERIFY_RECEIVED:/model sonnet', 'VERIFY_RECEIVED:/effort high']
+expected += (root / 'native-menu-commands.txt').read_text().splitlines()
+assert len(expected) == 20, expected
+assert rows == expected, (rows, expected)
 assert 'Sonnet 5.5 high' in (root / 'native-tmux-final.txt').read_text()
 assert 'BODY_MUST_NOT_BE_INJECTED' not in (root / 'native-transcript.jsonl').read_text()
 for label, required in [('native-inserted', '/review-native '), ('native-plugin-inserted', '/qa:verify-native draft stays'), ('native-draft-preserved', 'keep this draft')]:

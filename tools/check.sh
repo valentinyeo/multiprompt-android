@@ -7,7 +7,7 @@ gradle_run() {
 }
 
 source_checks() {
-  node --test tools/ci/phone-routing.test.mjs tools/root-files.test.js tools/strip-comments.test.js tools/release-status.test.js tools/verify-published.test.mjs tools/workflow-inputs.test.js tools/release-proof.test.js tools/pr-checks.test.js tools/branch-protection.test.js tools/release-notes/notes.test.mjs tools/baseline-profile.test.mjs tools/pstack-verifier.test.js tools/feature-coverage.test.js
+  node --test tools/ci/phone-routing.test.mjs tools/root-files.test.js tools/strip-comments.test.js tools/release-status.test.js tools/verify-published.test.mjs tools/workflow-inputs.test.js tools/release-proof.test.js tools/pr-checks.test.js tools/branch-protection.test.js tools/release-notes/notes.test.mjs tools/baseline-profile.test.mjs tools/pstack-verifier.test.js tools/pstack-verifier-eval.test.js tools/feature-coverage.test.js
   python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.test.py
   python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.py check
   python3 -B tools/message-projection/check.py
@@ -29,6 +29,7 @@ source_checks() {
   python3 -B tools/codex-sync.test.py
   python3 -B tools/structured-questions.test.py
   python3 -B tools/native-skills.test.py
+  python3 -B tools/clear-ranking/ui.test.py
   python3 -B tools/release-choices/ui.test.py
   python3 -B tools/check-approved-style-source.test.py
   python3 -B tools/historical_control.test.py

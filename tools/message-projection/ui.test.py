@@ -27,6 +27,13 @@ class ProjectionJourneyOracleTest(unittest.TestCase):
     def test_reverse_layout_traversal_still_requires_visual_order(self):
         self.assertEqual(1, ui.verify(self.xml(self.texts()), self.receipt(), "reconnect")["occurrences"])
 
+    def test_archived_reply_keeps_its_distinct_receipt_identity(self):
+        receipt = self.receipt()
+        receipt["transcript"][-1] = dict(type="multiprompt_history", row=dict(role="assistant", text="REPLY_AFTER_2532", id="history-2569"))
+        self.assertEqual(1, ui.verify(self.xml(self.texts()), receipt, "catchup")["occurrences"])
+        with self.assertRaisesRegex(AssertionError, "MESSAGE_PROJECTION_DUPLICATE"):
+            ui.verify(self.xml(self.texts() + ["REPLY_AFTER_2532"]), receipt, "catchup")
+
     def test_duplicate_bubble_fails_even_with_valid_receipts(self):
         with self.assertRaisesRegex(AssertionError, "MESSAGE_PROJECTION_DUPLICATE"):
             ui.verify(self.xml(self.texts() + ["PHONE_AFTER_2532"]), self.receipt(), "reconnect")
