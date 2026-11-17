@@ -1,6 +1,8 @@
 name: Android tests
 
 on:
+  push:
+    branches: [main]
   schedule:
     - cron: '23 3 * * *'
   workflow_dispatch:
@@ -26,26 +28,24 @@ jobs:
   phone-routing:
     runs-on: ubuntu-24.04
     outputs:
-      run: ${{ steps.route.outputs.run }}
+      image-preview-emulator: ${{ steps.route.outputs.image-preview-emulator }}
+      reply-notifications-emulator: ${{ steps.route.outputs.reply-notifications-emulator }}
+      session-rows-emulator: ${{ steps.route.outputs.session-rows-emulator }}
+      session-pins-emulator: ${{ steps.route.outputs.session-pins-emulator }}
+      message-actions-emulator: ${{ steps.route.outputs.message-actions-emulator }}
+      approved-style-emulator: ${{ steps.route.outputs.approved-style-emulator }}
     steps:
       - uses: actions/checkout@v4
-        if: github.event_name == 'pull_request'
         with:
           fetch-depth: 0
       - name: Phone routing regression proof
-        if: github.event_name == 'pull_request'
         run: node --test tools/ci/phone-routing.test.mjs
       - id: route
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          if [ "$EVENT_NAME" = pull_request ]; then
-            node tools/ci/phone-routing.mjs
-          else
-            echo 'run=true' >> "$GITHUB_OUTPUT"
-          fi
+        run: node tools/ci/phone-routing.mjs
 
   build:
     name: build
@@ -322,46 +322,32 @@ jobs:
   image-preview-emulator:
     name: image-preview-emulator
     needs: phone-routing
-    if: always() && !cancelled()
+    if: needs.phone-routing.outputs.image-preview-emulator == 'true'
     runs-on: ubuntu-24.04
     steps:
-      - name: Require a valid routing decision
-        env:
-          ROUTING_RESULT: ${{ needs.phone-routing.result }}
-          PHONE_PROOF: ${{ needs.phone-routing.outputs.run }}
-        run: |
-          test "$ROUTING_RESULT" = success
-          test "$PHONE_PROOF" = true || test "$PHONE_PROOF" = false
       - uses: actions/checkout@v4
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         with:
           fetch-depth: 0
       - uses: actions/setup-java@v4
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         with:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         with:
           gradle-version: "9.5.1"
       - name: Restore the shared build cache
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         uses: actions/cache/restore@v4
         with:
           path: ~/.gradle/caches/build-cache-1
           key: gradle-build-cache-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: gradle-build-cache-
       - name: Install screenshot comparison tool
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         run: |
           python3 -m pip install Pillow
           sudo apt-get update && sudo apt-get install -y tesseract-ocr
       - name: Build test APKs before starting the emulator
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         run: gradle --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2g -Pkotlin.compiler.execution.strategy=in-process assembleDebug assembleDebugAndroidTest
       - name: Verify image preview and day theme on one emulator
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         uses: ./.github/actions/android-proof
         with:
           stage: stage-1
@@ -374,13 +360,13 @@ jobs:
           DAY_THEME_BASE_REF: ${{ inputs.baseline_ref }}
           DAY_THEME_RELEASED_UPDATE: ${{ inputs.released_update }}
       - name: Capture day theme host memory evidence
-        if: ${{ always() && needs.phone-routing.outputs.run == 'true' }}
+        if: always()
         run: |
           mkdir -p build/day-theme/diagnostics
           sudo dmesg -T > build/day-theme/diagnostics/kernel.txt
           free -m > build/day-theme/diagnostics/memory.txt
       - uses: actions/upload-artifact@v4
-        if: ${{ always() && needs.phone-routing.outputs.run == 'true' }}
+        if: always()
         with:
           overwrite: true
           name: image-preview-emulator
@@ -395,43 +381,31 @@ jobs:
   reply-notifications-emulator:
     name: reply-notifications-emulator
     needs: phone-routing
-    if: always() && !cancelled()
+    if: needs.phone-routing.outputs.reply-notifications-emulator == 'true'
     runs-on: ubuntu-24.04
     steps:
-      - name: Require a valid routing decision
-        env:
-          ROUTING_RESULT: ${{ needs.phone-routing.result }}
-          PHONE_PROOF: ${{ needs.phone-routing.outputs.run }}
-        run: |
-          test "$ROUTING_RESULT" = success
-          test "$PHONE_PROOF" = true || test "$PHONE_PROOF" = false
       - uses: actions/checkout@v4
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
       - uses: actions/setup-java@v4
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         with:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         with:
           gradle-version: "9.5.1"
       - name: Restore the shared build cache
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         uses: actions/cache/restore@v4
         with:
           path: ~/.gradle/caches/build-cache-1
           key: gradle-build-cache-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: gradle-build-cache-
       - uses: ./.github/actions/android-proof
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         with:
           stage: stage-3
           script: bash tools/check-reply-notifications.sh
         env:
           GRADLE: gradle
       - uses: actions/upload-artifact@v4
-        if: ${{ always() && needs.phone-routing.outputs.run == 'true' }}
+        if: always()
         with:
           overwrite: true
           name: reply-notifications-emulator
@@ -446,45 +420,33 @@ jobs:
   session-rows-emulator:
     name: session-rows-emulator
     needs: phone-routing
-    if: always() && !cancelled()
+    if: needs.phone-routing.outputs.session-rows-emulator == 'true'
     runs-on: ubuntu-24.04
     steps:
-      - name: Require a valid routing decision
-        env:
-          ROUTING_RESULT: ${{ needs.phone-routing.result }}
-          PHONE_PROOF: ${{ needs.phone-routing.outputs.run }}
-        run: |
-          test "$ROUTING_RESULT" = success
-          test "$PHONE_PROOF" = true || test "$PHONE_PROOF" = false
       - uses: actions/checkout@v4
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         with:
           fetch-depth: 0
       - uses: actions/setup-java@v4
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         with:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         with:
           gradle-version: "9.5.1"
       - name: Restore the shared build cache
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         uses: actions/cache/restore@v4
         with:
           path: ~/.gradle/caches/build-cache-1
           key: gradle-build-cache-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: gradle-build-cache-
       - uses: ./.github/actions/android-proof
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         with:
           stage: stage-4
           script: bash tools/check-session-rows.sh
         env:
           GRADLE: gradle
       - uses: actions/upload-artifact@v4
-        if: ${{ always() && needs.phone-routing.outputs.run == 'true' }}
+        if: always()
         with:
           overwrite: true
           name: session-rows-emulator
@@ -496,45 +458,33 @@ jobs:
   session-pins-emulator:
     name: session-pins-emulator
     needs: phone-routing
-    if: always() && !cancelled()
+    if: needs.phone-routing.outputs.session-pins-emulator == 'true'
     runs-on: ubuntu-24.04
     steps:
-      - name: Require a valid routing decision
-        env:
-          ROUTING_RESULT: ${{ needs.phone-routing.result }}
-          PHONE_PROOF: ${{ needs.phone-routing.outputs.run }}
-        run: |
-          test "$ROUTING_RESULT" = success
-          test "$PHONE_PROOF" = true || test "$PHONE_PROOF" = false
       - uses: actions/checkout@v4
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         with:
           fetch-depth: 0
       - uses: actions/setup-java@v4
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         with:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         with:
           gradle-version: "9.5.1"
       - name: Restore the shared build cache
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         uses: actions/cache/restore@v4
         with:
           path: ~/.gradle/caches/build-cache-1
           key: gradle-build-cache-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: gradle-build-cache-
       - uses: ./.github/actions/android-proof
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         with:
           stage: stage-4
           script: bash tools/check-session-pins.sh
         env:
           GRADLE: gradle
       - uses: actions/upload-artifact@v4
-        if: ${{ always() && needs.phone-routing.outputs.run == 'true' }}
+        if: always()
         with:
           overwrite: true
           name: session-pins-emulator
@@ -546,46 +496,33 @@ jobs:
   message-actions-emulator:
     name: message-actions-emulator
     needs: phone-routing
-    if: always() && !cancelled()
+    if: needs.phone-routing.outputs.message-actions-emulator == 'true'
     runs-on: ubuntu-24.04
     steps:
-      - name: Require a valid routing decision
-        env:
-          ROUTING_RESULT: ${{ needs.phone-routing.result }}
-          PHONE_PROOF: ${{ needs.phone-routing.outputs.run }}
-        run: |
-          test "$ROUTING_RESULT" = success
-          test "$PHONE_PROOF" = true || test "$PHONE_PROOF" = false
       - uses: actions/checkout@v4
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
       - uses: actions/setup-java@v4
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         with:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         with:
           gradle-version: "9.5.1"
       - name: Restore the shared build cache
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         uses: actions/cache/restore@v4
         with:
           path: ~/.gradle/caches/build-cache-1
           key: gradle-build-cache-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: gradle-build-cache-
       - name: Install screenshot text reader
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
       - uses: ./.github/actions/android-proof
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         with:
           stage: stage-5
           script: bash tools/check-message-actions.sh
         env:
           GRADLE: gradle
       - uses: actions/upload-artifact@v4
-        if: ${{ always() && needs.phone-routing.outputs.run == 'true' }}
+        if: always()
         with:
           overwrite: true
           name: message-actions-emulator
@@ -598,49 +535,35 @@ jobs:
   approved-style-emulator:
     name: approved-style-emulator
     needs: phone-routing
-    if: always() && !cancelled()
+    if: needs.phone-routing.outputs.approved-style-emulator == 'true'
     runs-on: ubuntu-24.04
     steps:
-      - name: Require a valid routing decision
-        env:
-          ROUTING_RESULT: ${{ needs.phone-routing.result }}
-          PHONE_PROOF: ${{ needs.phone-routing.outputs.run }}
-        run: |
-          test "$ROUTING_RESULT" = success
-          test "$PHONE_PROOF" = true || test "$PHONE_PROOF" = false
       - uses: actions/checkout@v4
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         with:
           fetch-depth: 0
       - uses: actions/setup-java@v4
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         with:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         with:
           gradle-version: "9.5.1"
       - name: Restore the shared build cache
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         uses: actions/cache/restore@v4
         with:
           path: ~/.gradle/caches/build-cache-1
           key: gradle-build-cache-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: gradle-build-cache-
       - name: Install screenshot text reader
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         run: |
           sudo apt-get update && sudo apt-get install -y tesseract-ocr
           python3 -m pip install Pillow
       - name: Build original screen APKs before starting the emulator
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         run: bash tools/check-approved-style.sh prepare
         env:
           GRADLE: gradle
           STYLE_PHASE: before
       - name: Reject unapproved original screens and verify approved screens on one emulator
-        if: ${{ needs.phone-routing.outputs.run == 'true' }}
         uses: ./.github/actions/android-proof
         with:
           stage: stage-6
@@ -651,14 +574,14 @@ jobs:
         env:
           GRADLE: gradle
       - name: Capture host memory and emulator exit evidence
-        if: ${{ always() && needs.phone-routing.outputs.run == 'true' }}
+        if: always()
         run: |
           mkdir -p build/approved-style/diagnostics
           sudo dmesg -T > build/approved-style/diagnostics/kernel.txt
           free -m > build/approved-style/diagnostics/memory.txt
           ps -eo pid,ppid,stat,rss,args > build/approved-style/diagnostics/processes.txt
       - uses: actions/upload-artifact@v4
-        if: ${{ always() && needs.phone-routing.outputs.run == 'true' }}
+        if: always()
         with:
           overwrite: true
           name: approved-style-emulator

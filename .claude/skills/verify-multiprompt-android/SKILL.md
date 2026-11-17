@@ -29,7 +29,7 @@ Dispatch `hosts.md` and `host-changed-key.md` for trust-sheet changes. Inspect t
 
 ## Launch
 
-If the diff misses `on.pull_request.paths`, dispatch `verify.yml` yourself and treat a missing pull-request job as unrun.
+`pstack-verifier.yml` owns pull-request journeys. It picks at most three and runs each on head and parent through `verify.yml`; each pair counts as one journey. `verify.yml` also runs on main pushes and nightly, and supports manual dispatch. Tooling-only work can use the retained hosted Node test proof.
 
 From a pushed branch containing this workflow:
 
