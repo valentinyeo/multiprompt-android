@@ -389,7 +389,7 @@ function includeRequiredJourneys(picked, plan, diff = '') {
   const required = [...new Set([
     ...plan.outcomes.map(id => coverageGate.registry.outcomes[id].journey),
     ...ALLOWLIST.filter(name => diff.includes(`b/${coverageGate.REGISTRY_PATH}/${name}\n`)),
-  ])].filter(name => ALLOWLIST.includes(name));
+  ].filter(name => ALLOWLIST.includes(name)))];
   if (required.length > MAX_JOURNEYS) throw new Error('Required outcomes need more than three journeys; split the change.');
   if (!required.length) return picked;
   const selected = validateFeatures([...required, ...picked.features]);
