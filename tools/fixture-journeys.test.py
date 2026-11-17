@@ -57,6 +57,34 @@ class FixtureJourneyTest(unittest.TestCase):
                 os.chdir(previous)
                 subprocess.run(['sudo', 'chown', '-R', f'{os.getuid()}:{os.getgid()}', str(home)], check=True)
 
+    def test_ai_switch_claude_process_stays_ready_for_host_controls(self):
+        fixture = load('ai_switch_claude', SCRIPTS / 'ai-switch-fixture.py')
+        request = dict(type='control_request', request_id='remote-control-2538', request=dict(subtype='remote_control', enabled=True))
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            with patch.object(fixture, 'HOME', home), patch.object(fixture, 'boundary'), patch.object(sys, 'stdin', io.StringIO(json.dumps(request) + '\n')), redirect_stdout(io.StringIO()) as output:
+                fixture.claude()
+            events = [json.loads(line) for line in output.getvalue().splitlines()]
+            self.assertEqual(dict(type='system', subtype='init', session_id=fixture.SID, model='sonnet'), events[0])
+            self.assertEqual(dict(type='control_response', response=dict(subtype='success', request_id='remote-control-2538', response={})), events[1])
+            self.assertFalse((home / 'ai-switch-wrong-provider.txt').exists())
+
+    def test_ai_switch_pi_receipts_and_replies_follow_the_received_messages(self):
+        fixture = load('ai_switch_pi', SCRIPTS / 'ai-switch-fixture.py')
+        sid = 'c001c001-2538-4000-8000-000000002539'
+        texts = ['This chat ran on Claude until now and continues on Pi.\nCLAUDE_BEFORE_SWITCH_2538', 'PHONE_AFTER_SWITCH_2538']
+        requests = [dict(id=f'prompt-{index}', type='prompt', message=text) for index, text in enumerate(texts)]
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            with patch.object(fixture, 'HOME', home), patch.object(fixture, 'boundary'), patch.object(sys, 'argv', ['pi', '--mode', 'rpc', '--session-id', sid]), patch.object(sys, 'stdin', io.StringIO(''.join(json.dumps(row) + '\n' for row in requests))), redirect_stdout(io.StringIO()) as output:
+                fixture.pi()
+            receipts = [json.loads(line) for line in (home / 'ai-switch-provider-receipts.jsonl').read_text().splitlines()]
+            self.assertEqual([dict(provider='pi', sid=sid, id=row['id'], text=row['message']) for row in requests], receipts)
+            events = [json.loads(line) for line in output.getvalue().splitlines()]
+            replies = [event['assistantMessageEvent']['content'] for event in events if event.get('assistantMessageEvent', {}).get('type') == 'text_end']
+            self.assertEqual(['PI_HANDOVER_READY_2538', 'PI_REPLY_PHONE_AFTER_SWITCH_2538'], replies)
+            self.assertEqual(2, sum(event['type'] == 'agent_settled' for event in events))
+
     def test_real_generation_22_bundle_is_prepared_without_relabeling_current_source(self):
         with tempfile.TemporaryDirectory() as temporary:
             destination = Path(temporary)

@@ -44,6 +44,18 @@ def emit(event):
     print(json.dumps(event), flush=True)
 
 
+def claude():
+    boundary()
+    emit(dict(type='system', subtype='init', session_id=SID, model='sonnet'))
+    for line in sys.stdin:
+        request = json.loads(line)
+        if request.get('type') == 'control_request':
+            emit(dict(type='control_response', response=dict(subtype='success', request_id=request['request_id'], response={})))
+        elif request.get('type') == 'user':
+            with (HOME / 'ai-switch-wrong-provider.txt').open('a') as output:
+                output.write(line)
+
+
 def pi():
     boundary()
     assert '--mode' in sys.argv and sys.argv[sys.argv.index('--mode') + 1] == 'rpc'
@@ -69,5 +81,7 @@ def pi():
 if __name__ == '__main__':
     if sys.argv[1:] == ['console']:
         console()
+    elif '--print' in sys.argv[1:]:
+        claude()
     else:
         pi()

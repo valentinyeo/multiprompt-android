@@ -2,6 +2,8 @@
 wait_for_text CLAUDE_BEFORE_SWITCH_2538
 shot ai-switch-before
 tap_desc 'Session actions'
+wait_for_text 'Search in chat'
+shot ai-switch-actions
 tap_text 'Switch AI'
 wait_for_text Codex
 wait_for_text Pi

@@ -52,7 +52,9 @@ if [[ "${VERIFY_FEATURE:-}" == ai-switch.md ]]; then
     sudo install -m 755 "$(dirname "$0")/ai-switch-fixture.py" /home/verifyssh/ai-switch-fixture.py
     sudo install -m 644 app/src/main/assets/chat_history_reader.py /home/verifyssh/ai-switch-reader.py
     sudo -u verifyssh mkdir -p /home/verifyssh/.local/bin
-    sudo install -m 755 "$(dirname "$0")/ai-switch-fixture.py" /home/verifyssh/.local/bin/pi
+    for binary in claude pi; do
+        sudo install -m 755 "$(dirname "$0")/ai-switch-fixture.py" "/home/verifyssh/.local/bin/$binary"
+    done
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'env GITHUB_ACTIONS=true HOME=/home/verifyssh /home/verifyssh/claude -u /home/verifyssh/ai-switch-fixture.py console 2>/home/verifyssh/ai-switch-startup.txt'
     ready=false
@@ -69,6 +71,10 @@ if [[ "${VERIFY_FEATURE:-}" == ai-switch.md ]]; then
         cat "$EVIDENCE/ai-switch-startup.txt" "$EVIDENCE/ai-switch-startup-pane.txt"
         exit 1
     fi
+    sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/ai-switch-reader.py host start claude c001c001-2538-4000-8000-000000002538 > "$EVIDENCE/ai-switch-host-start.json"
+    jq -e '.status == "started" or .status == "already"' "$EVIDENCE/ai-switch-host-start.json"
+    sudo -u verifyssh tmux show-option -v -t verify-session @mp_host_sid > "$EVIDENCE/ai-switch-initial-sid.txt"
+    grep -Fx c001c001-2538-4000-8000-000000002538 "$EVIDENCE/ai-switch-initial-sid.txt"
 elif [[ "${VERIFY_FEATURE:-}" == chat-codex.md ]]; then
     sudo install -m 755 "$(dirname "$0")/codex-console.py" /home/verifyssh/codex-console.py
     sudo install -m 755 "$(dirname "$0")/resync-console.py" /home/verifyssh/resync-console.py
