@@ -23,11 +23,13 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       EVIDENCE: ${{ github.workspace }}/build/release-proof
-      FIXTURE: ${{ runner.temp }}/verify-ssh
       VERIFY_APK: ${{ github.workspace }}/app/build/outputs/apk/release/app-release.apk
       VERIFY_PACKAGE: dev.multiprompt.companion
       VERIFY_FEATURE: robot-faces.md
     steps:
+      - name: Set fixture directory
+        run: echo "FIXTURE=$RUNNER_TEMP/verify-ssh" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
