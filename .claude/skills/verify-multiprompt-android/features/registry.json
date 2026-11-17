@@ -76,8 +76,8 @@
       ]
     },
     "chat-queued.md": {
-      "name": "Queued label",
-      "description": "sent messages show Queued until taken in and answered, then return to normal.",
+      "name": "Queued messages",
+      "description": "Queued host messages stay visible once, receive correlated consumption receipts and become answered without stale delivery labels.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -87,7 +87,16 @@
       },
       "outcomes": [
         "chat-queued.journey"
-      ]
+      ],
+      "evidence": {
+        "00-queue-ui.json": 1500,
+        "00-queue-receipts.txt": 1500,
+        "queue-pending.json": 1500,
+        "queue-waiting-final.json": 1500,
+        "queue-followup-final.json": 1500,
+        "queue-uncertain-final.json": 1500,
+        "catchup-result.json": 1500
+      }
     },
     "chat-reactions.md": {
       "name": "Claude reactions",
@@ -129,7 +138,17 @@
       },
       "outcomes": [
         "chat-shared.journey"
-      ]
+      ],
+      "evidence": {
+        "shared-before-reset.json": 1000,
+        "shared-after-reset.json": 1000,
+        "shared-codex-before-restart.json": 1000,
+        "shared-codex-after-reset.json": 1000,
+        "05-shared-after-reset.xml": 3000,
+        "07-shared-codex-after-reset.xml": 3000,
+        "shared-terminal.txt": 1000,
+        "shared-result.txt": 500
+      }
     },
     "chat-working.md": {
       "name": "Working dots on the signed release",
@@ -366,6 +385,20 @@
         "session-settings.journey"
       ]
     },
+    "session-stop.md": {
+      "name": "Stop while the chat works",
+      "description": "Stop replaces Send while a chat is working and the box is empty. Typing brings Send back. Stop interrupts the session.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "reader.stop-while-working"
+      ]
+    },
     "session-summaries.md": {
       "name": "Useful inbox summaries",
       "description": "Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.",
@@ -440,6 +473,29 @@
       "outcomes": [
         "terminal.journey"
       ]
+    },
+    "chat-identity.md": {
+      "name": "Message identity and replies",
+      "description": "Phone send receipts, delayed transcript catchup, Fresh start format and reconnect keep each message with its reply once.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "chat.identity"
+      ],
+      "evidence": {
+        "projection-receipts-before.json": 2500,
+        "projection-receipts-reconnect.json": 5500,
+        "projection-state-before.json": 500,
+        "projection-state-fresh.json": 500,
+        "projection-state-catchup.json": 500,
+        "projection-state-reconnect.json": 500,
+        "projection-proof.txt": 500
+      }
     }
   },
   "outcomes": {
@@ -478,7 +534,7 @@
       ]
     },
     "chat-queued.journey": {
-      "description": "sent messages show Queued until taken in and answered, then return to normal.",
+      "description": "Queued host messages stay visible once, receive correlated consumption receipts and become answered without stale delivery labels.",
       "journey": "chat-queued.md",
       "sideEffect": true,
       "match": [
@@ -589,6 +645,14 @@
       "sideEffect": true,
       "match": [
         "SessionReaderConnection"
+      ]
+    },
+    "reader.stop-while-working": {
+      "description": "While a chat is working and the message box is empty, Stop replaces Send. Typing brings Send back, and Stop interrupts the session.",
+      "journey": "session-stop.md",
+      "sideEffect": true,
+      "match": [
+        "composerSlot|stopShown"
       ]
     },
     "session-routing.journey": {
@@ -794,6 +858,14 @@
       "journey": null,
       "sideEffect": true,
       "match": []
+    },
+    "chat.identity": {
+      "description": "Each canonical phone message appears once and keeps its reply across transcript catchup, Fresh start and reconnect.",
+      "journey": "chat-identity.md",
+      "sideEffect": true,
+      "match": [
+        "ChatHistory\\.kt|HostStream\\.kt|MessageProtocol\\.kt|projectMessages|LegacyMessageIdentity"
+      ]
     }
   }
 }

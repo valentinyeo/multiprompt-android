@@ -31,7 +31,7 @@ class LiveMessageOnceTest {
         }
         val replica = MessageReplica(1, 1, (1..5).associate { "mp-liveonce0000000$it" to card(it, "question $it") }, host = host)
 
-        val drawn = ChatHistory(sid = sid, inode = 1, offset = 0, rows = rows).managedMessages(replica, emptyList())
+        val drawn = ChatHistory(sid = sid, inode = 1, offset = 0, rows = rows).projectMessages(replica, emptyList())
 
         assertEquals((1..5).flatMap { listOf("[Image #1] question $it", "answer $it") }, drawn.map { it.text })
         assertEquals((1..5).map { "@shared:mp-liveonce0000000$it" }, drawn.filter { it.role == "user" }.map { it.key })
@@ -45,7 +45,7 @@ class LiveMessageOnceTest {
         host = text(host, "msg_2:text:0", "All tests pass.", false, 1)
         val replica = MessageReplica(1, 1, mapOf("mp-liveonce00000001" to card(1, "run it")), host = host)
 
-        val drawn = ChatHistory(sid = sid, inode = 1, offset = 0, rows = rows).managedMessages(replica, emptyList())
+        val drawn = ChatHistory(sid = sid, inode = 1, offset = 0, rows = rows).projectMessages(replica, emptyList())
 
         assertEquals(listOf("Running the tests.", "All tests pass."), drawn.filter { it.role == "assistant" }.map { it.text })
     }
@@ -56,7 +56,7 @@ class LiveMessageOnceTest {
         host = text(host, "text.done", "hi there", true, 1)
         val replica = MessageReplica(1, 1, mapOf("mp-liveonce00000001" to card(1, "hello")), host = host)
 
-        val drawn = ChatHistory(sid = sid, inode = 1, offset = 0, rows = rows).managedMessages(replica, emptyList())
+        val drawn = ChatHistory(sid = sid, inode = 1, offset = 0, rows = rows).projectMessages(replica, emptyList())
 
         assertEquals(listOf("hello", "hi there"), drawn.map { it.text })
     }
@@ -67,7 +67,7 @@ class LiveMessageOnceTest {
         host = text(host, "text.delta", "still typing", false, 1)
         val replica = MessageReplica(1, 1, mapOf("mp-liveonce00000001" to card(1, "hello")), host = host)
 
-        val drawn = ChatHistory(sid = sid, inode = 1, offset = 0, rows = rows).managedMessages(replica, emptyList())
+        val drawn = ChatHistory(sid = sid, inode = 1, offset = 0, rows = rows).projectMessages(replica, emptyList())
 
         assertEquals(listOf("hello", "first", "still typing"), drawn.map { it.text })
     }
