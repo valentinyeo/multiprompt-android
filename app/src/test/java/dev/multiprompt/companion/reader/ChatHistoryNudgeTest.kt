@@ -34,9 +34,9 @@ class ChatHistoryNudgeTest {
     fun nudgeRetriesAtOnceInsteadOfWaitingOutTheBackoff(): Unit = runBlocking {
         val attempts = AtomicInteger()
         val chat = ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()),
-            gate = MessageGate(), connectedExchange = { _ -> attempts.incrementAndGet(); throw IOException("down") })
+            gate = MessageGate(), connectedExchange = { _ -> attempts.incrementAndGet(); throw IOException("down") }, pollGate = ChatPollGate())
         chat.use {
-            chat.select(true)
+            chat.pollGate.acquire()
             chat.start()
             withTimeout(10_000L) { chat.state.first { it.retrying } }
             assertEquals(1, attempts.get())
@@ -47,7 +47,7 @@ class ChatHistoryNudgeTest {
 
     @Test
     fun nudgeCanInterruptAnInitialConnectionBeforeItHasFailed() {
-        ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder())).use { chat ->
+        ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()), pollGate = ChatPollGate()).use { chat ->
             assertTrue(chat.nudge())
         }
     }

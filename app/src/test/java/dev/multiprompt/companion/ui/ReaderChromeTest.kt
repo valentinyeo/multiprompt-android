@@ -33,6 +33,7 @@ import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.reader.ChatHistory
 import dev.multiprompt.companion.reader.ChatHistoryCache
 import dev.multiprompt.companion.reader.ChatHistoryConnection
+import dev.multiprompt.companion.reader.ChatPollGate
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import dev.multiprompt.companion.reader.ChatHistoryState
 import dev.multiprompt.companion.reader.ReaderState
@@ -88,11 +89,11 @@ class ReaderChromeTest {
         reader.value = ReaderState(status = ReaderStatus.Live, waitingForInput = true,
             runtimeDetails = TmuxText.RuntimeDetails("Opus 5.5", "medium"))
         val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, f.session.name, f.session.workingDirectory)
-        chat = ChatHistoryConnection(f.app.sshRepository, f.host, identity, byteArrayOf(), cache)
+        chat = ChatHistoryConnection(f.app.sshRepository, f.host, identity, byteArrayOf(), cache, pollGate = f.field<ChatPollGate>(connection, "pollGate"))
         ReflectionHelpers.setField(connection, "historyIdentity", identity)
         ReflectionHelpers.setField(connection, "historyConnection", chat)
         history = f.field(chat, "_state")
-        connection.select(true)
+        connection.observe()
         history.value = ChatHistoryState(loaded = true, connected = true, history = ChatHistory(sid = "chrome", rows =
             List(messageCount) { index ->
                 ChatHistoryProtocol.Row(if (index % 2 == 0) "user" else "assistant",

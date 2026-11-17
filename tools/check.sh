@@ -28,6 +28,10 @@ source_checks() {
   python3 -B tools/release-choices/ui.test.py
   python3 -B tools/check-approved-style-source.test.py
   python3 -B tools/historical_control.test.py
+  python3 -B tools/reader-ownership/check.py
+  python3 -B tools/reader-ownership/check.test.py
+  python3 -B tools/reader-ownership/observer.test.py
+  python3 -B tools/reader-ownership/codex-fixture.test.py
   python3 -B tools/account-journey/ui.test.py
   python3 -B tools/check-day-theme-images.test.py
   python3 -B tools/emulator.test.py

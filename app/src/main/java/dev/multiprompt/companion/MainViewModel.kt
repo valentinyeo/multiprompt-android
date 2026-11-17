@@ -1188,8 +1188,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         if (ChatHistoryProtocol.supports(session.agent, session.hostSessionId)) reader.chatHistory(session.agent, session.workingDirectory)
-        _state.value.reader?.takeIf { it !== reader }?.select(false)
-        reader.select(true)
         _state.update {
             it.copy(
                 terminal = null,
@@ -1655,7 +1653,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun closeReader() {
-        _state.value.reader?.select(false)
         _state.update { it.copy(reader = null, readerSession = null, readerSwipeOrder = emptyList()) }
         sweepWarmReaders()
     }
@@ -1900,7 +1897,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openTerminal(session: TmuxSession, userInitiated: Boolean = false) {
-        _state.value.reader?.select(false)
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
         val fromReader = _state.value.readerSession?.let {
             it.hostId == session.hostId && it.name == session.name
