@@ -1,6 +1,10 @@
 import importlib.util
+import json
+import os
 from pathlib import Path
 import struct
+import subprocess
+import sys
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
@@ -67,6 +71,10 @@ class ClearUiTest(unittest.TestCase):
             self.check('sent')
         self.node(text='Received /clear. Claude Opus 5.5 medium')
         self.check('sent')
+        tag = self.node(text='Received [mp:2094e4496b523bb3]. Claude Opus 5.5 medium')
+        with self.assertRaises(AssertionError):
+            self.check('sent')
+        self.root.remove(tag)
         self.editor.set('text', '/clear ')
         with self.assertRaises(AssertionError):
             self.check('sent')
@@ -76,6 +84,38 @@ class ClearUiTest(unittest.TestCase):
             self.check('ready')
         self.node(text='Native session skills are ready.')
         self.check('ready')
+
+    def test_host_receipt_allows_only_exact_clear_and_optional_delivery_trailer(self):
+        receipt = Path(self.temporary.name) / 'receipts.txt'
+        for trailer in ('', 'VERIFY_RECEIVED:[mp:2094e4496b523bb3]\n'):
+            receipt.write_text('VERIFY_RECEIVED:/clear\n' + trailer)
+            result = ui.check_receipts(receipt)
+            self.assertEqual(result['command'], '/clear')
+            self.assertEqual(result['command_count'], 1)
+        for raw in ('', 'VERIFY_RECEIVED:/clear \n',
+                    'VERIFY_RECEIVED:/clear\nVERIFY_RECEIVED:/clear\n',
+                    'VERIFY_RECEIVED:/clear\nVERIFY_RECEIVED:extra draft\n',
+                    'VERIFY_RECEIVED:/clear\nVERIFY_RECEIVED:[mp:wrong]\n',
+                    'VERIFY_RECEIVED:/clear\nVERIFY_RECEIVED:[mp:2094e4496b523bb3]\nVERIFY_RECEIVED:extra\n'):
+            with self.subTest(raw=raw):
+                receipt.write_text(raw)
+                with self.assertRaises(AssertionError):
+                    ui.check_receipts(receipt)
+
+    def test_fixture_retains_raw_delivery_tag_without_inventing_another_user_turn(self):
+        home = Path(self.temporary.name)
+        receipt = home / 'receipts.txt'
+        script = Path(__file__).resolve().parents[2] / '.claude/skills/verify-multiprompt-android/scripts/skills-console.py'
+        result = subprocess.run([sys.executable, str(script), str(receipt), 'clear-ranking'],
+                                input='/clear\n[mp:2094e4496b523bb3]\n', text=True, capture_output=True,
+                                env={**os.environ, 'HOME': str(home)}, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(receipt.read_text(), 'VERIFY_RECEIVED:/clear\nVERIFY_RECEIVED:[mp:2094e4496b523bb3]\n')
+        transcript = next(home.glob('.claude/projects/*/*.jsonl'))
+        rows = [json.loads(line) for line in transcript.read_text().splitlines()]
+        users = [row['message']['content'] for row in rows if row['type'] == 'user']
+        self.assertEqual(users, ['VERIFY_READY_528', '/clear'])
+        self.assertEqual(rows[-1]['message']['content'], 'Received /clear. Claude Opus 5.5 medium')
 
 
 if __name__ == '__main__':

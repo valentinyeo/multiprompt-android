@@ -83,7 +83,7 @@ A product change must name every changed outcome. The second-AI verifier require
 - [AI usage](ai-usage.md): Open AI usage, compare Claude and Codex numbers with independent SSH receipts, then close. SOFT-2542.
   - Outcomes: `ai.usage`. Runner: `verify.yml` (debug). Priority evidence: `ai-usage-menu.json` (1500 characters), `ai-usage-open.json` (2000 characters), `ai-usage-closed.json` (1000 characters), `ai-usage-proof.txt` (200 characters), `ai-usage-host.json` (2000 characters), `ai-usage-receipts.txt` (3000 characters).
 - [Find and send Claude clear](clear-ranking.md): Type /cl, check name-first command ranking, select /clear and send the exact command with independent host receipts. SOFT-2545.
-  - Outcomes: `claude.clear-ranking`. Runner: `verify.yml` (debug). Priority evidence: `clear-query.json` (1800 characters), `clear-selected.json` (700 characters), `clear-sent.json` (700 characters), `clear-receipts.txt` (700 characters), `clear-before.txt` (200 characters), `clear-selected-host.txt` (200 characters), `clear-proof.txt` (200 characters).
+  - Outcomes: `claude.clear-ranking`. Runner: `verify.yml` (debug). Priority evidence: `clear-query.json` (1800 characters), `clear-selected.json` (700 characters), `clear-sent.json` (700 characters), `clear-receipts.txt` (700 characters), `clear-host.json` (700 characters), `clear-before.txt` (200 characters), `clear-selected-host.txt` (200 characters), `clear-proof.txt` (200 characters).
 
 ## Initial coverage gaps
 

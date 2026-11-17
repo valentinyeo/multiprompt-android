@@ -661,6 +661,7 @@
         "clear-selected.json": 700,
         "clear-sent.json": 700,
         "clear-receipts.txt": 700,
+        "clear-host.json": 700,
         "clear-before.txt": 200,
         "clear-selected-host.txt": 200,
         "clear-proof.txt": 200

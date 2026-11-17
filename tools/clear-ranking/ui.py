@@ -52,11 +52,24 @@ def check(xml, screenshot, phase):
     elif phase == 'sent':
         assert composer in ('', 'Message verify-session'), f'Sent command stayed in composer: {composer!r}'
         assert any('Received /clear. Claude' in t for t in texts), 'Host reply is missing'
+        assert not any('[mp:' in t for t in texts), 'Delivery metadata became a chat turn'
         result['reply'] = 'Received /clear. Claude'
     else:
         raise AssertionError(f'Unknown phase: {phase}')
     return result
 
 
+def check_receipts(path):
+    rows = Path(path).read_text().splitlines()
+    assert len(rows) in (1, 2) and rows[0] == 'VERIFY_RECEIVED:/clear', rows
+    tag = None
+    if len(rows) == 2:
+        match = re.fullmatch(r'VERIFY_RECEIVED:\[mp:([0-9a-f]{16})\]', rows[1])
+        assert match, f'Unexpected extra host input: {rows[1]!r}'
+        tag = match[1]
+    return dict(command='/clear', command_count=1, delivery_tag=tag, raw_receipts=Path(path).name)
+
+
 if __name__ == '__main__':
-    print(json.dumps(check(*sys.argv[1:]), indent=2) + '\n', end='')
+    result = check_receipts(sys.argv[2]) if sys.argv[1] == 'receipts' else check(*sys.argv[1:])
+    print(json.dumps(result, indent=2) + '\n', end='')

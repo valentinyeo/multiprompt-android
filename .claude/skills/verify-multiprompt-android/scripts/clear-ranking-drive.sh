@@ -29,11 +29,6 @@ wait_receipt 'VERIFY_RECEIVED:/clear'
 wait_for_text 'Received /clear. Claude'
 clear_state sent
 sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/clear-receipts.txt"
-python3 - "$EVIDENCE/clear-receipts.txt" <<'PYCLEAR'
-from pathlib import Path
-import sys
-receipts = Path(sys.argv[1]).read_text().splitlines()
-assert receipts == ['VERIFY_RECEIVED:/clear'], receipts
-print('CLEAR_EXACT_HOST_RECEIPT_OK')
-PYCLEAR
+python3 tools/clear-ranking/ui.py receipts "$EVIDENCE/clear-receipts.txt" > "$EVIDENCE/clear-host.json"
+cat "$EVIDENCE/clear-host.json"
 printf 'CLAUDE_CLEAR_RANKING_JOURNEY_OK\n' | tee "$EVIDENCE/clear-proof.txt"

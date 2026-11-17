@@ -3,6 +3,7 @@ import datetime
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import uuid
 
@@ -64,6 +65,8 @@ for line in sys.stdin:
     text = line.rstrip("\r\n")
     with receipts.open("a", encoding="utf-8") as output:
         output.write("VERIFY_RECEIVED:" + text + "\n")
+    if sys.argv[2:] == ['clear-ranking'] and re.fullmatch(r'\[mp:[0-9a-f]{16}\]', text):
+        continue
     if text == "/review-native investigation":
         late = cwd / ".claude/skills/late-native/SKILL.md"
         late.parent.mkdir(parents=True, exist_ok=True)
