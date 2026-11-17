@@ -1,4 +1,6 @@
 import importlib.util
+import os
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
@@ -101,6 +103,54 @@ class TableUiTest(unittest.TestCase):
         self.viewport.set('scrollable', 'false')
         with self.assertRaisesRegex(AssertionError, 'no vertical scroll container'):
             ui.swipe(self.root, 'down')
+
+
+class RetainedPhoneTest(unittest.TestCase):
+    fixtures = Path(__file__).with_name('fixtures')
+    root = Path(__file__).resolve().parents[2]
+
+    def test_open_screen_has_description_only_close_and_no_exported_tags(self):
+        xml = self.fixtures / 'e4386ee1-open.xml'
+        root = ET.parse(xml).getroot()
+        self.assertFalse(any(node.get('text') == 'Close' for node in root.iter('node')))
+        self.assertFalse(any(node.get('resource-id', '').startswith('table-') for node in root.iter('node')))
+        result = ui.check(xml, xml.with_suffix('.png'), 'open', 'R01-C01 orchard', 'R01-C06 harvest')
+        self.assertEqual(result['state'], 'open')
+
+    def run_expand(self, xml):
+        script = self.root / '.claude/skills/verify-multiprompt-android/scripts/chat-table-drive.sh'
+        definitions, journey = script.read_text().split('tap_text verify-session\n', 1)
+        expand = journey[journey.index("tap_desc 'Expand table'"):journey.index("table_reveal 'R01-C06 harvest'")]
+        harness = """
+set -euo pipefail
+""" + definitions + """
+tap_desc() { :; }
+table_state() { printf 'TABLE_OPEN_CAPTURED\\n'; }
+wait_for_text() { python3 "$SHARED_UI" "$REPLAY_XML" contains "$1" >/dev/null; }
+select_node() { python3 "$SHARED_UI" "$REPLAY_XML" "$@" >/dev/null; }
+sleep() { :; }
+""" + expand
+        return subprocess.run(['bash', '-c', harness], text=True, capture_output=True,
+                              env={**os.environ, 'REPLAY_XML': str(xml),
+                                   'SHARED_UI': str(self.root / '.claude/skills/verify-multiprompt-android/scripts/ui.py')})
+
+    def test_expand_handshake_accepts_the_real_close_description(self):
+        result = self.run_expand(self.fixtures / 'e4386ee1-open.xml')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('TABLE_OPEN_CAPTURED', result.stdout)
+
+    def test_expand_handshake_rejects_close_text_without_the_control(self):
+        root = ET.parse(self.fixtures / 'e4386ee1-open.xml').getroot()
+        for node in root.iter('node'):
+            if node.get('content-desc') == 'Close':
+                node.set('content-desc', '')
+                node.set('text', 'Close')
+        with tempfile.TemporaryDirectory() as directory:
+            xml = Path(directory) / 'missing-close.xml'
+            ET.ElementTree(root).write(xml)
+            result = self.run_expand(xml)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn('TABLE_OPEN_CAPTURED', result.stdout)
 
 
 if __name__ == '__main__':

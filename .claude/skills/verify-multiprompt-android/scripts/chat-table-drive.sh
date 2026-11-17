@@ -21,13 +21,23 @@ table_state() {
     cat "$EVIDENCE/table-$state.json"
 }
 
+table_wait_open() {
+    local attempt
+    for attempt in {1..30}; do
+        if select_node desc Close >/dev/null 2>&1; then return; fi
+        sleep 1
+    done
+    printf 'Timed out waiting for the table Close control\n' >&2
+    return 1
+}
+
 tap_text verify-session
 wait_for_text 'Message verify-session'
 wait_for_text TABLE_READY_2544
 table_reveal Plot older
 table_state inline Plot 'R01-C06 harvest'
 tap_desc 'Expand table'
-wait_for_text 'Close'
+table_wait_open
 table_state open 'R01-C01 orchard' 'R01-C06 harvest'
 table_reveal 'R01-C06 harvest' sideways
 table_state sideways 'R01-C06 harvest' 'R24-C06 harvest'

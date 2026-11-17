@@ -20,6 +20,8 @@ Every step retains a numbered PNG/XML pair and a `table-<state>.json` result. Th
 
 Inspect all five `*-table-*.png` screenshots alongside their XML, result JSON and `driver-transcript.txt` in `verify-chat-table.md-<run-id>` after cleanup. `table-proof.txt` contains `CHAT_TABLE_JOURNEY_OK` only after every step passes.
 
+`tools/chat-table/fixtures/e4386ee1-open.xml` and its PNG retain the actual expanded phone screen from failed [run 44108093061](https://github.com/valentinyeo/multiprompt-android/actions/runs/44108093061/job/134130140740). The regression replays the driver's expand handshake against that screen. It accepts the icon-only **Close** description and rejects text saying Close without that control.
+
 The registry routes table source changes to this journey. Hosted Node tests replay PR #379's actual table diff, reject its unrelated successful reader proof, and require the picker to schedule this journey even when the model omits it or fills all three optional slots. The control map links the expand, horizontal scroll, vertical scroll and close controls to this recipe.
 
 ## Not covered
