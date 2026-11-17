@@ -1059,6 +1059,7 @@ if [[ "$feature" == room-order.md ]]; then
         python3 "$scripts/room-order.py" shown "$EVIDENCE/$(printf '%02d' "$step")-room-ordered.xml"
     fi
     sudo cat /home/verifyssh/room-submits.jsonl > "$EVIDENCE/room-submits.jsonl"
+    cp "$EVIDENCE/room-submits.jsonl" "$EVIDENCE/room-submits-final.txt"
     python3 "$scripts/room-order.py" submitted "$EVIDENCE/room-submits.jsonl"
     printf 'ROOM_ORDER_OK\n'
     exit 0

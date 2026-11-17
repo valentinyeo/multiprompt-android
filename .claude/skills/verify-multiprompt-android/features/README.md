@@ -73,7 +73,7 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Message identity and replies](chat-identity.md): Phone send receipts, delayed transcript catchup, Fresh start format and reconnect keep each message with its reply once.
   - Outcomes: `chat.identity`. Runner: `verify.yml` (debug). Priority evidence: `projection-receipts-before.json` (2500 characters), `projection-receipts-reconnect.json` (5500 characters), `projection-state-before.json` (500 characters), `projection-state-fresh.json` (500 characters), `projection-state-catchup.json` (500 characters), `projection-state-reconnect.json` (500 characters), `projection-proof.txt` (500 characters).
 - [Room message order](room-order.md): a room keeps two sends in post order, and the later reply includes the other agent's earlier answer.
-  - Outcomes: `rooms.order`. Runner: `verify.yml` (debug).
+  - Outcomes: `rooms.order`. Runner: `verify.yml` (debug). Priority evidence: `room-submits-final.txt` (1000 characters), `room-submits-first.txt` (300 characters), `07-room-ordered.xml` (3000 characters).
 
 ## Initial coverage gaps
 

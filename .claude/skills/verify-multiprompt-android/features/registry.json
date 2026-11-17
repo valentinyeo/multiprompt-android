@@ -543,7 +543,12 @@
       },
       "outcomes": [
         "rooms.order"
-      ]
+      ],
+      "evidence": {
+        "room-submits-final.txt": 1000,
+        "room-submits-first.txt": 300,
+        "07-room-ordered.xml": 3000
+      }
     }
   },
   "outcomes": {
