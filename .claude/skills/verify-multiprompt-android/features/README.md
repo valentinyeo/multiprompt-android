@@ -49,7 +49,7 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Pinned sessions](session-pins.md): signed scrolling in both list orders. Use `session-favorites.md` with `pins_scroll=true`.
   - Outcomes: `session-pins.journey`. Runner: `verify.yml` (signed). Inputs: `{"feature":"session-favorites.md","pins_scroll":true,"released_chat":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Session reader](session-reader.md): native output, Send, Enter/approve and Interrupt, with independent console receipts.
-  - Outcomes: `reader.send-enter-interrupt`. Runner: `verify.yml` (debug).
+  - Outcomes: `reader.send-enter-interrupt`. Runner: `verify.yml` (debug). Priority evidence: `08-send-draft.xml` (1500 characters), `10-send-result.xml` (2500 characters), `11-enter-action.xml` (500 characters), `12-enter-result.xml` (1500 characters), `13-interrupt-action.xml` (500 characters), `14-interrupt-result.xml` (1500 characters), `receipts.txt` (1000 characters), `tmux-final.txt` (1000 characters).
 - [Session routing](session-routing.md): Inbox and swipe switching, typed and simulated dictated sends, independent SSH receipts.
   - Outcomes: `session-routing.journey`. Runner: `verify.yml` (debug).
 - [Session settings](session-settings.md): full-screen split switches; saving is blocked without account OTP and a pulled layout.

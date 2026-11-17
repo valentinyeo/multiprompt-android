@@ -340,7 +340,17 @@
       },
       "outcomes": [
         "reader.send-enter-interrupt"
-      ]
+      ],
+      "evidence": {
+        "08-send-draft.xml": 1500,
+        "10-send-result.xml": 2500,
+        "11-enter-action.xml": 500,
+        "12-enter-result.xml": 1500,
+        "13-interrupt-action.xml": 500,
+        "14-interrupt-result.xml": 1500,
+        "receipts.txt": 1000,
+        "tmux-final.txt": 1000
+      }
     },
     "session-routing.md": {
       "name": "Session routing",
