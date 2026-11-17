@@ -26,6 +26,7 @@ import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.reader.ChatHistory
 import dev.multiprompt.companion.reader.ChatHistoryActorTest
 import dev.multiprompt.companion.reader.ChatHistoryConnection
+import dev.multiprompt.companion.reader.ChatPollGate
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import dev.multiprompt.companion.reader.ChatHistoryState
 import dev.multiprompt.companion.reader.MessageJournal
@@ -53,7 +54,7 @@ class PendingMessagesTest {
     private fun harness() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MultipromptApplication
         val host = HostProfile("pending-proof", "Proof", "", port = 0, username = "proof")
-        val stream = ChatHistoryConnection(app.sshRepository, host, identity, app.chatHistoryScript, app.chatHistoryCache)
+        val stream = ChatHistoryConnection(app.sshRepository, host, identity, app.chatHistoryScript, app.chatHistoryCache, pollGate = ChatPollGate())
         connection = SessionReaderConnection(app.sshRepository, host, identity.tmux, identity.agent, app.chatHistoryScript, app.chatHistoryCache)
         connection.javaClass.getDeclaredField("historyIdentity").apply { isAccessible = true }.set(connection, identity)
         connection.javaClass.getDeclaredField("historyConnection").apply { isAccessible = true }.set(connection, stream)
@@ -170,7 +171,7 @@ class PendingMessagesTest {
         val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MultipromptApplication
         try {
             runBlocking {
-                current.select(true); current.start(); f.ready(current)
+                current.pollGate.acquire(); current.start(); f.ready(current)
                 assertTrue(withTimeout(10_000) { current.resetConversation().await() } == dev.multiprompt.companion.reader.MessageActionResult.Unknown)
             }
             assertEquals("reset", f.journal.entries().single().operation)

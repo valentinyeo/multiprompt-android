@@ -1,0 +1,8 @@
+{
+  "app/src/main/java/dev/multiprompt/companion/reader/ChatHistoryConnection.kt": {
+    "streamChatHistory": 1
+  },
+  "app/src/main/java/dev/multiprompt/companion/reader/SessionReaderConnection.kt": {
+    "streamSession": 1
+  }
+}

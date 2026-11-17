@@ -110,6 +110,24 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: node .github/scripts/pstack-verifier/coverage.cjs check
 
+      - name: Android control map coverage and new-control ratchet
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.test.py 2>&1 | tee "$RUNNER_TEMP/android-control-tests.txt"
+          python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.py check --base "${BASE_SHA:-}" 2>&1 | tee "$RUNNER_TEMP/android-controls.txt"
+          head -n 1 "$RUNNER_TEMP/android-controls.txt" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Retain Android control coverage and missing controls
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-control-coverage
+          path: |
+            ${{ runner.temp }}/android-controls.txt
+            ${{ runner.temp }}/android-control-tests.txt
+          if-no-files-found: error
+
       - name: No code comments
         run: node tools/strip-comments.mjs --check
 

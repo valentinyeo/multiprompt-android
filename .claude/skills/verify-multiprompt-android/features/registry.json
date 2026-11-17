@@ -1,6 +1,24 @@
 {
   "smoke": "native-skills.md",
   "journeys": {
+    "ai-switch.md": {
+      "name": "Switch AI",
+      "description": "Claude-to-Pi handover, reattached chat, and a new phone message with independent provider receipts.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "ai.switch"
+      ],
+      "evidence": {
+        "ai-switch-state.json": 3500,
+        "ai-switch-host.json": 3000
+      }
+    },
     "app-name.md": {
       "name": "App name and update",
       "description": "published signed Android in-app update proof.",
@@ -72,8 +90,19 @@
         "driver": true
       },
       "outcomes": [
-        "codex.transcript"
-      ]
+        "codex.transcript",
+        "reader.lifecycle"
+      ],
+      "evidence": {
+        "reader-ui.json": 6000,
+        "hax-hidden-before.json": 128,
+        "hax-hidden-after.json": 128,
+        "hax-resumed.json": 128,
+        "claude-hidden-before.json": 128,
+        "claude-hidden-after.json": 128,
+        "reader-second-close-receipt.txt": 512,
+        "codex-receipt.txt": 256
+      }
     },
     "chat-queued.md": {
       "name": "Queued messages",
@@ -531,6 +560,24 @@
         "projection-proof.txt": 500
       }
     },
+    "snippets.md": {
+      "name": "Saved snippets",
+      "description": "save, restart, replace a draft with a saved snippet, send it, and delete it permanently.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "snippets.save-reuse-delete"
+      ],
+      "evidence": {
+        "snippets-state.json": 3000,
+        "snippets-receipts.txt": 1000
+      }
+    },
     "chat-search.md": {
       "name": "Find words inside a chat",
       "description": "search real chat replies, check highlighted matches, jump, wrap, handle no matches and close. SOFT-2540.",
@@ -553,6 +600,25 @@
         "search-no-match.json": 500,
         "search-closed.json": 500,
         "search-proof.txt": 200
+      }
+    },
+    "claude-remote-control.md": {
+      "name": "Claude remote control",
+      "description": "Open a hosted Claude chat, enable remote control from the phone, and share phone and desktop turns with independent host receipts. SOFT-2541.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "claude.remote-control"
+      ],
+      "evidence": {
+        "remote-control-state.json": 2000,
+        "remote-control-host.json": 3500,
+        "remote-control-before.txt": 200
       }
     }
   },
@@ -698,7 +764,7 @@
       "match": []
     },
     "reader.send-enter-interrupt": {
-      "description": "native output, Send, Enter/approve and Interrupt, with independent console receipts.",
+      "description": "Native output, Send, Enter/approve and Interrupt, with independent console receipts. Action evidence: driver-transcript.txt records + tap_desc 'Send prompt', + tap_text 'Enter / approve' and + tap_text 'Interrupt session'. Result evidence: 10-send-result.xml contains VERIFY_RECEIVED:VERIFY_SENT_528, 12-enter-result.xml contains VERIFY_ENTER_528, and 14-interrupt-result.xml contains VERIFY_INTERRUPTED_528. These markers are substrings of multiline text attributes, not standalone text=\"marker\" attributes. Independent side-effect evidence: receipts.txt and tmux-final.txt retain all three literal markers. Quote the marker substring verbatim, without inventing XML attribute boundaries.",
       "journey": "session-reader.md",
       "sideEffect": true,
       "match": [
@@ -777,18 +843,32 @@
     },
     "snippets.save-reuse-delete": {
       "description": "Save, reuse, delete and retain snippets.",
-      "journey": null,
+      "journey": "snippets.md",
       "sideEffect": true,
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tap_text VERIFY_SNIPPET_2537"
+        },
+        "result": {
+          "file": "snippets-state.json",
+          "quote": "\"composer\": [\n      \"VERIFY_SNIPPET_2537\"\n    ]"
+        },
+        "sideEffect": {
+          "file": "snippets-receipts.txt",
+          "quote": "VERIFY_RECEIVED:VERIFY_SNIPPET_2537"
+        }
+      },
       "match": [
         "SnippetStore|snippet|Snippet"
       ]
     },
     "ai.switch": {
       "description": "Switch AI and reattach to the chosen provider.",
-      "journey": null,
+      "journey": "ai-switch.md",
       "sideEffect": true,
       "match": [
-        "switchAi|Switch AI|switchAgent|SwitchAgent"
+        "switchAi|SwitchAi|Switch AI|switchAgent|SwitchAgent|host_switch_|HOST_SWITCH_|switch_ai"
       ]
     },
     "pi.model-switch": {
@@ -810,11 +890,25 @@
     },
     "claude.remote-control": {
       "description": "Start Claude remote control and run its bundled operations.",
-      "journey": null,
+      "journey": "claude-remote-control.md",
       "sideEffect": true,
       "match": [
-        "RemoteControl|remoteControl|remote-control"
-      ]
+        "RemoteControl|remoteControl|remote-control|remote_control|host_claude_open"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "+ tap_desc 'Send prompt'"
+        },
+        "result": {
+          "file": "remote-control-state.json",
+          "quote": "REMOTE_CONTROL_CONNECTED_2541 desktop_counter=1"
+        },
+        "sideEffect": {
+          "file": "remote-control-host.json",
+          "quote": "\"subtype\": \"remote_control\""
+        }
+      }
     },
     "ai.usage": {
       "description": "Open AI usage and render live, stale and missing status.",
@@ -940,6 +1034,15 @@
       "sideEffect": true,
       "match": [
         "ChatHistory\\.kt|HostStream\\.kt|MessageProtocol\\.kt|projectMessages|LegacyMessageIdentity"
+      ]
+    },
+    "reader.lifecycle": {
+      "description": "Hax and Claude stop snapshot and history requests while hidden, wake on return, and publish after another reader closes. Action evidence: driver-transcript.txt records adb shell input keyevent KEYCODE_HOME. Result evidence: reader-ui.json retains CODEX_REPLY_hax_HOST_WHILE_HIDDEN_hax and CODEX_REPLY_hax_AFTER_SECOND_READER_CLOSE. Independent side-effect evidence: hax-hidden-before.json and hax-hidden-after.json retain equal host request counts; hax-resumed.json retains increased counts. reader-second-close-receipt.txt records VERIFY_RECEIVED:AFTER_SECOND_READER_CLOSE. The *-result.txt files are assertion summaries, not independent side-effect citations.",
+      "journey": "chat-codex.md",
+      "sideEffect": true,
+      "match": [
+        "ChatPollGate",
+        "ReaderStreamPump"
       ]
     }
   }

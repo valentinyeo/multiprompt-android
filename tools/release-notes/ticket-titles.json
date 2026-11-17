@@ -1,4 +1,8 @@
 {
+  "IGSH-2568": "Feature freeze until each repo's verification is complete",
+  "IGSH-2570": "Android verification meets Lauren's checklist",
+  "IGSH-2534": "Android chat reader has one owner for its connection",
+  "IGSH-2537": "Android phone test saves and reuses snippets",
   "IGSH-2560": "Server overload: worker caps, heavy checks in the cloud, cloud workers",
   "IGSH-2535": "Android phone tests tap what a person can really reach",
   "IGSH-2531": "Android checks prove the feature that changed, not another one",
@@ -108,7 +112,8 @@
   "IGSH-2486": "Android shell gets Esc, Tab, Ctrl and arrow keys",
   "IGSH-2532": "Android chat shows each message once, with its reply",
   "IGSH-2533": "Android old-screen check stops breaking on every change",
+  "IGSH-2538": "Android phone test switches AI",
   "IGSH-2540": "Android phone test finds words inside chats",
   "IGSH-2560": "Server overload: worker caps, heavy checks in the cloud, cloud workers",
-  "IGSH-2568": "Feature freeze until each repo's verification is complete"
+  "IGSH-2541": "Android phone test opens Claude remote control"
 }

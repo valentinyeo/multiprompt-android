@@ -29,6 +29,7 @@ Requires JDK 17 and Android SDK 36. Before every push run `tools/check.sh`: it i
 | One registry owns verification recipes, picker eligibility and dispatch options | `coverage.cjs check` in `tools/check.sh` and `test.yml` |
 | Journey text replacement never types into an uncleared field | `drive.sh clear_field/fill`, `ui.py` readback and `tools/journey-actions/action.test.py` query/draft/numeric failure replays |
 | Journey taps resolve an enabled action in the active window, reveal its full clickable bounds and scroll the matching axis; new raw taps are forbidden | `journey_action.py` through `drive.sh tap_node`, `tools/journey-actions/check.py` baseline ratchet and `action.test.py` historical replays in `tools/check.sh` |
+| One session owns snapshot/history reads; screens hold foreground leases and release only their own lease. New read implementations cannot bypass the owner. Canceled unissued actions are rejected | `ChatPollGate`, `SessionReaderConnection`, `tools/reader-ownership/check.py` per-file baseline ratchet and historical replays, plus hosted reader lifecycle tests/journey |
 | ChatHistory.projectMessages owns visible message identity; protocols and UI never append independent echoes. Legacy text matching stays at LegacyMessageIdentity | `tools/message-projection/check.py` per-path baseline ratchet, `MessageProjectionTest`, and historical JVM replay in `test.yml` |
 | No scratch output (logs, OCR dumps, screenshots) at the repo root | `tools/root-files.mjs` allowlist in `tools/check.sh` |
 | Merged branches do not linger on GitHub | repo setting: delete branch on merge |
@@ -44,7 +45,7 @@ Requires JDK 17 and Android SDK 36. Before every push run `tools/check.sh`: it i
 
 ## Git workflow
 
-- `main` requires all eight always-on app/security checks. Updated base required; administrators cannot bypass. Never push directly.
+- `main` must require all 18 checks in `tools/pr-checks.mjs`, including `pstack-verifier`. Check live settings with `node tools/branch-protection.mjs --check`. Updated base required; administrators cannot bypass. Never push directly.
 - Before merge: `node tools/pr-checks.mjs <PR> --wait`. Recheck once with `node tools/pr-checks.mjs <PR>`. Missing checks never pass. Failed checks and unexpected skips stop immediately. The six path-routed emulator checks may be skipped. Ticket closure requires merged, complete-green proof.
 - One wait per PR; five-minute polls; thirty-minute maximum. Head/base changes stop the wait. Never use bare `gh pr checks --watch` or `gh-green` as complete-check proof.
 - Merge the checked head with `gh pr merge <PR> --squash --delete-branch --match-head-commit <checked-sha>`.

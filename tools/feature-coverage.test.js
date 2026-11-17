@@ -13,7 +13,32 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const tool = path.join(root, '.github/scripts/pstack-verifier/coverage.cjs');
 const productDiff = (file, text) => `diff --git a/app/src/main/${file} b/app/src/main/${file}\n--- a/app/src/main/${file}\n+++ b/app/src/main/${file}\n@@ -1 +1 @@\n-old\n+${text}\n`;
 
-for (const [pr, outcome] of [[380, 'chat-search.open'], [376, 'snippets.save-reuse-delete']]) {
+function mockPickerGithub(file) {
+  fs.writeFileSync(file, `#!${process.execPath}
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+const pull = 'repos/example/repo/pulls/' + process.env.PR_NUMBER;
+const diff = fs.readFileSync(process.env.FIXTURE_DIFF, 'utf8');
+const files = [...diff.matchAll(/^diff --git a\\/.+ b\\/(.+)$/gm)].map(([, filename]) => ({ filename }));
+if (args.includes('Accept: application/vnd.github.diff')) {
+  assert.deepEqual(args, ['api', pull, '-H', 'Accept: application/vnd.github.diff']);
+  process.stdout.write(diff);
+} else if (args.at(-1).includes('/files?')) {
+  assert.deepEqual(args, ['api', '--paginate', '--slurp', pull + '/files?per_page=100']);
+  console.log(JSON.stringify([files]));
+} else if (args[1].includes('/compare/')) {
+  assert.deepEqual(args, ['api', 'repos/example/repo/compare/main...' + process.env.EVENT_HEAD_SHA]);
+  console.log(JSON.stringify({ merge_base_commit: { sha: 'b'.repeat(40) } }));
+} else {
+  assert.deepEqual(args, ['api', pull]);
+  console.log(JSON.stringify({ number: Number(process.env.PR_NUMBER), state: 'open', changed_files: files.length,
+    head: { sha: process.env.EVENT_HEAD_SHA, repo: { full_name: 'example/repo' } }, base: { ref: 'main' } }));
+}
+`, { mode: 0o755 });
+}
+
+for (const [pr, outcome] of [[380, 'chat-search.open'], [376, 'snippets.save-reuse-delete'], [373, 'ai.switch']]) {
   test(`real PR #${pr} is rejected despite its successful unrelated head journeys`, () => {
     const fixture = JSON.parse(read(`tools/fixtures/feature-coverage/pr-${pr}.json`));
     const diff = read(`tools/fixtures/feature-coverage/pr-${pr}.diff`);
@@ -100,6 +125,56 @@ test('matching successful proof requires action, resulting UI, independent recei
   });
 });
 
+test('PR #391 reader lifecycle exposes citable actions, resumed UI and independent host counts', () => {
+  const fixture = JSON.parse(read('tools/fixtures/feature-coverage/pr-391-reader.json'));
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'reader-lifecycle-proof-'));
+  const claim = fixture.coverage;
+  try {
+    for (const [name, text] of Object.entries(fixture.files)) fs.writeFileSync(path.join(directory, name), text);
+    const priority = gate.registry.journeys[claim.journey].evidence;
+    for (const file of ['reader-ui.json', 'hax-hidden-before.json', 'hax-hidden-after.json', 'hax-resumed.json', 'reader-second-close-receipt.txt']) {
+      assert.ok(Object.hasOwn(priority, file), `${file} must reach the independent judge`);
+    }
+    const evidence = verifier.journeyEvidence(directory, claim.journey);
+    for (const ref of [claim.action, claim.result, claim.sideEffect]) assert.ok(evidence.includes(ref.quote), ref.file);
+    const args = {
+      plan: { product: true, outcomes: [claim.outcome] }, coverage: [claim],
+      directories: { [claim.journey]: directory }, conclusions: { [claim.journey]: 'success' }, sha: fixture.sha,
+    };
+    const proof = gate.featureErrors(args);
+    assert.deepEqual(proof.errors, []);
+    assert.equal(proof.accepted[0].outcome, 'reader.lifecycle');
+    fs.writeFileSync(path.join(directory, 'hax-hidden-result.txt'), 'READER_HIDDEN_OK: counts unchanged');
+    args.coverage = [{ ...claim, sideEffect: { file: 'hax-hidden-result.txt', quote: 'READER_HIDDEN_OK: counts unchanged' } }];
+    assert.equal(gate.featureErrors(args).errors.length, 1);
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('PR #391 session-reader citations match multiline UI text and independent receipts verbatim', () => {
+  const fixture = JSON.parse(read('tools/fixtures/feature-coverage/pr-391-session-reader.json'));
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'session-reader-proof-'));
+  const claim = fixture.coverage;
+  try {
+    for (const [name, text] of Object.entries(fixture.files)) fs.writeFileSync(path.join(directory, name), text);
+    const catalog = gate.catalog();
+    const evidence = verifier.journeyEvidence(directory, claim.journey);
+    for (const ref of [claim.action, claim.result, claim.sideEffect]) {
+      assert.ok(catalog.includes(ref.file), `${ref.file} needs an outcome citation`);
+      assert.ok(evidence.includes(ref.quote), ref.file);
+    }
+    for (const marker of ['VERIFY_RECEIVED:VERIFY_SENT_528', 'VERIFY_ENTER_528', 'VERIFY_INTERRUPTED_528']) {
+      assert.ok(catalog.includes(marker), `${marker} needs a literal outcome citation`);
+    }
+    const args = {
+      plan: { product: true, outcomes: [claim.outcome] }, coverage: [claim],
+      directories: { [claim.journey]: directory }, conclusions: { [claim.journey]: 'success' }, sha: fixture.sha,
+    };
+    assert.deepEqual(gate.featureErrors(args).errors, []);
+    args.coverage = [{ ...claim, result: { ...claim.result, quote: 'text="VERIFY_INTERRUPTED_528"' } }];
+    assert.equal(gate.featureErrors(args).errors.length, 1);
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
 test('missing, fabricated, stale, cross-journey and unretained proof fails even with a model PASS', () => {
   const mutations = [
     args => { args.coverage = []; },
@@ -165,8 +240,7 @@ test('the real picker schedules the changed chat search recipe for a tooling-onl
     const diff = path.join(directory, 'recipe.diff');
     fs.writeFileSync(diff, `diff --git a/${gate.REGISTRY_PATH}/chat-search.md b/${gate.REGISTRY_PATH}/chat-search.md\n+Find words inside a chat\n`);
     const gh = path.join(directory, 'gh');
-    fs.writeFileSync(gh, `#!${process.execPath}\nconst fs=require('node:fs');const args=process.argv.slice(2);if(args.includes('Accept: application/vnd.github.diff'))process.stdout.write(fs.readFileSync(process.env.FIXTURE_DIFF));else if(args[1].includes('/compare/'))console.log(JSON.stringify({merge_base_commit:{sha:'b'.repeat(40)}}));else console.log(JSON.stringify({number:397,state:'open',head:{sha:process.env.EVENT_HEAD_SHA,repo:{full_name:'example/repo'}},base:{ref:'main'}}));`);
-    fs.chmodSync(gh, 0o755);
+    mockPickerGithub(gh);
     const stub = path.join(directory, 'model.cjs');
     fs.writeFileSync(stub, `global.fetch=async()=>({status:200,ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:JSON.parse(process.env.MODEL_FEATURES),changed_outcomes:[],change_kind:'tooling',reason:'Tooling only.'})}}]})});`);
     for (const features of [[], ['native-skills.md', 'session-reader.md', 'terminal.md']]) {
@@ -306,4 +380,203 @@ test('pick and judge exchange required IDs and retain both tooling and outcome e
   assert.match(workflow, /name: verifier-feature-coverage/);
   assert.match(workflow, /name: verifier-tooling-proof/);
   assert.match(workflow, /node --test tools\/feature-coverage.test.js tools\/pstack-verifier.test.js/);
+});
+
+test('the real picker schedules snippets even when the model omits it or fills all three slots', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'snippets-pick-'));
+  try {
+    const fixture = JSON.parse(read('tools/fixtures/feature-coverage/pr-376.json'));
+    const gh = path.join(directory, 'gh');
+    mockPickerGithub(gh);
+    const stub = path.join(directory, 'model.cjs');
+    fs.writeFileSync(stub, `global.fetch = async () => ({status:200,ok:true,json:async () => ({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:JSON.parse(process.env.MODEL_FEATURES),changed_outcomes:[],change_kind:process.env.CHANGE_KIND,reason:'Model omitted snippets.'})}}]})});`);
+    const recipeDiff = path.join(directory, 'recipe.diff');
+    fs.writeFileSync(recipeDiff, `diff --git a/${gate.REGISTRY_PATH}/snippets.md b/${gate.REGISTRY_PATH}/snippets.md\n+Save and reuse snippets\n`);
+    for (const diff of [path.join(root, 'tools/fixtures/feature-coverage/pr-376.diff'), recipeDiff]) {
+      for (const modelFeatures of [[], ['native-skills.md', 'session-reader.md', 'terminal.md']]) {
+        const output = path.join(directory, 'outputs');
+        fs.writeFileSync(output, '');
+        const result = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
+          cwd: root,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${directory}:${process.env.PATH}`,
+            NODE_OPTIONS: `--require=${stub}`,
+            DEEPSEEK_API_KEY: 'test-only',
+            REPO: 'example/repo',
+            PR_NUMBER: '376',
+            EVENT_HEAD_SHA: fixture.headSha,
+            FIXTURE_DIFF: diff,
+            MODEL_FEATURES: JSON.stringify(modelFeatures),
+            CHANGE_KIND: diff === recipeDiff ? 'tooling' : 'product',
+            GITHUB_OUTPUT: output,
+          },
+        });
+        assert.equal(result.status, 0, result.stderr);
+        const values = fs.readFileSync(output, 'utf8');
+        const features = JSON.parse(values.match(/^features=(.+)$/m)[1]);
+        assert.equal(features[0], 'snippets.md', values);
+        assert.ok(features.length <= verifier.MAX_JOURNEYS);
+        assert.match(values, /^smoke=no$/m);
+        if (diff !== recipeDiff) assert.match(values, /changed_outcomes=.*snippets.save-reuse-delete/);
+      }
+    }
+    assert.equal(gate.baseline['snippets.save-reuse-delete'], undefined);
+    assert.equal(gate.registry.outcomes['snippets.save-reuse-delete'].journey, 'snippets.md');
+    assert.ok(gate.debugJourneys.includes('snippets.md'));
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('snippet citation hints reach the judge and require exact retained head actions, UI and receipts', () => {
+  const outcome = 'snippets.save-reuse-delete';
+  const journey = 'snippets.md';
+  const citations = gate.registry.outcomes[outcome].citations;
+  assert.ok(citations, 'Register explicit snippet action, result and side-effect citations');
+  assert.ok(gate.catalog().includes(JSON.stringify(citations)), 'The judge must receive the registered citation hints');
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'snippets-citations-'));
+  try {
+    fs.writeFileSync(path.join(directory, 'app-source-sha.txt'), sha);
+    fs.writeFileSync(path.join(directory, 'driver-transcript.txt'), '++ tap_text VERIFY_SNIPPET_2537\n');
+    fs.writeFileSync(path.join(directory, 'snippets-state.json'), JSON.stringify({ reused: { composer: ['VERIFY_SNIPPET_2537'] } }, null, 2));
+    fs.writeFileSync(path.join(directory, 'snippets-receipts.txt'), 'VERIFY_RECEIVED:VERIFY_SNIPPET_2537\n');
+    const args = {
+      plan: { product: true, outcomes: [outcome] },
+      coverage: [{ outcome, journey, ...citations }],
+      directories: { [journey]: directory },
+      conclusions: { [journey]: 'success' },
+      sha,
+    };
+    assert.equal(gate.featureErrors(args).accepted.length, 1);
+    assert.equal(gate.featureErrors({ ...args, coverage: [] }).errors.length, 1);
+    assert.equal(gate.featureErrors({ ...args, sha: 'b'.repeat(40) }).errors.length, 1);
+    for (const file of ['driver-transcript.txt', 'snippets-state.json', 'snippets-receipts.txt']) {
+      const full = path.join(directory, file);
+      const original = fs.readFileSync(full, 'utf8');
+      fs.writeFileSync(full, 'Missing snippet proof');
+      assert.equal(gate.featureErrors(args).errors.length, 1, file);
+      fs.writeFileSync(full, original);
+    }
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('the real picker schedules AI switch even when the model omits it or fills all three slots', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-switch-pick-'));
+  try {
+    const fixture = JSON.parse(read('tools/fixtures/feature-coverage/pr-373.json'));
+    const gh = path.join(directory, 'gh');
+    mockPickerGithub(gh);
+    const stub = path.join(directory, 'model.cjs');
+    fs.writeFileSync(stub, `global.fetch = async () => ({status:200,ok:true,json:async () => ({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:JSON.parse(process.env.MODEL_FEATURES),changed_outcomes:[],change_kind:process.env.CHANGE_KIND,reason:'Model omitted AI switch.'})}}]})});`);
+    const recipeDiff = path.join(directory, 'recipe.diff');
+    fs.writeFileSync(recipeDiff, `diff --git a/${gate.REGISTRY_PATH}/ai-switch.md b/${gate.REGISTRY_PATH}/ai-switch.md\n+Switch Claude to Pi and send a message\n`);
+    for (const diff of [path.join(root, 'tools/fixtures/feature-coverage/pr-373.diff'), recipeDiff]) {
+      for (const modelFeatures of [[], ['native-skills.md', 'session-reader.md', 'terminal.md']]) {
+        const output = path.join(directory, 'outputs');
+        fs.writeFileSync(output, '');
+        const result = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
+          cwd: root,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${directory}:${process.env.PATH}`,
+            NODE_OPTIONS: `--require=${stub}`,
+            DEEPSEEK_API_KEY: 'test-only',
+            REPO: 'example/repo',
+            PR_NUMBER: '373',
+            EVENT_HEAD_SHA: fixture.headSha,
+            FIXTURE_DIFF: diff,
+            MODEL_FEATURES: JSON.stringify(modelFeatures),
+            CHANGE_KIND: diff === recipeDiff ? 'tooling' : 'product',
+            GITHUB_OUTPUT: output,
+          },
+        });
+        assert.equal(result.status, 0, result.stderr);
+        const values = fs.readFileSync(output, 'utf8');
+        const features = JSON.parse(values.match(/^features=(.+)$/m)[1]);
+        assert.ok(features.includes('ai-switch.md'), values);
+        assert.ok(features.length <= verifier.MAX_JOURNEYS);
+        assert.match(values, /^smoke=no$/m);
+        if (diff !== recipeDiff) assert.match(values, /changed_outcomes=.*ai.switch/);
+      }
+    }
+    assert.equal(gate.baseline['ai.switch'], undefined);
+    assert.equal(gate.registry.outcomes['ai.switch'].journey, 'ai-switch.md');
+    assert.ok(gate.debugJourneys.includes('ai-switch.md'));
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('the real picker schedules Claude remote control even when the model omits it or fills all three slots', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-control-pick-'));
+  try {
+    const fixture = { headSha: sha };
+    const product = path.join(directory, 'product.diff');
+    fs.writeFileSync(product, productDiff('assets/chat_history_reader.py', 'def host_claude_open(): remote_control'));
+    const gh = path.join(directory, 'gh');
+    mockPickerGithub(gh);
+    const stub = path.join(directory, 'model.cjs');
+    fs.writeFileSync(stub, `global.fetch = async () => ({status:200,ok:true,json:async () => ({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:JSON.parse(process.env.MODEL_FEATURES),changed_outcomes:[],change_kind:process.env.CHANGE_KIND,reason:'Model omitted Claude remote control.'})}}]})});`);
+    const recipeDiff = path.join(directory, 'recipe.diff');
+    fs.writeFileSync(recipeDiff, `diff --git a/${gate.REGISTRY_PATH}/claude-remote-control.md b/${gate.REGISTRY_PATH}/claude-remote-control.md\n+Open Claude remote control\n`);
+    for (const diff of [product, recipeDiff]) {
+      for (const modelFeatures of [[], ['native-skills.md', 'session-reader.md', 'terminal.md']]) {
+        const output = path.join(directory, 'outputs');
+        fs.writeFileSync(output, '');
+        const result = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
+          cwd: root,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${directory}:${process.env.PATH}`,
+            NODE_OPTIONS: `--require=${stub}`,
+            DEEPSEEK_API_KEY: 'test-only',
+            REPO: 'example/repo',
+            PR_NUMBER: '366',
+            EVENT_HEAD_SHA: fixture.headSha,
+            FIXTURE_DIFF: diff,
+            MODEL_FEATURES: JSON.stringify(modelFeatures),
+            CHANGE_KIND: diff === recipeDiff ? 'tooling' : 'product',
+            GITHUB_OUTPUT: output,
+          },
+        });
+        assert.equal(result.status, 0, result.stderr);
+        const values = fs.readFileSync(output, 'utf8');
+        const features = JSON.parse(values.match(/^features=(.+)$/m)[1]);
+        assert.ok(features.includes('claude-remote-control.md'), values);
+        assert.ok(features.length <= verifier.MAX_JOURNEYS);
+        assert.match(values, /^smoke=no$/m);
+        if (diff !== recipeDiff) assert.match(values, /changed_outcomes=.*claude.remote-control/);
+      }
+    }
+    assert.equal(gate.baseline['claude.remote-control'], undefined);
+    assert.equal(gate.registry.outcomes['claude.remote-control'].journey, 'claude-remote-control.md');
+    assert.ok(gate.debugJourneys.includes('claude-remote-control.md'));
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+
+test('Claude remote-control proof requires its action, connected UI, independent host receipt and exact head', () => {
+  const outcome = 'claude.remote-control';
+  const journey = 'claude-remote-control.md';
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-control-proof-'));
+  const claim = { outcome, journey, ...gate.registry.outcomes[outcome].citations };
+  try {
+    const priority = gate.registry.journeys[journey].evidence;
+    assert.ok(priority['remote-control-state.json']);
+    assert.ok(priority['remote-control-host.json']);
+    fs.writeFileSync(path.join(directory, 'app-source-sha.txt'), sha);
+    for (const ref of [claim.action, claim.result, claim.sideEffect]) fs.writeFileSync(path.join(directory, ref.file), ref.quote);
+    const args = { plan: { product: true, outcomes: [outcome] }, coverage: [claim], directories: { [journey]: directory }, conclusions: { [journey]: 'success' }, sha };
+    assert.deepEqual(gate.featureErrors(args).errors, []);
+    for (const ref of [claim.action, claim.result, claim.sideEffect]) {
+      fs.writeFileSync(path.join(directory, ref.file), 'unrelated proof');
+      assert.match(gate.featureErrors(args).errors.join(' '), /FEATURE_NOT_EXERCISED: claude.remote-control/);
+      fs.writeFileSync(path.join(directory, ref.file), ref.quote);
+    }
+    fs.writeFileSync(path.join(directory, 'app-source-sha.txt'), 'b'.repeat(40));
+    assert.match(gate.featureErrors(args).errors.join(' '), /exact PR head SHA/);
+    for (const name of ['remote_control', 'host_claude_open', 'remoteControl', 'RemoteControl', 'remote-control']) {
+      assert.ok(gate.changedOutcomes(productDiff('assets/chat_history_reader.py', name)).includes(outcome), name);
+    }
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });

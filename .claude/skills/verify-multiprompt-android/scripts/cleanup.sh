@@ -11,6 +11,26 @@ fi
 if [[ -d "$FIXTURE" ]]; then
     sudo cat "$FIXTURE/sshd.log" > "$EVIDENCE/sshd.log" 2>/dev/null || true
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt" 2>/dev/null || true
+    for provider in codex claude; do
+        sudo cat "/home/verifyssh/$provider-receipts.txt" > "$EVIDENCE/$provider-receipts.txt" 2>/dev/null || true
+    done
+    sudo cat /home/verifyssh/reader-requests.jsonl > "$EVIDENCE/reader-requests.jsonl" 2>/dev/null || true
+    if [[ "${VERIFY_FEATURE:-}" == claude-remote-control.md ]]; then
+        sudo cat /home/verifyssh/remote-control-receipts.jsonl > "$EVIDENCE/remote-control-receipts.jsonl" 2>/dev/null || true
+        sudo cat /home/verifyssh/remote-control-work/desktop-counter.txt > "$EVIDENCE/remote-control-desktop.txt" 2>/dev/null || true
+        sudo cat /home/verifyssh/remote-control-startup.txt > "$EVIDENCE/remote-control-startup.txt" 2>/dev/null || true
+    fi
+    if [[ "${VERIFY_FEATURE:-}" == ai-switch.md ]]; then
+        sudo -u verifyssh python3 - > "$EVIDENCE/ai-switch-host-debug.json" <<'PYHOST'
+import json
+from pathlib import Path
+home = Path('/home/verifyssh')
+root = home / '.local/state/multiprompt/agent-host'
+files = [path for path in root.glob('*') if path.is_file() and path.suffix in ('.json', '.jsonl', '.log')]
+files += list(home.glob('ai-switch-*.txt')) + list(home.glob('ai-switch-*.jsonl'))
+print(json.dumps({str(path.relative_to(home)): path.read_text()[-64000:] for path in files}, indent=2))
+PYHOST
+    fi
     for name in tmux sshd; do
         if [[ -f "$FIXTURE/$name.pid" ]]; then
             pid=$(cat "$FIXTURE/$name.pid")

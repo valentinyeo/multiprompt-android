@@ -7,6 +7,8 @@ import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.model.HostProfile
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -84,6 +86,8 @@ class ChatHistoryActorTest {
         val resetRequested = CompletableDeferred<Unit>()
         var historyPause: CompletableDeferred<Unit>? = null
         val historyPaused = CompletableDeferred<Unit>()
+        var historyCleanup: CompletableDeferred<Unit>? = null
+        val historyCleanupStarted = CompletableDeferred<Unit>()
         var growingEvents = false
         @Volatile var nativeRows: List<JSONObject>? = null
         val nativeDelivered = CompletableDeferred<Unit>()
@@ -226,7 +230,17 @@ class ChatHistoryActorTest {
                     result(JSONObject().put("epoch", epoch).put("seq", 0).put("message", row))
                 }
                 else -> {
-                    historyPause?.let { historyPaused.complete(Unit); it.await() }
+                    historyPause?.let { pause ->
+                        historyPaused.complete(Unit)
+                        try { pause.await() } finally {
+                            historyCleanup?.let { cleanup ->
+                                withContext(NonCancellable) {
+                                    historyCleanupStarted.complete(Unit)
+                                    cleanup.await()
+                                }
+                            }
+                        }
+                    }
                     val wire = "@mp\t$id\thistory\tok\t$sid\t0\t0\t1\t0\t$provider\tchat\t1\t${"a".repeat(64)}\ttail\t0\n${TranscriptProtocol.END}\n"
                     JSONObject().put("id", id).put("wire", wire).toString()
                 }
@@ -235,7 +249,7 @@ class ChatHistoryActorTest {
         fun connection(): ChatHistoryConnection = ChatHistoryConnection(app.sshRepository, host, identity, byteArrayOf(),
             ChatHistoryCache(File(context.cacheDir, UUID.randomUUID().toString())), journal, gate,
             connectedExchange = { block -> block { query -> exchange(query) } },
-            beforeAdmission = { admissionPause?.let { admissionStarted.complete(Unit); it.await() } })
+            beforeAdmission = { admissionPause?.let { admissionStarted.complete(Unit); it.await() } }, pollGate = ChatPollGate())
         suspend fun ready(connection: ChatHistoryConnection) = withTimeout(10_000) { connection.state.first { it.replica != null && it.history.sid == sid } }
     }
 
@@ -247,7 +261,7 @@ class ChatHistoryActorTest {
             val owner = f.connection()
             val badKey = "unrelated12345678"
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 f.historyPause = CompletableDeferred()
                 owner.nearTop(true)
                 withTimeout(10_000) { f.historyPaused.await() }
@@ -289,7 +303,7 @@ class ChatHistoryActorTest {
         val f = Fixture("claude")
         val owner = f.connection()
         try {
-            owner.select(true); owner.start(); f.ready(owner)
+            owner.pollGate.acquire(); owner.start(); f.ready(owner)
             f.historyPause = CompletableDeferred()
             owner.nearTop(true)
             withTimeout(10_000) { f.historyPaused.await() }
@@ -308,21 +322,25 @@ class ChatHistoryActorTest {
         f.row = f.row("queued")
         val owner = f.connection()
         try {
-            owner.select(true); owner.start()
+            var ownerLease = owner.pollGate.acquire(); owner.start()
             val ready = f.ready(owner)
             val row = requireNotNull(ready.replica?.messages?.get(messageId))
             f.historyPause = CompletableDeferred()
             owner.nearTop(true)
             withTimeout(10_000) { f.historyPaused.await() }
             f.growingEvents = true
+            f.historyCleanup = CompletableDeferred()
             val old = owner.actionToken()
-            owner.select(false); owner.select(true)
+            ownerLease.close()
+            withTimeout(10_000) { f.historyCleanupStarted.await() }
+            ownerLease = owner.pollGate.acquire()
             val stale = async(start = CoroutineStart.UNDISPATCHED) { owner.checkStatus(messageId, old) }
             val send = async(start = CoroutineStart.UNDISPATCHED) { owner.submit("must not send") }
             val status = async(start = CoroutineStart.UNDISPATCHED) { owner.checkStatus(messageId) }
             val replay = async(start = CoroutineStart.UNDISPATCHED) { owner.replayUnknown(messageId) }
             val remove = async(start = CoroutineStart.UNDISPATCHED) { owner.dismiss(row) }
             f.historyPause!!.complete(Unit)
+            f.historyCleanup!!.complete(Unit)
             assertEquals("Chat changed", (withTimeout(10_000) { stale.await() } as MessageActionResult.Rejected).reason)
             assertEquals("Chat is catching up", (withTimeout(10_000) { send.await() } as PromptAdmission.Rejected).reason)
             for (command in listOf(status, replay, remove)) {
@@ -335,7 +353,11 @@ class ChatHistoryActorTest {
             assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.resetConversation().await() })
             assertEquals(1, f.resetCalls)
             assertTrue(owner.state.value.history.projectMessages(owner.state.value.replica, owner.state.value.unresolved).none { it.text == "hello" })
-        } finally { owner.close() }
+        } finally {
+            f.historyPause?.complete(Unit)
+            f.historyCleanup?.complete(Unit)
+            owner.close()
+        }
     }
 
     @Test fun malformedNativeIdentityKeepsOwnerCursorAndJournalThenAcceptsReplacement() = runBlocking {
@@ -352,7 +374,7 @@ class ChatHistoryActorTest {
                 .put("text", text).put("id", "native-$offset").put("read_id", "read")
                 .put("segment", segment).put("offset", offset).put("end", offset + 1)
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 f.historyPause = CompletableDeferred()
                 owner.nearTop(true)
                 withTimeout(10_000) { f.historyPaused.await() }
@@ -378,7 +400,7 @@ class ChatHistoryActorTest {
         f.row = f.row("cancelled")
         val owner = f.connection()
         try {
-            owner.select(true); owner.start(); f.ready(owner)
+            owner.pollGate.acquire(); owner.start(); f.ready(owner)
             assertTrue(owner.state.value.history.projectMessages(owner.state.value.replica, owner.state.value.unresolved).none { it.text == "hello" })
             assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.replayUnknown(entry.id) })
             assertEquals(entry.id, f.lastRetryId)
@@ -394,7 +416,7 @@ class ChatHistoryActorTest {
             f.row = f.row("failed", "new")
             val owner = f.connection()
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 assertTrue(owner.replayUnknown(entry.id) is MessageActionResult.Rejected)
                 assertEquals(0, f.retryCalls)
                 assertEquals(entry.id, f.journal.entries().single().id)
@@ -410,7 +432,7 @@ class ChatHistoryActorTest {
             f.epoch = 2; f.row = f.row("accepted", "new")
             val owner = f.connection()
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 assertEquals(0, f.retryCalls)
                 assertEquals(MessageActionResult.Applied, owner.replayUnknown(entry.id))
                 assertEquals(1, f.retryCalls)
@@ -427,11 +449,11 @@ class ChatHistoryActorTest {
         f.pauseSecondSnapshot = CompletableDeferred()
         val owner = f.connection()
         try {
-            owner.select(true); owner.start()
+            var ownerLease = owner.pollGate.acquire(); owner.start()
             withTimeout(10_000) { f.snapshotStarted.await() }
-            owner.select(false)
+            ownerLease.close()
             f.pauseSnapshot!!.complete(Unit)
-            owner.select(true)
+            ownerLease = owner.pollGate.acquire()
             withTimeout(10_000) { f.secondSnapshotStarted.await() }
             assertNull(owner.state.value.replica)
         } finally { owner.close() }
@@ -443,7 +465,7 @@ class ChatHistoryActorTest {
             val submit = f.journal.create(f.account, f.wire, "submit", text = "never sent", epoch = 1)
             val owner = f.connection()
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 withTimeout(15_000) { owner.state.first { it.unresolved.isEmpty() && it.replica?.messages?.get(submit.id) != null } }
                 assertEquals(1, f.submitCalls)
                 assertEquals(submit.id, f.row!!.getString("id"))
@@ -459,7 +481,7 @@ class ChatHistoryActorTest {
             f.dropSubmit = true
             val owner = f.connection()
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 val admission = owner.submit("hello") as PromptAdmission.Recorded
                 withTimeout(10_000) { owner.state.first { it.retrying } }
                 assertNull(f.row)
@@ -478,7 +500,7 @@ class ChatHistoryActorTest {
             f.dropAfterAdmission = true
             val owner = f.connection()
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 val admission = withTimeout(10_000) { owner.submit("hello") } as PromptAdmission.Recorded
                 withTimeout(10_000) { owner.state.first { it.retrying } }
                 val admitted = requireNotNull(f.row)
@@ -503,7 +525,7 @@ class ChatHistoryActorTest {
             f.dropReset = true
             val owner = f.connection()
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 assertEquals(MessageActionResult.Unknown, withTimeout(10_000) { owner.resetConversation().await() })
                 val original = f.journal.entries().single()
                 assertEquals("sid", original.scope.sid)
@@ -521,10 +543,10 @@ class ChatHistoryActorTest {
             f.admissionPause = CompletableDeferred()
             val owner = f.connection()
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                val ownerLease = owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 val action = async { if (reset) owner.resetConversation().await() else owner.submit("hello") }
                 withTimeout(10_000) { f.admissionStarted.await() }
-                owner.select(false)
+                ownerLease.close()
                 f.admissionPause!!.complete(Unit)
                 withTimeout(10_000) { action.await() }
                 assertTrue(f.journal.entries().isEmpty())
@@ -539,10 +561,10 @@ class ChatHistoryActorTest {
         val old = f.connection()
         val current = f.connection()
         try {
-            old.select(true); old.start(); f.ready(old)
+            old.pollGate.acquire(); old.start(); f.ready(old)
             val send = async { old.submit("hello") }
             withTimeout(10_000) { f.admissionStarted.await() }
-            current.select(true); current.start(); f.ready(current)
+            current.pollGate.acquire(); current.start(); f.ready(current)
             f.admissionPause!!.complete(Unit)
             assertTrue(withTimeout(10_000) { send.await() } is PromptAdmission.Rejected)
             assertTrue(f.journal.entries().isEmpty())
@@ -558,7 +580,7 @@ class ChatHistoryActorTest {
         f.blockLaterPage = true
         val owner = f.connection()
         try {
-            owner.select(true); owner.start()
+            owner.pollGate.acquire(); owner.start()
             withTimeout(10_000) { f.snapshotStarted.await() }
             val reset = owner.resetConversation()
             assertNull(owner.state.value.replica)
@@ -579,7 +601,7 @@ class ChatHistoryActorTest {
             f.row = f.row(state, "new")
             val owner = f.connection()
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 assertTrue(owner.replayUnknown(entry.id) is MessageActionResult.Rejected)
                 assertEquals(0, f.retryCalls)
                 assertTrue(f.journal.entries().any { it.id == entry.id })
@@ -603,7 +625,7 @@ class ChatHistoryActorTest {
             val raw = foreign.associate { it.id to f.prefs.getString(it.id, null) }
             val owner = f.connection()
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 assertEquals(MessageActionResult.Applied, withTimeout(10_000) { owner.removeUnknown(submit.id) })
                 assertEquals(submit.id, f.lastDismiss!!.getString("message_id"))
                 assertEquals(submit.text, f.lastDismiss!!.getString("text"))
@@ -629,7 +651,7 @@ class ChatHistoryActorTest {
             f.dismissPause = CompletableDeferred()
             val owner = f.connection()
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 assertEquals(MessageActionResult.Rejected("Remove confirmation is unknown"), owner.replayUnknown(submit.id))
                 val remove = async { owner.removeUnknown(submit.id) }
                 withTimeout(10_000) { f.dismissStarted.await() }
@@ -656,7 +678,7 @@ class ChatHistoryActorTest {
             f.nativeRows = listOf(JSONObject().put("role", "user").put("text", "native existing").put("id", "native").put("offset", 1).put("end", 2))
             val owner = f.connection()
             try {
-                owner.select(true); owner.start()
+                owner.pollGate.acquire(); owner.start()
                 val ready = withTimeout(10_000) { owner.state.first {
                     it.replica != null && it.history.sid == f.sid && it.unresolved.isEmpty() &&
                         it.history.projectMessages(it.replica, it.unresolved).any { message -> message.text == "native existing" }
@@ -682,7 +704,7 @@ class ChatHistoryActorTest {
             f.dismissPause = CompletableDeferred()
             val owner = f.connection()
             try {
-                owner.select(true); owner.start()
+                owner.pollGate.acquire(); owner.start()
                 val row = requireNotNull(f.ready(owner).replica?.messages?.get(submit.id))
                 val remove = async { owner.dismiss(row) }
                 withTimeout(10_000) { f.dismissStarted.await() }
@@ -707,7 +729,7 @@ class ChatHistoryActorTest {
             val first = f.connection()
             var second: ChatHistoryConnection? = null
             try {
-                first.select(true); first.start(); f.ready(first)
+                first.pollGate.acquire(); first.start(); f.ready(first)
                 withTimeout(15_000) { while (f.submitCalls < 1) kotlinx.coroutines.delay(50) }
                 f.dropDismissAfterAdmission = true
                 assertEquals(MessageActionResult.Unknown, withTimeout(10_000) { first.removeUnknown(submit.id) })
@@ -715,7 +737,7 @@ class ChatHistoryActorTest {
                 assertEquals(setOf("submit", "dismiss"), f.journal.entries().map { it.operation }.toSet())
                 f.hideSnapshotRow = false
                 val recovered = f.connection(); second = recovered
-                recovered.select(true); recovered.start(); f.ready(recovered)
+                recovered.pollGate.acquire(); recovered.start(); f.ready(recovered)
                 withTimeout(10_000) { recovered.state.first { it.unresolved.isEmpty() } }
                 assertEquals(1, f.dismissCalls); assertEquals(1, f.submitCalls); assertEquals(0, f.retryCalls)
                 assertEquals(MessageActionResult.Applied, withTimeout(10_000) { recovered.resetConversation().await() })
@@ -732,7 +754,7 @@ class ChatHistoryActorTest {
             val other = f.journal.create(f.account, MessageProtocol.Scope(provider, "other", "chat"), "submit", text = "unrelated", epoch = 1)
             val owner = f.connection()
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 val original = (withTimeout(10_000) { owner.submit("original text") } as PromptAdmission.Recorded).messageId
                 withTimeout(10_000) { owner.state.first { it.retrying } }
                 f.dropSubmit = false
@@ -772,7 +794,7 @@ class ChatHistoryActorTest {
             val first = f.connection()
             var second: ChatHistoryConnection? = null
             try {
-                first.select(true); first.start(); f.ready(first)
+                first.pollGate.acquire(); first.start(); f.ready(first)
                 val id = (first.submit("lost cancel") as PromptAdmission.Recorded).messageId
                 withTimeout(10_000) { first.state.first { it.retrying } }
                 f.dropSubmit = false
@@ -785,7 +807,7 @@ class ChatHistoryActorTest {
                 assertEquals("cancelled", f.row!!.getString("state"))
                 f.hideSnapshotRow = false
                 val recovered = f.connection(); second = recovered
-                recovered.select(true); recovered.start(); f.ready(recovered)
+                recovered.pollGate.acquire(); recovered.start(); f.ready(recovered)
                 withTimeout(10_000) { recovered.state.first { it.unresolved.isEmpty() } }
                 assertEquals(1, f.dismissCalls)
                 assertEquals(2, f.submitCalls)
@@ -802,7 +824,7 @@ class ChatHistoryActorTest {
             f.hideSnapshotRow = true
             val owner = f.connection()
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 f.dropDismissBeforeAdmission = true
                 assertEquals(MessageActionResult.Unknown, withTimeout(10_000) { owner.removeUnknown(submit.id) })
                 val dismiss = f.journal.entries().single { it.operation == "dismiss" }
@@ -832,7 +854,7 @@ class ChatHistoryActorTest {
             f.row = f.row("cancelled").put("id", submit.id).put("text", "different")
             val owner = f.connection()
             try {
-                owner.select(true); owner.start()
+                owner.pollGate.acquire(); owner.start()
                 val ready = f.ready(owner)
                 assertEquals(setOf(submit.id, dismiss.id), f.journal.entries().map { it.id }.toSet())
                 assertTrue(ready.history.projectMessages(ready.replica, ready.unresolved).any { it.text == "original" })
@@ -852,7 +874,7 @@ class ChatHistoryActorTest {
             f.epoch = 2
             val owner = f.connection()
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 withTimeout(10_000) { owner.state.first { it.unresolved.isEmpty() } }
                 assertEquals(0, f.submitCalls)
                 assertNull(f.row)
@@ -869,7 +891,7 @@ class ChatHistoryActorTest {
         f.hideSnapshotRow = true
         val owner = f.connection()
         try {
-            owner.select(true); owner.start(); f.ready(owner)
+            owner.pollGate.acquire(); owner.start(); f.ready(owner)
             f.admissionPause = CompletableDeferred()
             val remove = async { owner.removeUnknown(submit.id) }
             withTimeout(10_000) { f.admissionStarted.await() }
@@ -896,7 +918,7 @@ class ChatHistoryActorTest {
             f.hideSnapshotRow = true
             val owner = f.connection()
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 assertTrue(owner.replayUnknown(submit.id) is MessageActionResult.Rejected)
                 assertEquals(0, f.submitCalls)
                 assertEquals(0, f.dismissCalls)
@@ -922,7 +944,7 @@ class ChatHistoryActorTest {
                 .put("offset", 1).put("end", 2))
             val owner = f.connection()
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 f.dismissPause = CompletableDeferred()
                 val removal = async { owner.removeUnknown(submit.id) }
                 withTimeout(10_000) { f.dismissStarted.await() }
@@ -952,7 +974,7 @@ class ChatHistoryActorTest {
             val first = f.connection()
             var second: ChatHistoryConnection? = null
             try {
-                first.select(true); first.start(); f.ready(first)
+                first.pollGate.acquire(); first.start(); f.ready(first)
                 assertEquals(MessageActionResult.Rejected("Could not remove message"), withTimeout(10_000) { first.removeUnknown(submit.id) })
                 first.close()
                 val pending = f.journal.entries()
@@ -960,7 +982,7 @@ class ChatHistoryActorTest {
                 assertTrue(pending.single { it.operation == "dismiss" }.notRemovable)
                 f.hideSnapshotRow = false
                 val recovered = f.connection(); second = recovered
-                recovered.select(true); recovered.start()
+                recovered.pollGate.acquire(); recovered.start()
                 val refreshed = withTimeout(10_000) { recovered.state.first { it.replica?.messages?.get(submit.id)?.state == MessageProtocol.State.ACCEPTED && it.unresolved.isEmpty() } }
                 assertTrue(refreshed.history.projectMessages(refreshed.replica, refreshed.unresolved).any { it.text == "accepted work" })
                 assertEquals(1, f.dismissCalls)
@@ -978,7 +1000,7 @@ class ChatHistoryActorTest {
             f.hideSnapshotRow = true
             val owner = f.connection()
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 f.historyPause = CompletableDeferred()
                 owner.nearTop(true)
                 withTimeout(10_000) { f.historyPaused.await() }
@@ -1006,15 +1028,15 @@ class ChatHistoryActorTest {
             val old = f.connection()
             var current: ChatHistoryConnection? = null
             try {
-                old.select(true); old.start(); f.ready(old)
+                val oldLease = old.pollGate.acquire(); old.start(); f.ready(old)
                 val before = f.prefs.all.toMap()
                 f.admissionPause = CompletableDeferred()
                 val remove = async { old.removeUnknown(submit.id) }
                 withTimeout(10_000) { f.admissionStarted.await() }
                 if (takeover) {
                     val next = f.connection(); current = next
-                    next.select(true); next.start(); f.ready(next)
-                } else old.select(false)
+                    next.pollGate.acquire(); next.start(); f.ready(next)
+                } else oldLease.close()
                 f.admissionPause!!.complete(Unit)
                 assertTrue(withTimeout(10_000) { remove.await() } is MessageActionResult.Rejected)
                 assertEquals(before, f.prefs.all)
@@ -1034,7 +1056,7 @@ class ChatHistoryActorTest {
             f.nativeRows = listOf(JSONObject().put("role", "user").put("text", "native accepted").put("id", "native").put("offset", 1).put("end", 2))
             val owner = f.connection()
             try {
-                owner.select(true); owner.start()
+                owner.pollGate.acquire(); owner.start()
                 val ready = withTimeout(10_000) { owner.state.first {
                     it.replica != null && it.history.sid == f.sid &&
                         it.history.projectMessages(it.replica, it.unresolved).any { message -> message.text == "native accepted" }
@@ -1073,7 +1095,7 @@ class ChatHistoryActorTest {
             val first = f.connection()
             var second: ChatHistoryConnection? = null
             try {
-                first.select(true); first.start(); f.ready(first)
+                first.pollGate.acquire(); first.start(); f.ready(first)
                 assertEquals(MessageActionResult.Unknown, withTimeout(10_000) { first.removeUnknown(dismiss.id) })
                 first.close()
                 val saved = f.journal.entries().single { it.id == dismiss.id }
@@ -1083,7 +1105,7 @@ class ChatHistoryActorTest {
                 assertEquals("cancelled", f.row!!.getString("state"))
                 f.hideSnapshotRow = false
                 val recovered = f.connection(); second = recovered
-                recovered.select(true); recovered.start(); f.ready(recovered)
+                recovered.pollGate.acquire(); recovered.start(); f.ready(recovered)
                 withTimeout(10_000) { recovered.state.first { it.unresolved.isEmpty() } }
                 assertEquals(1, f.dismissCalls); assertEquals(0, f.submitCalls); assertEquals(0, f.retryCalls)
                 assertEquals(MessageActionResult.Applied, withTimeout(10_000) { recovered.resetConversation().await() })
@@ -1105,7 +1127,7 @@ class ChatHistoryActorTest {
             val raw = f.prefs.all.toMap()
             val owner = f.connection()
             try {
-                owner.select(true); owner.start()
+                owner.pollGate.acquire(); owner.start()
                 withTimeout(10_000) { f.snapshotStarted.await() }
                 val remove = async(start = CoroutineStart.UNDISPATCHED) { owner.removeUnknown(submit.id) }
                 f.pauseSnapshot!!.complete(Unit)
@@ -1132,7 +1154,7 @@ class ChatHistoryActorTest {
             val owner = f.connection()
             var current: ChatHistoryConnection? = null
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                val ownerLease = owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 val raw = f.prefs.all.toMap()
                 f.statusPause = CompletableDeferred()
                 val remove = async { owner.removeUnknown(submit.id) }
@@ -1140,9 +1162,9 @@ class ChatHistoryActorTest {
                 if (takeover) {
                     val seen = f.snapshotCount
                     val next = f.connection(); current = next
-                    next.select(true); next.start()
+                    next.pollGate.acquire(); next.start()
                     withTimeout(10_000) { while (f.snapshotCount <= seen) kotlinx.coroutines.delay(50) }
-                } else owner.select(false)
+                } else ownerLease.close()
                 f.statusPause!!.complete(Unit)
                 assertTrue(withTimeout(10_000) { remove.await() } is MessageActionResult.Rejected)
                 assertEquals(raw, f.prefs.all)
@@ -1161,7 +1183,7 @@ class ChatHistoryActorTest {
         f.blockLaterPage = true
         val owner = f.connection()
         try {
-            owner.select(true); owner.start()
+            owner.pollGate.acquire(); owner.start()
             withTimeout(10_000) { f.snapshotStarted.await() }
             val removal = async(start = CoroutineStart.UNDISPATCHED) { owner.removeUnknown(submit.id) }
             assertNull(owner.state.value.replica)
@@ -1180,7 +1202,7 @@ class ChatHistoryActorTest {
             f.dropReset = true
             val owner = f.connection()
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 assertEquals(MessageActionResult.Unknown, withTimeout(10_000) { owner.resetConversation().await() })
                 val pending = f.journal.entries().single()
                 assertEquals("reset", pending.operation)
@@ -1209,7 +1231,7 @@ class ChatHistoryActorTest {
             val f = Fixture(provider)
             val owner = f.connection()
             try {
-                owner.select(true); owner.start(); f.ready(owner)
+                owner.pollGate.acquire(); owner.start(); f.ready(owner)
                 val admission = withTimeout(10_000) { owner.submit("hello") }
                 assertTrue(admission is PromptAdmission.Recorded)
                 val id = (admission as PromptAdmission.Recorded).messageId

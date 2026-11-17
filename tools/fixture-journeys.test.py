@@ -1,6 +1,10 @@
 import ast
 import base64
-from contextlib import closing
+from contextlib import closing, redirect_stdout
+import io
+import os
+import pwd
+import shlex
 from datetime import datetime, timezone
 import importlib.util
 import json
@@ -9,7 +13,9 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
+import uuid
 from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
@@ -30,6 +36,117 @@ ui = load('queue_ui', SCRIPTS / 'queued.py')
 
 
 class FixtureJourneyTest(unittest.TestCase):
+    def test_remote_control_fixture_requires_enable_before_phone_and_desktop_turns(self):
+        fixture = load('remote_control_fixture', SCRIPTS / 'remote-control-fixture.py')
+        control = dict(type='control_request', request_id='host-phone-2541', request=dict(subtype='remote_control', enabled=True))
+        users = [dict(type='user', message=dict(content=[dict(type='text', text=text)])) for text in ('PHONE_REMOTE_CONTROL_2541', 'DESKTOP_REMOTE_CONTROL_2541')]
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            counter = home / 'desktop-counter.txt'
+            for controls in ([], [dict(control, request=dict(subtype='remote_control', enabled=False))], [control]):
+                counter.write_text('0\n')
+                receipt = home / 'remote-control-receipts.jsonl'
+                receipt.write_text('')
+                with patch.object(fixture, 'HOME', home), patch.object(fixture, 'CWD', home), patch.object(fixture, 'boundary'), patch.object(fixture.Path, 'cwd', return_value=home), patch.object(sys, 'argv', ['claude', '--resume', fixture.SID]), patch.object(sys, 'stdin', io.StringIO(''.join(json.dumps(row) + '\n' for row in controls + users))), redirect_stdout(io.StringIO()) as output:
+                    if controls != [control]:
+                        with self.assertRaisesRegex(AssertionError, 'without enabling remote control'):
+                            fixture.claude()
+                        self.assertEqual('0\n', counter.read_text())
+                        continue
+                    fixture.claude()
+                rows = [json.loads(line) for line in receipt.read_text().splitlines()]
+                self.assertEqual(['remote_control', 'user', 'user'], [row['kind'] for row in rows])
+                self.assertEqual(control, rows[0]['frame'])
+                self.assertEqual([fixture.SID] * 3, [row['sid'] for row in rows])
+                self.assertEqual(['PHONE_REMOTE_CONTROL_2541', 'DESKTOP_REMOTE_CONTROL_2541'], [row['text'] for row in rows[1:]])
+                self.assertEqual('2\n', counter.read_text())
+                events = [json.loads(line) for line in output.getvalue().splitlines()]
+                replies = [event['message']['content'][0]['text'] for event in events if event['type'] == 'assistant']
+                self.assertEqual(['REMOTE_CONTROL_CONNECTED_2541 desktop_counter=1', 'DESKTOP_REPLY_2541 desktop_counter=2'], replies)
+
+    def test_ai_switch_fixture_user_can_enable_the_initial_chat(self):
+        fixture = load('ai_switch_fixture', SCRIPTS / 'ai-switch-fixture.py')
+        branch = (SCRIPTS / 'fixture.sh').read_text().split('== ai-switch.md ]]; then', 1)[1].split('elif', 1)[0]
+        setup = next(line.strip() for line in branch.splitlines() if '/.local/bin' in line and ('mkdir' in line or 'install -d' in line))
+        user = pwd.getpwuid(os.getuid()).pw_name
+        previous = Path.cwd()
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            try:
+                command = setup.replace('/home/verifyssh', str(home)).replace('verifyssh', user)
+                subprocess.run(shlex.split(command), check=True)
+                self.assertTrue(os.access(home / '.local', os.W_OK), 'the fixture user must own the parent needed for host state')
+                (home / 'ai-switch-reader.py').write_bytes((ROOT / 'app/src/main/assets/chat_history_reader.py').read_bytes())
+                with patch.object(fixture, 'HOME', home), patch.object(fixture, 'CWD', home / 'ai-switch-work'), patch.object(fixture, 'boundary'), patch.object(fixture.os, 'execvp') as launch, patch.object(sys, 'stdin', io.StringIO('')), patch.dict(os.environ, HOME=str(home), GITHUB_ACTIONS='true'), redirect_stdout(io.StringIO()) as output:
+                    fixture.console()
+                self.assertIn('AI_SWITCH_READY_2538', output.getvalue())
+                launch.assert_called_once_with('sleep', ['sleep', 'infinity'])
+                configs = [json.loads(path.read_text()) for path in (home / '.local/state/multiprompt/agent-host').glob('*.config.json')]
+                self.assertEqual(1, len(configs))
+                self.assertEqual(('claude', fixture.SID, 'live-verify-session', True), tuple(configs[0][key] for key in ('provider', 'sid', 'tmux', 'enabled')))
+                reader = load('ai_switch_reader', ROOT / 'app/src/main/assets/chat_history_reader.py')
+                with patch.object(reader, 'HOME', home), patch.object(reader, 'host_owned', return_value=False), patch.object(reader, 'host_start', return_value=dict(status='started')):
+                    switched = reader.host_switch_ai('claude', fixture.SID, 'pi')
+                    self.assertEqual('switched', switched['status'], switched)
+                    history = reader.host_paths('pi', switched['sid'])['history'].read_text()
+                    self.assertIn('Switched AI: Claude to Pi', history)
+                    self.assertIn('CLAUDE_BEFORE_SWITCH_2538', history)
+            finally:
+                os.chdir(previous)
+                subprocess.run(['sudo', 'chown', '-R', f'{os.getuid()}:{os.getgid()}', str(home)], check=True)
+
+    def test_ai_switch_bootstrap_leaves_a_native_sleeping_pane(self):
+        socket = 'ai-switch-test-' + uuid.uuid4().hex
+        tmux = ['tmux', '-L', socket]
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            (home / 'ai-switch-reader.py').write_bytes((ROOT / 'app/src/main/assets/chat_history_reader.py').read_bytes())
+            program = f"import runpy;from pathlib import Path;n=runpy.run_path({str(SCRIPTS / 'ai-switch-fixture.py')!r});n['console'].__globals__.update(HOME=Path({str(home)!r}),CWD=Path({str(home / 'ai-switch-work')!r}),boundary=lambda:None);n['console']()"
+            env = dict(os.environ, HOME=str(home), GITHUB_ACTIONS='true')
+            env.pop('TMUX', None)
+            launch = next(line for line in (SCRIPTS / 'fixture.sh').read_text().splitlines() if 'tmux new-session' in line and 'live-verify-session' in line)
+            prefix = shlex.split(launch)[-1].split('/home/verifyssh/claude', 1)[0].replace('/home/verifyssh', str(home))
+            command = prefix + shlex.join([sys.executable, '-c', program]) + ' 2>' + shlex.quote(str(home / 'startup.txt'))
+            try:
+                subprocess.run(tmux + ['new-session', '-d', '-s', 'live-verify-session', command], env=env, check=True)
+                pane = ''
+                for _ in range(30):
+                    pane = subprocess.check_output(tmux + ['display-message', '-p', '-t', 'live-verify-session', '#{session_name}|#{pane_current_command}'], env=env, text=True).strip()
+                    if pane == 'live-verify-session|sleep':
+                        break
+                    time.sleep(0.1)
+                self.assertEqual('live-verify-session|sleep', pane)
+            finally:
+                subprocess.run(tmux + ['kill-server'], env=env, capture_output=True)
+
+    def test_ai_switch_claude_process_stays_ready_for_host_controls(self):
+        fixture = load('ai_switch_claude', SCRIPTS / 'ai-switch-fixture.py')
+        request = dict(type='control_request', request_id='remote-control-2538', request=dict(subtype='remote_control', enabled=True))
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            with patch.object(fixture, 'HOME', home), patch.object(fixture, 'boundary'), patch.object(sys, 'stdin', io.StringIO(json.dumps(request) + '\n')), redirect_stdout(io.StringIO()) as output:
+                fixture.claude()
+            events = [json.loads(line) for line in output.getvalue().splitlines()]
+            self.assertEqual(dict(type='system', subtype='init', session_id=fixture.SID, model='sonnet'), events[0])
+            self.assertEqual(dict(type='control_response', response=dict(subtype='success', request_id='remote-control-2538', response={})), events[1])
+            self.assertFalse((home / 'ai-switch-wrong-provider.txt').exists())
+
+    def test_ai_switch_pi_receipts_and_replies_follow_the_received_messages(self):
+        fixture = load('ai_switch_pi', SCRIPTS / 'ai-switch-fixture.py')
+        sid = 'c001c001-2538-4000-8000-000000002539'
+        texts = ['This chat ran on Claude until now and continues on Pi.\nCLAUDE_BEFORE_SWITCH_2538', 'PHONE_AFTER_SWITCH_2538']
+        requests = [dict(id=f'prompt-{index}', type='prompt', message=text) for index, text in enumerate(texts)]
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            with patch.object(fixture, 'HOME', home), patch.object(fixture, 'boundary'), patch.object(sys, 'argv', ['pi', '--mode', 'rpc', '--session-id', sid]), patch.object(sys, 'stdin', io.StringIO(''.join(json.dumps(row) + '\n' for row in requests))), redirect_stdout(io.StringIO()) as output:
+                fixture.pi()
+            receipts = [json.loads(line) for line in (home / 'ai-switch-provider-receipts.jsonl').read_text().splitlines()]
+            self.assertEqual([dict(provider='pi', sid=sid, id=row['id'], text=row['message']) for row in requests], receipts)
+            events = [json.loads(line) for line in output.getvalue().splitlines()]
+            replies = [event['assistantMessageEvent']['content'] for event in events if event.get('assistantMessageEvent', {}).get('type') == 'text_end']
+            self.assertEqual(['PI_HANDOVER_READY_2538', 'PI_REPLY_PHONE_AFTER_SWITCH_2538'], replies)
+            self.assertEqual(2, sum(event['type'] == 'agent_settled' for event in events))
+
     def test_real_generation_22_bundle_is_prepared_without_relabeling_current_source(self):
         with tempfile.TemporaryDirectory() as temporary:
             destination = Path(temporary)

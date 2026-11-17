@@ -8,6 +8,8 @@ A product change must name every changed outcome. The second-AI verifier require
 
 ## Features
 
+- [Switch AI](ai-switch.md): Claude-to-Pi handover, reattached chat, and a new phone message with independent provider receipts.
+  - Outcomes: `ai.switch`. Runner: `verify.yml` (debug). Priority evidence: `ai-switch-state.json` (3500 characters), `ai-switch-host.json` (3000 characters).
 - [App name and update](app-name.md): published signed Android in-app update proof.
   - Outcomes: `app-name.journey`. Runner: `app-name.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Late account bot pictures](bot-photo-refresh.md): hosted ViewModel and Compose regressions; seeded picture, not live account sync.
@@ -17,7 +19,7 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Chat choices](chat-choices.md): latest-reply option taps and live question number keys, with independent SSH/tmux receipts.
   - Outcomes: `chat-choices.journey`. Runner: `verify.yml` (debug).
 - [Codex transcript parity](chat-codex.md): Dispatch `feature=chat-codex.md`. The real Android APK connects through SSH to independent Hax, native Codex, and Claude fixture sessions. Hax and Codex write the same JSONL schemas consumed by desktop. Their terminal output deliberately excludes every transcript reply, ruling out terminal-scrape success.
-  - Outcomes: `codex.transcript`. Runner: `verify.yml` (debug).
+  - Outcomes: `codex.transcript`, `reader.lifecycle`. Runner: `verify.yml` (debug). Priority evidence: `reader-ui.json` (6000 characters), `hax-hidden-before.json` (128 characters), `hax-hidden-after.json` (128 characters), `hax-resumed.json` (128 characters), `claude-hidden-before.json` (128 characters), `claude-hidden-after.json` (128 characters), `reader-second-close-receipt.txt` (512 characters), `codex-receipt.txt` (256 characters).
 - [Queued messages](chat-queued.md): Queued host messages stay visible once, receive correlated consumption receipts and become answered without stale delivery labels.
   - Outcomes: `chat-queued.journey`. Runner: `verify.yml` (debug). Priority evidence: `00-queue-ui.json` (1500 characters), `00-queue-receipts.txt` (1500 characters), `queue-pending.json` (1500 characters), `queue-waiting-final.json` (1500 characters), `queue-followup-final.json` (1500 characters), `queue-uncertain-final.json` (1500 characters), `catchup-result.json` (1500 characters).
 - [Claude reactions](chat-reactions.md): quoted sends, one badge, restart identity, fallback and signed update offers.
@@ -72,8 +74,12 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `terminal.journey`. Runner: `verify.yml` (debug).
 - [Message identity and replies](chat-identity.md): Phone send receipts, delayed transcript catchup, Fresh start format and reconnect keep each message with its reply once.
   - Outcomes: `chat.identity`. Runner: `verify.yml` (debug). Priority evidence: `projection-receipts-before.json` (2500 characters), `projection-receipts-reconnect.json` (5500 characters), `projection-state-before.json` (500 characters), `projection-state-fresh.json` (500 characters), `projection-state-catchup.json` (500 characters), `projection-state-reconnect.json` (500 characters), `projection-proof.txt` (500 characters).
+- [Saved snippets](snippets.md): save, restart, replace a draft with a saved snippet, send it, and delete it permanently.
+  - Outcomes: `snippets.save-reuse-delete`. Runner: `verify.yml` (debug). Priority evidence: `snippets-state.json` (3000 characters), `snippets-receipts.txt` (1000 characters).
 - [Find words inside a chat](chat-search.md): search real chat replies, check highlighted matches, jump, wrap, handle no matches and close. SOFT-2540.
   - Outcomes: `chat-search.open`. Runner: `verify.yml` (debug). Priority evidence: `search-newest.json` (1000 characters), `search-previous.json` (1000 characters), `search-wrap-previous.json` (1000 characters), `search-wrap-next.json` (1000 characters), `search-next.json` (1000 characters), `search-no-match.json` (500 characters), `search-closed.json` (500 characters), `search-proof.txt` (200 characters).
+- [Claude remote control](claude-remote-control.md): Open a hosted Claude chat, enable remote control from the phone, and share phone and desktop turns with independent host receipts. SOFT-2541.
+  - Outcomes: `claude.remote-control`. Runner: `verify.yml` (debug). Priority evidence: `remote-control-state.json` (2000 characters), `remote-control-host.json` (3500 characters), `remote-control-before.txt` (200 characters).
 
 ## Initial coverage gaps
 
@@ -81,10 +87,7 @@ These IDs are an inventory, not exemptions for future changes. Untouched gaps do
 
 | Outcome | Existing case | Cleanup ticket |
 |---|---|---|
-| `snippets.save-reuse-delete` | [#376](https://github.com/valentinyeo/multiprompt-android/pull/376) | SOFT-2537 |
-| `ai.switch` | [#373](https://github.com/valentinyeo/multiprompt-android/pull/373) | SOFT-2538 |
 | `pi.model-switch` | [#374](https://github.com/valentinyeo/multiprompt-android/pull/374) | SOFT-2539 |
-| `claude.remote-control` | [#366](https://github.com/valentinyeo/multiprompt-android/pull/366) | SOFT-2541 |
 | `ai.usage` | [#377](https://github.com/valentinyeo/multiprompt-android/pull/377) | SOFT-2542 |
 | `skills.pills` | [#378](https://github.com/valentinyeo/multiprompt-android/pull/378) | SOFT-2543 |
 | `chat-table.expand` | [#379](https://github.com/valentinyeo/multiprompt-android/pull/379) | SOFT-2544 |

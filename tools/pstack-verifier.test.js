@@ -353,13 +353,11 @@ test('DeepSeek is not retried on a client error, and gives up after one retry', 
   assert.equal(calls, 2);
 });
 
-test('both steps stop with a clear error when the secret is empty', () => {
+test('the judge stops with a clear error when the secret is empty', () => {
   const env = { PATH: process.env.PATH, DEEPSEEK_API_KEY: '', PICK_RESULT: 'success', PR_NUMBER: '1', REPO: 'a/b' };
-  for (const command of ['pick', 'judge']) {
-    const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), command], { env, encoding: 'utf8' });
-    assert.notEqual(run.status, 0, command);
-    assert.match(run.stderr, /DEEPSEEK_API_KEY is empty or missing/);
-  }
+  const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'judge'], { env, encoding: 'utf8' });
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /DEEPSEEK_API_KEY is empty or missing/);
 });
 
 test('a picker that did not finish gives no verdict', () => {
@@ -425,16 +423,18 @@ test('the pick and judge jobs check out only the scripts and the journey maps, n
   assert.match(jobBlock(workflow, 'pstack-verifier'), /\.claude\/skills\/verify-multiprompt-android\/features/);
 });
 
-test('the check is named pstack-verifier and the workflow skips forks, drafts and dependabot', () => {
+test('every PR to main gets an unconditional pstack-verifier result, including drafts, forks and dependabot', () => {
   const workflow = read('.github/workflows/pstack-verifier.yml');
   assert.match(jobBlock(workflow, 'pstack-verifier'), /^ {4}name: pstack-verifier$/m);
   assert.match(jobBlock(workflow, 'pstack-verifier'), /needs: \[pick, journeys, parents\]/);
   assert.match(jobBlock(workflow, 'pstack-verifier'), /pull-requests: write/);
   const pick = jobBlock(workflow, 'pick');
-  assert.match(pick, /head\.repo\.full_name == github\.repository/);
-  assert.match(pick, /!github\.event\.pull_request\.draft/);
-  assert.match(pick, /dependabot\[bot\]/);
-  assert.match(workflow, /types: \[opened, reopened, synchronize, ready_for_review\]/);
+  assert.doesNotMatch(pick, /^ {4}if:/m);
+  assert.match(jobBlock(workflow, 'pstack-verifier'), /^ {4}if: \$\{\{ always\(\) \}\}$/m);
+  const triggers = topBlock(workflow, 'on').join('\n');
+  assert.match(triggers, /branches: \[main\]/);
+  assert.doesNotMatch(triggers, /paths(?:-ignore)?:/);
+  assert.match(workflow, /types: \[opened, reopened, synchronize, ready_for_review, edited\]/);
   assert.match(workflow, /cancel-in-progress: true/);
 });
 
@@ -682,7 +682,7 @@ test('the parents job drives the merge base with the head journey scripts and no
   assert.match(parents, /^ {6}side: parent$/m);
   assert.match(parents, /^ {6}app_ref: \$\{\{ needs\.pick\.outputs\.merge_base \}\}$/m);
   assert.match(parents, /fail-fast: false/);
-  assert.doesNotMatch(parents, /^ {4}if:/m);
+  assert.match(parents, /^ {4}if: needs\.pick\.outputs\.no_product_change != 'true'$/m);
   assert.doesNotMatch(parents, /secrets/i);
   assert.doesNotMatch(parents, /DEEPSEEK/);
   assert.match(jobBlock(workflow, 'pstack-verifier'), /MERGE_BASE: \$\{\{ needs\.pick\.outputs\.merge_base \}\}/);
@@ -751,6 +751,8 @@ test('drive.sh prints a product-assertion marker and keeps setup failures separa
   const workflow = read('.github/workflows/pstack-verifier.yml');
   assert.match(jobBlock(workflow, 'pick'), /change_kind: \$\{\{ steps\.pick\.outputs\.change_kind \}\}/);
   assert.match(jobBlock(workflow, 'pstack-verifier'), /CHANGE_KIND: \$\{\{ needs\.pick\.outputs\.change_kind \}\}/);
+  assert.match(jobBlock(workflow, 'pick'), /tools\/release-notes\/ticket-titles\.json/);
+  assert.match(jobBlock(workflow, 'pick'), /\.claude\/skills\/verify-multiprompt-android\/scripts\/drive\.sh/);
   assert.match(jobBlock(workflow, 'pstack-verifier'), /tools\/release-notes\/ticket-titles\.json/);
 });
 
@@ -780,4 +782,83 @@ test('a verdict wrapped in prose or a fence still parses, and a bad answer is as
   asked = 0;
   await assert.rejects(verifier.askParsed({ ask: async () => { asked += 1; throw Object.assign(new Error('cut'), { fatal: true }); }, parse }), /cut/);
   assert.equal(asked, 1);
+});
+
+test('only a complete docs/tooling file list gets a no-product result', () => {
+  for (const filename of ['README.md', 'CLAUDE.md', 'docs/reader.md', 'tools/check.sh', '.github/workflows/test.yml']) {
+    assert.equal(verifier.noProductChange([{ filename }], 1), true, filename);
+  }
+  for (const filename of ['app/src/main/App.kt', 'app/src/main/README.md', 'app/build.gradle.kts', 'gradle/libs.versions.toml', 'build.gradle.kts', 'scripts/build.sh', '.claude/skills/verify-multiprompt-android/features/hosts.md', 'unknown/file']) {
+    assert.equal(verifier.noProductChange([{ filename: 'README.md' }, { filename }], 2), false, filename);
+    assert.equal(verifier.noProductChange([{ filename: 'docs/old.md', previous_filename: filename }], 1), false, filename);
+  }
+  for (const [files, count] of [[[], 0], [[], 1], [[{ filename: 'README.md' }], 2], [null, 1]]) {
+    assert.throws(() => verifier.noProductChange(files, count), /Incomplete/);
+  }
+});
+
+function pickWithoutSecret(files, { fork = false, draft = false, login = 'author', count = files.length } = {}) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-pick-'));
+  try {
+    const pr = { state: 'open', draft, user: { login }, changed_files: count, head: { sha, repo: { full_name: fork ? 'fork/repo' : 'a/b' } }, base: { ref: 'main' } };
+    fs.writeFileSync(path.join(directory, 'gh'), `#!${process.execPath}
+const assert = require('node:assert/strict');
+const args = process.argv.slice(2);
+if (args.at(-1) === 'repos/a/b/pulls/1') {
+  assert.deepEqual(args, ['api', 'repos/a/b/pulls/1']);
+  console.log(${JSON.stringify(JSON.stringify(pr))});
+} else {
+  assert.deepEqual(args, ['api', '--paginate', '--slurp', 'repos/a/b/pulls/1/files?per_page=100']);
+  console.log(${JSON.stringify(JSON.stringify([files]))});
+}
+`, { mode: 0o755 });
+    const output = path.join(directory, 'output');
+    const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
+      env: { PATH: `${directory}:${process.env.PATH}`, REPO: 'a/b', PR_NUMBER: '1', EVENT_NAME: 'pull_request', EVENT_HEAD_SHA: sha, GITHUB_OUTPUT: output, DEEPSEEK_API_KEY: '' },
+      encoding: 'utf8',
+    });
+    return { ...run, output: fs.existsSync(output) ? fs.readFileSync(output, 'utf8') : '' };
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+test('docs/tooling PRs, including forks, drafts and dependabot, need no secret or Android journey', () => {
+  for (const filename of ['README.md', 'tools/branch-protection.mjs']) {
+    for (const options of [{}, { fork: true }, { draft: true }, { login: 'dependabot[bot]' }]) {
+      const run = pickWithoutSecret([{ filename }], options);
+      assert.equal(run.status, 0, run.stderr);
+      assert.match(run.output, /^no_product_change=true$/m);
+      assert.match(run.output, /^features=\[\]$/m);
+      assert.match(run.output, /No product change/);
+      assert.match(run.output, /No Android journey or second-AI product verdict was run/);
+    }
+  }
+});
+
+test('product changes still require the secret, even in drafts and dependabot PRs', () => {
+  for (const options of [{}, { draft: true }, { login: 'dependabot[bot]' }]) {
+    const run = pickWithoutSecret([{ filename: 'app/src/main/App.kt' }], options);
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /DEEPSEEK_API_KEY is empty or missing/);
+    assert.doesNotMatch(run.output, /no_product_change=true/);
+  }
+  const fork = pickWithoutSecret([{ filename: 'app/src/main/App.kt' }], { fork: true });
+  assert.equal(fork.status, 1);
+  assert.match(fork.stderr, /Product changes from forks cannot be verified/);
+  const incomplete = pickWithoutSecret([{ filename: 'README.md' }], { count: 2 });
+  assert.equal(incomplete.status, 1);
+  assert.match(incomplete.stderr, /Incomplete pull request file list/);
+});
+
+test('the no-product result writes an honest summary while product changes still run the judge', () => {
+  const workflow = read('.github/workflows/pstack-verifier.yml');
+  for (const job of ['journeys', 'parents']) {
+    assert.match(jobBlock(workflow, job), /^ {4}if: needs\.pick\.outputs\.no_product_change != 'true'$/m);
+  }
+  const final = jobBlock(workflow, 'pstack-verifier');
+  assert.match(final, /name: Report no product change\n {8}if: needs\.pick\.result == 'success' && needs\.pick\.outputs\.no_product_change == 'true'/);
+  assert.match(final, /REASON: \$\{\{ needs\.pick\.outputs\.reason \}\}/);
+  assert.match(final, /run: printf '%s\\n' "\$REASON" >> "\$GITHUB_STEP_SUMMARY"/);
+  assert.match(final, /name: Judge the change against the journey evidence\n {8}if: needs\.pick\.outputs\.no_product_change != 'true'/);
 });

@@ -131,7 +131,7 @@ class SessionReaderConnection(
     private val histories = MutableStateFlow<ChatHistoryConnection?>(null)
     val pendingPrompts = PendingPrompts()
     private var historyIdentity: ChatHistoryProtocol.Identity? = null
-    private val selectedFlow = MutableStateFlow(false)
+    private val pollGate = ChatPollGate()
 
     fun matches(host: HostProfile, agent: AgentKind): Boolean = this.host == host && this.agent == agent
 
@@ -148,14 +148,11 @@ class SessionReaderConnection(
         }
     }
 
-    fun select(value: Boolean) {
-        selectedFlow.value = value
-        historyConnection?.select(value)
-    }
+    fun observe(): AutoCloseable = pollGate.acquire()
 
     fun nudge() {
         if (ReconnectBackoff.shouldNudge(_state.value.status is ReaderStatus.Failed)) streamNudge.trySend(Unit)
-        historyConnection?.nudge()
+        historyConnection?.takeIf { pollGate.active.value && it.state.value.retrying }?.nudge()
     }
 
     fun hostSettings(): HostSettings? = historyConnection?.state?.value?.replica?.host?.settings
@@ -170,12 +167,11 @@ class SessionReaderConnection(
         val identity = ChatHistoryProtocol.Identity(agent, tmuxSessionName, cwd, hostSessionId)
         if (historyIdentity == identity) return requireNotNull(historyConnection)
         historyConnection?.close()
-        return ChatHistoryConnection(repository, host, identity, historyScript, historyCache, messageJournal, messageGate)
+        return ChatHistoryConnection(repository, host, identity, historyScript, historyCache, messageJournal, messageGate, pollGate = pollGate)
             .also {
                 historyIdentity = identity
                 historyConnection = it
                 histories.value = it
-                it.select(selectedFlow.value)
                 it.start()
             }
     }
@@ -209,12 +205,12 @@ class SessionReaderConnection(
     fun start() {
         if (pendingPromptJob == null) {
             pendingPromptJob = scope.launch {
-                combine(histories.flatMapLatest { it?.state ?: flowOf(ChatHistoryState()) }, pendingPrompts.state, selectedFlow) { history, pending, selected ->
+                combine(histories.flatMapLatest { it?.state ?: flowOf(ChatHistoryState()) }, pendingPrompts.state, pollGate.active) { history, pending, selected ->
                     selected && history.ready && pending.any { !it.issuing && it.error == null }
                 }.collect { ready ->
                     if (ready) while (true) {
                         val history = historyConnection ?: break
-                        val entry = pendingPrompts.next(selectedFlow.value && history.state.value.ready) ?: break
+                        val entry = pendingPrompts.next(pollGate.active.value && history.state.value.ready) ?: break
                         val admission = history.submit(entry.text, messageId = entry.id)
                         pendingPrompts.complete(entry.id, admission)
                         if (admission is PromptAdmission.Rejected) {
@@ -287,7 +283,7 @@ class SessionReaderConnection(
     suspend fun sendPrompt(text: String): PromptAdmission {
         if (sharedMessages) {
             val history = historyConnection ?: return PromptAdmission.Rejected("Chat is not ready")
-            if (!selectedFlow.value) return PromptAdmission.Rejected("Chat is no longer selected")
+            if (!pollGate.active.value) return PromptAdmission.Rejected("Chat is no longer selected")
             if (text.isBlank() || '\u0000' in text) return PromptAdmission.Rejected("Message is empty or invalid")
             pendingPrompts.state.value.firstOrNull { it.text == text && it.error == null }?.let {
                 return PromptAdmission.WaitingForConnection(it.id)
@@ -520,7 +516,7 @@ class SessionReaderConnection(
         if (streamJob?.isActive == true) return
         streamJob = scope.launch {
             ReaderStreamPump<SshClient>(
-                wanted = streamWanted(selectedFlow, confirmation.pending),
+                wanted = pollGate.active,
                 connect = { withTimeout(CONNECT_TIMEOUT_MS) { repository.connect(host) } },
                 stream = { client, heard -> streamFrames(client, heard) },
                 release = { client -> runCatching { client.disconnect() } },
@@ -679,6 +675,7 @@ class SessionReaderConnection(
 
     override fun close() {
         _state.update { it.copy(status = ReaderStatus.Closed) }
+        pollGate.close()
         requests.close()
         streamJob?.cancel()
         actionJob?.cancel()
