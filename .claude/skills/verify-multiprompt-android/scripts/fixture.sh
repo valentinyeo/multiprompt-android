@@ -58,7 +58,7 @@ if [[ "${VERIFY_FEATURE:-}" == ai-switch.md ]]; then
         sudo install -m 755 "$(dirname "$0")/ai-switch-fixture.py" "/home/verifyssh/.local/bin/$binary"
     done
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
-    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s live-verify-session -x 100 -y 32 'env GITHUB_ACTIONS=true HOME=/home/verifyssh /home/verifyssh/claude -u /home/verifyssh/ai-switch-fixture.py console 2>/home/verifyssh/ai-switch-startup.txt'
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s live-verify-session -x 100 -y 32 'exec env GITHUB_ACTIONS=true HOME=/home/verifyssh /home/verifyssh/claude -u /home/verifyssh/ai-switch-fixture.py console 2>/home/verifyssh/ai-switch-startup.txt'
     ready=false
     for attempt in {1..30}; do
         if sudo -u verifyssh tmux capture-pane -pt live-verify-session > "$EVIDENCE/ai-switch-startup-pane.txt"; then

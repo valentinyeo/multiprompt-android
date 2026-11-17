@@ -13,7 +13,9 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
+import uuid
 from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
@@ -64,6 +66,30 @@ class FixtureJourneyTest(unittest.TestCase):
             finally:
                 os.chdir(previous)
                 subprocess.run(['sudo', 'chown', '-R', f'{os.getuid()}:{os.getgid()}', str(home)], check=True)
+
+    def test_ai_switch_bootstrap_leaves_a_native_sleeping_pane(self):
+        socket = 'ai-switch-test-' + uuid.uuid4().hex
+        tmux = ['tmux', '-L', socket]
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            (home / 'ai-switch-reader.py').write_bytes((ROOT / 'app/src/main/assets/chat_history_reader.py').read_bytes())
+            program = f"import runpy;from pathlib import Path;n=runpy.run_path({str(SCRIPTS / 'ai-switch-fixture.py')!r});n['console'].__globals__.update(HOME=Path({str(home)!r}),CWD=Path({str(home / 'ai-switch-work')!r}),boundary=lambda:None);n['console']()"
+            env = dict(os.environ, HOME=str(home), GITHUB_ACTIONS='true')
+            env.pop('TMUX', None)
+            launch = next(line for line in (SCRIPTS / 'fixture.sh').read_text().splitlines() if 'tmux new-session' in line and 'live-verify-session' in line)
+            prefix = shlex.split(launch)[-1].split('/home/verifyssh/claude', 1)[0].replace('/home/verifyssh', str(home))
+            command = prefix + shlex.join([sys.executable, '-c', program]) + ' 2>' + shlex.quote(str(home / 'startup.txt'))
+            try:
+                subprocess.run(tmux + ['new-session', '-d', '-s', 'live-verify-session', command], env=env, check=True)
+                pane = ''
+                for _ in range(30):
+                    pane = subprocess.check_output(tmux + ['display-message', '-p', '-t', 'live-verify-session', '#{session_name}|#{pane_current_command}'], env=env, text=True).strip()
+                    if pane == 'live-verify-session|sleep':
+                        break
+                    time.sleep(0.1)
+                self.assertEqual('live-verify-session|sleep', pane)
+            finally:
+                subprocess.run(tmux + ['kill-server'], env=env, capture_output=True)
 
     def test_ai_switch_claude_process_stays_ready_for_host_controls(self):
         fixture = load('ai_switch_claude', SCRIPTS / 'ai-switch-fixture.py')
