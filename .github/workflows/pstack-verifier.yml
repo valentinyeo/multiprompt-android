@@ -36,6 +36,7 @@ jobs:
       merge_base: ${{ steps.pick.outputs.merge_base }}
       changed_outcomes: ${{ steps.pick.outputs.changed_outcomes }}
       change_kind: ${{ steps.pick.outputs.change_kind }}
+      break_it: ${{ steps.pick.outputs.break_it }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -43,6 +44,7 @@ jobs:
           sparse-checkout: |
             .github/scripts
             .claude/skills/verify-multiprompt-android/features
+            tools/android-break-it.test.js
             tools/pstack-verifier.test.js
             tools/pstack-verifier-eval.test.js
             tools/feature-coverage.test.js
@@ -64,7 +66,7 @@ jobs:
         with:
           node-version: 22
       - name: Prove the verifier on real historical mistakes
-        run: node --test tools/feature-coverage.test.js tools/pstack-verifier.test.js tools/pstack-verifier-eval.test.js tools/workflow-inputs.test.js tools/release-proof.test.js tools/pr-checks.test.js tools/branch-protection.test.js > "$RUNNER_TEMP/tooling-proof.txt" 2>&1
+        run: node --test tools/feature-coverage.test.js tools/pstack-verifier.test.js tools/pstack-verifier-eval.test.js tools/workflow-inputs.test.js tools/release-proof.test.js tools/pr-checks.test.js tools/branch-protection.test.js tools/android-break-it.test.js > "$RUNNER_TEMP/tooling-proof.txt" 2>&1
       - name: Retain non-UI verifier proof
         if: always()
         uses: actions/upload-artifact@v4
@@ -99,6 +101,7 @@ jobs:
     with:
       feature: ${{ matrix.feature }}
       side: head
+      break_it: ${{ needs.pick.outputs.break_it == 'true' }}
       app_ref: ${{ needs.pick.outputs.head_sha }}
 
   parents:

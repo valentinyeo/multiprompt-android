@@ -65,6 +65,7 @@ finish() {
     trap - EXIT
     set +e
     restore_chat_link
+    break_it_restore
     {
         date +%T.%N
         timeout 10s adb shell top -b -n 1 -m 15
@@ -218,7 +219,9 @@ fill() {
         return 1
     fi
     adb shell input keyevent KEYCODE_BACK
+    break_it_draft "$1" "$2"
 }
+source "$scripts/../../../../tools/android-break-it/drive.sh"
 
 scroll_to_newest() {
     local attempt

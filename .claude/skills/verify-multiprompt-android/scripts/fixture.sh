@@ -249,4 +249,9 @@ if [[ "${VERIFY_FEATURE:-}" == ai-usage.md ]]; then
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/ai-usage-host.py seed
     { printf 'command="env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/ai-usage-host.py" '; cat "$FIXTURE/user-key.pub"; } | sudo tee /home/verifyssh/.ssh/authorized_keys >/dev/null
 fi
+if [[ "${BREAK_IT_MODE:-}" == true ]]; then
+    sudo -u verifyssh tmux new-session -d -s verify-breakit-other -x 100 -y 32 'python3 -u /home/verifyssh/console.py /home/verifyssh/breakit-other-receipts.txt'
+    sudo -u verifyssh tmux set-window-option -t verify-breakit-other automatic-rename off
+    sudo -u verifyssh tmux rename-window -t verify-breakit-other verify-breakit-other
+fi
 printf 'SSH FIXTURE READY\n'

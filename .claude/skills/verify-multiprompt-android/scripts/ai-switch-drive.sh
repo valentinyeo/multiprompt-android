@@ -187,6 +187,7 @@ for phase, reply in (('streaming', 'PI_REPLY_PHONE_STREAM_2569'), ('resumed', 'P
     state[phase] = dict(xml=file.name, reply=reply, count=texts.count(reply))
 (root / 'ai-switch-state.json').write_text(json.dumps(state, indent=2) + '\n')
 PYSTRESSUI
+break_it_stream_send "$EVIDENCE/ai-switch-stress-host.json"
 printf 'AI_SWITCH_CLAUDE_TO_PI_AND_SEND_OK\n'
 printf 'AI_SWITCH_TWICE_STREAM_SEND_BACKGROUND_OK\n'
 exit 0
