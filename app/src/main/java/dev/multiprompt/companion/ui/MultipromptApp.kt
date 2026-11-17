@@ -4111,6 +4111,17 @@ internal fun ReaderScreen(
                                         },
                                     )
                                 }
+                                dev.multiprompt.companion.model.ChatId.of(session)?.let { chatId ->
+                                    KitMenuRow(
+                                        label = "Copy chat ID",
+                                        onClick = {
+                                            menuExpanded = false
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            clipboard.setPrimaryClip(ClipData.newPlainText("$displayName chat ID", chatId))
+                                            android.widget.Toast.makeText(context, dev.multiprompt.companion.model.ChatId.COPIED, android.widget.Toast.LENGTH_SHORT).show()
+                                        },
+                                    )
+                                }
                                 KitMenuRow(
                                     label = "Remind Me…",
                                     onClick = { menuExpanded = false; reminderDialogVisible = true },
