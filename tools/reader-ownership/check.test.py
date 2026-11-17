@@ -54,7 +54,7 @@ class ReaderOwnershipTest(unittest.TestCase):
     def test_real_inner_cancellation_handlers_from_ed853214_cannot_override_the_owner(self):
         path = "app/src/main/java/dev/multiprompt/companion/reader/ChatHistoryConnection.kt"
         files = check.source_files()
-        files[path] = subprocess.check_output(["git", "show", f"ed853214:{path}"], cwd=ROOT, text=True)
+        files[path] = (Path(__file__).parent / "fixtures" / "ed853214-ChatHistoryConnection.kt.txt").read_text()
         failures = check.violations(files, BASELINE)
         self.assertTrue(any("Command.Action.interrupted" in f for f in failures), failures)
         print("ED853214_CANCELLATION_REJECTED: inner handlers cannot turn unissued navigation cancellations into Unknown")
