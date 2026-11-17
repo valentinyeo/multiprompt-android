@@ -789,6 +789,11 @@ PYINFO
     exit 0
 fi
 
+if [[ "$feature" == snippets.md ]]; then
+    source "$scripts/snippets-drive.sh"
+    exit 0
+fi
+
 if [[ "$feature" == session-drafts.md ]]; then
     wait_for_text 'Inbox preview stays.'
     python3 "$scripts/draft-label.py" absent "$EVIDENCE/current.xml"

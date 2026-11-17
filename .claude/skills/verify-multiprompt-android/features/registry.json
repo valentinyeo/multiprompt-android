@@ -482,6 +482,24 @@
         "projection-state-reconnect.json": 500,
         "projection-proof.txt": 500
       }
+    },
+    "snippets.md": {
+      "name": "Saved snippets",
+      "description": "save, restart, replace a draft with a saved snippet, send it, and delete it permanently.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "snippets.save-reuse-delete"
+      ],
+      "evidence": {
+        "snippets-state.json": 3000,
+        "snippets-receipts.txt": 1000
+      }
     }
   },
   "outcomes": {
@@ -689,7 +707,7 @@
     },
     "snippets.save-reuse-delete": {
       "description": "Save, reuse, delete and retain snippets.",
-      "journey": null,
+      "journey": "snippets.md",
       "sideEffect": true,
       "match": [
         "SnippetStore|snippet|Snippet"
