@@ -54,6 +54,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `session-routing.journey`. Runner: `verify.yml` (debug).
 - [Session settings](session-settings.md): full-screen split switches; saving is blocked without account OTP and a pulled layout.
   - Outcomes: `session-settings.journey`. Runner: `verify.yml` (manual). Prerequisites: Account email OTP and a pulled account layout.
+- [Stop while the chat works](session-stop.md): Stop replaces Send while a chat is working and the box is empty. Typing brings Send back. Stop interrupts the session.
+  - Outcomes: `reader.stop-while-working`. Runner: `verify.yml` (debug).
 - [Useful inbox summaries](session-summaries.md): Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.
   - Outcomes: `inbox.summaries`. Runner: `verify.yml` (debug).
 - [Sessions](sessions.md): authenticated tmux discovery and search.
