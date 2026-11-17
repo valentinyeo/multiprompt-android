@@ -618,3 +618,22 @@ test('a verdict wrapped in prose or a fence still parses, and a bad answer is as
   await assert.rejects(verifier.askParsed({ ask: async () => { asked += 1; throw Object.assign(new Error('cut'), { fatal: true }); }, parse }), /cut/);
   assert.equal(asked, 1);
 });
+
+test('SOFT-2536 schedules all five required journeys beyond the suggestion limit', () => {
+  const outcomes = ['sign-in.journey', 'host-changed-key.journey', 'chat-reactions.journey', 'claude.skills-model-effort', 'inbox.search'];
+  const plan = { product: true, outcomes };
+  const picked = { features: ['sign-in.md', 'host-changed-key.md', 'chat-reactions.md'], smoke: false };
+  const selected = verifier.requiredJourneys(picked, plan);
+  const expected = [...picked.features, 'native-skills.md', 'sessions.md'];
+  assert.deepEqual(selected.features, expected);
+  assert.equal(selected.smoke, false);
+  assert.deepEqual(verifier.validateFeatures(selected.features, Infinity), { features: expected, dropped: [] });
+  const judge = read('.github/scripts/pstack-verifier/verifier.cjs').split('async function judge(')[1];
+  assert.match(judge, /validateFeatures\(requested, Infinity\)/);
+});
+
+test('required journeys replace a smoke fallback without inventing coverage for manual gaps', () => {
+  const picked = { features: [verifier.SMOKE_JOURNEY], smoke: true };
+  assert.deepEqual(verifier.requiredJourneys(picked, { outcomes: ['sign-in.journey'] }).features, ['sign-in.md']);
+  assert.deepEqual(verifier.requiredJourneys(picked, { outcomes: ['legacy.igsh-449'] }), picked);
+});

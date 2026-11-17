@@ -11,6 +11,8 @@ Read [the feature index](features/README.md), then the selected recipe. Everythi
 
 [features/registry.json](features/registry.json) owns outcome IDs, recipe ownership, runner kinds and prerequisites. The generated index, picker catalog, driver eligibility and workflow choices all come from it. Run `node .github/scripts/pstack-verifier/coverage.cjs generate` when it changes; CI runs `check` and rejects drift.
 
+The picker schedules every registered debug journey required by changed outcome IDs. The three-journey limit applies only to optional model suggestions, not required coverage.
+
 For every product change, identify the changed outcome IDs. Add a new ID and journey for a new behavior. The picker reports `changed_outcomes`; deterministic source matches and the independent judge can add required IDs. An unknown product outcome fails closed. Tooling-only work can use the retained hosted Node test proof instead of claiming that an Android smoke test covered it.
 
 The second-AI verdict must include `coverage` entries for every changed ID. Each entry names its registered journey and quotes a real action from `driver-transcript.txt`, a resulting XML/JSON state, and independent receipt/server evidence where required. The gate checks these references in the downloaded head artifact after cleanup, requires a successful matching journey and exact `app-source-sha.txt`, then retains `verifier-feature-coverage`. Free-text `not_covered`, a green unrelated journey or smoke cannot satisfy this contract. Both sides may pass; a manufactured failing parent is not required.
@@ -70,7 +72,9 @@ Every journey requires the exact `EXPECTED_VERSION` text and `Version <version>,
 
 All SSH journeys first capture Sign in, choose **Use without account (debug)**, open **Session list actions → Hosts → Add host**, fill the real form, open **Import private key**, and select the adb-pushed `verify-key.pem` through Android's real document picker. They compare the displayed `ssh-ed25519 SHA256:…` against the job-generated host fingerprint before choosing **Trust and connect**. An accepted SSH authentication before that action fails the driver. `hosts-retired.md` is the exception: it saves a host at the retired address `45.151.123.11` (blocked on the runner with iptables), force-stops and relaunches, and requires the host card and any "unreachable" banner to be gone; it never trusts or connects.
 
-`host-changed-key.md` rotates only the recorded fixture sshd, then checks **Session list actions → Refresh → Not now**, repeat refresh and force-stop/relaunch. It requires the new fingerprint, unchanged original pin and no further authentication. Session list settings ([session-settings.md](features/session-settings.md)) is mapped but not dispatchable: saving a split switch needs account OTP and a pulled layout, which CI cannot reach.
+`host-changed-key.md` closes the recorded fixture sshd and its owned authenticated child connections before rotating the host key. Replacing only the listener leaves pooled SSH connections authenticated against the old key. The journey then checks **Session list actions → Refresh → Not now**, repeat refresh and force-stop/relaunch. It requires the new fingerprint, unchanged original pin and no further authentication. Session list settings ([session-settings.md](features/session-settings.md)) is mapped but not dispatchable: saving a split switch needs account OTP and a pulled layout, which CI cannot reach.
+
+The reaction fixture consumes the prompt and its trailing delivery marker as one transcript turn. A marker is not a second user message or an extra assistant reply. `tools/kit-controls/journeys.test.py` checks this framing and the SSH rotation ownership. Workspace split actions resolve the active horizontal viewport and search both directions; do not wait for an offscreen label before revealing it.
 
 ## Evidence
 

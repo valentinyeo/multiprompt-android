@@ -883,7 +883,9 @@ if [[ "$feature" == host-changed-key.md ]]; then
     printf '%s\n' "$accepted_before" > "$EVIDENCE/accepted-before-rotation.txt"
     old_pid=$(sudo cat "$FIXTURE/sshd.pid")
     [[ "$old_pid" =~ ^[0-9]+$ && "$old_pid" -gt 1 ]]
-    sudo kill "$old_pid"
+    mapfile -t old_connections < <(sudo ps -o pid= --ppid "$old_pid" | awk '{print $1}')
+    printf '%s\n' "${old_connections[@]}" > "$EVIDENCE/sshd-children-before-rotation.txt"
+    sudo kill "$old_pid" "${old_connections[@]}"
     for attempt in {1..30}; do
         if ! sudo kill -0 "$old_pid" 2>/dev/null; then break; fi
         sleep 1
@@ -906,7 +908,8 @@ PYROTATE
     [[ "$new_pid" =~ ^[0-9]+$ && "$new_pid" -gt 1 && "$new_pid" != "$old_pid" ]]
     sudo kill -0 "$new_pid"
     printf '%s\n' "$new_pid" > "$EVIDENCE/rotated-sshd-pid.txt"
-    wait_for_text 'SSH host key changed' || { refresh_inbox; wait_for_text 'SSH host key changed'; }
+    refresh_inbox
+    wait_for_text 'SSH host key changed'
     shot changed-host-key
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "Now: ssh-ed25519 $rotated"
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "Saved: ssh-ed25519 $fingerprint"

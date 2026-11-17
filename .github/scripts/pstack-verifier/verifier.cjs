@@ -81,16 +81,23 @@ function escapeText(value) {
     .replace(/\]\(/g, '] (');
 }
 
-function validateFeatures(raw) {
+function validateFeatures(raw, limit = MAX_JOURNEYS) {
   const requested = Array.isArray(raw) ? raw.map(item => String(item ?? '').trim()) : [];
   const features = [];
   const dropped = [];
   for (const name of requested) {
     if (features.includes(name) || dropped.includes(name)) continue;
-    if (ALLOWLIST.includes(name) && features.length < MAX_JOURNEYS) features.push(name);
+    if (ALLOWLIST.includes(name) && features.length < limit) features.push(name);
     else dropped.push(name);
   }
   return { features, dropped };
+}
+
+function requiredJourneys(picked, plan) {
+  const required = plan.outcomes.map(id => coverageGate.registry.outcomes[id].journey).filter(name => ALLOWLIST.includes(name));
+  if (!required.length) return picked;
+  const features = [...new Set([...required, ...(picked.smoke ? [] : picked.features)])];
+  return { ...picked, features, dropped: (picked.dropped ?? []).filter(name => !features.includes(name)), smoke: false };
 }
 
 function parseJson(text) {
@@ -415,9 +422,10 @@ async function pick(env) {
   const picked = await askParsed({ ask: () => callDeepSeek({ key, system: PICK_INSTRUCTIONS, user }), parse: parsePick });
   const plan = coverageGate.planChange(diff, picked.changedOutcomes);
   if (plan.product && picked.changeKind !== 'product') throw new Error('FEATURE_UNMAPPED: product source changes cannot use tooling-only validation.');
+  const selected = requiredJourneys(picked, plan);
   const reason = picked.reason || 'Journeys chosen for this change.';
-  console.log(`pstack-verifier pick: PR #${number} features=${JSON.stringify(picked.features)} smoke=${picked.smoke} dropped=${JSON.stringify(picked.dropped)} reason=${reason}`);
-  setOutputs({ features: JSON.stringify(picked.features), smoke: picked.smoke ? 'yes' : 'no', reason, number, head_sha: head, merge_base: mergeBase, changed_outcomes: JSON.stringify(plan.outcomes) });
+  console.log(`pstack-verifier pick: PR #${number} features=${JSON.stringify(selected.features)} smoke=${selected.smoke} dropped=${JSON.stringify(selected.dropped)} reason=${reason}`);
+  setOutputs({ features: JSON.stringify(selected.features), smoke: selected.smoke ? 'yes' : 'no', reason, number, head_sha: head, merge_base: mergeBase, changed_outcomes: JSON.stringify(plan.outcomes) });
 }
 
 function ownComments(repo, number) {
@@ -477,7 +485,7 @@ async function judge(env) {
   } catch {
     throw new Error('FEATURES is not JSON');
   }
-  const { features } = validateFeatures(requested);
+  const { features } = validateFeatures(requested, Infinity);
   const smoke = env.SMOKE === 'yes';
 
   const pr = fetchPr(repo, number);
@@ -559,7 +567,7 @@ async function judge(env) {
 
 module.exports = {
   ALLOWLIST, MODEL, ENDPOINT, MARKER_PREFIX, VERDICTS, MAX_JOURNEYS, SMOKE_JOURNEY,
-  SIDES, RESULT_FILE, escapeText, validateFeatures, parseJson, askParsed, parsePick, parseVerdict, applyRules, parentResult, buildComment,
+  SIDES, RESULT_FILE, escapeText, validateFeatures, requiredJourneys, parseJson, askParsed, parsePick, parseVerdict, applyRules, parentResult, buildComment,
   artifactName, readSideFiles, fetchMergeBase, findOwnComment, jobConclusions, callDeepSeek, doneWhen, journeyEvidence, journeyCatalog, requireKey,
 };
 

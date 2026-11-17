@@ -33,6 +33,17 @@ class ActionTest(unittest.TestCase):
     def plan(self, xml, mode="text", value="Open live terminal", direction="forward"):
         return action.plan(ET.fromstring(xml), mode, value, direction)
 
+    def test_missing_split_searches_the_horizontal_viewport_in_both_directions(self):
+        xml = (Path(__file__).parent / "fixtures/46978da4-hidden-split.xml").read_text()
+        backward = self.plan(xml, value="Runners", direction="backward").split()
+        forward = self.plan(xml, value="Runners", direction="forward").split()
+        self.assertEqual(backward[0], "swipe")
+        self.assertEqual(backward[1:], [forward[3], forward[4], forward[1], forward[2]])
+        x1, y1, x2, y2 = map(int, backward[1:])
+        self.assertTrue(32 < x1 < x2 < 1048)
+        self.assertEqual(y1, y2)
+        self.assertTrue(1710 < y1 < 1836)
+
     def test_terminal_typing_area_is_reachable_without_a_clickable_text_node(self):
         xml = window('<node content-desc="Show keyboard" bounds="[900,40][1000,140]" /><node class="android.widget.HorizontalScrollView" scrollable="true" bounds="[0,1000][1080,1100]"><node content-desc="Esc key" bounds="[10,1010][100,1090]" /></node>')
         self.assertEqual(self.plan(xml, mode='terminal', value=''), 'tap 505 575')

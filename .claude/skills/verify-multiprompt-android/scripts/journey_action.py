@@ -115,9 +115,12 @@ def plan(root, mode, value, direction="forward"):
         raise Unreachable("ambiguous enabled label in active window")
     if not matches:
         scrolls = [n for n in nodes if n.get("scrollable") == "true" and n.get("class") != "android.widget.HorizontalScrollView" and enabled(n)]
-        if len(scrolls) != 1:
-            raise Unreachable("label missing or disabled; no unique active vertical scroll container")
-        return scroll(scrolls[0], "vertical", direction == "forward")
+        if len(scrolls) == 1:
+            return scroll(scrolls[0], "vertical", direction == "forward")
+        horizontal = [n for n in nodes if n.get("scrollable") == "true" and n.get("class") == "android.widget.HorizontalScrollView" and enabled(n)]
+        if not scrolls and len(horizontal) == 1:
+            return scroll(horizontal[0], "horizontal", direction == "forward")
+        raise Unreachable("label missing or disabled; no unique active scroll container")
     label = matches[0]
     target = next((n for n in chain(label) if n.get("clickable") == "true"), label)
     if target is label and label.get("clickable") != "true" and mode not in ("field", "editor") and any(n.get("package", "").startswith("dev.multiprompt.companion") for n in chain(label)):

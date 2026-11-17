@@ -50,20 +50,20 @@ wait_gone() {
     done
 }
 tap_split() {
-    local point x y
-    for _ in 1 2 3 4; do
+    local point x y x2 y2 action direction attempt
+    local selector="$here/../../.claude/skills/verify-multiprompt-android/scripts/ui.py"
+    for attempt in {1..12}; do
         dump_ui
-        if point=$(python3 "$here/ui.py" "$EVIDENCE/current.xml" tap "$1"); then
-            read -r x y <<< "$point"
+        direction=backward
+        if (( attempt > 6 )); then direction=forward; fi
+        point=$(python3 "$selector" "$EVIDENCE/current.xml" reach-text "$1" "$direction") || continue
+        read -r action x y x2 y2 <<< "$point"
+        if [[ "$action" == tap ]]; then
             adb shell input tap "$x" "$y"
             return 0
         fi
-        local row=0 label
-        for label in Runners Notes Work All; do
-            if point=$(python3 "$here/ui.py" "$EVIDENCE/current.xml" tap "$label"); then read -r x row <<< "$point"; break; fi
-        done
-        (( row > 0 )) || continue
-        adb shell input swipe 900 "$row" 200 "$row" 300
+        [[ "$action" == swipe ]] || return 1
+        adb shell input swipe "$x" "$y" "$x2" "$y2" 300
     done
     printf 'Split %s not reachable\n' "$1"
     shot "failure-split-$1"
