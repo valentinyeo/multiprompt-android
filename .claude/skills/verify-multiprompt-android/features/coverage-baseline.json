@@ -11,10 +11,6 @@
     "sourcePr": 379,
     "cleanupTicket": "SOFT-2544"
   },
-  "claude.clear-ranking": {
-    "sourcePr": 381,
-    "cleanupTicket": "SOFT-2545"
-  },
   "legacy.igsh-449": {
     "sourceTicket": "IGSH-449",
     "cleanupTicket": "IGSH-449"

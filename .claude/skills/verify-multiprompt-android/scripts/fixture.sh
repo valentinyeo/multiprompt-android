@@ -120,6 +120,10 @@ elif [[ "${VERIFY_FEATURE:-}" == terminal.md ]]; then
 elif [[ "${VERIFY_FEATURE:-}" == chat-choices.md ]]; then
     sudo install -m 755 "$(dirname "$0")/choices-console.py" /home/verifyssh/choices-console.py
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'exec -a claude /usr/bin/python3 -u /home/verifyssh/choices-console.py /home/verifyssh/receipts.txt'
+elif [[ "${VERIFY_FEATURE:-}" == clear-ranking.md ]]; then
+    sudo install -m 755 "$(dirname "$0")/skills-console.py" /home/verifyssh/skills-console.py
+    sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
+    sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/skills-console.py /home/verifyssh/receipts.txt clear-ranking'
 elif [[ "${VERIFY_FEATURE:-}" == native-skills.md ]]; then
     sudo install -m 755 "$(dirname "$0")/skills-console.py" /home/verifyssh/skills-console.py
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude

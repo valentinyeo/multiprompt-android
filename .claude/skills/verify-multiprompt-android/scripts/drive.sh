@@ -918,6 +918,11 @@ if [[ "$feature" == ai-usage.md ]]; then
     exit 0
 fi
 
+if [[ "$feature" == clear-ranking.md ]]; then
+    source "$scripts/clear-ranking-drive.sh"
+    exit 0
+fi
+
 if [[ "$feature" == snippets.md ]]; then
     source "$scripts/snippets-drive.sh"
     exit 0
