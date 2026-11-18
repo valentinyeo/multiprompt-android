@@ -109,6 +109,92 @@ test('the shared session-ready event runs all stress before drivers that never f
   assert.doesNotMatch(driver.slice(driver.indexOf('fill() {'), driver.indexOf('\nsource ', driver.indexOf('fill() {'))), /break_it_/);
 });
 
+test('chat opening retries a missed inbox tap but never drops the target assertion', t => {
+  const fixture = retained(t);
+  const script = `
+    source tools/android-break-it/drive.sh
+    tap_desc() { printf 'TAP %s\\n' "$1"; }
+    fill() { :; }
+    select_node() { [[ "$2" == Inbox ]]; }
+    waits=0
+    wait_for_text() {
+      [[ "$1" == '1 result across all splits' ]] && return 0
+      waits=$((waits + 1))
+      printf 'ASSERT %s\\n' "$1"
+      [[ "$waits" == 2 && "$RECOVERS" == true ]]
+    }
+    break_it_open_chat verify-breakit-other 'Message verify-breakit-other'
+  `;
+  for (const recovers of ['true', 'false']) {
+    const run = spawnSync('bash', ['-euo', 'pipefail', '-c', script], { cwd: path.join(__dirname, '..'), env: { ...process.env, EVIDENCE: fixture.dir, RECOVERS: recovers }, encoding: 'utf8' });
+    assert.equal(run.status === 0, recovers === 'true', run.stderr);
+    assert.equal(run.stdout.match(/TAP Robot verify-breakit-other/g)?.length, 2);
+    assert.equal(run.stdout.match(/ASSERT Message verify-breakit-other/g)?.length, 2);
+  }
+});
+
+test('the streaming fixture emits progressive data before completion and holds until release', () => {
+  const script = `
+import json
+import os
+from pathlib import Path
+import selectors
+import subprocess
+import sys
+import tempfile
+import textwrap
+import time
+source = Path('tools/android-break-it/fixture.py').read_text()
+body = textwrap.dedent(source.split('\\nelse:\\n', 1)[1])
+with tempfile.TemporaryDirectory() as directory:
+    child = 'import json,sys,time\\nfrom pathlib import Path\\nHOME=Path(' + repr(directory) + ')\\ndef emit(event): print(json.dumps(event),flush=True)\\n' + body
+    process = subprocess.Popen([sys.executable, '-u', '-c', child], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        process.stdin.write(b'{"type":"prompt","id":"first","message":"BREAK_IT_STREAM"}\\n')
+        process.stdin.flush()
+        pending = b''
+        events = []
+        deltas = []
+        with selectors.DefaultSelector() as selector:
+            selector.register(process.stdout, selectors.EVENT_READ)
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                for key, _ in selector.select(max(0, deadline - time.monotonic())):
+                    chunk = os.read(key.fd, 65536)
+                    assert chunk, 'Fixture exited before its streamed reply'
+                    pending += chunk
+                    while b'\\n' in pending:
+                        line, pending = pending.split(b'\\n', 1)
+                        event = json.loads(line)
+                        events.append(event)
+                        update = event.get('assistantMessageEvent', {})
+                        if update.get('type') == 'text_delta':
+                            deltas.append(update['delta'])
+                if ''.join(deltas) == 'BREAK_IT_STREAM_REPLY':
+                    break
+            assert ''.join(deltas) == 'BREAK_IT_STREAM_REPLY', events
+            assert len(deltas) > 1, 'Fixture must progressively stream, not emit one burst and stall'
+            assert not any(event.get('assistantMessageEvent', {}).get('type') == 'text_end' for event in events)
+            assert not any(event.get('type') == 'agent_settled' for event in events)
+        (Path(directory) / 'breakit-release-stream').touch()
+        process.stdin.write(b'{"type":"prompt","id":"second","message":"BREAK_IT_FOLLOWUP"}\\n')
+        process.stdin.flush()
+        process.stdin.close()
+        process.stdin = None
+        output, errors = process.communicate(timeout=5)
+        assert process.returncode == 0, errors
+        tail = [json.loads(line) for line in (pending + output).splitlines()]
+        done = [event['assistantMessageEvent']['content'] for event in tail if event.get('assistantMessageEvent', {}).get('type') == 'text_end']
+        assert done == ['BREAK_IT_STREAM_REPLY', 'BREAK_IT_FOLLOWUP_REPLY'], tail
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            process.communicate(timeout=3)
+`;
+  const run = spawnSync('python3', ['-B', '-c', script], { cwd: path.join(__dirname, '..'), encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stderr);
+});
+
 test('a missing, failed or unevidenced stress cannot pass', t => {
   for (const stress of proof.STRESSES) {
     for (const extension of ['json', 'png', 'xml', 'txt']) {
