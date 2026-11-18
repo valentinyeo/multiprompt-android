@@ -1008,6 +1008,31 @@
         "screencast-account-receipts.txt": 1000
       }
     },
+    "host-restart.md": {
+      "name": "Replies after a chat host restart",
+      "description": "Restart a desktop-hosted chat mid-conversation and require desktop and phone replies without reopening it. SOFT-2681.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/host-restart-drive.sh",
+          ".claude/skills/verify-multiprompt-android/scripts/host-restart-fixture.py",
+          ".claude/skills/verify-multiprompt-android/scripts/host-restart-setup.sh",
+          ".claude/skills/verify-multiprompt-android/scripts/host-restart-ssh.py"
+        ]
+      },
+      "outcomes": [
+        "reader.host-restart"
+      ],
+      "evidence": {
+        "host-restart-state.json": 2500,
+        "host-restart-host.json": 6000,
+        "host-restart-processes.txt": 1000
+      }
+    },
     "folder-bar.md": {
       "name": "Inbox folder bar",
       "description": "Selected last/middle folders remain fully visible on selection and restart; overflow fades over a transparent bar. SOFT-2706.",
@@ -1611,6 +1636,30 @@
       "match": [
         "ScreencastAccountKey|ScreencastUploader|screencastKey|screencast\\.prepare"
       ]
+    },
+    "reader.host-restart": {
+      "description": "A desktop-hosted chat catches up and keeps showing replies after its agent host process restarts, without reopening the phone reader.",
+      "journey": "host-restart.md",
+      "sideEffect": true,
+      "match": [
+        "reader/ChatHistoryConnection\\.kt",
+        "reader/ChatHistoryProtocol\\.kt",
+        "hosted_claude_transcript_sid|native_session=event"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "+ wait_for_text REPLY_DESKTOP_AFTER_2681"
+        },
+        "result": {
+          "file": "host-restart-state.json",
+          "quote": "REPLY_DESKTOP_AFTER_2681"
+        },
+        "sideEffect": {
+          "file": "host-restart-host.json",
+          "quote": "\"reply\": \"REPLY_DESKTOP_AFTER_2681\""
+        }
+      }
     },
     "inbox.folder-bar": {
       "description": "The selected inbox folder stays fully visible on open and change; overflow fades at transparent bar edges. SOFT-2706.",

@@ -1579,6 +1579,9 @@ if [[ "$feature" == sessions.md ]]; then
     exit 0
 fi
 tap_text verify-session
+if [[ "$feature" == host-restart.md ]]; then
+    source "$scripts/host-restart-drive.sh"
+fi
 if [[ "$feature" == reader-version.md ]]; then
     source "$scripts/reader-version-drive.sh"
 fi

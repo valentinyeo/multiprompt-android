@@ -58,7 +58,9 @@ fi
 if [[ "${VERIFY_FEATURE:-}" == folder-bar.md && "${BREAK_IT_MODE:-}" == true ]]; then
     VERIFY_FEATURE=ai-switch.md
 fi
-if [[ "${VERIFY_FEATURE:-}" == claude-remote-control.md ]]; then
+if [[ "${VERIFY_FEATURE:-}" == host-restart.md ]]; then
+    source "$(dirname "$0")/host-restart-setup.sh"
+elif [[ "${VERIFY_FEATURE:-}" == claude-remote-control.md ]]; then
     source "$(dirname "$0")/remote-control-setup.sh"
 elif [[ "${VERIFY_FEATURE:-}" == ai-switch.md ]]; then
     fixture_session=live-verify-session
