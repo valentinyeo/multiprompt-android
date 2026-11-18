@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { requiredChecks } from './pr-checks.mjs';
+import { requiredChecks, retiringChecks } from './pr-checks.mjs';
 
 try {
   if (process.argv.length !== 3 || process.argv[2] !== '--check') {
@@ -13,11 +13,14 @@ try {
     throw new Error('GitHub returned no valid required check contexts');
   }
   const missing = requiredChecks.filter(name => !contexts.includes(name));
-  const unexpected = contexts.filter(name => !requiredChecks.includes(name));
+  const unexpected = contexts.filter(name => !requiredChecks.includes(name) && !retiringChecks.includes(name));
   if (missing.length || unexpected.length) {
     throw new Error(`Branch protection differs from tools/pr-checks.mjs: missing [${missing.join(', ')}], unexpected [${unexpected.join(', ')}]`);
   }
-  console.log(`${requiredChecks.length} required checks match tools/pr-checks.mjs`);
+  const retiring = contexts.filter(name => retiringChecks.includes(name));
+  console.log(retiring.length
+    ? `${requiredChecks.length} target required checks present; lead must remove retired checks after merge: ${retiring.join(', ')}`
+    : `${requiredChecks.length} required checks match tools/pr-checks.mjs`);
 } catch (error) {
   console.error(error.message);
   process.exitCode = 1;

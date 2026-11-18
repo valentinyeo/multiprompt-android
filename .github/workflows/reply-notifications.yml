@@ -3,24 +3,6 @@ name: Reply notification release proof
 on:
   schedule:
     - cron: '23 3 * * *'
-  pull_request:
-    paths:
-      - 'app/src/main/**'
-      - 'app/src/debug/**'
-      - 'app/src/m3/**'
-      - 'app/src/release/**'
-      - 'app/*.gradle.kts'
-      - 'app/proguard-rules.pro'
-      - 'app/src/androidTest/AndroidManifest.xml'
-      - '.github/actions/android-proof/**'
-      - 'gradle.properties'
-      - '*.gradle.kts'
-      - 'gradlew.bat'
-      - 'gradlew'
-      - 'gradle/**'
-      - 'tools/reply-notifications/**'
-      - 'tools/release-choices/prepare.sh'
-      - '.github/workflows/reply-notifications.yml'
   workflow_dispatch:
     inputs:
       published_commit:

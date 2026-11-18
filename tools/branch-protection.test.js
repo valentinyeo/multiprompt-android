@@ -27,14 +27,14 @@ test('live required contexts must equal the merge helper list, regardless of ord
   const { requiredChecks } = await import('./pr-checks.mjs');
   const run = await check({ required_status_checks: { contexts: [...requiredChecks].reverse() } });
   assert.equal(run.status, 0, run.stderr);
-  assert.match(run.stdout, /18 required checks match/);
+  assert.match(run.stdout, /8 required checks match/);
 });
 
 test('the audited 13-context protection fails with every missing check named', async () => {
   const contexts = ['build', 'unit-tests', 'm3-unit-tests', 'lint', 'test', 'image-preview-emulator', 'reply-notifications-emulator', 'session-rows-emulator', 'message-actions-emulator', 'approved-style-emulator', 'secret-scan', 'no-paid-ai', 'session-pins-emulator'];
   const run = await check({ required_status_checks: { contexts } });
   assert.equal(run.status, 1);
-  for (const name of ['baseline-profile', 'phone-routing', 'message-projection-proof', 'pick journeys', 'pstack-verifier']) {
+  for (const name of ['pstack-verifier']) {
     assert.ok(run.stderr.includes(name), run.stderr);
   }
 });
@@ -61,4 +61,15 @@ test('only the read-only --check command is accepted', async () => {
     assert.equal(run.status, 1);
     assert.match(run.stderr, /Usage: node tools\/branch-protection.mjs --check/);
   }
+});
+
+test('the lead can remove known retired checks after merge, without a worker protection write', async () => {
+  const { requiredChecks, retiringChecks } = await import('./pr-checks.mjs');
+  const run = await check({ required_status_checks: { contexts: [...requiredChecks, ...retiringChecks] } });
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /8 target required checks present; lead must remove retired checks after merge/);
+  assert.match(run.stdout, /phone-routing/);
+  const missing = await check({ required_status_checks: { contexts: [...requiredChecks.filter(name => name !== 'pstack-verifier'), ...retiringChecks] } });
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /missing \[pstack-verifier\]/);
 });

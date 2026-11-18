@@ -13,7 +13,7 @@ A product change must name every changed outcome. The second-AI verifier require
 - [App name and update](app-name.md): published signed Android in-app update proof.
   - Outcomes: `app-name.journey`. Runner: `app-name.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Late account bot pictures](bot-photo-refresh.md): hosted ViewModel and Compose regressions; seeded picture, not live account sync.
-  - Outcomes: `bot-photo-refresh.journey`. Runner: `test.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
+  - Outcomes: `bot-photo-refresh.journey`. Runner: `android-full.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Cancel waiting messages](chat-cancel.md): exact cancellation, surviving order, host receipt and delivered actions, with a recording.
   - Outcomes: `chat-cancel.journey`. Runner: `verify.yml` (debug).
 - [Chat choices](chat-choices.md): latest-reply option taps and live question number keys, with independent SSH/tmux receipts.

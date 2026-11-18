@@ -40,7 +40,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           sparse-checkout: |
             .github/scripts
             .claude/skills/verify-multiprompt-android/features
@@ -57,6 +57,8 @@ jobs:
             tools/pr-checks.test.js
             tools/fixtures/pr-checks
             tools/workflow-inputs.test.js
+            tools/ci/pr-workflows.test.mjs
+            tools/parent-cache.test.js
             tools/release-proof.test.js
             tools/release-proof.sh
             tools/release-choices/prepare.sh
@@ -70,16 +72,7 @@ jobs:
         with:
           node-version: 22
       - name: Prove the verifier on real historical mistakes
-        run: node --test tools/feature-coverage.test.js tools/pstack-verifier.test.js tools/pstack-verifier-eval.test.js tools/workflow-inputs.test.js tools/release-proof.test.js tools/pr-checks.test.js tools/branch-protection.test.js tools/android-break-it.test.js > "$RUNNER_TEMP/tooling-proof.txt" 2>&1
-      - name: Retain non-UI verifier proof
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          overwrite: true
-          name: verifier-tooling-proof
-          path: ${{ runner.temp }}/tooling-proof.txt
-          if-no-files-found: error
-          retention-days: 7
+        run: node --test tools/feature-coverage.test.js tools/pstack-verifier.test.js tools/pstack-verifier-eval.test.js tools/workflow-inputs.test.js tools/release-proof.test.js tools/pr-checks.test.js tools/branch-protection.test.js tools/android-break-it.test.js tools/ci/pr-workflows.test.mjs tools/parent-cache.test.js > "$RUNNER_TEMP/tooling-proof.txt" 2>&1
       - name: Choose the journeys that exercise this change
         id: pick
         env:
@@ -90,11 +83,32 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: node .github/scripts/pstack-verifier/verifier.cjs pick
+      - name: Compare workflow rules on the parent
+        env:
+          BASE_SHA: ${{ steps.pick.outputs.merge_base }}
+        run: |
+          head_summary=$(tail -12 "$RUNNER_TEMP/tooling-proof.txt")
+          base="$BASE_SHA"
+          git fetch --no-tags origin "$base"
+          printf '\nPARENT workflow rules at %s\n' "$base" >> "$RUNNER_TEMP/tooling-proof.txt"
+          code=0
+          WORKFLOW_REF="$base" node --test tools/ci/pr-workflows.test.mjs >> "$RUNNER_TEMP/tooling-proof.txt" 2>&1 || code=$?
+          printf '\nHEAD tooling proof summary\n%s\nPARENT_WORKFLOW_EXIT=%s\n' "$head_summary" "$code" >> "$RUNNER_TEMP/tooling-proof.txt"
+      - name: Retain non-UI verifier proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          overwrite: true
+          name: verifier-tooling-proof
+          path: ${{ runner.temp }}/tooling-proof.txt
+          if-no-files-found: error
+          retention-days: 7
+
 
   journeys:
     name: journey ${{ matrix.feature }}
     needs: pick
-    if: needs.pick.outputs.no_product_change != 'true'
+    if: needs.pick.outputs.features != '[]'
     strategy:
       fail-fast: false
       matrix:
@@ -112,7 +126,7 @@ jobs:
   parents:
     name: parent journey ${{ matrix.feature }}
     needs: pick
-    if: needs.pick.outputs.no_product_change != 'true'
+    if: needs.pick.outputs.features != '[]'
     strategy:
       fail-fast: false
       matrix:
@@ -137,13 +151,7 @@ jobs:
       pull-requests: write
       actions: read
     steps:
-      - name: Report no product change
-        if: needs.pick.result == 'success' && needs.pick.outputs.no_product_change == 'true'
-        env:
-          REASON: ${{ needs.pick.outputs.reason }}
-        run: printf '%s\n' "$REASON" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        if: needs.pick.outputs.no_product_change != 'true'
         with:
           fetch-depth: 1
           sparse-checkout: |
@@ -152,11 +160,9 @@ jobs:
             tools/release-notes/ticket-titles.json
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        if: needs.pick.outputs.no_product_change != 'true'
         with:
           node-version: 22
       - name: Judge the change against the journey evidence
-        if: needs.pick.outputs.no_product_change != 'true'
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           GH_TOKEN: ${{ github.token }}
@@ -176,7 +182,7 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: node .github/scripts/pstack-verifier/verifier.cjs judge
       - name: Retain structured outcome coverage
-        if: always() && needs.pick.outputs.no_product_change != 'true'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           overwrite: true

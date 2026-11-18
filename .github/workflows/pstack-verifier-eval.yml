@@ -4,12 +4,6 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '17 5 * * 1'
-  pull_request:
-    paths:
-      - .github/scripts/pstack-verifier/**
-      - .github/workflows/pstack-verifier-eval.yml
-      - tools/pstack-verifier-eval.test.js
-
 permissions:
   contents: read
 
