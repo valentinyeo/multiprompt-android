@@ -1357,7 +1357,7 @@
         "ComputerView\\.kt|DeepgramKeySheet\\.kt|ReaderInformationSheets\\.kt",
         "label = \"(More|Computer|Snippets|Add file|Dictation API key|Screencast2 upload key|Estimate accuracy|Release notes)\"",
         "voiceModeOn|label = \"Voice Mode\"|endDialogVisible|DestructiveConfirmationSheet",
-        "AppMenu\\.kt|InboxOverflowMenu"
+        "InboxOverflowMenu|Session list actions|AppMenu\\.kt[\\s\\S]*onDismissRequest"
       ]
     }
   }

@@ -74,7 +74,7 @@
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
         "action": "Open Session list actions in Inbox, then press Android Back",
-        "result": "reader-menu-inbox-dismiss.json shows Inbox and Session list actions without Hosts or Settings menu rows"
+        "result": "reader-menu-inbox-dismiss.json shows Inbox and Session list actions without Refresh or Settings menu rows"
       }
     },
     {

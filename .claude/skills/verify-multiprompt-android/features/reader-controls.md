@@ -68,7 +68,7 @@ of the previous sheet. `controls.json` lists all 40 action/result pairs.
     Cancel, reopen, then dismiss with Android Back. Both return to the reader.
     Compare host receipts before and after, and independently require the same
     live tmux session and window in `reader-menu-end-host.txt`.
-16. Return to Inbox and open Session list actions. Require Hosts and Settings,
+16. Return to Inbox and open Session list actions. Require Refresh and Settings,
     dismiss with Android Back, and require Inbox without those menu rows.
 17. Reopen the reader, then More → Release notes. Require App updates and no
     reader actions.

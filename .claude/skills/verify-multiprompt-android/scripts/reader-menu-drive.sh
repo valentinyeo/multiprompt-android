@@ -179,11 +179,11 @@ grep -Fx 'verify-session|VERIFY_RENAMED_2653' "$EVIDENCE/reader-menu-end-host.tx
 tap_desc Back
 wait_for_text Inbox
 tap_desc 'Session list actions'
-wait_for_text Hosts
-menu_surface inbox-menu '{"text":["Hosts","Settings"]}'
+wait_for_text Settings
+menu_surface inbox-menu '{"text":["Refresh","Settings"]}'
 adb shell input keyevent KEYCODE_BACK
-wait_for_absence Hosts
-menu_surface inbox-dismiss '{"text":["Inbox"],"desc":["Session list actions"],"absent":["Hosts","Settings"]}'
+wait_for_absence Settings
+menu_surface inbox-dismiss '{"text":["Inbox"],"desc":["Session list actions"],"absent":["Refresh","Settings"]}'
 tap_text verify-session
 wait_for_text 'Message VERIFY_RENAMED_2653'
 open_more
