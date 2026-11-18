@@ -215,11 +215,15 @@ jobs:
           HEAD_SHA: ${{ needs.pick.outputs.reuse_head }}
           RUN_ID: ${{ github.run_id }}
         run: node .github/scripts/pstack-verifier/reuse.cjs publish
+      - name: Install Claude Code for changes DeepSeek wrote
+        if: needs.pick.outputs.reused != 'true'
+        run: npm i -g @anthropic-ai/claude-code@2.1.326
       - name: Judge the change against the journey evidence
         id: judge
         if: needs.pick.outputs.reused != 'true'
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ needs.pick.outputs.number }}

@@ -1131,3 +1131,19 @@ test('tooling and product changes both run the independent judge', () => {
   assert.doesNotMatch(final, /if:.*no_product_change/);
   assert.match(final, /name: Judge the change against the journey evidence\n {8}id: judge\n {8}if: needs\.pick\.outputs\.reused != 'true'\n {8}env:/);
 });
+
+test('judge family differs from every author family', () => {
+  assert.deepEqual(verifier.authorFamilies('x\nAuthor model: openai/gpt-6.1-sol\n'), ['openai']);
+  assert.equal(verifier.chooseJudge(verifier.authorFamilies('Author model: openai/gpt-6.1-sol')).family, 'deepseek');
+  assert.equal(verifier.chooseJudge(verifier.authorFamilies('Author model: deepseek/deepseek-v4.1-flash')).family, 'anthropic');
+  assert.equal(verifier.chooseJudge(verifier.authorFamilies('Author model: opencode-go/deepseek-v4.1-flash')).family, 'anthropic');
+  assert.equal(verifier.chooseJudge(verifier.authorFamilies('Author model: anthropic/claude-opus-5-5')).family, 'deepseek');
+  assert.throws(() => verifier.chooseJudge(verifier.authorFamilies('Author model: deepseek/deepseek-v4.1-flash\nAuthor model: anthropic/claude-opus-5-5')), /NO_INDEPENDENT_JUDGE/);
+  assert.throws(() => verifier.authorFamilies('no author line'), /AUTHOR_MODEL_MISSING/);
+  assert.throws(() => verifier.authorFamilies('Author model: mystery/thing'), /AUTHOR_MODEL_UNKNOWN/);
+});
+
+test('verdict comment names the judge that ran', () => {
+  const body = verifier.buildComment({ sha: 'a'.repeat(40), verdict: 'PASS', summary: 'Ok.', journeys: [], evidence: [], notCovered: [], notes: [], runUrl: 'https://example.test/run', judgeLabel: 'Claude (haiku)' });
+  assert.match(body, /Verified by Claude \(haiku\), a model family no author used/);
+});
