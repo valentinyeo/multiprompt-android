@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 fixture_session=live-verify-session
 host_restart_fixture() {
-    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/host-restart-fixture.py "$@"
+    if ! sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/host-restart-fixture.py "$@"; then
+        setup_failure=1
+        return 1
+    fi
 }
 wait_for_text DESKTOP_CHAT_READY_2681
 shot host-restart-open

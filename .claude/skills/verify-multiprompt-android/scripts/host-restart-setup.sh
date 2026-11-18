@@ -5,7 +5,7 @@ fixture_session=live-verify-session
 sudo install -m 755 "$scripts/host-restart-ssh.py" /home/verifyssh/host-restart-ssh.py
 { printf 'command="python3 /home/verifyssh/host-restart-ssh.py" '; cat "$FIXTURE/user-key.pub"; } | sudo tee /home/verifyssh/.ssh/authorized_keys >/dev/null
 sudo install -m 755 "$scripts/host-restart-fixture.py" /home/verifyssh/host-restart-fixture.py
-sudo install -m 644 app/src/main/assets/chat_history_reader.py /home/verifyssh/host-restart-reader.py
+sudo install -m 644 -o verifyssh -g verifyssh app/src/main/assets/chat_history_reader.py /home/verifyssh/host-restart-reader.py
 sudo -u verifyssh mkdir -p /home/verifyssh/.local/bin
 sudo install -m 755 "$scripts/host-restart-fixture.py" /home/verifyssh/.local/bin/claude
 sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s "$fixture_session" -x 100 -y 32 'exec env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 -u /home/verifyssh/host-restart-fixture.py console 2>/home/verifyssh/host-restart-startup.txt'
