@@ -979,12 +979,8 @@
       "label": "Dismiss Host mapping",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/HostMappingDialog.kt:HostMappingDialog:KitSheet:90073eaacdef9f43:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/HostMappingDialog.kt:23",
-      "journey": "settings-controls.md",
-      "proof": {
-        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
-        "action": "Tap Done in host mapping",
-        "result": "settings returns without Desktop tmux hosts in mapping-dismissed.json"
-      }
+      "journey": null,
+      "missing": "No automated journey exercises this control and checks its result."
     },
     {
       "id": "host-mapping.system-back",
@@ -1344,8 +1340,12 @@
       "label": "Refresh",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:Header:KitRoundButton:fe1691b60d3d35bc:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:737",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "settings-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
+        "action": "Tap Refresh in the Update header",
+        "result": "App updates remains in settings-refreshed.json; a new list-sessions command reaches the independent SSH host in settings-refresh-host.txt"
+      }
     },
     {
       "id": "update-navigation.version-open-release-notes",

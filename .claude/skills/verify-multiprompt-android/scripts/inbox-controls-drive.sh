@@ -64,6 +64,18 @@ if [[ "$feature" == settings-controls.md ]]; then
     tap_text Update
     wait_for_text 'App updates'
     inbox_control_state settings-update '{"text":["App updates","Check now"],"desc":["Open navigation"],"absent":["Session list settings"]}'
+    sudo cat /home/verifyssh/commands.log > "$EVIDENCE/settings-refresh-before.txt"
+    tap_desc Refresh
+    wait_for_text 'App updates'
+    inbox_control_state settings-refreshed '{"text":["App updates"],"desc":["Open navigation"]}'
+    sudo cat /home/verifyssh/commands.log > "$EVIDENCE/settings-refresh-host.txt"
+    python3 - "$EVIDENCE/settings-refresh-before.txt" "$EVIDENCE/settings-refresh-host.txt" <<'PY'
+from pathlib import Path
+import sys
+before, after = [Path(p).read_text() for p in sys.argv[1:]]
+assert after.startswith(before)
+assert 'list-sessions' in after[len(before):], 'Update navigation Refresh did not reach the SSH host'
+PY
     tap_desc 'Open navigation'
     inbox_control_state update-menu '{"text":["Sessions","✓ Update"],"absent":["Session list settings"]}'
     adb shell input keyevent KEYCODE_BACK

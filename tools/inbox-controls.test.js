@@ -33,7 +33,8 @@ test('menu changes require the matching journey even when the picker omits it', 
     ['MultipromptApp.kt', 'description = "Open navigation"', 'settings-controls.md'],
     ['MultipromptApp.kt', 'ReminderDialog(session = session)', 'inbox-reminders.md'],
     ['MultipromptApp.kt', 'bucketMenuExpanded = true', 'inbox-reminders.md'],
-    ['AppMenu.kt', 'internal fun InboxOverflowMenu(', 'inbox-reminders.md'],
+    ['AppMenu.kt', 'label = "Refresh"', 'inbox-reminders.md'],
+    ['MultipromptApp.kt', '"In 1 hour" to now.plusHours(1)', 'inbox-reminders.md'],
   ]) {
     const filePath = `app/src/main/java/dev/multiprompt/companion/ui/${file}`;
     const diff = `diff --git a/${filePath} b/${filePath}\n--- a/${filePath}\n+++ b/${filePath}\n@@ -1 +1 @@\n-old\n+${text}\n`;

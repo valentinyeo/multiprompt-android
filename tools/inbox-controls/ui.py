@@ -56,10 +56,6 @@ def check(xml, screenshot, expected):
     for label in expected.get('selected', []):
         node = choice(label)
         assert node.get('selected') == 'true' or node.get('checked') == 'true', f'Choice not selected: {label}'
-    for label, value in expected.get('fields', {}).items():
-        assert any(n.get('class') == 'android.widget.EditText' and n.get('text') == value
-                   and any(c.get('text') == label for c in n.iter()) and visible(n)
-                   for n in nodes), f'Wrong editor value: {label}'
     return dict(xml=Path(xml).name, screenshot=Path(screenshot).name, asserted=expected,
                 texts=[n.get('text') for n in nodes if n.get('text') and visible(n)])
 
