@@ -150,6 +150,11 @@ elif [[ "${VERIFY_FEATURE:-}" == chat-reactions.md ]]; then
 elif [[ "${VERIFY_FEATURE:-}" == chat-cancel.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true ]]
     sudo install -m 755 "$(dirname "$0")/cancel-console.py" /home/verifyssh/cancel-console.py
+    sudo install -m 644 "$(dirname "$0")/cancel-proof.py" /home/verifyssh/cancel-proof.py
+    sudo install -m 644 app/src/main/assets/chat_history_reader.py /home/verifyssh/cancel-reader.py
+    for provider in claude codex; do
+        sudo install -m 644 "app/src/main/assets/chat_connectors/$provider.py" "/home/verifyssh/cancel-$provider.py"
+    done
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
     sudo -u verifyssh env GITHUB_ACTIONS="$GITHUB_ACTIONS" HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'env GITHUB_ACTIONS=true HOME=/home/verifyssh /home/verifyssh/claude -u /home/verifyssh/cancel-console.py /home/verifyssh/receipts.txt'
 elif [[ "${VERIFY_FEATURE:-}" == chat-queued.md || "${VERIFY_FEATURE:-}" == chat-shared.md ]]; then
@@ -250,14 +255,14 @@ if [[ "${VERIFY_FEATURE:-}" == session-favorites.md ]]; then
         tmux has-session -t verify-keep
     '
 fi
-if [[ "${VERIFY_FEATURE:-}" == device-approval.md ]]; then
+if [[ "${VERIFY_FEATURE:-}" == device-approval.md || "${VERIFY_FEATURE:-}" == screencast-account.md ]]; then
     for name in pending-device denied-device; do
         ssh-keygen -q -t ed25519 -N '' -C "$name" -f "$FIXTURE/$name"
         ssh-keygen -lf "$FIXTURE/$name.pub" -E sha256 | awk '{print $2}' > "$EVIDENCE/$name-fingerprint.txt"
         sudo install -m 644 -o verifyssh -g verifyssh "$FIXTURE/$name.pub" "/home/verifyssh/$name.pub"
     done
     sudo install -m 755 "$(dirname "$0")/device-approval.py" /home/verifyssh/device-approval.py
-    sudo -u verifyssh python3 /home/verifyssh/device-approval.py /home/verifyssh /home/verifyssh 8787 > "$EVIDENCE/device-approval-server.log" 2>&1 &
+    sudo -u verifyssh python3 /home/verifyssh/device-approval.py /home/verifyssh /home/verifyssh 8787 "$VERIFY_FEATURE" > "$EVIDENCE/device-approval-server.log" 2>&1 &
     for attempt in {1..30}; do
         if curl -fsS http://127.0.0.1:8787/ready > /dev/null; then break; fi
         sleep 1

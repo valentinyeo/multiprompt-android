@@ -11,7 +11,7 @@ SKILL = Path('.claude/skills/verify-multiprompt-android')
 DEDICATED = {
     'app-name.md': ('app-name.yml', 'app_name'),
     'chat-working.md': ('working-dots.yml', 'working_dots'),
-    'bot-photo-refresh.md': ('test.yml', 'photo'),
+    'bot-photo-refresh.md': ('android-full.yml', 'photo'),
 }
 FLAGS = ('released_chat', 'released_robots', 'release_choices', 'pins_scroll', 'candidate')
 

@@ -13,6 +13,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: bubble-width-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   width:
     runs-on: ubuntu-24.04

@@ -13,9 +13,9 @@ A product change must name every changed outcome. The second-AI verifier require
 - [App name and update](app-name.md): published signed Android in-app update proof.
   - Outcomes: `app-name.journey`. Runner: `app-name.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Late account bot pictures](bot-photo-refresh.md): hosted ViewModel and Compose regressions; seeded picture, not live account sync.
-  - Outcomes: `bot-photo-refresh.journey`. Runner: `test.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
-- [Cancel waiting messages](chat-cancel.md): exact cancellation, surviving order, host receipt and delivered actions, with a recording.
-  - Outcomes: `chat-cancel.journey`. Runner: `verify.yml` (debug).
+  - Outcomes: `bot-photo-refresh.journey`. Runner: `android-full.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
+- [Cancel waiting messages](chat-cancel.md): canonical queued/cancelled states, untouched terminal draft, surviving receipt order and delivered actions, with a recording.
+  - Outcomes: `chat-cancel.journey`. Runner: `verify.yml` (debug). Priority evidence: `cancel-waiting.json` (3000 characters), `cancel-cancelled.json` (3000 characters), `cancel-delivered.json` (5000 characters).
 - [Chat choices](chat-choices.md): latest-reply option taps and live question number keys, with independent SSH/tmux receipts.
   - Outcomes: `chat-choices.journey`. Runner: `verify.yml` (debug).
 - [Codex transcript parity](chat-codex.md): Dispatch `feature=chat-codex.md`. The real Android APK connects through SSH to independent Hax, native Codex, and Claude fixture sessions. Hax and Codex write the same JSONL schemas consumed by desktop. Their terminal output deliberately excludes every transcript reply, ruling out terminal-scrape success.
@@ -104,10 +104,12 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `settings.controls`. Runner: `verify.yml` (debug). Priority evidence: `settings-theme-Sunlight.json` (800 characters), `settings-theme-Dark.json` (800 characters), `settings-font-Small.json` (800 characters), `settings-font-Large.json` (800 characters), `settings-retained.json` (1000 characters), `settings-refresh-host.txt` (2000 characters), `mapping-scroll-bottom.json` (1000 characters), `settings-version.json` (1000 characters).
 - [Inbox buckets and reminders](inbox-reminders.md): Refresh with independent SSH reads; switch inbox buckets and save every reminder preset and custom deadlines. SOFT-2670.
   - Outcomes: `inbox.reminders`. Runner: `verify.yml` (debug). Priority evidence: `inbox-refresh-host.txt` (2000 characters), `bucket-unread-on.json` (500 characters), `reminder-scroll-bottom.json` (1000 characters), `reminder-day2-time.json` (500 characters), `reminder-custom-time.json` (500 characters), `reminder-keyboard-time.json` (500 characters), `reminder-keyboard-waiting.json` (1000 characters), `inbox-reminders-proof.txt` (200 characters).
+- [Account upload key](screencast-account.md): Signed-in image selection without typing a Screencast2 key, with authenticated account receipts.
+  - Outcomes: `upload.account-key`. Runner: `verify.yml` (debug). Prerequisites: Local authenticated account fixture; live production email OTP and successful Screencast2 upload are not exercised. Priority evidence: `screencast-signed-in.json` (2000 characters), `screencast-picker.json` (2000 characters), `screencast-selected.json` (2000 characters), `screencast-account-receipts.txt` (1000 characters).
 
 ## Initial coverage gaps
 
-These IDs are an inventory, not exemptions for future changes. Untouched gaps do not block this migration. Changing one requires its own journey proof. New uncovered IDs fail the ratchet even if another gap was removed. Signed, dedicated and manual routes remain explicit; the debug picker must not select them.
+These IDs are an inventory, not exemptions for future changes. Untouched gaps do not block this migration. Changing one requires its own journey proof. New uncovered IDs fail the ratchet even if another gap was removed. Signed routes run parent/head candidates with their registered inputs. Dedicated and manual routes remain outside the PR picker.
 
 | Outcome | Existing case | Cleanup ticket |
 |---|---|---|

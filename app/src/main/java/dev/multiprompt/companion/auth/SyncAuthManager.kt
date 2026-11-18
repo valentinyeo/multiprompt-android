@@ -13,6 +13,7 @@ import dev.multiprompt.companion.account.AccountReply
 import dev.multiprompt.companion.account.BotPhotoCache
 import dev.multiprompt.companion.account.CrashReportUpload
 import dev.multiprompt.companion.account.DeepgramAccountKey
+import dev.multiprompt.companion.account.ScreencastAccountKey
 import dev.multiprompt.companion.data.CrashReport
 import dev.multiprompt.companion.security.SecretStore
 import kotlinx.coroutines.runBlocking
@@ -99,6 +100,10 @@ class SyncAuthManager(context: Context, private val http: AccountHttp = AccountH
 
     suspend fun deepgramKey(): String? = withContext(Dispatchers.IO) {
         mutex.withLock { try { DeepgramAccountKey(http, auth).fetch() } catch (_: Exception) { null } }
+    }
+
+    suspend fun screencastKey(): String? = withContext(Dispatchers.IO) {
+        mutex.withLock { try { ScreencastAccountKey(http, auth).fetch() } catch (_: Exception) { null } }
     }
 
     suspend fun signOut() = withContext(Dispatchers.IO) {
