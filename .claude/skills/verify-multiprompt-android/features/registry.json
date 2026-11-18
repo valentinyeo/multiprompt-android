@@ -894,6 +894,57 @@
         "reminder-keyboard-waiting.json": 1000,
         "inbox-reminders-proof.txt": 200
       }
+    },
+    "workspace-controls.md": {
+      "name": "Workspace and selection controls",
+      "description": "Create, arrange, archive and restore splits; move one or two bots with independent account HTTP receipts. SOFT-2675.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [
+          "Local browser/PKCE account fixture; no production email OTP."
+        ],
+        "driver": true
+      },
+      "outcomes": [
+        "inbox.workspace-controls"
+      ],
+      "evidence": {
+        "workspace-created-host.json": 1600,
+        "workspace-arrange-scrolled.json": 1200,
+        "workspace-moved-up-host.json": 2000,
+        "workspace-bulk-arrived.json": 1500,
+        "workspace-bulk-moved-host.json": 2000,
+        "workspace-retained.json": 1000,
+        "workspace-controls-proof.txt": 200
+      }
+    },
+    "group-controls.md": {
+      "name": "Group menu controls",
+      "description": "Create, rename and remove chat groups, including cancellation and keyboard submission, with independent account HTTP receipts. SOFT-2675.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [
+          "Local browser/PKCE account fixture; no production email OTP."
+        ],
+        "driver": true
+      },
+      "outcomes": [
+        "inbox.group-controls"
+      ],
+      "evidence": {
+        "group-created-host.json": 1500,
+        "group-keyboard-renamed-host.json": 2000,
+        "group-existing-moved-host.json": 2000,
+        "group-removed-host.json": 2000,
+        "group-ungrouped.json": 1200,
+        "group-ungrouped-host.json": 2000,
+        "group-retained.json": 1000,
+        "group-controls-proof.txt": 200
+      }
     }
   },
   "outcomes": {
@@ -1454,6 +1505,25 @@
       "match": [
         "ReminderDialog|reminderPromptSession|ReminderTimeParser|Switch session bucket|bucketMenuExpanded|Unread only|inbox-reminders|InboxOverflowMenu",
         "AppMenu\\.kt[\\s\\S]*(?:onRefresh|label = \"Refresh\")|Custom time|Later today|In 30 minutes|In [125] hours?|Tomorrow.*9:00 AM|In 2 days|Remind me|Remind Me|onArchiveUntil|submitCustom|presets\\.forEach|unreadOnly|SessionBucket"
+      ]
+    },
+    "inbox.workspace-controls": {
+      "description": "Create, arrange, archive and restore splits; move one or two bots with independent account HTTP receipts. SOFT-2675.",
+      "journey": "workspace-controls.md",
+      "sideEffect": true,
+      "match": [
+        "workspaceDialogVisible|workspaceName|workspaceError|splitOrderDialogVisible|arrangedWorkspaceSplitIds|onCreateWorkspace|onArchiveWorkspace|onRestoreWorkspace|onMoveWorkspaceSplit|onResetWorkspaceSplitOrder",
+        "moveSessionTarget|moveSelectionOpen|selectingBots|chosenBots|LocalBotSelection|LocalStartSelection|Move to workspace|Move to\u2026|Select bots|onMoveSession",
+        "label = \"(Arrange splits|New workspace)\"|fun (createWorkspace|moveSession|archiveWorkspace|restoreWorkspace|moveWorkspaceSplit|resetWorkspaceSplitOrder)"
+      ]
+    },
+    "inbox.group-controls": {
+      "description": "Create, rename and remove chat groups, including cancellation and keyboard submission, with independent account HTTP receipts. SOFT-2675.",
+      "journey": "group-controls.md",
+      "sideEffect": true,
+      "match": [
+        "renameGroupPrompt|groupDraft|groupError|groupMoveTarget|newGroupTarget|onSetChatGroup|onRenameGroup|onUngroup|onMoveToGroup",
+        "Rename group|Move to group|New group|No group|Ungroup|fun (renameGroup|setGroup|ungroup)|groupIn\\(|groupNames\\("
       ]
     }
   }

@@ -152,7 +152,7 @@ tap_node() {
         fi
         direction=forward
         if (( attempt > 12 )); then direction=backward; fi
-        plan=$(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "reach-$1" "$2" "$direction") || return
+        plan=$(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "reach-$1" "$2" "$direction" '' "${4:-}") || return
         read -r action x1 y1 x2 y2 <<< "$plan"
         if [[ "$action" == tap && "${3:-tap}" == reveal ]]; then return; fi
         case "$action" in
@@ -164,7 +164,7 @@ tap_node() {
     printf 'JOURNEY_ACTION_UNREACHABLE: %s: not reachable after 24 scrolls in the active container\n' "$2" >&2
     return 1
 }
-tap_text() { tap_node text "$1"; }
+tap_text() { tap_node text "$1" tap "${2:-}"; }
 tap_desc() { tap_node desc "$1"; }
 hold_text() {
     local point x y
@@ -950,6 +950,11 @@ PYINFO
     cmp "$EVIDENCE/information-neighbor-receipts-before.txt" "$EVIDENCE/information-neighbor-receipts-after.txt"
     shot information-favorites-final
     printf 'SIGNED_OFFLINE_FAVORITES_OK\n' | tee "$EVIDENCE/favorites-result.txt"
+    exit 0
+fi
+
+if [[ "$feature" == workspace-controls.md || "$feature" == group-controls.md ]]; then
+    source "$scripts/account-controls-drive.sh"
     exit 0
 fi
 

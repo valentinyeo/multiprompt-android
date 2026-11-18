@@ -96,8 +96,12 @@
       "label": "Arrange splits",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt:InboxOverflowMenu:KitMenuRow:a96c12b9c06297f4:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt:72",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Open Session list actions, then Arrange splits",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-arrange-top.json"
+      }
     },
     {
       "id": "inbox-menu.new-workspace",
@@ -105,8 +109,12 @@
       "label": "New workspace",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt:InboxOverflowMenu:KitMenuRow:431d04890f02a3da:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt:79",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Open Session list actions, then New workspace",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-new-open.json"
+      }
     },
     {
       "id": "inbox-menu.refresh",
@@ -1713,8 +1721,12 @@
       "label": "Dismiss Rename group",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSheet:5921326e32256c64:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1371",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/group-controls.md",
+        "action": "Press Android Back from Rename group",
+        "result": "Resulting visible state and independent account receipt where applicable in group-rename-dismiss.json and group-rename-unchanged-host.json"
+      }
     },
     {
       "id": "rename-group.group-name",
@@ -1722,8 +1734,12 @@
       "label": "Group name",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:OutlinedTextField:682890a7f73b52e4:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1376",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/group-controls.md",
+        "action": "Fill group Name with Cancelled",
+        "result": "Resulting visible state and independent account receipt where applicable in group-rename-draft.json"
+      }
     },
     {
       "id": "rename-group.keyboard-done",
@@ -1731,8 +1747,12 @@
       "label": "Keyboard Done",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KeyboardActions:c896f0ba23bc3a96:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1388",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/group-controls.md",
+        "action": "Fill Name with Keyboard, focus the field and press Enter",
+        "result": "Resulting visible state and independent account receipt where applicable in group-keyboard-renamed.json and group-keyboard-renamed-host.json"
+      }
     },
     {
       "id": "rename-group.cancel",
@@ -1740,8 +1760,12 @@
       "label": "Cancel",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:a850acb8b3cf9bc2:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1393",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/group-controls.md",
+        "action": "Tap Cancel after changing the group name",
+        "result": "Resulting visible state and independent account receipt where applicable in group-rename-cancel.json and group-rename-unchanged-host.json"
+      }
     },
     {
       "id": "rename-group.ungroup",
@@ -1749,8 +1773,12 @@
       "label": "Ungroup",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:883d6f54931a3e10:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1397",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/group-controls.md",
+        "action": "Long-press Other, then tap Ungroup",
+        "result": "Resulting visible state and independent account receipt where applicable in group-ungrouped.json and group-ungrouped-host.json"
+      }
     },
     {
       "id": "rename-group.rename",
@@ -1758,8 +1786,12 @@
       "label": "Rename",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitPrimaryButton:3f5e606e19021a8d:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1401",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/group-controls.md",
+        "action": "Fill Name with Renamed, then tap Rename",
+        "result": "Resulting visible state and independent account receipt where applicable in group-renamed.json and group-renamed-host.json"
+      }
     },
     {
       "id": "move-to-group.dismiss-move-to-group",
@@ -1767,8 +1799,12 @@
       "label": "Dismiss Move to group",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSheet:ca584c3988e84e35:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1409",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/group-controls.md",
+        "action": "Press Android Back from Move to group",
+        "result": "Resulting visible state and independent account receipt where applicable in group-move-dismiss.json and group-unchanged-host.json"
+      }
     },
     {
       "id": "move-to-group.move-to-existing-group",
@@ -1776,8 +1812,12 @@
       "label": "Move to existing group",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:eea29e560ac34fd4:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1412",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/group-controls.md",
+        "action": "Tap Other in Move to group",
+        "result": "Resulting visible state and independent account receipt where applicable in group-existing-moved.json and group-existing-moved-host.json"
+      }
     },
     {
       "id": "move-to-group.new-group",
@@ -1785,8 +1825,12 @@
       "label": "New group",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:d8ad6752db86c219:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1421",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/group-controls.md",
+        "action": "Tap New group in Move to group",
+        "result": "Resulting visible state and independent account receipt where applicable in group-new-draft.json"
+      }
     },
     {
       "id": "move-to-group.no-group",
@@ -1794,8 +1838,12 @@
       "label": "No group",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:d001dc700b642325:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1430",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/group-controls.md",
+        "action": "Tap No group for verify-session",
+        "result": "Resulting visible state and independent account receipt where applicable in group-removed.json and group-removed-host.json"
+      }
     },
     {
       "id": "move-to-group.cancel",
@@ -1803,8 +1851,12 @@
       "label": "Cancel",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:b772cc30ae7294d8:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1437",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/group-controls.md",
+        "action": "Tap Cancel in Move to group",
+        "result": "Resulting visible state and independent account receipt where applicable in group-move-cancel.json and group-unchanged-host.json"
+      }
     },
     {
       "id": "new-group.dismiss-new-group",
@@ -1812,8 +1864,12 @@
       "label": "Dismiss New group",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSheet:c4fe68e6f012ef22:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1442",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/group-controls.md",
+        "action": "Press Android Back from New group",
+        "result": "Resulting visible state and independent account receipt where applicable in group-new-dismiss.json and group-unchanged-host.json"
+      }
     },
     {
       "id": "new-group.new-group-name",
@@ -1821,8 +1877,12 @@
       "label": "New group name",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:OutlinedTextField:d0cc23992cc3d2db:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1447",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/group-controls.md",
+        "action": "Fill New group Name with Discarded",
+        "result": "Resulting visible state and independent account receipt where applicable in group-new-draft.json"
+      }
     },
     {
       "id": "new-group.keyboard-done",
@@ -1839,8 +1899,12 @@
       "label": "Cancel",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:4971e5f40529b7e5:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1464",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/group-controls.md",
+        "action": "Tap Cancel in New group",
+        "result": "Resulting visible state and independent account receipt where applicable in group-new-cancel.json and group-unchanged-host.json"
+      }
     },
     {
       "id": "new-group.create",
@@ -1848,8 +1912,12 @@
       "label": "Create",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitPrimaryButton:c23eea2ba6c335e1:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1468",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/group-controls.md",
+        "action": "Fill Name with Focus, then tap Create",
+        "result": "Resulting visible state and independent account receipt where applicable in group-created.json and group-created-host.json"
+      }
     },
     {
       "id": "session-list-settings.system-back",
@@ -2205,8 +2273,12 @@
       "label": "Cancel",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:dcd04d40154cc786:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1658",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Tap Cancel while one bot is selected",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-selection-cancel.json"
+      }
     },
     {
       "id": "select-bots.move-to",
@@ -2214,8 +2286,12 @@
       "label": "Move to\u2026",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitPrimaryButton:e8d1dbd1d4d7ce32:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1662",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Select two bots and tap Move to\u2026",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-bulk-open.json"
+      }
     },
     {
       "id": "move-selected-bots.dismiss-move-selected-bots",
@@ -2223,8 +2299,12 @@
       "label": "Dismiss Move selected bots",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSheet:2d829657f407f762:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1666",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Press Android Back from the bulk Move to sheet",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-bulk-dismiss.json and workspace-bulk-unchanged-host.json"
+      }
     },
     {
       "id": "move-selected-bots.move-selected-bots-to-workspace",
@@ -2232,8 +2312,12 @@
       "label": "Move selected bots to workspace",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:2063e9aefec26a81:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1669",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Tap Studio in the bulk Move to sheet",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-bulk-arrived.json and workspace-bulk-moved-host.json"
+      }
     },
     {
       "id": "move-selected-bots.cancel",
@@ -2241,8 +2325,12 @@
       "label": "Cancel",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:fc5faacbf05878bc:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1680",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Tap Cancel in the bulk Move to sheet",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-bulk-cancel.json and workspace-bulk-unchanged-host.json"
+      }
     },
     {
       "id": "crash-report.dismiss-crash-report",
@@ -2295,8 +2383,12 @@
       "label": "Dismiss Move session to workspace",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSheet:15622bfd53c26e2a:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1745",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Press Android Back from the single-session Move to sheet",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-move-dismiss.json and workspace-move-unchanged-host.json"
+      }
     },
     {
       "id": "move-session-to-workspace.move-session-to-workspace",
@@ -2304,8 +2396,12 @@
       "label": "Move session to workspace",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:b7ec1736197771c1:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1748",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Tap Studio in the single-session Move to sheet",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-single-arrived.json and workspace-single-moved-host.json"
+      }
     },
     {
       "id": "move-session-to-workspace.cancel",
@@ -2313,8 +2409,12 @@
       "label": "Cancel",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:efdbdf0f5bac45b9:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1756",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Tap Cancel in the single-session Move to sheet",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-move-cancel.json and workspace-move-unchanged-host.json"
+      }
     },
     {
       "id": "arrange-splits.dismiss-arrange-splits",
@@ -2322,8 +2422,12 @@
       "label": "Dismiss Arrange splits",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSheet:ea2e18a6d9a41db8:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1772",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Press Android Back from Arrange splits",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-arrange-dismiss.json"
+      }
     },
     {
       "id": "arrange-splits.scroll-arrange-splits",
@@ -2331,8 +2435,12 @@
       "label": "Scroll Arrange splits",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:verticalScroll:74f9c94015fb4c77:3",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1775",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Scroll Arrange splits to reveal the Workshop row and its Archive action",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-arrange-top.json and workspace-arrange-scrolled.json"
+      }
     },
     {
       "id": "arrange-splits.archive-workspace",
@@ -2340,8 +2448,12 @@
       "label": "Archive workspace",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:clickable:c16b46ba393c40c9:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1810",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Tap Archive in the Workshop row",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-archived.json"
+      }
     },
     {
       "id": "arrange-splits.move-split-up",
@@ -2349,8 +2461,12 @@
       "label": "Move split up",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:feb063be13f52197:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1815",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Tap the up arrow in the Studio row",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-moved-up.json and workspace-moved-up-host.json"
+      }
     },
     {
       "id": "arrange-splits.move-split-down",
@@ -2358,8 +2474,12 @@
       "label": "Move split down",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:62af59f384d620b3:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1822",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Tap the down arrow in the Studio row",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-moved-down.json and workspace-moved-down-host.json"
+      }
     },
     {
       "id": "arrange-splits.restore-workspace",
@@ -2367,8 +2487,12 @@
       "label": "Restore workspace",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:clickable:2bec619474530e13:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1841",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Tap Restore in the archived Workshop row",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-restored.json"
+      }
     },
     {
       "id": "arrange-splits.automatic-order",
@@ -2376,8 +2500,12 @@
       "label": "Automatic order",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:531caf025a8dcdc8:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1849",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Tap Automatic order after restoring the original order",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-automatic.json and workspace-automatic-host.json"
+      }
     },
     {
       "id": "arrange-splits.done",
@@ -2385,8 +2513,12 @@
       "label": "Done",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitPrimaryButton:53f719441cc4b8b6:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1850",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Tap Done in Arrange splits",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-arrange-done.json"
+      }
     },
     {
       "id": "new-workspace.dismiss-new-workspace",
@@ -2394,8 +2526,12 @@
       "label": "Dismiss New workspace",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSheet:9dea4374bd6c177e:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1857",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Press Android Back from New workspace",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-new-dismiss.json"
+      }
     },
     {
       "id": "new-workspace.workspace-name",
@@ -2403,8 +2539,12 @@
       "label": "Workspace name",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:OutlinedTextField:29e14769c4224308:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1859",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Fill Name with Discarded",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-new-draft.json"
+      }
     },
     {
       "id": "new-workspace.cancel",
@@ -2412,8 +2552,12 @@
       "label": "Cancel",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:b25b4dec63101f4c:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1867",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Tap Cancel after entering Discarded",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-new-cancel.json and workspace-cancelled-host.json"
+      }
     },
     {
       "id": "new-workspace.create",
@@ -2421,8 +2565,12 @@
       "label": "Create",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitPrimaryButton:fbc971a129caee75:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1868",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Fill Name with Review, then tap Create",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-created.json and workspace-created-host.json"
+      }
     },
     {
       "id": "inbox-bucket-menu.switch-session-bucket",
@@ -2947,8 +3095,12 @@
       "label": "Select bot",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:SessionCard:combinedClickable:f08e23cd9c031907:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2543",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Tap Robot pin-00 to select and deselect its inbox row",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-selected-two.json and workspace-deselected-one.json"
+      }
     },
     {
       "id": "inbox-session-actions.long-press-session-actions",
@@ -3000,8 +3152,12 @@
       "label": "Move to workspace",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:SessionCard:KitMenuRow:d250507e4619e6b1:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2638",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Long-press Robot verify-session, then tap Move to workspace",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-move-open.json"
+      }
     },
     {
       "id": "inbox-session-actions.move-to-group",
@@ -3067,8 +3223,12 @@
       "label": "Select bots",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:SessionCard:KitMenuRow:1df58491990c6ec2:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2699",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-controls.md",
+        "action": "Long-press Robot verify-session, then tap Select bots",
+        "result": "Resulting visible state and independent account receipt where applicable in workspace-selection-open.json"
+      }
     },
     {
       "id": "inbox-session-actions.pure-terminal-output",
