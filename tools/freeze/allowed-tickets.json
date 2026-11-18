@@ -1,0 +1,25 @@
+{
+  "frozen": true,
+  "reason": "Valentin froze feature work until phone testing meets the checklist (IGSH-2570)",
+  "allowed": [
+    "IGSH-2681",
+    "IGSH-2682",
+    "IGSH-2547",
+    "IGSH-2532",
+    "IGSH-2474",
+    "IGSH-2709",
+    "IGSH-2714",
+    "IGSH-2751",
+    "IGSH-2734",
+    "IGSH-2748",
+    "IGSH-2533",
+    "IGSH-2752",
+    "IGSH-2570",
+    "IGSH-2708",
+    "IGSH-2715",
+    "IGSH-2646",
+    "IGSH-2531",
+    "IGSH-2535",
+    "IGSH-2673"
+  ]
+}
