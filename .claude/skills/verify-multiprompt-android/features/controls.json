@@ -70,8 +70,12 @@
       "label": "Dismiss Inbox menu",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt:InboxOverflowMenu:KitMenu:3c3e5fdb377a63aa:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt:61",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Open Session list actions in Inbox, then press Android Back",
+        "result": "reader-menu-inbox-dismiss.json shows Inbox and Session list actions without Refresh or Settings menu rows"
+      }
     },
     {
       "id": "inbox-menu.settings",
@@ -688,8 +692,12 @@
       "label": "Back to chat",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:ComputerPane:KitRoundButton:35f04a446b5c7646:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:83",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Back to chat from Computer",
+        "result": "reader-menu-computer-back.json shows the reader without Computer actions"
+      }
     },
     {
       "id": "computer-pinned-page.computer-actions",
@@ -697,8 +705,12 @@
       "label": "Computer actions",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:ComputerPane:KitRoundButton:6e1458958ee5d371:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:92",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Computer actions",
+        "result": "reader-menu-computer-menu.json shows Viewer address, Open full screen and Hide computer"
+      }
     },
     {
       "id": "computer-pinned-page.dismiss-computer-pinned-page",
@@ -706,8 +718,12 @@
       "label": "Dismiss Computer / pinned page",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:ComputerPane:KitMenu:17ad8667c8498a24:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:93",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Press Android Back from Computer actions",
+        "result": "reader-menu-computer-dismiss.json shows Computer with no Viewer address row"
+      }
     },
     {
       "id": "computer-pinned-page.viewer-address-display-only",
@@ -715,8 +731,12 @@
       "label": "Viewer address (display only)",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:ComputerPane:KitMenuRow:787cb4c8c9026f7d:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:94",
-      "journey": null,
-      "missing": "Display-only sheet item is inventoried; no journey asserts this item and its disabled state."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Open Computer actions and inspect its address",
+        "result": "reader-menu-computer-menu.json asserts 127.0.0.1:6080 is disabled"
+      }
     },
     {
       "id": "computer-pinned-page.viewer-address",
@@ -724,8 +744,12 @@
       "label": "Viewer address",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:ComputerPane:KitMenuRow:01af7c2dcc0031e8:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:95",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Viewer address",
+        "result": "reader-menu-address-draft.json shows the address sheet and editor"
+      }
     },
     {
       "id": "computer-pinned-page.full-screen-on-off",
@@ -733,8 +757,12 @@
       "label": "Full screen on / off",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:ComputerPane:KitMenuRow:989f723e79f34cc5:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:96",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Open full screen in Computer actions",
+        "result": "reader-menu-computer-menu-full.json shows Exit full screen and hides the header"
+      }
     },
     {
       "id": "computer-pinned-page.hide-computer",
@@ -742,8 +770,12 @@
       "label": "Hide computer",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:ComputerPane:KitMenuRow:4e46e56a472b70dd:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:100",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Computer actions \u2192 Hide computer",
+        "result": "reader-menu-computer-hide.json shows the reader without Computer actions"
+      }
     },
     {
       "id": "computer-pinned-page.give-back",
@@ -760,8 +792,12 @@
       "label": "Exit full screen",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:ComputerPane:CornerPill:e5c1203f0bb0d758:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:147",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Exit full screen",
+        "result": "reader-menu-computer-exit-full.json shows the restored Computer header and View only"
+      }
     },
     {
       "id": "computer-pinned-page.take-control-give-back",
@@ -886,8 +922,12 @@
       "label": "Dismiss Dictation key (Settings, reader, terminal)",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/DeepgramKeySheet.kt:DeepgramKeySheet:KitSheet:90073eaacdef9f43:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/DeepgramKeySheet.kt:32",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Press Android Back from Deepgram dictation",
+        "result": "reader-menu-key-dismiss.json shows the reader without the sheet"
+      }
     },
     {
       "id": "dictation-key-settings-reader-terminal.api-key-replacement-api-key",
@@ -895,8 +935,12 @@
       "label": "API key / replacement API key",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/DeepgramKeySheet.kt:DeepgramKeySheet:OutlinedTextField:a17c53e2b95685bb:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/DeepgramKeySheet.kt:35",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Fill API key with not-a-key",
+        "result": "reader-menu-key-invalid.json shows validation for the supplied short key; reader-menu-key-reopened.json shows no saved key"
+      }
     },
     {
       "id": "dictation-key-settings-reader-terminal.cancel",
@@ -904,8 +948,12 @@
       "label": "Cancel",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/DeepgramKeySheet.kt:DeepgramKeySheet:KitSecondaryButton:78a475eb26440a71:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/DeepgramKeySheet.kt:49",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Cancel after an invalid key",
+        "result": "reader-menu-key-cancel.json shows the reader; reopening has an empty field"
+      }
     },
     {
       "id": "dictation-key-settings-reader-terminal.save-key-save-and-dictate",
@@ -913,8 +961,12 @@
       "label": "Save key / save and dictate",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/DeepgramKeySheet.kt:DeepgramKeySheet:KitPrimaryButton:98bb37b5989d32dd:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/DeepgramKeySheet.kt:50",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Save and dictate with not-a-key",
+        "result": "reader-menu-key-invalid.json shows the exact format error without saving or starting dictation"
+      }
     },
     {
       "id": "approve-device.dismiss-approve-device",
@@ -2565,8 +2617,12 @@
       "label": "Dismiss End session confirmation (Inbox and reader)",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:DestructiveConfirmationSheet:KitSheet:90073eaacdef9f43:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2299",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Press Android Back from the end-session confirmation",
+        "result": "reader-menu-end-dismiss.json shows the reader; unchanged host receipts and reader-menu-end-host.txt prove no session ended"
+      }
     },
     {
       "id": "end-session-confirmation-inbox-and-reader.scroll-end-session-confirmation-inbox-and-reader",
@@ -2583,8 +2639,12 @@
       "label": "Cancel",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:DestructiveConfirmationSheet:KitSecondaryButton:a00488b6231e7715:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2306",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Cancel in the end-session confirmation",
+        "result": "reader-menu-end-cancel.json shows the reader; unchanged host receipts and reader-menu-end-host.txt prove the tmux session remains"
+      }
     },
     {
       "id": "end-session-confirmation-inbox-and-reader.end-session",
@@ -3188,8 +3248,12 @@
       "label": "Dismiss Image upload key",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSheet:80d52b0738c98d3d:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3652",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Press Android Back from Screencast2 uploads",
+        "result": "reader-menu-upload-dismiss.json shows the reader without the sheet"
+      }
     },
     {
       "id": "image-upload-key.screencast2-upload-key",
@@ -3210,8 +3274,12 @@
       "label": "Cancel",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:12e8cbfda641750e:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3668",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Cancel in Screencast2 uploads",
+        "result": "reader-menu-upload-cancel.json shows the reader without the sheet"
+      }
     },
     {
       "id": "image-upload-key.save-and-choose-image",
@@ -3232,8 +3300,12 @@
       "label": "Dismiss Computer viewer address",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSheet:4dc86c92976477ab:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3685",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Press Android Back from Viewer address",
+        "result": "reader-menu-address-dismiss.json shows Computer without the editor"
+      }
     },
     {
       "id": "computer-viewer-address.viewer-address",
@@ -3241,8 +3313,12 @@
       "label": "Viewer address",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:OutlinedTextField:09c3b4e9c325aa1c:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3692",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Fill Address and port with 127.0.0.1:6081",
+        "result": "reader-menu-address-draft.json asserts the exact field value"
+      }
     },
     {
       "id": "computer-viewer-address.cancel",
@@ -3250,8 +3326,12 @@
       "label": "Cancel",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:68a584f6cc5aa3aa:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3701",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Cancel after editing the address",
+        "result": "reader-menu-address-cancel.json shows the original 127.0.0.1:6080 on reopening"
+      }
     },
     {
       "id": "computer-viewer-address.save-address",
@@ -3259,8 +3339,12 @@
       "label": "Save address",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitPrimaryButton:6f6421dfe0dcf0cd:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3702",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Save address then leave and reopen Computer",
+        "result": "reader-menu-address-retained.json asserts the saved local 127.0.0.1:6081 address is read back as a disabled row; no working viewer or host connection is claimed"
+      }
     },
     {
       "id": "pin-page.dismiss-pin-page",
@@ -3268,8 +3352,12 @@
       "label": "Dismiss Pin page",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSheet:97858c13862aab42:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3721",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Press Android Back from Pin a page",
+        "result": "reader-menu-pin-dismiss.json shows the reader without the sheet"
+      }
     },
     {
       "id": "pin-page.page-address",
@@ -3277,8 +3365,12 @@
       "label": "Page address",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:OutlinedTextField:2425ecbca249dc2e:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3724",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Fill Page address with https://example.com/igsh-2669",
+        "result": "reader-menu-pin-draft.json asserts the exact editor value"
+      }
     },
     {
       "id": "pin-page.cancel",
@@ -3286,8 +3378,12 @@
       "label": "Cancel",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:8f34c3c0fbf9c71d:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3733",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Cancel with a page draft",
+        "result": "reader-menu-pin-cancelled-value.json shows an empty address on reopening"
+      }
     },
     {
       "id": "pin-page.pin-page",
@@ -3295,8 +3391,12 @@
       "label": "Pin page",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitPrimaryButton:4a5309ab7ff217eb:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3734",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Pin page with a valid HTTPS address and restart",
+        "result": "reader-menu-pinned.json and reader-menu-pin-retained.json show the saved page card"
+      }
     },
     {
       "id": "reader-navigation.system-back-search-page-computer-then-inbox",
@@ -3431,8 +3531,12 @@
       "label": "Voice Mode",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:e4bcca726192ba1f:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3944",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Voice Mode on and off, reopening Session actions after each change",
+        "result": "reader-menu-voice-on.json and reader-menu-voice-off.json assert the row checkmark toggles"
+      }
     },
     {
       "id": "session-actions.mark-read",
@@ -3528,8 +3632,12 @@
       "label": "Pin a page / change pinned page",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:5c8b5b55e073b997:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4045",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Pin a page\u2026",
+        "result": "reader-menu-pin-draft.json shows Pin a page and its address field"
+      }
     },
     {
       "id": "session-actions.display",
@@ -3563,8 +3671,12 @@
       "label": "Computer",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:efa88fa1fdd97947:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4064",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Computer",
+        "result": "reader-menu-computer-open.json shows Computer and View only"
+      }
     },
     {
       "id": "session-actions.open-live-terminal",
@@ -3594,8 +3706,12 @@
       "label": "More",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:3bb66a304ce8a7db:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4085",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Session actions \u2192 More",
+        "result": "reader-menu-more.json shows the More rows"
+      }
     },
     {
       "id": "session-actions.end-tmux-session",
@@ -3603,8 +3719,12 @@
       "label": "End tmux session",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:d751ec6fd3bc94f9:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4092",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap End tmux session",
+        "result": "reader-menu-end-open.json shows the confirmation title, Cancel and End session"
+      }
     },
     {
       "id": "session-actions.delete",
@@ -3817,8 +3937,12 @@
       "label": "Release notes",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:4aabeb16634e4b3b:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4169",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Release notes",
+        "result": "reader-menu-release-notes.json shows App updates"
+      }
     },
     {
       "id": "reader-more.estimate-accuracy",
@@ -3826,8 +3950,12 @@
       "label": "Estimate accuracy",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:624e060a85bf268e:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4173",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Estimate accuracy",
+        "result": "reader-menu-accuracy-open.json shows the sheet and Close"
+      }
     },
     {
       "id": "reader-more.copy-raw-transcript",
@@ -3844,8 +3972,12 @@
       "label": "Dictation API key",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:e914d0a792ea1be7:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4200",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Dictation API key",
+        "result": "reader-menu-key-draft.json shows Deepgram dictation"
+      }
     },
     {
       "id": "reader-more.screencast2-upload-key",
@@ -3853,8 +3985,12 @@
       "label": "Screencast2 upload key",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:97255e751936c3e8:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4207",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Screencast2 upload key",
+        "result": "reader-menu-upload-open.json shows Screencast2 uploads"
+      }
     },
     {
       "id": "stopped-agent.restart",
@@ -3889,8 +4025,12 @@
       "label": "Open",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:dbe361a2d0591280:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4319",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Open on the pinned page card",
+        "result": "reader-menu-page-open.json shows Page inside the reader; Android Back returns to the transcript in reader-menu-page-back.json"
+      }
     },
     {
       "id": "pinned-page-card.remove",
@@ -3898,8 +4038,12 @@
       "label": "Remove",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:a0c5433c1b1bf83a:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4320",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Remove on the pinned page card",
+        "result": "reader-menu-pin-removed.json asserts the address, Open and Remove are gone"
+      }
     },
     {
       "id": "attach-menu.attach",
@@ -3933,8 +4077,12 @@
       "label": "Snippets",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:8991b2c6665e97ba:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4374",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Snippets back row after opening Attach \u2192 Snippets",
+        "result": "reader-menu-snippets-back.json shows Add image and Add file again"
+      }
     },
     {
       "id": "snippets.save-current-text",
@@ -4206,8 +4354,12 @@
       "label": "Add file",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:5b5e8865829b34a7:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4500",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Attach \u2192 Add file",
+        "result": "reader-menu-file-picker.json and its screenshot show Android Recent; Back restores the reader"
+      }
     },
     {
       "id": "attach-menu.skill",
@@ -4817,8 +4969,12 @@
       "label": "Dismiss Estimate accuracy",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ReaderInformationSheets.kt:EstimateAccuracySheet:KitSheet:90073eaacdef9f43:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/ReaderInformationSheets.kt:38",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Press Android Back from Estimate accuracy",
+        "result": "reader-menu-accuracy-dismiss.json shows the reader without the sheet"
+      }
     },
     {
       "id": "estimate-accuracy.scroll-estimate-accuracy",
@@ -4835,8 +4991,12 @@
       "label": "Close",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ReaderInformationSheets.kt:EstimateAccuracySheet:KitPrimaryButton:ed4f3b6e0a9ddd8e:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/ReaderInformationSheets.kt:62",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Close in Estimate accuracy",
+        "result": "reader-menu-accuracy-close.json shows the reader without the sheet"
+      }
     },
     {
       "id": "session-history.dismiss-session-history",

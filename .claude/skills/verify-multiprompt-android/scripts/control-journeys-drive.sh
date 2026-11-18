@@ -110,3 +110,4 @@ wait_for_text 'Sunlight mode on'
 control_state reader-controls-sunlight-off display 'Sunlight mode on'
 adb shell input keyevent KEYCODE_BACK
 printf 'READER_RENAME_DISPLAY_CONTROLS_OK\n' | tee "$EVIDENCE/reader-controls-proof.txt"
+source "$scripts/reader-menu-drive.sh"
