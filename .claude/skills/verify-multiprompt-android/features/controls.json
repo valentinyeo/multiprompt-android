@@ -70,8 +70,12 @@
       "label": "Dismiss Inbox menu",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt:InboxOverflowMenu:KitMenu:3c3e5fdb377a63aa:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt:61",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Open Session list actions in Inbox, then press Android Back",
+        "result": "reader-menu-inbox-dismiss.json shows Inbox and Session list actions without Hosts or Settings menu rows"
+      }
     },
     {
       "id": "inbox-menu.settings",
@@ -819,12 +823,8 @@
       "label": "Open full screen",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:ComputerPane:KitSecondaryButton:1c77c135fd7f6935:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:182",
-      "journey": "reader-controls.md",
-      "proof": {
-        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
-        "action": "Tap the Computer Open full screen button",
-        "result": "reader-menu-computer-button-full.json shows Exit full screen and hides the header"
-      }
+      "journey": null,
+      "missing": "No automated journey exercises this control and checks its result."
     },
     {
       "id": "computer-pinned-page.sleep",
@@ -3343,7 +3343,7 @@
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
         "action": "Tap Save address then leave and reopen Computer",
-        "result": "reader-menu-address-retained.json asserts the saved disabled 127.0.0.1:6081; reader-menu-viewer-host.txt independently records HTTP over its SSH tunnel"
+        "result": "reader-menu-address-retained.json asserts the saved local 127.0.0.1:6081 address is read back as a disabled row; no working viewer or host connection is claimed"
       }
     },
     {

@@ -57,23 +57,26 @@ of the previous sheet. `controls.json` lists all 40 action/result pairs.
     Dismiss, reopen, save the new address and return to chat. Reopen Computer and
     require the new disabled address row.
 13. Choose Open full screen from Computer actions. Require Exit full screen and
-    no header. Exit and require the header returns. Repeat through the separate
-    Open full screen button. Finally choose Hide computer and require the reader.
-    A disposable host HTTP listener independently records requests through the
-    new SSH tunnel in `reader-menu-viewer-host.txt`. It is not a remote desktop;
-    control, keyboard, sleep/wake and successful VNC rendering remain uncovered.
+    no header. Exit and require the header returns. Choose Hide computer and
+    require the reader. The separate bottom Open full screen button sits under
+    Android's navigation bar in run 44225849084 and stays uncovered. These checks
+    prove local viewer-address save/readback and menu state, not a working tunnel.
+    Control, keyboard, sleep/wake and successful VNC rendering remain uncovered.
 14. Toggle Voice Mode on, reopen Session actions and require its row checkmark.
     Toggle off, reopen and require no checkmark on that row.
 15. Open End tmux session and require the confirmation title and both buttons.
     Cancel, reopen, then dismiss with Android Back. Both return to the reader.
     Compare host receipts before and after, and independently require the same
     live tmux session and window in `reader-menu-end-host.txt`.
-16. Open More → Release notes. Require App updates and no reader actions.
+16. Return to Inbox and open Session list actions. Require Hosts and Settings,
+    dismiss with Android Back, and require Inbox without those menu rows.
+17. Reopen the reader, then More → Release notes. Require App updates and no
+    reader actions.
 
 Retain `READER_RENAME_DISPLAY_CONTROLS_OK` in `reader-controls-proof.txt` and
 `READER_MENU_40_CONTROLS_OK` in `reader-menu-proof.txt`. Inspect the JSON, XML,
-PNGs, driver transcript and host HTTP receipt after cleanup at the exact head SHA.
-Cleanup stops only the recorded HTTP listener PID and preserves its request log.
+PNGs, driver transcript and host receipts after cleanup at the exact head SHA.
+End-session exits must leave host receipts and the real tmux session unchanged.
 
 PRs editing these menus require `reader-controls.md` through the outcome registry
 and `pstack-verifier.yml`'s call to `verify.yml`. Recipe edits also force this

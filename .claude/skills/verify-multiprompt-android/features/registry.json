@@ -805,7 +805,7 @@
         "reader-controls-sunlight-off.json": 1500,
         "reader-controls-host.txt": 1000,
         "reader-menu-proof.txt": 100,
-        "reader-menu-viewer-host.txt": 1000
+        "reader-menu-end-host.txt": 300
       }
     },
     "message-reply.md": {
@@ -1356,7 +1356,8 @@
         "ReaderMenuPage\\.MORE|apiKeyDialogVisible|imageKeyDialogVisible|pinPageOpen|pinnedPage|computerTargetOpen|computerOpen|setComputerOpen",
         "ComputerView\\.kt|DeepgramKeySheet\\.kt|ReaderInformationSheets\\.kt",
         "label = \"(More|Computer|Snippets|Add file|Dictation API key|Screencast2 upload key|Estimate accuracy|Release notes)\"",
-        "voiceModeOn|label = \"Voice Mode\"|endDialogVisible|DestructiveConfirmationSheet"
+        "voiceModeOn|label = \"Voice Mode\"|endDialogVisible|DestructiveConfirmationSheet",
+        "AppMenu\\.kt|InboxOverflowMenu"
       ]
     }
   }

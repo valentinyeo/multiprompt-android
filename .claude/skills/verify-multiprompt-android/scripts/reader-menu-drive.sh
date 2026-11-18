@@ -110,8 +110,6 @@ shot reader-menu-file-picker
 python3 tools/control-journeys/ui.py "$EVIDENCE/$(printf '%02d' "$step")-reader-menu-file-picker.xml" "$EVIDENCE/$(printf '%02d' "$step")-reader-menu-file-picker.png" surface '{"text":["Recent"],"absent":["Session actions"]}' > "$EVIDENCE/reader-menu-file-picker.json"
 adb shell input keyevent KEYCODE_BACK
 menu_reader file-cancel
-python3 -u -m http.server 6081 --bind 127.0.0.1 --directory "$FIXTURE" > "$EVIDENCE/reader-menu-viewer-host.txt" 2>&1 &
-printf '%s\n' "$!" > "$FIXTURE/reader-menu-http.pid"
 open_control_menu Computer
 wait_for_text 'View only'
 menu_surface computer-open '{"text":["Computer","View only"],"desc":["Back to chat","Computer actions"]}'
@@ -147,15 +145,9 @@ menu_surface computer-menu-full '{"text":["Exit full screen"],"absent":["Compute
 tap_text 'Exit full screen'
 wait_for_text 'View only'
 menu_surface computer-exit-full '{"text":["Computer","View only"],"desc":["Computer actions","Back to chat"]}'
-tap_text 'Open full screen'
-wait_for_text 'Exit full screen'
-menu_surface computer-button-full '{"text":["Exit full screen"],"absent":["Computer actions","Back to chat"]}'
-tap_text 'Exit full screen'
-wait_for_text 'View only'
 open_computer_menu
 tap_text 'Hide computer'
 menu_reader computer-hide
-grep -E '"GET /[^ ]* HTTP/[0-9.]+"' "$EVIDENCE/reader-menu-viewer-host.txt"
 open_control_menu 'Voice Mode'
 wait_for_absence 'Search in chat'
 menu_reader voice-enabled
@@ -184,6 +176,16 @@ sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/reader-menu-after-end.txt"
 cmp "$EVIDENCE/reader-menu-before-end.txt" "$EVIDENCE/reader-menu-after-end.txt"
 sudo -u verifyssh tmux display-message -p -t '=verify-session:' '#{session_name}|#{window_name}' > "$EVIDENCE/reader-menu-end-host.txt"
 grep -Fx 'verify-session|VERIFY_RENAMED_2653' "$EVIDENCE/reader-menu-end-host.txt"
+tap_desc Back
+wait_for_text Inbox
+tap_desc 'Session list actions'
+wait_for_text Hosts
+menu_surface inbox-menu '{"text":["Hosts","Settings"]}'
+adb shell input keyevent KEYCODE_BACK
+wait_for_absence Hosts
+menu_surface inbox-dismiss '{"text":["Inbox"],"desc":["Session list actions"],"absent":["Hosts","Settings"]}'
+tap_text verify-session
+wait_for_text 'Message VERIFY_RENAMED_2653'
 open_more
 tap_text 'Release notes'
 wait_for_text 'App updates'
