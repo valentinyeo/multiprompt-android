@@ -659,8 +659,8 @@ test('parent job names and artifact names never collide with the head side', () 
   assert.equal(verifier.artifactName('hosts.md', '9', 'head'), 'verify-hosts.md-9');
   assert.equal(verifier.artifactName('hosts.md', '9', 'parent'), 'verify-hosts.md-9-parent');
   const verify = read('.github/workflows/verify.yml');
-  assert.match(verify, /name: verify-\$\{\{ env\.VERIFY_FEATURE \}\}-\$\{\{ github\.run_id \}\}\$\{\{ inputs\.side == 'parent' && '-parent' \|\| '' \}\}\$\{\{ inputs\.side && inputs\.side != 'head' && inputs\.side != 'parent' && format\('-\{0\}', inputs\.side\) \|\| '' \}\}$/m);
-  assert.match(verify, /stage: stage-1\$\{\{ inputs\.side && format\('-\{0\}-\{1\}', inputs\.side, inputs\.feature\) \|\| '' \}\}$/m);
+  assert.match(verify, /name: verify-\$\{\{ env\.VERIFY_FEATURE \}\}-\$\{\{ github\.run_id \}\}\$\{\{ inputs\.side == 'parent' && '-parent' \|\| '' \}\}\$\{\{ inputs\.side && inputs\.side != 'head' && inputs\.side != 'parent' && format\('-\{0\}', inputs\.side\) \|\| '' \}\}\$\{\{ inputs\.native_skills_runs == '10' && format\('-sample-\{0\}', matrix\.sample\) \|\| '' \}\}$/m);
+  assert.match(verify, /stage: stage-1\$\{\{ inputs\.side && format\('-\{0\}-\{1\}', inputs\.side, inputs\.feature\) \|\| '' \}\}\$\{\{ inputs\.native_skills_runs == '10' && format\('-sample-\{0\}', matrix\.sample\) \|\| '' \}\}$/m);
 });
 
 test('the merge base comes from the compare API and must be a full sha', () => {

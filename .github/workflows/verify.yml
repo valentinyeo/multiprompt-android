@@ -45,6 +45,13 @@ on:
         type: string
   workflow_dispatch:
     inputs:
+      native_skills_runs:
+        description: Independent native-skills stability runs, with no retries
+        type: choice
+        default: '1'
+        options:
+          - '1'
+          - '10'
       break_it:
         description: Replay after normal proof with rotation, background, chat switch, slow network and streaming send
         type: boolean
@@ -179,7 +186,11 @@ concurrency:
 
 jobs:
   verify:
-    name: ${{ inputs.expect_shell_missing && 'original shell control' || inputs.expect_native_missing && 'original native-skill control' || 'verify' }}
+    name: ${{ inputs.native_skills_runs == '10' && format('native-skills stability {0}', matrix.sample) || inputs.expect_shell_missing && 'original shell control' || inputs.expect_native_missing && 'original native-skill control' || 'verify' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: ${{ fromJSON(inputs.native_skills_runs == '10' && '[1,2,3,4,5,6,7,8,9,10]' || '[1]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: ${{ inputs.feature == 'reader-controls.md' && 50 || inputs.side == 'parent' && 50 || inputs.break_it && 55 || 35 }}
     env:
@@ -484,7 +495,7 @@ jobs:
         continue-on-error: ${{ inputs.side == 'parent' || github.event_name == 'workflow_dispatch' && (github.event.inputs.expect_native_missing == 'true' || github.event.inputs.expect_shell_missing == 'true' || github.event.inputs.expect_settings_missing == 'true' || github.event.inputs.expect_shared_missing == 'true') }}
         uses: ./.github/actions/android-proof
         with:
-          stage: stage-1${{ inputs.side && format('-{0}-{1}', inputs.side, inputs.feature) || '' }}
+          stage: stage-1${{ inputs.side && format('-{0}-{1}', inputs.side, inputs.feature) || '' }}${{ inputs.native_skills_runs == '10' && format('-sample-{0}', matrix.sample) || '' }}
           target: default
           script: |
             proof() {
@@ -623,7 +634,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           overwrite: true
-          name: verify-${{ env.VERIFY_FEATURE }}-${{ github.run_id }}${{ inputs.side == 'parent' && '-parent' || '' }}${{ inputs.side && inputs.side != 'head' && inputs.side != 'parent' && format('-{0}', inputs.side) || '' }}
+          name: verify-${{ env.VERIFY_FEATURE }}-${{ github.run_id }}${{ inputs.side == 'parent' && '-parent' || '' }}${{ inputs.side && inputs.side != 'head' && inputs.side != 'parent' && format('-{0}', inputs.side) || '' }}${{ inputs.native_skills_runs == '10' && format('-sample-{0}', matrix.sample) || '' }}
           path: verification-evidence/
           if-no-files-found: error
           retention-days: 7
