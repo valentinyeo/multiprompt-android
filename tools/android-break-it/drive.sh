@@ -74,7 +74,7 @@ break_it_draft() {
     break_it_active=network
     printf '::group::Break-it 4/5 Throttle network\n'
     break_it_network=true
-    adb emu network speed 128000:128000
+    adb emu network speed 128:128
     adb emu network delay 150:300
     adb emu network status | tee "$EVIDENCE/network-status.txt"
     grep -Eq 'download speed: +128000 bits/s' "$EVIDENCE/network-status.txt"

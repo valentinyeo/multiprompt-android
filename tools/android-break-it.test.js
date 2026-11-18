@@ -135,7 +135,13 @@ test('network stress requires the configured numeric rates and both latency boun
   for (const response of [status, status.replace('upload speed:       128000', 'upload speed:       473600'), status.replace('download speed:     128000', 'download speed:     0'), status.replace('150 ms', '0 ms'), status.replace('300 ms', '100 ms')]) {
     const fixture = retained(t);
     const script = `label=chat; draft=prompt
-      adb() { if [[ "$*" == 'emu network status' ]]; then printf '%s' "$STATUS"; fi; }
+      adb() {
+        case "$*" in
+          'emu network status') printf '%s' "$STATUS" ;;
+          'emu network speed 128:128'|'emu network delay 150:300') : ;;
+          *) printf 'Wrong network command: %s' "$*" >&2; return 1 ;;
+        esac
+      }
       break_it_require_draft() { :; }
       break_it_checkpoint() { printf 'NETWORK_CHECKPOINT_PASSED'; }
       ${block}`;
