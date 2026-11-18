@@ -1857,7 +1857,7 @@ CHOICES
 fi
 if [[ "$feature" == chat-cancel.md ]]; then
     if [[ "$package" != dev.multiprompt.companion ]]; then
-        adb shell 'echo $$ > /sdcard/cancel-record.pid; exec screenrecord --time-limit 180 /sdcard/cancel-proof.mp4' &
+        adb shell 'echo $$ > /sdcard/cancel-record.pid; exec screenrecord --time-limit 0 /sdcard/cancel-proof.mp4' &
         recording_client=$!
     fi
     wait_for_text VERIFY_READY_1010
