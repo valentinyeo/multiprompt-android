@@ -527,17 +527,47 @@ test('a bug fix can pass when the parent failed a product assertion and head plu
   }).verdict, 'FAIL');
 });
 
-test('a bug fix fails when the parent passed', () => {
+test('a bug fix passes with one recorded repro and a passing regression guard', () => {
   const ruled = verifier.applyRules({
     modelVerdict: 'PASS',
     bugFix: true,
-    features: ['hosts.md', 'terminal.md'],
-    conclusions: { 'hosts.md': 'success', 'terminal.md': 'success' },
-    parents: { 'hosts.md': 'product assertion', 'terminal.md': 'passed' },
+    stressProof: { errors: [], evidence: [] },
+    features: ['reader-version.md', 'settings-controls.md'],
+    conclusions: { 'reader-version.md': 'success', 'settings-controls.md': 'success' },
+    parents: { 'reader-version.md': 'product assertion', 'settings-controls.md': 'passed' },
+  });
+  assert.equal(ruled.verdict, 'PASS');
+  assert.deepEqual(ruled.notes, []);
+});
+
+test('a bug fix fails with only regression guards and no recorded repro', () => {
+  const ruled = verifier.applyRules({
+    modelVerdict: 'PASS',
+    bugFix: true,
+    stressProof: { errors: [], evidence: [] },
+    features: ['reader-version.md', 'settings-controls.md'],
+    conclusions: { 'reader-version.md': 'success', 'settings-controls.md': 'success' },
+    parents: { 'reader-version.md': 'passed', 'settings-controls.md': 'passed' },
   });
   assert.equal(ruled.verdict, 'FAIL');
-  assert.match(ruled.notes.join(' '), /terminal\.md parent passed/);
-  assert.match(ruled.notes.join(' '), /not a repro/);
+  assert.match(ruled.notes.join(' '), /No recorded repro/);
+  assert.match(ruled.notes.join(' '), /settings-controls\.md parent passed/);
+});
+
+test('a recorded repro does not excuse a regression guard that did not pass on head', () => {
+  for (const conclusion of ['failure', 'cancelled', 'skipped', null]) {
+    const ruled = verifier.applyRules({
+      modelVerdict: 'PASS',
+      bugFix: true,
+      stressProof: { errors: [], evidence: [] },
+      features: ['reader-version.md', 'settings-controls.md'],
+      conclusions: { 'reader-version.md': 'success', 'settings-controls.md': conclusion },
+      parents: { 'reader-version.md': 'product assertion', 'settings-controls.md': 'passed' },
+    });
+    assert.equal(ruled.verdict, 'FAIL', conclusion);
+    assert.match(ruled.notes.join(' '), /Journey not passed: settings-controls\.md/);
+    assert.doesNotMatch(ruled.notes.join(' '), /No recorded repro/);
+  }
 });
 
 test('a bug fix fails when the parent failed in setup rather than a product assertion', () => {
@@ -545,6 +575,7 @@ test('a bug fix fails when the parent failed in setup rather than a product asse
     const ruled = verifier.applyRules({
       modelVerdict: 'PASS',
       bugFix: true,
+      stressProof: { errors: [], evidence: [] },
       features: ['hosts.md'],
       conclusions: { 'hosts.md': 'success' },
       parents: { 'hosts.md': parent },
