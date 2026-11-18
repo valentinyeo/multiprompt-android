@@ -41,7 +41,19 @@ export function checkStatus(pr) {
   if (!/^[a-f0-9]{40}$/.test(pr.headRefOid) || !/^[a-f0-9]{40}$/.test(pr.baseRefOid)) throw new Error('Missing exact PR revisions');
   if (!Array.isArray(pr.statusCheckRollup) || pr.statusCheckRollup.length >= 100) throw new Error('Missing or truncated check graph');
   if (pr.mergeable === 'CONFLICTING') throw new Error('PR conflicts with base');
-  const checks = pr.statusCheckRollup;
+  const checks = [];
+  const latestRuns = new Map();
+  for (const check of pr.statusCheckRollup) {
+    if (check.__typename !== 'CheckRun') {
+      checks.push(check);
+      continue;
+    }
+    const key = JSON.stringify([check.name, check.workflowName ?? '']);
+    const timestamp = Date.parse(check.startedAt || check.completedAt) || 0;
+    const previous = latestRuns.get(key);
+    if (!previous || timestamp >= previous.timestamp) latestRuns.set(key, { check, timestamp });
+  }
+  checks.push(...Array.from(latestRuns.values(), ({ check }) => check));
   const failed = checks.filter(check => check.__typename === 'CheckRun'
     ? check.status === 'COMPLETED' && check.conclusion !== 'SUCCESS' && !(check.conclusion === 'SKIPPED' && (skippableChecks.includes(check.name) || /^(?:parent )?journey /.test(check.name)))
     : check.__typename === 'StatusContext' ? !['SUCCESS', 'PENDING', 'EXPECTED'].includes(check.state) : true);
