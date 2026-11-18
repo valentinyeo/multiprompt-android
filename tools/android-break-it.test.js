@@ -165,6 +165,36 @@ test('tooling proof selects its complete adapter without dropping journeys for A
   assert.deepEqual(verifier.includeRequiredJourneys(picked, { product: true, outcomes: [] }, diff).features, ['native-skills.md']);
 });
 
+test('the probe seed enables the same host history that the real reader resolves', () => {
+  const fixture = fs.readFileSync(path.join(__dirname, 'android-break-it/fixture.py'), 'utf8');
+  const seed = fixture.slice(fixture.indexOf("    assert reader.host_cli(['enable'"), fixture.indexOf('\nelse:\n')).split('\n').map(line => line.slice(4)).join('\n');
+  const script = `
+import importlib.util
+from pathlib import Path
+import sys
+import tempfile
+spec = importlib.util.spec_from_file_location('reader', 'app/src/main/assets/chat_history_reader.py')
+reader = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(reader)
+with tempfile.TemporaryDirectory() as directory:
+    HOME = reader.HOME = Path(directory)
+    SID = 'b2679000-0000-4000-8000-000000002679'
+    CHAT = 'live-pi_verify-breakit-probe'
+    def cli(args):
+        if args[0] == 'enable':
+            reader.host_write(reader.host_paths('pi', SID)['config'], dict(enabled=True, provider='pi', sid=SID, tmux=CHAT, cwd=str(HOME)))
+            return dict(status='enabled')
+        query = dict(id=1, provider='pi', codex=False, sid=SID, tmux=CHAT, cwd=str(HOME))
+        agent, sid, path, response = reader.resolve_response_path(query)
+        assert path is not None and 'BREAK_IT_READY' in path.read_text(), (path, response)
+        return dict(status='started')
+    reader.host_cli = cli
+    exec(${JSON.stringify(seed)})
+`;
+  const run = spawnSync('python3', ['-B', '-c', script], { cwd: path.join(__dirname, '..'), encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stderr);
+});
+
 test('draft readback survives lost focus without relying on an empty-field placeholder', t => {
   for (const observed of ['PHONE_AFTER_SWITCH_2538', '']) {
     const fixture = retained(t);
