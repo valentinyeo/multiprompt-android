@@ -90,6 +90,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `chat-table.expand`. Runner: `verify.yml` (debug). Priority evidence: `table-inline.json` (1200 characters), `table-open.json` (1200 characters), `table-sideways.json` (1200 characters), `table-down.json` (1200 characters), `table-closed.json` (1200 characters), `table-proof.txt` (200 characters).
 - [Find and send Claude clear](clear-ranking.md): Type /cl, check name-first command ranking, select /clear and send the exact command with independent host receipts. SOFT-2545.
   - Outcomes: `claude.clear-ranking`. Runner: `verify.yml` (debug). Priority evidence: `clear-query.json` (1800 characters), `clear-selected.json` (700 characters), `clear-sent.json` (700 characters), `clear-receipts.txt` (700 characters), `clear-host.json` (700 characters), `clear-before.txt` (200 characters), `clear-selected-host.txt` (200 characters), `clear-proof.txt` (200 characters).
+- [Signed-out sync row](signed-out-sync.md): Reader Session actions, then More, shows Sign in to sync. The journey does not sign in.
+  - Outcomes: `legacy.igsh-413`. Runner: `verify.yml` (debug). Priority evidence: `reader-sync.json` (200 characters), `sync-menu-proof.txt` (80 characters).
 - [Bot look choices](bot-look.md): Choose all faces and colours, scroll, dismiss and retain the local appearance after restart. SOFT-2653.
   - Outcomes: `bot.look`. Runner: `verify.yml` (debug). Priority evidence: `bot-look-top.json` (1000 characters), `bot-look-bottom.json` (1500 characters), `bot-look-retained-face.json` (1500 characters), `bot-look-retained-auto.json` (1500 characters), `bot-look-proof.txt` (200 characters).
 - [Reader rename and display controls](reader-controls.md): Rename and display, plus 40 reader More, key-validation, pinned-page, attachment and Computer controls with screenshots and independent SSH receipts. SOFT-2669.
@@ -113,7 +115,6 @@ These IDs are an inventory, not exemptions for future changes. Untouched gaps do
 | `legacy.igsh-426` | IGSH-426 | IGSH-426 |
 | `legacy.igsh-424` | IGSH-424 | IGSH-424 |
 | `legacy.igsh-425` | IGSH-425 | IGSH-425 |
-| `legacy.igsh-413` | IGSH-413 | IGSH-413 |
 | `app-name.journey` | app-name.md | SOFT-2531 |
 | `bot-photo-refresh.journey` | bot-photo-refresh.md | SOFT-2531 |
 | `chat-working.journey` | chat-working.md | SOFT-2531 |

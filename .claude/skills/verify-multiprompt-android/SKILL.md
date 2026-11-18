@@ -150,6 +150,7 @@ All helpers are executable. These setup/interaction commands are **GitHub-job-on
 .claude/skills/verify-multiprompt-android/scripts/drive.sh session-reader.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh session-routing.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh chat-choices.md
+.claude/skills/verify-multiprompt-android/scripts/drive.sh signed-out-sync.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh message-reply.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh terminal.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh sign-in.md
