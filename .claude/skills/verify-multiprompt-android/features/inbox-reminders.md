@@ -6,7 +6,7 @@ Use the shared disposable SSH fixture and its real `verify-session` row.
 
 ## Folder bar regression (SOFT-2706)
 
-Before the reminder cases, seed twelve local debug folders against the already-trusted disposable host. No account or production data is used. Select **Folder 12**, restart the app, and assert the selected pill without first revealing it. Repeat selection and restart for **Folder 06**, then return to **All**.
+Before the reminder cases, block HTTP through an emulator-local closed proxy port and seed an offline debug account with twelve folders against the already-trusted disposable host. No production account or data is used. Select **Folder 12**, restart the app, and assert the selected pill without first revealing it. Repeat selection and restart for **Folder 06**, then return to **All**.
 
 `folder-bar-reopened.json` and `folder-bar-middle-reopened.json` require the complete clickable pill and both text paddings inside the horizontal viewport, clear of the edge fades. Screenshot pixels at both rounded ends must match the solid selected fill. Every state keeps its numbered PNG/XML pair. The unchanged parent must fail a product assertion after restart, retaining the hidden selected folder and the old solid bar as the before screenshot.
 

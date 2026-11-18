@@ -1591,7 +1591,7 @@
       "citations": {
         "action": {
           "file": "driver-transcript.txt",
-          "quote": "tap_text Folder"
+          "quote": "tap_text 'Folder 12'"
         },
         "result": {
           "file": "folder-bar-reopened.json",

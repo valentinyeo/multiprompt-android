@@ -125,6 +125,8 @@ PY
 fi
 if [[ "$feature" == inbox-reminders.md ]]; then
     setup_failure=1
+    adb shell settings put global http_proxy 127.0.0.1:9
+    [[ "$(adb shell settings get global http_proxy | tr -d '\r')" == 127.0.0.1:9 ]]
     adb shell am force-stop "$package"
     adb shell am instrument -w -e class dev.multiprompt.companion.account.FolderBarSeedTest#seedsOverflowingFolders \
         -e mode folder-bar-seed "$package.test/androidx.test.runner.AndroidJUnitRunner" | tr -d '\r' > "$EVIDENCE/folder-bar-seed.txt"
