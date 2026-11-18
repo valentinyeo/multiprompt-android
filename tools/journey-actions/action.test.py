@@ -86,6 +86,20 @@ adb() {
         with self.assertRaisesRegex(action.Unreachable, 'overlap'):
             self.plan(covered, mode='terminal', value='')
 
+    def test_release_robot_hidden_under_inbox_header_is_revealed_before_tapping(self):
+        fixtures = Path(__file__).parent / 'fixtures'
+        clipped = (fixtures / '3e0b2df2-release-robot-clipped.xml').read_text()
+        visible = (fixtures / '962eecad-release-robot-visible.xml').read_text()
+        for mode, value in [('text', 'verify-session'), ('desc', 'Robot verify-session')]:
+            with self.subTest(mode=mode):
+                self.assertEqual(self.plan(clipped, mode, value), 'swipe 540 527 540 1352')
+                self.assertEqual(self.plan(visible, mode, value), 'tap 540 353')
+        old = subprocess.check_output(['git', 'show', '3e0b2df2:.claude/skills/verify-multiprompt-android/scripts/journey_action.py'], cwd=ROOT, text=True)
+        namespace = {}
+        exec(compile(old, 'release-parent-journey-action', 'exec'), namespace)
+        self.assertEqual(namespace['plan'](ET.fromstring(clipped), 'desc', 'Robot verify-session'), 'tap 540 62')
+        print('RELEASE_ROBOT_REPLAY: 3e0b2df2 taps hidden row at 540 62; head scrolls below the header')
+
     def test_complete_button_uses_clickable_ancestor(self):
         xml = window('<node clickable="true" bounds="[20,400][500,600]"><node text="Open live terminal" bounds="[50,450][300,500]" /></node>')
         self.assertEqual(self.plan(xml), "tap 260 500")
