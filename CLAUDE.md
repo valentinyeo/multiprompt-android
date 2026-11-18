@@ -18,11 +18,13 @@ Start time with and without the baseline profile: dispatch `startup-time.yml` (`
 
 Emulator scroll-under proof: `tools/top-fade-proof.sh`. GitHub runs it in `top-fade.yml`. Dispatch with `release_smoke=true` to verify the published APK.
 
-Requires JDK 17 and Android SDK 36. Before every push run `tools/check.sh`: it is exactly what CI runs on every pull request and push to `main` (`.github/workflows/test.yml`).
+Requires JDK 17 and Android SDK 36. Before every push run the focused source checks. Run `tools/check.sh` on GitHub, never local Gradle. On every PR and main push, `test.yml` runs its `source`, `unit`, `m3` and `lint` phases plus the debug build. Historical mutations and phone regressions run in `android-full.yml` nightly.
 
 | Rule | Enforced by |
 |---|---|
-| Never push code that does not compile or pass tests | `tools/check.sh` in `test.yml` |
+| Every PR builds, unit-tests and lints without unrelated phone jobs | `test.yml` runs build and `tools/check.sh source/unit/m3/lint`; `tools/ci/pr-workflows.test.mjs` checks workflow ownership |
+| Every PR gets one independent verdict, including tooling-only changes. Product journeys cover only touched registry outcomes and changed recipes | `pstack-verifier.yml`, `verifier.cjs` and `tools/pstack-verifier.test.js`; tooling retains hosted parent/head rule proof |
+| Reuse base proof only for the same source SHA, journey and unchanged driver inputs | `parent-cache.cjs`, retained base artifacts and `tools/parent-cache.test.js` |
 | No code comments (license headers and tool directives allowed) | `tools/strip-comments.mjs --check` in `tools/check.sh` |
 | An old-screen check builds that complete revision in its own worktree, or uses a retained APK. Do not copy old source into the current app | `tools/historical_control.py` in `tools/check.sh`; `tools/check-session-pins.sh` builds commit `93f137d8` |
 | Changed product outcomes need matching head-journey action/result proof at the exact APK SHA; smoke is not coverage. Initial gaps do not exempt future changes | `features/registry.json`, `coverage.cjs` ratchet in `test.yml`, and structured artifact validation in `pstack-verifier` |
@@ -33,8 +35,8 @@ Requires JDK 17 and Android SDK 36. Before every push run `tools/check.sh`: it i
 | Journey taps resolve an enabled action in the active window, reveal its full clickable bounds and scroll the matching axis; new raw taps are forbidden | `journey_action.py` through `drive.sh tap_node`, `tools/journey-actions/check.py` baseline ratchet and `action.test.py` historical replays in `tools/check.sh` |
 | Shipping buttons and menus use `ui/DesignKit.kt`; no legacy button wrappers. Baseline allowances can only shrink | Resolved-symbol `KitControlRequired` Android lint in `tools/kit-controls`, run for debug/release/m3 by `tools/check.sh lint`; historical #132/#136 replays and `history.test.py` baseline guard |
 | One session owns snapshot/history reads; screens hold foreground leases and release only their own lease. New read implementations cannot bypass the owner. Canceled unissued actions are rejected | `ChatPollGate`, `SessionReaderConnection`, `tools/reader-ownership/check.py` per-file baseline ratchet and historical replays, plus hosted reader lifecycle tests/journey |
-| ChatHistory.projectMessages owns visible message identity; protocols and UI never append independent echoes. Legacy text matching stays at LegacyMessageIdentity | `tools/message-projection/check.py` per-path baseline ratchet, `MessageProjectionTest`, and historical JVM replay in `test.yml` |
-| Shared verification seeds and drivers run all six phone checks; fixture users never need access to the runner workspace; named inbox targets resolve exactly with a full inbox; off-screen proof chooses a name absent from the captured initial dump and search proof requires that same exact row, not query text or a count alone | `tools/ci/phone-routing.test.mjs` and `tools/verify-seed.test.py` / `.js` |
+| ChatHistory.projectMessages owns visible message identity; protocols and UI never append independent echoes. Legacy text matching stays at LegacyMessageIdentity | `tools/message-projection/check.py` per-path baseline ratchet, `MessageProjectionTest`, and historical JVM replay in `android-full.yml` |
+| All six phone regressions run nightly, not per PR. Fixture users need no runner workspace access; named inbox targets and off-screen search resolve the exact seeded row | `android-full.yml`, `tools/ci/pr-workflows.test.mjs` and `tools/verify-seed.test.py` / `.js` |
 | No scratch output (logs, OCR dumps, screenshots) at the repo root | `tools/root-files.mjs` allowlist in `tools/check.sh` |
 | Merged branches do not linger on GitHub | repo setting: delete branch on merge |
 | Every PR title starts with its ticket, like `IGSH-1684: what changed`; add that ticket's exact Hypertask title to `tools/release-notes/ticket-titles.json`. Update notes show one `IGSH-N exact title` line per ticket, never filler | `tools/release-notes/notes.mjs` in `test.yml` and `release.yml` |
@@ -51,9 +53,10 @@ Requires JDK 17 and Android SDK 36. Before every push run `tools/check.sh`: it i
 
 ## Git workflow
 
-- `main` must require all 18 checks in `tools/pr-checks.mjs`, including `pstack-verifier`. Check live settings with `node tools/branch-protection.mjs --check`. Updated base required; administrators cannot bypass. Never push directly.
-- Before merge: `node tools/pr-checks.mjs <PR> --wait`. Recheck once with `node tools/pr-checks.mjs <PR>`. Missing checks never pass. Failed checks and unexpected skips stop immediately. The six path-routed emulator checks may be skipped. Ticket closure requires merged, complete-green proof.
+- `main` targets exactly eight required checks in `tools/pr-checks.mjs`: `build`, `test`, `unit-tests`, `m3-unit-tests`, `lint`, `secret-scan`, `no-paid-ai`, `pstack-verifier`. The lead removes the ten named retired checks after this workflow PR merges. `node tools/branch-protection.mjs --check` accepts only the target checks and that known transition, reports remaining retired checks, and never writes settings. Updated base required; administrators cannot bypass. Never push directly.
+- Before merge: `node tools/pr-checks.mjs <PR> --wait`. Recheck once with `node tools/pr-checks.mjs <PR>`. Missing checks never pass. Failed checks and unexpected skips stop immediately. Only unused journey branches may skip. The verifier and cheap required checks must succeed. Ticket closure requires merged, complete-green proof.
 - One wait per PR; five-minute polls; thirty-minute maximum. Head/base changes stop the wait. Never use bare `gh pr checks --watch` or `gh-green` as complete-check proof.
+- Emergency regression: revert the bad change first through a PR with the same verifier and cheap checks. Restore service before attempting a forward fix. Never bypass the signed-APK release proof or branch protection.
 - Merge the checked head with `gh pr merge <PR> --squash --delete-branch --match-head-commit <checked-sha>`.
 - Never finish a task with changes parked in a branch, in the stash, or as untracked files. A task is done when its PR is merged and its branch deleted.
 

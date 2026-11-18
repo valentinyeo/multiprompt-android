@@ -78,7 +78,9 @@ The `emulator-stability.yml` dispatch option is an equivalent entry point for te
 
 ## Launch
 
-`pstack-verifier.yml` owns pull-request journeys. It picks at most three and runs each on head and parent through `verify.yml`; each pair counts as one journey. `verify.yml` also runs on main pushes and nightly, and supports manual dispatch. Tooling-only work can use the retained hosted Node test proof.
+`pstack-verifier.yml` owns pull-request journeys. It runs only debug journeys for changed registry outcomes and changed recipes on head and parent through `verify.yml`. It never pads the selection with smoke. Parent proof is reused across PRs only for the same base SHA, journey and driver inputs; missing or invalid proof triggers a fresh run. Tooling-only PRs still get the independent verdict from hosted Node and parent/head workflow-rule proof.
+
+`verify.yml` supports calls and manual dispatch. The weekly `maintain-verification.yml` pass drives every registered automated feature. `android-full.yml` runs all six phone regressions, release-profile compilation and historical controls nightly. Dedicated top-fade, account, update and other periodic workflows retain their schedules without PR triggers. `release.yml` still blocks publication on the recorded robot-faces journey against the exact signed APK.
 
 From a pushed branch containing this workflow:
 

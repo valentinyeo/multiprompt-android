@@ -40,7 +40,7 @@
       "description": "hosted ViewModel and Compose regressions; seeded picture, not live account sync.",
       "runner": {
         "kind": "dedicated",
-        "workflow": "test.yml",
+        "workflow": "android-full.yml",
         "inputs": {},
         "prerequisites": [
           "Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable."
