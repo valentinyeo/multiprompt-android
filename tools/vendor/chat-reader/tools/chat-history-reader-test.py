@@ -2072,6 +2072,51 @@ class HistoryReaderTest(unittest.TestCase):
         _, rows = self.read()
         self.assertEqual([r['text'] for r in rows], ['queued', '/test foo', 'answer'])
 
+    def test_soft_2529_skill_arguments_stay_visible_live_and_after_reload(self):
+        arguments = '> Earlier answer\n>\n> … Check every chat, not just this one.\n> Keep the full paragraph visible.'
+        for command in ('/pstack:correct', '/correct'):
+            for as_blocks in (False, True):
+                with self.subTest(command=command, as_blocks=as_blocks):
+                    self.query.update(cached_sid='', inode=0, offset=0)
+                    self.write(self.event('Earlier answer'))
+                    self.read()
+                    markup = ('<command-message>' + command[1:] + '</command-message>\n'
+                              '<command-name>' + command + '</command-name>\n'
+                              '<command-args>' + arguments + '</command-args>')
+                    content = [dict(type='text', text=markup)] if as_blocks else markup
+                    events = [dict(type='user', uuid='skill-command', timestamp='2026-11-16T14:21:42Z',
+                                   message=dict(role='user', content=content)),
+                              dict(type='user', isMeta=True, message=dict(role='user', content='skill body'))]
+                    with self.path.open('a') as output:
+                        for event in events:
+                            output.write(json.dumps(event) + '\n')
+                    _, live = self.read()
+                    expected = command + ' ' + arguments
+                    self.assertEqual([(row['id'], row['text']) for row in live if row.get('role') == 'user'],
+                                     [('skill-command', expected)])
+                    self.query.update(cached_sid='', inode=0, offset=0)
+                    _, reloaded = self.read()
+                    self.assertEqual([(row['id'], row['text']) for row in reloaded if row.get('role') == 'user'],
+                                     [('skill-command', expected)])
+                    settled = reader.settle_response(dict(self.query, op='settle', texts=[expected], after_ms=0)).splitlines()
+                    self.assertEqual(json.loads(settled[1])['line'], 2)
+
+    def test_soft_2423_skill_quote_shows_as_user_bubble(self):
+        self.path.write_text((ROOT / 'tools/fixtures/SOFT-2423/skill-quote.jsonl').read_text())
+        _, rows = self.read()
+        shown = [(row['role'], row['text']) for row in rows if row.get('role') in ('user', 'assistant')]
+        self.assertEqual(shown, [
+            ('user', '/pstack:poteto-mode > quoted note'),
+            ('assistant', 'bot note'),
+            ('user', '> quoted note\n> second line\n\n/pstack:correct own note'),
+            ('user', '/pstack:correct plain note'),
+        ])
+        self.assertNotIn('skill body', [row.get('text') for row in rows])
+        sent = ['/pstack:poteto-mode > quoted note', '/pstack:correct > quoted note > second line own note']
+        lines = reader.settle_response(dict(self.query, op='settle', texts=sent, after_ms=0)).splitlines()
+        self.assertEqual(lines[0], '@mp\t7\tsettle\tok\t-\t2')
+        self.assertEqual([json.loads(line)['line'] for line in lines[1:3]], [1, 4])
+
     def test_refused_slash_command_facts_are_opt_in_and_additive(self):
         prompt = '/hormozi-skills:audit-offer can you use this also to review my own offer'
         enqueue = dict(type='queue-operation', operation='enqueue', timestamp='2026-10-13T11:06:22.591Z', content=prompt)
@@ -8020,8 +8065,9 @@ class SOFT2272HostedClearTest(unittest.TestCase):
         self.before = self.transcript(self.host_sid, 'Remember the secret word PINEAPPLE', 'ok')
         self.after = self.transcript(self.native_sid, 'What was the secret word I told you earlier?', 'unknown')
         paths = reader.host_paths('claude', self.host_sid)
-        reader.host_write(paths['config'], dict(enabled=True, tmux=self.tmux, cwd=self.cwd))
-        reader.host_write(paths['state'], dict(provider='claude', sid=self.host_sid, native_session=self.native_sid))
+        reader.host_write(paths['config'], dict(enabled=True, provider='claude', sid=self.host_sid,
+                                                tmux=self.tmux, cwd=self.cwd, native_session=self.native_sid))
+        reader.host_write(paths['state'], dict(provider='claude', sid=self.host_sid))
         self.query = dict(id=7, codex=False, provider='claude', sid=self.host_sid, tmux=self.tmux, cwd=self.cwd,
                           follow=True, cached_sid=self.host_sid, inode=0, offset=0, start=0)
 
@@ -8043,8 +8089,9 @@ class SOFT2272HostedClearTest(unittest.TestCase):
         self.assertNotIn('PINEAPPLE', wire)
 
     def test_no_clear_keeps_reading_the_pinned_transcript(self):
-        reader.host_write(reader.host_paths('claude', self.host_sid)['state'],
-                          dict(provider='claude', sid=self.host_sid, native_session=self.host_sid))
+        paths = reader.host_paths('claude', self.host_sid)
+        config = reader.host_read(paths['config'])
+        reader.host_write(paths['config'], dict(config, native_session=self.host_sid))
         wire = self.wire()
         self.assertIn('PINEAPPLE', wire)
         self.assertNotIn('unknown', wire)
@@ -8057,15 +8104,202 @@ class SOFT2272HostedClearTest(unittest.TestCase):
         self.assertIn('PINEAPPLE', wire)
         self.assertNotIn('unknown', wire)
 
-    def test_a_missing_native_transcript_keeps_the_pinned_file(self):
+    def test_a_missing_native_transcript_never_reads_the_foreign_pinned_file(self):
         self.after.unlink()
         wire = self.wire()
-        self.assertIn('PINEAPPLE', wire)
-        self.assertNotIn('history\tmissing', wire)
+        self.assertNotIn('PINEAPPLE', wire)
+        self.assertIn('\thistory\tok\t' + self.host_sid + '\t', wire)
+        self.assertIn('"no_transcript":true', wire)
+
+    def test_soft_2681_config_precedes_a_later_init_and_private_state(self):
+        paths = reader.host_paths('claude', self.host_sid)
+        reader.host_log('claude', self.host_sid, 'init', dict(session=self.host_sid))
+        reader.host_write(paths['state'], dict(native_session=self.host_sid))
+        wire = self.wire()
+        self.assertIn('unknown', wire)
+        self.assertNotIn('PINEAPPLE', wire)
+
+    def test_soft_2681_latest_valid_init_is_used_without_config_native_session(self):
+        paths = reader.host_paths('claude', self.host_sid)
+        config = reader.host_read(paths['config'])
+        config.pop('native_session')
+        reader.host_write(paths['config'], config)
+        reader.host_log('claude', self.host_sid, 'init', dict(session=self.host_sid))
+        reader.host_log('claude', self.host_sid, 'init', dict(session=self.native_sid))
+        for event in (dict(session='../foreign'), [], None):
+            reader.host_log('claude', self.host_sid, 'init', event)
+        with paths['log'].open('ab') as output:
+            output.write(b'{broken\n[]\n' + b' ' * 70000 + b'\n{"event":')
+        wire = self.wire()
+        self.assertIn('unknown', wire)
+        self.assertNotIn('PINEAPPLE', wire)
+        self.assertIn('\thistory\tok\t' + self.host_sid + '\t', wire)
+
+    def test_soft_2681_invalid_config_native_session_uses_init(self):
+        paths = reader.host_paths('claude', self.host_sid)
+        config = reader.host_read(paths['config'])
+        reader.host_log('claude', self.host_sid, 'init', dict(session=self.native_sid))
+        for native in (None, '', '../foreign', [], 1):
+            with self.subTest(native=native):
+                reader.host_write(paths['config'], dict(config, native_session=native))
+                self.assertIn('unknown', self.wire())
+                self.assertNotIn('PINEAPPLE', self.wire())
+
+    def test_soft_2681_without_public_native_metadata_uses_the_stable_id(self):
+        paths = reader.host_paths('claude', self.host_sid)
+        config = reader.host_read(paths['config'])
+        config.pop('native_session')
+        reader.host_write(paths['config'], config)
+        reader.host_write(paths['state'], dict(native_session=self.native_sid))
+        self.assertIn('PINEAPPLE', self.wire())
+        self.assertNotIn('unknown', self.wire())
+
+    def test_soft_2681_native_transcript_does_not_require_a_stable_id_file(self):
+        self.before.unlink()
+        wire = self.wire()
+        self.assertIn('unknown', wire)
+        self.assertIn('\thistory\tok\t' + self.host_sid + '\t', wire)
+
+    def test_soft_2681_tab_only_query_loads_the_host_config_before_selecting_history(self):
+        self.query.update(sid='', cwd='/wrong')
+        wire = self.wire()
+        self.assertIn('unknown', wire)
+        self.assertNotIn('PINEAPPLE', wire)
+        self.assertIn('\thistory\tok\t' + self.host_sid + '\t', wire)
+
+    def test_soft_2681_saved_host_history_still_precedes_the_native_transcript(self):
+        paths = reader.host_paths('claude', self.host_sid)
+        reader.host_write(paths['state'], dict(display_history=True))
+        paths['history'].write_text(json.dumps(dict(type='multiprompt_history', row=dict(
+            role='assistant', text='saved host history', id='saved-2681'))) + '\n')
+        for sid in (self.host_sid, ''):
+            with self.subTest(sid=sid):
+                self.query['sid'] = sid
+                wire = self.wire()
+                self.assertIn('saved host history', wire)
+                self.assertNotIn('PINEAPPLE', wire)
+                self.assertNotIn('unknown', wire)
+
+    def test_soft_2681_native_selection_reads_the_transcript_owners_home(self):
+        owner = self.home / 'secondary'
+        target = owner / '.claude/projects' / reader.claude_project_folder(self.cwd) / self.after.name
+        target.parent.mkdir(parents=True)
+        self.after.rename(target)
+        with patch.object(reader, 'conversation_owner', return_value=('secondary', owner)):
+            wire = self.wire()
+        self.assertIn('unknown', wire)
+        self.assertNotIn('PINEAPPLE', wire)
+        self.assertIn('\thistory\tok\t' + self.host_sid + '\t', wire)
+
+    def test_soft_2681_delegated_native_history_keeps_the_stable_wire_id(self):
+        expected = '@mp\t7\thistory\tok\t' + self.native_sid + '\t0\n{"role":"assistant","text":"owner reply"}\n@@MP_END@@\n'
+        with patch.object(reader, 'conversation_path', side_effect=PermissionError()), \
+                patch.object(reader, 'conversation_owner', return_value=('secondary', Path('/home/secondary'))), \
+                patch.object(reader, 'owner_response', return_value=expected) as delegated:
+            wire = reader.response(dict(self.query), reader.READER_SOURCE)
+        self.assertIn('\thistory\tok\t' + self.host_sid + '\t', wire)
+        self.assertIn('owner reply', wire)
+        self.assertEqual(delegated.call_args.args[0]['sid'], self.native_sid)
+        self.assertEqual(delegated.call_args.args[0]['cached_sid'], self.native_sid)
+        self.assertFalse(delegated.call_args.args[0]['follow'])
 
     def test_an_owner_read_never_switches_session(self):
         wire = reader.response(dict(self.query), reader.READER_SOURCE, as_owner=True)
         self.assertIn('PINEAPPLE', wire)
+
+
+class SOFT_2348_PiLoginAnswerTest(unittest.TestCase):
+    provider = 'pi'
+    sid = 'pi-login-answer'
+    tmux = 'pi-login-chat'
+    code = 'mp-login-secret-918273'
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.addCleanup(patch.stopall)
+        self.home = Path(self.temp.name)
+        patch.object(reader, 'HOME', self.home).start()
+        self.stream = io.BytesIO()
+        self.session = dict(state=dict(display_history=True))
+        reader.host_session_reset(self.session, types.SimpleNamespace(stdin=self.stream))
+        self.session['ready'] = True
+        self.session['pi_login'] = dict(phase='login', provider='anthropic')
+        self.printed = []
+        self.attempts = []
+        patch.object(reader, 'serve_print', side_effect=self.printed.append).start()
+        patch.object(reader, 'host_owned', return_value=True).start()
+        patch.object(reader, 'host_request', side_effect=self.forward).start()
+        patch.object(reader, 'host_attempt', side_effect=self.track_attempt).start()
+
+    def forward(self, provider, sid, request):
+        return reader.host_handle_request(provider, sid, self.tmux, self.session, request)
+
+    def track_attempt(self, *args, **kwargs):
+        self.attempts.append(args)
+        return dict(status='claimed') if len(args) < 9 or args[8] is None else None
+
+    def lines(self):
+        return [json.loads(line) for line in self.stream.getvalue().splitlines() if line.strip()]
+
+    def prompts(self):
+        return [line for line in self.lines() if line.get('type') == 'prompt']
+
+    def ask(self, dialog_id='ask-1'):
+        reader.host_pi_event(self.provider, self.sid, self.tmux, self.session, dict(
+            type='extension_ui_request', id=dialog_id, method='input', message='Paste the code'))
+
+    def serve(self, **query):
+        reader.serve_request(json.dumps(dict(id=41, provider=self.provider, sid=self.sid, **query)), None, {}, threading.Lock())
+        return self.printed[-1]
+
+    def stored(self):
+        history = reader.host_paths(self.provider, self.sid)['history']
+        log = reader.host_paths(self.provider, self.sid)['log']
+        blob = (history.read_text() if history.exists() else '') + (log.read_text() if log.exists() else '')
+        db = reader.message_store_db(self.tmux)
+        try:
+            rows = [row[0] for row in db.execute('SELECT text FROM shared_messages')]
+            rows += [row[0] for row in db.execute('SELECT body FROM message_events')]
+            rows += [row[0] for row in db.execute('SELECT binding FROM message_attempts')]
+        finally:
+            db.close()
+        sends = json.dumps(self.session.get('sends') or [])
+        return blob + '\n' + '\n'.join(rows) + '\n' + sends
+
+    def test_login_answer_arrives_as_data_and_a_late_retry_is_not_a_prompt(self):
+        started = self.serve(op='login')
+        self.assertEqual(started.get('result'), dict(status='busy', reason='login_busy'))
+        self.ask()
+        refused = self.serve(op='login_answer', command=dict(type='prompt', message=self.code))
+        self.assertEqual(refused['result'], dict(status='refused', reason='invalid_answer'))
+        self.assertEqual(self.prompts(), [])
+        self.assertEqual(self.session['pi_login_dialog']['id'], 'ask-1')
+        answered = self.serve(op='login_answer', data=self.code)
+        self.assertEqual(answered['result'], dict(status='final'))
+        self.assertNotIn(self.code, json.dumps(answered))
+        self.assertNotIn('pi_login_dialog', self.session)
+        self.assertEqual(self.lines()[-1], dict(type='extension_ui_response', id='ask-1', value=self.code))
+        self.assertNotIn(self.code, self.stored())
+        self.assertEqual(self.attempts, [])
+        before = len(self.lines())
+        retry = self.serve(op='login_answer', data=self.code)
+        self.assertEqual(retry['result']['status'], 'final')
+        self.assertEqual(self.lines()[before:], [])
+        dispatched = reader.message_store_request(dict(
+            message_protocol=1, provider=self.provider, sid=self.sid, tmux=self.tmux, op='message_dispatch'))
+        self.assertIsNone(dispatched['message'])
+        self.assertEqual(self.prompts(), [])
+        self.assertNotIn(self.code, self.stored())
+        self.ask('ask-2')
+        desktop = reader.host_handle_request(self.provider, self.sid, self.tmux, self.session, dict(
+            op='deliver', id='desktop-login-answer-01', attempt='one', epoch=1, text=self.code))
+        self.assertEqual(desktop['status'], 'ok')
+        self.assertEqual(self.lines()[-1], dict(type='extension_ui_response', id='ask-2', value=self.code))
+        follow = reader.host_handle_request(self.provider, self.sid, self.tmux, self.session, dict(
+            op='deliver', id='desktop-login-answer-02', attempt='one', epoch=1, text='hello after login'))
+        self.assertEqual(follow['status'], 'sent')
+        self.assertEqual(self.prompts(), [dict(id='desktop-login-answer-02', type='prompt', message='hello after login')])
 
 
 def load_tests(loader, tests, pattern):

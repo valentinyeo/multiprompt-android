@@ -1541,7 +1541,8 @@
       "sideEffect": true,
       "match": [
         "reader/ChatHistoryConnection\\.kt",
-        "reader/ChatHistoryProtocol\\.kt"
+        "reader/ChatHistoryProtocol\\.kt",
+        "hosted_claude_transcript_sid"
       ],
       "citations": {
         "action": {
