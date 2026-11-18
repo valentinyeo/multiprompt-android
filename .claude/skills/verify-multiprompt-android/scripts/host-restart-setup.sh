@@ -8,7 +8,7 @@ sudo install -m 755 "$scripts/host-restart-ssh.py" /home/verifyssh/host-restart-
 sudo install -m 755 "$scripts/host-restart-fixture.py" /home/verifyssh/host-restart-fixture.py
 reader_source=app/src/main/assets/chat_history_reader.py
 if [[ -n "${APP_REF:-}" ]]; then
-    [[ "$(cat "$EVIDENCE/app-source-sha.txt")" == "$APP_REF" ]]
+    [[ "$(git -C app-source rev-parse HEAD)" == "$APP_REF" ]]
     reader_source="app-source/$reader_source"
 fi
 sha256sum "$reader_source" > "$EVIDENCE/host-restart-seed-reader.sha256"
