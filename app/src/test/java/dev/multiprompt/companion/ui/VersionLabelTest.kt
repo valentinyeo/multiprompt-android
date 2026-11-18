@@ -236,6 +236,27 @@ class VersionLabelTest {
     }
 
     @Test
+    fun readerStyleVersionSitsBesideSessionActionsAndOpensReleaseNotes() {
+        compose.setContent {
+            MultipromptTheme(sunlight = sunlight.value, readerStyle = true) {
+                Surface(Modifier.fillMaxSize()) {
+                    ReaderTopBar(
+                        session = session,
+                        modelLabel = "Claude Opus · high",
+                        statusLabel = null,
+                        onModelCommand = {},
+                        onOpenTerminal = {},
+                        onReleaseNotes = { clicks++ },
+                        onMenuClick = {},
+                        menuContent = {},
+                    )
+                }
+            }
+        }
+        verifyThemes("reader-style", session.displayName, "Session actions")
+    }
+
+    @Test
     fun readerVersionDoesNotDisplaceTitleOrMenuAndOpensReleaseNotes() {
         render {
             ReaderTopBar(

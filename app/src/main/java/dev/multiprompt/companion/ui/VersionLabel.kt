@@ -16,24 +16,29 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.BuildConfig
 
+internal fun versionReleaseNotesDescription(versionName: String): String =
+    "Version $versionName, open release notes"
+
 @Composable
 internal fun VersionLabel(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     versionName: String = BuildConfig.VERSION_NAME,
 ) {
+    val reader = LocalReaderStyle.current
     Text(
         text = versionName,
         modifier = modifier
             .padding(start = 4.dp)
             .widthIn(max = 72.dp)
             .testTag("app-version")
-            .semantics { contentDescription = "Version $versionName, open release notes" }
+            .semantics { contentDescription = versionReleaseNotesDescription(versionName) }
             .clickable(onClick = onClick)
             .padding(horizontal = 2.dp, vertical = 4.dp),
-        fontSize = 10.sp,
-        fontFamily = if (LocalMaterial3.current) FontFamily.Monospace else null,
-        color = if (LocalMaterial3.current) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurfaceVariant,
+        style = if (reader) Kit.Label else androidx.compose.material3.LocalTextStyle.current,
+        fontSize = if (reader) Kit.Label.fontSize else 10.sp,
+        fontFamily = if (reader) Kit.Label.fontFamily else if (LocalMaterial3.current) FontFamily.Monospace else null,
+        color = if (reader) MaterialTheme.colorScheme.onBackground else if (LocalMaterial3.current) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,
         softWrap = false,
         overflow = TextOverflow.Ellipsis,
