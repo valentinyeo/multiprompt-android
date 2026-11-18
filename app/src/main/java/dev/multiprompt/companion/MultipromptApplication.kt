@@ -59,7 +59,7 @@ class MultipromptApplication : Application() {
     val sshRepository by lazy { SshRepository(secretStore) }
     val deepgramDictation by lazy { DeepgramDictation(this, secretStore) }
     val updateManager by lazy { UpdateManager(this) }
-    val screencastUploader by lazy { ScreencastUploader(this, secretStore) }
+    val screencastUploader by lazy { ScreencastUploader(this, secretStore, syncAuth::accountId, syncAuth::screencastKey) }
     val accountHttp: AccountHttp by lazy { AccountHttpClient() }
     val syncAuth by lazy { SyncAuthManager(this, accountHttp) }
     val deviceKeyStore by lazy { DeviceKeyStore(secretStore) }

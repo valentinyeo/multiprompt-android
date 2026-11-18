@@ -95,6 +95,26 @@ sudo() {
             receipts = [json.loads(line) for line in (root / 'device-approval-receipts.jsonl').read_text().splitlines()]
             self.assertEqual([row['action'] for row in receipts], ['browser_pkce_exchange', 'approve', 'deny'])
 
+    def test_screencast_fixture_requires_account_auth_and_never_records_the_key(self):
+        spec = importlib.util.spec_from_file_location("approval_fixture", SCRIPTS / "device-approval.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'pending-device.pub').write_text('ssh-ed25519 APPROVE')
+            (root / 'denied-device.pub').write_text('ssh-ed25519 DENY')
+            fixture = module.ApprovalFixture(root, root, screencast=True)
+            route = '/v1/secrets/screencast2'
+            self.assertEqual(fixture.request('GET', route, {}, None)[0], 401)
+            self.assertEqual(fixture.request('GET', route, {}, 'Bearer wrong')[0], 401)
+            status, reply = fixture.request('GET', route, {}, 'Bearer ' + fixture.access)
+            self.assertEqual(status, 200)
+            self.assertRegex(reply['key'], r'^[!-~]{1,256}$')
+            receipts = (root / 'device-approval-receipts.jsonl').read_text()
+            self.assertNotIn(reply['key'], receipts)
+            self.assertEqual(json.loads(receipts), dict(action='screencast_key_fetch', authenticated=True, status=200))
+            self.assertEqual(fixture.keys, [])
+
     def test_reaction_fixture_consumes_the_prompt_and_delivery_marker_as_one_turn(self):
         wire = "👍 to: First reply [mp:6d8e353d25c5fe23]"
         marker = "[mp:5e5cdaa77f3dcfe4]"

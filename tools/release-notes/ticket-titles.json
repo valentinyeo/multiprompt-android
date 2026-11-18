@@ -129,5 +129,6 @@
   "IGSH-2658": "Agents try to break every Android bug fix",
   "IGSH-2653": "Phone tests cover 40 more controls",
   "IGSH-2669": "Phone tests cover 40 more controls, batch 3",
-  "IGSH-2670": "Phone tests cover 40 more controls, batch 4"
+  "IGSH-2670": "Phone tests cover 40 more controls, batch 4",
+  "IGSH-2682": "Android app reads the screencast2 key from the account"
 }

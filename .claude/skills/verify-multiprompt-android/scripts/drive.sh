@@ -1224,6 +1224,10 @@ if [[ "$feature" == device-approval.md ]]; then
     source "$scripts/device-approval-drive.sh"
     exit 0
 fi
+if [[ "$feature" == screencast-account.md ]]; then
+    source "$scripts/screencast-account-drive.sh"
+    exit 0
+fi
 if [[ "$feature" == hosts.md ]]; then
     tap_desc 'Session list actions'
     tap_text Settings
