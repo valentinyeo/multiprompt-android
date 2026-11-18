@@ -1,4 +1,5 @@
 {
+  "IGSH-2752": "A required check blocks feature PRs until phone testing is right",
   "IGSH-2681": "Android reader misses replies after the chat server restarts",
   "IGSH-2679": "Break-it stress check skips journeys that never type a message",
   "IGSH-2708": "Android CI matches pstack: forced journeys, signed runs, sync proof",
