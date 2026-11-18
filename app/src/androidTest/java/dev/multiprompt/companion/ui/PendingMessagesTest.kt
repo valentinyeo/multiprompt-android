@@ -12,6 +12,11 @@ import java.io.File
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import dev.multiprompt.companion.reader.ChatHistoryMessage
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -151,6 +156,26 @@ class PendingMessagesTest {
         val answer = compose.onNodeWithText("Synthetic answer arrived").getUnclippedBoundsInRoot()
         assertTrue("the reply must sit below the sent message", answer.top.value >= ask.bottom.value)
         screenshot("answered-send")
+    }
+
+    @Test fun newRepliesStayVisibleWhileFollowing() {
+        val messages = mutableStateOf((1..20).map { index ->
+            ChatHistoryMessage("reply-$index", "assistant", "Older reply $index", "", index.toLong(), index.toLong())
+        })
+        val working = mutableStateOf(false)
+        compose.setContent {
+            MultipromptTheme(readerStyle = true) {
+                ChatHistoryList(messages.value, working = working.value, modifier = Modifier.height(240.dp))
+            }
+        }
+        compose.onNodeWithText("Older reply 20").assertIsDisplayed()
+        compose.runOnIdle { working.value = true }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            messages.value += ChatHistoryMessage("new-reply", "assistant", "Received /model opus. Claude Opus 5.5 high", "", 21, 21)
+            working.value = false
+        }
+        compose.onNodeWithText("Received /model opus. Claude Opus 5.5 high").assertIsDisplayed()
     }
 
     @Test fun aLeftoverRetryShowsNoButtons() {
