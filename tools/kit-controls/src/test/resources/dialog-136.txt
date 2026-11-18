@@ -1,0 +1,27 @@
+AlertDialog(
+            onDismissRequest = { workspaceDialogVisible = false },
+            title = { Text("New workspace") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        workspaceName,
+                        { workspaceName = it; workspaceError = null },
+                        label = { Text("Name") },
+                        singleLine = true,
+                    )
+                    workspaceError?.let { InlineError(it) }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    workspaceError = onCreateWorkspace(workspaceName)
+                    if (workspaceError == null) {
+                        workspaceDialogVisible = false
+                        workspaceName = ""
+                    }
+                }) { Text("Create") }
+            },
+            dismissButton = {
+                TextButton(onClick = { workspaceDialogVisible = false }) { Text("Cancel") }
+            },
+        )

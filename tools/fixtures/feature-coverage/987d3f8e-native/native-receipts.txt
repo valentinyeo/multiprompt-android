@@ -1,0 +1,6 @@
+VERIFY_RECEIVED:/review-native investigation
+VERIFY_RECEIVED:[mp:2bedbb7f9fdcc838]
+VERIFY_RECEIVED:/qa:verify-native draft stays
+VERIFY_RECEIVED:[mp:7225c3a6e507037d]
+VERIFY_RECEIVED:/model sonnet
+VERIFY_RECEIVED:/effort high

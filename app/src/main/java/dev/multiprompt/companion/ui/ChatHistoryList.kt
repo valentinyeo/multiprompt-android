@@ -19,7 +19,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -145,11 +144,12 @@ internal fun ChatHistoryView(
         }
         state.messageError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(8.dp)) }
         reader.modelPickerOptions.forEach { option ->
-            OutlinedButton(
+            KitSecondaryButton(
+                text = option.label + if (option.current) " · current" else "",
                 onClick = { if (connection.selectModelPickerOption(option.index)) onSessionUsed() },
                 enabled = !reader.sending,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text(option.label + if (option.current) " · current" else "") }
+            )
         }
         ChatHistoryList(
             messages = messages,

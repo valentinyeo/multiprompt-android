@@ -67,6 +67,15 @@ test('a missing structured citation turns a clean model PASS into a gate FAIL', 
   assert.match(result.notes.join('\n'), /FEATURE_NOT_EXERCISED/);
 });
 
+test('the clean clipboard patch preserves the label and value its evidence cannot distinguish', () => {
+  const diff = read('aspen').diff;
+  const side = prefix => diff.split('\n').filter(line => line.startsWith(prefix) && !line.startsWith(prefix.repeat(3))).map(line => line.slice(1)).join('\n');
+  const before = side('-').match(/ClipData\.newPlainText\(([^)]+)\)/)[1];
+  const after = side('+').match(/ClipData\.newPlainText\(([^)]+)\)/)[1];
+  assert.equal(after, before);
+  assert.match(side('+'), /clipboard\.setPrimaryClip\(clip\)/);
+});
+
 test('a clean copy change passes the real coverage and verdict gates', async t => {
   const sample = read('aspen');
   const result = await reliability.runCase(sample, {
