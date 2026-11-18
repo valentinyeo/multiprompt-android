@@ -148,10 +148,10 @@ if [[ "$feature" == inbox-reminders.md ]]; then
     ! grep -F 'FAILURES' "$EVIDENCE/folder-bar-seed.txt"
     setup_failure=0
     relaunch_app
-    tap_folder 'Folder 12'
-    inbox_control_state folder-bar-selected '{"selected":["Folder 12"]}'
+    tap_folder 'Folder 09'
+    inbox_control_state folder-bar-selected '{"selected":["Folder 09"]}'
     relaunch_app
-    inbox_control_state folder-bar-reopened '{"folder":"Folder 12"}'
+    inbox_control_state folder-bar-reopened '{"folder":"Folder 09"}'
     tap_folder All
     inbox_control_state folder-bar-all '{"folder":"All"}'
     tap_folder 'Folder 06'

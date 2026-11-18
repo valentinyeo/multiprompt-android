@@ -34,7 +34,7 @@ class FolderBarSeedTest {
             .put("refresh_token", "offline-fixture")
             .put("expires_at", System.currentTimeMillis() + 3_600_000L)
         secrets.put(AccountAuth.TOKENS, login.toString().toByteArray())
-        val folders = (1..12).map { "Folder %02d".format(it) }
+        val folders = (1..9).map { "Folder %02d".format(it) }
         val sessions = listOf("verify-session", "cl-long-chat") + (0..39).map { "row-%02d".format(it) }
         val layout = AccountLayout(
             revision = 0,

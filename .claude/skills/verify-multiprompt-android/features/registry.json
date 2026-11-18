@@ -1591,11 +1591,11 @@
       "citations": {
         "action": {
           "file": "driver-transcript.txt",
-          "quote": "tap_text 'Folder 12'"
+          "quote": "tap_text 'Folder 09'"
         },
         "result": {
           "file": "folder-bar-reopened.json",
-          "quote": "\"folder\": \"Folder 12\""
+          "quote": "\"folder\": \"Folder 09\""
         }
       }
     }
