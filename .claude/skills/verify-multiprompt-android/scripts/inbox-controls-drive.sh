@@ -102,6 +102,11 @@ switch_inbox_bucket() {
     wait_for_text "$1"
 }
 open_inbox_reminder() {
+    if ! select_node desc 'Close session search' >/dev/null 2>&1; then
+        tap_desc 'Search sessions'
+        fill 'Search all sessions' verify-session
+    fi
+    wait_for_text '1 result across all splits'
     tap_node desc 'Robot verify-session' reveal
     hold_text verify-session
     tap_text 'Remind Me…'

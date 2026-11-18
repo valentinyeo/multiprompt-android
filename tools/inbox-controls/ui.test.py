@@ -123,6 +123,28 @@ tap_text() { [[ "$screen" == Settings ]]; }
             result = subprocess.run(['bash', '-ec', shell], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_reminder_search_reveals_the_title_before_long_pressing(self):
+        import subprocess
+        import xml.etree.ElementTree as ET
+        fixture = Path(__file__).parent / 'fixtures/7b7f76f1-clipped-session.xml'
+        nodes = list(ET.parse(fixture).getroot().iter('node'))
+        self.assertTrue(any(n.get('content-desc') == 'Robot verify-session' for n in nodes))
+        self.assertFalse(any(n.get('text') == 'verify-session' for n in nodes))
+        source = (Path(__file__).resolve().parents[2] / '.claude/skills/verify-multiprompt-android/scripts/inbox-controls-drive.sh').read_text()
+        helper = 'open_inbox_reminder() {' + source.split('open_inbox_reminder() {', 1)[1].split('\n}', 1)[0] + '\n}'
+        shell = '''search_open=false
+searched=false
+select_node() { [[ "$search_open" == true && "$2" == 'Close session search' ]]; }
+tap_desc() { [[ "$1" == 'Search sessions' ]]; search_open=true; }
+fill() { [[ "$1" == 'Search all sessions' && "$2" == verify-session ]]; searched=true; }
+wait_for_text() { [[ "$1" == 'Remind me' || "$searched" == true && "$1" == '1 result across all splits' ]]; }
+tap_node() { :; }
+hold_text() { [[ "$searched" == true && "$1" == verify-session ]]; }
+tap_text() { [[ "$1" == 'Remind Me…' ]]; }
+''' + helper + '\nopen_inbox_reminder\nopen_inbox_reminder\n'
+        result = subprocess.run(['bash', '-ec', shell], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_relative_deadlines_reject_wrong_duration_and_session(self):
         for duration in [1800, 3600, 7200, 10800, 14400, 18000]:
             self.saved(100000 + duration)
