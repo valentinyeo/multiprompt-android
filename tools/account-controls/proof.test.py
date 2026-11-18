@@ -2,6 +2,7 @@ import base64
 import hashlib
 import importlib.util
 import json
+import re
 from pathlib import Path
 import sys
 import tempfile
@@ -55,6 +56,20 @@ class AccountControlsTest(unittest.TestCase):
         disabled = ET.fromstring(xml.replace('text="Archive" clickable="true" bounds="[400,200]', 'text="Archive" enabled="false" clickable="true" bounds="[400,200]'))
         with self.assertRaises(action.Unreachable):
             action.plan(disabled, 'text', 'Archive', row_label='Studio')
+
+    def test_hosted_flattened_workspace_rows_reveal_the_complete_correct_button(self):
+        root = ET.parse(HERE / 'fixtures/16a7d111-arrange-clipped.xml').getroot()
+        for label in ['Archive', '↑', '↓']:
+            self.assertTrue(action.plan(root, 'text', label, row_label='Workshop').startswith('swipe '))
+        scrolls = [n for n in root.iter('node') if n.get('scrollable') == 'true']
+        self.assertEqual(len(scrolls), 1)
+        for node in scrolls[0].iter('node'):
+            if node is scrolls[0]:
+                continue
+            x1, y1, x2, y2 = map(int, re.findall(r'-?\d+', node.get('bounds')))
+            node.set('bounds', f'[{x1},{y1 - 100}][{x2},{y2 - 100}]')
+        for label, expected in [('Archive', 'tap 662 647'), ('↑', 'tap 817 646'), ('↓', 'tap 964 646')]:
+            self.assertEqual(action.plan(root, 'text', label, row_label='Workshop'), expected)
 
     def test_missing_row_scrolls_the_active_menu_before_selecting_a_repeated_action(self):
         root = ET.fromstring('<hierarchy><node bounds="[0,0][1080,1920]"><node scrollable="true" bounds="[0,200][1080,1200]"><node text="Studio" bounds="[0,200][300,280]"/><node text="Archive" clickable="true" bounds="[400,200][600,280]"/></node></node></hierarchy>')

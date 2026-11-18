@@ -103,12 +103,11 @@ def plan(root, mode, value, direction="forward", search_axis=None, row_label=Non
             raise Unreachable("ambiguous row label in active window")
         search_nodes = []
         if anchors:
-            row = next((n for n in chain(anchors[0]) if any(
-                child.get("text" if mode == "text" else "content-desc") == value
-                for child in n.iter("node"))), None)
-            if row is None or row is window or row.get("scrollable") == "true":
-                raise Unreachable("action is not in the labelled row")
-            search_nodes = list(row.iter("node"))
+            anchor = anchors[0]
+            rect = bounds(anchor)
+            center_y = (rect[1] + rect[3]) // 2
+            scope = next((n for n in chain(anchor) if n.get("scrollable") == "true"), window)
+            search_nodes = [n for n in scope.iter("node") if bounds(n)[1] <= center_y < bounds(n)[3]]
 
     matches = []
     for node in search_nodes:
