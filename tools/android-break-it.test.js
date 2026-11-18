@@ -162,7 +162,7 @@ test('fresh character input does not crowd the named journey actions out of veri
 
 test('a fresh replay restores the same APK and its install-time permissions after clearing data', () => {
   const source = fs.readFileSync(path.join(__dirname, 'android-break-it/run.sh'), 'utf8');
-  assert.match(source, /adb shell pm clear dev\.multiprompt\.companion\.debug \| grep -Fx Success\nadb install -r -g "\$VERIFY_APK"\n"\$scripts\/fixture\.sh"/);
+  assert.match(source, /adb shell pm clear "\$package" \| grep -Fx Success\nadb install -r -g "\$VERIFY_APK"\n"\$scripts\/fixture\.sh"/);
 });
 
 test('settings-controls stress replay records the five checkpoints on the reader-version chat path', t => {

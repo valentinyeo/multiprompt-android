@@ -2,7 +2,20 @@ name: Verify real Android UI
 
 on:
   workflow_call:
+    secrets:
+      ANDROID_KEYSTORE_BASE64:
+        required: false
+      ANDROID_KEYSTORE_PASSWORD:
+        required: false
+      ANDROID_KEY_ALIAS:
+        required: false
+      ANDROID_KEY_PASSWORD:
+        required: false
     inputs:
+      driver_feature:
+        description: Driver recipe when the registered journey uses another recipe with dedicated inputs
+        type: string
+        required: false
       released_chat:
         required: false
         type: boolean
@@ -183,7 +196,8 @@ jobs:
     timeout-minutes: ${{ inputs.feature == 'reader-controls.md' && 50 || inputs.side == 'parent' && 50 || inputs.break_it && 55 || 35 }}
     env:
       EVIDENCE: ${{ github.workspace }}/verification-evidence
-      VERIFY_FEATURE: ${{ inputs.feature || 'native-skills.md' }}
+      VERIFY_FEATURE: ${{ inputs.driver_feature || inputs.feature || 'native-skills.md' }}
+      VERIFY_JOURNEY: ${{ inputs.feature || 'native-skills.md' }}
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
       UPDATE_BASELINE_RUN: ${{ inputs.update_baseline_run }}
       APP_REF: ${{ inputs.app_ref }}
@@ -222,7 +236,8 @@ jobs:
           RELEASED_ROBOTS: ${{ inputs.released_robots }}
         run: |
           if [[ "$BREAK_IT" == true ]]; then
-            [[ "$SIDE" != parent && "$RELEASED_CHAT" != true && "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true ]]
+            [[ "$SIDE" != parent ]]
+            [[ "$RELEASED_CHAT" != true && "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true || "$CANDIDATE" == true ]]
           fi
           if [[ "$BREAK_IT_CONTROL" != none && -n "$BREAK_IT_CONTROL" ]]; then
             [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$BREAK_IT" == true && "$BREAK_IT_CONTROL" == rotation-loss && "$VERIFY_FEATURE" == ai-switch.md && "$APP_REF" == 75c43b90864ef8479ba1dda52a1f04d4d0e3d968 ]]
@@ -231,7 +246,7 @@ jobs:
             [[ "$APP_REF" =~ ^[0-9a-f]{40}$ ]]
           fi
           if [[ "$PIN_SCROLL_PROOF" == true ]]; then
-            [[ "$VERIFY_FEATURE" == session-favorites.md && "$RELEASED_CHAT" == true && -z "$APP_REF" && -z "$UPDATE_BASELINE_RUN" ]]
+            [[ "$VERIFY_FEATURE" == session-favorites.md && "$RELEASED_CHAT" == true && ( -z "$APP_REF" || "$CANDIDATE" == true ) && -z "$UPDATE_BASELINE_RUN" ]]
             [[ "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true ]]
             [[ "$EXPECT_SHARED_MISSING" != true && "$EXPECT_SHELL_MISSING" != true && "$EXPECT_NATIVE_MISSING" != true && "$EXPECT_SETTINGS_MISSING" != true ]]
           fi
@@ -245,7 +260,7 @@ jobs:
             if [[ "$CANDIDATE" == true ]]; then [[ "$RELEASED_CHAT" == true ]]; fi
           fi
           if [[ "$VERIFY_FEATURE" == session-favorites.md || ( "$VERIFY_FEATURE" == session-routing.md && ( "$RELEASED_CHAT" == true || "$RELEASE_CHANNEL" == android-m3-latest ) ) ]]; then
-            [[ "$RELEASED_CHAT" == true && -z "$APP_REF" && -z "$UPDATE_BASELINE_RUN" ]]
+            [[ "$RELEASED_CHAT" == true && ( -z "$APP_REF" || "$CANDIDATE" == true ) && -z "$UPDATE_BASELINE_RUN" ]]
             [[ "$RELEASE_CHOICES" != true && "$RELEASE_ICON" != true && "$RELEASED_REACTIONS" != true && "$RELEASED_TERMINAL" != true && "$RELEASED_ROBOTS" != true ]]
           fi
           case "$RELEASE_CHANNEL" in
@@ -653,7 +668,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           overwrite: true
-          name: verify-${{ env.VERIFY_FEATURE }}-${{ github.run_id }}${{ inputs.side == 'parent' && '-parent' || '' }}${{ inputs.side && inputs.side != 'head' && inputs.side != 'parent' && format('-{0}', inputs.side) || '' }}
+          name: verify-${{ env.VERIFY_JOURNEY }}-${{ github.run_id }}${{ inputs.side == 'parent' && '-parent' || '' }}${{ inputs.side && inputs.side != 'head' && inputs.side != 'parent' && format('-{0}', inputs.side) || '' }}
           path: verification-evidence/
           if-no-files-found: error
           retention-days: 7

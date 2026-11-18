@@ -29,6 +29,7 @@ jobs:
     outputs:
       no_product_change: ${{ steps.pick.outputs.no_product_change }}
       features: ${{ steps.pick.outputs.features }}
+      runners: ${{ steps.pick.outputs.runners }}
       smoke: ${{ steps.pick.outputs.smoke }}
       reason: ${{ steps.pick.outputs.reason }}
       number: ${{ steps.pick.outputs.number }}
@@ -120,8 +121,19 @@ jobs:
     with:
       feature: ${{ matrix.feature }}
       side: head
+      driver_feature: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].feature }}
+      candidate: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].candidate }}
+      released_chat: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].released_chat }}
+      released_robots: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].released_robots }}
+      release_choices: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].release_choices }}
+      pins_scroll: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].pins_scroll }}
       break_it: ${{ needs.pick.outputs.break_it == 'true' }}
       app_ref: ${{ needs.pick.outputs.head_sha }}
+    secrets:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
   parents:
     name: parent journey ${{ matrix.feature }}
@@ -138,7 +150,18 @@ jobs:
     with:
       feature: ${{ matrix.feature }}
       side: parent
+      driver_feature: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].feature }}
+      candidate: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].candidate }}
+      released_chat: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].released_chat }}
+      released_robots: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].released_robots }}
+      release_choices: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].release_choices }}
+      pins_scroll: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].pins_scroll }}
       app_ref: ${{ needs.pick.outputs.merge_base }}
+    secrets:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
   pstack-verifier:
     name: pstack-verifier
