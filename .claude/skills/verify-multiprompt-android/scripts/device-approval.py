@@ -12,13 +12,17 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 
 class ApprovalFixture:
-    def __init__(self, fixture, home):
+    def __init__(self, fixture, home, screencast=False):
         self.home = home
+        self.screencast = screencast
+        self.upload_key = secrets.token_urlsafe(32)
         self.codes = {}
         self.access = secrets.token_urlsafe(32)
         self.refresh = secrets.token_urlsafe(32)
         self.keys = [dict(device_id="fixture-approve", name="Fixture laptop", public_key=" ".join((fixture / "pending-device.pub").read_text().split()[:2]), status="pending"),
                      dict(device_id="fixture-deny", name="Stale laptop", public_key=" ".join((fixture / "denied-device.pub").read_text().split()[:2]), status="waiting")]
+        if screencast:
+            self.keys = []
         self.phone = None
         self.layout = dict(schema=1, revision=0, workspaces=[], tabs=[])
 
@@ -39,6 +43,9 @@ class ApprovalFixture:
             return 200, dict(access_token=self.access, refresh_token=self.refresh, token_type="Bearer", expires_in=3600, account_id="fixture-account", device_id="fixture-phone")
         if authorization != "Bearer " + self.access:
             return 401, dict(error="unauthorized")
+        if path == "/v1/secrets/screencast2" and method == "GET" and self.screencast:
+            self.receipt(action="screencast_key_fetch", authenticated=True, status=200)
+            return 200, dict(key=self.upload_key)
         if path == "/v1/layout":
             if method == "PUT":
                 if body.get("base_revision") != self.layout["revision"]:
@@ -73,8 +80,8 @@ class ApprovalFixture:
         return 404, dict(error="not_found")
 
 
-def serve(fixture, home, port):
-    state = ApprovalFixture(fixture, home)
+def serve(fixture, home, port, screencast=False):
+    state = ApprovalFixture(fixture, home, screencast=screencast)
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):
@@ -128,4 +135,4 @@ def serve(fixture, home, port):
 
 
 if __name__ == "__main__":
-    serve(Path(sys.argv[1]), Path(sys.argv[2]), int(sys.argv[3]))
+    serve(Path(sys.argv[1]), Path(sys.argv[2]), int(sys.argv[3]), screencast=sys.argv[4:] == ["screencast-account.md"])
