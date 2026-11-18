@@ -178,6 +178,10 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
+      - name: Require successful verification preparation
+        env:
+          PICK_RESULT: ${{ needs.pick.result }}
+        run: test "$PICK_RESULT" = success
       - name: Publish the reused verdict at this head
         if: needs.pick.result == 'success' && needs.pick.outputs.reused == 'true'
         env:

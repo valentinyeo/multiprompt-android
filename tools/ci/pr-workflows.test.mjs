@@ -106,6 +106,7 @@ test('verdict reuse skips picking and driving only on a validated hit, retaining
   }
   const gate = workflow.split('\n  pstack-verifier:\n')[1];
   assert.match(gate, /name: pstack-verifier\n    needs: \[pick, journeys, parents\]\n    if: \$\{\{ always\(\) \}\}/);
+  assert.match(gate, /name: Require successful verification preparation\n        env:\n          PICK_RESULT: \$\{\{ needs.pick.result \}\}\n        run: test "\$PICK_RESULT" = success/);
   assert.match(gate, /if: needs.pick.result == 'success' && needs.pick.outputs.reused == 'true'/);
   assert.match(gate, /HEAD_SHA: \$\{\{ needs.pick.outputs.reuse_head \}\}/);
   assert.match(gate, /run: node \.github\/scripts\/pstack-verifier\/reuse.cjs publish/);
