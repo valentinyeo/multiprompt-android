@@ -4512,13 +4512,13 @@
       "id": "attach-menu.add-image",
       "screen": "Attach menu",
       "label": "Add image",
-      "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:fa52034d9e80af63:1",
+      "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:2ac9caa1d5f07abb:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4492",
-      "journey": "native-skills.md",
+      "journey": "screencast-account.md",
       "proof": {
-        "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
-        "action": "Tap Add image",
-        "result": "Upload-key sheet and real Android picker appear"
+        "recipe": ".claude/skills/verify-multiprompt-android/features/screencast-account.md",
+        "action": "Sign in, tap Add image and select the fixture photo without entering a key",
+        "result": "Android picker selects one photo; authenticated account key fetch is independently recorded"
       }
     },
     {
@@ -4526,7 +4526,7 @@
       "screen": "Attach menu",
       "label": "Add file",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:5b5e8865829b34a7:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4501",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4508",
       "journey": "reader-controls.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
@@ -4539,7 +4539,7 @@
       "screen": "Attach menu",
       "label": "Skill",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:1c6af4ce8bbb08cd:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4510",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4517",
       "journey": "native-skills.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
@@ -4552,7 +4552,7 @@
       "screen": "Attach menu",
       "label": "Snippets",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:8d6805ccafafdcd4:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4520",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4527",
       "journey": "snippets.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/snippets.md",
@@ -4565,7 +4565,7 @@
       "screen": "Attach menu",
       "label": "Pi models",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:ac4f8835a966e28f:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4530",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4537",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4574,7 +4574,7 @@
       "screen": "Attach menu",
       "label": "Model",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:e80e62db84985427:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4542",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4549",
       "journey": "native-skills.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
@@ -4587,7 +4587,7 @@
       "screen": "Attach menu",
       "label": "Effort",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:e80e62db84985427:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4542",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4549",
       "journey": "native-skills.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
@@ -4600,7 +4600,7 @@
       "screen": "Attach menu",
       "label": "Permission level",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:e80e62db84985427:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4542",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4549",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4609,7 +4609,7 @@
       "screen": "Composer",
       "label": "Message",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:BasicTextField:52feb11447598c8f:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4566",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4573",
       "journey": "snippets.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/snippets.md",
@@ -4622,7 +4622,7 @@
       "screen": "Composer",
       "label": "Keyboard Send",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KeyboardActions:b4dc4685a43d7445:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4586",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4593",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4631,7 +4631,7 @@
       "screen": "Composer",
       "label": "Start / stop dictation",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitRoundButton:1c23f721b1626c65:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4618",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4625",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4640,7 +4640,7 @@
       "screen": "Composer",
       "label": "Send prompt",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:clickable:f1da549d27420029:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4629",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4636",
       "journey": "session-reader.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/session-reader.md",
@@ -4653,7 +4653,7 @@
       "screen": "Composer",
       "label": "Stop session",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:clickable:f1da549d27420029:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4629",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4636",
       "journey": "session-stop.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/session-stop.md",
@@ -4666,7 +4666,7 @@
       "screen": "Reader transcript",
       "label": "Pinch native chat font size",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:transformable:944b7d5be12ee8f2:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4758",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4765",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4675,7 +4675,7 @@
       "screen": "Reader transcript",
       "label": "Double-tap native chat to open terminal",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:pointerInput:2fca9c729753a22f:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4759",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4766",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4684,7 +4684,7 @@
       "screen": "Reader transcript",
       "label": "Scroll Reader transcript",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:readerScroll:2cda670bf12c93c7:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4767",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4774",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4693,7 +4693,7 @@
       "screen": "Reader transcript",
       "label": "Double-tap transcript to open terminal",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:pointerInput:2fca9c729753a22f:2",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4768",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4775",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4702,7 +4702,7 @@
       "screen": "Reader transcript",
       "label": "Load older messages",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:cfa95e7046a21d64:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4776",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4783",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4711,7 +4711,7 @@
       "screen": "Reader transcript",
       "label": "Pinch transcript font size",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:transformable:944b7d5be12ee8f2:2",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4848",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4855",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4720,7 +4720,7 @@
       "screen": "Reader transcript",
       "label": "Choose terminal model option",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:66638f70a6990c1b:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4920",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4927",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4729,7 +4729,7 @@
       "screen": "Reader output block",
       "label": "Expand / collapse output block",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReaderCollapsibleBlock:KitListRow:ae3c57bd1e455aed:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5117",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5124",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4738,7 +4738,7 @@
       "screen": "Reader output block",
       "label": "Select output text",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReaderCollapsibleBlock:SelectionContainer:e6f518b71d62adec:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5129",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5136",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4747,7 +4747,7 @@
       "screen": "Update",
       "label": "Scroll Update",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:UpdateScreen:verticalScroll:74f9c94015fb4c77:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5253",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5260",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4756,7 +4756,7 @@
       "screen": "Update",
       "label": "Try update again",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:UpdateScreen:KitPrimaryButton:7f9e918913026de0:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5278",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5285",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4765,7 +4765,7 @@
       "screen": "Update",
       "label": "Check now",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:UpdateScreen:KitSecondaryButton:ced3ec6feb3d2124:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5281",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5288",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4774,7 +4774,7 @@
       "screen": "Release notes",
       "label": "Open ticket release note",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:NoteLine:Url:e20d92a55122c1b2:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5360",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5367",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4783,7 +4783,7 @@
       "screen": "Available update",
       "label": "Download and update",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:UpdateAvailableCard:KitPrimaryButton:eefff3b10e671d79:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5389",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5396",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4792,7 +4792,7 @@
       "screen": "Terminal header",
       "label": "Double-tap terminal header to return to chat",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalTopBar:pointerInput:0dd7ada8b8bd9f40:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5415",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5422",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4801,7 +4801,7 @@
       "screen": "Terminal header",
       "label": "Version, open release notes",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalTopBar:VersionLabel:b8219537fc9e7952:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5433",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5440",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4810,7 +4810,7 @@
       "screen": "Terminal header",
       "label": "Open shell history",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalTopBar:KitRoundButton:ac53d04d7f2a6390:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5434",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5441",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4819,7 +4819,7 @@
       "screen": "Terminal header",
       "label": "Back to the live view",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalTopBar:KitRoundButton:19844df3f6fbf085:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5435",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5442",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4828,7 +4828,7 @@
       "screen": "Terminal header",
       "label": "Start / stop dictation",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalTopBar:KitRoundButton:a9cd984730587b74:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5436",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5443",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4837,7 +4837,7 @@
       "screen": "Terminal header",
       "label": "Show keyboard",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalTopBar:KitRoundButton:cbe163be81bdc532:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5437",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5444",
       "journey": "terminal.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/terminal.md",
@@ -4850,7 +4850,7 @@
       "screen": "Terminal",
       "label": "System Back",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalScreen:BackHandler:337c5f2d3002d230:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5507",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5514",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4859,7 +4859,7 @@
       "screen": "Terminal",
       "label": "Scroll horizontally",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalScreen:horizontalScroll:fbe95d1a7d2130bd:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5525",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5532",
       "journey": "terminal.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/terminal.md",
@@ -4872,7 +4872,7 @@
       "screen": "Terminal",
       "label": "Ctrl key",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalScreen:KitSegmented:0e17d7999b019ea6:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5535",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5542",
       "journey": "terminal.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/terminal.md",
@@ -4885,7 +4885,7 @@
       "screen": "Terminal",
       "label": "Alt key",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalScreen:KitSegmented:0e17d7999b019ea6:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5535",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5542",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4894,7 +4894,7 @@
       "screen": "Terminal",
       "label": "Esc key",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalScreen:KitSecondaryButton:dc8d9cc3772bbbc2:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5549",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5556",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4903,7 +4903,7 @@
       "screen": "Terminal",
       "label": "Tab key",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalScreen:KitSecondaryButton:dc8d9cc3772bbbc2:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5549",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5556",
       "journey": "terminal.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/terminal.md",
@@ -4916,7 +4916,7 @@
       "screen": "Terminal",
       "label": "Up key",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalScreen:KitSecondaryButton:dc8d9cc3772bbbc2:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5549",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5556",
       "journey": "terminal.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/terminal.md",
@@ -4929,7 +4929,7 @@
       "screen": "Terminal",
       "label": "Down key",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalScreen:KitSecondaryButton:dc8d9cc3772bbbc2:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5549",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5556",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4938,7 +4938,7 @@
       "screen": "Terminal",
       "label": "Left key",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalScreen:KitSecondaryButton:dc8d9cc3772bbbc2:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5549",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5556",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4947,7 +4947,7 @@
       "screen": "Terminal",
       "label": "Right key",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalScreen:KitSecondaryButton:dc8d9cc3772bbbc2:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5549",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5556",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4956,7 +4956,7 @@
       "screen": "Terminal",
       "label": "Double-tap terminal to return to chat",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalScreen:pointerInput:084ac0a475f6fb9a:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5570",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5577",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -4965,7 +4965,7 @@
       "screen": "Terminal",
       "label": "Tap terminal to show keyboard",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalScreen:Terminal:3b3a7736e65f005f:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5596",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5603",
       "journey": "terminal.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/terminal.md",
@@ -4978,7 +4978,7 @@
       "screen": "Terminal",
       "label": "Type in terminal",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalScreen:Terminal:3b3a7736e65f005f:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5596",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5603",
       "journey": "terminal.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/terminal.md",
@@ -4991,7 +4991,7 @@
       "screen": "Terminal",
       "label": "Paste in terminal",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalScreen:Terminal:3b3a7736e65f005f:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5596",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5603",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -5000,7 +5000,7 @@
       "screen": "Empty Inbox",
       "label": "Host mapping",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:EmptyState:KitPrimaryButton:0779d169f17b2794:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5647",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5654",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -5009,7 +5009,7 @@
       "screen": "Error notice",
       "label": "Dismiss error",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:DismissibleError:KitRoundButton:ebf026bc24631446:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5676",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5683",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -5018,7 +5018,7 @@
       "screen": "Cached sessions",
       "label": "Retry connection",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:CachedSessionsNotice:KitRoundButton:423097d249e49166:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5706",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5713",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -5027,7 +5027,7 @@
       "screen": "Reader transcript",
       "label": "Open terminal transcript link",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:terminalLinks:Url:00f13f729137a8ac:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5815",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5822",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -5036,7 +5036,7 @@
       "screen": "Skill picker",
       "label": "Retry empty skill list",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:NativeSkillPicker:ComposerListNote:2bf5746c947cc690:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5887",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5894",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -5045,14 +5045,14 @@
       "screen": "Skill picker",
       "label": "Retry skill list with results",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:NativeSkillPicker:ComposerListNote:2bf5746c947cc690:2",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5891",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5898",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
     {
       "screen": "Skill picker",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:NativeSkillPicker:clickable:f5d780fe65d7af78:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5894",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5901",
       "id": "skill-picker.clear-command",
       "label": "/clear",
       "journey": "clear-ranking.md",
@@ -5067,7 +5067,7 @@
       "screen": "Skill picker",
       "label": "Insert slash command or skill",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:NativeSkillPicker:clickable:f5d780fe65d7af78:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5894",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5901",
       "journey": "native-skills.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
@@ -5080,7 +5080,7 @@
       "screen": "Chat mentions",
       "label": "Insert chat mention",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ChatMentionPicker:clickable:f90559a5be3e36e2:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5914",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5921",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -5089,7 +5089,7 @@
       "screen": "Composer suggestions",
       "label": "Scroll Composer suggestions",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ComposerList:verticalScroll:74f9c94015fb4c77:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5930",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5937",
       "journey": "skill-pills.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/skill-pills.md",
@@ -5608,7 +5608,7 @@
       "screen": "Reader transcript",
       "label": "Overscroll to load older messages",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:nestedScroll:c7dc0c62b1f9c874:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4766",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4773",
       "journey": null,
       "missing": "No automated journey exercises this overscroll action and checks the result."
     },
@@ -6505,7 +6505,7 @@
     {
       "id": "forward.MultipromptApp.TerminalScreen.onClick.27",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:TerminalScreen:onClick:9171fdb37a439979:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5544",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5551",
       "reason": "Shared implementation delegates the same interaction to the named component call sites; not a second user control.",
       "callers": [
         "terminal.ctrl-key",
@@ -6516,7 +6516,7 @@
     {
       "id": "forward.MultipromptApp.top-level.pointerInput.28",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:pointerInput:d9f14ef08f6b511d:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5722",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5729",
       "reason": "Shared implementation delegates the same interaction to the named component call sites; not a second user control.",
       "callers": [
         "inbox.swipe-to-adjacent-workspace"
@@ -6526,7 +6526,7 @@
     {
       "id": "forward.MultipromptApp.ComposerListNote.clickable.29",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ComposerListNote:clickable:05f1cc3e776882d0:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5942",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5949",
       "reason": "Shared implementation delegates the same interaction to the named component call sites; not a second user control.",
       "callers": [
         "skill-picker.retry-empty-skill-list",
@@ -6711,7 +6711,7 @@
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt",
       "label": "Audited screen composition, labels and finite choice domains",
-      "sha256": "24dbecd19df15cac605b2cb8d775d316c3d8b1ff06916b4134db0d7c8a043efd"
+      "sha256": "c0ae0e151a4c99806fcda92a9eafba01b3d2a3e9ed1da6e6e05ba292f9e61136"
     },
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/NewBelow.kt",
@@ -7227,85 +7227,85 @@
     {
       "id": "composer",
       "screen": "Composer",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4566",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4573",
       "entry": "See controls with this screen name; shared screens list their entry contexts."
     },
     {
       "id": "reader-transcript",
       "screen": "Reader transcript",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4758",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4765",
       "entry": "See controls with this screen name; shared screens list their entry contexts."
     },
     {
       "id": "reader-output-block",
       "screen": "Reader output block",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5117",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5124",
       "entry": "See controls with this screen name; shared screens list their entry contexts."
     },
     {
       "id": "update",
       "screen": "Update",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5253",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5260",
       "entry": "See controls with this screen name; shared screens list their entry contexts."
     },
     {
       "id": "release-notes",
       "screen": "Release notes",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5360",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5367",
       "entry": "See controls with this screen name; shared screens list their entry contexts."
     },
     {
       "id": "available-update",
       "screen": "Available update",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5389",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5396",
       "entry": "See controls with this screen name; shared screens list their entry contexts."
     },
     {
       "id": "terminal-header",
       "screen": "Terminal header",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5415",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5422",
       "entry": "See controls with this screen name; shared screens list their entry contexts."
     },
     {
       "id": "terminal",
       "screen": "Terminal",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5507",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5514",
       "entry": "See controls with this screen name; shared screens list their entry contexts."
     },
     {
       "id": "empty-inbox",
       "screen": "Empty Inbox",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5647",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5654",
       "entry": "See controls with this screen name; shared screens list their entry contexts."
     },
     {
       "id": "error-notice",
       "screen": "Error notice",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5676",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5683",
       "entry": "See controls with this screen name; shared screens list their entry contexts."
     },
     {
       "id": "cached-sessions",
       "screen": "Cached sessions",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5706",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5713",
       "entry": "See controls with this screen name; shared screens list their entry contexts."
     },
     {
       "id": "skill-picker",
       "screen": "Skill picker",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5887",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5894",
       "entry": "See controls with this screen name; shared screens list their entry contexts."
     },
     {
       "id": "chat-mentions",
       "screen": "Chat mentions",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5914",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5921",
       "entry": "See controls with this screen name; shared screens list their entry contexts."
     },
     {
       "id": "composer-suggestions",
       "screen": "Composer suggestions",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5930",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5937",
       "entry": "See controls with this screen name; shared screens list their entry contexts."
     },
     {

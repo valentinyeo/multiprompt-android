@@ -3652,7 +3652,7 @@ internal fun ReaderScreen(
     if (imageKeyDialogVisible) {
         KitSheet(onDismiss = { imageKeyDialogVisible = false }) {
             Text("Screencast2 uploads", style = Kit.Heading, color = Kit.Text)
-            Text("The upload key is encrypted with Android Keystore and stays on this device.", style = Kit.Body, color = Kit.TextMuted)
+            Text("Your account upload key is used when available. A key entered here is encrypted on this device as a fallback.", style = Kit.Body, color = Kit.TextMuted)
             OutlinedTextField(
                 value = imageKeyDraft,
                 onValueChange = {
@@ -4494,8 +4494,15 @@ internal fun ReaderScreen(
                                         icon = Icons.Outlined.OutlinedImage,
                                         onClick = {
                                             attachMenuExpanded = false
-                                            if (screencast.configured) imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                                            else imageKeyDialogVisible = true
+                                            readerScope.launch {
+                                                imageUploading = true
+                                                try {
+                                                    if (screencast.prepare()) imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                                    else imageKeyDialogVisible = true
+                                                } finally {
+                                                    imageUploading = false
+                                                }
+                                            }
                                         },
                                     )
                                     KitMenuRow(
