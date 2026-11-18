@@ -134,7 +134,7 @@
       "id": "inbox-menu.version-open-release-notes",
       "screen": "Inbox menu",
       "label": "Version, open release notes",
-      "site": "app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt:InboxOverflowMenu:KitMenuRow:d0a5527144495444:1",
+      "site": "app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt:InboxOverflowMenu:KitMenuRow:7c49e4c4813b2c9f:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt:101",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
@@ -773,7 +773,7 @@
       "journey": "reader-controls.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
-        "action": "Tap Computer actions → Hide computer",
+        "action": "Tap Computer actions \u2192 Hide computer",
         "result": "reader-menu-computer-hide.json shows the reader without Computer actions"
       }
     },
@@ -2131,7 +2131,7 @@
     {
       "id": "select-bots.move-to",
       "screen": "Select bots",
-      "label": "Move to…",
+      "label": "Move to\u2026",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitPrimaryButton:e8d1dbd1d4d7ce32:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1662",
       "journey": null,
@@ -2895,7 +2895,7 @@
     {
       "id": "inbox-session-actions.remind-me",
       "screen": "Inbox session actions",
-      "label": "Remind Me…",
+      "label": "Remind Me\u2026",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:SessionCard:KitMenuRow:9ef47acdfd388b08:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2690",
       "journey": null,
@@ -3449,13 +3449,13 @@
     {
       "id": "session-actions.back",
       "screen": "Session actions",
-      "label": "‹ Back",
+      "label": "\u2039 Back",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:04daaf2cf4a09c36:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3857",
       "journey": "native-skills.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
-        "action": "Tap ‹ Back from the reader model menu",
+        "action": "Tap \u2039 Back from the reader model menu",
         "result": "Search in chat row returns in native-menu-reader-back XML/PNG"
       }
     },
@@ -3490,7 +3490,7 @@
       "journey": "native-skills.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
-        "action": "Tap Session actions then Change ›",
+        "action": "Tap Session actions then Change \u203a",
         "result": "Disabled Current: Fable row in native-menu-reader-current XML/PNG"
       }
     },
@@ -3624,7 +3624,7 @@
     {
       "id": "session-actions.remind-me",
       "screen": "Session actions",
-      "label": "Remind Me…",
+      "label": "Remind Me\u2026",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:89bc78dfa896860f:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4038",
       "journey": null,
@@ -3648,7 +3648,7 @@
       "journey": "reader-controls.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
-        "action": "Tap Pin a page…",
+        "action": "Tap Pin a page\u2026",
         "result": "reader-menu-pin-draft.json shows Pin a page and its address field"
       }
     },
@@ -3722,7 +3722,7 @@
       "journey": "reader-controls.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
-        "action": "Tap Session actions → More",
+        "action": "Tap Session actions \u2192 More",
         "result": "reader-menu-more.json shows the More rows"
       }
     },
@@ -4093,7 +4093,7 @@
       "journey": "reader-controls.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
-        "action": "Tap Snippets back row after opening Attach → Snippets",
+        "action": "Tap Snippets back row after opening Attach \u2192 Snippets",
         "result": "reader-menu-snippets-back.json shows Add image and Add file again"
       }
     },
@@ -4194,8 +4194,8 @@
       "journey": "native-skills.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
-        "action": "Tap Attach → Model → Opus",
-        "result": "Opus 5.5 · high visible host reply and Opus › selection in native-menu-attach-opus XML/PNG; independent /model opus receipt"
+        "action": "Tap Attach \u2192 Model \u2192 Opus",
+        "result": "Opus 5.5 \u00b7 high visible host reply and Opus \u203a selection in native-menu-attach-opus XML/PNG; independent /model opus receipt"
       }
     },
     {
@@ -4220,8 +4220,8 @@
       "journey": "native-skills.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
-        "action": "Tap Attach → Model → Haiku",
-        "result": "Haiku 5.5 · high visible host reply and Haiku › selection in native-menu-attach-haiku XML/PNG; independent /model haiku receipt"
+        "action": "Tap Attach \u2192 Model \u2192 Haiku",
+        "result": "Haiku 5.5 \u00b7 high visible host reply and Haiku \u203a selection in native-menu-attach-haiku XML/PNG; independent /model haiku receipt"
       }
     },
     {
@@ -4233,8 +4233,8 @@
       "journey": "native-skills.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
-        "action": "Tap Attach → Model → Fable",
-        "result": "Fable 5.5 · high visible host reply and Fable › selection in native-menu-attach-fable XML/PNG; independent /model fable receipt"
+        "action": "Tap Attach \u2192 Model \u2192 Fable",
+        "result": "Fable 5.5 \u00b7 high visible host reply and Fable \u203a selection in native-menu-attach-fable XML/PNG; independent /model fable receipt"
       }
     },
     {
@@ -4246,8 +4246,8 @@
       "journey": "native-skills.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
-        "action": "Tap Attach → Effort → Low",
-        "result": "Fable 5.5 · low visible host reply and Low › selection in native-menu-attach-low XML/PNG; independent /effort low receipt"
+        "action": "Tap Attach \u2192 Effort \u2192 Low",
+        "result": "Fable 5.5 \u00b7 low visible host reply and Low \u203a selection in native-menu-attach-low XML/PNG; independent /effort low receipt"
       }
     },
     {
@@ -4259,8 +4259,8 @@
       "journey": "native-skills.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
-        "action": "Tap Attach → Effort → Medium",
-        "result": "Fable 5.5 · medium visible host reply and Medium › selection in native-menu-attach-medium XML/PNG; independent /effort medium receipt"
+        "action": "Tap Attach \u2192 Effort \u2192 Medium",
+        "result": "Fable 5.5 \u00b7 medium visible host reply and Medium \u203a selection in native-menu-attach-medium XML/PNG; independent /effort medium receipt"
       }
     },
     {
@@ -4370,7 +4370,7 @@
       "journey": "reader-controls.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
-        "action": "Tap Attach → Add file",
+        "action": "Tap Attach \u2192 Add file",
         "result": "reader-menu-file-picker.json and its screenshot show Android Recent; Back restores the reader"
       }
     },
@@ -6404,12 +6404,13 @@
     {
       "id": "forward.VersionLabel.VersionLabel.clickable.32",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/VersionLabel.kt:VersionLabel:clickable:39ca928681ce822a:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/VersionLabel.kt:32",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/VersionLabel.kt:36",
       "reason": "Shared implementation delegates the same interaction to the named component call sites; not a second user control.",
       "callers": [
         "sign-in.version-open-release-notes",
         "update-navigation.version-open-release-notes",
         "session-list-settings.version-open-release-notes",
+        "chat-header.reader-version",
         "chat-header.version-open-release-notes",
         "terminal-header.version-open-release-notes"
       ],
@@ -6435,7 +6436,7 @@
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt",
       "label": "Audited screen composition, labels and finite choice domains",
-      "sha256": "9e6dfb8c8cd22d09b8a49318c265cfda534d7c55e4e7e06f5157860fd25b2948"
+      "sha256": "30d1dba8233d57c1300d2b4ce73bc30036a69ad8cc9bfa21160b3b9e4412da43"
     },
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/BotAvatar.kt",
@@ -6550,7 +6551,7 @@
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt",
       "label": "Audited screen composition, labels and finite choice domains",
-      "sha256": "1325b273fb8f82cb05af754474d4985f5da6175174ad94ba20c07a33b31ee23f"
+      "sha256": "24dbecd19df15cac605b2cb8d775d316c3d8b1ff06916b4134db0d7c8a043efd"
     },
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/NewBelow.kt",
@@ -6645,7 +6646,7 @@
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/VersionLabel.kt",
       "label": "Audited screen composition, labels and finite choice domains",
-      "sha256": "22f757770c03e76b4b9d3f8b2f5356542a600355fd5824525b14d4cc5b25a19c"
+      "sha256": "b616dbed2b5295b2c4f78584597728b18f02a76bb12e56d814c18c8690887d86"
     },
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/WorkingDots.kt",
