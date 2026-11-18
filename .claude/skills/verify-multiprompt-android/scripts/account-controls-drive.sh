@@ -68,7 +68,7 @@ tap_text 'Verify · verifyssh@10.0.2.2'
 tap_text Done
 tap_desc Back
 wait_for_text Inbox
-tap_text Workshop
+tap_node text Workshop tap '' horizontal
 tap_node desc 'Robot verify-session' reveal
 account_control_state account-workshop '{"text":["Inbox","ORIGINAL","OTHER"],"desc":["Robot verify-session","Robot pin-00"],"selected":["Workshop"]}'
 account_layout_receipt account-initial '{"tabs":{"verify-session":{"workspace":"Workshop","group":"Original"},"pin-00":{"workspace":"Workshop","group":"Other"}}}'
@@ -87,7 +87,7 @@ if [[ "$feature" == workspace-controls.md ]]; then
     fill Name Review
     tap_text Create
     wait_for_absence 'New workspace'
-    tap_node text Review reveal
+    tap_node text Review reveal '' horizontal
     account_control_state workspace-created '{"text":["Inbox","Review"],"absent":["New workspace"]}'
     account_layout_receipt workspace-created '{"contains":["Review"],"absent":["Discarded"]}'
     adb shell wm size 1080x1280
@@ -119,7 +119,7 @@ if [[ "$feature" == workspace-controls.md ]]; then
     account_layout_receipt workspace-automatic '{"order":["Workshop","Studio","North","South","East","West","Archiveable","Review"]}'
     tap_text Done
     account_control_state workspace-arrange-done '{"text":["Inbox"],"absent":["Arrange splits"]}'
-    tap_text Workshop
+    tap_node text Workshop tap '' horizontal
     account_open_move
     account_control_state workspace-move-open '{"text":["Move to","Workshop","Studio","Cancel"]}'
     tap_text Cancel
@@ -132,13 +132,13 @@ if [[ "$feature" == workspace-controls.md ]]; then
     tap_text Studio
     account_layout_receipt workspace-single-moved '{"tabs":{"verify-session":{"workspace":"Studio"},"pin-00":{"workspace":"Workshop"}}}'
     account_control_state workspace-single-left '{"text":["Inbox"],"absent_desc":["Robot verify-session"],"desc":["Robot pin-00"]}'
-    tap_text Studio
+    tap_node text Studio tap '' horizontal
     tap_node desc 'Robot verify-session' reveal
     account_control_state workspace-single-arrived '{"text":["Inbox"],"selected":["Studio"],"desc":["Robot verify-session"],"absent_desc":["Robot pin-00"]}'
     account_open_move
     tap_text Workshop
     account_layout_receipt workspace-single-returned '{"tabs":{"verify-session":{"workspace":"Workshop"}}}'
-    tap_text Workshop
+    tap_node text Workshop tap '' horizontal
     account_open_selection
     account_control_state workspace-selection-open '{"text":["1 selected","Move to…","Cancel"]}'
     tap_desc 'Robot pin-00'
@@ -161,11 +161,11 @@ if [[ "$feature" == workspace-controls.md ]]; then
     tap_text Studio
     account_layout_receipt workspace-bulk-moved '{"tabs":{"verify-session":{"workspace":"Studio"},"pin-00":{"workspace":"Studio"}}}'
     account_control_state workspace-bulk-left '{"text":["This split is clear"],"absent":["2 selected","Move to…"],"absent_desc":["Robot verify-session","Robot pin-00"]}'
-    tap_text Studio
+    tap_node text Studio tap '' horizontal
     tap_node desc 'Robot verify-session' reveal
     account_control_state workspace-bulk-arrived '{"text":["Inbox"],"selected":["Studio"],"desc":["Robot verify-session","Robot pin-00"]}'
     relaunch_app
-    tap_text Studio
+    tap_node text Studio tap '' horizontal
     tap_node desc 'Robot verify-session' reveal
     account_control_state workspace-retained '{"text":["Inbox"],"selected":["Studio"],"desc":["Robot verify-session","Robot pin-00"]}'
     printf 'WORKSPACE_CONTROLS_OK\n' | tee "$EVIDENCE/workspace-controls-proof.txt"
@@ -235,7 +235,7 @@ wait_for_absence 'Rename group'
 account_control_state group-ungrouped '{"text":["Inbox"],"desc":["Robot verify-session","Robot pin-00"],"absent":["OTHER","Rename group"]}'
 account_layout_receipt group-ungrouped '{"tabs":{"verify-session":{"group":""},"pin-00":{"group":""}},"no_group":["Original","Focus","Renamed","Keyboard","Other"]}'
 relaunch_app
-tap_text Workshop
+tap_node text Workshop tap '' horizontal
 tap_node desc 'Robot verify-session' reveal
 account_control_state group-retained '{"text":["Inbox"],"desc":["Robot verify-session","Robot pin-00"],"absent":["ORIGINAL","FOCUS","RENAMED","KEYBOARD","OTHER"]}'
 printf 'GROUP_CONTROLS_OK\n' | tee "$EVIDENCE/group-controls-proof.txt"

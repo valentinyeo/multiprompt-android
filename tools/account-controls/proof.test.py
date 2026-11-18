@@ -56,6 +56,18 @@ class AccountControlsTest(unittest.TestCase):
         with self.assertRaises(action.Unreachable):
             action.plan(disabled, 'text', 'Archive', row_label='Studio')
 
+    def test_missing_row_scrolls_the_active_menu_before_selecting_a_repeated_action(self):
+        root = ET.fromstring('<hierarchy><node bounds="[0,0][1080,1920]"><node scrollable="true" bounds="[0,200][1080,1200]"><node text="Studio" bounds="[0,200][300,280]"/><node text="Archive" clickable="true" bounds="[400,200][600,280]"/></node></node></hierarchy>')
+        self.assertEqual(action.plan(root, 'text', 'Archive', row_label='Workshop'), 'swipe 540 1000 540 400')
+
+    def test_missing_split_uses_horizontal_strip_even_when_the_inbox_also_scrolls(self):
+        root = ET.parse(HERE / 'fixtures/3676f1f3-workshop.xml').getroot()
+        for direction in ['forward', 'backward']:
+            plan = action.plan(root, 'text', 'Review', direction, 'horizontal').split()
+            self.assertEqual(plan[0], 'swipe')
+            self.assertEqual(plan[2], plan[4])
+            self.assertNotEqual(plan[1], plan[3])
+
     def test_row_scope_does_not_hide_an_overlapping_action(self):
         root = ET.fromstring('<hierarchy><node bounds="[0,0][1080,1920]"><node bounds="[0,100][1080,200]"><node text="Studio" bounds="[0,100][300,200]"/><node text="Archive" clickable="true" bounds="[400,100][600,200]"/></node><node clickable="true" bounds="[400,100][600,200]"/></node></hierarchy>')
         with self.assertRaisesRegex(action.Unreachable, 'overlap'):

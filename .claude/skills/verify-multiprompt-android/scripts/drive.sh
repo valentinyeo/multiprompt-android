@@ -152,7 +152,7 @@ tap_node() {
         fi
         direction=forward
         if (( attempt > 12 )); then direction=backward; fi
-        plan=$(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "reach-$1" "$2" "$direction" '' "${4:-}") || return
+        plan=$(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "reach-$1" "$2" "$direction" "${5:-}" "${4:-}") || return
         read -r action x1 y1 x2 y2 <<< "$plan"
         if [[ "$action" == tap && "${3:-tap}" == reveal ]]; then return; fi
         case "$action" in

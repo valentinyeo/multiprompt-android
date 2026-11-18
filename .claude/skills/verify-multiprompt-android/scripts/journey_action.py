@@ -99,14 +99,16 @@ def plan(root, mode, value, direction="forward", search_axis=None, row_label=Non
     search_nodes = nodes
     if row_label:
         anchors = [n for n in nodes if n.get("text") == row_label and enabled(n)]
-        if len(anchors) != 1:
-            raise Unreachable("missing or ambiguous row label in active window")
-        row = next((n for n in chain(anchors[0]) if any(
-            child.get("text" if mode == "text" else "content-desc") == value
-            for child in n.iter("node"))), None)
-        if row is None or row is window or row.get("scrollable") == "true":
-            raise Unreachable("action is not in the labelled row")
-        search_nodes = list(row.iter("node"))
+        if len(anchors) > 1:
+            raise Unreachable("ambiguous row label in active window")
+        search_nodes = []
+        if anchors:
+            row = next((n for n in chain(anchors[0]) if any(
+                child.get("text" if mode == "text" else "content-desc") == value
+                for child in n.iter("node"))), None)
+            if row is None or row is window or row.get("scrollable") == "true":
+                raise Unreachable("action is not in the labelled row")
+            search_nodes = list(row.iter("node"))
 
     matches = []
     for node in search_nodes:
