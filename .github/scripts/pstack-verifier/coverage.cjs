@@ -45,7 +45,7 @@ function changedOutcomes(diff) {
 
 function planChange(diff, reported) {
   if (!Array.isArray(reported) || reported.some(id => typeof id !== 'string' || !registry.outcomes[id])) {
-    throw new Error('FEATURE_UNMAPPED: report registered changed_outcomes; add a new outcome and its journey to features/registry.json.');
+    throw new Error(`FEATURE_UNMAPPED: unregistered changed_outcomes ${JSON.stringify(reported)}; report exact outcome IDs from features/registry.json, or register the missing outcome and its journey.`);
   }
   const outcomes = [...new Set([...changedOutcomes(diff), ...reported])];
   return { product: changedProduct(diff).length > 0, outcomes };
