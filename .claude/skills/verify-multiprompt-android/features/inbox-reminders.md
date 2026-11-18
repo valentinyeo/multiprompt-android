@@ -19,7 +19,7 @@ Taps use `tap_text` or `tap_desc`; row long presses resolve the robot descriptio
 ## Evidence and limits
 
 `inbox-reminders-proof.txt` is written only after every assertion passes.
-`inbox-refresh-host.txt` records independent host reads. `reminder-*-preferences.xml` and `reminder-*-time.json` record local persisted deadlines, not host receipts.
+`inbox-refresh-host.txt` contains post-Refresh command excerpts from the independent host log. Full before/after logs remain alongside it. The short viewport uses the already-focused search editor, verifies it is cleared before typing, and reads back the exact query before hiding the keyboard. `reminder-*-preferences.xml` and `reminder-*-time.json` record local persisted deadlines, not host receipts.
 The registry requires this journey for reminder and bucket changes and for edits to this recipe.
 Inspect the PNGs, XML, JSON, SSH logs and transcript at the exact head APK source SHA after cleanup.
 This proves local reminder creation and cancellation, not notification delivery or waiting until the deadline.

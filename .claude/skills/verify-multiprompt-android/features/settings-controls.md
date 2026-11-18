@@ -21,5 +21,5 @@ All taps resolve an enabled text or description through the shared reachability 
 `settings-controls-proof.txt` is written only after every assertion passes.
 The registry makes this journey required for settings, host mapping and update-menu changes, and for edits to this recipe.
 Inspect the PNGs, XML, JSON and driver transcript at the exact head APK source SHA after cleanup.
-Settings and mapping change local navigation or preferences. Header Refresh reads the SSH host; `settings-refresh-host.txt` retains the independent command log. No control writes to the host.
+Settings and mapping change local navigation or preferences. Header Refresh reads the SSH host; `settings-refresh-host.txt` retains post-action command excerpts, with full before/after logs alongside it. Theme and font selection captures receive priority in the verifier evidence. No control writes to the host.
 Account-only layout switches, workspace colours, real dictation credentials, downloads and signed updates are not covered.

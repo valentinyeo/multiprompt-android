@@ -861,14 +861,14 @@
         "settings.controls"
       ],
       "evidence": {
-        "settings-scrolled.json": 1000,
+        "settings-theme-Sunlight.json": 800,
+        "settings-theme-Dark.json": 800,
+        "settings-font-Small.json": 800,
+        "settings-font-Large.json": 800,
         "settings-retained.json": 1000,
+        "settings-refresh-host.txt": 2000,
         "mapping-scroll-bottom.json": 1000,
-        "update-menu.json": 1000,
-        "update-sessions.json": 1000,
-        "settings-version.json": 1000,
-        "settings-controls-proof.txt": 200,
-        "settings-refresh-host.txt": 2000
+        "settings-version.json": 1000
       }
     },
     "inbox-reminders.md": {

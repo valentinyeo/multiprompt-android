@@ -70,13 +70,18 @@ if [[ "$feature" == settings-controls.md ]]; then
     tap_desc Refresh
     wait_for_text 'App updates'
     inbox_control_state settings-refreshed '{"text":["App updates"],"desc":["Open navigation"]}'
-    sudo cat /home/verifyssh/commands.log > "$EVIDENCE/settings-refresh-host.txt"
-    python3 - "$EVIDENCE/settings-refresh-before.txt" "$EVIDENCE/settings-refresh-host.txt" <<'PY'
+    sudo cat /home/verifyssh/commands.log > "$EVIDENCE/settings-refresh-after.txt"
+    python3 - "$EVIDENCE/settings-refresh-before.txt" "$EVIDENCE/settings-refresh-after.txt" > "$EVIDENCE/settings-refresh-host.txt" <<'PY'
 from pathlib import Path
 import sys
 before, after = [Path(p).read_text() for p in sys.argv[1:]]
 assert after.startswith(before)
-assert 'list-sessions' in after[len(before):], 'Update navigation Refresh did not reach the SSH host'
+new = after[len(before):]
+assert 'list-sessions' in new, 'Update navigation Refresh did not reach the SSH host'
+for command in new.splitlines():
+    if 'list-sessions' in command:
+        start = max(0, command.index('list-sessions') - 5)
+        print(command[start:start + 1000])
 PY
     tap_desc 'Open navigation'
     inbox_control_state update-menu '{"text":["Sessions","✓ Update"],"absent":["Session list settings"]}'
@@ -111,7 +116,12 @@ hold_inbox_session() {
 open_inbox_reminder() {
     if ! select_node desc 'Close session search' >/dev/null 2>&1; then
         tap_desc 'Search sessions'
-        fill 'Search all sessions' verify-session
+        select_node focused-field '' >/dev/null
+        clear_field ''
+        adb shell input text verify-session
+        dump_ui
+        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value '' verify-session
+        adb shell input keyevent KEYCODE_BACK
     fi
     wait_for_text '1 result across all splits'
     hold_inbox_session
@@ -143,13 +153,18 @@ tap_desc 'Session list actions'
 tap_text Refresh
 wait_for_text verify-session
 inbox_control_state inbox-refreshed '{"text":["Inbox","verify-session"],"absent":["Settings","Refresh"]}'
-sudo cat /home/verifyssh/commands.log > "$EVIDENCE/inbox-refresh-host.txt"
-python3 - "$EVIDENCE/inbox-refresh-before.txt" "$EVIDENCE/inbox-refresh-host.txt" <<'PY'
+sudo cat /home/verifyssh/commands.log > "$EVIDENCE/inbox-refresh-after.txt"
+python3 - "$EVIDENCE/inbox-refresh-before.txt" "$EVIDENCE/inbox-refresh-after.txt" > "$EVIDENCE/inbox-refresh-host.txt" <<'PY'
 from pathlib import Path
 import sys
 before, after = [Path(p).read_text() for p in sys.argv[1:]]
 assert after.startswith(before)
-assert 'list-sessions' in after[len(before):], 'Refresh did not reach the SSH host'
+new = after[len(before):]
+assert 'list-sessions' in new, 'Refresh did not reach the SSH host'
+for command in new.splitlines():
+    if 'list-sessions' in command:
+        start = max(0, command.index('list-sessions') - 5)
+        print(command[start:start + 1000])
 PY
 tap_desc 'Switch session bucket'
 inbox_control_state bucket-open '{"text":["Inbox","Waiting","Archive","Unread only"]}'

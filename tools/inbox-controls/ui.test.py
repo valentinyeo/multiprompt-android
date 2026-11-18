@@ -135,24 +135,76 @@ tap_text() { [[ "$screen" == Settings ]]; }
                             for name in ['hold_inbox_session', 'open_inbox_reminder'])
         shell = '''search_open=false
 searched=false
+cleared=false
+scripts=/driver
+EVIDENCE=/evidence
 select_node() {
     if [[ "$2" == 'Close session search' ]]; then
         [[ "$search_open" == true ]]
+    elif [[ "$1" == focused-field ]]; then
+        [[ "$search_open" == true && "$2" == '' ]]
     else
         [[ "$searched" == true && "$1" == desc && "$2" == 'Robot verify-session' ]]
         printf '105 450\\n'
     fi
 }
 tap_desc() { [[ "$1" == 'Search sessions' ]]; search_open=true; }
-fill() { [[ "$1" == 'Search all sessions' && "$2" == verify-session ]]; searched=true; }
+fill() { return 1; }
+clear_field() { [[ "$search_open" == true && "$1" == '' ]]; cleared=true; }
+dump_ui() { :; }
+python3() { [[ "$3" == field-value && "$4" == '' && "$5" == verify-session && "$searched" == true ]]; }
 wait_for_text() { [[ "$1" == 'Remind me' || "$searched" == true && "$1" == '1 result across all splits' ]]; }
 tap_node() { [[ "$searched" == true && "$1" == desc && "$2" == 'Robot verify-session' && "$3" == reveal ]]; }
 hold_text() { return 1; }
-adb() { [[ "$*" == 'shell input swipe 105 450 105 450 800' ]]; }
+adb() {
+    if [[ "$*" == 'shell input text verify-session' ]]; then
+        [[ "$cleared" == true ]]
+        searched=true
+    else
+        [[ "$*" == 'shell input swipe 105 450 105 450 800' || "$*" == 'shell input keyevent KEYCODE_BACK' ]]
+    fi
+}
 tap_text() { [[ "$1" == 'Remind Me…' ]]; }
 ''' + helpers + '\nopen_inbox_reminder\nopen_inbox_reminder\n'
         result = subprocess.run(['bash', '-ec', shell], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_retained_short_search_uses_the_focused_editor_without_its_label(self):
+        import subprocess
+        import sys
+        import xml.etree.ElementTree as ET
+        fixture = Path(__file__).parent / 'fixtures/2aceb691-short-search.xml'
+        tool = Path(__file__).resolve().parents[2] / '.claude/skills/verify-multiprompt-android/scripts/ui.py'
+        focused = subprocess.run([sys.executable, str(tool), str(fixture), 'focused-field', ''], capture_output=True, text=True)
+        self.assertEqual(focused.returncode, 0, focused.stderr)
+        labeled = subprocess.run([sys.executable, str(tool), str(fixture), 'field', 'Search all sessions'], capture_output=True, text=True)
+        self.assertNotEqual(labeled.returncode, 0)
+        root = ET.parse(fixture)
+        editor = next(n for n in root.getroot().iter('node') if n.get('class') == 'android.widget.EditText' and n.get('focused') == 'true')
+        for value in ['verify-session', 'wrong']:
+            editor.set('text', value)
+            root.write(self.xml)
+            result = subprocess.run([sys.executable, str(tool), str(self.xml), 'field-value', '', 'verify-session'], capture_output=True, text=True)
+            self.assertEqual(result.returncode == 0, value == 'verify-session')
+
+    def test_refresh_receipts_contain_only_new_host_commands(self):
+        import re
+        import subprocess
+        import sys
+        source = (Path(__file__).resolve().parents[2] / '.claude/skills/verify-multiprompt-android/scripts/inbox-controls-drive.sh').read_text()
+        blocks = re.findall(r"python3 - [^\n]*refresh-before.txt[^\n]*<<'PY'\n(.*?)\nPY", source, re.S)
+        self.assertEqual(len(blocks), 2)
+        before, after = self.root / 'before.txt', self.root / 'after.txt'
+        old = 'tmux list-sessions -F old\n' + 'previous command\n' * 10000
+        before.write_text(old)
+        for block in blocks:
+            after.write_text(old + 'tmux list-sessions -F new\n')
+            result = subprocess.run([sys.executable, '-c', block, str(before), str(after)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, 'tmux list-sessions -F new\n')
+            after.write_text(old + 'unrelated command\n')
+            result = subprocess.run([sys.executable, '-c', block, str(before), str(after)], capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
 
     def test_relative_deadlines_reject_wrong_duration_and_session(self):
         for duration in [1800, 3600, 7200, 10800, 14400, 18000]:
