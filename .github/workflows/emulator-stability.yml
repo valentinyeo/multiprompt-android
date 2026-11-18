@@ -16,7 +16,7 @@ permissions:
 
 concurrency:
   group: emulator-stability-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ inputs.feature_map == true }}
 
 jobs:
   maintenance:

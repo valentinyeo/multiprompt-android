@@ -22,6 +22,19 @@ def passed_jobs():
 
 
 class MaintenanceTest(unittest.TestCase):
+    def test_weekly_workflow_and_dispatch_bridge_supersede_runs(self):
+        workflow = (ROOT / '.github/workflows/maintain-verification.yml').read_text()
+        self.assertIn("cron: '17 5 * * 1'", workflow)
+        self.assertIn('  workflow_dispatch:', workflow)
+        self.assertIn('  workflow_call:', workflow)
+        self.assertIn('  group: maintain-android-feature-map\n  cancel-in-progress: true', workflow)
+        self.assertIn('      fail-fast: false\n      max-parallel: 2', workflow)
+        self.assertIn('uses: ./.github/workflows/verify.yml', workflow)
+        self.assertIn('side: ${{ matrix.journey }}', workflow)
+        bridge = (ROOT / '.github/workflows/emulator-stability.yml').read_text()
+        self.assertIn('cancel-in-progress: ${{ inputs.feature_map == true }}', bridge)
+        self.assertIn('uses: ./.github/workflows/maintain-verification.yml', bridge)
+
     def test_every_registered_journey_has_a_route_or_explicit_blocker(self):
         result = M.plan(REGISTRY)
         routed = {item['journey'] for item in result['matrix']['include']}
