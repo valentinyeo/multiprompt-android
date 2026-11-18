@@ -297,6 +297,7 @@ if [[ "${BREAK_IT_MODE:-}" == true ]]; then
     sudo -u verifyssh tmux rename-window -t verify-breakit-other verify-breakit-other
 fi
 if [[ "${VERIFY_FEATURE:-}" != long-chat.md && "${PIN_SCROLL_PROOF:-}" != true ]]; then
+    sudo install -m 755 "$(dirname "$0")/mpa" "$(dirname "$0")/journey_action.py" /home/verifyssh/
     sudo install -m 755 "$(dirname "$0")/seed.sh" /home/verifyssh/seed.sh
     sudo install -m 755 tools/long-chat/fixture.py /home/verifyssh/long-chat-fixture.py
     sudo install -m 644 tools/verify-seed.py /home/verifyssh/verify-seed.py

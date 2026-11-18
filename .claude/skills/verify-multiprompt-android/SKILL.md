@@ -7,6 +7,28 @@ description: Verify multiprompt Android's Jetpack Compose mobile UI on GitHub's 
 
 Read [the feature index](features/README.md), then the selected recipe. Everything that builds or runs the app happens on GitHub, never on the local server. No local Gradle, Java, emulator or Actions imitation.
 
+## The phone CLI
+
+[scripts/mpa](scripts/mpa) is the one way agents drive the phone. Python 3, stdlib only, one JSON object per command, rich `--help` on every subcommand, and `--dry-run` on anything that changes state.
+
+| Command | What it does |
+|---|---|
+| `mpa doctor --expected-version "$EXPECTED_VERSION"` | Read-only proof that this device is worth driving. |
+| `mpa launch [--force-stop] [--wait-text Inbox]` | Start the app. |
+| `mpa seed` | 40 inbox sessions and the long chat on the runner fixture. |
+| `mpa tap text verify-session` | Resolve an enabled label through `journey_action`, scroll it into view, tap it. |
+| `mpa read` | The UI tree as JSON. `--select` answers one selector; `--wait-text` and `--wait-absent` poll. |
+| `mpa screenshot reader-sync` | Numbered PNG/XML pair in `$EVIDENCE`. |
+| `mpa proof --name reader-sync --require-text 'Sign in to sync'` | Assert the screen, write `reader-sync.json` and a proof file. |
+| `mpa key back` | One keyevent. |
+| `mpa cleanup --fixture "$FIXTURE"` | Stop the recorded PIDs, copy logs, keep the evidence. |
+
+`--xml PATH` replays a captured dump instead of dumping the phone, which is how the CLI's own tests run without a device. A failure prints `{"ok": false, "error": "...", "message": "...", "next": "..."}` and exits 1; `next` names the command to run instead. `ui.py`, `doctor.sh`, `seed.sh` and `cleanup.sh` are thin wrappers over the same core, so a journey that has not moved yet keeps working.
+
+`tools/mpa-cli.test.py` covers argument parsing, the JSON shape, `--dry-run` side effects and the error messages. It runs in `tools/check.sh source`.
+
+One journey has moved end to end: `signed-out-sync.md` runs only `mpa` commands. Every other journey still uses the `drive.sh` helpers below; migrate one journey per pull request. Remaining loose drivers to fold in: `drive.sh` and its 2,670-line journey body, `fixture.sh`, and the per-journey `*-drive.sh`, `*-console.py`, `*-fixture.py` and `*-proof.py` scripts in [scripts](scripts).
+
 ## Choose proof for the change
 
 [features/registry.json](features/registry.json) owns outcome IDs, recipe ownership, runner kinds and prerequisites. The generated index, picker catalog, driver eligibility and workflow choices all come from it. Run `node .github/scripts/pstack-verifier/coverage.cjs generate` when it changes; CI runs `check` and rejects drift.
@@ -101,7 +123,7 @@ The ephemeral SSH server is the runner at `10.0.2.2:2222`, user `verifyssh`, tar
 The workflow's driver calls this read-only check after starting the activity, before driving it. On the GitHub runner only:
 
 ```bash
-EXPECTED_VERSION="0.1.2-verify.$GITHUB_RUN_NUMBER-debug" EVIDENCE="$GITHUB_WORKSPACE/verification-evidence" .claude/skills/verify-multiprompt-android/scripts/doctor.sh
+EXPECTED_VERSION="0.1.2-verify.$GITHUB_RUN_NUMBER-debug" EVIDENCE="$GITHUB_WORKSPACE/verification-evidence" .claude/skills/verify-multiprompt-android/scripts/mpa doctor
 ```
 
 It requires boot completion, the debug package's expected build versionName, resumed MainActivity and a non-empty parsed UI XML containing the app package. It writes `package.txt`, `activity.txt` and `doctor.xml`. It never launches, grants permissions, imports keys or changes app state. Rerun it first when the UI appears wrong; a browser on top intentionally fails it.
@@ -117,7 +139,7 @@ The workflow calls, on its fresh GitHub emulator only:
 .claude/skills/verify-multiprompt-android/scripts/drive.sh session-routing.md
 ```
 
-`EVIDENCE`, `FIXTURE` and `EXPECTED_VERSION` come from the workflow. Pass any filename in the feature index. `drive.sh` has small `tap_text`, `tap_desc`, `wait_for_text`, `dump_ui` and `shot` functions. Use `tap_text`, `tap_desc` or `tap_node` for new actions, never a raw coordinate tap. Their shared `journey_action.py` planner resolves the enabled label and clickable ancestor in the active window, requires the complete clickable bounds inside the window and ancestor scroll viewports, and rejects tap centers covered by foreground controls (drawing order, or accessibility sibling order when absent). The existing native terminal-focus action checks both toolbar/key-row anchors and the typing point between them. It chooses the clipped target's vertical or horizontal scroll ancestor, redumps after every swipe and taps only after re-resolution. A missing lazy label searches the unique active vertical container forward then backward, bounded to 18 gestures; ambiguous containers fail rather than scrolling the background or key row. Failures name the label with `JOURNEY_ACTION_UNREACHABLE`. Native picker rows without a clickable ancestor use the enabled label bounds. `tools/journey-actions/check.py` blocks new bypasses; its baseline lists old raw taps for cleanup. Observation selectors such as `contains` do not prove reachability. Update the affected recipe alongside changed interactions, then rerun that journey with its existing resulting-state and independent receipt assertions. Editable fields are found by class and their label/placeholder. Missing or ambiguous selectors fail instead of falling back to blind coordinates. While waiting, a system **isn't responding** dialog from the slow emulator is answered with **Wait** and logged in `system-anr.txt`; before launch the driver sets the emulator's `hide_error_dialogs` so other apps' ANR dialogs cannot cover the app (an app crash still fails doctor and shows in `logcat.txt`), and doctor runs at most three times, each failure logged in `doctor-retries.txt`. After doctor it waits up to 60 s for the emulator to reach `10.0.2.2` (logged in `network-wait.txt`) and fails as blocked otherwise. A single **Trust and connect** tap must reach `verify-session`; failure is logged in `trust-retries.txt`, captured as `trust-retry-1`, and fails the journey without retrying. Existing Compose accessibility text suffices; no test-only state setters or UI instrumentation are used.
+`EVIDENCE`, `FIXTURE` and `EXPECTED_VERSION` come from the workflow. Pass any filename in the feature index. `drive.sh` boots the app, runs doctor, seeds the host and owns the evidence trap; the journey itself drives the phone with `mpa` (`mpa tap text …`, `mpa read --wait-text …`, `mpa screenshot …`, `mpa proof …`). Journeys that have not moved yet still call the `drive.sh` helpers `tap_text`, `tap_desc`, `wait_for_text`, `dump_ui` and `shot`. Never use a raw coordinate tap. Their shared `journey_action.py` planner resolves the enabled label and clickable ancestor in the active window, requires the complete clickable bounds inside the window and ancestor scroll viewports, and rejects tap centers covered by foreground controls (drawing order, or accessibility sibling order when absent). The existing native terminal-focus action checks both toolbar/key-row anchors and the typing point between them. It chooses the clipped target's vertical or horizontal scroll ancestor, redumps after every swipe and taps only after re-resolution. A missing lazy label searches the unique active vertical container forward then backward, bounded to 18 gestures; ambiguous containers fail rather than scrolling the background or key row. Failures name the label with `JOURNEY_ACTION_UNREACHABLE`. Native picker rows without a clickable ancestor use the enabled label bounds. `tools/journey-actions/check.py` blocks new bypasses; its baseline lists old raw taps for cleanup. Observation selectors such as `contains` do not prove reachability. Update the affected recipe alongside changed interactions, then rerun that journey with its existing resulting-state and independent receipt assertions. Editable fields are found by class and their label/placeholder. Missing or ambiguous selectors fail instead of falling back to blind coordinates. While waiting, a system **isn't responding** dialog from the slow emulator is answered with **Wait** and logged in `system-anr.txt`; before launch the driver sets the emulator's `hide_error_dialogs` so other apps' ANR dialogs cannot cover the app (an app crash still fails doctor and shows in `logcat.txt`), and doctor runs at most three times, each failure logged in `doctor-retries.txt`. After doctor it waits up to 60 s for the emulator to reach `10.0.2.2` (logged in `network-wait.txt`) and fails as blocked otherwise. A single **Trust and connect** tap must reach `verify-session`; failure is logged in `trust-retries.txt`, captured as `trust-retry-1`, and fails the journey without retrying. Existing Compose accessibility text suffices; no test-only state setters or UI instrumentation are used.
 
 Every journey requires the exact `EXPECTED_VERSION` text and `Version <version>, open release notes` description immediately after doctor, saving `version-label.txt` (no added `v` prefix). On Sign in this label is at the bottom, not beside a menu.
 
@@ -149,36 +171,27 @@ LOOK at the downloaded PNGs, read the XML and receipts, and reconcile them with 
 The driver EXIT trap captures the final UI and logcat on both success and failure. The emulator-runner action ends the emulator it owns, including after driver failure. The workflow always invokes:
 
 ```bash
-.claude/skills/verify-multiprompt-android/scripts/cleanup.sh
+.claude/skills/verify-multiprompt-android/scripts/mpa cleanup --fixture "$FIXTURE"
 ```
 
 It copies SSH logs and console receipts into evidence, kills only the tmux and sshd PIDs recorded by fixture setup, removes the generated private/public key files (including the rotated host key) and tries to remove the emulator's imported file. It never kills by process name. The fresh hosted runner's disposal removes the user's Keystore, imported app secrets and fixture user; evidence survives in the uploaded artifact. Do not cancel the job as a substitute for normal cleanup.
 
 ## Helpers
 
-All helpers are executable. These setup/interaction commands are **GitHub-job-only**, with workflow environment variables set:
+All helpers are executable. These commands are **GitHub-job-only**, with workflow environment variables set:
 
 ```bash
 .claude/skills/verify-multiprompt-android/scripts/fixture.sh
-.claude/skills/verify-multiprompt-android/scripts/doctor.sh
-.claude/skills/verify-multiprompt-android/scripts/drive.sh hosts.md
-.claude/skills/verify-multiprompt-android/scripts/drive.sh hosts-retired.md
-.claude/skills/verify-multiprompt-android/scripts/drive.sh host-changed-key.md
-.claude/skills/verify-multiprompt-android/scripts/drive.sh sessions.md
-.claude/skills/verify-multiprompt-android/scripts/drive.sh session-drafts.md
-.claude/skills/verify-multiprompt-android/scripts/drive.sh session-favorite-dot.md
-.claude/skills/verify-multiprompt-android/scripts/drive.sh copy-chat-id.md
-.claude/skills/verify-multiprompt-android/scripts/drive.sh session-reader.md
-.claude/skills/verify-multiprompt-android/scripts/drive.sh session-routing.md
-.claude/skills/verify-multiprompt-android/scripts/drive.sh chat-choices.md
+.claude/skills/verify-multiprompt-android/scripts/mpa doctor --expected-version "$EXPECTED_VERSION"
+.claude/skills/verify-multiprompt-android/scripts/mpa read --select desc --value 'Session actions'
+.claude/skills/verify-multiprompt-android/scripts/mpa screenshot reader-menu
+.claude/skills/verify-multiprompt-android/scripts/mpa cleanup --fixture "$FIXTURE"
 .claude/skills/verify-multiprompt-android/scripts/drive.sh signed-out-sync.md
-.claude/skills/verify-multiprompt-android/scripts/drive.sh message-reply.md
-.claude/skills/verify-multiprompt-android/scripts/drive.sh terminal.md
-.claude/skills/verify-multiprompt-android/scripts/drive.sh sign-in.md
-.claude/skills/verify-multiprompt-android/scripts/cleanup.sh
-python3 .claude/skills/verify-multiprompt-android/scripts/ui.py "$EVIDENCE/current.xml" desc 'Session actions'
+.claude/skills/verify-multiprompt-android/scripts/drive.sh session-reader.md
 python3 -u .claude/skills/verify-multiprompt-android/scripts/console.py /home/verifyssh/receipts.txt
 ```
+
+`drive.sh <feature>.md` still runs the boot, doctor, host seed and evidence trap for the journeys that have not moved to `mpa` yet. Every other invocation above is an `mpa` subcommand; `ui.py`, `doctor.sh`, `seed.sh` and `cleanup.sh` remain only as wrappers for those journeys.
 
 Fixture setup starts `console.py` inside tmux as the disposable fixture user; do not run a second copy. Ordinary driver invocations need a fresh emulator. The break-it replay alone reuses its normal journey's boot after replacing the disposable fixture, clearing app data and reinstalling the identical APK with its original permission grants.
 
