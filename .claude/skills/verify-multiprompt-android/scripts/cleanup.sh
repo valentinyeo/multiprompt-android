@@ -35,7 +35,7 @@ files += list(home.glob('ai-switch-*.txt')) + list(home.glob('ai-switch-*.jsonl'
 print(json.dumps({str(path.relative_to(home)): path.read_text()[-64000:] for path in files}, indent=2))
 PYHOST
     fi
-    for name in tmux sshd; do
+    for name in reader-menu-http tmux sshd; do
         if [[ -f "$FIXTURE/$name.pid" ]]; then
             pid=$(cat "$FIXTURE/$name.pid")
             [[ "$pid" =~ ^[0-9]+$ ]]

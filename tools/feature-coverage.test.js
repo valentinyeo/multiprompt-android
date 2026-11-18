@@ -901,6 +901,13 @@ test('Bot look and reader menu changes schedule their registered verify.yml jour
     ['java/dev/multiprompt/companion/ui/MultipromptApp.kt', 'renameDraft = it', 'reader-controls.md'],
     ['java/dev/multiprompt/companion/ui/MultipromptApp.kt', 'onTechnicalModeChanged(!technicalMode)', 'reader-controls.md'],
     ['java/dev/multiprompt/companion/ui/MultipromptApp.kt', 'label = "Sunlight mode on"', 'reader-controls.md'],
+    ['java/dev/multiprompt/companion/ui/MultipromptApp.kt', 'ReaderMenuPage.MORE', 'reader-controls.md'],
+    ['java/dev/multiprompt/companion/ui/MultipromptApp.kt', 'pinPageOpen = true', 'reader-controls.md'],
+    ['java/dev/multiprompt/companion/ui/MultipromptApp.kt', 'computerTargetOpen = false', 'reader-controls.md'],
+    ['java/dev/multiprompt/companion/ui/MultipromptApp.kt', 'label = "Add file"', 'reader-controls.md'],
+    ['java/dev/multiprompt/companion/ui/ComputerView.kt', 'onBack()', 'reader-controls.md'],
+    ['java/dev/multiprompt/companion/ui/DeepgramKeySheet.kt', 'onSaved()', 'reader-controls.md'],
+    ['java/dev/multiprompt/companion/ui/ReaderInformationSheets.kt', 'onDismiss()', 'reader-controls.md'],
   ]) {
     const diff = productDiff(file, text);
     const plan = gate.planChange(diff, []);
