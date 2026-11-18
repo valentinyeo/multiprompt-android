@@ -1007,7 +1007,13 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/host-restart-drive.sh",
+          ".claude/skills/verify-multiprompt-android/scripts/host-restart-fixture.py",
+          ".claude/skills/verify-multiprompt-android/scripts/host-restart-setup.sh",
+          ".claude/skills/verify-multiprompt-android/scripts/host-restart-ssh.py"
+        ]
       },
       "outcomes": [
         "reader.host-restart"
