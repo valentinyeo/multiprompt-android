@@ -32,7 +32,7 @@ Preconditions: fresh fixture; dispatch `feature=session-reader.md`. The driver f
 
 ## Day-theme appearance
 
-The reader uses light theme roles for message cards, code, controls and composer. The top fade uses the page background. Dark reader colors remain unchanged. `DayThemeTest` in `test.yml` captures five screens and measures rendered light-text contrast, including code and links. Dispatch that workflow with `baseline_ref` to capture before/after screens and compare dark pixels. The signed-update input also installs the published release on its emulator.
+The reader uses light theme roles for message cards, code, controls and composer. The top fade uses the page background. Dark reader colors remain unchanged. `DayThemeTest` in `android-full.yml` captures five screens and measures rendered light-text contrast, including code and links. Dispatch that workflow with `baseline_ref` to capture before/after screens and compare dark pixels. The signed-update input also installs the published release on its emulator.
 
 The SSH journey above proves transport and actions, not chat appearance. Its console has no supported agent transcript. Account OTP remains outside both appearance and SSH evidence.
 

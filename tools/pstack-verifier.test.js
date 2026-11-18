@@ -453,7 +453,7 @@ test('the caller grants the permissions verify.yml asks for, and dispatch adds n
 test('verify.yml keeps non-PR triggers and delegates PR journeys to the capped picker', () => {
   const verify = read('.github/workflows/verify.yml');
   const triggers = topBlock(verify, 'on').join('\n');
-  for (const trigger of ['push', 'schedule', 'workflow_dispatch', 'workflow_call']) {
+  for (const trigger of ['workflow_dispatch', 'workflow_call']) {
     assert.match(triggers, new RegExp(`^ {2}${trigger}:`, 'm'), trigger);
   }
   assert.doesNotMatch(triggers, /^ {2}pull_request:/m);
@@ -465,16 +465,13 @@ test('verify.yml keeps non-PR triggers and delegates PR journeys to the capped p
   assert.match(verify, /^ {2}group: verify-\$\{\{ github\.ref \}\}\$\{\{ inputs\.feature && inputs\.feature != github\.event\.inputs\.feature && format\('-\{0\}', inputs\.feature\) \|\| '' \}\}\$\{\{ inputs\.side && format\('-\{0\}', inputs\.side\) \|\| '' \}\}-\$\{\{ inputs\.break_it_control \|\| 'none' \}\}$/m);
 });
 
-test('a change no journey fits still drives the smoke journey and never gets a plain PASS', () => {
+test('a change no journey fits schedules no unrelated Android smoke', () => {
   const picked = verifier.parsePick(JSON.stringify({ features: ['not-a-journey.md'], changed_outcomes: [], change_kind: 'tooling', reason: 'Only workflow files changed.' }));
-  assert.deepEqual(picked.features, [verifier.SMOKE_JOURNEY]);
-  assert.equal(picked.smoke, true);
-  assert.ok(verifier.ALLOWLIST.includes(verifier.SMOKE_JOURNEY));
-  const passed = verifier.applyRules({ modelVerdict: 'PASS', features: picked.features, conclusions: { [verifier.SMOKE_JOURNEY]: 'success' }, notDrivenReason: picked.reason, smoke: true });
-  assert.equal(passed.verdict, 'PASS+NOTES');
-  assert.match(passed.notes.join(' '), /Only the smoke journey was driven/);
-  const broken = verifier.applyRules({ modelVerdict: 'PASS', features: picked.features, conclusions: { [verifier.SMOKE_JOURNEY]: 'failure' }, parents: { [verifier.SMOKE_JOURNEY]: 'passed' }, smoke: true });
-  assert.equal(broken.verdict, 'FAIL');
+  assert.deepEqual(picked.features, []);
+  assert.equal(picked.smoke, false);
+  const result = verifier.applyRules({ modelVerdict: 'PASS', features: [], conclusions: {}, notDrivenReason: picked.reason });
+  assert.equal(result.verdict, 'PASS+NOTES');
+  assert.match(result.notes.join(' '), /Nothing was driven/);
 });
 
 function stepBlocks(source) {
@@ -716,7 +713,7 @@ test('the parents job drives the merge base with the head journey scripts and no
   assert.match(parents, /^ {6}side: parent$/m);
   assert.match(parents, /^ {6}app_ref: \$\{\{ needs\.pick\.outputs\.merge_base \}\}$/m);
   assert.match(parents, /fail-fast: false/);
-  assert.match(parents, /^ {4}if: needs\.pick\.outputs\.no_product_change != 'true'$/m);
+  assert.match(parents, /^ {4}if: needs\.pick\.outputs\.features != '\[\]'$/m);
   assert.doesNotMatch(parents, /secrets/i);
   assert.doesNotMatch(parents, /DEEPSEEK/);
   assert.match(jobBlock(workflow, 'pstack-verifier'), /MERGE_BASE: \$\{\{ needs\.pick\.outputs\.merge_base \}\}/);
@@ -753,7 +750,7 @@ test('every step that can fail a head run has an id so the parent result counts 
   for (const step of steps) {
     const name = step.match(/name: (.+)/)?.[1] ?? step.split('\n')[0];
     const condition = step.match(/^ {8}if: (.+)$/m)?.[1] ?? '';
-    if (condition.startsWith('always()')) continue;
+    if (condition.startsWith('always()') || condition.startsWith('(always()')) continue;
     assert.match(step, /^ {8}id: \S+$/m, name);
   }
 });
@@ -762,9 +759,9 @@ test('the parent result is written into the artifact by an always step before th
   const verify = read('.github/workflows/verify.yml');
   const steps = stepBlocks(verify);
   const record = steps.findIndex(step => /Record the parent result for the judge/.test(step));
-  const upload = steps.findIndex(step => /actions\/upload-artifact/.test(step));
+  const upload = steps.findIndex(step => /name: Upload evidence even on failure/.test(step));
   assert.ok(record > 0 && upload > record);
-  assert.match(steps[record], /if: always\(\) && inputs\.side == 'parent'/);
+  assert.match(steps[record], /if: \(always\(\) && inputs\.side == 'parent'\) && steps\.parent-cache\.outputs\.hit != 'true'/);
   assert.match(steps[record], /STEPS_JSON: \$\{\{ toJSON\(steps\) \}\}/);
   assert.match(steps[record], /\$EVIDENCE\/side-result\.json/);
   assert.match(steps[record], /\$steps\["native-ui"\]\.outcome == "success"/);
@@ -796,7 +793,7 @@ test('verify.yml pins the parent app source to a full sha and takes it through a
   assert.match(verify, /SIDE: \$\{\{ inputs\.side \}\}/);
   assert.match(verify, /if \[\[ "\$SIDE" == parent \]\]; then\n\s+\[\[ "\$APP_REF" =~ \^\[0-9a-f\]\{40\}\$ \]\]/);
   const checkout = stepBlocks(verify).find(step => /id: app-checkout/.test(step));
-  assert.match(checkout, /if: env\.APP_REF != ''/);
+  assert.match(checkout, /if: \(env\.APP_REF != ''\)/);
   assert.match(checkout, /ref: \$\{\{ env\.APP_REF \}\}/);
   assert.match(checkout, /path: app-source/);
 });
@@ -834,7 +831,7 @@ test('SOFT-2536 schedules all five required journeys beyond the suggestion limit
 test('required journeys replace a smoke fallback without inventing coverage for manual gaps', () => {
   const picked = { features: [verifier.SMOKE_JOURNEY], smoke: true };
   assert.deepEqual(verifier.includeRequiredJourneys(picked, { outcomes: ['sign-in.journey'] }).features, ['sign-in.md']);
-  assert.deepEqual(verifier.includeRequiredJourneys(picked, { outcomes: ['session-settings.journey'] }), picked);
+  assert.deepEqual(verifier.includeRequiredJourneys(picked, { outcomes: ['session-settings.journey'] }).features, []);
 });
 
 test('PR392 native model and effort receipts reach the judge before diagnostic evidence fills its budget', () => {
@@ -899,6 +896,8 @@ const args = process.argv.slice(2);
 if (args.at(-1) === 'repos/a/b/pulls/1') {
   assert.deepEqual(args, ['api', 'repos/a/b/pulls/1']);
   console.log(${JSON.stringify(JSON.stringify(pr))});
+} else if (args.at(-1).includes('/compare/')) {
+  console.log(JSON.stringify({ merge_base_commit: { sha: '${sha}' } }));
 } else {
   assert.deepEqual(args, ['api', '--paginate', '--slurp', 'repos/a/b/pulls/1/files?per_page=100']);
   console.log(${JSON.stringify(JSON.stringify([files]))});
@@ -915,7 +914,7 @@ if (args.at(-1) === 'repos/a/b/pulls/1') {
   }
 }
 
-test('docs/tooling PRs, including forks, drafts and dependabot, need no secret or Android journey', () => {
+test('docs/tooling skips Android but retains exact base and non-UI classification for the judge', () => {
   for (const filename of ['README.md', 'tools/branch-protection.mjs']) {
     for (const options of [{}, { fork: true }, { draft: true }, { login: 'dependabot[bot]' }]) {
       const run = pickWithoutSecret([{ filename }], options);
@@ -923,7 +922,9 @@ test('docs/tooling PRs, including forks, drafts and dependabot, need no secret o
       assert.match(run.output, /^no_product_change=true$/m);
       assert.match(run.output, /^features=\[\]$/m);
       assert.match(run.output, /No product change/);
-      assert.match(run.output, /No Android journey or second-AI product verdict was run/);
+      assert.match(run.output, /independent verifier judges/);
+      assert.match(run.output, /^change_kind=tooling$/m);
+      assert.match(run.output, new RegExp(`^merge_base=${sha}$`, 'm'));
     }
   }
 });
@@ -943,14 +944,12 @@ test('product changes still require the secret, even in drafts and dependabot PR
   assert.match(incomplete.stderr, /Incomplete pull request file list/);
 });
 
-test('the no-product result writes an honest summary while product changes still run the judge', () => {
+test('tooling and product changes both run the independent judge', () => {
   const workflow = read('.github/workflows/pstack-verifier.yml');
   for (const job of ['journeys', 'parents']) {
-    assert.match(jobBlock(workflow, job), /^ {4}if: needs\.pick\.outputs\.no_product_change != 'true'$/m);
+    assert.match(jobBlock(workflow, job), /^ {4}if: needs\.pick\.outputs\.features != '\[\]'$/m);
   }
   const final = jobBlock(workflow, 'pstack-verifier');
-  assert.match(final, /name: Report no product change\n {8}if: needs\.pick\.result == 'success' && needs\.pick\.outputs\.no_product_change == 'true'/);
-  assert.match(final, /REASON: \$\{\{ needs\.pick\.outputs\.reason \}\}/);
-  assert.match(final, /run: printf '%s\\n' "\$REASON" >> "\$GITHUB_STEP_SUMMARY"/);
-  assert.match(final, /name: Judge the change against the journey evidence\n {8}if: needs\.pick\.outputs\.no_product_change != 'true'/);
+  assert.doesNotMatch(final, /if:.*no_product_change/);
+  assert.match(final, /name: Judge the change against the journey evidence\n {8}env:/);
 });
