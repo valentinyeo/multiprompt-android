@@ -109,7 +109,7 @@ A product change must name every changed outcome. The second-AI verifier require
 
 ## Initial coverage gaps
 
-These IDs are an inventory, not exemptions for future changes. Untouched gaps do not block this migration. Changing one requires its own journey proof. New uncovered IDs fail the ratchet even if another gap was removed. Signed, dedicated and manual routes remain explicit; the debug picker must not select them.
+These IDs are an inventory, not exemptions for future changes. Untouched gaps do not block this migration. Changing one requires its own journey proof. New uncovered IDs fail the ratchet even if another gap was removed. Signed routes run parent/head candidates with their registered inputs. Dedicated and manual routes remain outside the PR picker.
 
 | Outcome | Existing case | Cleanup ticket |
 |---|---|---|

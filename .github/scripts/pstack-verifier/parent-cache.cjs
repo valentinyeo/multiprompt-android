@@ -5,15 +5,15 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 const { readSideFiles, parentResult } = require('./verifier.cjs');
-const { debugJourneys } = require('./coverage.cjs');
+const { registry, prJourneys } = require('./coverage.cjs');
 
 const gh = args => execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
 
 function cacheKey(sha, feature, root = process.cwd()) {
-  if (!/^[a-f0-9]{40}$/.test(sha) || !debugJourneys.includes(feature)) throw new Error('Invalid base cache identity');
+  if (!/^[a-f0-9]{40}$/.test(sha) || !prJourneys.includes(feature)) throw new Error('Invalid base cache identity');
   const files = execFileSync('git', ['ls-files', '-z', '.claude/skills/verify-multiprompt-android/scripts', '.github/actions/android-proof', '.github/workflows/verify.yml', '.github/scripts/pstack-verifier', 'tools'], { cwd: root, encoding: 'utf8' })
     .split('\0').filter(file => file && !/(?:\.test\.|\/release-notes\/)/.test(file)).sort();
-  const hash = createHash('sha256');
+  const hash = createHash('sha256').update(JSON.stringify(registry.journeys[feature].runner)).update('\0');
   for (const file of files) hash.update(file).update('\0').update(fs.readFileSync(path.join(root, file))).update('\0');
   return `verify-base-${sha}-${feature}-${hash.digest('hex')}`;
 }
@@ -58,7 +58,8 @@ module.exports = { cacheKey, reusable, restore };
 
 if (require.main === module) {
   try {
-    const { APP_REF: sha, VERIFY_FEATURE: feature, EVIDENCE: directory, GITHUB_REPOSITORY: repo, GITHUB_RUN_ID: runId } = process.env;
+    const { APP_REF: sha, VERIFY_JOURNEY: journey, VERIFY_FEATURE: driver, EVIDENCE: directory, GITHUB_REPOSITORY: repo, GITHUB_RUN_ID: runId } = process.env;
+    const feature = journey || driver;
     const key = cacheKey(sha, feature);
     const command = process.argv[2];
     if (!['restore', 'save'].includes(command)) throw new Error('Usage: parent-cache.cjs restore|save');

@@ -118,14 +118,14 @@ test('the picker can classify a bug fix, and only fix or bug words count', () =>
 
 test('unknown journey names are dropped and at most three run', () => {
   const picked = verifier.parsePick(JSON.stringify({
-    features: ['hosts.md', 'made-up.md', 'settings-navigation.md', '../etc/passwd', 'hosts.md', 'terminal.md', 'sessions.md', 'chat-cancel.md'],
+    features: ['hosts.md', 'made-up.md', 'session-settings.md', '../etc/passwd', 'hosts.md', 'terminal.md', 'sessions.md', 'chat-cancel.md'],
     reason: 'x',
     changed_outcomes: [],
     change_kind: 'tooling',
   }));
   assert.deepEqual(picked.features, ['hosts.md', 'terminal.md', 'sessions.md']);
   assert.ok(picked.dropped.includes('made-up.md'));
-  assert.ok(picked.dropped.includes('settings-navigation.md'));
+  assert.ok(picked.dropped.includes('session-settings.md'));
   assert.ok(picked.dropped.includes('chat-cancel.md'));
   assert.deepEqual(verifier.validateFeatures('hosts.md').features, []);
   assert.deepEqual(verifier.validateFeatures(null).features, []);
@@ -157,7 +157,113 @@ test('required outcome journeys cannot be omitted by the model picker', () => {
   const selected = verifier.includeRequiredJourneys(picked, { outcomes: ['reader.send-enter-interrupt', 'chat.link-recovery'] });
   assert.deepEqual(selected.features, ['session-reader.md', 'chat-shared.md']);
   assert.equal(selected.smoke, false);
-  assert.deepEqual(verifier.includeRequiredJourneys(picked, { outcomes: ['reader.send-enter-interrupt', 'chat.link-recovery', 'inbox.search', 'terminal.journey'] }).features, ['session-reader.md', 'chat-shared.md', 'sessions.md', 'terminal.md']);
+  assert.throws(() => verifier.includeRequiredJourneys(picked, { outcomes: ['reader.send-enter-interrupt', 'chat.link-recovery', 'inbox.search', 'terminal.journey'] }), /split the change/);
+});
+
+test('changed recipes and owned drivers are mandatory before model suggestions', () => {
+  const gate = require('../.github/scripts/pstack-verifier/coverage.cjs');
+  const files = ['session-pins.md', 'session-gestures.md'].map(name => ({ filename: `${gate.REGISTRY_PATH}/${name}` }));
+  files.push({ filename: 'tools/session-gestures/drive.py' });
+  const required = gate.changedJourneys('', files);
+  assert.deepEqual(required, ['session-gestures.md', 'session-pins.md', 'session-summaries.md']);
+  const picked = { features: ['native-skills.md'], dropped: [], smoke: false };
+  assert.deepEqual(verifier.includeRequiredJourneys(picked, { outcomes: [] }, '', required).features, required);
+  assert.deepEqual(gate.changedJourneys('', [{ filename: 'docs/moved.md', previous_filename: '.claude/skills/verify-multiprompt-android/scripts/pins-drive.sh' }]), ['session-pins.md']);
+  assert.equal(verifier.noProductChange([{ filename: 'tools/session-gestures/drive.py' }], 1), false);
+  assert.equal(verifier.noProductChange([{ filename: 'tools/session-gestures/scroll.test.py' }], 1), true);
+});
+
+test('more than three mandatory journeys fail instead of silently dropping proof', () => {
+  const gate = require('../.github/scripts/pstack-verifier/coverage.cjs');
+  const required = gate.changedJourneys('', [{ filename: '.claude/skills/verify-multiprompt-android/scripts/drive.sh' }]);
+  assert.ok(required.length > verifier.MAX_JOURNEYS);
+  assert.throws(() => verifier.includeRequiredJourneys({ features: [], dropped: [] }, { outcomes: [] }, '', required), /split the change/i);
+});
+
+test('all signed registry routes build candidates with the same journey identity for evidence', () => {
+  const gate = require('../.github/scripts/pstack-verifier/coverage.cjs');
+  for (const [name, journey] of Object.entries(gate.registry.journeys)) {
+    if (journey.runner.kind !== 'signed') continue;
+    assert.ok(verifier.ALLOWLIST.includes(name), name);
+    const routes = verifier.journeyRunners([name]);
+    assert.equal(routes[name].candidate, true, name);
+    assert.equal(routes[name].feature, journey.runner.inputs.feature ?? name);
+    for (const flag of ['released_chat', 'released_robots', 'pins_scroll', 'release_choices']) {
+      assert.equal(routes[name][flag], journey.runner.inputs[flag] === true, `${name} ${flag}`);
+    }
+  }
+  assert.ok(!verifier.ALLOWLIST.includes('session-settings.md'));
+  assert.ok(!verifier.ALLOWLIST.includes('chat-working.md'));
+  const workflow = read('.github/workflows/pstack-verifier.yml');
+  for (const job of ['journeys', 'parents']) {
+    const block = jobBlock(workflow, job);
+    for (const flag of ['candidate', 'released_chat', 'released_robots', 'release_choices', 'pins_scroll']) {
+      assert.ok(block.includes(`      ${flag}: \${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].${flag} }}`));
+    }
+    assert.ok(block.includes('      driver_feature: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].feature }}'));
+  }
+});
+
+test('every signed route accepts pinned parent and head candidates but keeps published pin guards', () => {
+  const prepare = stepBlocks(read('.github/workflows/verify.yml')).find(step => /id: validate-channel/.test(step));
+  const script = prepare.split('        run: |\n')[1].replace(/^          /gm, '');
+  const defaults = Object.fromEntries([...script.matchAll(/\$\{?([A-Z_]+)/g)].map(match => [match[1], '']));
+  for (const [journey, runner] of Object.entries(verifier.journeyRunners(verifier.ALLOWLIST))) {
+    if (!runner.candidate) continue;
+    for (const side of ['head', 'parent']) {
+      const env = {
+        ...defaults, ...Object.fromEntries(Object.entries(runner).map(([key, value]) => [key.toUpperCase(), String(value)])),
+        SIDE: side, VERIFY_FEATURE: runner.feature, PIN_SCROLL_PROOF: String(runner.pins_scroll),
+        APP_REF: sha, RELEASE_CHANNEL: 'android-latest', BREAK_IT: 'false',
+      };
+      const run = spawnSync('bash', ['-euc', script], { env, encoding: 'utf8' });
+      assert.equal(run.status, 0, `${journey} ${side}: ${run.stderr}`);
+      if (runner.pins_scroll) {
+        const published = spawnSync('bash', ['-euc', script], { env: { ...env, CANDIDATE: 'false' }, encoding: 'utf8' });
+        assert.notEqual(published.status, 0);
+      }
+    }
+  }
+});
+
+test('signed candidate preparation builds and records each pinned revision with a mocked Gradle boundary', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'signed-candidate-source-'));
+  try {
+    const source = path.join(directory, 'app-source');
+    const evidence = path.join(directory, 'evidence');
+    const bin = path.join(directory, 'bin');
+    const work = path.join(directory, 'signing');
+    for (const folder of [source, evidence, bin, work]) fs.mkdirSync(folder);
+    const git = args => {
+      const run = spawnSync('git', ['-C', source, ...args], { encoding: 'utf8' });
+      assert.equal(run.status, 0, run.stderr);
+      return run.stdout.trim();
+    };
+    git(['init', '-q']);
+    const refs = [];
+    for (const side of ['parent', 'head']) {
+      fs.writeFileSync(path.join(source, 'source-bytes'), side);
+      git(['add', 'source-bytes']);
+      git(['-c', 'user.name=Fixture', '-c', 'user.email=noreply@openai.com', 'commit', '-qm', side]);
+      refs.push([side, git(['rev-parse', 'HEAD'])]);
+    }
+    fs.writeFileSync(path.join(bin, 'gradle'), '#!/bin/sh\nset -eu\ntest "$1" = -p\ntest -s "$2/keystore.properties"\nmkdir -p "$2/app/build/outputs/apk/release"\ncp "$2/source-bytes" "$2/app/build/outputs/apk/release/app-release.apk"\n', { mode: 0o755 });
+    const block = read('tools/release-choices/prepare.sh').match(/elif \[\[ "\$\{CANDIDATE:-false\}" == true \]\]; then\n([\s\S]*?)^else$/m)[1];
+    for (const [side, ref] of refs) {
+      git(['checkout', '--detach', '-q', ref]);
+      const run = spawnSync('bash', ['-euc', `work="$WORK"; app_apk="$EVIDENCE/app.apk"; task=assembleRelease; apk=app/build/outputs/apk/release/app-release.apk; suffix=\n${block}`], {
+        encoding: 'utf8', env: {
+          PATH: `${bin}:${process.env.PATH}`, GITHUB_WORKSPACE: directory, GITHUB_SHA: sha, APP_REF: ref,
+          EVIDENCE: evidence, WORK: work, VERIFY_FEATURE: 'settings-navigation.md', EXPECTED_COMMIT: '',
+          ANDROID_KEYSTORE_PASSWORD: 'fixture', ANDROID_KEY_ALIAS: 'fixture', ANDROID_KEY_PASSWORD: 'fixture',
+        },
+      });
+      assert.equal(run.status, 0, run.stderr);
+      assert.equal(fs.readFileSync(path.join(evidence, 'app-source-sha.txt'), 'utf8').trim(), ref);
+      assert.equal(fs.readFileSync(path.join(evidence, 'app.apk'), 'utf8'), side);
+      assert.doesNotMatch(run.stdout + run.stderr, /storePassword|keyPassword/);
+    }
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
 test('the judge receives recovery UI and host receipts before large diagnostic files', () => {
@@ -372,13 +478,13 @@ test('every allowlisted journey is a dispatch option of verify.yml and has a map
   assert.ok(options.length > 10);
   assert.equal(new Set(verifier.ALLOWLIST).size, verifier.ALLOWLIST.length);
   for (const name of verifier.ALLOWLIST) {
-    assert.ok(options.includes(name), `${name} is a feature option in verify.yml`);
+    assert.ok(options.includes(verifier.journeyRunners([name])[name].feature), `${name} has a driver option in verify.yml`);
     assert.ok(fs.existsSync(path.join(root, '.claude/skills/verify-multiprompt-android/features', name)), `${name} has a journey map`);
   }
 });
 
-test('journeys that need a signed APK or release inputs are not allowlisted', () => {
-  for (const name of ['settings-navigation.md', 'session-gestures.md', 'session-favorites.md', 'robot-faces.md']) {
+test('dedicated and manual journeys are not allowlisted', () => {
+  for (const name of ['app-name.md', 'bot-photo-refresh.md', 'chat-working.md', 'session-settings.md']) {
     assert.ok(!verifier.ALLOWLIST.includes(name), name);
   }
 });
@@ -389,7 +495,7 @@ test('the journey catalog describes each allowlisted journey from the feature ma
   assert.doesNotMatch(catalog, /no description/);
 });
 
-test('the journeys job runs verify.yml with no secrets and no key', () => {
+test('the journeys job passes only the existing signing secrets to verify.yml', () => {
   const workflow = read('.github/workflows/pstack-verifier.yml');
   const journeys = jobBlock(workflow, 'journeys');
   assert.match(journeys, /^ {4}uses: \.\/\.github\/workflows\/verify\.yml$/m);
@@ -397,14 +503,14 @@ test('the journeys job runs verify.yml with no secrets and no key', () => {
   assert.match(journeys, /^ {6}side: head$/m);
   assert.match(journeys, /^ {6}app_ref: \$\{\{ needs\.pick\.outputs\.head_sha \}\}$/m);
   assert.match(journeys, /fail-fast: false/);
-  assert.doesNotMatch(journeys, /secrets/i);
+  assert.deepEqual([...journeys.matchAll(/secrets\.([A-Z0-9_]+)/g)].map(match => match[1]), ['ANDROID_KEYSTORE_BASE64', 'ANDROID_KEYSTORE_PASSWORD', 'ANDROID_KEY_ALIAS', 'ANDROID_KEY_PASSWORD']);
   assert.doesNotMatch(journeys, /DEEPSEEK/);
   assert.doesNotMatch(workflow, /secrets:\s*inherit/);
 });
 
 test('the DeepSeek key reaches only the pick and judge steps, as env', () => {
   const workflow = read('.github/workflows/pstack-verifier.yml');
-  const uses = workflow.match(/secrets\.[A-Z_]+/g) ?? [];
+  const uses = workflow.match(/secrets\.DEEPSEEK_API_KEY/g) ?? [];
   assert.deepEqual(uses, ['secrets.DEEPSEEK_API_KEY', 'secrets.DEEPSEEK_API_KEY']);
   for (const job of ['pick', 'pstack-verifier']) {
     assert.match(jobBlock(workflow, job), /^ {10}DEEPSEEK_API_KEY: \$\{\{ secrets\.DEEPSEEK_API_KEY \}\}$/m, job);
@@ -459,7 +565,7 @@ test('verify.yml keeps non-PR triggers and delegates PR journeys to the capped p
   assert.doesNotMatch(triggers, /^ {2}pull_request:/m);
   const call = triggers.slice(triggers.indexOf('  workflow_call:'), triggers.indexOf('  workflow_dispatch:'));
   assert.match(call, /^ {6}feature:\n {8}description: .+\n {8}required: true\n {8}type: string\n/m);
-  assert.deepEqual([...call.matchAll(/^ {6}(\w+):$/gm)].map(match => match[1]), ['released_chat', 'released_robots', 'release_choices', 'pins_scroll', 'candidate', 'break_it', 'feature', 'side', 'app_ref']);
+  assert.deepEqual([...call.slice(call.indexOf('    inputs:')).matchAll(/^ {6}(\w+):$/gm)].map(match => match[1]), ['driver_feature', 'released_chat', 'released_robots', 'release_choices', 'pins_scroll', 'candidate', 'break_it', 'feature', 'side', 'app_ref']);
   assert.match(call, /^ {6}side:\n {8}description: .+\n {8}required: false\n {8}type: string\n/m);
   assert.match(call, /^ {6}app_ref:\n {8}description: .+\n {8}required: false\n {8}type: string\n$/m);
   assert.match(verify, /^ {2}group: verify-\$\{\{ github\.ref \}\}\$\{\{ inputs\.feature && inputs\.feature != github\.event\.inputs\.feature && format\('-\{0\}', inputs\.feature\) \|\| '' \}\}\$\{\{ inputs\.side && format\('-\{0\}', inputs\.side\) \|\| '' \}\}-\$\{\{ inputs\.break_it_control \|\| 'none' \}\}$/m);
@@ -687,7 +793,7 @@ test('parent job names and artifact names never collide with the head side', () 
   assert.equal(verifier.artifactName('hosts.md', '9', 'head'), 'verify-hosts.md-9');
   assert.equal(verifier.artifactName('hosts.md', '9', 'parent'), 'verify-hosts.md-9-parent');
   const verify = read('.github/workflows/verify.yml');
-  assert.match(verify, /name: verify-\$\{\{ env\.VERIFY_FEATURE \}\}-\$\{\{ github\.run_id \}\}\$\{\{ inputs\.side == 'parent' && '-parent' \|\| '' \}\}\$\{\{ inputs\.side && inputs\.side != 'head' && inputs\.side != 'parent' && format\('-\{0\}', inputs\.side\) \|\| '' \}\}$/m);
+  assert.match(verify, /name: verify-\$\{\{ env\.VERIFY_JOURNEY \}\}-\$\{\{ github\.run_id \}\}\$\{\{ inputs\.side == 'parent' && '-parent' \|\| '' \}\}\$\{\{ inputs\.side && inputs\.side != 'head' && inputs\.side != 'parent' && format\('-\{0\}', inputs\.side\) \|\| '' \}\}$/m);
   assert.match(verify, /stage: stage-1\$\{\{ inputs\.side && format\('-\{0\}-\{1\}', inputs\.side, inputs\.feature\) \|\| '' \}\}$/m);
 });
 
@@ -704,7 +810,7 @@ test('the merge base comes from the compare API and must be a full sha', () => {
   assert.match(pick, /merge_base: \$\{\{ steps\.pick\.outputs\.merge_base \}\}/);
 });
 
-test('the parents job drives the merge base with the head journey scripts and no secrets', () => {
+test('the parents job drives the merge base with the head journey scripts and signing secrets', () => {
   const workflow = read('.github/workflows/pstack-verifier.yml');
   const parents = jobBlock(workflow, 'parents');
   assert.match(parents, /^ {4}name: parent journey \$\{\{ matrix\.feature \}\}$/m);
@@ -714,7 +820,7 @@ test('the parents job drives the merge base with the head journey scripts and no
   assert.match(parents, /^ {6}app_ref: \$\{\{ needs\.pick\.outputs\.merge_base \}\}$/m);
   assert.match(parents, /fail-fast: false/);
   assert.match(parents, /^ {4}if: needs\.pick\.outputs\.features != '\[\]'$/m);
-  assert.doesNotMatch(parents, /secrets/i);
+  assert.doesNotMatch(parents, /DEEPSEEK|secrets:\s*inherit/);
   assert.doesNotMatch(parents, /DEEPSEEK/);
   assert.match(jobBlock(workflow, 'pstack-verifier'), /MERGE_BASE: \$\{\{ needs\.pick\.outputs\.merge_base \}\}/);
 });
@@ -815,17 +921,9 @@ test('a verdict wrapped in prose or a fence still parses, and a bad answer is as
   assert.equal(asked, 1);
 });
 
-test('SOFT-2536 schedules all five required journeys beyond the suggestion limit', () => {
+test('SOFT-2536 must split five required journeys rather than omit coverage', () => {
   const outcomes = ['sign-in.journey', 'host-changed-key.journey', 'chat-reactions.journey', 'claude.skills-model-effort', 'inbox.search'];
-  const plan = { product: true, outcomes };
-  const picked = { features: ['sign-in.md', 'host-changed-key.md', 'chat-reactions.md'], smoke: false };
-  const selected = verifier.includeRequiredJourneys(picked, plan);
-  const expected = [...picked.features, 'native-skills.md', 'sessions.md'];
-  assert.deepEqual(selected.features, expected);
-  assert.equal(selected.smoke, false);
-  assert.deepEqual(verifier.validateFeatures(selected.features, Infinity), { features: expected, dropped: [] });
-  const judge = read('.github/scripts/pstack-verifier/verifier.cjs').split('async function judge(')[1];
-  assert.match(judge, /validateFeatures\(requested, Infinity\)/);
+  assert.throws(() => verifier.includeRequiredJourneys({ features: ['sign-in.md'], smoke: false }, { product: true, outcomes }), /split the change/);
 });
 
 test('required journeys replace a smoke fallback without inventing coverage for manual gaps', () => {
