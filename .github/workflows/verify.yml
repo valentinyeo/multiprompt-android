@@ -7,6 +7,26 @@ on:
     - cron: '23 3 * * *'
   workflow_call:
     inputs:
+      released_chat:
+        required: false
+        type: boolean
+        default: false
+      released_robots:
+        required: false
+        type: boolean
+        default: false
+      release_choices:
+        required: false
+        type: boolean
+        default: false
+      pins_scroll:
+        required: false
+        type: boolean
+        default: false
+      candidate:
+        required: false
+        type: boolean
+        default: false
       break_it:
         description: Replay a proven head journey with five retained stress checkpoints
         type: boolean
@@ -156,7 +176,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: verify-${{ github.ref }}${{ inputs.feature && inputs.feature != github.event.inputs.feature && format('-{0}', inputs.feature) || '' }}${{ inputs.side == 'parent' && '-parent' || '' }}-${{ inputs.break_it_control || 'none' }}
+  group: verify-${{ github.ref }}${{ inputs.feature && inputs.feature != github.event.inputs.feature && format('-{0}', inputs.feature) || '' }}${{ inputs.side && format('-{0}', inputs.side) || '' }}-${{ inputs.break_it_control || 'none' }}
   cancel-in-progress: true
 
 jobs:
@@ -605,7 +625,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           overwrite: true
-          name: verify-${{ env.VERIFY_FEATURE }}-${{ github.run_id }}${{ inputs.side == 'parent' && '-parent' || '' }}
+          name: verify-${{ env.VERIFY_FEATURE }}-${{ github.run_id }}${{ inputs.side == 'parent' && '-parent' || '' }}${{ inputs.side && inputs.side != 'head' && inputs.side != 'parent' && format('-{0}', inputs.side) || '' }}
           path: verification-evidence/
           if-no-files-found: error
           retention-days: 7
