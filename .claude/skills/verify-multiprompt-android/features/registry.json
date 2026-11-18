@@ -1511,8 +1511,7 @@
       "sideEffect": true,
       "match": [
         "reader/ChatHistoryConnection\\.kt",
-        "reader/ChatHistoryProtocol\\.kt",
-        "latestPosition|hiddenIds"
+        "reader/ChatHistoryProtocol\\.kt"
       ],
       "citations": {
         "action": {

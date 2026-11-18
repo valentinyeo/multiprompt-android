@@ -7,7 +7,6 @@ from pathlib import Path
 import select
 import socket
 import sys
-import time
 
 SID = "c001c001-2532-4000-8000-000000002532"
 TMUX = "verify-session"
@@ -59,7 +58,6 @@ def console():
     with db:
         db.execute("INSERT OR IGNORE INTO message_chats(provider,sid) VALUES ('claude',?)", (SID,))
     accepted = []
-    stream_completed = None
 
     def append(role, text, identity, fresh=False):
         stamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -103,18 +101,11 @@ def console():
                             payload = dict(message_id=token)
                             if not fresh:
                                 payload["uuids"] = [native]
-                            if fresh:
-                                stream_completed = time.time() * 1000
-                                for kind, body in (("text.done", dict(text="REPLY_BEFORE_2532")), ("turn.ended", {})):
-                                    reader["message_event"](db, "claude", SID, dict(kind=kind, sid=SID, turn="turn-1",
-                                        item="msg_reply_1:text:0", at=int(stream_completed), payload=body))
-                            events = [("turn.started", None, payload),
-                                ("text.done" if fresh else "text.delta", f"msg_reply_{n}:text:0", dict(text=f"REPLY_{'AFTER' if fresh else 'BEFORE'}_2532"))]
-                            if fresh:
-                                events.append(("turn.ended", None, {}))
-                            for kind, item, body in events:
+                            for kind, item, body in (("turn.started", None, payload),
+                                                     ("text.done", f"msg_reply_{n}:text:0", dict(text=f"REPLY_{'AFTER' if fresh else 'BEFORE'}_2532")),
+                                                     ("turn.ended", None, {})):
                                 reader["message_event"](db, "claude", SID, dict(kind=kind, sid=SID, turn=f"turn-{n}", item=item, payload=body))
-                        evidence = dict(phone_id=token, native_id=native, submitted=row["created"] * 1000, receipt=row["receipt"], text=row["text"], transcript=transcript, live_item=f"msg_reply_{n}:text:0")
+                        evidence = dict(phone_id=token, native_id=native, receipt=row["receipt"], text=row["text"], transcript=transcript, live_item=f"msg_reply_{n}:text:0")
                         accepted.append(evidence)
                         with receipts.open("a") as output:
                             output.write(json.dumps(evidence) + "\n")
@@ -139,10 +130,7 @@ def console():
                                             output.write(json.dumps(archived) + "\n")
                     else:
                         assert name == "read", name
-                    result = dict(sid=SID, accepted=accepted, submitted=accepted[1]["submitted"] if len(accepted) > 1 else None,
-                                  completed=stream_completed,
-                                  followup_submitted_while_streaming=len(accepted) > 1 and accepted[1]["submitted"] < stream_completed,
-                                  transcript=[json.loads(line) for line in TRANSCRIPT.read_text().splitlines()],
+                    result = dict(sid=SID, accepted=accepted, transcript=[json.loads(line) for line in TRANSCRIPT.read_text().splitlines()],
                                   events=[json.loads(row[0]) for row in db.execute("SELECT body FROM message_events WHERE provider='claude' AND sid=? ORDER BY seq", (SID,))])
                 except Exception as error:
                     result = dict(error=str(error))

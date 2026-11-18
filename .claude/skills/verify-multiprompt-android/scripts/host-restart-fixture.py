@@ -55,16 +55,10 @@ def console():
     reader = runtime()
     reader['host_write'](reader['host_paths']('claude', SID)['state'], dict(
         native_session=NATIVE_BEFORE, nightly_day=time.strftime('%Y-%m-%d')))
-    for native in (SID, NATIVE_BEFORE):
-        native_row(native, 'user', 'CURRENT_CHAT_2681', 'initial-user-2681')
-        native_row(native, 'assistant', 'DESKTOP_CHAT_READY_2681', 'initial-reply-2681')
-    with reader['message_store_db'](TMUX) as db, db:
-        db.execute('INSERT OR IGNORE INTO message_chats(provider,sid) VALUES (?,?)', ('claude', SID))
-        for index in range(40):
-            token = f'old-message-2681-{index:04d}'
-            db.execute("INSERT INTO shared_messages VALUES (?,?,?,?,?,?,'accepted',NULL,?,0,?,'human')",
-                (token, 'claude', SID, f'OLD_INCOMING_2681_{index:04d}', index + 1,
-                 uuid.uuid4().hex, 'historical-acceptance', time.time() - 3600 + index))
+    native_row(SID, 'user', 'FOREIGN_QUESTION_2681', 'foreign-user-2681')
+    native_row(SID, 'assistant', 'FOREIGN_OLD_SESSION_2681', 'foreign-reply-2681')
+    native_row(NATIVE_BEFORE, 'user', 'CURRENT_CHAT_2681', 'initial-user-2681')
+    native_row(NATIVE_BEFORE, 'assistant', 'DESKTOP_CHAT_READY_2681', 'initial-reply-2681')
     subprocess.run(['tmux', 'set-option', '-t', TMUX, '@mp_host_sid', SID], check=True)
     RECEIPTS.write_text('')
     print('Claude Code\nHOST_RESTART_READY_2681\nReady', flush=True)
@@ -86,11 +80,7 @@ def restart():
     else:
         raise AssertionError('Fixture host did not stop')
     state = reader['host_read'](paths['state'])
-    session = dict(state=state)
     state['native_session'] = NATIVE_AFTER
-    reader['host_fresh_archive']('claude', SID, TMUX, session)
-    if session.get('db') is not None:
-        session['db'].close()
     reader['host_write'](paths['state'], state)
     assert cli('start', 'claude', SID)['status'] in ('started', 'already')
     for _ in range(100):
@@ -140,24 +130,51 @@ def finish_stream():
     raise AssertionError('Stream did not complete')
 
 
+def metadata(publish=False):
+    reader = runtime()
+    paths = reader['host_paths']('claude', SID)
+    for _ in range(100):
+        receipts = [json.loads(line) for line in RECEIPTS.read_text().splitlines()]
+        desktop = next((row for row in receipts if row['text'] == 'DESKTOP_AFTER_2681'), None)
+        state = reader['host_read'](paths['state'])
+        if desktop and ((HOME / 'host-restart-stream-enabled').exists() or
+                state.get('result', {}).get('at', 0) >= desktop['at']):
+            break
+        time.sleep(.1)
+    else:
+        raise AssertionError('Replacement provider did not receive the desktop message')
+    events = [json.loads(line) for line in paths['log'].read_text().splitlines()]
+    latest_init = next(row['detail']['session'] for row in reversed(events) if row['event'] == 'init')
+    assert latest_init == NATIVE_AFTER, events
+    state = reader['host_read'](paths['state'])
+    state.pop('native_session', None)
+    reader['host_write'](paths['state'], state)
+    config = reader['host_read'](paths['config'])
+    config.pop('native_session', None)
+    if publish:
+        config['native_session'] = NATIVE_AFTER
+    reader['host_write'](paths['config'], config)
+    print(json.dumps(dict(sid=config.get('sid', SID), native_session=config.get('native_session'),
+        latest_init=latest_init, private_session_hint=False)))
+
+
 def evidence():
     reader = runtime()
-    history = reader['host_paths']('claude', SID)['history']
-    all_rows = [json.loads(line)['row'] for line in history.read_text().splitlines()]
-    rows = [row for row in all_rows if row['role'] in ('user', 'assistant')]
-    receipts = [json.loads(line) for line in RECEIPTS.read_text().splitlines()]
     paths = reader['host_paths']('claude', SID)
+    rows = []
+    for native in (NATIVE_BEFORE, NATIVE_AFTER):
+        path = HOME / '.claude/projects' / str(CWD).replace('/', '-') / (native + '.jsonl')
+        if path.exists():
+            for line in path.read_text().splitlines():
+                event = json.loads(line)
+                rows.append(dict(role=event['type'], text=''.join(block.get('text', '') for block in event['message']['content']),
+                    id=event['uuid'], timestamp=event['timestamp'], native_session=native))
+    receipts = [json.loads(line) for line in RECEIPTS.read_text().splitlines()]
     state = reader['host_read'](paths['state'])
-    log = paths['log'].read_text()[-20000:]
-    errors = paths['errors'].read_text() if paths['errors'].exists() else ''
-    with sqlite3.connect(reader['message_store_path']().as_uri() + '?mode=ro', uri=True) as db:
-        messages = [dict(zip(('id', 'text', 'state', 'deadline', 'receipt'), row)) for row in
-            db.execute('SELECT id,text,state,deadline,receipt FROM shared_messages WHERE sid=? ORDER BY position', (SID,))]
-    print(json.dumps(dict(sid=SID, tmux=TMUX, history=rows, history_bytes=history.stat().st_size,
-        archived_tools=sum(row['role'] == 'tool' for row in all_rows),
-        old_accepted=sum(row['state'] == 'accepted' and row['id'].startswith('old-message-2681-') for row in messages),
-        receipts=receipts, messages=messages[-3:],
-        host_state=state, host_log=log, host_stderr=errors), indent=2))
+    config = reader['host_read'](paths['config'])
+    print(json.dumps(dict(sid=SID, tmux=TMUX, history=rows, receipts=receipts,
+        config=config, host_state=state, host_log=paths['log'].read_text()[-12000:],
+        host_stderr=paths['errors'].read_text() if paths['errors'].exists() else ''), indent=2))
 
 
 def emit(event):
@@ -179,7 +196,7 @@ def claude():
             text = content if isinstance(content, str) else ''.join(block.get('text', '') for block in content)
             reply = 'REPLY_' + text
             with RECEIPTS.open('a') as output:
-                output.write(json.dumps(dict(text=text, reply=reply, pid=os.getpid(), sid=SID, native_session=native)) + '\n')
+                output.write(json.dumps(dict(text=text, reply=reply, pid=os.getpid(), sid=SID, native_session=native, at=time.time())) + '\n')
             native_row(native, 'user', text, request['uuid'])
             answer_id = 'msg_' + uuid.uuid4().hex
             if text == 'DESKTOP_AFTER_2681' and (HOME / 'host-restart-stream-enabled').exists():
@@ -208,6 +225,10 @@ if __name__ == '__main__':
         restart()
     elif sys.argv[1:] == ['finish-stream']:
         finish_stream()
+    elif sys.argv[1:] == ['metadata-legacy']:
+        metadata()
+    elif sys.argv[1:] == ['metadata-config']:
+        metadata(publish=True)
     elif sys.argv[1:] == ['evidence']:
         evidence()
     else:

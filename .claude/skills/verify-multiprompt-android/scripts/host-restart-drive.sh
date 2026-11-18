@@ -16,10 +16,11 @@ shot host-restart-before
 host_restart_fixture restart > "$EVIDENCE/host-restart-processes.txt"
 sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/host-restart-reader.py host send claude c001c001-2681-4000-8000-000000002681 DESKTOP_AFTER_2681 > "$EVIDENCE/host-restart-desktop-send.json"
 jq -e '.status == "sent" or .status == "queued"' "$EVIDENCE/host-restart-desktop-send.json"
+host_restart_fixture metadata-legacy > "$EVIDENCE/host-restart-legacy-metadata.json"
 host_restart_fixture evidence > "$EVIDENCE/host-restart-host.json"
 if ! wait_for_text REPLY_DESKTOP_AFTER_2681; then
     host_restart_fixture evidence > "$EVIDENCE/host-restart-host.json"
-    if ! jq -e '.old_accepted == 40 and any(.history[]; .role == "assistant" and .text == "REPLY_DESKTOP_AFTER_2681")' "$EVIDENCE/host-restart-host.json"; then
+    if ! jq -e 'any(.history[]; .role == "assistant" and .text == "REPLY_DESKTOP_AFTER_2681")' "$EVIDENCE/host-restart-host.json"; then
         setup_failure=1
         exit 1
     fi
@@ -27,6 +28,7 @@ if ! wait_for_text REPLY_DESKTOP_AFTER_2681; then
     exit 1
 fi
 shot host-restart-after
+host_restart_fixture metadata-config > "$EVIDENCE/host-restart-config-metadata.json"
 fill 'Message verify-session' PHONE_AFTER_2681
 tap_desc 'Send prompt'
 if [[ "${BREAK_IT_MODE:-}" == true ]]; then
@@ -51,8 +53,7 @@ process = json.loads(root.joinpath('host-restart-processes.txt').read_text().spl
 assert process['old_pid'] != process['new_pid'] and process['history_pids'], process
 assert process['sid'] == host['sid'] and process['tmux'] == host['tmux'], process
 assert process['sid'] not in (process['native_before'], process['native_after'])
-assert host['old_accepted'] == 40
-assert all(not row['timestamp'].endswith('Z') for row in host['history'])
+assert host['config']['native_session'] == process['native_after']
 expected = ['PHONE_BEFORE_2681', 'DESKTOP_AFTER_2681', 'PHONE_AFTER_2681']
 assert [row['text'] for row in host['receipts']] == expected, host
 assert host['receipts'][0]['pid'] != host['receipts'][1]['pid']
@@ -67,7 +68,7 @@ for phase, text in [('open', 'DESKTOP_CHAT_READY_2681'), ('draft', 'PHONE_BEFORE
     nodes = list(ET.parse(file).getroot().iter('node'))
     assert any(node.get('text') == text for node in nodes), (phase, text)
     if phase in ('after', 'phone-after'):
-        assert not any('OLD_INCOMING_2681_' in node.get('text', '') for node in nodes), phase
+        assert not any('FOREIGN_OLD_SESSION_2681' in node.get('text', '') for node in nodes), phase
     assert file.with_suffix('.png').stat().st_size > 100
     states[phase] = dict(xml=file.name, screenshot=file.with_suffix('.png').name, text=text)
 root.joinpath('host-restart-state.json').write_text(json.dumps(states, indent=2) + '\n')
