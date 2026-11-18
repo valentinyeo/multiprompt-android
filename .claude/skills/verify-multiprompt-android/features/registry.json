@@ -9,7 +9,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/ai-switch-drive.sh"
+        ]
       },
       "outcomes": [
         "ai.switch"
@@ -290,7 +293,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/native-menu-drive.sh"
+        ]
       },
       "outcomes": [
         "claude.skills-model-effort"
@@ -389,7 +395,10 @@
         "prerequisites": [
           "Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable."
         ],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          "tools/session-gestures/drive.py"
+        ]
       },
       "outcomes": [
         "session-gestures.journey"
@@ -409,7 +418,10 @@
         "prerequisites": [
           "Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable."
         ],
-        "driver": false
+        "driver": false,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/pins-drive.sh"
+        ]
       },
       "outcomes": [
         "session-pins.journey"
@@ -491,7 +503,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          "tools/session-gestures/drive.py"
+        ]
       },
       "outcomes": [
         "inbox.summaries"
@@ -602,7 +617,10 @@
         "prerequisites": [
           "Local authenticated account fixture; live production email OTP is not exercised."
         ],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/device-approval-drive.sh"
+        ]
       },
       "outcomes": [
         "legacy.igsh-449"
@@ -624,7 +642,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/chat-search-drive.sh"
+        ]
       },
       "outcomes": [
         "chat-search.open"
@@ -648,7 +669,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/snippets-drive.sh"
+        ]
       },
       "outcomes": [
         "snippets.save-reuse-delete"
@@ -666,7 +690,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/remote-control-drive.sh"
+        ]
       },
       "outcomes": [
         "claude.remote-control"
@@ -688,7 +715,10 @@
         "workflow": "verify.yml",
         "driver": true,
         "inputs": {},
-        "prerequisites": []
+        "prerequisites": [],
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/ai-usage-drive.sh"
+        ]
       },
       "evidence": {
         "ai-usage-menu.json": 1500,
@@ -707,7 +737,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/skill-pills-drive.sh"
+        ]
       },
       "outcomes": [
         "skills.pills"
@@ -725,7 +758,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/chat-table-drive.sh"
+        ]
       },
       "outcomes": [
         "chat-table.expand"
@@ -747,7 +783,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/clear-ranking-drive.sh"
+        ]
       },
       "outcomes": [
         "claude.clear-ranking"
@@ -771,7 +810,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/signed-out-sync-drive.sh"
+        ]
       },
       "outcomes": [
         "legacy.igsh-413"
@@ -789,7 +831,11 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/control-journeys-drive.sh",
+          ".claude/skills/verify-multiprompt-android/scripts/reader-menu-drive.sh"
+        ]
       },
       "outcomes": [
         "bot.look"
@@ -810,7 +856,11 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/reader-version-drive.sh",
+          ".claude/skills/verify-multiprompt-android/scripts/ai-switch-drive.sh"
+        ]
       },
       "outcomes": [
         "legacy.igsh-426"
@@ -828,7 +878,11 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/control-journeys-drive.sh",
+          ".claude/skills/verify-multiprompt-android/scripts/reader-menu-drive.sh"
+        ]
       },
       "outcomes": [
         "reader.controls"
@@ -852,7 +906,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/message-reply-drive.sh"
+        ]
       },
       "outcomes": [
         "legacy.igsh-418"
@@ -873,7 +930,11 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/inbox-controls-drive.sh",
+          ".claude/skills/verify-multiprompt-android/scripts/ai-switch-drive.sh"
+        ]
       },
       "outcomes": [
         "settings.controls"
@@ -897,7 +958,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/inbox-controls-drive.sh"
+        ]
       },
       "outcomes": [
         "inbox.reminders"
