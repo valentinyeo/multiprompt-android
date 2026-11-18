@@ -140,16 +140,20 @@
       "screen": "Bot look",
       "label": "Dismiss Bot look",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookSheet:KitSheet:90073eaacdef9f43:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:41",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:46",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Press Android Back from Bot look",
+        "result": "Reader title and Session actions return without Bot look in bot-look-dismissed.json"
+      }
     },
     {
       "id": "bot-look.use-picture-change-picture",
       "screen": "Bot look",
       "label": "Use picture / change picture",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:KitSecondaryButton:eb80e1f7d3263066:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:68",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:73",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -158,7 +162,7 @@
       "screen": "Bot look",
       "label": "Remove picture",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:KitSecondaryButton:26a3d609bd760091:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:69",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:74",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -167,270 +171,390 @@
       "screen": "Bot look",
       "label": "Scroll Bot look",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:verticalScroll:74f9c94015fb4c77:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:71",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:76",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Reach Face 20, Colour 8 and Auto by scrolling the short-screen Bot look container",
+        "result": "Face 1 is visible and Auto hidden in bot-look-top.json; Auto is visible and Face 1 offscreen in bot-look-bottom.json"
+      }
     },
     {
       "id": "bot-look.face-1",
       "screen": "Bot look",
       "label": "Face 1",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:81",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Face 1 by accessibility description",
+        "result": "Bot look and exactly the chosen face selected in bot-look-face-1.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.face-2",
       "screen": "Bot look",
       "label": "Face 2",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:81",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Face 2 by accessibility description",
+        "result": "Bot look and exactly the chosen face selected in bot-look-face-2.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.face-3",
       "screen": "Bot look",
       "label": "Face 3",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:81",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Face 3 by accessibility description",
+        "result": "Bot look and exactly the chosen face selected in bot-look-face-3.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.face-4",
       "screen": "Bot look",
       "label": "Face 4",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:81",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Face 4 by accessibility description",
+        "result": "Bot look and exactly the chosen face selected in bot-look-face-4.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.face-5",
       "screen": "Bot look",
       "label": "Face 5",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:81",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Face 5 by accessibility description",
+        "result": "Bot look and exactly the chosen face selected in bot-look-face-5.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.face-6",
       "screen": "Bot look",
       "label": "Face 6",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:81",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Face 6 by accessibility description",
+        "result": "Bot look and exactly the chosen face selected in bot-look-face-6.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.face-7",
       "screen": "Bot look",
       "label": "Face 7",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:81",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Face 7 by accessibility description",
+        "result": "Bot look and exactly the chosen face selected in bot-look-face-7.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.face-8",
       "screen": "Bot look",
       "label": "Face 8",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:81",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Face 8 by accessibility description",
+        "result": "Bot look and exactly the chosen face selected in bot-look-face-8.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.face-9",
       "screen": "Bot look",
       "label": "Face 9",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:81",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Face 9 by accessibility description",
+        "result": "Bot look and exactly the chosen face selected in bot-look-face-9.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.face-10",
       "screen": "Bot look",
       "label": "Face 10",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:81",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Face 10 by accessibility description",
+        "result": "Bot look and exactly the chosen face selected in bot-look-face-10.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.face-11",
       "screen": "Bot look",
       "label": "Face 11",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:81",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Face 11 by accessibility description",
+        "result": "Bot look and exactly the chosen face selected in bot-look-face-11.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.face-12",
       "screen": "Bot look",
       "label": "Face 12",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:81",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Face 12 by accessibility description",
+        "result": "Bot look and exactly the chosen face selected in bot-look-face-12.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.face-13",
       "screen": "Bot look",
       "label": "Face 13",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:81",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Face 13 by accessibility description",
+        "result": "Bot look and exactly the chosen face selected in bot-look-face-13.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.face-14",
       "screen": "Bot look",
       "label": "Face 14",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:81",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Face 14 by accessibility description",
+        "result": "Bot look and exactly the chosen face selected in bot-look-face-14.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.face-15",
       "screen": "Bot look",
       "label": "Face 15",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:81",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Face 15 by accessibility description",
+        "result": "Bot look and exactly the chosen face selected in bot-look-face-15.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.face-16",
       "screen": "Bot look",
       "label": "Face 16",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:81",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Face 16 by accessibility description",
+        "result": "Bot look and exactly the chosen face selected in bot-look-face-16.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.face-17",
       "screen": "Bot look",
       "label": "Face 17",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:81",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Face 17 by accessibility description",
+        "result": "Bot look and exactly the chosen face selected in bot-look-face-17.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.face-18",
       "screen": "Bot look",
       "label": "Face 18",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:81",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Face 18 by accessibility description",
+        "result": "Bot look and exactly the chosen face selected in bot-look-face-18.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.face-19",
       "screen": "Bot look",
       "label": "Face 19",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:81",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Face 19 by accessibility description",
+        "result": "Bot look and exactly the chosen face selected in bot-look-face-19.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.face-20",
       "screen": "Bot look",
       "label": "Face 20",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:e0e7ef0f67e477c1:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:81",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:86",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Face 20 by accessibility description",
+        "result": "Bot look and exactly the chosen face selected in bot-look-face-20.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.colour-1",
       "screen": "Bot look",
       "label": "Colour 1",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:f60ffb92b7cffe28:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:113",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:116",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Colour 1 by accessibility description",
+        "result": "Bot look and exactly the chosen colour selected in bot-look-colour-1.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.colour-2",
       "screen": "Bot look",
       "label": "Colour 2",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:f60ffb92b7cffe28:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:113",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:116",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Colour 2 by accessibility description",
+        "result": "Bot look and exactly the chosen colour selected in bot-look-colour-2.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.colour-3",
       "screen": "Bot look",
       "label": "Colour 3",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:f60ffb92b7cffe28:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:113",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:116",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Colour 3 by accessibility description",
+        "result": "Bot look and exactly the chosen colour selected in bot-look-colour-3.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.colour-4",
       "screen": "Bot look",
       "label": "Colour 4",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:f60ffb92b7cffe28:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:113",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:116",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Colour 4 by accessibility description",
+        "result": "Bot look and exactly the chosen colour selected in bot-look-colour-4.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.colour-5",
       "screen": "Bot look",
       "label": "Colour 5",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:f60ffb92b7cffe28:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:113",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:116",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Colour 5 by accessibility description",
+        "result": "Bot look and exactly the chosen colour selected in bot-look-colour-5.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.colour-6",
       "screen": "Bot look",
       "label": "Colour 6",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:f60ffb92b7cffe28:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:113",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:116",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Colour 6 by accessibility description",
+        "result": "Bot look and exactly the chosen colour selected in bot-look-colour-6.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.colour-7",
       "screen": "Bot look",
       "label": "Colour 7",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:f60ffb92b7cffe28:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:113",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:116",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Colour 7 by accessibility description",
+        "result": "Bot look and exactly the chosen colour selected in bot-look-colour-7.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.colour-8",
       "screen": "Bot look",
       "label": "Colour 8",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:f60ffb92b7cffe28:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:113",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:116",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Colour 8 by accessibility description",
+        "result": "Bot look and exactly the chosen colour selected in bot-look-colour-8.json with visible bounds and XML/screenshot"
+      }
     },
     {
       "id": "bot-look.automatic-colour",
       "screen": "Bot look",
       "label": "Automatic colour",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:BotLookContent:clickable:288ddc035ee32828:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:122",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:141",
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Tap Auto after selecting Colour 8",
+        "result": "Auto selected with no selected explicit colour in bot-look-auto.json and after restart"
+      }
     },
     {
       "id": "native-chat.retry",
@@ -1955,7 +2079,7 @@
     {
       "id": "select-bots.move-to",
       "screen": "Select bots",
-      "label": "Move to…",
+      "label": "Move to\u2026",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitPrimaryButton:e8d1dbd1d4d7ce32:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1662",
       "journey": null,
@@ -2711,7 +2835,7 @@
     {
       "id": "inbox-session-actions.remind-me",
       "screen": "Inbox session actions",
-      "label": "Remind Me…",
+      "label": "Remind Me\u2026",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:SessionCard:KitMenuRow:9ef47acdfd388b08:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2690",
       "journey": null,
@@ -3003,8 +3127,12 @@
       "label": "Dismiss Reader rename session",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSheet:6f9b80409db429f9:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3585",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Press Android Back from Rename session",
+        "result": "Original reader title and no sheet in reader-controls-rename-dismiss.json; unchanged host receipts"
+      }
     },
     {
       "id": "reader-rename-session.session-name",
@@ -3012,8 +3140,12 @@
       "label": "Session name",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:OutlinedTextField:1968f78b280da33f:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3590",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Fill Name with VERIFY_CANCELLED_2653 and VERIFY_RENAMED_2653",
+        "result": "Exact editor text in reader-controls-rename-draft.json and reader-controls-rename-save-draft.json"
+      }
     },
     {
       "id": "reader-rename-session.keyboard-done",
@@ -3030,8 +3162,12 @@
       "label": "Cancel",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:e935831a0300780b:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3607",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Cancel after editing Name",
+        "result": "Original title returns, original draft on reopen, unchanged host receipts in reader-controls-cancelled.txt"
+      }
     },
     {
       "id": "reader-rename-session.rename",
@@ -3039,8 +3175,12 @@
       "label": "Rename",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitPrimaryButton:3429a7b605b502d1:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3611",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Rename with VERIFY_RENAMED_2653",
+        "result": "New title in reader-controls-renamed.json, exactly one /rename host receipt and independent tmux window name"
+      }
     },
     {
       "id": "image-upload-key.dismiss-image-upload-key",
@@ -3196,13 +3336,13 @@
     {
       "id": "session-actions.back",
       "screen": "Session actions",
-      "label": "‹ Back",
+      "label": "\u2039 Back",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:04daaf2cf4a09c36:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3856",
       "journey": "native-skills.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
-        "action": "Tap ‹ Back from the reader model menu",
+        "action": "Tap \u2039 Back from the reader model menu",
         "result": "Search in chat row returns in native-menu-reader-back XML/PNG"
       }
     },
@@ -3237,7 +3377,7 @@
       "journey": "native-skills.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
-        "action": "Tap Session actions then Change ›",
+        "action": "Tap Session actions then Change \u203a",
         "result": "Disabled Current: Fable row in native-menu-reader-current XML/PNG"
       }
     },
@@ -3344,8 +3484,12 @@
       "label": "Rename",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:742ee1367236c3d9:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4016",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Open Session actions and tap Rename",
+        "result": "Rename session, Name editor and Cancel appear in reader-controls-rename-draft.json"
+      }
     },
     {
       "id": "session-actions.copy-chat-id",
@@ -3363,7 +3507,7 @@
     {
       "id": "session-actions.remind-me",
       "screen": "Session actions",
-      "label": "Remind Me…",
+      "label": "Remind Me\u2026",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:89bc78dfa896860f:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4037",
       "journey": null,
@@ -3393,8 +3537,12 @@
       "label": "Display",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:4ce9927e623a995e:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4052",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Open Session actions and tap Display",
+        "result": "Show terminal details and Use default font size in reader-controls-display.json"
+      }
     },
     {
       "id": "session-actions.bot-look",
@@ -3402,8 +3550,12 @@
       "label": "Bot look",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:8006220fc0dbcb55:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4057",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "bot-look.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/bot-look.md",
+        "action": "Open Session actions and tap Bot look",
+        "result": "Bot look and Face 1 appear in bot-look-top.json"
+      }
     },
     {
       "id": "session-actions.computer",
@@ -3630,8 +3782,12 @@
       "label": "Show / hide terminal details",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:8e1b263a03ce6212:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4146",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Show terminal details, reopen Display, tap Hide terminal details and reopen",
+        "result": "Hide terminal details then Show terminal details in reader-controls-details-on.json and reader-controls-details-off.json"
+      }
     },
     {
       "id": "reader-display.sunlight-mode-on-off",
@@ -3639,8 +3795,12 @@
       "label": "Sunlight mode on / off",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:07ea1661c63a43f4:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4153",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Sunlight mode on, reopen Display, tap Sunlight mode off and reopen",
+        "result": "Opposite action labels and reader screenshots in reader-controls-sunlight-on.json and reader-controls-sunlight-off.json"
+      }
     },
     {
       "id": "reader-display.use-default-font-size",
@@ -3873,8 +4033,8 @@
       "journey": "native-skills.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
-        "action": "Tap Attach → Model → Opus",
-        "result": "Opus 5.5 · high visible host reply and Opus › selection in native-menu-attach-opus XML/PNG; independent /model opus receipt"
+        "action": "Tap Attach \u2192 Model \u2192 Opus",
+        "result": "Opus 5.5 \u00b7 high visible host reply and Opus \u203a selection in native-menu-attach-opus XML/PNG; independent /model opus receipt"
       }
     },
     {
@@ -3899,8 +4059,8 @@
       "journey": "native-skills.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
-        "action": "Tap Attach → Model → Haiku",
-        "result": "Haiku 5.5 · high visible host reply and Haiku › selection in native-menu-attach-haiku XML/PNG; independent /model haiku receipt"
+        "action": "Tap Attach \u2192 Model \u2192 Haiku",
+        "result": "Haiku 5.5 \u00b7 high visible host reply and Haiku \u203a selection in native-menu-attach-haiku XML/PNG; independent /model haiku receipt"
       }
     },
     {
@@ -3912,8 +4072,8 @@
       "journey": "native-skills.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
-        "action": "Tap Attach → Model → Fable",
-        "result": "Fable 5.5 · high visible host reply and Fable › selection in native-menu-attach-fable XML/PNG; independent /model fable receipt"
+        "action": "Tap Attach \u2192 Model \u2192 Fable",
+        "result": "Fable 5.5 \u00b7 high visible host reply and Fable \u203a selection in native-menu-attach-fable XML/PNG; independent /model fable receipt"
       }
     },
     {
@@ -3925,8 +4085,8 @@
       "journey": "native-skills.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
-        "action": "Tap Attach → Effort → Low",
-        "result": "Fable 5.5 · low visible host reply and Low › selection in native-menu-attach-low XML/PNG; independent /effort low receipt"
+        "action": "Tap Attach \u2192 Effort \u2192 Low",
+        "result": "Fable 5.5 \u00b7 low visible host reply and Low \u203a selection in native-menu-attach-low XML/PNG; independent /effort low receipt"
       }
     },
     {
@@ -3938,8 +4098,8 @@
       "journey": "native-skills.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/native-skills.md",
-        "action": "Tap Attach → Effort → Medium",
-        "result": "Fable 5.5 · medium visible host reply and Medium › selection in native-menu-attach-medium XML/PNG; independent /effort medium receipt"
+        "action": "Tap Attach \u2192 Effort \u2192 Medium",
+        "result": "Fable 5.5 \u00b7 medium visible host reply and Medium \u203a selection in native-menu-attach-medium XML/PNG; independent /effort medium receipt"
       }
     },
     {
@@ -6112,7 +6272,7 @@
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt",
       "label": "Audited screen composition, labels and finite choice domains",
-      "sha256": "65df2aea6450c5a5047bd4c31c518a7e1ff54b8e0c0185763da52fab8ed155ac"
+      "sha256": "ed0709f41c0f31c7c547f535ae68ceed890573eaf5f6a9bcf61e93881b316525"
     },
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/ChatBubble.kt",
@@ -6373,7 +6533,7 @@
     {
       "id": "bot-look",
       "screen": "Bot look",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:41",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/BotLookSheet.kt:46",
       "entry": "See controls with this screen name; shared screens list their entry contexts."
     },
     {

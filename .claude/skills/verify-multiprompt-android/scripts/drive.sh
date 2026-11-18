@@ -937,6 +937,11 @@ PYINFO
     exit 0
 fi
 
+if [[ "$feature" == bot-look.md || "$feature" == reader-controls.md ]]; then
+    source "$scripts/control-journeys-drive.sh"
+    exit 0
+fi
+
 if [[ "$feature" == ai-usage.md ]]; then
     source "$scripts/ai-usage-drive.sh"
     exit 0
