@@ -9,6 +9,10 @@ on:
         description: Run weekly feature-map maintenance instead of the stability series
         type: boolean
         default: false
+      dry_run:
+        description: Plan feature-map journeys and check sources without driving Android or publishing a PR
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -22,6 +26,8 @@ jobs:
   maintenance:
     if: inputs.feature_map == true
     uses: ./.github/workflows/maintain-verification.yml
+    with:
+      dry_run: ${{ inputs.dry_run }}
     permissions:
       contents: write
       pull-requests: write

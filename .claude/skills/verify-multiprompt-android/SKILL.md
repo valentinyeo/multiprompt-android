@@ -55,15 +55,18 @@ On pull requests, CI runs `check --base <PR-base-sha>` and forbids growing the i
 
 ## Weekly maintenance
 
-`maintain-verification.yml` runs on Mondays at 05:17 UTC and supports `workflow_dispatch`. Its `scripts/maintain.py` planner reads every journey from the registry. Debug and signed journeys reuse `verify.yml`, two at a time, with the existing seeded SSH fixture. Signed routes build branch candidates; dedicated update, working-dots and photo routes retain their own proofs. Manual prerequisites and unsupported future routes are reported as blocked, never counted as coverage.
+`maintain-verification.yml` runs on Mondays at 05:17 UTC and supports `workflow_dispatch`. Its `scripts/maintain.py` planner reads every journey from the registry. Debug and signed journeys reuse `verify.yml`, two at a time, with the existing seeded SSH fixture. Signed routes build branch candidates; dedicated update, working-dots and photo routes retain their own proofs. Manual prerequisites remain explicit limitations, not failures or live coverage. Unsupported future routes block the run.
 
-The source pass checks the registry/index and retains `control_map.py check` before and after `locations`. Only moved locations are repaired automatically; changed controls, choice digests and product failures still need review. The final job reads all paginated job conclusions, including missing or skipped journeys, and opens or updates one `maintain/<UTC-date>` PR with corrections and a failure report. It uses `GITHUB_TOKEN` with contents and pull-request write permissions; repository Actions settings must allow PR creation. It never merges. Source drift or incomplete coverage leaves the maintenance run red even after a correction PR opens.
+The source pass checks the registry/index and retains `control_map.py check` before and after `locations`. Only moved locations are repaired automatically; changed controls, choice digests and product failures still need review. The final job reads all paginated job conclusions, including missing or skipped journeys, and opens or updates one `maintain/<UTC-date>` PR with corrections and a failure report. It uses `GITHUB_TOKEN` with contents and pull-request write permissions; repository Actions settings must allow PR creation. It never merges. A clean automated pass exits zero and opens no PR. Source drift, failed automated journeys or unsupported routes leave the run red even after a correction PR opens.
 
 ```bash
 gh workflow run maintain-verification.yml -R valentinyeo/multiprompt-android --ref <branch>
-gh workflow run emulator-stability.yml -R valentinyeo/multiprompt-android --ref <branch> -f feature_map=true
+gh workflow run maintain-verification.yml -R valentinyeo/multiprompt-android --ref <branch> -f dry_run=true
+gh workflow run emulator-stability.yml -R valentinyeo/multiprompt-android --ref <branch> -f feature_map=true -f dry_run=true
 python3 -B tools/maintain-verification.test.py
 ```
+
+`dry_run=true` executes planner/report regression tests, the real source checks and the report without driving Android or creating/updating a PR. The artifacts include the complete plan, test output, before/after checks and `publication.json`; planned journeys are explicitly not live coverage. Source drift still exits non-zero. The normal weekly run always drives automated journeys.
 
 The `emulator-stability.yml` dispatch option is an equivalent entry point for testing a new workflow before it exists on the default branch; it does not run the stability series.
 

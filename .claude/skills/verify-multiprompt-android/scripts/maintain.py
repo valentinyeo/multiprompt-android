@@ -19,6 +19,7 @@ FLAGS = ('released_chat', 'released_robots', 'release_choices', 'pins_scroll', '
 def plan(registry):
     matrix = []
     blocked = {}
+    manual = {}
     dedicated = {value[1]: False for value in DEDICATED.values()}
     for feature, journey in registry['journeys'].items():
         runner = journey['runner']
@@ -36,17 +37,20 @@ def plan(registry):
             })
         elif feature in DEDICATED and runner['workflow'] == DEDICATED[feature][0] and runner['kind'] == 'dedicated':
             dedicated[DEDICATED[feature][1]] = True
+        elif runner['kind'] == 'manual':
+            manual[feature] = '; '.join(runner['prerequisites'])
         else:
             blocked[feature] = '; '.join(runner['prerequisites']) or f"Unsupported runner: {runner['kind']} / {runner['workflow']}"
-    return {'matrix': {'include': matrix}, 'blocked': blocked, **dedicated}
+    return {'matrix': {'include': matrix}, 'blocked': blocked, 'manual': manual, **dedicated}
 
 
 def conclusions(registry, pages):
-    blocked = plan(registry)['blocked']
+    routes = plan(registry)
+    blocked = routes['blocked']
     jobs = [job for page in pages for job in page['jobs']]
     failures = {}
     for feature in registry['journeys']:
-        if feature in blocked:
+        if feature in blocked or feature in routes['manual']:
             continue
         prefix = f'journey {feature}'
         matches = [j for j in jobs if prefix in j['name'].split(' / ')]
@@ -57,7 +61,7 @@ def conclusions(registry, pages):
     return failures, blocked
 
 
-def body(source, failures, blocked, run_url):
+def body(source, failures, blocked, run_url, manual=None):
     lines = [
         '# Android feature-map maintenance', '', f'Run: {run_url}', '',
         f"Source check before / after location refresh: {source['before']} / {source['after']}",
@@ -71,6 +75,10 @@ def body(source, failures, blocked, run_url):
     lines.extend(['', '## Blocked journeys (not live coverage)', ''])
     lines.extend(f'- `{feature}`: {reason}' for feature, reason in blocked.items())
     if not blocked:
+        lines.append('None.')
+    lines.extend(['', '## Manual prerequisites (not live coverage)', ''])
+    lines.extend(f'- `{feature}`: {reason}' for feature, reason in (manual or {}).items())
+    if not manual:
         lines.append('None.')
     return '\n'.join(lines) + '\n'
 
@@ -128,21 +136,34 @@ def main():
         with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
             for key in ('matrix', 'app_name', 'working_dots', 'photo'):
                 output.write(f'{key}={json.dumps(result[key], separators=(",", ":"))}\n')
+        print(json.dumps(result, indent=2))
         return
     if sys.argv[1] != 'report':
         raise SystemExit('Use plan or report <evidence-directory>')
     evidence = Path(sys.argv[2]).resolve()
     source_path = evidence / 'source-result.json'
     source = json.loads(source_path.read_text()) if source_path.is_file() else {'before': -1, 'after': -1, 'registry': -1}
-    failures, blocked = conclusions(registry, json.loads((evidence / 'jobs.json').read_text()))
-    text = body(source, failures, blocked, os.environ['RUN_URL'])
+    dry_run = os.environ.get('DRY_RUN') == 'true'
+    routes = plan(registry)
+    failures, blocked = ({}, routes['blocked']) if dry_run else conclusions(registry, json.loads((evidence / 'jobs.json').read_text()))
+    text = body(source, failures, blocked, os.environ['RUN_URL'], routes['manual'])
+    if dry_run:
+        text += '\nDry run: journeys were planned, not driven. No PR is opened or updated.\n'
     (evidence / 'report.md').write_text(text)
     with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
         summary.write(text)
-    if any(source.values()) or failures or blocked:
+    needs_pr = bool(any(source.values()) or failures or blocked)
+    (evidence / 'publication.json').write_text(json.dumps({'dry_run': dry_run, 'needs_pr': needs_pr, 'published': False}) + '\n')
+    if dry_run:
+        print(f'DRY_RUN: needs_pr={str(needs_pr).lower()}; no PR published; no live coverage claimed')
+        if needs_pr:
+            raise SystemExit('Dry run detected feature-map drift; no PR published.')
+        return
+    if needs_pr:
         print(publish(evidence, text, source, failures, blocked))
+        (evidence / 'publication.json').write_text(json.dumps({'dry_run': False, 'needs_pr': True, 'published': True}) + '\n')
         raise SystemExit('Android feature-map drift or incomplete journey coverage; review the maintenance PR.')
-    print('Android feature map: clean; every registered journey passed')
+    print('Android feature map: clean; every automated journey passed; manual prerequisites remain explicit')
 
 
 if __name__ == '__main__':

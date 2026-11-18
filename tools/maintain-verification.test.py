@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 import os
 import tempfile
+import sys
+import subprocess
 import unittest
 from unittest.mock import patch
 
@@ -18,7 +20,7 @@ REGISTRY = json.loads((SKILL / 'features/registry.json').read_text())
 
 def passed_jobs():
     return [{'name': f'journey {feature} / verify', 'conclusion': 'success', 'status': 'completed'}
-            for feature in REGISTRY['journeys'] if feature not in M.plan(REGISTRY)['blocked']]
+            for feature, journey in REGISTRY['journeys'].items() if journey['runner']['kind'] != 'manual' and feature not in M.plan(REGISTRY)['blocked']]
 
 
 class MaintenanceTest(unittest.TestCase):
@@ -39,8 +41,9 @@ class MaintenanceTest(unittest.TestCase):
         result = M.plan(REGISTRY)
         routed = {item['journey'] for item in result['matrix']['include']}
         dedicated = {feature for feature, (_, flag) in M.DEDICATED.items() if result[flag]}
-        self.assertEqual(set(REGISTRY['journeys']), routed | dedicated | set(result['blocked']))
-        self.assertEqual({'session-settings.md'}, set(result['blocked']))
+        self.assertEqual(set(REGISTRY['journeys']), routed | dedicated | set(result['blocked']) | set(result['manual']))
+        self.assertEqual({}, result['blocked'])
+        self.assertEqual({'session-settings.md'}, set(result['manual']))
         self.assertNotIn('session-settings.md', routed)
 
     def test_signed_routes_keep_their_inputs_and_use_branch_candidates(self):
@@ -76,7 +79,7 @@ class MaintenanceTest(unittest.TestCase):
         failures, blocked = M.conclusions(REGISTRY, [{'jobs': jobs[:20]}, {'jobs': jobs[20:]}])
         self.assertEqual({failed, skipped, canceled, missing}, set(failures))
         self.assertIn('missing job', failures[missing])
-        self.assertIn('session-settings.md', blocked)
+        self.assertEqual({}, blocked)
 
     def test_existing_dispatch_bridge_preserves_journey_names(self):
         jobs = [{**job, 'name': 'maintenance / ' + job['name']} for job in passed_jobs()]
@@ -88,6 +91,46 @@ class MaintenanceTest(unittest.TestCase):
         jobs.append({'name': jobs[0]['name'].replace('/ verify', '/ build'), 'conclusion': 'failure', 'status': 'completed'})
         failures, _ = M.conclusions(REGISTRY, [{'jobs': jobs}])
         self.assertEqual(1, len(failures))
+
+    def test_clean_report_cli_exits_zero_with_manual_prerequisites(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = root / M.SKILL / 'scripts/maintain.py'
+            script.parent.mkdir(parents=True)
+            script.write_text((SKILL / 'scripts/maintain.py').read_text())
+            (root / M.SKILL / 'features').mkdir()
+            (root / M.SKILL / 'features/registry.json').write_text(json.dumps(REGISTRY))
+            (root / 'source-result.json').write_text('{"before":0,"after":0,"registry":0}')
+            (root / 'jobs.json').write_text(json.dumps([{'jobs': passed_jobs()}]))
+            result = subprocess.run([sys.executable, '-B', str(script), 'report', str(root)], env={'RUN_URL': 'https://example.test/run/1', 'GITHUB_STEP_SUMMARY': str(root / 'summary.md')}, capture_output=True, text=True)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            self.assertFalse(json.loads((root / 'publication.json').read_text())['published'])
+
+    def test_clean_report_exits_zero_without_a_pr_and_drift_opens_exactly_one(self):
+        for drift, dry_run in [(False, False), (True, False), (False, True), (True, True)]:
+            with self.subTest(drift=drift, dry_run=dry_run), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / M.SKILL / 'features').mkdir(parents=True)
+                (root / M.SKILL / 'features/registry.json').write_text(json.dumps(REGISTRY))
+                evidence = root / 'evidence'
+                evidence.mkdir()
+                (evidence / 'source-result.json').write_text(json.dumps({'before': int(drift), 'after': 0, 'registry': 0}))
+                (evidence / 'jobs.json').write_text(json.dumps([{'jobs': [] if dry_run else passed_jobs()}]))
+                env = {'RUN_URL': 'https://example.test/run/1', 'GITHUB_STEP_SUMMARY': str(root / 'summary.md'), 'DRY_RUN': str(dry_run).lower()}
+                with patch.object(M, 'ROOT', root), patch.object(M, 'publish', return_value='https://example.test/pr/42') as publish, patch.object(sys, 'argv', ['maintain.py', 'report', str(evidence)]), patch.dict(os.environ, env):
+                    if drift:
+                        with self.assertRaises(SystemExit):
+                            M.main()
+                    else:
+                        self.assertIsNone(M.main())
+                    self.assertEqual(int(drift and not dry_run), publish.call_count)
+                report = (evidence / 'report.md').read_text()
+                self.assertIn('session-settings.md', report)
+                publication = json.loads((evidence / 'publication.json').read_text())
+                self.assertEqual(drift, publication['needs_pr'])
+                self.assertEqual(drift and not dry_run, publication['published'])
+                if dry_run:
+                    self.assertIn('planned, not driven', report)
 
     def test_failures_create_one_pr_and_retries_update_it_without_merging(self):
         for existing in [[], [{'number': 42, 'baseRefName': 'main', 'url': 'https://example.test/pr/42'}]]:
@@ -121,7 +164,7 @@ class MaintenanceTest(unittest.TestCase):
     def test_clean_automated_routes_do_not_claim_manual_coverage(self):
         failures, blocked = M.conclusions(REGISTRY, [{'jobs': passed_jobs()}])
         self.assertEqual({}, failures)
-        text = M.body({'before': 1, 'after': 0}, failures, blocked, 'https://example.test/run/1')
+        text = M.body({'before': 1, 'after': 0}, failures, blocked, 'https://example.test/run/1', M.plan(REGISTRY)['manual'])
         self.assertIn('1 / 0', text)
         self.assertIn('not live coverage', text)
         self.assertIn('session-settings.md', text)
