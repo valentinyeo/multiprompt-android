@@ -97,6 +97,7 @@ test('the shared session-ready event runs all stress before drivers that never f
   assert.equal(run.stdout.match(/FOUR_STRESSES/g)?.length, 1);
   assert.equal(run.stdout.match(/STREAM_CHECKPOINT/g)?.length, 1);
   assert.match(run.stdout, /FILL Message verify-breakit-probe BREAK_IT_DRAFT_2679/);
+  assert.match(run.stdout, /FILL BREAK_IT_DRAFT_2679 BREAK_IT_STREAM/);
   assert.match(run.stdout, /WAIT BREAK_IT_FOLLOWUP_REPLY/);
   assert.match(run.stdout, /ACTION Back\nWAIT Inbox\nTAP All/);
   const driver = fs.readFileSync(path.join(__dirname, '../.claude/skills/verify-multiprompt-android/scripts/drive.sh'), 'utf8');

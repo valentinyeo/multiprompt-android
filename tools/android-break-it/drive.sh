@@ -111,7 +111,7 @@ break_it_ready() {
     break_it_draft 'Message verify-breakit-probe' BREAK_IT_DRAFT_2679 live-pi_verify-breakit-probe
     break_it_active=stream-send
     printf '::group::Break-it 5/5 Send while a reply streams\n'
-    fill 'Message verify-breakit-probe' BREAK_IT_STREAM
+    fill BREAK_IT_DRAFT_2679 BREAK_IT_STREAM
     tap_desc 'Send prompt'
     wait_for_text BREAK_IT_STREAM_REPLY
     shot break-it-streaming

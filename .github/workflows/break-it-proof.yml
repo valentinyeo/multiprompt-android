@@ -1,0 +1,52 @@
+name: Break-it harness proof
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - tools/android-break-it/**
+      - tools/android-break-it.test.js
+      - .github/scripts/pstack-verifier/break-it.cjs
+      - .github/workflows/break-it-proof.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: break-it-proof-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  journeys:
+    strategy:
+      fail-fast: false
+      matrix:
+        feature: [chat-search.md, native-skills.md]
+    uses: ./.github/workflows/verify.yml
+    with:
+      feature: ${{ matrix.feature }}
+      break_it: true
+      side: head
+      app_ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.1'
+      - run: sudo apt-get update && sudo apt-get install -y tesseract-ocr tmux
+      - run: python3 -m pip install Pillow
+      - run: tools/check.sh
+        env:
+          GRADLE: gradle
