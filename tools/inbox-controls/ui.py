@@ -59,7 +59,7 @@ def check(xml, screenshot, expected):
         assert node.get('selected') == 'true' or node.get('checked') == 'true', f'Choice not selected: {label}'
     if label := expected.get('folder'):
         node = choice(label)
-        assert node.get('selected') == 'true', f'Folder not selected: {label}'
+        assert node.get('selected') == 'true' or node.get('checked') == 'true', f'Folder not selected: {label}'
         assert visible(node), f'Folder pill clipped: {label}'
         left, top, right, bottom = bounds(node)
         text_left, _, text_right, _ = bounds(matches(label)[0])

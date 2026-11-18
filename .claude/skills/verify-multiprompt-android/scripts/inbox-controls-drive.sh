@@ -123,6 +123,12 @@ PY
     fi
     exit 0
 fi
+reopen_folder_bar() {
+    adb shell am force-stop "$package"
+    adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
+    wait_for_text Inbox
+    doctor
+}
 tap_folder() {
     local attempt direction plan action x1 y1 x2 y2
     for attempt in {1..24}; do
@@ -150,13 +156,13 @@ if [[ "$feature" == inbox-reminders.md ]]; then
     relaunch_app
     tap_folder 'Folder 09'
     inbox_control_state folder-bar-selected '{"selected":["Folder 09"]}'
-    relaunch_app
+    reopen_folder_bar
     inbox_control_state folder-bar-reopened '{"folder":"Folder 09"}'
     tap_folder All
     inbox_control_state folder-bar-all '{"folder":"All"}'
     tap_folder 'Folder 06'
     inbox_control_state folder-bar-middle '{"folder":"Folder 06"}'
-    relaunch_app
+    reopen_folder_bar
     inbox_control_state folder-bar-middle-reopened '{"folder":"Folder 06"}'
     tap_folder All
     printf 'FOLDER_BAR_SELECTED_FULLY_VISIBLE_OK\n' | tee "$EVIDENCE/folder-bar-proof.txt"
