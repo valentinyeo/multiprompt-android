@@ -38,7 +38,9 @@ jobs:
           python3 -B "$script" locations
           after=0
           python3 -B "$script" check > maintenance-evidence/source-after.txt 2>&1 || after=$?
-          printf '{"before":%s,"after":%s}\n' "$before" "$after" > maintenance-evidence/source-result.json
+          registry=0
+          node .github/scripts/pstack-verifier/coverage.cjs check > maintenance-evidence/registry.txt 2>&1 || registry=$?
+          printf '{"before":%s,"after":%s,"registry":%s}\n' "$before" "$after" "$registry" > maintenance-evidence/source-result.json
           cp .claude/skills/verify-multiprompt-android/features/controls.json maintenance-evidence/controls.json
           cat maintenance-evidence/source-before.txt maintenance-evidence/source-after.txt
       - uses: actions/upload-artifact@v4
@@ -136,13 +138,16 @@ jobs:
         with:
           fetch-depth: 0
       - uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: maintenance-map
           path: maintenance-evidence
       - name: Retain journey conclusions
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=latest&per_page=100" > maintenance-evidence/jobs.json
+        run: |
+          mkdir -p maintenance-evidence
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=latest&per_page=100" > maintenance-evidence/jobs.json
       - name: Open one correction PR, never merge
         env:
           GH_TOKEN: ${{ github.token }}

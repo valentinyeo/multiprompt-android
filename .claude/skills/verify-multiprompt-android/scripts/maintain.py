@@ -60,7 +60,8 @@ def conclusions(registry, pages):
 def body(source, failures, blocked, run_url):
     lines = [
         '# Android feature-map maintenance', '', f'Run: {run_url}', '',
-        f"Source check before / after location refresh: {source['before']} / {source['after']}", '',
+        f"Source check before / after location refresh: {source['before']} / {source['after']}",
+        f"Registry/index check: {source.get('registry', 0)}", '',
         'Only source locations are corrected automatically. Changed controls, choice digests and product failures require review.', '',
         '## Failing journeys', '',
     ]
@@ -109,7 +110,7 @@ def publish(evidence, text, source, failures, blocked):
         'Refresh moved source locations and record failures without changing product behavior.',
         '## Verification',
         f"Run: {os.environ['RUN_URL']}",
-        f"Source check before / after refresh: {source['before']} / {source['after']}",
+        f"Source check before / after refresh: {source['before']} / {source['after']}; registry/index: {source.get('registry', 0)}",
         'Failing journeys: ' + (', '.join(f'`{feature}` ({reason})' for feature, reason in failures.items()) or 'none') + '.',
         'Blocked journeys: ' + (', '.join(f'`{feature}` ({reason})' for feature, reason in blocked.items()) or 'none') + '.',
         f'[Full report]({SKILL}/maintenance.md). Review source-check logs and journey artifacts; never auto-merge.',
@@ -132,13 +133,13 @@ def main():
         raise SystemExit('Use plan or report <evidence-directory>')
     evidence = Path(sys.argv[2]).resolve()
     source_path = evidence / 'source-result.json'
-    source = json.loads(source_path.read_text()) if source_path.is_file() else {'before': -1, 'after': -1}
+    source = json.loads(source_path.read_text()) if source_path.is_file() else {'before': -1, 'after': -1, 'registry': -1}
     failures, blocked = conclusions(registry, json.loads((evidence / 'jobs.json').read_text()))
     text = body(source, failures, blocked, os.environ['RUN_URL'])
     (evidence / 'report.md').write_text(text)
     with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
         summary.write(text)
-    if source['before'] or source['after'] or failures or blocked:
+    if any(source.values()) or failures or blocked:
         print(publish(evidence, text, source, failures, blocked))
         raise SystemExit('Android feature-map drift or incomplete journey coverage; review the maintenance PR.')
     print('Android feature map: clean; every registered journey passed')

@@ -3,7 +3,10 @@ import copy
 import importlib.util
 import json
 from pathlib import Path
+import os
+import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / '.claude/skills/verify-multiprompt-android'
@@ -72,6 +75,35 @@ class MaintenanceTest(unittest.TestCase):
         jobs.append({'name': jobs[0]['name'].replace('/ verify', '/ build'), 'conclusion': 'failure', 'status': 'completed'})
         failures, _ = M.conclusions(REGISTRY, [{'jobs': jobs}])
         self.assertEqual(1, len(failures))
+
+    def test_failures_create_one_pr_and_retries_update_it_without_merging(self):
+        for existing in [[], [{'number': 42, 'baseRefName': 'main', 'url': 'https://example.test/pr/42'}]]:
+            with self.subTest(existing=bool(existing)), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / M.SKILL / 'features').mkdir(parents=True)
+                evidence = root / 'evidence'
+                evidence.mkdir()
+                (evidence / 'controls.json').write_text('{"corrected":true}\n')
+                calls = []
+                def command(*args):
+                    calls.append(args)
+                    if args[:3] == ('gh', 'pr', 'list'):
+                        return json.dumps(existing)
+                    if args[:3] == ('git', 'ls-remote', '--heads'):
+                        return 'remote-sha' if existing else ''
+                    return 'https://example.test/pr/42'
+                env = {'GITHUB_REPOSITORY': 'owner/repo', 'DEFAULT_BRANCH': 'main', 'RUN_URL': 'https://example.test/run/7'}
+                with patch.object(M, 'ROOT', root), patch.object(M, 'run', side_effect=command), patch.object(M.subprocess, 'run') as diff, patch.dict(os.environ, env):
+                    diff.return_value.returncode = 1
+                    url = M.publish(evidence, 'Drift report\n', {'before': 1, 'after': 0}, {'sessions.md': 'failure'}, {})
+                self.assertEqual('https://example.test/pr/42', url)
+                mutations = [c for c in calls if c[:3] in [('gh', 'pr', 'create'), ('gh', 'pr', 'edit')]]
+                self.assertEqual(1, len(mutations))
+                self.assertEqual('edit' if existing else 'create', mutations[0][2])
+                self.assertFalse(any('merge' in c or '--force' in c for c in calls))
+                self.assertEqual('{"corrected":true}\n', (root / M.SKILL / 'features/controls.json').read_text())
+                self.assertLessEqual(len((evidence / 'pr-body.md').read_text().splitlines()), 40)
+                self.assertIn('`sessions.md` (failure)', (evidence / 'pr-body.md').read_text())
 
     def test_clean_automated_routes_do_not_claim_manual_coverage(self):
         failures, blocked = M.conclusions(REGISTRY, [{'jobs': passed_jobs()}])

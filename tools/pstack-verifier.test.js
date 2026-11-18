@@ -459,10 +459,10 @@ test('verify.yml keeps non-PR triggers and delegates PR journeys to the capped p
   assert.doesNotMatch(triggers, /^ {2}pull_request:/m);
   const call = triggers.slice(triggers.indexOf('  workflow_call:'), triggers.indexOf('  workflow_dispatch:'));
   assert.match(call, /^ {6}feature:\n {8}description: .+\n {8}required: true\n {8}type: string\n/m);
-  assert.deepEqual([...call.matchAll(/^ {6}(\w+):$/gm)].map(match => match[1]), ['feature', 'side', 'app_ref']);
+  assert.deepEqual([...call.matchAll(/^ {6}(\w+):$/gm)].map(match => match[1]), ['released_chat', 'released_robots', 'release_choices', 'pins_scroll', 'candidate', 'feature', 'side', 'app_ref']);
   assert.match(call, /^ {6}side:\n {8}description: .+\n {8}required: false\n {8}type: string\n/m);
   assert.match(call, /^ {6}app_ref:\n {8}description: .+\n {8}required: false\n {8}type: string\n$/m);
-  assert.match(verify, /^ {2}group: verify-\$\{\{ github\.ref \}\}\$\{\{ inputs\.feature && inputs\.feature != github\.event\.inputs\.feature && format\('-\{0\}', inputs\.feature\) \|\| '' \}\}\$\{\{ inputs\.side == 'parent' && '-parent' \|\| '' \}\}$/m);
+  assert.match(verify, /^ {2}group: verify-\$\{\{ github\.ref \}\}\$\{\{ inputs\.feature && inputs\.feature != github\.event\.inputs\.feature && format\('-\{0\}', inputs\.feature\) \|\| '' \}\}\$\{\{ inputs\.side && format\('-\{0\}', inputs\.side\) \|\| '' \}\}$/m);
 });
 
 test('a change no journey fits still drives the smoke journey and never gets a plain PASS', () => {
@@ -656,7 +656,7 @@ test('parent job names and artifact names never collide with the head side', () 
   assert.equal(verifier.artifactName('hosts.md', '9', 'head'), 'verify-hosts.md-9');
   assert.equal(verifier.artifactName('hosts.md', '9', 'parent'), 'verify-hosts.md-9-parent');
   const verify = read('.github/workflows/verify.yml');
-  assert.match(verify, /name: verify-\$\{\{ env\.VERIFY_FEATURE \}\}-\$\{\{ github\.run_id \}\}\$\{\{ inputs\.side == 'parent' && '-parent' \|\| '' \}\}$/m);
+  assert.match(verify, /name: verify-\$\{\{ env\.VERIFY_FEATURE \}\}-\$\{\{ github\.run_id \}\}\$\{\{ inputs\.side == 'parent' && '-parent' \|\| '' \}\}\$\{\{ inputs\.side && inputs\.side != 'head' && inputs\.side != 'parent' && format\('-\{0\}', inputs\.side\) \|\| '' \}\}$/m);
   assert.match(verify, /stage: stage-1\$\{\{ inputs\.side && format\('-\{0\}-\{1\}', inputs\.side, inputs\.feature\) \|\| '' \}\}$/m);
 });
 
