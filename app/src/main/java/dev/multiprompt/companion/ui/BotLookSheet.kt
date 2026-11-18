@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -21,6 +22,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.multiprompt.companion.model.TmuxSession
 
@@ -79,6 +84,10 @@ internal fun BotLookContent(
                             Modifier
                                 .size(48.dp)
                                 .clickable { onPickFace(index) }
+                                .semantics {
+                                    contentDescription = "Face ${index + 1}"
+                                    selected = pickedFace == index
+                                }
                                 .border(
                                     if (pickedFace == index) 3.dp else 1.dp,
                                     if (pickedFace == index) Kit.Text else Kit.Outline,
@@ -88,7 +97,7 @@ internal fun BotLookContent(
                             BotAvatar(
                                 session.name,
                                 44.dp,
-                                Modifier.align(Alignment.Center),
+                                Modifier.align(Alignment.Center).clearAndSetSemantics {},
                                 workspaceColor = session.workspaceColor,
                                 face = index,
                                 color = pickedColor,
@@ -103,15 +112,24 @@ internal fun BotLookContent(
                     row.forEach { index ->
                         Box(
                             Modifier
-                                .size(28.dp)
-                                .background(botColor(index), CircleShape)
-                                .border(
-                                    if (pickedColor == index) 3.dp else 1.dp,
-                                    if (pickedColor == index) Kit.Text else Kit.Outline,
-                                    CircleShape,
-                                )
-                                .clickable { onPickColor(index) },
-                        )
+                                .size(48.dp)
+                                .clickable { onPickColor(index) }
+                                .semantics {
+                                    contentDescription = "Colour ${index + 1}"
+                                    selected = pickedColor == index
+                                },
+                        ) {
+                            Box(
+                                Modifier.align(Alignment.Center)
+                                    .size(28.dp)
+                                    .background(botColor(index), CircleShape)
+                                    .border(
+                                        if (pickedColor == index) 3.dp else 1.dp,
+                                        if (pickedColor == index) Kit.Text else Kit.Outline,
+                                        CircleShape,
+                                    ),
+                            )
+                        }
                     }
                 }
             }
@@ -119,7 +137,9 @@ internal fun BotLookContent(
                 Text(
                     "Auto",
                     modifier = Modifier
+                        .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                         .clickable { onPickColor(null) }
+                        .semantics { selected = pickedColor == null }
                         .padding(start = 4.dp),
                     style = Kit.Label,
                     color = if (pickedColor == null) Kit.Text else Kit.TextMuted,

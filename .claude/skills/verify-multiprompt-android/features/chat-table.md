@@ -26,4 +26,4 @@ The registry routes table source changes to this journey. Hosted Node tests repl
 
 ## Not covered
 
-Inline horizontal scrolling, Android Back dismissal, table links, terminal tables and account-only chats are outside this recipe.
+Inline horizontal scrolling, Android Back dismissal, table links, terminal tables and account-only chats are outside this recipe. The reader top bar on this phone shows the session name only. It has no model or waiting subtitle, so that part of `legacy.igsh-424` stays unproven.

@@ -64,8 +64,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `reader.stop-while-working`. Runner: `verify.yml` (debug).
 - [Useful inbox summaries](session-summaries.md): Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.
   - Outcomes: `inbox.summaries`. Runner: `verify.yml` (debug).
-- [Sessions](sessions.md): Default seed readback: 42 real tmux sessions and a large transcript, runtime-selected off-screen reader entry, and an exact search result for that same session. Does not assert all 42 rows render.
-  - Outcomes: `inbox.search`. Runner: `verify.yml` (debug). Priority evidence: `seed-counts.json` (1500 characters), `seed-check.json` (1500 characters), `seed-search.xml` (2000 characters), `seed-deep-target.xml` (1000 characters), `seed-deep-choice.json` (1000 characters), `row-long-press-actions.xml` (1500 characters), `start-agent-picker.xml` (1500 characters), `start-agent-back-to-folder.xml` (1000 characters).
+- [Sessions](sessions.md): Default seed readback: 42 real tmux sessions and a large transcript, runtime-selected off-screen reader entry, and an exact search result for that same session below the search box and above the keyboard. Does not assert all 42 rows render.
+  - Outcomes: `inbox.search`, `legacy.igsh-414`. Runner: `verify.yml` (debug). Priority evidence: `seed-counts.json` (1500 characters), `seed-check.json` (1500 characters), `seed-search.xml` (2000 characters), `seed-deep-target.xml` (1000 characters), `seed-deep-choice.json` (1000 characters), `row-long-press-actions.xml` (1500 characters), `start-agent-picker.xml` (1500 characters), `start-agent-back-to-folder.xml` (1000 characters).
 - [Settings navigation](settings-navigation.md): sessions-first settings, host mapping and account handoff on the signed APK.
   - Outcomes: `settings-navigation.journey`. Runner: `verify.yml` (signed). Inputs: `{"release_choices":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Sign in](sign-in.md): real account browser handoff; OTP remains manual.
@@ -92,8 +92,12 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `claude.clear-ranking`. Runner: `verify.yml` (debug). Priority evidence: `clear-query.json` (1800 characters), `clear-selected.json` (700 characters), `clear-sent.json` (700 characters), `clear-receipts.txt` (700 characters), `clear-host.json` (700 characters), `clear-before.txt` (200 characters), `clear-selected-host.txt` (200 characters), `clear-proof.txt` (200 characters).
 - [Signed-out sync row](signed-out-sync.md): Reader Session actions, then More, shows Sign in to sync. The journey does not sign in.
   - Outcomes: `legacy.igsh-413`. Runner: `verify.yml` (debug). Priority evidence: `reader-sync.json` (200 characters), `sync-menu-proof.txt` (80 characters).
-- [Version label](version-labels.md): The version label on Inbox, settings, the reader and the shell, and the Update screen it opens.
-  - Outcomes: `legacy.igsh-426`. Runner: `verify.yml` (debug). Priority evidence: `inbox-version.json` (300 characters), `update-screen.json` (400 characters), `settings-version.json` (300 characters), `reader-version.json` (300 characters), `shell-version.json` (300 characters), `version-proof.txt` (80 characters).
+- [Bot look choices](bot-look.md): Choose all faces and colours, scroll, dismiss and retain the local appearance after restart. SOFT-2653.
+  - Outcomes: `bot.look`. Runner: `verify.yml` (debug). Priority evidence: `bot-look-top.json` (1000 characters), `bot-look-bottom.json` (1500 characters), `bot-look-retained-face.json` (1500 characters), `bot-look-retained-auto.json` (1500 characters), `bot-look-proof.txt` (200 characters).
+- [Reader rename and display controls](reader-controls.md): Cancel, dismiss and save a rename with independent host receipts; toggle terminal details and sunlight. SOFT-2653.
+  - Outcomes: `reader.controls`. Runner: `verify.yml` (debug). Priority evidence: `reader-controls-renamed.json` (1500 characters), `reader-controls-details-on.json` (1500 characters), `reader-controls-details-off.json` (1500 characters), `reader-controls-sunlight-on.json` (1500 characters), `reader-controls-sunlight-off.json` (1500 characters), `reader-controls-host.txt` (1000 characters), `reader-controls-window.txt` (200 characters), `reader-controls-proof.txt` (200 characters).
+- [Reply to a message](message-reply.md): Long-press a Claude bubble, cancel the reply bar, then send a quoted reply with a host receipt.
+  - Outcomes: `legacy.igsh-418`. Runner: `verify.yml` (debug). Priority evidence: `reply-open.json` (400 characters), `reply-cancelled.json` (200 characters), `reply-sent.json` (200 characters), `reply-receipts.txt` (800 characters), `reply-proof.txt` (80 characters).
 
 ## Initial coverage gaps
 
@@ -108,10 +112,9 @@ These IDs are an inventory, not exemptions for future changes. Untouched gaps do
 | `legacy.igsh-434` | IGSH-434 | IGSH-434 |
 | `legacy.igsh-423` | IGSH-423 | IGSH-423 |
 | `legacy.igsh-415` | IGSH-415 | IGSH-415 |
+| `legacy.igsh-426` | IGSH-426 | IGSH-426 |
 | `legacy.igsh-424` | IGSH-424 | IGSH-424 |
-| `legacy.igsh-418` | IGSH-418 | IGSH-418 |
 | `legacy.igsh-425` | IGSH-425 | IGSH-425 |
-| `legacy.igsh-414` | IGSH-414 | IGSH-414 |
 | `app-name.journey` | app-name.md | SOFT-2531 |
 | `bot-photo-refresh.journey` | bot-photo-refresh.md | SOFT-2531 |
 | `chat-working.journey` | chat-working.md | SOFT-2531 |
