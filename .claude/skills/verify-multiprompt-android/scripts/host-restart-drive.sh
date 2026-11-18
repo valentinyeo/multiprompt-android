@@ -50,7 +50,8 @@ import xml.etree.ElementTree as ET
 root = Path(sys.argv[1])
 host = json.loads(root.joinpath('host-restart-host.json').read_text())
 process = json.loads(root.joinpath('host-restart-processes.txt').read_text().splitlines()[-1])
-assert process['old_pid'] != process['new_pid'] and process['history_pids'], process
+legacy = json.loads(root.joinpath('host-restart-legacy-metadata.json').read_text())
+assert process['old_pid'] != process['new_pid'] and legacy['history_pids'], (process, legacy)
 assert process['sid'] == host['sid'] and process['tmux'] == host['tmux'], process
 assert process['sid'] not in (process['native_before'], process['native_after'])
 assert host['config']['native_session'] == process['native_after']
@@ -68,7 +69,7 @@ for phase, text in [('open', 'DESKTOP_CHAT_READY_2681'), ('draft', 'PHONE_BEFORE
     nodes = list(ET.parse(file).getroot().iter('node'))
     assert any(node.get('text') == text for node in nodes), (phase, text)
     if phase in ('after', 'phone-after'):
-        assert not any('FOREIGN_OLD_SESSION_2681' in node.get('text', '') for node in nodes), phase
+        assert not any('FOREIGN_OLD_SESSION_2681' in node.get('text', '') for node in nodes), f'FOREIGN_TRANSCRIPT_VISIBLE_2681: {phase}'
     assert file.with_suffix('.png').stat().st_size > 100
     states[phase] = dict(xml=file.name, screenshot=file.with_suffix('.png').name, text=text)
 root.joinpath('host-restart-state.json').write_text(json.dumps(states, indent=2) + '\n')

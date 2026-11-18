@@ -107,7 +107,7 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Account upload key](screencast-account.md): Signed-in image selection without typing a Screencast2 key, with authenticated account receipts.
   - Outcomes: `upload.account-key`. Runner: `verify.yml` (debug). Prerequisites: Local authenticated account fixture; live production email OTP and successful Screencast2 upload are not exercised. Priority evidence: `screencast-signed-in.json` (2000 characters), `screencast-picker.json` (2000 characters), `screencast-selected.json` (2000 characters), `screencast-account-receipts.txt` (1000 characters).
 - [Replies after a chat host restart](host-restart.md): Restart a desktop-hosted chat mid-conversation and require desktop and phone replies without reopening it. SOFT-2681.
-  - Outcomes: `reader.host-restart`. Runner: `verify.yml` (debug). Priority evidence: `host-restart-state.json` (2500 characters), `host-restart-host.json` (4000 characters), `host-restart-processes.txt` (1000 characters).
+  - Outcomes: `reader.host-restart`. Runner: `verify.yml` (debug). Priority evidence: `host-restart-state.json` (2500 characters), `host-restart-host.json` (6000 characters), `host-restart-processes.txt` (1000 characters).
 
 ## Initial coverage gaps
 

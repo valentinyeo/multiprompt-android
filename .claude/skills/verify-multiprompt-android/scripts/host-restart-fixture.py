@@ -90,21 +90,7 @@ def restart():
         time.sleep(.1)
     else:
         raise AssertionError('Fixture replacement host did not start')
-    disconnected = []
-    for line in (HOME / 'host-restart-history-pids.jsonl').read_text().splitlines():
-        pid = json.loads(line)['pid']
-        process = Path('/proc') / str(pid)
-        try:
-            if process.stat().st_uid != os.getuid() or b'--serve' not in (process / 'cmdline').read_bytes():
-                continue
-            os.kill(pid, signal.SIGTERM)
-            disconnected.append(pid)
-        except ProcessLookupError:
-            pass
-        except FileNotFoundError:
-            pass
-    assert disconnected, 'No phone history channel was open at the restart'
-    print(json.dumps(dict(old_pid=old, new_pid=owner['pid'], history_pids=disconnected, sid=SID,
+    print(json.dumps(dict(old_pid=old, new_pid=owner['pid'], sid=SID,
         native_before=NATIVE_BEFORE, native_after=NATIVE_AFTER, tmux=TMUX)), flush=True)
 
 
@@ -154,8 +140,22 @@ def metadata(publish=False):
     if publish:
         config['native_session'] = NATIVE_AFTER
     reader['host_write'](paths['config'], config)
+    disconnected = []
+    for line in (HOME / 'host-restart-history-pids.jsonl').read_text().splitlines():
+        pid = json.loads(line)['pid']
+        process = Path('/proc') / str(pid)
+        try:
+            if process.stat().st_uid != os.getuid() or b'--serve' not in (process / 'cmdline').read_bytes():
+                continue
+            os.kill(pid, signal.SIGTERM)
+            disconnected.append(pid)
+        except ProcessLookupError:
+            pass
+        except FileNotFoundError:
+            pass
+    assert disconnected, 'No phone history channel was open at the restart'
     print(json.dumps(dict(sid=config.get('sid', SID), native_session=config.get('native_session'),
-        latest_init=latest_init, private_session_hint=False)))
+        latest_init=latest_init, private_session_hint=False, history_pids=disconnected)))
 
 
 def evidence():

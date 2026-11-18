@@ -9,10 +9,10 @@ Outcome `reader.host-restart` covers SOFT-2681.
 2. Send `PHONE_BEFORE_2681` and require its reply.
 3. Kill only the disposable fixture's recorded host process.
    Restart it with a different native session, keeping the host ID unchanged.
-   Drop the recorded history channel to force catch-up.
 4. Send `DESKTOP_AFTER_2681` through the desktop host CLI.
 5. Remove private session hints from the disposable fixture.
    Leave `config.native_session` absent to model an older desktop host.
+   Drop the recorded history channel after removing those hints.
    Require `REPLY_DESKTOP_AFTER_2681` on the still-open phone.
    The reader must use the latest `init` event's `detail.session`.
 6. Publish `config.native_session` with the current native session ID.

@@ -950,7 +950,7 @@
       ],
       "evidence": {
         "host-restart-state.json": 2500,
-        "host-restart-host.json": 4000,
+        "host-restart-host.json": 6000,
         "host-restart-processes.txt": 1000
       }
     }
