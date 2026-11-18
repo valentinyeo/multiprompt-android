@@ -25,7 +25,7 @@ def source(name):
 
 class EmulatorProofTest(unittest.TestCase):
     def test_every_emulator_job_uses_one_shared_lifecycle(self):
-        for name in ('android-full', 'verify', 'top-fade', 'account-journey', 'working-dots'):
+        for name in ('test' if args.ref else 'android-full', 'verify', 'top-fade', 'account-journey', 'working-dots'):
             workflow = source(f'.github/workflows/{name}.yml')
             events = re.findall(r'^  ([a-z_]+):', workflow.split('permissions:', 1)[0], re.M)
             self.assertEqual(len(events), len(set(events)), f'duplicate workflow event: {name}')
