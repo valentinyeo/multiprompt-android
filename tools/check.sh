@@ -13,6 +13,8 @@ source_checks() {
   python3 -B tools/maintain-verification.test.py
   python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.test.py
   python3 -B tools/control-journeys/ui.test.py
+  python3 -B tools/inbox-controls/ui.test.py
+  node --test tools/inbox-controls.test.js
   python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.py check
   python3 -B tools/message-projection/check.py
   python3 -B tools/message-projection/check.test.py

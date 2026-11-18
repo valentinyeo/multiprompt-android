@@ -953,6 +953,11 @@ PYINFO
     exit 0
 fi
 
+if [[ "$feature" == settings-controls.md || "$feature" == inbox-reminders.md ]]; then
+    source "$scripts/inbox-controls-drive.sh"
+    exit 0
+fi
+
 if [[ "$feature" == bot-look.md || "$feature" == reader-controls.md ]]; then
     source "$scripts/control-journeys-drive.sh"
     exit 0
