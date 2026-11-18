@@ -256,7 +256,6 @@ fill() {
         return 1
     fi
     adb shell input keyevent KEYCODE_BACK
-    break_it_draft "$1" "$2"
 }
 source "$scripts/../../../../tools/android-break-it/drive.sh"
 
@@ -367,6 +366,8 @@ adb shell settings put global hide_error_dialogs 1
 adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
 product_checks=1
 if [[ "$feature" == launcher-icon.md ]]; then
+    wait_for_text 'Sign in to see your servers, workspaces and sessions.'
+    break_it_screen 'Sign in to see your servers, workspaces and sessions.'
     launcher_icon
     exit 0
 fi
@@ -381,6 +382,7 @@ else
     dump_ui
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" version "$EXPECTED_VERSION" > "$EVIDENCE/version-label.txt"
     shot sign-in
+    break_it_screen 'Sign in to see your servers, workspaces and sessions.'
 fi
 if [[ "$feature" == sign-in.md ]]; then
     browser_handoff 'Sign in' access-browser
@@ -519,6 +521,7 @@ if ! wait_for_text verify-session; then
     exit 1
 fi
 shot sessions
+break_it_ready
 
 if [[ "$feature" == session-favorite-dot.md ]]; then
     [[ "$package" == dev.multiprompt.companion.debug ]]
@@ -1859,7 +1862,7 @@ CHOICES
 fi
 if [[ "$feature" == chat-cancel.md ]]; then
     if [[ "$package" != dev.multiprompt.companion ]]; then
-        adb shell 'echo $$ > /sdcard/cancel-record.pid; exec screenrecord --time-limit 180 /sdcard/cancel-proof.mp4' &
+        adb shell 'echo $$ > /sdcard/cancel-record.pid; exec screenrecord --time-limit 0 /sdcard/cancel-proof.mp4' &
         recording_client=$!
     fi
     wait_for_text VERIFY_READY_1010
