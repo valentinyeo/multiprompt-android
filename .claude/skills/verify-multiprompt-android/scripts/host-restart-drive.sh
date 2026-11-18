@@ -22,7 +22,11 @@ fi
 shot host-restart-after
 fill 'Message verify-session' PHONE_AFTER_2681
 tap_desc 'Send prompt'
-wait_for_text REPLY_PHONE_AFTER_2681
+if ! wait_for_text REPLY_PHONE_AFTER_2681; then
+    host_restart_fixture evidence > "$EVIDENCE/host-restart-host.json"
+    printf 'HOST_RESTART_PHONE_REPLY_NOT_VISIBLE_2681\n'
+    exit 1
+fi
 shot host-restart-phone-after
 host_restart_fixture evidence > "$EVIDENCE/host-restart-host.json"
 python3 - "$EVIDENCE" <<'PYPROOF'

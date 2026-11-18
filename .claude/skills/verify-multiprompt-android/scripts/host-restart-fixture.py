@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-import datetime
 import json
 import os
 from pathlib import Path
 import runpy
 import signal
+import sqlite3
 import subprocess
 import sys
 import time
@@ -78,7 +78,15 @@ def evidence():
     history = reader['host_paths']('claude', SID)['history']
     rows = [json.loads(line)['row'] for line in history.read_text().splitlines()]
     receipts = [json.loads(line) for line in RECEIPTS.read_text().splitlines()]
-    print(json.dumps(dict(sid=SID, tmux=TMUX, history=rows, receipts=receipts), indent=2))
+    paths = reader['host_paths']('claude', SID)
+    state = reader['host_read'](paths['state'])
+    log = paths['log'].read_text()[-20000:]
+    errors = paths['errors'].read_text() if paths['errors'].exists() else ''
+    with sqlite3.connect(reader['message_store_path']().as_uri() + '?mode=ro', uri=True) as db:
+        messages = [dict(zip(('id', 'text', 'state', 'deadline', 'receipt'), row)) for row in
+            db.execute('SELECT id,text,state,deadline,receipt FROM shared_messages WHERE sid=? ORDER BY position', (SID,))]
+    print(json.dumps(dict(sid=SID, tmux=TMUX, history=rows, receipts=receipts, messages=messages,
+        host_state=state, host_log=log, host_stderr=errors), indent=2))
 
 
 def emit(event):
