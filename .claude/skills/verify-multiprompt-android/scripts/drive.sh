@@ -67,7 +67,9 @@ finish() {
     code=$?
     trap - EXIT
     set +e
+    break_it_failure "$code"
     restore_chat_link
+    break_it_restore
     {
         date +%T.%N
         timeout 10s adb shell top -b -n 1 -m 15
@@ -239,17 +241,24 @@ clear_field() {
     fi
 }
 fill() {
+    local value=${2//%s/ } index character
     tap_node field "$1" || return
     select_node focused-field "$1" >/dev/null || return
     clear_field "$1" || return
-    if [[ -n "$2" ]]; then adb shell input text "$2" || return; fi
+    for ((index=0; index<${#value}; index++)); do
+        character=${value:index:1}
+        if [[ "$character" == ' ' ]]; then character=%s; fi
+        adb shell input text "$character" || return
+    done
     dump_ui || return
     if ! python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value "$1" "${2//%s/ }"; then
         printf 'JOURNEY_FIELD_INPUT_FAILED: %s: typed text did not equal the requested value\n' "$1" >&2
         return 1
     fi
     adb shell input keyevent KEYCODE_BACK
+    break_it_draft "$1" "$2"
 }
+source "$scripts/../../../../tools/android-break-it/drive.sh"
 
 scroll_to_newest() {
     local attempt

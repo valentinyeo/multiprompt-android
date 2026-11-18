@@ -19,4 +19,6 @@ Every capture retains PNG and XML. `ai-switch-state.json` extracts and checks th
 
 The registry removes `ai.switch` from the missing-coverage baseline. The verifier schedules this journey for matching AI-switch product changes and changes to this recipe, even when the model selects unrelated journeys.
 
+For a bug-fix PR, the normal journey must pass before a second replay on the same emulator. During the first draft that replay rotates, backgrounds and returns, switches to `verify-breakit-other` and back, and throttles the emulator network. The existing streaming follow-up supplies the fifth checkpoint through `break_it_stream_send`. Original reply-count and provider-receipt assertions still run. The artifact's `break-it/` directory retains five PNG/XML/text checkpoints and the full replay transcript. A missing checkpoint or broken assertion fails the verifier, even if its model says PASS.
+
 Live provider authentication, Codex, busy refusal, and signed releases are outside this recipe.
