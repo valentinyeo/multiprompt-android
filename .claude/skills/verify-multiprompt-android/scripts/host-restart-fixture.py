@@ -154,8 +154,13 @@ def metadata(publish=False):
         except FileNotFoundError:
             pass
     assert disconnected, 'No phone history channel was open at the restart'
+    resolved = reader['resolve_response_path'](dict(id=7, provider='claude', codex=False, sid=SID,
+        tmux=TMUX, cwd=str(CWD), follow=True))
+    active = json.loads((HOME / '.multiprompt-runtime/active.json').read_text())
     print(json.dumps(dict(sid=config.get('sid', SID), native_session=config.get('native_session'),
-        latest_init=latest_init, private_session_hint=False, history_pids=disconnected)))
+        latest_init=latest_init, private_session_hint=reader['host_read'](paths['state']).get('native_session'),
+        history_pids=disconnected, active_runtime=active, resolver_has_fix='hosted_claude_transcript_sid' in reader,
+        resolved_transcript=str(resolved[2]))))
 
 
 def evidence():
@@ -173,7 +178,11 @@ def evidence():
     state = reader['host_read'](paths['state'])
     config = reader['host_read'](paths['config'])
     print(json.dumps(dict(sid=SID, tmux=TMUX, history=rows, receipts=receipts,
-        config=config, host_state=state, host_log=paths['log'].read_text()[-12000:],
+        config=config, host_state=state,
+        active_runtime=json.loads((HOME / '.multiprompt-runtime/active.json').read_text()),
+        resolver_has_fix='hosted_claude_transcript_sid' in reader,
+        foreign_transcript_exists=(HOME / '.claude/projects' / str(CWD).replace('/', '-') / (SID + '.jsonl')).exists(),
+        host_log=paths['log'].read_text()[-12000:],
         host_stderr=paths['errors'].read_text() if paths['errors'].exists() else ''), indent=2))
 
 

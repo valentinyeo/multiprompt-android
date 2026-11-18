@@ -28,6 +28,7 @@ if ! wait_for_text REPLY_DESKTOP_AFTER_2681; then
     exit 1
 fi
 shot host-restart-after
+host_restart_fixture evidence > "$EVIDENCE/host-restart-after-host.json"
 host_restart_fixture metadata-config > "$EVIDENCE/host-restart-config-metadata.json"
 fill 'Message verify-session' PHONE_AFTER_2681
 tap_desc 'Send prompt'
