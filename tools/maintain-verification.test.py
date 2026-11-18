@@ -62,6 +62,11 @@ class MaintenanceTest(unittest.TestCase):
         self.assertIn('missing job', failures[missing])
         self.assertIn('session-settings.md', blocked)
 
+    def test_existing_dispatch_bridge_preserves_journey_names(self):
+        jobs = [{**job, 'name': 'maintenance / ' + job['name']} for job in passed_jobs()]
+        failures, _ = M.conclusions(REGISTRY, [{'jobs': jobs}])
+        self.assertEqual({}, failures)
+
     def test_success_cannot_hide_a_failed_nested_job(self):
         jobs = passed_jobs()
         jobs.append({'name': jobs[0]['name'].replace('/ verify', '/ build'), 'conclusion': 'failure', 'status': 'completed'})

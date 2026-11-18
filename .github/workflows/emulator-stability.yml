@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '23 3 * * *'
   workflow_dispatch:
+    inputs:
+      feature_map:
+        description: Run weekly feature-map maintenance instead of the stability series
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -14,7 +19,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  maintenance:
+    if: inputs.feature_map == true
+    uses: ./.github/workflows/maintain-verification.yml
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+    secrets: inherit
+
   series:
+    if: inputs.feature_map != true
     runs-on: ubuntu-latest
     timeout-minutes: 160
     steps:

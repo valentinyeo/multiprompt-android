@@ -49,7 +49,7 @@ def conclusions(registry, pages):
         if feature in blocked:
             continue
         prefix = f'journey {feature}'
-        matches = [j for j in jobs if j['name'] == prefix or j['name'].startswith(prefix + ' / ')]
+        matches = [j for j in jobs if prefix in j['name'].split(' / ')]
         if not matches:
             failures[feature] = 'missing job; no live proof'
         elif any(j['conclusion'] != 'success' for j in matches):
@@ -78,7 +78,7 @@ def run(*args):
     return subprocess.check_output(args, cwd=ROOT, text=True).strip()
 
 
-def publish(evidence, text, source):
+def publish(evidence, text, source, failures, blocked):
     repo = os.environ['GITHUB_REPOSITORY']
     base = os.environ['DEFAULT_BRANCH']
     branch = 'maintain/' + datetime.datetime.now(datetime.timezone.utc).date().isoformat()
@@ -102,7 +102,6 @@ def publish(evidence, text, source):
         run('git', '-c', 'user.name=github-actions[bot]', '-c', 'user.email=41898282+github-actions[bot]@users.noreply.github.com', 'commit', '-m', 'IGSH-2665: Refresh Android feature-map evidence')
         run('git', 'push', 'origin', f'HEAD:refs/heads/{branch}')
     pr_body = evidence / 'pr-body.md'
-    failures, blocked = conclusions(json.loads((ROOT / SKILL / 'features/registry.json').read_text()), json.loads((evidence / 'jobs.json').read_text()))
     pr_body.write_text('\n'.join([
         '## Why',
         'Keep the Android feature map true through a weekly hosted run.',
@@ -140,7 +139,7 @@ def main():
     with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
         summary.write(text)
     if source['before'] or source['after'] or failures or blocked:
-        print(publish(evidence, text, source))
+        print(publish(evidence, text, source, failures, blocked))
         raise SystemExit('Android feature-map drift or incomplete journey coverage; review the maintenance PR.')
     print('Android feature map: clean; every registered journey passed')
 

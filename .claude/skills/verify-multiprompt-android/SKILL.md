@@ -61,8 +61,11 @@ The source pass retains `control_map.py check` before and after `locations`. Onl
 
 ```bash
 gh workflow run maintain-verification.yml -R valentinyeo/multiprompt-android --ref <branch>
+gh workflow run emulator-stability.yml -R valentinyeo/multiprompt-android --ref <branch> -f feature_map=true
 python3 -B tools/maintain-verification.test.py
 ```
+
+The `emulator-stability.yml` dispatch option is an equivalent entry point for testing a new workflow before it exists on the default branch; it does not run the stability series.
 
 `maintenance-map` retains source diagnostics and corrected locations; `maintenance-report` retains the paginated job list and report. Each journey retains its usual action/result artifacts. Review those before accepting map changes. A global concurrency group cancels superseded maintenance runs so two runs cannot write the same dated branch.
 
