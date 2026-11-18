@@ -35,6 +35,166 @@ test('all five retained stress checkpoints pass and are cited', t => {
   for (const stress of ['rotate', 'background', 'chat-switch', 'network', 'stream-send']) assert.ok(result.evidence.some(line => line.includes(`break-it/${stress}.txt`)));
 });
 
+test('inspector rejection is not reported as a driver failure or timeout', t => {
+  const fixture = retained(t);
+  const file = path.join(fixture.dir, 'result.json');
+  fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file)), inspectorExit: 1 }));
+  const result = fixture.inspect();
+  assert.ok(result.errors.some(line => line.includes('checkpoint inspector failed with exit 1')));
+  assert.ok(result.errors.every(line => !/20 minutes|driver failed/.test(line)));
+});
+
+test('the replay recorder preserves driver success when the inspector rejects checkpoints', t => {
+  const fixture = retained(t);
+  const apkFile = path.join(fixture.root, 'app.apk');
+  fs.writeFileSync(apkFile, 'same APK');
+  fs.writeFileSync(path.join(fixture.root, 'app-source-sha.txt'), sha);
+  const source = fs.readFileSync(path.join(__dirname, 'android-break-it/run.sh'), 'utf8');
+  const recorder = source.slice(source.indexOf('write_result() {'), source.indexOf('\nrecord() {'));
+  const script = `root="$EVIDENCE"; journey=ai-switch.md; VERIFY_APK="$root/app.apk"; started=$SECONDS; phase=inspector\n${recorder}\nwrite_result 1`;
+  const run = spawnSync('bash', ['-euo', 'pipefail', '-c', script], { env: { ...process.env, EVIDENCE: fixture.root }, encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stderr);
+  const report = JSON.parse(fs.readFileSync(path.join(fixture.dir, 'result.json')));
+  assert.equal(report.driverExit, 0);
+  assert.equal(report.inspectorExit, 1);
+});
+
+test('journeys without a host still require every reachable screen checkpoint', t => {
+  assert.deepEqual(proof.requiredStresses('chat-search.md'), proof.STRESSES);
+  assert.deepEqual(proof.requiredStresses('native-skills.md'), proof.STRESSES);
+  assert.deepEqual(proof.requiredStresses('new-driver.md'), proof.STRESSES);
+  for (const journey of ['sign-in.md', 'launcher-icon.md', 'hosts-retired.md']) {
+    const fixture = retained(t);
+    const file = path.join(fixture.dir, 'result.json');
+    fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file)), journey }));
+    for (const stress of ['chat-switch', 'stream-send']) {
+      for (const ext of ['json', 'png', 'xml', 'txt']) fs.rmSync(path.join(fixture.dir, `${stress}.${ext}`));
+    }
+    assert.deepEqual(proof.inspect(fixture.root, journey, sha).errors, []);
+    fs.rmSync(path.join(fixture.dir, 'rotate.xml'));
+    assert.match(proof.inspect(fixture.root, journey, sha).errors.join('\n'), /rotate checkpoint missing/);
+  }
+});
+
+test('the shared session-ready event runs all stress before drivers that never fill a message', t => {
+  const fixture = retained(t);
+  const script = `
+    source tools/android-break-it/drive.sh
+    tap_text() { printf 'TAP %s\\n' "$*"; }
+    wait_for_text() { printf 'WAIT %s\\n' "$*"; }
+    fill() { printf 'FILL %s\\n' "$*"; }
+    tap_desc() { printf 'ACTION %s\\n' "$*"; }
+    shot() { :; }
+    select_node() { return 1; }
+    sudo() { printf '{}\\n'; }
+    break_it_draft() { break_it_started=true; printf 'FOUR_STRESSES\\n'; }
+    break_it_stream_send() { printf 'STREAM_CHECKPOINT\\n'; }
+    break_it_ready
+    break_it_ready
+  `;
+  const run = spawnSync('bash', ['-euo', 'pipefail', '-c', script], { cwd: path.join(__dirname, '..'), env: { ...process.env, EVIDENCE: fixture.dir, BREAK_IT_MODE: 'true' }, encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stdout.match(/FOUR_STRESSES/g)?.length, 1);
+  assert.equal(run.stdout.match(/STREAM_CHECKPOINT/g)?.length, 1);
+  assert.match(run.stdout, /FILL Message verify-breakit-probe BREAK_IT_DRAFT_2679/);
+  assert.match(run.stdout, /FILL BREAK_IT_DRAFT_2679 BREAK_IT_STREAM/);
+  assert.match(run.stdout, /WAIT BREAK_IT_FOLLOWUP_REPLY/);
+  assert.match(run.stdout, /ACTION Back\nWAIT Inbox\nTAP All/);
+  const driver = fs.readFileSync(path.join(__dirname, '../.claude/skills/verify-multiprompt-android/scripts/drive.sh'), 'utf8');
+  assert.match(driver, /shot sessions\nbreak_it_ready\n/);
+  assert.match(run.stdout, /ACTION Search sessions\nFILL Search all sessions live-pi_verify-breakit-probe\nWAIT 1 result across all splits\nACTION Robot live-pi_verify-breakit-probe\nWAIT BREAK_IT_READY/);
+  const seed = fs.readFileSync(path.join(__dirname, '../.claude/skills/verify-multiprompt-android/scripts/fixture.sh'), 'utf8');
+  assert.match(seed, /new-session -d -s live-pi_verify-breakit-probe[^\n]*'sleep infinity'/);
+  assert.match(seed, /rename-window -t live-pi_verify-breakit-probe verify-breakit-probe/);
+  assert.doesNotMatch(driver.slice(driver.indexOf('fill() {'), driver.indexOf('\nsource ', driver.indexOf('fill() {'))), /break_it_/);
+});
+
+test('chat opening retries a missed inbox tap but never drops the target assertion', t => {
+  const fixture = retained(t);
+  const script = `
+    source tools/android-break-it/drive.sh
+    tap_desc() { printf 'TAP %s\\n' "$1"; }
+    fill() { :; }
+    select_node() { [[ "$2" == Inbox ]]; }
+    waits=0
+    wait_for_text() {
+      [[ "$1" == '1 result across all splits' ]] && return 0
+      waits=$((waits + 1))
+      printf 'ASSERT %s\\n' "$1"
+      [[ "$waits" == 2 && "$RECOVERS" == true ]]
+    }
+    break_it_open_chat verify-breakit-other 'Message verify-breakit-other'
+  `;
+  for (const recovers of ['true', 'false']) {
+    const run = spawnSync('bash', ['-euo', 'pipefail', '-c', script], { cwd: path.join(__dirname, '..'), env: { ...process.env, EVIDENCE: fixture.dir, RECOVERS: recovers }, encoding: 'utf8' });
+    assert.equal(run.status === 0, recovers === 'true', run.stderr);
+    assert.equal(run.stdout.match(/TAP Robot verify-breakit-other/g)?.length, 2);
+    assert.equal(run.stdout.match(/ASSERT Message verify-breakit-other/g)?.length, 2);
+  }
+});
+
+test('the streaming fixture emits progressive data before completion and holds until release', () => {
+  const script = `
+import json
+import os
+from pathlib import Path
+import selectors
+import subprocess
+import sys
+import tempfile
+import textwrap
+import time
+source = Path('tools/android-break-it/fixture.py').read_text()
+body = textwrap.dedent(source.split('\\nelse:\\n', 1)[1])
+with tempfile.TemporaryDirectory() as directory:
+    child = 'import json,sys,time\\nfrom pathlib import Path\\nHOME=Path(' + repr(directory) + ')\\ndef emit(event): print(json.dumps(event),flush=True)\\n' + body
+    process = subprocess.Popen([sys.executable, '-u', '-c', child], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        process.stdin.write(b'{"type":"prompt","id":"first","message":"BREAK_IT_STREAM"}\\n')
+        process.stdin.flush()
+        pending = b''
+        events = []
+        deltas = []
+        with selectors.DefaultSelector() as selector:
+            selector.register(process.stdout, selectors.EVENT_READ)
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                for key, _ in selector.select(max(0, deadline - time.monotonic())):
+                    chunk = os.read(key.fd, 65536)
+                    assert chunk, 'Fixture exited before its streamed reply'
+                    pending += chunk
+                    while b'\\n' in pending:
+                        line, pending = pending.split(b'\\n', 1)
+                        event = json.loads(line)
+                        events.append(event)
+                        update = event.get('assistantMessageEvent', {})
+                        if update.get('type') == 'text_delta':
+                            deltas.append(update['delta'])
+                if ''.join(deltas) == 'BREAK_IT_STREAM_REPLY':
+                    break
+            assert ''.join(deltas) == 'BREAK_IT_STREAM_REPLY', events
+            assert len(deltas) > 1, 'Fixture must progressively stream, not emit one burst and stall'
+            assert not any(event.get('assistantMessageEvent', {}).get('type') == 'text_end' for event in events)
+            assert not any(event.get('type') == 'agent_settled' for event in events)
+        (Path(directory) / 'breakit-release-stream').touch()
+        process.stdin.write(b'{"type":"prompt","id":"second","message":"BREAK_IT_FOLLOWUP"}\\n')
+        process.stdin.flush()
+        process.stdin.close()
+        process.stdin = None
+        output, errors = process.communicate(timeout=5)
+        assert process.returncode == 0, errors
+        tail = [json.loads(line) for line in (pending + output).splitlines()]
+        done = [event['assistantMessageEvent']['content'] for event in tail if event.get('assistantMessageEvent', {}).get('type') == 'text_end']
+        assert done == ['BREAK_IT_STREAM_REPLY', 'BREAK_IT_FOLLOWUP_REPLY'], tail
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            process.communicate(timeout=3)
+`;
+  const run = spawnSync('python3', ['-B', '-c', script], { cwd: path.join(__dirname, '..'), encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stderr);
+});
+
 test('a missing, failed or unevidenced stress cannot pass', t => {
   for (const stress of proof.STRESSES) {
     for (const extension of ['json', 'png', 'xml', 'txt']) {
@@ -92,6 +252,36 @@ test('tooling proof selects its complete adapter without dropping journeys for A
   assert.equal(tooling.smoke, false);
   assert.deepEqual(verifier.includeRequiredJourneys(picked, { product: true, outcomes: ['claude.skills-model-effort'] }, diff).features, ['native-skills.md']);
   assert.deepEqual(verifier.includeRequiredJourneys(picked, { product: true, outcomes: [] }, diff).features, []);
+});
+
+test('the probe seed enables the same host history that the real reader resolves', () => {
+  const fixture = fs.readFileSync(path.join(__dirname, 'android-break-it/fixture.py'), 'utf8');
+  const seed = fixture.slice(fixture.indexOf("    assert reader.host_cli(['enable'"), fixture.indexOf('\nelse:\n')).split('\n').map(line => line.slice(4)).join('\n');
+  const script = `
+import importlib.util
+from pathlib import Path
+import sys
+import tempfile
+spec = importlib.util.spec_from_file_location('reader', 'app/src/main/assets/chat_history_reader.py')
+reader = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(reader)
+with tempfile.TemporaryDirectory() as directory:
+    HOME = reader.HOME = Path(directory)
+    SID = 'b2679000-0000-4000-8000-000000002679'
+    CHAT = 'live-pi_verify-breakit-probe'
+    def cli(args):
+        if args[0] == 'enable':
+            reader.host_write(reader.host_paths('pi', SID)['config'], dict(enabled=True, provider='pi', sid=SID, tmux=CHAT, cwd=str(HOME)))
+            return dict(status='enabled')
+        query = dict(id=1, provider='pi', codex=False, sid=SID, tmux=CHAT, cwd=str(HOME))
+        agent, sid, path, response = reader.resolve_response_path(query)
+        assert path is not None and 'BREAK_IT_READY' in path.read_text(), (path, response)
+        return dict(status='started')
+    reader.host_cli = cli
+    exec(${JSON.stringify(seed)})
+`;
+  const run = spawnSync('python3', ['-B', '-c', script], { cwd: path.join(__dirname, '..'), encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stderr);
 });
 
 test('draft readback survives lost focus without relying on an empty-field placeholder', t => {

@@ -26,6 +26,7 @@ break_it_restore() {
     if [[ "$break_it_started" == true ]]; then adb shell wm user-rotation lock 0; fi
 }
 break_it_require_draft() {
+    if [[ "$1" != Message\ * ]]; then wait_for_text "$1"; return; fi
     local attempt
     for attempt in {1..30}; do
         if select_node editor '' >/dev/null 2>&1; then break; fi
@@ -34,8 +35,10 @@ break_it_require_draft() {
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" editor-value "$1" "$2"
 }
 break_it_draft() {
-    [[ "${BREAK_IT_MODE:-}" == true && "$break_it_started" == false && "$1" == Message\ * && -n "$2" ]] || return 0
-    local label=$1 draft=${2//%s/ } chat=${1#Message } attempt
+    [[ "${BREAK_IT_MODE:-}" == true && "$break_it_started" == false ]] || return 0
+    local label=$1 draft=${2//%s/ } chat=${3:-${1#Message }} attempt state
+    state="screen: $label"
+    if [[ "$label" == Message\ * ]]; then state="exact unsent draft: $draft"; fi
     break_it_started=true
     break_it_active=rotate
     printf '::group::Break-it 1/5 Rotate during draft\n'
@@ -47,7 +50,7 @@ break_it_draft() {
     done
     grep -q 'mRotation=ROTATION_90' "$EVIDENCE/rotate-display.txt"
     break_it_require_draft "$label" "$draft"
-    break_it_checkpoint rotate "Landscape rotation retained exact unsent draft: $draft"
+    break_it_checkpoint rotate "Landscape rotation retained $state"
     adb shell wm user-rotation lock 0
     break_it_require_draft "$label" "$draft"
     break_it_active=background
@@ -56,21 +59,22 @@ break_it_draft() {
     shot break-it-background-away
     adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity"
     break_it_require_draft "$label" "$draft"
-    break_it_checkpoint background "Home and return retained exact unsent draft: $draft"
-    break_it_active=chat-switch
-    printf '::group::Break-it 3/5 Switch chats and back\n'
-    tap_desc Back
-    wait_for_text Inbox
-    tap_text All
-    tap_text verify-breakit-other
-    wait_for_text 'Message verify-breakit-other'
-    shot break-it-other-chat
-    tap_desc Back
-    wait_for_text Inbox
-    tap_text All
-    tap_text "$chat"
-    break_it_require_draft "$label" "$draft"
-    break_it_checkpoint chat-switch "Opened verify-breakit-other and returned to $chat; retained exact draft: $draft"
+    break_it_checkpoint background "Home and return retained $state"
+    if [[ "$label" == Message\ * ]]; then
+        break_it_active=chat-switch
+        printf '::group::Break-it 3/5 Switch chats and back\n'
+        tap_desc Back
+        wait_for_text Inbox
+        tap_text All
+        break_it_open_chat verify-breakit-other 'Message verify-breakit-other'
+        shot break-it-other-chat
+        tap_desc Back
+        wait_for_text Inbox
+        tap_text All
+        break_it_open_chat "$chat" "$draft"
+        break_it_require_draft "$label" "$draft"
+        break_it_checkpoint chat-switch "Opened verify-breakit-other and returned to $chat; retained exact draft: $draft"
+    fi
     break_it_active=network
     printf '::group::Break-it 4/5 Throttle network\n'
     break_it_network=true
@@ -82,7 +86,49 @@ break_it_draft() {
     grep -Eq 'minimum latency: +150 ms' "$EVIDENCE/network-status.txt"
     grep -Eq 'maximum latency: +300 ms' "$EVIDENCE/network-status.txt"
     break_it_require_draft "$label" "$draft"
-    break_it_checkpoint network "128000 bits/s upload/download and 150:300ms delay applied before Send; the rest of the original journey must pass under this throttle. Draft: $draft"
+    break_it_checkpoint network "128000 bits/s upload/download and 150:300ms delay applied; the rest of the original journey must pass under this throttle. Screen: $label. Draft: $draft"
+}
+break_it_screen() {
+    [[ "${BREAK_IT_MODE:-}" == true && "$break_it_started" == false ]] || return 0
+    if node -e 'const p = require("./.github/scripts/pstack-verifier/break-it.cjs"); process.exit(p.requiredStresses(process.argv[1]).includes("chat-switch") ? 1 : 0)' "$feature"; then
+        break_it_draft "$1" ''
+    fi
+}
+break_it_open_chat() {
+    if select_node desc 'Close session search' >/dev/null 2>&1; then tap_desc 'Close session search'; fi
+    tap_desc 'Search sessions'
+    fill 'Search all sessions' "$1"
+    wait_for_text '1 result across all splits'
+    tap_desc "Robot $1"
+    if wait_for_text "$2"; then return; fi
+    select_node text Inbox >/dev/null 2>&1 || return 1
+    tap_desc "Robot $1" || return
+    wait_for_text "$2"
+}
+break_it_ready() {
+    [[ "${BREAK_IT_MODE:-}" == true && "$break_it_started" == false ]] || return 0
+    setup_failure=1
+    break_it_open_chat live-pi_verify-breakit-probe BREAK_IT_READY
+    setup_failure=0
+    fill 'Message verify-breakit-probe' BREAK_IT_DRAFT_2679
+    break_it_draft 'Message verify-breakit-probe' BREAK_IT_DRAFT_2679 live-pi_verify-breakit-probe
+    break_it_active=stream-send
+    printf '::group::Break-it 5/5 Send while a reply streams\n'
+    fill BREAK_IT_DRAFT_2679 BREAK_IT_STREAM
+    tap_desc 'Send prompt'
+    wait_for_text BREAK_IT_STREAM_REPLY
+    shot break-it-streaming
+    fill 'Message verify-breakit-probe' BREAK_IT_FOLLOWUP
+    tap_desc 'Send prompt'
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/breakit-fixture.py release
+    wait_for_text BREAK_IT_FOLLOWUP_REPLY
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/breakit-fixture.py proof > "$EVIDENCE/stream-send-host.json"
+    break_it_stream_send "$EVIDENCE/stream-send-host.json"
+    tap_desc Back
+    wait_for_text Inbox
+    tap_text All
+    if select_node desc 'Close session search' >/dev/null 2>&1; then tap_desc 'Close session search'; fi
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/breakit-fixture.py stop
 }
 break_it_stream_send() {
     [[ "${BREAK_IT_MODE:-}" == true ]] || return 0

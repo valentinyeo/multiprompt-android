@@ -1,0 +1,52 @@
+name: Break-it harness proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      features:
+        description: JSON array of registered journeys to stress
+        type: string
+        default: '["chat-cancel.md", "ai-switch.md"]'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: break-it-proof-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  journeys:
+    strategy:
+      fail-fast: false
+      matrix:
+        feature: ${{ fromJSON(inputs.features) }}
+    uses: ./.github/workflows/verify.yml
+    with:
+      feature: ${{ matrix.feature }}
+      break_it: true
+      side: head
+      app_ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.1'
+      - run: sudo apt-get update && sudo apt-get install -y tesseract-ocr tmux
+      - run: python3 -m pip install Pillow
+      - run: tools/check.sh
+        env:
+          GRADLE: gradle
