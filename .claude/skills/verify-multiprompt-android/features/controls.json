@@ -7,7 +7,7 @@
       "screen": "Android reply notification",
       "label": "Reply notification",
       "site": "app/src/main/java/dev/multiprompt/companion/notify/ReplyNotifier.kt:show:setContentIntent:a319d615e76f921f:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/notify/ReplyNotifier.kt:56",
+      "source": "app/src/main/java/dev/multiprompt/companion/notify/ReplyNotifier.kt:57",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
