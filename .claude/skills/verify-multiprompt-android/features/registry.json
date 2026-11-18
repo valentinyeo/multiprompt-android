@@ -499,7 +499,7 @@
     },
     "sessions.md": {
       "name": "Sessions",
-      "description": "Default seed readback: 42 real tmux sessions and a large transcript, runtime-selected off-screen reader entry, and an exact search result for that same session. Does not assert all 42 rows render.",
+      "description": "Default seed readback: 42 real tmux sessions and a large transcript, runtime-selected off-screen reader entry, and an exact search result for that same session below the search box and above the keyboard. Does not assert all 42 rows render.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -508,7 +508,8 @@
         "driver": true
       },
       "outcomes": [
-        "inbox.search"
+        "inbox.search",
+        "legacy.igsh-414"
       ],
       "evidence": {
         "seed-counts.json": 1500,
@@ -805,6 +806,27 @@
         "reader-controls-host.txt": 1000,
         "reader-controls-window.txt": 200,
         "reader-controls-proof.txt": 200
+      }
+    },
+    "message-reply.md": {
+      "name": "Reply to a message",
+      "description": "Long-press a Claude bubble, cancel the reply bar, then send a quoted reply with a host receipt.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "legacy.igsh-418"
+      ],
+      "evidence": {
+        "reply-open.json": 400,
+        "reply-cancelled.json": 200,
+        "reply-sent.json": 200,
+        "reply-receipts.txt": 800,
+        "reply-proof.txt": 80
       }
     }
   },
@@ -1240,10 +1262,26 @@
       "match": []
     },
     "legacy.igsh-418": {
-      "description": "a real bubble plus swipe/long-press input, beyond the tap-only driver. Swipe right or long-press \u2192 **Reply**; inspect **Reply to \u2026**, **Cancel reply**, and send a quoted reply.",
-      "journey": null,
+      "description": "Long-press a Claude bubble, cancel Replying, then send a quoted reply. The host receipt contains the quote and the new text.",
+      "journey": "message-reply.md",
       "sideEffect": true,
-      "match": []
+      "match": [
+        "Cancel reply"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tap_text Reply"
+        },
+        "result": {
+          "file": "reply-open.json",
+          "quote": "\"cancel\": \"Cancel reply\""
+        },
+        "sideEffect": {
+          "file": "reply-receipts.txt",
+          "quote": "> REPLY_BUBBLE_418"
+        }
+      }
     },
     "legacy.igsh-425": {
       "description": "multi-touch and long/wide tmux output, no extra credential. **Open live terminal**, pinch (8\u201328 sp, retained on reopen), pan, swipe down or **Open shell history**, then **Jump to live** / **Back to the live view**. Terminal.md proves attachment only.",
@@ -1252,10 +1290,22 @@
       "match": []
     },
     "legacy.igsh-414": {
-      "description": "matching/close are automated; no credential blocks layout proof, but keyboard-visible bounds inspection is unimplemented. Inbox **Search sessions**, type in **Search all sessions**, inspect results below the box and above the keyboard before closing.",
-      "journey": null,
-      "sideEffect": true,
-      "match": []
+      "description": "Inbox search keeps the keyboard open. The exact session row sits below the search box and above the keyboard.",
+      "journey": "sessions.md",
+      "sideEffect": false,
+      "match": [
+        "Search all sessions"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tools/search-layout/bounds.py"
+        },
+        "result": {
+          "file": "search-keyboard.json",
+          "quote": "\"aboveKeyboard\": true"
+        }
+      }
     },
     "legacy.igsh-413": {
       "description": "no credential blocks comparing signed-out **Sign in to sync** in Inbox **Session list actions** and reader **Session actions**; that comparison is unimplemented. OTP is needed for **Sync: signed in \u2014 sign out** and synced splits. Compare both menus, then complete sign-in manually.",

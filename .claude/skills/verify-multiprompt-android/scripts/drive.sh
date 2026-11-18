@@ -164,6 +164,13 @@ tap_node() {
 }
 tap_text() { tap_node text "$1"; }
 tap_desc() { tap_node desc "$1"; }
+hold_text() {
+    local point x y
+    dump_ui || return
+    point=$(python3 tools/message-reply/state.py point "$EVIDENCE/current.xml" "$1") || return
+    read -r x y <<< "$point"
+    adb shell input swipe "$x" "$y" "$x" "$y" 800
+}
 browser_handoff() {
     local action=$1 evidence=$2 resolved attempt
     resolved=$(adb shell cmd package resolve-activity --brief --user 0 \
@@ -967,6 +974,11 @@ if [[ "$feature" == chat-table.md ]]; then
     exit 0
 fi
 
+if [[ "$feature" == message-reply.md ]]; then
+    source "$scripts/message-reply-drive.sh"
+    exit 0
+fi
+
 if [[ "$feature" == chat-search.md ]]; then
     source "$scripts/chat-search-drive.sh"
     exit 0
@@ -1479,9 +1491,23 @@ if [[ "$feature" == sessions.md ]]; then
     tap_desc Back
     wait_for_text Inbox
     tap_desc 'Search sessions'
-    fill 'Search all sessions' "$deep_target"
+    tap_node field 'Search all sessions'
+    select_node focused-field 'Search all sessions' >/dev/null
+    clear_field 'Search all sessions'
+    adb shell input text "$deep_target"
+    dump_ui
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value 'Search all sessions' "$deep_target"
     wait_for_text '1 result across all splits'
     wait_for_text "$deep_target"
+    adb shell dumpsys input_method > "$EVIDENCE/search-ime.txt"
+    adb shell dumpsys window > "$EVIDENCE/search-window.txt"
+    python3 tools/search-layout/bounds.py \
+        "$EVIDENCE/current.xml" \
+        "$EVIDENCE/search-ime.txt" \
+        "$EVIDENCE/search-window.txt" \
+        "$deep_target" \
+        "$deep_description" > "$EVIDENCE/search-keyboard.json"
+    cat "$EVIDENCE/search-keyboard.json"
     shot search-match
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains '1 result across all splits' >/dev/null
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" reach-desc "$deep_description" | grep -q '^tap '
