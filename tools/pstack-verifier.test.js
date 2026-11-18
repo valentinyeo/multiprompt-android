@@ -459,10 +459,10 @@ test('verify.yml keeps non-PR triggers and delegates PR journeys to the capped p
   assert.doesNotMatch(triggers, /^ {2}pull_request:/m);
   const call = triggers.slice(triggers.indexOf('  workflow_call:'), triggers.indexOf('  workflow_dispatch:'));
   assert.match(call, /^ {6}feature:\n {8}description: .+\n {8}required: true\n {8}type: string\n/m);
-  assert.deepEqual([...call.matchAll(/^ {6}(\w+):$/gm)].map(match => match[1]), ['released_chat', 'released_robots', 'release_choices', 'pins_scroll', 'candidate', 'feature', 'side', 'app_ref']);
+  assert.deepEqual([...call.matchAll(/^ {6}(\w+):$/gm)].map(match => match[1]), ['released_chat', 'released_robots', 'release_choices', 'pins_scroll', 'candidate', 'break_it', 'feature', 'side', 'app_ref']);
   assert.match(call, /^ {6}side:\n {8}description: .+\n {8}required: false\n {8}type: string\n/m);
   assert.match(call, /^ {6}app_ref:\n {8}description: .+\n {8}required: false\n {8}type: string\n$/m);
-  assert.match(verify, /^ {2}group: verify-\$\{\{ github\.ref \}\}\$\{\{ inputs\.feature && inputs\.feature != github\.event\.inputs\.feature && format\('-\{0\}', inputs\.feature\) \|\| '' \}\}\$\{\{ inputs\.side && format\('-\{0\}', inputs\.side\) \|\| '' \}\}$/m);
+  assert.match(verify, /^ {2}group: verify-\$\{\{ github\.ref \}\}\$\{\{ inputs\.feature && inputs\.feature != github\.event\.inputs\.feature && format\('-\{0\}', inputs\.feature\) \|\| '' \}\}\$\{\{ inputs\.side && format\('-\{0\}', inputs\.side\) \|\| '' \}\}-\$\{\{ inputs\.break_it_control \|\| 'none' \}\}$/m);
 });
 
 test('a change no journey fits still drives the smoke journey and never gets a plain PASS', () => {
@@ -499,10 +499,11 @@ test('a feature parent result never changes the verdict', () => {
   }
 });
 
-test('a bug fix can pass when the parent failed a product assertion and head passed', () => {
+test('a bug fix can pass when the parent failed a product assertion and head plus stress passed', () => {
   const proven = verifier.applyRules({
     modelVerdict: 'PASS',
     bugFix: true,
+    stressProof: { errors: [], evidence: [] },
     features: ['hosts.md'],
     conclusions: { 'hosts.md': 'success' },
     parents: { 'hosts.md': 'product assertion' },
@@ -511,6 +512,7 @@ test('a bug fix can pass when the parent failed a product assertion and head pas
   assert.equal(verifier.applyRules({
     modelVerdict: 'FAIL',
     bugFix: true,
+    stressProof: { errors: [], evidence: [] },
     features: ['hosts.md'],
     conclusions: { 'hosts.md': 'success' },
     parents: { 'hosts.md': 'product assertion' },
@@ -518,6 +520,7 @@ test('a bug fix can pass when the parent failed a product assertion and head pas
   assert.equal(verifier.applyRules({
     modelVerdict: 'PASS',
     bugFix: true,
+    stressProof: { errors: [], evidence: [] },
     features: ['hosts.md'],
     conclusions: { 'hosts.md': 'failure' },
     parents: { 'hosts.md': 'product assertion' },
@@ -699,8 +702,8 @@ test('every step of verify.yml cannot turn the parent run red, and the head run 
   assert.doesNotMatch(jobBlock(verify, 'verify'), /^ {4}continue-on-error:/m);
   const drive = steps.find(step => /id: native-ui/.test(step));
   assert.match(drive, /continue-on-error: \$\{\{ inputs\.side == 'parent' \|\| github\.event_name == 'workflow_dispatch' && \(/);
-  assert.match(drive, /timeout-minutes: \$\{\{ inputs\.side == 'parent' && 20 \|\| 35 \}\}/);
-  assert.match(jobBlock(verify, 'verify'), /^ {4}timeout-minutes: \$\{\{ inputs\.side == 'parent' && 50 \|\| 35 \}\}$/m);
+  assert.match(drive, /timeout-minutes: \$\{\{ inputs\.side == 'parent' && 20 \|\| inputs\.break_it && 55 \|\| 35 \}\}/);
+  assert.match(jobBlock(verify, 'verify'), /^ {4}timeout-minutes: \$\{\{ inputs\.side == 'parent' && 50 \|\| inputs\.break_it && 55 \|\| 35 \}\}$/m);
   const ids = steps.map(step => step.match(/^ {8}id: (\S+)$/m)?.[1]).filter(Boolean);
   assert.equal(new Set(ids).size, ids.length);
   assert.ok(ids.includes('native-ui'));

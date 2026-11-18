@@ -207,6 +207,10 @@ elif [[ "${VERIFY_FEATURE:-}" == chat-search.md ]]; then
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/chat-search-console.py'
 elif [[ "${VERIFY_FEATURE:-}" == session-drafts.md ]]; then
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'python3 -c "import sys; sys.stdout.write(\"\u23fa Inbox preview stays.\n\"); sys.stdout.flush()"; exec python3 -u /home/verifyssh/console.py /home/verifyssh/receipts.txt'
+elif [[ "${VERIFY_FEATURE:-}" == message-reply.md ]]; then
+    sudo install -m 755 tools/message-reply/console.py /home/verifyssh/message-reply-console.py
+    sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/message-reply-console.py'
 elif [[ "${VERIFY_FEATURE:-}" == chat-resync.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true ]]
     sudo install -m 644 app/src/main/assets/chat_history_reader.py /home/verifyssh/recovery-reader.py
@@ -267,6 +271,11 @@ if [[ "${VERIFY_FEATURE:-}" == ai-usage.md ]]; then
     sudo install -m 644 tools/ai-usage/host.py /home/verifyssh/ai-usage-host.py
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/ai-usage-host.py seed
     { printf 'command="env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/ai-usage-host.py" '; cat "$FIXTURE/user-key.pub"; } | sudo tee /home/verifyssh/.ssh/authorized_keys >/dev/null
+fi
+if [[ "${BREAK_IT_MODE:-}" == true ]]; then
+    sudo -u verifyssh tmux new-session -d -s verify-breakit-other -x 100 -y 32 'python3 -u /home/verifyssh/console.py /home/verifyssh/breakit-other-receipts.txt'
+    sudo -u verifyssh tmux set-window-option -t verify-breakit-other automatic-rename off
+    sudo -u verifyssh tmux rename-window -t verify-breakit-other verify-breakit-other
 fi
 if [[ "${VERIFY_FEATURE:-}" != long-chat.md && "${PIN_SCROLL_PROOF:-}" != true ]]; then
     sudo install -m 755 "$(dirname "$0")/seed.sh" /home/verifyssh/seed.sh

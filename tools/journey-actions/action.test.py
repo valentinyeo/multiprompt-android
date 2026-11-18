@@ -234,7 +234,7 @@ adb() {
         xml = window('<node text="Open live terminal" package="com.android.documentsui" bounds="[20,500][500,580]" />')
         self.assertEqual(self.plan(xml), 'tap 260 540')
 
-    def fill(self, text='NO_MATCH_2540', target='orchard', blocked_clear=False, blocked_type=False):
+    def fill(self, text='NO_MATCH_2540', target='orchard', blocked_clear=False, blocked_type=False, stale_batch=False):
         source = (SCRIPTS / 'drive.sh').read_text()
         helpers = '\n'.join(name + '() {' + source.split(name + '() {', 1)[1].split('\n}', 1)[0] + '\n}'
                             for name in ('clear_field', 'fill') if name + '() {' in source)
@@ -255,6 +255,7 @@ ET.ElementTree(root).write(sys.argv[1])
 PYXML
 }
 tap_node() { :; }
+break_it_draft() { :; }
 select_node() { dump_ui; python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "$@"; }
 adb() {
     case "$3" in
@@ -276,6 +277,7 @@ adb() {
             typed=$((typed + 1))
             if [[ "$BLOCK_TYPE" != true ]]; then
                 insertion=${4//%s/ }
+                if [[ "$STALE_BATCH" == true && ${#insertion} -gt 13 ]]; then insertion=${insertion:0:13}; fi
                 text="${text:0:cursor}$insertion${text:cursor}"
                 cursor=$((cursor + ${#insertion}))
             fi
@@ -292,8 +294,13 @@ printf 'FINAL=%s\\nTYPED=%s\\nBACK=%s\\n' "$text" "$typed" "$back"
 exit "$code"
 '''], env={**os.environ, 'SCRIPTS': str(SCRIPTS), 'TEST_DIR': directory, 'INITIAL': text,
            'TARGET': target, 'BLOCK_CLEAR': str(blocked_clear).lower(), 'BLOCK_TYPE': str(blocked_type).lower(),
-           'PYTHONDONTWRITEBYTECODE': '1'}, capture_output=True, text=True)
+           'STALE_BATCH': str(stale_batch).lower(), 'PYTHONDONTWRITEBYTECODE': '1'}, capture_output=True, text=True)
         return result
+
+    def test_busy_stream_input_does_not_lose_the_tail_to_a_stale_event_batch(self):
+        result = self.fill(text='', target='PHONE_DURING_STREAM_2569', stale_batch=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('FINAL=PHONE_DURING_STREAM_2569\n', result.stdout)
 
     def test_restore_query_replaces_every_character_even_with_cursor_in_middle(self):
         result = self.fill()

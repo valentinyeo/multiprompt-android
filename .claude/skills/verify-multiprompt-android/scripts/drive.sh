@@ -67,7 +67,9 @@ finish() {
     code=$?
     trap - EXIT
     set +e
+    break_it_failure "$code"
     restore_chat_link
+    break_it_restore
     {
         date +%T.%N
         timeout 10s adb shell top -b -n 1 -m 15
@@ -164,6 +166,13 @@ tap_node() {
 }
 tap_text() { tap_node text "$1"; }
 tap_desc() { tap_node desc "$1"; }
+hold_text() {
+    local point x y
+    dump_ui || return
+    point=$(python3 tools/message-reply/state.py point "$EVIDENCE/current.xml" "$1") || return
+    read -r x y <<< "$point"
+    adb shell input swipe "$x" "$y" "$x" "$y" 800
+}
 browser_handoff() {
     local action=$1 evidence=$2 resolved attempt
     resolved=$(adb shell cmd package resolve-activity --brief --user 0 \
@@ -232,17 +241,24 @@ clear_field() {
     fi
 }
 fill() {
+    local value=${2//%s/ } index character
     tap_node field "$1" || return
     select_node focused-field "$1" >/dev/null || return
     clear_field "$1" || return
-    if [[ -n "$2" ]]; then adb shell input text "$2" || return; fi
+    for ((index=0; index<${#value}; index++)); do
+        character=${value:index:1}
+        if [[ "$character" == ' ' ]]; then character=%s; fi
+        adb shell input text "$character" || return
+    done
     dump_ui || return
     if ! python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value "$1" "${2//%s/ }"; then
         printf 'JOURNEY_FIELD_INPUT_FAILED: %s: typed text did not equal the requested value\n' "$1" >&2
         return 1
     fi
     adb shell input keyevent KEYCODE_BACK
+    break_it_draft "$1" "$2"
 }
+source "$scripts/../../../../tools/android-break-it/drive.sh"
 
 scroll_to_newest() {
     local attempt
@@ -967,6 +983,11 @@ if [[ "$feature" == chat-table.md ]]; then
     exit 0
 fi
 
+if [[ "$feature" == message-reply.md ]]; then
+    source "$scripts/message-reply-drive.sh"
+    exit 0
+fi
+
 if [[ "$feature" == chat-search.md ]]; then
     source "$scripts/chat-search-drive.sh"
     exit 0
@@ -1479,9 +1500,23 @@ if [[ "$feature" == sessions.md ]]; then
     tap_desc Back
     wait_for_text Inbox
     tap_desc 'Search sessions'
-    fill 'Search all sessions' "$deep_target"
+    tap_node field 'Search all sessions'
+    select_node focused-field 'Search all sessions' >/dev/null
+    clear_field 'Search all sessions'
+    adb shell input text "$deep_target"
+    dump_ui
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value 'Search all sessions' "$deep_target"
     wait_for_text '1 result across all splits'
     wait_for_text "$deep_target"
+    adb shell dumpsys input_method > "$EVIDENCE/search-ime.txt"
+    adb shell dumpsys window > "$EVIDENCE/search-window.txt"
+    python3 tools/search-layout/bounds.py \
+        "$EVIDENCE/current.xml" \
+        "$EVIDENCE/search-ime.txt" \
+        "$EVIDENCE/search-window.txt" \
+        "$deep_target" \
+        "$deep_description" > "$EVIDENCE/search-keyboard.json"
+    cat "$EVIDENCE/search-keyboard.json"
     shot search-match
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains '1 result across all splits' >/dev/null
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" reach-desc "$deep_description" | grep -q '^tap '
