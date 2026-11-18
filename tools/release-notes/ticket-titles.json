@@ -1,5 +1,6 @@
 {
   "IGSH-2754": "One phone test CLI replaces 34 loose test scripts",
+  "IGSH-2757": "PR checker judges a change with the same AI that wrote it",
   "IGSH-2752": "A required check blocks feature PRs until phone testing is right",
   "IGSH-2681": "Android reader misses replies after the chat server restarts",
   "IGSH-2679": "Break-it stress check skips journeys that never type a message",

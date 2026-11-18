@@ -3,7 +3,6 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
 const verifier = require('./verifier.cjs');
 const coverage = require('./coverage.cjs');
 
@@ -68,23 +67,7 @@ function grade(results, expected) {
   }));
 }
 
-function claude({ system, user, cwd }, env = process.env, run = execFileSync) {
-  if (!env.CLAUDE_CODE_OAUTH_TOKEN?.trim()) throw new Error('CLAUDE_CODE_OAUTH_TOKEN is missing');
-  try {
-    return run('claude', [
-      '-p', '--model', 'haiku', '--system-prompt', system, '--output-format', 'text',
-      '--tools', '', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}',
-      '--setting-sources', '', '--disable-slash-commands', '--no-session-persistence',
-      '--permission-mode', 'dontAsk', '--max-turns', '1',
-    ], {
-      input: user, cwd, encoding: 'utf8', timeout: 240_000, maxBuffer: 2 * 1024 * 1024,
-      env: { PATH: env.PATH, HOME: env.HOME, CLAUDE_CODE_OAUTH_TOKEN: env.CLAUDE_CODE_OAUTH_TOKEN, DISABLE_AUTOUPDATER: '1' },
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-  } catch (error) {
-    throw new Error(`Claude CLI did not complete (status ${error.status ?? error.code ?? 'unknown'})`);
-  }
-}
+const claude = verifier.callClaude;
 
 async function main(env = process.env) {
   const family = process.argv[2];
