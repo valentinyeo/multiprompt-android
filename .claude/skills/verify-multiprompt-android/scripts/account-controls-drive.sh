@@ -80,6 +80,7 @@ if [[ "$feature" == workspace-controls.md ]]; then
     tap_text Cancel
     account_control_state workspace-new-cancel '{"text":["Inbox"],"absent":["New workspace","Discarded"]}'
     account_inbox_menu 'New workspace'
+    wait_for_text 'New workspace'
     adb shell input keyevent KEYCODE_BACK
     account_control_state workspace-new-dismiss '{"text":["Inbox"],"absent":["New workspace"]}'
     account_layout_receipt workspace-cancelled '{"absent":["Discarded"]}'
@@ -154,6 +155,7 @@ if [[ "$feature" == workspace-controls.md ]]; then
     tap_text Cancel
     account_control_state workspace-bulk-cancel '{"text":["2 selected","Move to…"],"absent":["Move to"]}'
     tap_text 'Move to…'
+    wait_for_text 'Move to'
     adb shell input keyevent KEYCODE_BACK
     account_control_state workspace-bulk-dismiss '{"text":["2 selected","Move to…"],"absent":["Move to"]}'
     account_layout_receipt workspace-bulk-unchanged '{"tabs":{"verify-session":{"workspace":"Workshop"},"pin-00":{"workspace":"Workshop"}}}'
@@ -191,7 +193,7 @@ account_new_group
 fill Name Focus
 tap_text Create
 wait_for_absence 'New group'
-wait_for_text Focus
+wait_for_text FOCUS
 account_control_state group-created '{"text":["FOCUS","OTHER"],"absent":["ORIGINAL","New group"]}'
 account_layout_receipt group-created '{"tabs":{"verify-session":{"group":"Focus"},"pin-00":{"group":"Other"}}}'
 account_rename_group Focus
@@ -208,7 +210,7 @@ account_rename_group Focus
 fill Name Renamed
 tap_text Rename
 wait_for_absence 'Rename group'
-wait_for_text Renamed
+wait_for_text RENAMED
 account_control_state group-renamed '{"text":["RENAMED","OTHER"],"absent":["FOCUS","Rename group"]}'
 account_layout_receipt group-renamed '{"tabs":{"verify-session":{"group":"Renamed"}}}'
 account_rename_group Renamed
@@ -216,7 +218,7 @@ fill Name Keyboard
 tap_node field Name
 adb shell input keyevent KEYCODE_ENTER
 wait_for_absence 'Rename group'
-wait_for_text Keyboard
+wait_for_text KEYBOARD
 account_control_state group-keyboard-renamed '{"text":["KEYBOARD","OTHER"],"absent":["RENAMED","Rename group"]}'
 account_layout_receipt group-keyboard-renamed '{"tabs":{"verify-session":{"group":"Keyboard"}}}'
 account_open_group
