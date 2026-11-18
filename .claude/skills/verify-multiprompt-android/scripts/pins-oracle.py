@@ -43,6 +43,10 @@ def named(name):
     return [n for n in nodes if visible(n)
             and (n.get("text") == name or n.get("content-desc") == name)]
 
+def robot(name):
+    description = "Robot " + name
+    return [n for n in nodes if visible(n) and n.get("content-desc") == description]
+
 pin_names = [f"pin-{i:02d}" for i in range(12)]
 
 
@@ -94,9 +98,9 @@ try:
             raise ValueError("invalid content viewport after fixed tabs")
         complete = False
         for name in pin_names:
-            if named(name):
+            if robot(name):
                 try:
-                    pin = raw_bounds(clickable(name))
+                    pin = raw_bounds(clickable("Robot " + name))
                 except ValueError:
                     continue
                 if top <= pin[1] and pin[3] <= bottom:
@@ -111,16 +115,16 @@ try:
         if args[0] == "any":
             pin = None
             for name in pin_names:
-                if named(name):
+                if robot(name):
                     try:
-                        pin = clickable(name)
+                        pin = clickable("Robot " + name)
                         break
                     except ValueError:
                         pass
             if pin is None:
                 raise ValueError("no visible clickable pin")
         else:
-            pin = clickable(args[0])
+            pin = clickable("Robot " + args[0])
         x1, y1, x2, y2 = raw_bounds(pin)
         y = (y1 + y2) // 2
         print(screen[0] + (screen[2] - screen[0]) // 8, y,
@@ -147,10 +151,10 @@ try:
             previous = json.load(source)
         if header() != previous:
             raise ValueError("header moved")
-        if not any(visible(n) and re.fullmatch(r"row-(?:0[0-9]|1[0-9]|2[0-7])",
-                                              n.get("text", "")) for n in nodes):
+        if not any(visible(n) and re.fullmatch(r"Robot row-(?:0[0-9]|1[0-9]|2[0-7])",
+                                              n.get("content-desc", "")) for n in nodes):
             raise ValueError("fixture row missing")
-        if any(named(name) for name in pin_names):
+        if any(robot(name) for name in pin_names):
             raise SystemExit("PINNED_STRIP_MUST_SCROLL")
         print("PINS_SCROLLED_OK")
     else:

@@ -3,6 +3,7 @@
   "IGSH-2536": "Android uses only the design kit for buttons and menus",
   "IGSH-2569": "After switching AI a reply shows once, not twice",
   "IGSH-2568": "Feature freeze until each repo's verification is complete",
+  "IGSH-2646": "Android: long chat, pins and swipe tests use the big test data",
   "IGSH-2570": "Android verification meets Lauren's checklist",
   "IGSH-2534": "Android chat reader has one owner for its connection",
   "IGSH-2537": "Android phone test saves and reuses snippets",

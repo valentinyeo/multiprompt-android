@@ -2,7 +2,7 @@
 [[ "$package" == dev.multiprompt.companion || "$package" == dev.multiprompt.companion.m3 ]]
 [[ "$(adb shell settings get global http_proxy | tr -d '\r')" == 10.0.2.2:8788 ]]
 kill -0 "$(cat "$FIXTURE/offline-proxy.pid")"
-wait_for_text verify-keep
+tap_node desc 'Robot verify-keep' reveal
 for attempt in {1..30}; do
     if sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/pins-ssh-auth.txt"; then break; fi
     sleep 1
@@ -14,14 +14,7 @@ sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh bash -c '
     [[ "$GITHUB_ACTIONS" == true && "$HOME" == /home/verifyssh && "$(id -u)" -ne 0 && "$(id -un)" == verifyssh ]]
     tmux has-session -t =verify-session
     tmux has-session -t =verify-keep
-    for i in {0..39}; do
-        if (( i < 12 )); then printf -v name "pin-%02d" "$i"
-        else printf -v name "row-%02d" "$((i - 12))"; fi
-        receipt="/home/verifyssh/pins-$name-receipts.txt"
-        tmux new-session -d -s "$name" -x 100 -y 32 \
-            "env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 -u /home/verifyssh/console.py $receipt"
-    done
-    tmux list-sessions -F "#{session_name}" | grep -E "^(pin|row)-[0-9][0-9]$" | sort > /home/verifyssh/pins-names.txt
+    tmux has-session -t =cl-long-chat
     [[ "$(wc -l < /home/verifyssh/pins-names.txt)" == 40 ]]
     for i in {0..39}; do
         if (( i < 12 )); then printf -v name "pin-%02d" "$i"

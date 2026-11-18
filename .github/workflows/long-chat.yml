@@ -73,12 +73,10 @@ jobs:
       - name: Start isolated SSH and long transcript
         run: |
           bash .claude/skills/verify-multiprompt-android/scripts/fixture.sh
-          sudo install -m 755 tools/long-chat/fixture.py /home/verifyssh/long-chat-fixture.py
-          sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
-          sudo -u verifyssh tmux new-session -d -s cl-long-chat -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/long-chat-fixture.py /home/verifyssh/long-chat-source.json'
+          sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/verify-seed.py check - < "$EVIDENCE/seed-counts.json" > "$EVIDENCE/seed-check.json"
           sudo -u verifyssh tmux set-window-option -t cl-long-chat automatic-rename off
           sudo -u verifyssh tmux rename-window -t cl-long-chat cl-long-chat
-          timeout 30s bash -c 'until sudo test -s /home/verifyssh/long-chat-source.json; do sleep 0.1; done'
+          sudo test -s /home/verifyssh/long-chat-source.json
           sudo cat /home/verifyssh/long-chat-source.json > "$EVIDENCE/source.json"
           if [[ "$NEGATIVE_CONTROL" == true ]]; then
             sudo rm "$(jq -er .path "$EVIDENCE/source.json")"

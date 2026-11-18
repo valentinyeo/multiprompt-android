@@ -114,9 +114,33 @@ public class Observe extends Instrumentation {
         }
     }
 
+    private void reveal(String description) {
+        for (int attempt = 0; attempt < 24; attempt++) {
+            if (node(description) != null) return;
+            AccessibilityNodeInfo scroller = tallestScrollable(getUiAutomation().getRootInActiveWindow(), null);
+            int action = attempt < 12 ? AccessibilityNodeInfo.ACTION_SCROLL_FORWARD : AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD;
+            if (scroller == null || !scroller.performAction(action)) throw new AssertionError("SCROLL_REVEAL_FAILED: " + description);
+            SystemClock.sleep(200);
+        }
+        if (node(description) == null) throw new AssertionError("VISIBLE_TARGET_MISSING: " + description);
+    }
+
+    private AccessibilityNodeInfo tallestScrollable(AccessibilityNodeInfo node, AccessibilityNodeInfo best) {
+        if (node == null) return best;
+        if (node.isScrollable() && node.isVisibleToUser()) {
+            Rect bounds = new Rect();
+            Rect bestBounds = new Rect();
+            node.getBoundsInScreen(bounds);
+            if (best != null) best.getBoundsInScreen(bestBounds);
+            if (best == null || bounds.height() > bestBounds.height()) best = node;
+        }
+        for (int i = 0; i < node.getChildCount(); i++) best = tallestScrollable(node.getChild(i), best);
+        return best;
+    }
+
     private void open(String stage, long budget) throws Exception {
-        waitFor("cl-long-chat", SystemClock.elapsedRealtime() + 30000);
-        AccessibilityNodeInfo target = node("cl-long-chat");
+        reveal("Robot cl-long-chat");
+        AccessibilityNodeInfo target = node("Robot cl-long-chat");
         while (target != null && !target.isClickable()) target = target.getParent();
         if (target == null) throw new AssertionError("Session target missing");
         long started = SystemClock.elapsedRealtime();
@@ -174,7 +198,8 @@ public class Observe extends Instrumentation {
             open(phase, phase.equals("initial") ? 15000 : phase.equals("smoke") ? 2000 : 1000);
             if (phase.equals("initial")) {
                 click("Back");
-                click("verify-session");
+                reveal("Robot verify-session");
+                click("Robot verify-session");
                 waitFor("VERIFY_READY_528", SystemClock.elapsedRealtime() + 30000);
                 click("Back");
                 open("switch-back", 1000);
