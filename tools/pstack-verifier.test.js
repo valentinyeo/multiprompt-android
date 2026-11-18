@@ -951,5 +951,5 @@ test('tooling and product changes both run the independent judge', () => {
   }
   const final = jobBlock(workflow, 'pstack-verifier');
   assert.doesNotMatch(final, /if:.*no_product_change/);
-  assert.match(final, /name: Judge the change against the journey evidence\n {8}env:/);
+  assert.match(final, /name: Judge the change against the journey evidence\n {8}id: judge\n {8}if: needs\.pick\.outputs\.reused != 'true'\n {8}env:/);
 });

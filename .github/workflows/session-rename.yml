@@ -18,6 +18,10 @@ permissions:
   contents: read
   actions: read
 
+concurrency:
+  group: session-rename-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   released-rename:
     if: inputs.android_run == ''
