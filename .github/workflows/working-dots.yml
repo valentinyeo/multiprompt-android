@@ -1,12 +1,17 @@
 name: Released Android working dots
 
 on:
+  workflow_call:
   schedule:
     - cron: '23 3 * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: working-dots-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   recording:

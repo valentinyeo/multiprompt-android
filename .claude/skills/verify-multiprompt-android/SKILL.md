@@ -53,6 +53,19 @@ python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.py loca
 
 On pull requests, CI runs `check --base <PR-base-sha>` and forbids growing the initial gap list, even when an older gap disappears. New controls require journeys. CI retains `android-control-coverage` with the count and missing list. `tools/check.sh source` runs the same check and its tests. The historical test reads the actual parent and merged source of [PR #380](https://github.com/valentinyeo/multiprompt-android/pull/380), commit `50eb80bbcc560ee2813d0eb869ab2364663275a8`, and rejects its previously unmapped chat-search controls.
 
+## Weekly maintenance
+
+`maintain-verification.yml` runs on Mondays at 05:17 UTC and supports `workflow_dispatch`. Its `scripts/maintain.py` planner reads every journey from the registry. Debug and signed journeys reuse `verify.yml`, two at a time, with the existing seeded SSH fixture. Signed routes build branch candidates; dedicated update, working-dots and photo routes retain their own proofs. Manual prerequisites and unsupported future routes are reported as blocked, never counted as coverage.
+
+The source pass retains `control_map.py check` before and after `locations`. Only moved locations are repaired automatically; changed controls, choice digests and product failures still need review. The final job reads all paginated job conclusions, including missing or skipped journeys, and opens or updates one `maintain/<UTC-date>` PR with corrections and a failure report. It uses `GITHUB_TOKEN` with contents and pull-request write permissions; repository Actions settings must allow PR creation. It never merges. Source drift or incomplete coverage leaves the maintenance run red even after a correction PR opens.
+
+```bash
+gh workflow run maintain-verification.yml -R valentinyeo/multiprompt-android --ref <branch>
+python3 -B tools/maintain-verification.test.py
+```
+
+`maintenance-map` retains source diagnostics and corrected locations; `maintenance-report` retains the paginated job list and report. Each journey retains its usual action/result artifacts. Review those before accepting map changes. A global concurrency group cancels superseded maintenance runs so two runs cannot write the same dated branch.
+
 ## Launch
 
 `pstack-verifier.yml` owns pull-request journeys. It picks at most three and runs each on head and parent through `verify.yml`; each pair counts as one journey. `verify.yml` also runs on main pushes and nightly, and supports manual dispatch. Tooling-only work can use the retained hosted Node test proof.
