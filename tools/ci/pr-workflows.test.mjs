@@ -51,7 +51,7 @@ test('PR journeys come only from touched registry outcomes; even tooling receive
   assert.match(workflow, /if: needs\.pick\.outputs\.features != '\[\]'/);
   const verifier = read('.github/scripts/pstack-verifier/verifier.cjs');
   assert.doesNotMatch(verifier, /features: \[SMOKE_JOURNEY\]/);
-  assert.match(verifier, /validateFeatures\(required, Infinity\)/);
+  assert.match(verifier, /validateFeatures\(ranked\)/);
   assert.doesNotMatch(verifier, /\.\.\.\(picked\.smoke \? \[\] : picked\.features\)/);
   assert.match(workflow, /PARENT_WORKFLOW_EXIT/);
 });

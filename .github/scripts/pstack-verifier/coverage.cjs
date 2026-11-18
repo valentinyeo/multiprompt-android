@@ -9,11 +9,20 @@ const REGISTRY_PATH = '.claude/skills/verify-multiprompt-android/features';
 const debugJourneys = Object.entries(registry.journeys).filter(([, journey]) => journey.runner.kind === 'debug').map(([name]) => name);
 const prJourneys = Object.entries(registry.journeys).filter(([, journey]) => ['debug', 'signed'].includes(journey.runner.kind)).map(([name]) => name);
 
-function changedJourneys(diff, files = []) {
-  const paths = new Set([
+function changedPaths(diff, files = []) {
+  return new Set([
     ...files.flatMap(file => [file.filename, file.previous_filename]).filter(Boolean),
     ...[...String(diff).matchAll(/^diff --git a\/(\S+) b\/(\S+)$/gm)].flatMap(match => match.slice(1)),
   ]);
+}
+
+function changedRecipes(diff, files = []) {
+  const paths = changedPaths(diff, files);
+  return prJourneys.filter(name => paths.has(`${REGISTRY_PATH}/${name}`));
+}
+
+function changedJourneys(diff, files = []) {
+  const paths = changedPaths(diff, files);
   return prJourneys.filter(name => paths.has(`${REGISTRY_PATH}/${name}`)
     || paths.has('.claude/skills/verify-multiprompt-android/scripts/drive.sh')
     || (registry.journeys[name].runner.scripts ?? []).some(script => paths.has(script)));
@@ -141,7 +150,7 @@ function renderWorkflow(source) {
   return source.replace(/^      VERIFY_FEATURE: .*$/m, `      VERIFY_FEATURE: \${{ inputs.driver_feature || inputs.feature || '${registry.smoke}' }}`).replace(/(      feature:\n        description:[^\n]+\n        required: true\n        type: choice\n        options:\n)(?:          - [^\n]+\n)+/, `$1${options}\n`);
 }
 
-module.exports = { registry, baseline, REGISTRY_PATH, debugJourneys, prJourneys, changedJourneys, changedProduct, changedOutcomes, planChange, featureErrors, catalog, validateRegistry, ratchetErrors, renderIndex, renderWorkflow };
+module.exports = { registry, baseline, REGISTRY_PATH, debugJourneys, prJourneys, changedRecipes, changedJourneys, changedProduct, changedOutcomes, planChange, featureErrors, catalog, validateRegistry, ratchetErrors, renderIndex, renderWorkflow };
 
 if (require.main === module) {
   if (process.argv[2] === 'journey') {

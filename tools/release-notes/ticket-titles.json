@@ -131,5 +131,6 @@
   "IGSH-2670": "Phone tests cover 40 more controls, batch 4",
   "IGSH-2682": "Android app reads the screencast2 key from the account",
   "IGSH-2662": "Android: chat screen lost its version label",
-  "IGSH-2687": "PR checks follow the pstack playbooks: one verifier, touched journeys only"
+  "IGSH-2687": "PR checks follow the pstack playbooks: one verifier, touched journeys only",
+  "IGSH-2722": "PR checker blocks shared chat reader changes: 46 journeys over cap"
 }
