@@ -24,7 +24,7 @@ if [[ -d "$FIXTURE" ]]; then
         sudo cat /home/verifyssh/remote-control-work/desktop-counter.txt > "$EVIDENCE/remote-control-desktop.txt" 2>/dev/null || true
         sudo cat /home/verifyssh/remote-control-startup.txt > "$EVIDENCE/remote-control-startup.txt" 2>/dev/null || true
     fi
-    if [[ "${VERIFY_FEATURE:-}" == ai-switch.md ]]; then
+    if [[ "${VERIFY_FEATURE:-}" == ai-switch.md || "${VERIFY_FEATURE:-}" == reader-version.md ]]; then
         sudo -u verifyssh python3 - > "$EVIDENCE/ai-switch-host-debug.json" <<'PYHOST'
 import json
 from pathlib import Path

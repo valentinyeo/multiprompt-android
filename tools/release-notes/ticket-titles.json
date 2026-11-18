@@ -117,11 +117,9 @@
   "IGSH-2533": "Android old-screen check stops breaking on every change",
   "IGSH-2538": "Android phone test switches AI",
   "IGSH-2540": "Android phone test finds words inside chats",
-  "IGSH-2560": "Server overload: worker caps, heavy checks in the cloud, cloud workers",
   "IGSH-2541": "Android phone test opens Claude remote control",
   "IGSH-2542": "Android phone test opens AI usage",
   "IGSH-2543": "Android phone test inserts skills within messages",
-  "IGSH-2568": "Feature freeze until each repo's verification is complete",
   "IGSH-2544": "Android phone test expands and scrolls tables",
   "IGSH-2638": "Phone tests cover every menu control",
   "IGSH-2545": "Android phone test finds and sends clear",
@@ -130,5 +128,7 @@
   "IGSH-2653": "Phone tests cover 40 more controls",
   "IGSH-2669": "Phone tests cover 40 more controls, batch 3",
   "IGSH-2670": "Phone tests cover 40 more controls, batch 4",
-  "IGSH-2682": "Android app reads the screencast2 key from the account"
+  "IGSH-2682": "Android app reads the screencast2 key from the account",
+  "IGSH-2662": "Android: chat screen lost its version label",
+  "IGSH-2687": "PR checks follow the pstack playbooks: one verifier, touched journeys only"
 }

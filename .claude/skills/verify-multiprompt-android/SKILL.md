@@ -16,8 +16,8 @@ The picker schedules every registered debug journey required by changed outcome 
 For every product change, identify the changed outcome IDs. Add a new ID and journey for a new behavior. The picker reports `changed_outcomes`; deterministic source matches and the independent judge can add required IDs. An unknown product outcome fails closed. Tooling-only work can use the retained hosted Node test proof instead of claiming that an Android smoke test covered it.
 
 The second-AI verdict must include `coverage` entries for every changed ID. Each entry names its registered journey and quotes a real action from `driver-transcript.txt`, a resulting XML/JSON state, and independent receipt/server evidence where required. The gate checks these references in the downloaded head artifact after cleanup, requires a successful matching journey and exact `app-source-sha.txt`, then retains `verifier-feature-coverage`. Free-text `not_covered`, a green unrelated journey or smoke cannot satisfy this contract. For a feature, both sides may pass; a manufactured failing parent is not required.
-A bug-fix pull request (its title or ticket says fix or bug, or the picker sets change_kind to bug) fails unless every picked journey fails on the parent at a product assertion and passes on head.
-The driver records that failure as the line PRODUCT_ASSERTION_FAILED; a parent that fails in setup, build or fixture is not a repro.
+A bug-fix pull request (its title or ticket says fix or bug, or the picker sets change_kind to bug) needs at least one picked journey that fails on the parent at a product assertion and passes on head. Every picked journey must pass on head; journeys that passed on the parent may serve as regression guards.
+The driver records the repro failure as the line PRODUCT_ASSERTION_FAILED; a parent that fails in setup, build or fixture does not count as the repro.
 
 Verification checklist item 7 is the break-it pass. The same bug classification schedules a second head replay after the normal journey passes, on the same emulator and APK. `tools/android-break-it/drive.sh` rotates during the first non-empty chat draft, backgrounds and returns, switches to another fixture chat and back, then applies 128000 bit/s upload/download bandwidth and 150–300ms latency for the remaining journey. Each checkpoint retains PNG, XML and text. The recipe must call `break_it_stream_send` with independently checked send-admission and stream-completion timestamps; `ai-switch.md` supplies this checkpoint. Other recipes must add an equivalent checkpoint before they can pass as bug-fix proof. Missing evidence fails closed.
 
@@ -78,7 +78,9 @@ The `emulator-stability.yml` dispatch option is an equivalent entry point for te
 
 ## Launch
 
-`pstack-verifier.yml` owns pull-request journeys. It picks at most three and runs each on head and parent through `verify.yml`; each pair counts as one journey. `verify.yml` also runs on main pushes and nightly, and supports manual dispatch. Tooling-only work can use the retained hosted Node test proof.
+`pstack-verifier.yml` owns pull-request journeys. It runs only debug journeys for changed registry outcomes and changed recipes on head and parent through `verify.yml`. It never pads the selection with smoke. Parent proof is reused across PRs only for the same base SHA, journey and driver inputs; missing or invalid proof triggers a fresh run. Tooling-only PRs still get the independent verdict from hosted Node and parent/head workflow-rule proof.
+
+`verify.yml` supports calls and manual dispatch. The weekly `maintain-verification.yml` pass drives every registered automated feature. `android-full.yml` runs all six phone regressions, release-profile compilation and historical controls nightly. Dedicated top-fade, account, update and other periodic workflows retain their schedules without PR triggers. `release.yml` still blocks publication on the recorded robot-faces journey against the exact signed APK.
 
 From a pushed branch containing this workflow:
 

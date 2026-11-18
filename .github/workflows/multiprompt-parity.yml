@@ -2,11 +2,6 @@ name: Multiprompt parity
 on:
   schedule:
     - cron: '23 3 * * *'
-  pull_request:
-    paths:
-      - 'tools/parity/**'
-      - 'docs/multiprompt-features.md'
-      - '.github/workflows/multiprompt-parity.yml'
   workflow_dispatch:
 permissions:
   contents: read
