@@ -308,22 +308,23 @@ test('the real picker reserves changed signed recipes and drivers before consult
           FIXTURE_DIFF: diff, GITHUB_OUTPUT: output, REQUEST_FILE: request,
         },
       });
-      if (paths.length === 3) {
-        assert.notEqual(run.status, 0);
-        assert.match(run.stderr, /split the change/);
-        assert.equal(fs.existsSync(request), false);
-      } else {
-        assert.equal(run.status, 0, run.stderr);
-        const values = fs.readFileSync(output, 'utf8');
-        const selected = JSON.parse(values.match(/^features=(.+)$/m)[1]);
-        assert.deepEqual(selected, ['session-gestures.md', 'session-pins.md', 'session-summaries.md']);
-        const prompt = JSON.parse(fs.readFileSync(request, 'utf8')).messages[1].content;
-        assert.ok(prompt.startsWith(`Required journeys (already selected before your choice): ${JSON.stringify(selected)}`));
-        const runners = JSON.parse(values.match(/^runners=(.+)$/m)[1]);
-        assert.equal(runners['session-pins.md'].feature, 'session-favorites.md');
-        assert.equal(runners['session-pins.md'].pins_scroll, true);
-        assert.equal(runners['session-pins.md'].candidate, true);
-      }
+      assert.equal(run.status, 0, run.stderr);
+      const values = fs.readFileSync(output, 'utf8');
+      const selected = JSON.parse(values.match(/^features=(.+)$/m)[1]);
+      assert.deepEqual(selected, paths.length === 3
+        ? ['hosts.md', 'session-pins.md', 'session-gestures.md']
+        : ['session-gestures.md', 'session-pins.md', 'session-summaries.md']);
+      const prompt = JSON.parse(fs.readFileSync(request, 'utf8')).messages[1].content;
+      const recipes = JSON.parse(prompt.split('\n')[0].split(': ')[1]);
+      assert.ok(recipes.includes('session-pins.md'));
+      assert.equal(recipes.includes('hosts.md'), paths.length === 3);
+      assert.match(prompt, /Required candidates \(rank repro first, then relevant guards within the cap\):/);
+      assert.match(prompt, /session-summaries\.md/);
+      if (paths.length === 3) assert.match(run.stdout, /deferred=\["session-summaries\.md"\]/);
+      const runners = JSON.parse(values.match(/^runners=(.+)$/m)[1]);
+      assert.equal(runners['session-pins.md'].feature, 'session-favorites.md');
+      assert.equal(runners['session-pins.md'].pins_scroll, true);
+      assert.equal(runners['session-pins.md'].candidate, true);
     }
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
@@ -885,7 +886,9 @@ test('the real picker schedules clear-ranking code and recipe edits even when th
     const rankingDiff = path.join(directory, 'ranking.diff');
     fs.writeFileSync(rankingDiff, productDiff('skills/NativeSkills.kt', 'val rank = score(skill.name, skill.description, query)'));
     const historicalPlan = gate.planChange(read('tools/fixtures/feature-coverage/pr-381.diff'), []);
-    assert.throws(() => verifier.includeRequiredJourneys({ features: [], dropped: [], smoke: true }, historicalPlan), /split the change/);
+    const historicalPick = verifier.includeRequiredJourneys({ features: ['clear-ranking.md'], dropped: [], smoke: true }, historicalPlan);
+    assert.deepEqual(historicalPick.features, ['clear-ranking.md', 'native-skills.md', 'claude-remote-control.md']);
+    assert.deepEqual(historicalPick.deferred, ['skill-pills.md']);
     for (const diff of [rankingDiff, recipeDiff]) {
       for (const features of [[], ['native-skills.md', 'session-reader.md', 'terminal.md']]) {
         const output = path.join(directory, 'outputs');

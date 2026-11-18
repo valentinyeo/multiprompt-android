@@ -157,7 +157,9 @@ test('required outcome journeys cannot be omitted by the model picker', () => {
   const selected = verifier.includeRequiredJourneys(picked, { outcomes: ['reader.send-enter-interrupt', 'chat.link-recovery'] });
   assert.deepEqual(selected.features, ['session-reader.md', 'chat-shared.md']);
   assert.equal(selected.smoke, false);
-  assert.throws(() => verifier.includeRequiredJourneys(picked, { outcomes: ['reader.send-enter-interrupt', 'chat.link-recovery', 'inbox.search', 'terminal.journey'] }), /split the change/);
+  const bounded = verifier.includeRequiredJourneys(picked, { outcomes: ['reader.send-enter-interrupt', 'chat.link-recovery', 'inbox.search', 'terminal.journey'] });
+  assert.deepEqual(bounded.features, ['chat-shared.md', 'session-reader.md', 'sessions.md']);
+  assert.deepEqual(bounded.deferred, ['terminal.md']);
 });
 
 test('changed recipes and owned drivers are mandatory before model suggestions', () => {
@@ -173,11 +175,45 @@ test('changed recipes and owned drivers are mandatory before model suggestions',
   assert.equal(verifier.noProductChange([{ filename: 'tools/session-gestures/scroll.test.py' }], 1), true);
 });
 
-test('more than three mandatory journeys fail instead of silently dropping proof', () => {
+for (const repro of [true, false]) {
+  test(`an oversize shared-driver change ${repro ? 'with' : 'without'} a repro keeps the cap and defers guards`, () => {
+    const gate = require('../.github/scripts/pstack-verifier/coverage.cjs');
+    const files = ['.claude/skills/verify-multiprompt-android/scripts/drive.sh', ...(repro ? [`${gate.REGISTRY_PATH}/chat-shared.md`] : [])];
+    const diff = files.map(file => `diff --git a/${file} b/${file}\n+changed`).join('\n');
+    const picked = { features: ['session-reader.md', 'chat-codex.md', 'terminal.md'], dropped: ['made-up.md'] };
+    const selected = verifier.includeRequiredJourneys(picked, { outcomes: [] }, diff);
+    assert.deepEqual(selected.features, repro ? ['chat-shared.md', 'session-reader.md', 'chat-codex.md'] : picked.features);
+    assert.equal(selected.features.length, verifier.MAX_JOURNEYS);
+    assert.deepEqual(new Set([...selected.features, ...selected.deferred]), new Set(gate.changedJourneys(diff)));
+    assert.ok(selected.deferred.length > 3);
+    assert.ok(selected.deferred.every(name => !selected.features.includes(name)));
+    assert.deepEqual(selected.dropped, ['made-up.md']);
+    const ruled = verifier.applyRules({ modelVerdict: 'PASS', features: selected.features, conclusions: Object.fromEntries(selected.features.map(name => [name, 'success'])), parents: Object.fromEntries(selected.features.map(name => [name, 'passed'])), deferred: selected.deferred });
+    assert.equal(ruled.verdict, 'PASS+NOTES');
+    const body = verifier.buildComment({ sha, ...ruled, summary: 'Bounded proof.', evidence: [], notCovered: [], runUrl });
+    assert.match(body, /Deferred to nightly android-full/);
+    for (const name of selected.deferred) assert.ok(body.includes(name), name);
+  });
+}
+
+test('more than three directly edited recipes require splitting instead of dropping an edited recipe', () => {
   const gate = require('../.github/scripts/pstack-verifier/coverage.cjs');
-  const required = gate.changedJourneys('', [{ filename: '.claude/skills/verify-multiprompt-android/scripts/drive.sh' }]);
-  assert.ok(required.length > verifier.MAX_JOURNEYS);
-  assert.throws(() => verifier.includeRequiredJourneys({ features: [], dropped: [] }, { outcomes: [] }, '', required), /split the change/i);
+  const diff = ['hosts.md', 'terminal.md', 'chat-shared.md', 'chat-codex.md'].map(name => `diff --git a/${gate.REGISTRY_PATH}/${name} b/${gate.REGISTRY_PATH}/${name}\n+changed`).join('\n');
+  assert.throws(() => verifier.includeRequiredJourneys({ features: [] }, { outcomes: [] }, diff), /changed recipes.*split/i);
+});
+
+test('deferred guards are outside PR coverage but selected and unmapped outcomes still fail closed', () => {
+  const gate = require('../.github/scripts/pstack-verifier/coverage.cjs');
+  const plan = { product: true, outcomes: ['reader.send-enter-interrupt', 'chat.link-recovery', 'inbox.search', 'terminal.journey', 'app-name.journey'] };
+  const selected = verifier.includeRequiredJourneys({ features: ['session-reader.md', 'chat-shared.md', 'sessions.md'] }, plan);
+  const scoped = verifier.scopePlan(plan, selected.deferred);
+  assert.ok(scoped.outcomes.includes('reader.send-enter-interrupt'));
+  assert.ok(!scoped.outcomes.includes('terminal.journey'));
+  const proof = gate.featureErrors({ plan: scoped, sha });
+  assert.match(proof.errors.join(' '), /reader.send-enter-interrupt/);
+  assert.doesNotMatch(proof.errors.join(' '), /terminal.journey/);
+  assert.match(proof.errors.join(' '), /app-name.journey/);
+  assert.equal(verifier.applyRules({ modelVerdict: 'FAIL', features: [], deferred: selected.deferred }).verdict, 'FAIL');
 });
 
 test('all signed registry routes build candidates with the same journey identity for evidence', () => {
@@ -921,9 +957,28 @@ test('a verdict wrapped in prose or a fence still parses, and a bad answer is as
   assert.equal(asked, 1);
 });
 
-test('SOFT-2536 must split five required journeys rather than omit coverage', () => {
+test('SOFT-2536 bounds five required journeys and names the nightly guards', () => {
   const outcomes = ['sign-in.journey', 'host-changed-key.journey', 'chat-reactions.journey', 'claude.skills-model-effort', 'inbox.search'];
-  assert.throws(() => verifier.includeRequiredJourneys({ features: ['sign-in.md'], smoke: false }, { product: true, outcomes }), /split the change/);
+  const selected = verifier.includeRequiredJourneys({ features: ['sign-in.md'], smoke: false }, { product: true, outcomes });
+  assert.deepEqual(selected.features, ['sign-in.md', 'host-changed-key.md', 'chat-reactions.md']);
+  assert.deepEqual(selected.deferred, ['native-skills.md', 'sessions.md']);
+});
+
+test('android-full schedules every deferred candidate with its registered runner inputs', () => {
+  const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'nightly'], { encoding: 'utf8', env: { ...process.env, GITHUB_OUTPUT: '' } });
+  assert.equal(run.status, 0, run.stderr);
+  const matrix = JSON.parse(run.stdout.trim().slice('matrix='.length));
+  assert.deepEqual(matrix.include.map(row => row.journey), verifier.ALLOWLIST);
+  for (const row of matrix.include) assert.deepEqual(row, { journey: row.journey, ...verifier.journeyRunners([row.journey])[row.journey] });
+  const nightly = read('.github/workflows/android-full.yml');
+  assert.match(jobBlock(nightly, 'journey-plan'), /run: node \.github\/scripts\/pstack-verifier\/verifier\.cjs nightly/);
+  const job = jobBlock(nightly, 'nightly-journeys');
+  assert.match(job, /matrix: \$\{\{ fromJSON\(needs\.journey-plan\.outputs\.matrix\) \}\}/);
+  assert.match(job, /uses: \.\/\.github\/workflows\/verify\.yml/);
+  assert.match(job, /feature: \$\{\{ matrix\.journey \}\}/);
+  assert.match(job, /driver_feature: \$\{\{ matrix\.feature \}\}/);
+  for (const flag of ['candidate', 'released_chat', 'released_robots', 'release_choices', 'pins_scroll']) assert.ok(job.includes(`      ${flag}: \${{ matrix.${flag} }}`), flag);
+  assert.match(job, /app_ref: \$\{\{ github\.sha \}\}/);
 });
 
 test('required journeys replace a smoke fallback without inventing coverage for manual gaps', () => {
