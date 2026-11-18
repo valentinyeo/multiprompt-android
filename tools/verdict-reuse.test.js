@@ -109,7 +109,10 @@ if (args[0] === 'run') {
   if (endpoint.endsWith('/pulls/42')) result = state.pr;
   else if (endpoint.includes('/comments?')) result = [state.comments];
   else if (endpoint.includes('/artifacts?')) result = [{ artifacts: state.artifacts }];
-  else if (endpoint.endsWith('/runs/10')) result = state.run;
+  else if (endpoint.endsWith('/runs/10')) {
+    if (state.runError) process.exit(1);
+    result = state.run;
+  }
   else throw Error('Unexpected request: ' + args.join(' '));
   console.log(JSON.stringify(result));
 }
@@ -138,7 +141,15 @@ if (args[0] === 'run') {
   state.record = { ...old, patchId: 'f'.repeat(40) };
   assert.equal(command('probe').status, 0);
   assert.match(fs.readFileSync(output, 'utf8'), /reused=false\n/);
+  state.record = null;
+  assert.equal(command('probe').status, 0);
+  assert.match(fs.readFileSync(output, 'utf8'), /reused=false\n/);
   state.record = old;
+  state.runError = true;
+  assert.equal(command('probe').status, 0);
+  assert.match(fs.readFileSync(output, 'utf8'), /reused=false\n/);
+  assert.notEqual(command('publish').status, 0);
+  delete state.runError;
   state.pr.head.sha = f.head;
   assert.notEqual(command('probe').status, 0);
   state.pr.head.sha = f.nextHead;

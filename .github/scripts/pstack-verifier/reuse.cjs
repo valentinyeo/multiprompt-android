@@ -116,7 +116,11 @@ function main(env, command) {
     return;
   }
   if (!['probe', 'publish'].includes(command)) throw new Error('Usage: reuse.cjs probe|publish|save');
-  const hit = probe(current);
+  let hit;
+  try { hit = probe(current); } catch (error) {
+    if (command === 'publish') throw error;
+    console.log(`No reusable proof available: ${error.message}`);
+  }
   if (command === 'probe') {
     output({ reused: Boolean(hit), head_sha: current.sha, features: hit ? '[]' : '' }, env);
     if (hit) console.log(`Reusing verdict ${hit.record.sha}, patch-id ${current.patchId}`);
