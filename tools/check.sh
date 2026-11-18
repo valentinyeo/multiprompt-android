@@ -22,6 +22,7 @@ source_checks() {
   node --test tools/verify-seed.test.js
   python3 -I tools/verify-seed.test.py
   python3 -B tools/fixture-journeys.test.py
+  python3 -B tools/cancel-fixture.test.py
   python3 -B tools/journey-actions/check.py
   python3 -B tools/journey-actions/action.test.py
   python3 -B tools/session-gestures/scroll.test.py

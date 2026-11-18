@@ -1869,7 +1869,8 @@ if [[ "$feature" == chat-cancel.md ]]; then
         wait_for_text "$word"
     done
     shot cancel-waiting
-    python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 3 WAITING
+    sudo -u verifyssh python3 /home/verifyssh/cancel-proof.py host waiting > "$EVIDENCE/cancel-waiting.json"
+    python3 "$scripts/cancel-proof.py" ui "$EVIDENCE/current.xml" "$EVIDENCE/cancel-waiting.json"
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/cancel-draft-before.txt"
     grep -Fx '❯ FIXTURE_OWNED_DRAFT' "$EVIDENCE/cancel-draft-before.txt"
     sudo test ! -s /home/verifyssh/receipts.txt
@@ -1878,16 +1879,20 @@ if [[ "$feature" == chat-cancel.md ]]; then
     wait_for_text 'Cancel message'
     shot cancel-menu
     tap_text 'Cancel message'
-    wait_for_text Cancelled
+    wait_for_absence CANCEL_TARGET_TWO
     shot cancel-cancelled
-    python3 "$scripts/queued.py" "$EVIDENCE/current.xml" 2 WAITING
+    sudo -u verifyssh python3 /home/verifyssh/cancel-proof.py host cancelled > "$EVIDENCE/cancel-cancelled.json"
+    python3 "$scripts/cancel-proof.py" ui "$EVIDENCE/current.xml" "$EVIDENCE/cancel-cancelled.json"
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/cancel-draft-after.txt"
+    diff "$EVIDENCE/cancel-draft-before.txt" "$EVIDENCE/cancel-draft-after.txt"
     sudo test ! -s /home/verifyssh/receipts.txt
     sudo -u verifyssh touch /home/verifyssh/cancel-ready
     wait_receipt VERIFY_RECEIVED:CANCEL_KEEP_ONE
     wait_receipt VERIFY_RECEIVED:CANCEL_KEEP_THREE
-    wait_for_text Delivered
-    wait_for_absence Queued
+    wait_for_text 'Received CANCEL_KEEP_THREE'
     shot cancel-delivered
+    sudo -u verifyssh python3 /home/verifyssh/cancel-proof.py host delivered > "$EVIDENCE/cancel-delivered.json"
+    python3 "$scripts/cancel-proof.py" ui "$EVIDENCE/current.xml" "$EVIDENCE/cancel-delivered.json"
     if sudo grep -F CANCEL_TARGET_TWO /home/verifyssh/receipts.txt; then exit 1; fi
     python3 - <<'PROOF'
 from pathlib import Path
