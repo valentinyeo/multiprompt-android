@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-revision=605597a163923914989a0cae06f727a83afbcd5a
+revision=98f1c4a835ff0a9924dd391f54a7df65452e3221
 [[ "$(cat app/src/main/assets/chat_history_reader.sha)" == "$revision" ]]
 [[ $# -le 1 && ( "${1:-}" == "" || "${1:-}" == --check ) ]]
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 for entry in \
-    'chat_history_reader.py 13ff821c39e8e81b700016b054c92f03a474c6b7ca9e52e03979e17bb2b7012c' \
+    'chat_history_reader.py 36bf62590819c1d557f6d3b923f579e173d2cf3b6f5c461433d96cc1ccc5a6d1' \
     'chat_connectors/claude.py 7b181305096a39c3ac4276607a3177177f23ca0a88535c96604c2b3f393d1729' \
     'chat_connectors/codex.py 07e448dc7d5a849cbbf4b914ce375e147f9343906f213bcda00a7d7663757a31' \
     'mp_send.py 380036692abf2a771b07493197d40a83824584ee3c374ee1a88f41a2b6886903' \

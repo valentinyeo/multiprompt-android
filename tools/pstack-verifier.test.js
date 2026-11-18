@@ -100,6 +100,31 @@ test('a well formed model answer parses, caps its lists and ignores extra keys',
   assert.equal(fenced.verdict, 'PASS');
 });
 
+test('picker outcome typos get one correction and genuine unmapped behavior still blocks', async () => {
+  const pick = changed_outcomes => JSON.stringify({ features: ['host-restart.md'], changed_outcomes, change_kind: 'bug', reason: 'Follow the live native Claude transcript after restart.' });
+  const answers = [pick(['host-restart.md']), pick(['reader.host-restart'])];
+  const failures = [];
+  let asked = 0;
+  const parsed = await verifier.askParsed({
+    ask: async error => { if (error) failures.push(error.message); return answers[asked++]; },
+    parse: verifier.parsePick,
+  });
+  assert.equal(asked, 2);
+  assert.deepEqual(parsed.changedOutcomes, ['reader.host-restart']);
+  assert.match(failures[0], /host-restart\.md/);
+  assert.match(failures[0], /Follow the live native Claude transcript/);
+  asked = 0;
+  await assert.rejects(verifier.askParsed({
+    ask: async () => { asked += 1; return pick(['unmapped']); }, parse: verifier.parsePick,
+  }), /FEATURE_UNMAPPED.*unmapped.*Follow the live native Claude transcript/);
+  assert.equal(asked, 1);
+  asked = 0;
+  await assert.rejects(verifier.askParsed({
+    ask: async () => { asked += 1; return pick(['invented.outcome']); }, parse: verifier.parsePick,
+  }), /FEATURE_UNMAPPED.*invented\.outcome/);
+  assert.equal(asked, 2);
+});
+
 test('the picker can classify a bug fix, and only fix or bug words count', () => {
   const picked = verifier.parsePick(JSON.stringify({ features: ['hosts.md'], changed_outcomes: [], change_kind: 'bug', reason: 'Send drops the draft.' }));
   assert.equal(picked.changeKind, 'bug');

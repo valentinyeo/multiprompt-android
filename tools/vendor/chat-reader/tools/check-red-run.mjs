@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { autoRevertBranch, classifyTrees } from './version-stamp.mjs';
-import { tokenize } from './strip-comments.mjs';
+import { nativeTestParts as splitNativeTests } from './native-test-parts.mjs';
 
 const [baseRef, headRef] = process.argv.slice(2);
 if (!baseRef || !headRef || process.argv.length !== 4) {
@@ -39,46 +39,7 @@ function nativeTestParts(source) {
     input: source, encoding: 'utf8', timeout: 300000, maxBuffer: 32 * 1024 * 1024,
   });
   if (parsed.error || parsed.status !== 0) throw new Error('Invalid Zig source');
-  const { tokens, comments } = tokenize(source, 'zig');
-  const positions = [];
-  let cursor = 0, comment = 0;
-  for (const [, value] of tokens) {
-    while (cursor < source.length) {
-      if (comments[comment]?.start === cursor) cursor = comments[comment++].end;
-      else if (/\s/.test(source[cursor])) cursor++;
-      else break;
-    }
-    if (!source.startsWith(value, cursor)) throw new Error('Ambiguous Zig token');
-    positions.push(cursor);
-    cursor += value.length;
-  }
-  const names = [], pieces = [];
-  let depth = 0, last = 0;
-  for (let i = 0; i < tokens.length; i++) {
-    const [kind, value] = tokens[i];
-    if (depth === 0 && kind === 'word' && value === 'test') {
-      const start = positions[i];
-      if (tokens[i + 1]?.[0] !== 'string' || tokens[i + 2]?.[1] !== '{') throw new Error('Ambiguous Zig test');
-      const name = tokens[i + 1][1];
-      if (names.includes(name)) throw new Error('Duplicate Zig test');
-      names.push(name);
-      i += 2;
-      let testDepth = 1;
-      while (testDepth && ++i < tokens.length) {
-        if (tokens[i][0] === 'code' && tokens[i][1] === '{') testDepth++;
-        if (tokens[i][0] === 'code' && tokens[i][1] === '}') testDepth--;
-      }
-      if (testDepth) throw new Error('Unclosed Zig test');
-      pieces.push(source.slice(last, start));
-      last = positions[i] + tokens[i][1].length;
-    } else if (kind === 'code' && value === '{') depth++;
-    else if (kind === 'code' && value === '}') {
-      if (--depth < 0) throw new Error('Unbalanced Zig source');
-    }
-  }
-  if (depth) throw new Error('Unbalanced Zig source');
-  pieces.push(source.slice(last));
-  return { names, outside: pieces.join('') };
+  return splitNativeTests(source);
 }
 
 function nativeZigTestsOnly() {
@@ -120,6 +81,12 @@ function run(file, dir) {
   return { ...result, output: (result.stdout || '') + (result.stderr || '') };
 }
 
+function assertionFailure(file, output) {
+  return file.endsWith('.py')
+    ? /^FAIL: /m.test(output) && /AssertionError/.test(output) && !/^ERROR: /m.test(output)
+    : /^# fail [1-9]\d*$/m.test(output) && /code: ['"]ERR_ASSERTION['"]/.test(output) && !/(?:code: ['"](?:MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND|ENOENT)['"]|name: ['"](?:Syntax|Reference|Type)Error['"])/.test(output);
+}
+
 try {
   console.log(`merge-base=${base} head=${head}`);
   if (changed.length && changed.every(file => docs.test(file))) {
@@ -131,6 +98,13 @@ try {
       git('worktree', 'add', '--quiet', '--detach', dir, ref);
       worktrees.push(dir);
     }
+    const baseDir = path.join(scratch, 'plain');
+    const ensureBase = () => {
+      if (fs.existsSync(baseDir)) return;
+      git('worktree', 'add', '--quiet', '--detach', baseDir, base);
+      worktrees.push(baseDir);
+      if (tests.some(file => file.startsWith('service/test/'))) prepareService(baseDir);
+    };
     const stampPaths = /^(?:src\/(?:main|changelog)\.zig|changelog\.d\/[^/]+)$/;
     const workflow = /^\.github\/workflows\/[^/]+\.ya?ml$/;
     if (changed.length && changed.every(file => stampPaths.test(file)) && classifyTrees(snapshot(red), snapshot(green), changed) === 'STAMP') {
@@ -153,11 +127,17 @@ try {
         if (testOnly) continue;
         const before = run(file, red);
         console.log(`MERGE_BASE ${file}\n${before.output}`);
-        if (before.status === 0) throw new Error(`${file} stayed green on merge-base source; the test does not prove this fix.`);
-        const assertion = file.endsWith('.py')
-          ? /^FAIL: /m.test(before.output) && /AssertionError/.test(before.output) && !/^ERROR: /m.test(before.output)
-          : /^# fail [1-9]\d*$/m.test(before.output) && /code: ['"]ERR_ASSERTION['"]/.test(before.output) && !/(?:code: ['"](?:MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND|ENOENT)['"]|name: ['"](?:Syntax|Reference|Type)Error['"])/.test(before.output);
-        if (before.error || before.status !== 1 || !assertion) throw new Error(`${file} needs an assertion failure on merge-base source, not an infrastructure or loading error.`);
+        if (before.status === 0) {
+          ensureBase();
+          const repaired = run(file, baseDir);
+          console.log(`MERGE_BASE_SUITE ${file}\n${repaired.output}`);
+          if (repaired.error || repaired.status === 0 || !assertionFailure(file, repaired.output)) {
+            throw new Error(`${file} stayed green on merge-base source; the test does not prove this fix.`);
+          }
+          console.log(`REPAIR PROVEN ${file} exit=${repaired.status} merge-base=${base}`);
+          continue;
+        }
+        if (before.error || before.status !== 1 || !assertionFailure(file, before.output)) throw new Error(`${file} needs an assertion failure on merge-base source, not an infrastructure or loading error.`);
         console.log(`RED PROVEN ${file} exit=${before.status} merge-base=${base}`);
       }
       console.log(`${testOnly ? 'TEST_ONLY_PROVEN' : 'RED_RUN_PROVEN'} ${tests.length} changed suites`);

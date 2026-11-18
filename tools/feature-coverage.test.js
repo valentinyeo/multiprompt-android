@@ -289,6 +289,42 @@ for (const journey of ['chat-search.md', 'sessions.md']) test(`the real picker s
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
+test('the real picker corrects outcome IDs once but never retries explicit unmapped behavior', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'outcome-pick-'));
+  try {
+    mockPickerGithub(path.join(directory, 'gh'));
+    const diff = path.join(directory, 'change.diff');
+    fs.writeFileSync(diff, productDiff('assets/chat_history_reader.py', 'hosted_claude_transcript_sid'));
+    const stub = path.join(directory, 'model.cjs');
+    fs.writeFileSync(stub, `let calls=0;global.fetch=async(url,options)=>{require('node:fs').appendFileSync(process.env.REQUEST_FILE,options.body+'\\n');const id=calls++===0?process.env.FIRST_OUTCOME:'reader.host-restart';return {status:200,ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:['host-restart.md'],changed_outcomes:[id],change_kind:'bug',reason:'Follow the live native Claude transcript.'})}}]})}};`);
+    for (const first of ['host-restart.md', 'unmapped']) {
+      const output = path.join(directory, `output-${first}`);
+      const request = path.join(directory, `request-${first}`);
+      const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
+        cwd: root, encoding: 'utf8', env: {
+          ...process.env, PATH: `${directory}:${process.env.PATH}`, NODE_OPTIONS: `--require=${stub}`,
+          DEEPSEEK_API_KEY: 'test-only', REPO: 'example/repo', PR_NUMBER: '425', EVENT_HEAD_SHA: sha,
+          FIXTURE_DIFF: diff, GITHUB_OUTPUT: output, REQUEST_FILE: request, FIRST_OUTCOME: first,
+        },
+      });
+      const requests = fs.readFileSync(request, 'utf8').trim().split('\n').map(JSON.parse);
+      assert.match(run.stderr, new RegExp(`FEATURE_UNMAPPED.*${first}`));
+      assert.match(run.stderr, /Follow the live native Claude transcript/);
+      if (first === 'unmapped') {
+        assert.equal(run.status, 1);
+        assert.equal(requests.length, 1);
+        assert.equal(fs.existsSync(output), false);
+      } else {
+        assert.equal(run.status, 0, run.stderr);
+        assert.equal(requests.length, 2);
+        assert.match(requests[1].messages[1].content, /Your previous answer was invalid: FEATURE_UNMAPPED/);
+        assert.match(requests[1].messages[1].content, /report \["unmapped"\]/);
+        assert.match(fs.readFileSync(output, 'utf8'), /^changed_outcomes=\["reader.host-restart"\]$/m);
+      }
+    }
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
 test('the real picker reserves changed signed recipes and drivers before consulting the model', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'signed-journey-pick-'));
   try {

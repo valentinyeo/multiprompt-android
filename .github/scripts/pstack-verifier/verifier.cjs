@@ -156,7 +156,7 @@ async function askParsed({ ask, parse }) {
     return parse(await ask());
   } catch (error) {
     if (error?.fatal) throw error;
-    return parse(await ask());
+    return parse(await ask(error));
   }
 }
 
@@ -164,6 +164,13 @@ function parsePick(content) {
   const parsed = parseJson(content);
   if (!parsed || !Array.isArray(parsed.features)) throw new Error('the picker answer is not the expected JSON');
   if (!Array.isArray(parsed.changed_outcomes) || !['product', 'tooling', 'bug'].includes(parsed.change_kind)) throw new Error('FEATURE_UNMAPPED: picker must report changed_outcomes and change_kind.');
+  try {
+    coverageGate.planChange('', parsed.changed_outcomes);
+  } catch (error) {
+    error.message += ` Picker reason: ${oneLine(parsed.reason, 600)}`;
+    error.fatal = parsed.changed_outcomes.includes('unmapped');
+    throw error;
+  }
   const plan = { changedOutcomes: parsed.changed_outcomes, changeKind: parsed.change_kind };
   const { features, dropped } = validateFeatures(parsed.features);
   const reason = oneLine(parsed.reason, 300);
@@ -517,7 +524,13 @@ async function pick(env) {
   const recipes = coverageGate.changedRecipes(diff, files);
   const deterministic = includeRequiredJourneys({ features: [], dropped: [] }, coverageGate.planChange(diff, []), diff, changed, recipes);
   const user = `Directly edited recipes (must run): ${JSON.stringify(recipes)}\nRequired candidates (rank repro first, then relevant guards within the cap): ${JSON.stringify([...deterministic.features, ...deterministic.deferred])}\n\nJourney catalog (the only names you may choose):\n${journeyCatalog(env.ROOT ?? process.cwd())}\n\n${prContext(pr, diff, PICK_DIFF_CHARS)}`;
-  const picked = await askParsed({ ask: () => callDeepSeek({ key, system: PICK_INSTRUCTIONS, user }), parse: parsePick });
+  const picked = await askParsed({
+    ask: error => {
+      if (error) console.error(`pstack-verifier pick: invalid answer: ${error.message}`);
+      return callDeepSeek({ key, system: PICK_INSTRUCTIONS, user: error ? `${user}\n\nYour previous answer was invalid: ${error.message}\nCorrect the outcome IDs using the catalog. If the behavior has no registered outcome, report ["unmapped"] and explain the missing behavior in reason.` : user });
+    },
+    parse: parsePick,
+  });
   const plan = coverageGate.planChange(diff, picked.changedOutcomes);
   if (plan.product && picked.changeKind === 'tooling') throw new Error('FEATURE_UNMAPPED: product source changes cannot use tooling-only validation.');
   const selected = includeRequiredJourneys(picked, plan, diff, changed, recipes);
