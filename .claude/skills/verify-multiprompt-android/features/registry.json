@@ -293,7 +293,8 @@
         "driver": true
       },
       "outcomes": [
-        "claude.skills-model-effort"
+        "claude.skills-model-effort",
+        "reader.follow-newest"
       ],
       "evidence": {
         "native-menu-state.txt": 5000,
@@ -1388,6 +1389,14 @@
         "label = \"(More|Computer|Snippets|Add file|Dictation API key|Screencast2 upload key|Estimate accuracy|Release notes)\"",
         "voiceModeOn|label = \"Voice Mode\"|endDialogVisible|DestructiveConfirmationSheet",
         "InboxOverflowMenu|Session list actions|AppMenu\\.kt[\\s\\S]*onDismissRequest"
+      ]
+    },
+    "reader.follow-newest": {
+      "description": "A reader already at newest keeps incoming replies visible through working-indicator and message layout changes, without tapping Jump to newest. The native-skills journey requires each model/effort reply on screen after its independent command receipt.",
+      "journey": "native-skills.md",
+      "sideEffect": true,
+      "match": [
+        "requestScrollToItem"
       ]
     }
   }
