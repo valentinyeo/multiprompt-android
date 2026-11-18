@@ -846,6 +846,54 @@
         "reply-receipts.txt": 800,
         "reply-proof.txt": 80
       }
+    },
+    "settings-controls.md": {
+      "name": "Settings, host mapping and update navigation",
+      "description": "Choose and retain themes and font sizes; navigate settings, host mapping and update menus. SOFT-2670.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "settings.controls"
+      ],
+      "evidence": {
+        "settings-theme-Sunlight.json": 800,
+        "settings-theme-Dark.json": 800,
+        "settings-font-Small.json": 800,
+        "settings-font-Large.json": 800,
+        "settings-retained.json": 1000,
+        "settings-refresh-host.txt": 2000,
+        "mapping-scroll-bottom.json": 1000,
+        "settings-version.json": 1000
+      }
+    },
+    "inbox-reminders.md": {
+      "name": "Inbox buckets and reminders",
+      "description": "Refresh with independent SSH reads; switch inbox buckets and save every reminder preset and custom deadlines. SOFT-2670.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "inbox.reminders"
+      ],
+      "evidence": {
+        "inbox-refresh-host.txt": 2000,
+        "bucket-unread-on.json": 500,
+        "reminder-scroll-bottom.json": 1000,
+        "reminder-day2-time.json": 500,
+        "reminder-custom-time.json": 500,
+        "reminder-keyboard-time.json": 500,
+        "reminder-keyboard-waiting.json": 1000,
+        "inbox-reminders-proof.txt": 200
+      }
     }
   },
   "outcomes": {
@@ -1388,6 +1436,24 @@
         "label = \"(More|Computer|Snippets|Add file|Dictation API key|Screencast2 upload key|Estimate accuracy|Release notes)\"",
         "voiceModeOn|label = \"Voice Mode\"|endDialogVisible|DestructiveConfirmationSheet",
         "InboxOverflowMenu|Session list actions|AppMenu\\.kt[\\s\\S]*onDismissRequest"
+      ]
+    },
+    "settings.controls": {
+      "description": "Choose and retain themes and font sizes; navigate settings, host mapping and update menus. SOFT-2670.",
+      "journey": "settings-controls.md",
+      "sideEffect": true,
+      "match": [
+        "settingsPage|SettingsPage|Session list settings|Default Reader font size|KitSegmented|HostMappingDialog|Desktop tmux hosts|Open navigation|AppSection.UPDATE to \"Update\"|Dictation key|VersionLabel",
+        "onSetReaderDefaultFontScale|readerDefaultFontScale|fontOptions|AppTheme|onSetAppTheme|AppSection\\.UPDATE|onSelect\\(destination\\)"
+      ]
+    },
+    "inbox.reminders": {
+      "description": "Refresh with independent SSH reads; switch inbox buckets and save every reminder preset and custom deadlines. SOFT-2670.",
+      "journey": "inbox-reminders.md",
+      "sideEffect": true,
+      "match": [
+        "ReminderDialog|reminderPromptSession|ReminderTimeParser|Switch session bucket|bucketMenuExpanded|Unread only|inbox-reminders|InboxOverflowMenu",
+        "AppMenu\\.kt[\\s\\S]*(?:onRefresh|label = \"Refresh\")|Custom time|Later today|In 30 minutes|In [125] hours?|Tomorrow.*9:00 AM|In 2 days|Remind me|Remind Me|onArchiveUntil|submitCustom|presets\\.forEach|unreadOnly|SessionBucket"
       ]
     }
   }
