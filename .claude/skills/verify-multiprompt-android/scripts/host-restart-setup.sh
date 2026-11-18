@@ -2,6 +2,7 @@
 [[ "${GITHUB_ACTIONS:-}" == true ]]
 scripts=$(cd "$(dirname "$0")" && pwd)
 fixture_session=live-verify-session
+if [[ "${BREAK_IT_MODE:-}" == true ]]; then sudo touch /home/verifyssh/host-restart-stream-enabled; fi
 sudo install -m 755 "$scripts/host-restart-ssh.py" /home/verifyssh/host-restart-ssh.py
 { printf 'command="python3 /home/verifyssh/host-restart-ssh.py" '; cat "$FIXTURE/user-key.pub"; } | sudo tee /home/verifyssh/.ssh/authorized_keys >/dev/null
 sudo install -m 755 "$scripts/host-restart-fixture.py" /home/verifyssh/host-restart-fixture.py

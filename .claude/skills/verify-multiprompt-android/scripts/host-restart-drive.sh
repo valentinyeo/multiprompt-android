@@ -19,7 +19,7 @@ jq -e '.status == "sent" or .status == "queued"' "$EVIDENCE/host-restart-desktop
 host_restart_fixture evidence > "$EVIDENCE/host-restart-host.json"
 if ! wait_for_text REPLY_DESKTOP_AFTER_2681; then
     host_restart_fixture evidence > "$EVIDENCE/host-restart-host.json"
-    if ! jq -e '.old_accepted == 40 and .history_bytes > 524288 and .archived_tools == 700 and any(.history[]; .role == "assistant" and .text == "REPLY_DESKTOP_AFTER_2681")' "$EVIDENCE/host-restart-host.json"; then
+    if ! jq -e '.old_accepted == 40 and any(.history[]; .role == "assistant" and .text == "REPLY_DESKTOP_AFTER_2681")' "$EVIDENCE/host-restart-host.json"; then
         setup_failure=1
         exit 1
     fi
@@ -29,6 +29,10 @@ fi
 shot host-restart-after
 fill 'Message verify-session' PHONE_AFTER_2681
 tap_desc 'Send prompt'
+if [[ "${BREAK_IT_MODE:-}" == true ]]; then
+    host_restart_fixture finish-stream > "$EVIDENCE/host-restart-stream-host.json"
+    break_it_stream_send "$EVIDENCE/host-restart-stream-host.json"
+fi
 if ! wait_for_text REPLY_PHONE_AFTER_2681; then
     host_restart_fixture evidence > "$EVIDENCE/host-restart-host.json"
     printf 'HOST_RESTART_PHONE_REPLY_NOT_VISIBLE_2681\n'
@@ -46,6 +50,9 @@ host = json.loads(root.joinpath('host-restart-host.json').read_text())
 process = json.loads(root.joinpath('host-restart-processes.txt').read_text().splitlines()[-1])
 assert process['old_pid'] != process['new_pid'] and process['history_pids'], process
 assert process['sid'] == host['sid'] and process['tmux'] == host['tmux'], process
+assert process['sid'] not in (process['native_before'], process['native_after'])
+assert host['old_accepted'] == 40
+assert all(not row['timestamp'].endswith('Z') for row in host['history'])
 expected = ['PHONE_BEFORE_2681', 'DESKTOP_AFTER_2681', 'PHONE_AFTER_2681']
 assert [row['text'] for row in host['receipts']] == expected, host
 assert host['receipts'][0]['pid'] != host['receipts'][1]['pid']

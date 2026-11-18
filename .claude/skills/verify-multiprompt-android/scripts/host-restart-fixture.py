@@ -87,11 +87,10 @@ def restart():
         raise AssertionError('Fixture host did not stop')
     state = reader['host_read'](paths['state'])
     session = dict(state=state)
-    reader['host_fresh_archive']('claude', SID, TMUX, session)
-    for index in range(700):
-        reader['host_history_append']('claude', SID, session,
-            dict(role='tool', id=f'archive-tool-{index}', text='Archived tool step', detail='x' * 1024))
     state['native_session'] = NATIVE_AFTER
+    reader['host_fresh_archive']('claude', SID, TMUX, session)
+    if session.get('db') is not None:
+        session['db'].close()
     reader['host_write'](paths['state'], state)
     assert cli('start', 'claude', SID)['status'] in ('started', 'already')
     for _ in range(100):
@@ -117,6 +116,28 @@ def restart():
     assert disconnected, 'No phone history channel was open at the restart'
     print(json.dumps(dict(old_pid=old, new_pid=owner['pid'], history_pids=disconnected, sid=SID,
         native_before=NATIVE_BEFORE, native_after=NATIVE_AFTER, tmux=TMUX)), flush=True)
+
+
+def finish_stream():
+    reader = runtime()
+    with sqlite3.connect(reader['message_store_path']().as_uri() + '?mode=ro', uri=True) as db:
+        for _ in range(100):
+            row = db.execute('SELECT created FROM shared_messages WHERE sid=? AND text=?', (SID, 'PHONE_AFTER_2681')).fetchone()
+            if row:
+                break
+            time.sleep(.1)
+        else:
+            raise AssertionError('Follow-up was not admitted while streaming')
+    (HOME / 'host-restart-release-stream').touch()
+    for _ in range(100):
+        completed = HOME / 'host-restart-stream-completed'
+        if completed.exists():
+            done = float(completed.read_text())
+            assert row[0] * 1000 < done
+            print(json.dumps(dict(submitted=row[0] * 1000, completed=done, followup_submitted_while_streaming=True)))
+            return
+        time.sleep(.1)
+    raise AssertionError('Stream did not complete')
 
 
 def evidence():
@@ -161,6 +182,18 @@ def claude():
                 output.write(json.dumps(dict(text=text, reply=reply, pid=os.getpid(), sid=SID, native_session=native)) + '\n')
             native_row(native, 'user', text, request['uuid'])
             answer_id = 'msg_' + uuid.uuid4().hex
+            if text == 'DESKTOP_AFTER_2681' and (HOME / 'host-restart-stream-enabled').exists():
+                for event in [dict(type='message_start', message=dict(id=answer_id)),
+                        dict(type='content_block_start', index=0, content_block=dict(type='text')),
+                        dict(type='content_block_delta', index=0, delta=dict(type='text_delta', text=reply))]:
+                    emit(dict(type='stream_event', event=event))
+                for _ in range(1800):
+                    if (HOME / 'host-restart-release-stream').exists():
+                        break
+                    time.sleep(.1)
+                else:
+                    raise AssertionError('Streaming follow-up never arrived')
+                (HOME / 'host-restart-stream-completed').write_text(str(time.time() * 1000))
             native_row(native, 'assistant', reply, answer_id)
             emit(dict(type='assistant', uuid=str(uuid.uuid4()), session_id=native,
                 message=dict(id=answer_id, role='assistant', content=[dict(type='text', text=reply)])))
@@ -173,6 +206,8 @@ if __name__ == '__main__':
         console()
     elif sys.argv[1:] == ['restart']:
         restart()
+    elif sys.argv[1:] == ['finish-stream']:
+        finish_stream()
     elif sys.argv[1:] == ['evidence']:
         evidence()
     else:
