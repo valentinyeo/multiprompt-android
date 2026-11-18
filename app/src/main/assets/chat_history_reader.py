@@ -1645,46 +1645,20 @@ def pin_hosted_claude(q, agent, as_owner=False):
     return q
 
 
-def hosted_claude_transcript_sid(sid, config):
-    native = config.get("native_session") if isinstance(config, dict) else None
-    if isinstance(native, str) and SESSION_ID.fullmatch(native):
-        return native
-    try:
-        with host_paths("claude", sid)["log"].open("rb") as source:
-            end = source.seek(0, os.SEEK_END)
-            pending = b""
-            while end:
-                count = min(end, 65536)
-                end -= count
-                source.seek(end)
-                lines = (source.read(count) + pending).split(b"\n")
-                pending = lines.pop(0) if end else b""
-                for raw in reversed(lines):
-                    event = load_line(raw)
-                    detail = event.get("detail") if isinstance(event, dict) and event.get("event") == "init" else None
-                    native = detail.get("session") if isinstance(detail, dict) else None
-                    if isinstance(native, str) and SESSION_ID.fullmatch(native):
-                        return native
-    except OSError:
-        pass
-    return sid
-
-
 def resolve_response_path(q, source=None, as_owner=False):
     rid = q["id"]
     agent = q.get("provider") if q.get("provider") in HOST_PROVIDERS else "codex" if q["codex"] else "claude"
     sid, tmux, cwd = q["sid"], q["tmux"], q["cwd"]
+    hosted = host_config(agent, sid) if isinstance(sid, str) and SESSION_ID.fullmatch(sid) else None
+    if isinstance(hosted, dict) and isinstance(hosted.get("cwd"), str) and Path(hosted["cwd"]).is_absolute():
+        cwd = q["cwd"] = hosted["cwd"]
     if (not isinstance(rid, int) or rid < 0 or
             sid and not SESSION_ID.fullmatch(sid) or
-            tmux and not TMUX_NAME.fullmatch(tmux) or not sid and not tmux):
+            tmux and not TMUX_NAME.fullmatch(tmux) or not sid and not tmux or
+            cwd and not Path(cwd).is_absolute()):
         raise ValueError("invalid identity")
     if not sid and tmux and not as_owner:
         sid = q["sid"] = host_sid_for_tmux(agent, tmux) or ""
-    hosted = host_config(agent, sid) if sid else None
-    if isinstance(hosted, dict) and isinstance(hosted.get("cwd"), str) and Path(hosted["cwd"]).is_absolute():
-        cwd = q["cwd"] = hosted["cwd"]
-    if cwd and not Path(cwd).is_absolute():
-        raise ValueError("invalid identity")
     if hosted and host_session_state(agent, sid).get("display_history"):
         history = host_paths(agent, sid)["history"]
         if history.is_file():
@@ -1700,29 +1674,6 @@ def resolve_response_path(q, source=None, as_owner=False):
     pin_hosted_claude(q, agent, as_owner)
     sid = q["sid"]
     follow = bool(tmux and (q.get("follow") or agent == "codex"))
-    if agent == "claude" and sid and not as_owner and host_dispatch_switch(agent, sid):
-        native = hosted_claude_transcript_sid(sid, hosted)
-        if native != sid:
-            owner = conversation_owner(cwd)
-            denied = False
-            for home in ([None, owner[1]] if owner and owner[1] != HOME else [None]):
-                try:
-                    path = conversation_path(agent, native, cwd, home)
-                except PermissionError:
-                    path, denied = None, True
-                if path is not None:
-                    return agent, sid, path, None
-            if denied and owner and source is not None:
-                query = dict(q, sid=native, follow=False,
-                             cached_sid=native if q.get("cached_sid") == sid else q.get("cached_sid", ""))
-                wire = owner_response(query, owner, source)
-                operation = "search" if "search" in q else "history"
-                prefix = f"@mp\t{rid}\t{operation}\tok\t{native}\t"
-                if wire.startswith(prefix):
-                    wire = f"@mp\t{rid}\t{operation}\tok\t{sid}\t" + wire[len(prefix):]
-                return agent, sid, None, wire
-            wire = missing_response(q, "permission denied") if denied else empty_history_response(q, sid, tmux)
-            return agent, sid, None, wire
     denied = False
     delegated = None
     try:
@@ -1736,6 +1687,15 @@ def resolve_response_path(q, source=None, as_owner=False):
         except PermissionError:
             hosted = None
         return (agent, sid, hosted, None) if hosted is not None else (agent, sid, None, empty_history_response(q, sid, tmux, agent))
+    if agent == "claude" and path is not None and sid and not as_owner and host_dispatch_switch(agent, sid):
+        native = host_session_state(agent, sid).get("native_session")
+        if isinstance(native, str) and SESSION_ID.fullmatch(native) and native != sid:
+            try:
+                cleared = conversation_path(agent, native, cwd)
+            except PermissionError:
+                cleared = None
+            if cleared is not None:
+                path = cleared
     owner = conversation_owner(cwd) if agent == "claude" else None
     if follow and owner and owner[1] != HOME and source is not None and not as_owner:
         delegated = owner_response(dict(q, sid=""), owner, source)
@@ -4963,6 +4923,9 @@ def host_claude_event(provider, sid, tmux, session, event):
                              dict(requested=settings["model"], actual=actual or "unknown"))
             if isinstance(event.get("session_id"), str):
                 session["state"]["native_session"] = event["session_id"]
+                config = host_config(provider, sid)
+                if config is not None:
+                    host_write(host_paths(provider, sid)["config"], dict(config, native_session=event["session_id"]))
             host_state_write(provider, sid, session["state"])
             host_log(provider, sid, "init", dict(session=event.get("session_id")))
             host_event(provider, sid, tmux, session, "host.status", dict(state="ready"))
@@ -8163,8 +8126,8 @@ elif __name__ == "__main__":
         print("@mp\t0\thistory\terror\t-\t0\n" + END)
 
 '''
-RUNTIME_GENERATION = 131
-READER_SOURCE = 'CONNECTOR_SOURCES = ' + repr(globals().get('CONNECTOR_SOURCES', {})) + '\nRUNTIME_GENERATION = ' + repr(RUNTIME_GENERATION) + '\n' + READER_SOURCE
+READER_SOURCE = 'CONNECTOR_SOURCES = ' + repr(globals().get('CONNECTOR_SOURCES', {})) + '\n' + READER_SOURCE
+RUNTIME_GENERATION = 130
 
 if __name__ == '__main__':
     import base64 as _base64

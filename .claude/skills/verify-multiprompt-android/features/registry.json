@@ -1606,7 +1606,7 @@
       "match": [
         "reader/ChatHistoryConnection\\.kt",
         "reader/ChatHistoryProtocol\\.kt",
-        "hosted_claude_transcript_sid"
+        "hosted_claude_transcript_sid|native_session=event"
       ],
       "citations": {
         "action": {

@@ -6607,6 +6607,22 @@ class HostEventStreamFixture:
 
 
 class HostEventStreamTest(HostEventStreamFixture, unittest.TestCase):
+    def test_soft_2681_config_follows_the_live_claude_session_after_resume(self):
+        self.sid = '11111111-1111-4111-8111-111111111111'
+        resumed = '22222222-2222-4222-8222-222222222222'
+        config = dict(enabled=True, provider=self.provider, sid=self.sid, tmux=self.tmux,
+                      cwd=str(self.home), model='opus')
+        paths = reader.host_paths(self.provider, self.sid)
+        reader.host_write(paths['config'], dict(config, native_session=self.sid))
+        for native in (self.sid, resumed):
+            with self.subTest(native=native):
+                self.feed(dict(type='system', subtype='init', session_id=native))
+                saved = json.loads(paths['config'].read_text())
+                self.assertEqual(saved.get('native_session'), native)
+                self.assertEqual({key: saved[key] for key in config}, config)
+                self.assertEqual(reader.host_session_state(self.provider, self.sid)['native_session'], native)
+                self.assertEqual(reader.host_sid_for_tmux(self.provider, self.tmux), self.sid)
+
     def test_text_and_thinking_deltas_coalesce_into_one_full_text_row_then_complete(self):
         self.feed(self.frame(dict(type='message_start', message=dict(id='msg-1'))),
                   self.frame(dict(type='content_block_start', index=0, content_block=dict(type='thinking', thinking=''))),
@@ -8065,9 +8081,8 @@ class SOFT2272HostedClearTest(unittest.TestCase):
         self.before = self.transcript(self.host_sid, 'Remember the secret word PINEAPPLE', 'ok')
         self.after = self.transcript(self.native_sid, 'What was the secret word I told you earlier?', 'unknown')
         paths = reader.host_paths('claude', self.host_sid)
-        reader.host_write(paths['config'], dict(enabled=True, provider='claude', sid=self.host_sid,
-                                                tmux=self.tmux, cwd=self.cwd, native_session=self.native_sid))
-        reader.host_write(paths['state'], dict(provider='claude', sid=self.host_sid))
+        reader.host_write(paths['config'], dict(enabled=True, tmux=self.tmux, cwd=self.cwd))
+        reader.host_write(paths['state'], dict(provider='claude', sid=self.host_sid, native_session=self.native_sid))
         self.query = dict(id=7, codex=False, provider='claude', sid=self.host_sid, tmux=self.tmux, cwd=self.cwd,
                           follow=True, cached_sid=self.host_sid, inode=0, offset=0, start=0)
 
@@ -8089,9 +8104,8 @@ class SOFT2272HostedClearTest(unittest.TestCase):
         self.assertNotIn('PINEAPPLE', wire)
 
     def test_no_clear_keeps_reading_the_pinned_transcript(self):
-        paths = reader.host_paths('claude', self.host_sid)
-        config = reader.host_read(paths['config'])
-        reader.host_write(paths['config'], dict(config, native_session=self.host_sid))
+        reader.host_write(reader.host_paths('claude', self.host_sid)['state'],
+                          dict(provider='claude', sid=self.host_sid, native_session=self.host_sid))
         wire = self.wire()
         self.assertIn('PINEAPPLE', wire)
         self.assertNotIn('unknown', wire)
@@ -8104,113 +8118,11 @@ class SOFT2272HostedClearTest(unittest.TestCase):
         self.assertIn('PINEAPPLE', wire)
         self.assertNotIn('unknown', wire)
 
-    def test_a_missing_native_transcript_never_reads_the_foreign_pinned_file(self):
+    def test_a_missing_native_transcript_keeps_the_pinned_file(self):
         self.after.unlink()
         wire = self.wire()
-        self.assertNotIn('PINEAPPLE', wire)
-        self.assertIn('\thistory\tok\t' + self.host_sid + '\t', wire)
-        self.assertIn('"no_transcript":true', wire)
-
-    def test_soft_2681_config_precedes_a_later_init_and_private_state(self):
-        paths = reader.host_paths('claude', self.host_sid)
-        reader.host_log('claude', self.host_sid, 'init', dict(session=self.host_sid))
-        reader.host_write(paths['state'], dict(native_session=self.host_sid))
-        wire = self.wire()
-        self.assertIn('unknown', wire)
-        self.assertNotIn('PINEAPPLE', wire)
-
-    def test_soft_2681_latest_valid_init_is_used_without_config_native_session(self):
-        paths = reader.host_paths('claude', self.host_sid)
-        config = reader.host_read(paths['config'])
-        config.pop('native_session')
-        reader.host_write(paths['config'], config)
-        reader.host_log('claude', self.host_sid, 'init', dict(session=self.host_sid))
-        reader.host_log('claude', self.host_sid, 'init', dict(session=self.native_sid))
-        for event in (dict(session='../foreign'), [], None):
-            reader.host_log('claude', self.host_sid, 'init', event)
-        with paths['log'].open('ab') as output:
-            output.write(b'{broken\n[]\n' + b' ' * 70000 + b'\n{"event":')
-        wire = self.wire()
-        self.assertIn('unknown', wire)
-        self.assertNotIn('PINEAPPLE', wire)
-        self.assertIn('\thistory\tok\t' + self.host_sid + '\t', wire)
-
-    def test_soft_2681_invalid_config_native_session_uses_init(self):
-        paths = reader.host_paths('claude', self.host_sid)
-        config = reader.host_read(paths['config'])
-        reader.host_log('claude', self.host_sid, 'init', dict(session=self.native_sid))
-        for native in (None, '', '../foreign', [], 1):
-            with self.subTest(native=native):
-                reader.host_write(paths['config'], dict(config, native_session=native))
-                self.assertIn('unknown', self.wire())
-                self.assertNotIn('PINEAPPLE', self.wire())
-
-    def test_soft_2681_without_public_native_metadata_uses_the_stable_id(self):
-        paths = reader.host_paths('claude', self.host_sid)
-        config = reader.host_read(paths['config'])
-        config.pop('native_session')
-        reader.host_write(paths['config'], config)
-        reader.host_write(paths['state'], dict(native_session=self.native_sid))
-        self.assertIn('PINEAPPLE', self.wire())
-        self.assertNotIn('unknown', self.wire())
-
-    def test_soft_2681_native_transcript_does_not_require_a_stable_id_file(self):
-        self.before.unlink()
-        wire = self.wire()
-        self.assertIn('unknown', wire)
-        self.assertIn('\thistory\tok\t' + self.host_sid + '\t', wire)
-
-    def test_soft_2681_tab_only_query_loads_the_host_config_before_selecting_history(self):
-        self.query.update(sid='', cwd='/wrong')
-        wire = self.wire()
-        self.assertIn('unknown', wire)
-        self.assertNotIn('PINEAPPLE', wire)
-        self.assertIn('\thistory\tok\t' + self.host_sid + '\t', wire)
-
-    def test_soft_2681_saved_host_history_still_precedes_the_native_transcript(self):
-        paths = reader.host_paths('claude', self.host_sid)
-        reader.host_write(paths['state'], dict(display_history=True))
-        paths['history'].write_text(json.dumps(dict(type='multiprompt_history', row=dict(
-            role='assistant', text='saved host history', id='saved-2681'))) + '\n')
-        for sid in (self.host_sid, ''):
-            with self.subTest(sid=sid):
-                self.query['sid'] = sid
-                wire = self.wire()
-                self.assertIn('saved host history', wire)
-                self.assertNotIn('PINEAPPLE', wire)
-                self.assertNotIn('unknown', wire)
-
-    def test_soft_2681_native_selection_reads_the_transcript_owners_home(self):
-        owner = self.home / 'secondary'
-        target = owner / '.claude/projects' / reader.claude_project_folder(self.cwd) / self.after.name
-        target.parent.mkdir(parents=True)
-        self.after.rename(target)
-        with patch.object(reader, 'conversation_owner', return_value=('secondary', owner)):
-            wire = self.wire()
-        self.assertIn('unknown', wire)
-        self.assertNotIn('PINEAPPLE', wire)
-        self.assertIn('\thistory\tok\t' + self.host_sid + '\t', wire)
-
-    def test_soft_2681_delegated_native_history_keeps_the_stable_wire_id(self):
-        expected = '@mp\t7\thistory\tok\t' + self.native_sid + '\t0\n{"role":"assistant","text":"owner reply"}\n@@MP_END@@\n'
-        with patch.object(reader, 'conversation_path', side_effect=PermissionError()), \
-                patch.object(reader, 'conversation_owner', return_value=('secondary', Path('/home/secondary'))), \
-                patch.object(reader, 'owner_response', return_value=expected) as delegated:
-            wire = reader.response(dict(self.query), reader.READER_SOURCE)
-        self.assertIn('\thistory\tok\t' + self.host_sid + '\t', wire)
-        self.assertIn('owner reply', wire)
-        self.assertEqual(delegated.call_args.args[0]['sid'], self.native_sid)
-        self.assertEqual(delegated.call_args.args[0]['cached_sid'], self.native_sid)
-        self.assertFalse(delegated.call_args.args[0]['follow'])
-
-    def test_soft_2681_delegated_native_search_keeps_the_stable_wire_id(self):
-        expected = '@mp\t7\tsearch\tok\t' + self.native_sid + '\t0\t0\t0\t0\tclaude\tlive-clear\n@@MP_END@@\n'
-        with patch.object(reader, 'conversation_path', side_effect=PermissionError()), \
-                patch.object(reader, 'conversation_owner', return_value=('secondary', Path('/home/secondary'))), \
-                patch.object(reader, 'owner_response', return_value=expected):
-            wire = reader.response(dict(self.query, search='owner reply'), reader.READER_SOURCE)
-        self.assertIn('\tsearch\tok\t' + self.host_sid + '\t', wire)
-        self.assertNotIn(self.native_sid, wire)
+        self.assertIn('PINEAPPLE', wire)
+        self.assertNotIn('history\tmissing', wire)
 
     def test_an_owner_read_never_switches_session(self):
         wire = reader.response(dict(self.query), reader.READER_SOURCE, as_owner=True)

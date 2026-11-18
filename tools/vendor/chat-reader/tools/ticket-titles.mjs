@@ -1,12 +1,32 @@
-const boards = { IGSH: 2060, HYCI: 11514 };
-const aliases = { IGSH: 'SOFT' };
+import fs from 'node:fs';
+import { parseTicketId, canonicalTicketId } from './ticket-id.js';
 
 export function ticketRecord(id, title) {
-  if (typeof id !== 'string' || !/^(?:IGSH|HYCI)-[1-9]\d*$/.test(id)) throw new Error(`Invalid ticket ID: ${id}`);
+  id = canonicalTicketId(id);
   if (typeof title !== 'string' || title !== title.trim() || !title || Buffer.from(title).toString('utf8') !== title || Buffer.byteLength(`${id} ${title}`) > 512 || /[\x00-\x1f\x7f]/.test(title) || /checks and fixes, no visible change/i.test(title) || /(?:https?:\/\/|[A-Za-z]:\\|(?:^|\s)\/(?:home|tmp|var|etc)\/)/i.test(title)) {
     throw new Error(`Missing or invalid title for ${id}`);
   }
   return { id, title };
+}
+
+export const ticketTitlesDir = new URL('./ticket-titles/', import.meta.url);
+
+export function ticketTitleFile(id) {
+  id = canonicalTicketId(id);
+  return `${id}.txt`;
+}
+
+export function loadTicketTitles(dir = ticketTitlesDir) {
+  const titles = {};
+  for (const name of fs.readdirSync(dir).sort()) {
+    const ticket = name.endsWith('.txt') && parseTicketId(name.slice(0, -4));
+    if (!ticket) throw new Error(`Unexpected entry in ticket title catalog: ${name}`);
+    const title = fs.readFileSync(new URL(name, dir), 'utf8').replace(/\r?\n$/, '');
+    const record = ticketRecord(ticket.id, title);
+    if (Object.hasOwn(titles, record.id) && titles[record.id] !== record.title) throw new Error(`Conflicting titles for ${record.id}`);
+    titles[record.id] = record.title;
+  }
+  return titles;
 }
 
 export function ticketLine(record) {
@@ -15,13 +35,18 @@ export function ticketLine(record) {
 }
 
 export async function resolveTicketTitles(ids, catalog, token, request = fetch) {
-  const titles = { ...catalog };
+  const titles = {};
+  for (const [id, title] of Object.entries(catalog)) {
+    const canonical = canonicalTicketId(id);
+    if (Object.hasOwn(titles, canonical) && titles[canonical] !== title) throw new Error(`Conflicting titles for ${canonical}`);
+    titles[canonical] = title;
+  }
+  ids = ids.map(canonicalTicketId);
   const missing = [...new Set(ids)].filter(id => !Object.hasOwn(titles, id));
   if (missing.length > 2000) throw new Error('Too many unresolved ticket titles');
   const deadline = Date.now() + 120000;
   for (const id of missing) {
-    const match = /^(IGSH|HYCI)-([1-9]\d*)$/.exec(id);
-    if (!match) throw new Error(`Invalid ticket ID: ${id}`);
+    const ticket = parseTicketId(id);
     if (!token) throw new Error(`Missing title for ${id}; provide a catalog or release token`);
     const remaining = deadline - Date.now();
     if (remaining <= 0) throw new Error('Ticket title lookup timed out');
@@ -38,7 +63,7 @@ export async function resolveTicketTitles(ids, catalog, token, request = fetch) 
     if (!response.ok) throw new Error(`Title lookup failed for ${id}`);
     const data = await response.json().catch(() => null);
     const task = data?.tasks?.[0];
-    if (data?.success !== true || !Array.isArray(data.tasks) || data.tasks.length !== 1 || task?.boardId !== boards[match[1]] || (task.ticketNumber == null && task.uniqueIndex == null) || (task.ticketNumber != null && task.ticketNumber !== id && task.ticketNumber !== `${aliases[match[1]] ?? ''}-${match[2]}`) || (task.uniqueIndex != null && String(task.uniqueIndex) !== match[2])) throw new Error(`Unresolved title for ${id}`);
+    if (data?.success !== true || !Array.isArray(data.tasks) || data.tasks.length !== 1 || task?.boardId !== ticket.boardId || (task.ticketNumber == null && task.uniqueIndex == null) || (task.ticketNumber != null && parseTicketId(task.ticketNumber)?.id !== id) || (task.uniqueIndex != null && String(task.uniqueIndex) !== ticket.number)) throw new Error(`Unresolved title for ${id}`);
     titles[id] = ticketRecord(id, task.title).title;
   }
   for (const id of ids) ticketRecord(id, titles[id]);
