@@ -67,7 +67,21 @@ if [[ "$feature" == settings-controls.md ]]; then
     wait_for_text 'App updates'
     inbox_control_state settings-update '{"text":["App updates","Check now"],"desc":["Open navigation"],"absent":["Session list settings"]}'
     sudo cat /home/verifyssh/commands.log > "$EVIDENCE/settings-refresh-before.txt"
-    tap_desc Refresh
+    refresh_deadline=$((SECONDS + 15))
+    refresh_tapped=0
+    while (( SECONDS < refresh_deadline )); do
+        dump_ui || true
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" desc Refresh >/dev/null 2>&1 && tap_desc Refresh; then
+            refresh_tapped=1
+            break
+        fi
+        if (( SECONDS >= refresh_deadline )); then break; fi
+        sleep 1
+    done
+    if [[ "$refresh_tapped" != 1 ]]; then
+        printf 'Timed out waiting for Refresh\n' >&2
+        exit 1
+    fi
     wait_for_text 'App updates'
     inbox_control_state settings-refreshed '{"text":["App updates"],"desc":["Open navigation"]}'
     sudo cat /home/verifyssh/commands.log > "$EVIDENCE/settings-refresh-after.txt"
@@ -99,6 +113,14 @@ PY
     wait_for_text 'App updates'
     inbox_control_state settings-version '{"text":["App updates"],"absent":["Session list settings"]}'
     printf 'SETTINGS_MAPPING_NAVIGATION_CONTROLS_OK\n' | tee "$EVIDENCE/settings-controls-proof.txt"
+    if [[ "${BREAK_IT_MODE:-}" == true ]]; then
+        adb shell input keyevent KEYCODE_BACK
+        wait_for_text Inbox
+        tap_text All
+        tap_text verify-session
+        wait_for_text 'Message verify-session'
+        source "$scripts/ai-switch-drive.sh"
+    fi
     exit 0
 fi
 switch_inbox_bucket() {

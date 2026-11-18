@@ -26,9 +26,13 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      actions: read
     outputs:
       no_product_change: ${{ steps.pick.outputs.no_product_change }}
-      features: ${{ steps.pick.outputs.features }}
+      features: ${{ steps.reuse.outputs.features || steps.pick.outputs.features }}
+      reused: ${{ steps.reuse.outputs.reused }}
+      reuse_head: ${{ steps.reuse.outputs.head_sha }}
+      runners: ${{ steps.pick.outputs.runners }}
       smoke: ${{ steps.pick.outputs.smoke }}
       reason: ${{ steps.pick.outputs.reason }}
       number: ${{ steps.pick.outputs.number }}
@@ -40,7 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           sparse-checkout: |
             .github/scripts
             .claude/skills/verify-multiprompt-android/features
@@ -58,6 +62,9 @@ jobs:
             tools/pr-checks.test.js
             tools/fixtures/pr-checks
             tools/workflow-inputs.test.js
+            tools/ci/pr-workflows.test.mjs
+            tools/verdict-reuse.test.js
+            tools/parent-cache.test.js
             tools/release-proof.test.js
             tools/release-proof.sh
             tools/release-choices/prepare.sh
@@ -71,17 +78,19 @@ jobs:
         with:
           node-version: 22
       - name: Prove the verifier on real historical mistakes
-        run: node --test tools/feature-coverage.test.js tools/pstack-verifier.test.js tools/pstack-verifier-eval.test.js tools/workflow-inputs.test.js tools/release-proof.test.js tools/pr-checks.test.js tools/branch-protection.test.js tools/android-break-it.test.js > "$RUNNER_TEMP/tooling-proof.txt" 2>&1
-      - name: Retain non-UI verifier proof
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          overwrite: true
-          name: verifier-tooling-proof
-          path: ${{ runner.temp }}/tooling-proof.txt
-          if-no-files-found: error
-          retention-days: 7
+        run: node --test tools/feature-coverage.test.js tools/pstack-verifier.test.js tools/pstack-verifier-eval.test.js tools/workflow-inputs.test.js tools/release-proof.test.js tools/pr-checks.test.js tools/branch-protection.test.js tools/android-break-it.test.js tools/ci/pr-workflows.test.mjs tools/parent-cache.test.js tools/verdict-reuse.test.js > "$RUNNER_TEMP/tooling-proof.txt" 2>&1
+      - name: Reuse a successful verdict for an unchanged rebased patch
+        id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr || github.event.pull_request.number }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: node .github/scripts/pstack-verifier/reuse.cjs probe
       - name: Choose the journeys that exercise this change
+        if: steps.reuse.outputs.reused != 'true'
         id: pick
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
@@ -91,11 +100,33 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: node .github/scripts/pstack-verifier/verifier.cjs pick
+      - name: Compare workflow rules on the parent
+        if: steps.reuse.outputs.reused != 'true'
+        env:
+          BASE_SHA: ${{ steps.pick.outputs.merge_base }}
+        run: |
+          head_summary=$(tail -12 "$RUNNER_TEMP/tooling-proof.txt")
+          base="$BASE_SHA"
+          git fetch --no-tags origin "$base"
+          printf '\nPARENT workflow rules at %s\n' "$base" >> "$RUNNER_TEMP/tooling-proof.txt"
+          code=0
+          WORKFLOW_REF="$base" node --test tools/ci/pr-workflows.test.mjs >> "$RUNNER_TEMP/tooling-proof.txt" 2>&1 || code=$?
+          printf '\nHEAD tooling proof summary\n%s\nPARENT_WORKFLOW_EXIT=%s\n' "$head_summary" "$code" >> "$RUNNER_TEMP/tooling-proof.txt"
+      - name: Retain non-UI verifier proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          overwrite: true
+          name: verifier-tooling-proof
+          path: ${{ runner.temp }}/tooling-proof.txt
+          if-no-files-found: error
+          retention-days: 7
+
 
   journeys:
     name: journey ${{ matrix.feature }}
     needs: pick
-    if: needs.pick.outputs.no_product_change != 'true'
+    if: needs.pick.outputs.features != '[]'
     strategy:
       fail-fast: false
       matrix:
@@ -107,13 +138,24 @@ jobs:
     with:
       feature: ${{ matrix.feature }}
       side: head
+      driver_feature: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].feature }}
+      candidate: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].candidate }}
+      released_chat: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].released_chat }}
+      released_robots: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].released_robots }}
+      release_choices: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].release_choices }}
+      pins_scroll: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].pins_scroll }}
       break_it: ${{ needs.pick.outputs.break_it == 'true' }}
       app_ref: ${{ needs.pick.outputs.head_sha }}
+    secrets:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
   parents:
     name: parent journey ${{ matrix.feature }}
     needs: pick
-    if: needs.pick.outputs.no_product_change != 'true'
+    if: needs.pick.outputs.features != '[]'
     strategy:
       fail-fast: false
       matrix:
@@ -125,7 +167,18 @@ jobs:
     with:
       feature: ${{ matrix.feature }}
       side: parent
+      driver_feature: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].feature }}
+      candidate: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].candidate }}
+      released_chat: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].released_chat }}
+      released_robots: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].released_robots }}
+      release_choices: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].release_choices }}
+      pins_scroll: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].pins_scroll }}
       app_ref: ${{ needs.pick.outputs.merge_base }}
+    secrets:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
   pstack-verifier:
     name: pstack-verifier
@@ -138,26 +191,33 @@ jobs:
       pull-requests: write
       actions: read
     steps:
-      - name: Report no product change
-        if: needs.pick.result == 'success' && needs.pick.outputs.no_product_change == 'true'
-        env:
-          REASON: ${{ needs.pick.outputs.reason }}
-        run: printf '%s\n' "$REASON" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        if: needs.pick.outputs.no_product_change != 'true'
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           sparse-checkout: |
             .github/scripts
             .claude/skills/verify-multiprompt-android/features
             tools/release-notes/ticket-titles.json
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        if: needs.pick.outputs.no_product_change != 'true'
         with:
           node-version: 22
+      - name: Require successful verification preparation
+        env:
+          PICK_RESULT: ${{ needs.pick.result }}
+        run: test "$PICK_RESULT" = success
+      - name: Publish the reused verdict at this head
+        if: needs.pick.result == 'success' && needs.pick.outputs.reused == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr || github.event.pull_request.number }}
+          HEAD_SHA: ${{ needs.pick.outputs.reuse_head }}
+          RUN_ID: ${{ github.run_id }}
+        run: node .github/scripts/pstack-verifier/reuse.cjs publish
       - name: Judge the change against the journey evidence
-        if: needs.pick.outputs.no_product_change != 'true'
+        id: judge
+        if: needs.pick.outputs.reused != 'true'
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           GH_TOKEN: ${{ github.token }}
@@ -176,8 +236,29 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: node .github/scripts/pstack-verifier/verifier.cjs judge
+      - name: Save the independently verified patch identity
+        if: needs.pick.outputs.reused != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ needs.pick.outputs.number }}
+          HEAD_SHA: ${{ needs.pick.outputs.head_sha }}
+          MERGE_BASE: ${{ needs.pick.outputs.merge_base }}
+          VERDICT: ${{ steps.judge.outputs.verdict }}
+          RUN_ID: ${{ github.run_id }}
+          RECORD_PATH: ${{ runner.temp }}/verdict.json
+        run: node .github/scripts/pstack-verifier/reuse.cjs save
+      - name: Retain the successful verdict identity
+        if: needs.pick.outputs.reused != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          overwrite: true
+          name: verifier-verdict
+          path: ${{ runner.temp }}/verdict.json
+          if-no-files-found: error
+          retention-days: 30
       - name: Retain structured outcome coverage
-        if: always() && needs.pick.outputs.no_product_change != 'true'
+        if: always() && needs.pick.outputs.reused != 'true'
         uses: actions/upload-artifact@v4
         with:
           overwrite: true

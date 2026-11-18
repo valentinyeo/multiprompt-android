@@ -5,6 +5,7 @@ set -euo pipefail
 : "${EVIDENCE:?}" "${FIXTURE:?}" "${VERIFY_APK:?}" "${VERIFY_FEATURE:?}"
 scripts="$GITHUB_WORKSPACE/.claude/skills/verify-multiprompt-android/scripts"
 root=$EVIDENCE
+journey=${VERIFY_JOURNEY:-$VERIFY_FEATURE}
 started=$SECONDS
 "$scripts/cleanup.sh"
 uid=$(id -u verifyssh)
@@ -18,7 +19,7 @@ export EVIDENCE="$root/break-it" BREAK_IT_MODE=true
 mkdir -p "$EVIDENCE"
 phase=setup
 write_result() {
-    python3 - "$root" "$VERIFY_FEATURE" "$1" "$((SECONDS - started))" "$VERIFY_APK" "$phase" <<'PY'
+    python3 - "$root" "$journey" "$1" "$((SECONDS - started))" "$VERIFY_APK" "$phase" <<'PY'
 import hashlib
 import json
 from pathlib import Path
@@ -42,15 +43,20 @@ record() {
 }
 trap record EXIT
 trap 'exit 124' TERM INT
-adb shell am force-stop dev.multiprompt.companion.debug
-adb shell pm clear dev.multiprompt.companion.debug | grep -Fx Success
+package=${VERIFY_PACKAGE:-dev.multiprompt.companion.debug}
+adb shell am force-stop "$package"
+adb shell pm clear "$package" | grep -Fx Success
 adb install -r -g "$VERIFY_APK"
 "$scripts/fixture.sh"
 phase=driver
-"$scripts/drive.sh" "$VERIFY_FEATURE"
+if [[ "$package" == dev.multiprompt.companion.debug ]]; then
+    "$scripts/drive.sh" "$VERIFY_FEATURE"
+else
+    bash tools/release-choices/run.sh
+fi
 phase=inspector
 write_result 0
-node - "$root" "$VERIFY_FEATURE" <<'JS'
+node - "$root" "$journey" <<'JS'
 const fs = require('node:fs');
 const proof = require('./.github/scripts/pstack-verifier/break-it.cjs');
 const sha = fs.readFileSync(`${process.argv[2]}/app-source-sha.txt`, 'utf8').trim();

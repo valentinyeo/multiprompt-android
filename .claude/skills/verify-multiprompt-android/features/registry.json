@@ -9,7 +9,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/ai-switch-drive.sh"
+        ]
       },
       "outcomes": [
         "ai.switch"
@@ -40,7 +43,7 @@
       "description": "hosted ViewModel and Compose regressions; seeded picture, not live account sync.",
       "runner": {
         "kind": "dedicated",
-        "workflow": "test.yml",
+        "workflow": "android-full.yml",
         "inputs": {},
         "prerequisites": [
           "Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable."
@@ -53,17 +56,26 @@
     },
     "chat-cancel.md": {
       "name": "Cancel waiting messages",
-      "description": "exact cancellation, surviving order, host receipt and delivered actions, with a recording.",
+      "description": "canonical queued/cancelled states, untouched terminal draft, surviving receipt order and delivered actions, with a recording.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/cancel-console.py",
+          ".claude/skills/verify-multiprompt-android/scripts/cancel-proof.py"
+        ]
       },
       "outcomes": [
         "chat-cancel.journey"
-      ]
+      ],
+      "evidence": {
+        "cancel-waiting.json": 3000,
+        "cancel-cancelled.json": 3000,
+        "cancel-delivered.json": 5000
+      }
     },
     "chat-choices.md": {
       "name": "Chat choices",
@@ -290,7 +302,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/native-menu-drive.sh"
+        ]
       },
       "outcomes": [
         "claude.skills-model-effort"
@@ -389,7 +404,10 @@
         "prerequisites": [
           "Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable."
         ],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          "tools/session-gestures/drive.py"
+        ]
       },
       "outcomes": [
         "session-gestures.journey"
@@ -409,7 +427,10 @@
         "prerequisites": [
           "Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable."
         ],
-        "driver": false
+        "driver": false,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/pins-drive.sh"
+        ]
       },
       "outcomes": [
         "session-pins.journey"
@@ -491,7 +512,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          "tools/session-gestures/drive.py"
+        ]
       },
       "outcomes": [
         "inbox.summaries"
@@ -602,7 +626,10 @@
         "prerequisites": [
           "Local authenticated account fixture; live production email OTP is not exercised."
         ],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/device-approval-drive.sh"
+        ]
       },
       "outcomes": [
         "legacy.igsh-449"
@@ -624,7 +651,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/chat-search-drive.sh"
+        ]
       },
       "outcomes": [
         "chat-search.open"
@@ -648,7 +678,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/snippets-drive.sh"
+        ]
       },
       "outcomes": [
         "snippets.save-reuse-delete"
@@ -666,7 +699,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/remote-control-drive.sh"
+        ]
       },
       "outcomes": [
         "claude.remote-control"
@@ -688,7 +724,10 @@
         "workflow": "verify.yml",
         "driver": true,
         "inputs": {},
-        "prerequisites": []
+        "prerequisites": [],
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/ai-usage-drive.sh"
+        ]
       },
       "evidence": {
         "ai-usage-menu.json": 1500,
@@ -707,7 +746,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/skill-pills-drive.sh"
+        ]
       },
       "outcomes": [
         "skills.pills"
@@ -725,7 +767,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/chat-table-drive.sh"
+        ]
       },
       "outcomes": [
         "chat-table.expand"
@@ -747,7 +792,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/clear-ranking-drive.sh"
+        ]
       },
       "outcomes": [
         "claude.clear-ranking"
@@ -771,7 +819,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/signed-out-sync-drive.sh"
+        ]
       },
       "outcomes": [
         "legacy.igsh-413"
@@ -789,7 +840,11 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/control-journeys-drive.sh",
+          ".claude/skills/verify-multiprompt-android/scripts/reader-menu-drive.sh"
+        ]
       },
       "outcomes": [
         "bot.look"
@@ -802,6 +857,28 @@
         "bot-look-proof.txt": 200
       }
     },
+    "reader-version.md": {
+      "name": "Chat version label",
+      "description": "Open a chat, check the version label beside Session actions, tap it, and open App updates.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/reader-version-drive.sh",
+          ".claude/skills/verify-multiprompt-android/scripts/ai-switch-drive.sh"
+        ]
+      },
+      "outcomes": [
+        "legacy.igsh-426"
+      ],
+      "evidence": {
+        "reader-version.json": 400,
+        "reader-updates.json": 400
+      }
+    },
     "reader-controls.md": {
       "name": "Reader rename and display controls",
       "description": "Rename and display, plus 40 reader More, key-validation, pinned-page, attachment and Computer controls with screenshots and independent SSH receipts. SOFT-2669.",
@@ -810,7 +887,11 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/control-journeys-drive.sh",
+          ".claude/skills/verify-multiprompt-android/scripts/reader-menu-drive.sh"
+        ]
       },
       "outcomes": [
         "reader.controls"
@@ -834,7 +915,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/message-reply-drive.sh"
+        ]
       },
       "outcomes": [
         "legacy.igsh-418"
@@ -855,7 +939,11 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/inbox-controls-drive.sh",
+          ".claude/skills/verify-multiprompt-android/scripts/ai-switch-drive.sh"
+        ]
       },
       "outcomes": [
         "settings.controls"
@@ -879,7 +967,10 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/inbox-controls-drive.sh"
+        ]
       },
       "outcomes": [
         "inbox.reminders"
@@ -893,6 +984,28 @@
         "reminder-keyboard-time.json": 500,
         "reminder-keyboard-waiting.json": 1000,
         "inbox-reminders-proof.txt": 200
+      }
+    },
+    "screencast-account.md": {
+      "name": "Account upload key",
+      "description": "Signed-in image selection without typing a Screencast2 key, with authenticated account receipts.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [
+          "Local authenticated account fixture; live production email OTP and successful Screencast2 upload are not exercised."
+        ],
+        "driver": true
+      },
+      "outcomes": [
+        "upload.account-key"
+      ],
+      "evidence": {
+        "screencast-signed-in.json": 2000,
+        "screencast-picker.json": 2000,
+        "screencast-selected.json": 2000,
+        "screencast-account-receipts.txt": 1000
       }
     }
   },
@@ -1316,10 +1429,22 @@
       "match": []
     },
     "legacy.igsh-426": {
-      "description": "prefix checks Sign in's exact version only. No credential blocks local-screen layout inspection; navigation/bounds proof is unimplemented. Inspect the label on Inbox, reader, shell, Hosts, editor and Settings; tap for **Update**. Workspaces need OTP. Sign in's label is bottom-centred, not beside three dots.",
-      "journey": null,
-      "sideEffect": true,
-      "match": []
+      "description": "The chat top bar shows the installed version beside Session actions. Its description is Version <version>, open release notes. Tapping it opens App updates. Inbox, settings and the live shell keep their own labels.",
+      "journey": "reader-version.md",
+      "sideEffect": false,
+      "match": [
+        "versionReleaseNotesDescription"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "reader version label tap"
+        },
+        "result": {
+          "file": "reader-updates.json",
+          "quote": "App updates"
+        }
+      }
     },
     "legacy.igsh-424": {
       "description": "a supported agent (Claude) transcript on the SSH host, including tables/nested lists and model/effort state. Open from Inbox, scroll the complete transcript, inspect tables horizontally and top-bar subtitle; no **Conversation** header/status row. **Session actions \u2192 Session history** opens alternate-screen history. Console output proves none of this.",
@@ -1454,6 +1579,14 @@
       "match": [
         "ReminderDialog|reminderPromptSession|ReminderTimeParser|Switch session bucket|bucketMenuExpanded|Unread only|inbox-reminders|InboxOverflowMenu",
         "AppMenu\\.kt[\\s\\S]*(?:onRefresh|label = \"Refresh\")|Custom time|Later today|In 30 minutes|In [125] hours?|Tomorrow.*9:00 AM|In 2 days|Remind me|Remind Me|onArchiveUntil|submitCustom|presets\\.forEach|unreadOnly|SessionBucket"
+      ]
+    },
+    "upload.account-key": {
+      "description": "Signed-in users select an image with the account Screencast2 key and no manual key entry. Cached keys survive account/network errors; signed-out users retain their manual fallback. SOFT-2682.",
+      "journey": "screencast-account.md",
+      "sideEffect": true,
+      "match": [
+        "ScreencastAccountKey|ScreencastUploader|screencastKey|screencast\\.prepare"
       ]
     }
   }

@@ -125,6 +125,22 @@ test('matching successful proof requires action, resulting UI, independent recei
   });
 });
 
+test('signed journey evidence uses the same exact-SHA action and result gate as debug evidence', () => {
+  for (const [journey, entry] of Object.entries(gate.registry.journeys)) {
+    if (entry.runner.kind !== 'signed') continue;
+    withProof((args, directory) => {
+      const outcome = entry.outcomes[0];
+      args.plan.outcomes = [outcome];
+      args.coverage[0] = { ...args.coverage[0], outcome, journey };
+      args.directories = { [journey]: directory };
+      args.conclusions = { [journey]: 'success' };
+      assert.equal(gate.featureErrors(args).accepted[0]?.journey, journey);
+      args.conclusions[journey] = 'failure';
+      assert.match(gate.featureErrors(args).errors.join('\n'), /no matching successful/);
+    });
+  }
+});
+
 test('PR #391 reader lifecycle exposes citable actions, resumed UI and independent host counts', () => {
   const fixture = JSON.parse(read('tools/fixtures/feature-coverage/pr-391-reader.json'));
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'reader-lifecycle-proof-'));
@@ -269,6 +285,46 @@ for (const journey of ['chat-search.md', 'sessions.md']) test(`the real picker s
       assert.ok(selected.length <= verifier.MAX_JOURNEYS);
       assert.match(values, /^smoke=no$/m);
       assert.match(values, /^changed_outcomes=\[\]$/m);
+    }
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('the real picker reserves changed signed recipes and drivers before consulting the model', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'signed-journey-pick-'));
+  try {
+    mockPickerGithub(path.join(directory, 'gh'));
+    const diff = path.join(directory, 'change.diff');
+    const stub = path.join(directory, 'model.cjs');
+    fs.writeFileSync(stub, `global.fetch=async(url,options)=>{require('node:fs').writeFileSync(process.env.REQUEST_FILE,options.body);return {status:200,ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:['native-skills.md'],changed_outcomes:[],change_kind:'tooling',reason:'Model omitted changed drivers.'})}}]})}};`);
+    const files = [`${gate.REGISTRY_PATH}/session-pins.md`, 'tools/session-gestures/drive.py'];
+    for (const paths of [files, [...files, `${gate.REGISTRY_PATH}/hosts.md`]]) {
+      fs.writeFileSync(diff, paths.map(file => `diff --git a/${file} b/${file}\n+changed\n`).join(''));
+      const output = path.join(directory, `outputs-${paths.length}`);
+      const request = path.join(directory, `request-${paths.length}`);
+      const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
+        cwd: root, encoding: 'utf8', env: {
+          ...process.env, PATH: `${directory}:${process.env.PATH}`, NODE_OPTIONS: `--require=${stub}`,
+          DEEPSEEK_API_KEY: 'test-only', REPO: 'example/repo', PR_NUMBER: '429', EVENT_HEAD_SHA: sha,
+          FIXTURE_DIFF: diff, GITHUB_OUTPUT: output, REQUEST_FILE: request,
+        },
+      });
+      assert.equal(run.status, 0, run.stderr);
+      const values = fs.readFileSync(output, 'utf8');
+      const selected = JSON.parse(values.match(/^features=(.+)$/m)[1]);
+      assert.deepEqual(selected, paths.length === 3
+        ? ['hosts.md', 'session-pins.md', 'session-gestures.md']
+        : ['session-gestures.md', 'session-pins.md', 'session-summaries.md']);
+      const prompt = JSON.parse(fs.readFileSync(request, 'utf8')).messages[1].content;
+      const recipes = JSON.parse(prompt.split('\n')[0].split(': ')[1]);
+      assert.ok(recipes.includes('session-pins.md'));
+      assert.equal(recipes.includes('hosts.md'), paths.length === 3);
+      assert.match(prompt, /Required candidates \(rank repro first, then relevant guards within the cap\):/);
+      assert.match(prompt, /session-summaries\.md/);
+      if (paths.length === 3) assert.match(run.stdout, /deferred=\["session-summaries\.md"\]/);
+      const runners = JSON.parse(values.match(/^runners=(.+)$/m)[1]);
+      assert.equal(runners['session-pins.md'].feature, 'session-favorites.md');
+      assert.equal(runners['session-pins.md'].pins_scroll, true);
+      assert.equal(runners['session-pins.md'].candidate, true);
     }
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
@@ -830,10 +886,9 @@ test('the real picker schedules clear-ranking code and recipe edits even when th
     const rankingDiff = path.join(directory, 'ranking.diff');
     fs.writeFileSync(rankingDiff, productDiff('skills/NativeSkills.kt', 'val rank = score(skill.name, skill.description, query)'));
     const historicalPlan = gate.planChange(read('tools/fixtures/feature-coverage/pr-381.diff'), []);
-    const historicalPick = verifier.includeRequiredJourneys({ features: [], dropped: [], smoke: true }, historicalPlan);
-    assert.deepEqual(historicalPick.features, [...new Set(historicalPlan.outcomes.map(id => gate.registry.outcomes[id].journey))]);
-    assert.ok(historicalPick.features.length > verifier.MAX_JOURNEYS);
-    assert.equal(historicalPick.smoke, false);
+    const historicalPick = verifier.includeRequiredJourneys({ features: ['clear-ranking.md'], dropped: [], smoke: true }, historicalPlan);
+    assert.deepEqual(historicalPick.features, ['clear-ranking.md', 'native-skills.md', 'claude-remote-control.md']);
+    assert.deepEqual(historicalPick.deferred, ['skill-pills.md']);
     for (const diff of [rankingDiff, recipeDiff]) {
       for (const features of [[], ['native-skills.md', 'session-reader.md', 'terminal.md']]) {
         const output = path.join(directory, 'outputs');

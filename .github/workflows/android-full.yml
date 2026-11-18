@@ -1,0 +1,406 @@
+name: Android full regression
+
+on:
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+    inputs:
+      baseline_ref:
+        description: Optional original commit for before and after theme proof
+        type: string
+      released_update:
+        description: Install and inspect the published signed update
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-full-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  journey-plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Plan every PR-capable journey, including deferred guards
+        id: plan
+        run: node .github/scripts/pstack-verifier/verifier.cjs nightly
+
+  nightly-journeys:
+    name: nightly ${{ matrix.journey }}
+    needs: journey-plan
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.journey-plan.outputs.matrix) }}
+    uses: ./.github/workflows/verify.yml
+    with:
+      feature: ${{ matrix.journey }}
+      driver_feature: ${{ matrix.feature }}
+      candidate: ${{ matrix.candidate }}
+      released_chat: ${{ matrix.released_chat }}
+      released_robots: ${{ matrix.released_robots }}
+      release_choices: ${{ matrix.release_choices }}
+      pins_scroll: ${{ matrix.pins_scroll }}
+      app_ref: ${{ github.sha }}
+    secrets:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+  baseline-profile:
+    name: baseline-profile
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.1"
+      - name: Build the release APK
+        run: gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g assembleRelease
+      - name: Check the baseline profile is compiled into the release APK
+        run: |
+          shopt -s nullglob
+          apks=(app/build/outputs/apk/release/*.apk)
+          test "${#apks[@]}" -eq 1
+          node tools/baseline-profile.mjs apk "${apks[0]}"
+
+  message-projection-replays:
+    uses: ./.github/workflows/message-projection.yml
+
+  message-projection-proof:
+    name: message-projection-proof
+    needs: message-projection-replays
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every historical replay to pass
+        env:
+          RESULT: ${{ needs.message-projection-replays.result }}
+        run: test "$RESULT" = success
+
+  image-preview-emulator:
+    name: image-preview-emulator
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.1"
+      - name: Install screenshot comparison tool
+        run: |
+          python3 -m pip install Pillow
+          sudo apt-get update && sudo apt-get install -y tesseract-ocr
+      - name: Build test APKs before starting the emulator
+        run: gradle --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2g -Pkotlin.compiler.execution.strategy=in-process assembleDebug assembleDebugAndroidTest
+      - name: Verify image preview and day theme on one emulator
+        uses: ./.github/actions/android-proof
+        with:
+          stage: stage-1
+          script: |
+            bash tools/check-image-preview.sh
+            adb shell cmd uimode night no
+            bash tools/check-day-theme.sh
+        env:
+          GRADLE: gradle
+          DAY_THEME_BASE_REF: ${{ inputs.baseline_ref }}
+          DAY_THEME_RELEASED_UPDATE: ${{ inputs.released_update }}
+      - name: Capture day theme host memory evidence
+        if: always()
+        run: |
+          mkdir -p build/day-theme/diagnostics
+          sudo dmesg -T > build/day-theme/diagnostics/kernel.txt
+          free -m > build/day-theme/diagnostics/memory.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          overwrite: true
+          name: image-preview-emulator
+          path: |
+            build/day-theme/
+            build/image-unfurl.png
+            build/image-preview-logcat.txt
+            build/image-preview-screen.png
+            app/build/reports/androidTests/connected
+          if-no-files-found: error
+
+  reply-notifications-emulator:
+    name: reply-notifications-emulator
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.1"
+      - uses: ./.github/actions/android-proof
+        with:
+          stage: stage-3
+          script: bash tools/check-reply-notifications.sh
+        env:
+          GRADLE: gradle
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          overwrite: true
+          name: reply-notifications-emulator
+          path: |
+            build/reply-notifications-shade.png
+            build/favorite-only-notifications-shade.png
+            build/reply-notifications-logcat.txt
+            build/reply-notifications-screen.png
+            app/build/reports/androidTests/connected
+          if-no-files-found: error
+
+  session-rows-emulator:
+    name: session-rows-emulator
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.1"
+      - uses: ./.github/actions/android-proof
+        with:
+          stage: stage-4
+          script: bash tools/check-session-rows.sh
+        env:
+          GRADLE: gradle
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          overwrite: true
+          name: session-rows-emulator
+          path: |
+            build/session-rows/
+            app/build/reports/androidTests/connected
+          if-no-files-found: error
+
+  session-pins-emulator:
+    name: session-pins-emulator
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.1"
+      - uses: ./.github/actions/android-proof
+        with:
+          stage: stage-4
+          script: bash tools/check-session-pins.sh
+        env:
+          GRADLE: gradle
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          overwrite: true
+          name: session-pins-emulator
+          path: |
+            build/session-rows/pins/
+            app/build/reports/androidTests/connected
+          if-no-files-found: error
+
+  message-actions-emulator:
+    name: message-actions-emulator
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.1"
+      - name: Install screenshot text reader
+        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
+      - uses: ./.github/actions/android-proof
+        with:
+          stage: stage-5
+          script: bash tools/check-message-actions.sh
+        env:
+          GRADLE: gradle
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          overwrite: true
+          name: message-actions-emulator
+          path: |
+            build/message-actions/
+            app/build/reports/androidTests/connected
+            app/build/outputs/androidTest-results/connected
+          if-no-files-found: error
+
+  approved-style-emulator:
+    name: approved-style-emulator
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.1"
+      - name: Install screenshot text reader
+        run: |
+          sudo apt-get update && sudo apt-get install -y tesseract-ocr
+          python3 -m pip install Pillow
+      - name: Build original screen APKs before starting the emulator
+        run: bash tools/check-approved-style.sh prepare
+        env:
+          GRADLE: gradle
+          STYLE_PHASE: before
+      - name: Reject unapproved original screens and verify approved screens on one emulator
+        uses: ./.github/actions/android-proof
+        with:
+          stage: stage-6
+          script: |
+            STYLE_PHASE=before bash tools/check-approved-style.sh
+            STYLE_PHASE=after bash tools/check-approved-style.sh prepare
+            STYLE_PHASE=after bash tools/check-approved-style.sh
+        env:
+          GRADLE: gradle
+      - name: Capture host memory and emulator exit evidence
+        if: always()
+        run: |
+          mkdir -p build/approved-style/diagnostics
+          sudo dmesg -T > build/approved-style/diagnostics/kernel.txt
+          free -m > build/approved-style/diagnostics/memory.txt
+          ps -eo pid,ppid,stat,rss,args > build/approved-style/diagnostics/processes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          overwrite: true
+          name: approved-style-emulator
+          path: |
+            build/approved-style/
+            app/build/reports/androidTests/connected
+          if-no-files-found: error
+
+  historical-controls:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.1"
+      - name: Prove ordinary-list regression on original source
+        env:
+          BASE_SHA: 41f3847b42a3d56ac9d3a1ce32e62fac23066132
+        run: |
+          git fetch origin "$BASE_SHA"
+          git worktree add "$RUNNER_TEMP/question-control" "$BASE_SHA"
+          cp app/src/test/java/dev/multiprompt/companion/ui/PlainListsTest.kt "$RUNNER_TEMP/question-control/app/src/test/java/dev/multiprompt/companion/ui/"
+          set +e
+          gradle -p "$RUNNER_TEMP/question-control" --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*PlainListsTest*'
+          status=$?
+          set -e
+          test "$status" -ne 0
+          python3 - "$RUNNER_TEMP/question-control/app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.PlainListsTest.xml" <<'PYCONTROL'
+          import sys
+          import xml.etree.ElementTree as ET
+          root = ET.parse(sys.argv[1]).getroot()
+          case = root.find("testcase[@name='plainNumberedListsKeepTheirNumbersAndHaveNoCards']")
+          assert case is not None and case.find('failure') is not None
+          print('ORIGINAL_LIST_CARD_REGRESSION_REPRODUCED')
+          PYCONTROL
+          mkdir -p app/build/reports/question-control
+          cp "$RUNNER_TEMP/question-control/app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.PlainListsTest.xml" app/build/reports/question-control/
+          git worktree remove --force "$RUNNER_TEMP/question-control"
+
+      - name: Reject the original unshared emulator lifecycle
+        run: |
+          git fetch --no-tags origin 7bc752421f1599727aaef1bc316e0ee81b4a0630 379589588d573b353138ea915f951f590156a9c7 48bc00c1d4cb8122d1688be9bc6962a2caab611f 11fdebca24f50fa2f21a4e1da5125bdb0589cd95 2ca0d5b6ea31c7c245e8a4334e496cbf9eaac618 f05a21c8cb474767e9faf461036041f09e459f6e ed853214b274b81a343ba00e37d167a005e04005
+          for ref in 7bc75242 3795895 48bc00c 11fdebc 2ca0d5b; do
+            if python3 -B tools/emulator.test.py --config-only --ref "$ref" > /tmp/emulator-red.txt 2>&1; then cat /tmp/emulator-red.txt; exit 1; fi
+            cat /tmp/emulator-red.txt
+            grep -F 'AssertionError' /tmp/emulator-red.txt
+          done
+          if python3 -B tools/emulator.test.py --ref f05a21c > /tmp/emulator-metadata-red.txt 2>&1; then cat /tmp/emulator-metadata-red.txt; exit 1; fi
+          cat /tmp/emulator-metadata-red.txt
+          grep -F 'xmlns:generic' /tmp/emulator-metadata-red.txt
+          echo EMULATOR_ORIGINAL_REJECTED
+
+      - name: Reject model footer summaries on original source
+        run: |
+          source=app/src/main/java/dev/multiprompt/companion/ui/SessionPreview.kt
+          cp "$source" "$RUNNER_TEMP/SessionPreview.kt"
+          git show 099a8e7:"$source" > "$source"
+          status=0
+          gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*SessionPreviewTest' || status=$?
+          cp "$RUNNER_TEMP/SessionPreview.kt" "$source"
+          test "$status" -ne 0
+          python3 - <<'PYCONTROL'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.SessionPreviewTest.xml').getroot()
+          for name in ['lastReplyStartsWithItsFirstSentenceNotTheFooter', 'liveWorkReplacesThePreviousReply', 'modelAndShellOnlyHaveNoInventedReply']:
+              assert root.find(f"testcase[@name='{name}']/failure") is not None, name
+          print('ORIGINAL_SUMMARY_FOOTER_REJECTED')
+          PYCONTROL
+          mkdir -p app/build/reports/summary-control
+          cp app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.SessionPreviewTest.xml app/build/reports/summary-control/
+
+      - name: Reject new non-kit controls against the real Material dependency
+        env:
+          GRADLE: gradle
+        run: bash tools/kit-controls/replay.sh
+      - name: Reject unpublished bot photos
+        env:
+          GRADLE: gradle
+        run: tools/check.sh unit-red
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          overwrite: true
+          name: historical-controls
+          path: app/build/reports/

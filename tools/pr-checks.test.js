@@ -30,7 +30,7 @@ test('complete green graph stays accepted', async () => {
   console.log('COMPLETE_GREEN_ACCEPTED');
 });
 
-test('every unconditional PR job is required', async () => {
+test('only the verdict and cheap unconditional PR jobs are required', async () => {
   const { requiredChecks } = await gate;
   const directory = path.join(__dirname, '../.github/workflows');
   const jobs = [];
@@ -43,7 +43,7 @@ test('every unconditional PR job is required', async () => {
     for (let i = 1; i < blocks.length; i += 2) {
       if (/^    uses: /m.test(blocks[i + 1])) continue;
       const explicit = blocks[i + 1].match(/^    name: (.+)$/m)?.[1];
-      jobs.push(explicit ?? blocks[i]);
+      if (blocks[i] !== 'pick') jobs.push(explicit ?? blocks[i]);
     }
   }
   assert.deepEqual([...requiredChecks].sort(), jobs.sort());
@@ -68,25 +68,14 @@ test('failed, cancelled, neutral and unexpectedly skipped jobs never pass', asyn
   }
 });
 
-test('only the six path-routed phone checks may report skipped', async () => {
-  const { checkStatus, skippableChecks } = await gate;
-  assert.deepEqual(skippableChecks, [
-    'image-preview-emulator', 'reply-notifications-emulator', 'session-rows-emulator',
-    'session-pins-emulator', 'message-actions-emulator', 'approved-style-emulator',
-  ]);
+test('skipped required checks cannot pass; only unused journey branches may skip', async () => {
+  const { checkStatus } = await gate;
   const pr = await green();
   for (const check of pr.statusCheckRollup) {
-    const skipped = { ...pr, statusCheckRollup: pr.statusCheckRollup.map(c => c === check ? { ...c, conclusion: 'SKIPPED' } : c) };
-    if (skippableChecks.includes(check.name)) assert.equal(checkStatus(skipped).ready, true, check.name);
-    else assert.throws(() => checkStatus(skipped), /Checks not green/, check.name);
+    assert.throws(() => checkStatus({ ...pr, statusCheckRollup: pr.statusCheckRollup.map(c => c === check ? { ...c, conclusion: 'SKIPPED' } : c) }), /Checks not green/, check.name);
   }
-  const skipped = pr.statusCheckRollup.map(c => skippableChecks.includes(c.name) ? { ...c, conclusion: 'SKIPPED' } : c);
-  assert.equal(checkStatus({ ...pr, statusCheckRollup: skipped }).ready, true);
-  for (const name of skippableChecks) {
-    assert.equal(checkStatus({ ...pr, statusCheckRollup: skipped.filter(c => c.name !== name) }).ready, false, name);
-    for (const conclusion of ['FAILURE', 'CANCELLED', 'NEUTRAL', 'TIMED_OUT']) {
-      assert.throws(() => checkStatus({ ...pr, statusCheckRollup: skipped.map(c => c.name === name ? { ...c, conclusion } : c) }), /Checks not green/, name);
-    }
+  for (const name of ['journey native-skills.md', 'parent journey native-skills.md']) {
+    assert.equal(checkStatus({ ...pr, statusCheckRollup: [...pr.statusCheckRollup, { __typename: 'CheckRun', name, status: 'COMPLETED', conclusion: 'SKIPPED' }] }).ready, true);
   }
 });
 

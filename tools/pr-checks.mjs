@@ -7,11 +7,16 @@ import { setTimeout } from 'node:timers/promises';
 
 export const requiredChecks = [
   'build',
-  'baseline-profile',
   'test',
   'unit-tests',
   'm3-unit-tests',
   'lint',
+  'secret-scan',
+  'no-paid-ai',
+  'pstack-verifier',
+];
+export const retiringChecks = [
+  'baseline-profile',
   'phone-routing',
   'message-projection-proof',
   'image-preview-emulator',
@@ -20,18 +25,7 @@ export const requiredChecks = [
   'session-pins-emulator',
   'message-actions-emulator',
   'approved-style-emulator',
-  'secret-scan',
-  'no-paid-ai',
   'pick journeys',
-  'pstack-verifier',
-];
-export const skippableChecks = [
-  'image-preview-emulator',
-  'reply-notifications-emulator',
-  'session-rows-emulator',
-  'session-pins-emulator',
-  'message-actions-emulator',
-  'approved-style-emulator',
 ];
 export const intervalMs = 300_000;
 export const timeoutMs = 1_800_000;
@@ -55,7 +49,7 @@ export function checkStatus(pr) {
   }
   checks.push(...Array.from(latestRuns.values(), ({ check }) => check));
   const failed = checks.filter(check => check.__typename === 'CheckRun'
-    ? check.status === 'COMPLETED' && check.conclusion !== 'SUCCESS' && !(check.conclusion === 'SKIPPED' && (skippableChecks.includes(check.name) || /^(?:parent )?journey /.test(check.name)))
+    ? check.status === 'COMPLETED' && check.conclusion !== 'SUCCESS' && !(check.conclusion === 'SKIPPED' && /^(?:parent )?journey /.test(check.name))
     : check.__typename === 'StatusContext' ? !['SUCCESS', 'PENDING', 'EXPECTED'].includes(check.state) : true);
   if (failed.length) throw new Error(`Checks not green: ${failed.map(check => check.name ?? check.context ?? 'unknown check').join(', ')}`);
   const missing = requiredChecks.filter(name => !checks.some(check => check.__typename === 'CheckRun' && check.name === name));

@@ -37,18 +37,25 @@ if [[ -n "${CANDIDATE_APK:-}" ]]; then
     printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/app-source-sha.txt"
     printf '%s\n' "${EXPECTED_VERSION:?}" > "$EVIDENCE/version.txt"
 elif [[ "${CANDIDATE:-false}" == true ]]; then
-    if [[ "${VERIFY_FEATURE:-}" == settings-navigation.md ]]; then
-        [[ "${EXPECTED_COMMIT:-}" == "$GITHUB_SHA" && "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+    app_source="$GITHUB_WORKSPACE"
+    if [[ -n "${APP_REF:-}" ]]; then
+        [[ "$APP_REF" =~ ^[0-9a-f]{40}$ ]]
+        app_source="$GITHUB_WORKSPACE/app-source"
+        [[ "$(git -C "$app_source" rev-parse HEAD)" == "$APP_REF" ]]
     fi
-    cat > keystore.properties <<EOF
+    source_sha=$(git -C "$app_source" rev-parse HEAD)
+    if [[ "${VERIFY_FEATURE:-}" == settings-navigation.md ]]; then
+        [[ "${EXPECTED_COMMIT:-$source_sha}" == "$source_sha" && "$source_sha" =~ ^[0-9a-f]{40}$ ]]
+    fi
+    cat > "$app_source/keystore.properties" <<EOF
 storeFile=$work/signing.jks
 storePassword=$ANDROID_KEYSTORE_PASSWORD
 keyAlias=$ANDROID_KEY_ALIAS
 keyPassword=$ANDROID_KEY_PASSWORD
 EOF
-    gradle --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2g -PversionCode=1000000000 -PversionName=0.1.2-candidate "$task"
-    cp "$apk" "$app_apk"
-    printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/app-source-sha.txt"
+    gradle -p "$app_source" --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2g -PversionCode=1000000000 -PversionName=0.1.2-candidate "$task"
+    cp "$app_source/$apk" "$app_apk"
+    printf '%s\n' "$source_sha" > "$EVIDENCE/app-source-sha.txt"
     printf '%s\n' "0.1.2-candidate$suffix" > "$EVIDENCE/version.txt"
 else
     curl -fsSL "$manifest_url" -o "$EVIDENCE/manifest.json"
@@ -98,4 +105,4 @@ grep -Eq '^Signer #1 certificate SHA-256 digest: [0-9a-fA-F]{64}$' "$EVIDENCE/ap
 grep -Eq '^Signer #1 certificate SHA-256 digest: [0-9a-fA-F]{64}$' "$EVIDENCE/seed-certificate.txt"
 diff <(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$EVIDENCE/apk-certificate.txt") <(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$EVIDENCE/seed-certificate.txt")
 rm "$work/signing.jks"
-rm -f keystore.properties
+rm -f "${app_source:-$GITHUB_WORKSPACE}/keystore.properties"

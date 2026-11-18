@@ -13,9 +13,9 @@ A product change must name every changed outcome. The second-AI verifier require
 - [App name and update](app-name.md): published signed Android in-app update proof.
   - Outcomes: `app-name.journey`. Runner: `app-name.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Late account bot pictures](bot-photo-refresh.md): hosted ViewModel and Compose regressions; seeded picture, not live account sync.
-  - Outcomes: `bot-photo-refresh.journey`. Runner: `test.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
-- [Cancel waiting messages](chat-cancel.md): exact cancellation, surviving order, host receipt and delivered actions, with a recording.
-  - Outcomes: `chat-cancel.journey`. Runner: `verify.yml` (debug).
+  - Outcomes: `bot-photo-refresh.journey`. Runner: `android-full.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
+- [Cancel waiting messages](chat-cancel.md): canonical queued/cancelled states, untouched terminal draft, surviving receipt order and delivered actions, with a recording.
+  - Outcomes: `chat-cancel.journey`. Runner: `verify.yml` (debug). Priority evidence: `cancel-waiting.json` (3000 characters), `cancel-cancelled.json` (3000 characters), `cancel-delivered.json` (5000 characters).
 - [Chat choices](chat-choices.md): latest-reply option taps and live question number keys, with independent SSH/tmux receipts.
   - Outcomes: `chat-choices.journey`. Runner: `verify.yml` (debug).
 - [Codex transcript parity](chat-codex.md): Dispatch `feature=chat-codex.md`. The real Android APK connects through SSH to independent Hax, native Codex, and Claude fixture sessions. Hax and Codex write the same JSONL schemas consumed by desktop. Their terminal output deliberately excludes every transcript reply, ruling out terminal-scrape success.
@@ -94,6 +94,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `legacy.igsh-413`. Runner: `verify.yml` (debug). Priority evidence: `reader-sync.json` (200 characters), `sync-menu-proof.txt` (80 characters).
 - [Bot look choices](bot-look.md): Choose all faces and colours, scroll, dismiss and retain the local appearance after restart. SOFT-2653.
   - Outcomes: `bot.look`. Runner: `verify.yml` (debug). Priority evidence: `bot-look-top.json` (1000 characters), `bot-look-bottom.json` (1500 characters), `bot-look-retained-face.json` (1500 characters), `bot-look-retained-auto.json` (1500 characters), `bot-look-proof.txt` (200 characters).
+- [Chat version label](reader-version.md): Open a chat, check the version label beside Session actions, tap it, and open App updates.
+  - Outcomes: `legacy.igsh-426`. Runner: `verify.yml` (debug). Priority evidence: `reader-version.json` (400 characters), `reader-updates.json` (400 characters).
 - [Reader rename and display controls](reader-controls.md): Rename and display, plus 40 reader More, key-validation, pinned-page, attachment and Computer controls with screenshots and independent SSH receipts. SOFT-2669.
   - Outcomes: `reader.controls`. Runner: `verify.yml` (debug). Priority evidence: `reader-controls-renamed.json` (1500 characters), `reader-controls-details-on.json` (1500 characters), `reader-controls-details-off.json` (1500 characters), `reader-controls-sunlight-on.json` (1500 characters), `reader-controls-sunlight-off.json` (1500 characters), `reader-controls-host.txt` (1000 characters), `reader-menu-proof.txt` (100 characters), `reader-menu-end-host.txt` (300 characters).
 - [Reply to a message](message-reply.md): Long-press a Claude bubble, cancel the reply bar, then send a quoted reply with a host receipt.
@@ -102,10 +104,12 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `settings.controls`. Runner: `verify.yml` (debug). Priority evidence: `settings-theme-Sunlight.json` (800 characters), `settings-theme-Dark.json` (800 characters), `settings-font-Small.json` (800 characters), `settings-font-Large.json` (800 characters), `settings-retained.json` (1000 characters), `settings-refresh-host.txt` (2000 characters), `mapping-scroll-bottom.json` (1000 characters), `settings-version.json` (1000 characters).
 - [Inbox buckets and reminders](inbox-reminders.md): Refresh with independent SSH reads; switch inbox buckets and save every reminder preset and custom deadlines. SOFT-2670.
   - Outcomes: `inbox.reminders`. Runner: `verify.yml` (debug). Priority evidence: `inbox-refresh-host.txt` (2000 characters), `bucket-unread-on.json` (500 characters), `reminder-scroll-bottom.json` (1000 characters), `reminder-day2-time.json` (500 characters), `reminder-custom-time.json` (500 characters), `reminder-keyboard-time.json` (500 characters), `reminder-keyboard-waiting.json` (1000 characters), `inbox-reminders-proof.txt` (200 characters).
+- [Account upload key](screencast-account.md): Signed-in image selection without typing a Screencast2 key, with authenticated account receipts.
+  - Outcomes: `upload.account-key`. Runner: `verify.yml` (debug). Prerequisites: Local authenticated account fixture; live production email OTP and successful Screencast2 upload are not exercised. Priority evidence: `screencast-signed-in.json` (2000 characters), `screencast-picker.json` (2000 characters), `screencast-selected.json` (2000 characters), `screencast-account-receipts.txt` (1000 characters).
 
 ## Initial coverage gaps
 
-These IDs are an inventory, not exemptions for future changes. Untouched gaps do not block this migration. Changing one requires its own journey proof. New uncovered IDs fail the ratchet even if another gap was removed. Signed, dedicated and manual routes remain explicit; the debug picker must not select them.
+These IDs are an inventory, not exemptions for future changes. Untouched gaps do not block this migration. Changing one requires its own journey proof. New uncovered IDs fail the ratchet even if another gap was removed. Signed routes run parent/head candidates with their registered inputs. Dedicated and manual routes remain outside the PR picker.
 
 | Outcome | Existing case | Cleanup ticket |
 |---|---|---|
@@ -116,7 +120,6 @@ These IDs are an inventory, not exemptions for future changes. Untouched gaps do
 | `legacy.igsh-434` | IGSH-434 | IGSH-434 |
 | `legacy.igsh-423` | IGSH-423 | IGSH-423 |
 | `legacy.igsh-415` | IGSH-415 | IGSH-415 |
-| `legacy.igsh-426` | IGSH-426 | IGSH-426 |
 | `legacy.igsh-424` | IGSH-424 | IGSH-424 |
 | `legacy.igsh-425` | IGSH-425 | IGSH-425 |
 | `app-name.journey` | app-name.md | SOFT-2531 |
