@@ -132,7 +132,7 @@ tap_text() { [[ "$screen" == Settings ]]; }
         self.assertFalse(any(n.get('text') == 'verify-session' for n in nodes))
         source = (Path(__file__).resolve().parents[2] / '.claude/skills/verify-multiprompt-android/scripts/inbox-controls-drive.sh').read_text()
         helpers = '\n'.join(name + '() {' + source.split(name + '() {', 1)[1].split('\n}', 1)[0] + '\n}'
-                            for name in ['hold_inbox_session', 'open_inbox_reminder'])
+                            for name in ['hold_inbox_session', 'find_inbox_session', 'open_inbox_reminder'])
         shell = '''search_open=false
 searched=false
 cleared=false
@@ -165,7 +165,8 @@ adb() {
     fi
 }
 tap_text() { [[ "$1" == 'Remind Me…' ]]; }
-''' + helpers + '\nopen_inbox_reminder\nopen_inbox_reminder\n'
+inbox_control_state() { [[ "$searched" == true && "$1" == inbox-refreshed ]]; }
+''' + helpers + '\n' + source.split('tap_text Refresh\n', 1)[1].split('\nsudo cat', 1)[0] + '\nopen_inbox_reminder\nopen_inbox_reminder\n'
         result = subprocess.run(['bash', '-ec', shell], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 

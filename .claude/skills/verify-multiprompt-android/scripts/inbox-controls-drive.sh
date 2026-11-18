@@ -113,7 +113,7 @@ hold_inbox_session() {
     read -r x y <<< "$point"
     adb shell input swipe "$x" "$y" "$x" "$y" 800
 }
-open_inbox_reminder() {
+find_inbox_session() {
     if ! select_node desc 'Close session search' >/dev/null 2>&1; then
         tap_desc 'Search sessions'
         select_node focused-field '' >/dev/null
@@ -124,6 +124,10 @@ open_inbox_reminder() {
         adb shell input keyevent KEYCODE_BACK
     fi
     wait_for_text '1 result across all splits'
+    tap_node desc 'Robot verify-session' reveal
+}
+open_inbox_reminder() {
+    find_inbox_session
     hold_inbox_session
     tap_text 'Remind Me…'
     wait_for_text 'Remind me'
@@ -151,7 +155,7 @@ reminder_timezone=${reminder_timezone:-Etc/UTC}
 sudo cat /home/verifyssh/commands.log > "$EVIDENCE/inbox-refresh-before.txt"
 tap_desc 'Session list actions'
 tap_text Refresh
-wait_for_text verify-session
+find_inbox_session
 inbox_control_state inbox-refreshed '{"text":["Inbox","verify-session"],"absent":["Settings","Refresh"]}'
 sudo cat /home/verifyssh/commands.log > "$EVIDENCE/inbox-refresh-after.txt"
 python3 - "$EVIDENCE/inbox-refresh-before.txt" "$EVIDENCE/inbox-refresh-after.txt" > "$EVIDENCE/inbox-refresh-host.txt" <<'PY'
