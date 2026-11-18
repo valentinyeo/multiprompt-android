@@ -4,7 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import dev.multiprompt.companion.security.SecretStore
+import dev.multiprompt.companion.security.SecretStorage
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.security.SecureRandom
@@ -19,13 +19,33 @@ import org.json.JSONObject
 
 class ScreencastUploader(
     context: Context,
-    private val secrets: SecretStore,
+    private val secrets: SecretStorage,
+    private val accountId: () -> String? = { null },
+    private val accountKey: suspend () -> String? = { null },
 ) {
     private val appContext = context.applicationContext
     private val client = OkHttpClient()
 
     val configured: Boolean
-        get() = secrets.get(SECRET_ID) != null
+        get() = cachedSecret() != null
+
+    suspend fun prepare(): Boolean = resolveSecret() != null
+
+    private fun cachedSecret(): String? =
+        accountId()?.let { secrets.get("${SECRET_ID}_account_$it") }
+            ?.toString(Charsets.UTF_8)?.ifBlank { null }
+            ?: secrets.get(SECRET_ID)?.toString(Charsets.UTF_8)?.ifBlank { null }
+
+    private suspend fun resolveSecret(): String? = withContext(Dispatchers.IO) {
+        val account = accountId()
+        if (account != null) {
+            val key = accountKey()
+            if (key != null && account == accountId()) {
+                secrets.put("${SECRET_ID}_account_$account", key.toByteArray(Charsets.UTF_8))
+            }
+        }
+        cachedSecret()
+    }
 
     fun saveSecret(value: String): Boolean {
         val secret = value.trim()
@@ -35,8 +55,7 @@ class ScreencastUploader(
     }
 
     suspend fun upload(uri: Uri): String = withContext(Dispatchers.IO) {
-        val secret = secrets.get(SECRET_ID)?.toString(Charsets.UTF_8)?.ifBlank { null }
-            ?: error("Add the Screencast2 upload key first")
+        val secret = resolveSecret() ?: error("Add the Screencast2 upload key first")
         val png = imageAsPng(uri)
         val id = randomId()
         val body = MultipartBody.Builder()
