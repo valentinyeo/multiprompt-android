@@ -113,6 +113,14 @@ PY
     wait_for_text 'App updates'
     inbox_control_state settings-version '{"text":["App updates"],"absent":["Session list settings"]}'
     printf 'SETTINGS_MAPPING_NAVIGATION_CONTROLS_OK\n' | tee "$EVIDENCE/settings-controls-proof.txt"
+    if [[ "${BREAK_IT_MODE:-}" == true ]]; then
+        adb shell input keyevent KEYCODE_BACK
+        wait_for_text Inbox
+        tap_text All
+        tap_text verify-session
+        wait_for_text 'Message verify-session'
+        source "$scripts/ai-switch-drive.sh"
+    fi
     exit 0
 fi
 switch_inbox_bucket() {

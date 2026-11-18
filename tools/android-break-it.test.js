@@ -164,6 +164,45 @@ test('a fresh replay restores the same APK and its install-time permissions afte
   assert.match(source, /adb shell pm clear dev\.multiprompt\.companion\.debug \| grep -Fx Success\nadb install -r -g "\$VERIFY_APK"\n"\$scripts\/fixture\.sh"/);
 });
 
+test('settings-controls stress replay records the five checkpoints on the reader-version chat path', t => {
+  const root = path.join(__dirname, '..');
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+  const readerTail = read('.claude/skills/verify-multiprompt-android/scripts/reader-version-drive.sh');
+  const continuation = readerTail.slice(readerTail.indexOf('adb shell input keyevent KEYCODE_BACK'));
+  const settings = read('.claude/skills/verify-multiprompt-android/scripts/inbox-controls-drive.sh');
+  const proofLine = settings.indexOf("printf 'SETTINGS_MAPPING_NAVIGATION_CONTROLS_OK");
+  const block = settings.slice(proofLine, settings.indexOf('\nfi', proofLine));
+  assert.match(block, /if \[\[ "\$\{BREAK_IT_MODE:-\}" == true \]\]; then/);
+  for (const line of continuation.trim().split('\n')) assert.ok(block.includes(line), line);
+  assert.ok(block.trimEnd().endsWith('exit 0'));
+  const fixture = read('.claude/skills/verify-multiprompt-android/scripts/fixture.sh');
+  const logger = fixture.indexOf('settings-controls.md');
+  const remap = fixture.indexOf('VERIFY_FEATURE=ai-switch.md');
+  assert.ok(logger > 0 && logger < remap);
+  assert.match(fixture, /== reader-version\.md \]\] \|\| \[\[ "\$\{VERIFY_FEATURE:-\}" == settings-controls\.md && "\$\{BREAK_IT_MODE:-\}" == true \]\]; then\n {4}VERIFY_FEATURE=ai-switch\.md/);
+  const evidence = retained(t);
+  const reportPath = path.join(evidence.dir, 'result.json');
+  const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+  report.journey = 'settings-controls.md';
+  fs.writeFileSync(reportPath, JSON.stringify(report));
+  assert.deepEqual(proof.inspect(evidence.root, 'settings-controls.md', sha).errors, []);
+  for (const stress of proof.STRESSES) fs.rmSync(path.join(evidence.dir, `${stress}.txt`));
+  const failed = proof.inspect(evidence.root, 'settings-controls.md', sha);
+  for (const stress of proof.STRESSES) {
+    assert.ok(failed.errors.includes(`BREAK_IT_FAILED: settings-controls.md: ${stress} checkpoint missing, failed or missing screenshot/text evidence`));
+  }
+  const stub = fs.mkdtempSync(path.join(os.tmpdir(), 'settings-stress-'));
+  t.after(() => fs.rmSync(stub, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(stub, 'ai-switch-drive.sh'), 'printf SOURCED\\n');
+  const tail = block.slice(block.indexOf('if [[ "${BREAK_IT_MODE:-}" == true ]]; then'), block.lastIndexOf('exit 0'));
+  const harness = `adb() { :; }\nwait_for_text() { :; }\ntap_text() { :; }\n${tail}`;
+  for (const mode of ['true', 'false']) {
+    const run = spawnSync('bash', ['-euo', 'pipefail', '-c', harness], { env: { ...process.env, BREAK_IT_MODE: mode, scripts: stub }, encoding: 'utf8' });
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(run.stdout.includes('SOURCED'), mode === 'true');
+  }
+});
+
 test('verification tooling is not an Android repair merely because its ticket mentions bugs', () => {
   assert.equal(verifier.isBugFix({ title: 'IGSH-2658: stress checks', changeKind: 'tooling', tickets: { 'IGSH-2658': 'Agents try to break every Android bug fix' } }), false);
   assert.equal(verifier.isBugFix({ title: 'IGSH-2658: stress checks', changeKind: 'product', tickets: { 'IGSH-2658': 'Agents try to break every Android bug fix' } }), true);
