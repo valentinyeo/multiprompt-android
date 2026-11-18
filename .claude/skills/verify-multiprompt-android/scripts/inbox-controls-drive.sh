@@ -166,6 +166,12 @@ if [[ "$feature" == inbox-reminders.md ]]; then
     inbox_control_state folder-bar-middle-reopened '{"folder":"Folder 06"}'
     tap_folder All
     printf 'FOLDER_BAR_SELECTED_FULLY_VISIBLE_OK\n' | tee "$EVIDENCE/folder-bar-proof.txt"
+    open_inbox_settings
+    tap_text 'Sign out'
+    wait_for_text 'Use without account (debug)'
+    tap_text 'Use without account (debug)'
+    wait_for_text Inbox
+    tap_text All
 fi
 switch_inbox_bucket() {
     tap_desc 'Switch session bucket'

@@ -10,7 +10,7 @@ Before the reminder cases, block HTTP through an emulator-local closed proxy por
 
 `folder-bar-reopened.json` and `folder-bar-middle-reopened.json` require the complete clickable pill and both text paddings inside the horizontal viewport, clear of the edge fades. Screenshot pixels at both rounded ends must match the solid selected fill. Every state keeps its numbered PNG/XML pair. The unchanged parent must fail a product assertion after restart, retaining the hidden selected folder and the old solid bar as the before screenshot.
 
-In the bug-fix break-it replay, the journey finishes in the fixture reader with a non-empty draft. The shared stress driver checks rotation, background/return, another chat and slow networking on that same APK.
+After the folder assertions, sign out through Settings and choose the debug guest path. This removes the temporary account's synthetic rows before the existing reminder cases. In the bug-fix break-it replay, use the same live reader fixture as the settings stress journey and finish in its reader with a non-empty draft. The shared stress driver checks rotation, background/return, another chat and slow networking on that same APK.
 
 ## Journey
 
