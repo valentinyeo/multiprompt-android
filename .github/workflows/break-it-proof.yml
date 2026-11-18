@@ -2,12 +2,11 @@ name: Break-it harness proof
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - tools/android-break-it/**
-      - tools/android-break-it.test.js
-      - .github/scripts/pstack-verifier/break-it.cjs
-      - .github/workflows/break-it-proof.yml
+    inputs:
+      features:
+        description: JSON array of registered journeys to stress
+        type: string
+        default: '["chat-cancel.md", "ai-switch.md"]'
 
 permissions:
   contents: read
@@ -22,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        feature: [chat-search.md, native-skills.md]
+        feature: ${{ fromJSON(inputs.features) }}
     uses: ./.github/workflows/verify.yml
     with:
       feature: ${{ matrix.feature }}

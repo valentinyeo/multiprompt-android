@@ -51,7 +51,7 @@ test('the replay recorder preserves driver success when the inspector rejects ch
   fs.writeFileSync(path.join(fixture.root, 'app-source-sha.txt'), sha);
   const source = fs.readFileSync(path.join(__dirname, 'android-break-it/run.sh'), 'utf8');
   const recorder = source.slice(source.indexOf('write_result() {'), source.indexOf('\nrecord() {'));
-  const script = `root="$EVIDENCE"; VERIFY_FEATURE=ai-switch.md; VERIFY_APK="$root/app.apk"; started=$SECONDS; phase=inspector\n${recorder}\nwrite_result 1`;
+  const script = `root="$EVIDENCE"; journey=ai-switch.md; VERIFY_APK="$root/app.apk"; started=$SECONDS; phase=inspector\n${recorder}\nwrite_result 1`;
   const run = spawnSync('bash', ['-euo', 'pipefail', '-c', script], { env: { ...process.env, EVIDENCE: fixture.root }, encoding: 'utf8' });
   assert.equal(run.status, 0, run.stderr);
   const report = JSON.parse(fs.readFileSync(path.join(fixture.dir, 'result.json')));
