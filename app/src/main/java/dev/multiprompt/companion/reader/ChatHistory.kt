@@ -82,6 +82,13 @@ data class ChatHistory(
         val transcript = transcript(source)
         val latest = transcript.filter { it.role == "user" }.mapNotNull { LegacyMessageIdentity.seconds(it.timestamp) }.maxOrNull()
         val host = replica?.host ?: HostStream()
+        val aliases = HashMap<String, String>()
+        host.sentRows.forEach { (id, uuids) -> (uuids + id).forEach { aliases[it] = id } }
+        scoped.forEach { aliases[it.id] = it.id }
+        waitingIds.forEach { aliases.putIfAbsent(it, it) }
+        val canonical = scoped.associateBy { it.id }
+        val latestPosition = transcript.filter { it.role == "user" }
+            .mapNotNull { canonical[aliases[it.requestId]]?.position }.maxOrNull()
         val cards = if (sent == null) scoped.filter { it.state != MessageProtocol.State.CANCELLED }.sortedBy { it.position }.map { row ->
             val notSent = notSent(row, now, seen[row.id])
             Card(ChatHistoryMessage("@shared:${row.id}", "user", row.text, "", 0, 0, row.id,
@@ -90,7 +97,8 @@ data class ChatHistory(
                 cancellable = cancellable(row, now, seen[row.id])),
                 host.sentRows[row.id].orEmpty().toSet() + row.id,
                 visible = row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT, MessageProtocol.State.FAILED) ||
-                    row.id == host.messageId || latest == null || latest <= row.created + CLOCK_SLACK,
+                    (latestPosition?.let { row.position > it }
+                        ?: (row.id == host.messageId || latest == null || latest <= row.created + CLOCK_SLACK)),
                 shared = row)
         } else {
             val local = sent.filter { it.sid.isEmpty() || sid.isEmpty() || it.sid == sid }
@@ -137,10 +145,6 @@ data class ChatHistory(
                 floor = maxOf(floor, index)
             }
         }
-        val aliases = HashMap<String, String>()
-        host.sentRows.forEach { (id, uuids) -> (uuids + id).forEach { aliases[it] = id } }
-        scoped.forEach { aliases[it.id] = it.id }
-        waitingIds.forEach { aliases.putIfAbsent(it, it) }
         val projected = LinkedHashMap<String, ChatHistoryMessage>()
         val replyOwners = HashMap<Int, ChatHistoryMessage>()
         var replyOwner: ChatHistoryMessage? = null
@@ -162,7 +166,9 @@ data class ChatHistory(
         val replies = LinkedHashMap<String, MutableList<HostBlock>>()
         val unmatched = mutableListOf<HostBlock>()
         val matchedReplies = HashSet<Int>()
+        val hiddenIds = cards.filter { !it.visible && it.message.key !in placed }.mapNotNull { it.shared?.id }.toSet()
         for (block in blocks) {
+            if (block.messageId in hiddenIds) continue
             val index = transcript.indices.firstOrNull { index ->
                 val message = transcript[index]
                 index !in matchedReplies && message.role == "assistant" &&
@@ -191,7 +197,6 @@ data class ChatHistory(
         unmatched.filter { it.turn != host.turn }.forEach(::appendReply)
         cards.filter { it.message.key !in placed && it.visible }.forEach { append(it.message) }
         replies.values.flatten().forEach(::appendReply)
-        val canonical = scoped.associateBy { it.id }
         unresolved.filter { it.operation == "submit" && it.scope.sid == sid && canonical[it.messageId]?.text != it.text }.forEach { entry ->
             val key = if (entry.messageId in canonical) "@unknown:${entry.id}" else "@shared:${entry.messageId}"
             if (projected.values.none { it.role == "user" && it.requestId == entry.messageId && it.text == entry.text }) {

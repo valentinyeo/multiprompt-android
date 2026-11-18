@@ -66,6 +66,8 @@ for phase, text in [('open', 'DESKTOP_CHAT_READY_2681'), ('draft', 'PHONE_BEFORE
     file = files[0]
     nodes = list(ET.parse(file).getroot().iter('node'))
     assert any(node.get('text') == text for node in nodes), (phase, text)
+    if phase in ('after', 'phone-after'):
+        assert not any('OLD_INCOMING_2681_' in node.get('text', '') for node in nodes), phase
     assert file.with_suffix('.png').stat().st_size > 100
     states[phase] = dict(xml=file.name, screenshot=file.with_suffix('.png').name, text=text)
 root.joinpath('host-restart-state.json').write_text(json.dumps(states, indent=2) + '\n')

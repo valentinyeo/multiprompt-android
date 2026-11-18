@@ -1623,6 +1623,7 @@ if [[ "$feature" == chat-identity.md ]]; then
     tap_text verify-session
     wait_for_text REPLY_AFTER_2532
     projection_assert reconnect
+    break_it_stream_send "$EVIDENCE/projection-receipts-reconnect.json"
     printf 'MESSAGE_PROJECTION_RECEIPTS_AND_ROWS_OK\n' | tee "$EVIDENCE/projection-proof.txt"
     exit 0
 fi

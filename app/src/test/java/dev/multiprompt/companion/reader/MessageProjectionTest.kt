@@ -50,6 +50,15 @@ class MessageProjectionTest {
         once(history.projectMessages(replica(listOf(old, current), emptyList())), listOf("current question", "answer 2"))
     }
 
+    @Test fun carriedRepliesOutsideTheArchiveTailDoNotReappearAfterTheNewestReply() {
+        val old = row(1)
+        val current = row(2)
+        val history = ChatHistory(sid = sid, inode = 8, rows = listOf(
+            user(2, current.id).copy(timestamp = "2026-11-13T11:00:02.123456"), reply(2),
+        ))
+        once(history.projectMessages(replica(listOf(old, current), host(1))), listOf("same", "answer 2"))
+    }
+
     @Test fun newerAcceptedMessagesRemainVisibleUntilTheirHistoryArrives() {
         val current = row(1).copy(text = "current question")
         val newer = row(2).copy(text = "new incoming")
