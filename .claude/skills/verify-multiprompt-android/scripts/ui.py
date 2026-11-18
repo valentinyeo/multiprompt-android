@@ -37,7 +37,7 @@ for node in root.iter("node"):
         matches.append(node)
     elif mode in ("desc", "checked", "unchecked", "key-row") and value == node.get("content-desc"):
         matches.append(node)
-    elif mode == "editor" and node.get("class") == "android.widget.EditText" and node.get("package") == package:
+    elif mode in ("editor", "editor-value") and node.get("class") == "android.widget.EditText" and node.get("package") == package:
         matches.append(node)
     elif mode == "field-value" and node.get("class") == "android.widget.EditText" and node.get("focused") == "true":
         matches.append(node)
@@ -69,9 +69,9 @@ if mode == "key-row":
         raise SystemExit("Terminal key row is not scrollable")
 if mode == "focused-field" and node.get("focused") != "true":
     raise SystemExit(f"Field is not focused: {value}")
-if mode == "field-value":
+if mode in ("field-value", "editor-value"):
     expected = sys.argv[4]
-    if (not expected or node.get("password") != "true") and node.get("text") != expected:
+    if (mode == "editor-value" or not expected or node.get("password") != "true") and node.get("text") != expected:
         raise SystemExit(f"Field {value} has {node.get('text')!r}, expected {expected!r}")
     print("FIELD_VALUE_VERIFIED")
     raise SystemExit(0)

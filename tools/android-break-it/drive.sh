@@ -28,13 +28,10 @@ break_it_restore() {
 break_it_require_draft() {
     local attempt
     for attempt in {1..30}; do
-        if select_node field "$1" >/dev/null 2>&1; then break; fi
+        if select_node editor '' >/dev/null 2>&1; then break; fi
         sleep 1
     done
-    tap_node field "$1"
-    dump_ui
-    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value "$1" "$2"
-    adb shell input keyevent KEYCODE_BACK
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" editor-value "$1" "$2"
 }
 break_it_draft() {
     [[ "${BREAK_IT_MODE:-}" == true && "$break_it_started" == false && "$1" == Message\ * && -n "$2" ]] || return 0

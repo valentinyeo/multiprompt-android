@@ -104,7 +104,7 @@ test('draft readback survives lost focus without relying on an empty-field place
         printf '<hierarchy><node package="dev.multiprompt.companion.debug" class="android.widget.EditText" text="%s" content-desc="Message verify-session" focused="%s" bounds="[0,0][100,100]"/></hierarchy>' "$OBSERVED" "$focused" > "$EVIDENCE/current.xml"
       }
       select_node() { dump_ui; python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "$1" "$2"; }
-      tap_node() { focused=true; }
+      tap_node() { printf 'Unexpected focus change' >&2; return 1; }
       adb() { :; }
       break_it_require_draft 'Message verify-session' PHONE_AFTER_SWITCH_2538
     `;
@@ -116,6 +116,14 @@ test('draft readback survives lost focus without relying on an empty-field place
       assert.notEqual(run.status, 0);
       assert.match(run.stderr, /expected 'PHONE_AFTER_SWITCH_2538'/);
     }
+  }
+});
+
+test('retained landscape XML accepts the real draft and rejects the planted loss without a placeholder or focus', () => {
+  for (const [file, passed] of [['rotation-draft.xml', true], ['rotation-lost.xml', false]]) {
+    const run = spawnSync('python3', ['-B', path.join(__dirname, '../.claude/skills/verify-multiprompt-android/scripts/ui.py'), path.join(__dirname, 'fixtures/android-break-it', file), 'editor-value', 'Message verify-session', 'PHONE_AFTER_SWITCH_2538'], { encoding: 'utf8' });
+    assert.equal(run.status === 0, passed, run.stderr);
+    if (!passed) assert.match(run.stderr, /has '', expected 'PHONE_AFTER_SWITCH_2538'/);
   }
 });
 
