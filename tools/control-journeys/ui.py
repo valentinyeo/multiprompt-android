@@ -24,13 +24,60 @@ def check(xml, screenshot, phase, value=''):
 
     texts = [n.get('text', '') for n in nodes]
     descriptions = [n.get('content-desc', '') for n in nodes]
-    assert nodes, 'Missing app UI'
+    assert nodes or phase == 'surface', 'Missing app UI'
 
     def visible(node):
         bounds = list(map(int, re.findall(r'-?\d+', node.get('bounds', ''))))
         return (len(bounds) == 4 and 0 <= bounds[0] < bounds[2] <= width
                 and 0 <= bounds[1] < bounds[3] <= height)
 
+    if phase == 'surface':
+        expected = json.loads(value)
+        root = ET.parse(xml).getroot()
+        active = list(root)[-1]
+        nodes = list(active.iter('node'))
+        parents = {child: parent for parent in nodes for child in parent}
+
+        def shown(node):
+            if not visible(node):
+                return False
+            current = node
+            while current is not None:
+                if current.get('visible-to-user') == 'false':
+                    return False
+                if current.get('scrollable') == 'true':
+                    a, b, c, d = map(int, re.findall(r'-?\d+', current.get('bounds', '')))
+                    x, y, right, bottom = map(int, re.findall(r'-?\d+', node.get('bounds', '')))
+                    if not (a <= x < right <= c and b <= y < bottom <= d):
+                        return False
+                current = parents.get(current)
+            return True
+
+        for attribute, key in [('text', 'text'), ('content-desc', 'desc')]:
+            for label in expected.get(key, []):
+                assert any(n.get(attribute) == label and shown(n) for n in nodes), f'Missing visible {key}: {label}'
+        for label in expected.get('absent', []):
+            assert not any(n.get('text') == label or n.get('content-desc') == label for n in nodes), f'Unexpected surface: {label}'
+        if 'field' in expected:
+            fields = [n for n in nodes if n.get('class') == 'android.widget.EditText' and shown(n)]
+            assert len(fields) == 1 and fields[0].get('text') == expected['field'], 'Wrong editor value'
+        for label, marked in expected.get('marked', {}).items():
+            matches = [n for n in nodes if n.get('text') == label and shown(n)]
+            assert len(matches) == 1, f'Missing marked row: {label}'
+            node = matches[0]
+            while node.get('clickable') != 'true' and node in parents:
+                node = parents[node]
+            assert node.get('clickable') == 'true', f'Missing row action: {label}'
+            assert any(n.get('text') == '✓' for n in node.iter('node')) == marked, f'Wrong checkmark: {label}'
+        for label in expected.get('disabled', []):
+            matches = [n for n in nodes if n.get('text') == label and shown(n)]
+            assert len(matches) == 1, f'Missing disabled row: {label}'
+            node = matches[0]
+            while node.get('enabled') != 'false' and node in parents:
+                node = parents[node]
+            assert node.get('enabled') == 'false', f'Row is enabled: {label}'
+        return dict(phase=phase, expected=expected, xml=Path(xml).name,
+                    screenshot=Path(screenshot).name)
     if phase in ('face', 'colour', 'auto'):
         assert 'Bot look' in texts
         label = {'face': f'Face {value}', 'colour': f'Colour {value}', 'auto': 'Auto'}[phase]
