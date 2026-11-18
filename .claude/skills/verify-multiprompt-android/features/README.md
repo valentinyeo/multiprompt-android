@@ -106,6 +106,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `inbox.reminders`. Runner: `verify.yml` (debug). Priority evidence: `inbox-refresh-host.txt` (2000 characters), `bucket-unread-on.json` (500 characters), `reminder-scroll-bottom.json` (1000 characters), `reminder-day2-time.json` (500 characters), `reminder-custom-time.json` (500 characters), `reminder-keyboard-time.json` (500 characters), `reminder-keyboard-waiting.json` (1000 characters), `inbox-reminders-proof.txt` (200 characters).
 - [Account upload key](screencast-account.md): Signed-in image selection without typing a Screencast2 key, with authenticated account receipts.
   - Outcomes: `upload.account-key`. Runner: `verify.yml` (debug). Prerequisites: Local authenticated account fixture; live production email OTP and successful Screencast2 upload are not exercised. Priority evidence: `screencast-signed-in.json` (2000 characters), `screencast-picker.json` (2000 characters), `screencast-selected.json` (2000 characters), `screencast-account-receipts.txt` (1000 characters).
+- [Inbox folder bar](folder-bar.md): Selected last/middle folders remain fully visible on selection and restart; overflow fades over a transparent bar. SOFT-2706.
+  - Outcomes: `inbox.folder-bar`. Runner: `verify.yml` (debug). Priority evidence: `folder-bar-reopened.json` (1800 characters), `folder-bar-middle-reopened.json` (1400 characters), `folder-bar-all.json` (1400 characters), `folder-bar-proof.txt` (200 characters).
 
 ## Initial coverage gaps
 

@@ -956,6 +956,11 @@ PYINFO
     exit 0
 fi
 
+if [[ "$feature" == folder-bar.md ]]; then
+    source "$scripts/folder-bar-drive.sh"
+    exit 0
+fi
+
 if [[ "$feature" == settings-controls.md || "$feature" == inbox-reminders.md ]]; then
     source "$scripts/inbox-controls-drive.sh"
     exit 0

@@ -57,7 +57,32 @@ def check(xml, screenshot, expected):
     for label in expected.get('selected', []):
         node = choice(label)
         assert node.get('selected') == 'true' or node.get('checked') == 'true', f'Choice not selected: {label}'
-    return dict(xml=Path(xml).name, screenshot=Path(screenshot).name, asserted=expected,
+    folder_geometry = None
+    if label := expected.get('folder'):
+        node = choice(label)
+        assert node.get('selected') == 'true' or node.get('checked') == 'true', f'Folder not selected: {label}'
+        assert visible(node), f'Folder pill clipped: {label}'
+        left, top, right, bottom = bounds(node)
+        text_left, _, text_right, _ = bounds(matches(label)[0])
+        density = (bottom - top) / 48
+        assert text_left - left >= 23 * density and right - text_right >= 23 * density, f'Folder pill padding clipped: {label}'
+        viewport = parents.get(node)
+        while viewport is not None and viewport.get('scrollable') != 'true':
+            viewport = parents.get(viewport)
+        assert viewport is not None, 'Missing folder scroll viewport'
+        x1, _, x2, _ = bounds(viewport)
+        assert left - x1 >= 11 * density and x2 - right >= 11 * density, f'Folder pill inside edge fade: {label}'
+        from PIL import Image
+        pixels = Image.open(screenshot).convert('RGB')
+        center_y = (top + bottom) // 2
+        center = pixels.getpixel(((left + right) // 2, top + max(2, int(3 * density))))
+        assert all(abs(a - b) <= 5 for point in [(left + int(3 * density), center_y), (right - int(3 * density), center_y)]
+                   for a, b in zip(pixels.getpixel(point), center)), 'Selected pill is faded or clipped'
+        folder_geometry = dict(pill=bounds(node), text=bounds(matches(label)[0]), viewport=bounds(viewport),
+                               density=density, fade_clearance=[left - x1, x2 - right], fill_rgb=center,
+                               end_rgb=[pixels.getpixel((left + int(3 * density), center_y)),
+                                        pixels.getpixel((right - int(3 * density), center_y))])
+    return dict(xml=Path(xml).name, screenshot=Path(screenshot).name, asserted=expected, folder_geometry=folder_geometry,
                 texts=[n.get('text') for n in nodes if n.get('text') and visible(n)])
 
 

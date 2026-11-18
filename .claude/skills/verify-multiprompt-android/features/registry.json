@@ -1007,6 +1007,29 @@
         "screencast-selected.json": 2000,
         "screencast-account-receipts.txt": 1000
       }
+    },
+    "folder-bar.md": {
+      "name": "Inbox folder bar",
+      "description": "Selected last/middle folders remain fully visible on selection and restart; overflow fades over a transparent bar. SOFT-2706.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/folder-bar-drive.sh"
+        ]
+      },
+      "outcomes": [
+        "inbox.folder-bar"
+      ],
+      "evidence": {
+        "folder-bar-reopened.json": 1800,
+        "folder-bar-middle-reopened.json": 1400,
+        "folder-bar-all.json": 1400,
+        "folder-bar-proof.txt": 200
+      }
     }
   },
   "outcomes": {
@@ -1588,6 +1611,24 @@
       "match": [
         "ScreencastAccountKey|ScreencastUploader|screencastKey|screencast\\.prepare"
       ]
+    },
+    "inbox.folder-bar": {
+      "description": "The selected inbox folder stays fully visible on open and change; overflow fades at transparent bar edges. SOFT-2706.",
+      "journey": "folder-bar.md",
+      "sideEffect": false,
+      "match": [
+        "splitScrollState|displayedWorkspaceSplitIds|folder-bar|Modifier.findPin\\(state.selectedWorkspaceId"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tap_text 'Folder 09'"
+        },
+        "result": {
+          "file": "folder-bar-reopened.json",
+          "quote": "\"folder\": \"Folder 09\""
+        }
+      }
     }
   }
 }
