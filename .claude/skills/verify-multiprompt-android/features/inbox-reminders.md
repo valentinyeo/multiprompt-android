@@ -7,7 +7,7 @@ Use the shared disposable SSH fixture and its real `verify-session` row.
 ## Journey
 
 Each assertion saves a numbered PNG/XML pair and a JSON result through `tools/inbox-controls/ui.py`.
-Taps use `tap_text` or `tap_desc`; row long presses resolve the visible text after the shared driver reveals the full row.
+Taps use `tap_text` or `tap_desc`; row long presses resolve the robot description after the shared driver reveals the exact search result. This avoids confusing the session title with the identical search-box text.
 
 1. Open **Session list actions → Refresh**. Require the inbox and `verify-session`, without the menu. Compare independent SSH command logs before and after and require a new `list-sessions` command.
 2. Tap **Switch session bucket**. Require **Inbox**, **Waiting**, **Archive** and **Unread only**. Press Android **Back** and require the menu gone. Select **Waiting**, **Archive** and **Inbox**, asserting each destination. Enable and disable **Unread only**, asserting the **Inbox · Unread** title and its removal.

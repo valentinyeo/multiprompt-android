@@ -131,17 +131,26 @@ tap_text() { [[ "$screen" == Settings ]]; }
         self.assertTrue(any(n.get('content-desc') == 'Robot verify-session' for n in nodes))
         self.assertFalse(any(n.get('text') == 'verify-session' for n in nodes))
         source = (Path(__file__).resolve().parents[2] / '.claude/skills/verify-multiprompt-android/scripts/inbox-controls-drive.sh').read_text()
-        helper = 'open_inbox_reminder() {' + source.split('open_inbox_reminder() {', 1)[1].split('\n}', 1)[0] + '\n}'
+        helpers = '\n'.join(name + '() {' + source.split(name + '() {', 1)[1].split('\n}', 1)[0] + '\n}'
+                            for name in ['hold_inbox_session', 'open_inbox_reminder'])
         shell = '''search_open=false
 searched=false
-select_node() { [[ "$search_open" == true && "$2" == 'Close session search' ]]; }
+select_node() {
+    if [[ "$2" == 'Close session search' ]]; then
+        [[ "$search_open" == true ]]
+    else
+        [[ "$searched" == true && "$1" == desc && "$2" == 'Robot verify-session' ]]
+        printf '105 450\\n'
+    fi
+}
 tap_desc() { [[ "$1" == 'Search sessions' ]]; search_open=true; }
 fill() { [[ "$1" == 'Search all sessions' && "$2" == verify-session ]]; searched=true; }
 wait_for_text() { [[ "$1" == 'Remind me' || "$searched" == true && "$1" == '1 result across all splits' ]]; }
-tap_node() { :; }
-hold_text() { [[ "$searched" == true && "$1" == verify-session ]]; }
+tap_node() { [[ "$searched" == true && "$1" == desc && "$2" == 'Robot verify-session' && "$3" == reveal ]]; }
+hold_text() { return 1; }
+adb() { [[ "$*" == 'shell input swipe 105 450 105 450 800' ]]; }
 tap_text() { [[ "$1" == 'Remind Me…' ]]; }
-''' + helper + '\nopen_inbox_reminder\nopen_inbox_reminder\n'
+''' + helpers + '\nopen_inbox_reminder\nopen_inbox_reminder\n'
         result = subprocess.run(['bash', '-ec', shell], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 

@@ -101,14 +101,20 @@ switch_inbox_bucket() {
     tap_text "$1"
     wait_for_text "$1"
 }
+hold_inbox_session() {
+    local point x y
+    tap_node desc 'Robot verify-session' reveal
+    point=$(select_node desc 'Robot verify-session') || return
+    read -r x y <<< "$point"
+    adb shell input swipe "$x" "$y" "$x" "$y" 800
+}
 open_inbox_reminder() {
     if ! select_node desc 'Close session search' >/dev/null 2>&1; then
         tap_desc 'Search sessions'
         fill 'Search all sessions' verify-session
     fi
     wait_for_text '1 result across all splits'
-    tap_node desc 'Robot verify-session' reveal
-    hold_text verify-session
+    hold_inbox_session
     tap_text 'Remind Me…'
     wait_for_text 'Remind me'
 }
@@ -116,7 +122,7 @@ restore_reminded_session() {
     switch_inbox_bucket Waiting
     tap_node desc 'Robot verify-session' reveal
     inbox_control_state "reminder-$1-waiting" '{"text":["Waiting","verify-session"],"absent":["Remind me"]}'
-    hold_text verify-session
+    hold_inbox_session
     tap_text 'Return to open'
     switch_inbox_bucket Inbox
     tap_node desc 'Robot verify-session' reveal
