@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import runpy
 import signal
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -50,6 +51,7 @@ def console():
 
 
 def restart():
+    shutil.copyfile(HOME / '.multiprompt-runtime/reader.py', READER)
     reader = runtime()
     paths = reader['host_paths']('claude', SID)
     owner = json.loads(paths['owner'].read_text())
@@ -70,7 +72,21 @@ def restart():
         time.sleep(.1)
     else:
         raise AssertionError('Fixture replacement host did not start')
-    print(json.dumps(dict(old_pid=old, new_pid=owner['pid'], sid=SID, tmux=TMUX)), flush=True)
+    disconnected = []
+    for line in (HOME / 'host-restart-history-pids.jsonl').read_text().splitlines():
+        pid = json.loads(line)['pid']
+        process = Path('/proc') / str(pid)
+        try:
+            if process.stat().st_uid != os.getuid() or b'--serve' not in (process / 'cmdline').read_bytes():
+                continue
+            os.kill(pid, signal.SIGTERM)
+            disconnected.append(pid)
+        except ProcessLookupError:
+            pass
+        except FileNotFoundError:
+            pass
+    assert disconnected, 'No phone history channel was open at the restart'
+    print(json.dumps(dict(old_pid=old, new_pid=owner['pid'], history_pids=disconnected, sid=SID, tmux=TMUX)), flush=True)
 
 
 def evidence():

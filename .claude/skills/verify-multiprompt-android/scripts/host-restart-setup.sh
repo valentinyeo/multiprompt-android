@@ -2,6 +2,8 @@
 [[ "${GITHUB_ACTIONS:-}" == true ]]
 scripts=$(cd "$(dirname "$0")" && pwd)
 fixture_session=live-verify-session
+sudo install -m 755 "$scripts/host-restart-ssh.py" /home/verifyssh/host-restart-ssh.py
+{ printf 'command="python3 /home/verifyssh/host-restart-ssh.py" '; cat "$FIXTURE/user-key.pub"; } | sudo tee /home/verifyssh/.ssh/authorized_keys >/dev/null
 sudo install -m 755 "$scripts/host-restart-fixture.py" /home/verifyssh/host-restart-fixture.py
 sudo install -m 644 app/src/main/assets/chat_history_reader.py /home/verifyssh/host-restart-reader.py
 sudo -u verifyssh mkdir -p /home/verifyssh/.local/bin

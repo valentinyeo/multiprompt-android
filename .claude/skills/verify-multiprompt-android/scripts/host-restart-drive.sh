@@ -10,7 +10,7 @@ shot host-restart-draft
 tap_desc 'Send prompt'
 wait_for_text REPLY_PHONE_BEFORE_2681
 shot host-restart-before
-host_restart_fixture restart > "$EVIDENCE/host-restart-processes.jsonl"
+host_restart_fixture restart > "$EVIDENCE/host-restart-processes.txt"
 sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/host-restart-reader.py host send claude c001c001-2681-4000-8000-000000002681 DESKTOP_AFTER_2681 > "$EVIDENCE/host-restart-desktop-send.json"
 jq -e '.status == "sent" or .status == "queued"' "$EVIDENCE/host-restart-desktop-send.json"
 host_restart_fixture evidence > "$EVIDENCE/host-restart-host.json"
@@ -36,6 +36,9 @@ import sys
 import xml.etree.ElementTree as ET
 root = Path(sys.argv[1])
 host = json.loads(root.joinpath('host-restart-host.json').read_text())
+process = json.loads(root.joinpath('host-restart-processes.txt').read_text().splitlines()[-1])
+assert process['old_pid'] != process['new_pid'] and process['history_pids'], process
+assert process['sid'] == host['sid'] and process['tmux'] == host['tmux'], process
 expected = ['PHONE_BEFORE_2681', 'DESKTOP_AFTER_2681', 'PHONE_AFTER_2681']
 assert [row['text'] for row in host['receipts']] == expected, host
 assert host['receipts'][0]['pid'] != host['receipts'][1]['pid']

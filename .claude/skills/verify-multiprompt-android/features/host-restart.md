@@ -6,7 +6,8 @@ Outcome `reader.host-restart` covers SOFT-2681.
 1. Open the desktop-hosted Claude chat through real SSH.
 2. Send `PHONE_BEFORE_2681` and require its reply.
 3. Kill only the disposable fixture's recorded host process.
-4. Start its replacement with the same chat identity.
+4. Start its replacement with the same chat identity and published runtime.
+   Drop the fixture's recorded history channel to force reader catch-up.
 5. Send `DESKTOP_AFTER_2681` through the desktop host CLI.
 6. Require `REPLY_DESKTOP_AFTER_2681` on the still-open phone.
 7. Send `PHONE_AFTER_2681` and require its reply.
