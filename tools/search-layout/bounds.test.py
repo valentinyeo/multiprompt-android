@@ -38,6 +38,17 @@ class SearchBoundsTest(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "keyboard is hidden"):
             bounds.check(screen(300, 420), "mInputShown=false\n", WINDOW, "pin-01", "Robot pin-01")
 
+    def test_api35_ime_insets_frame_is_the_keyboard(self):
+        window = "mInputShown=true\nInsetsSource id=3 type=ime frame=[0,1019][1080,1920] visible=true\n"
+        result = bounds.check(screen(491, 617), "", window, "pin-01", "Robot pin-01")
+        self.assertEqual(1019, result["keyboardTop"])
+        self.assertLessEqual(result["rowBottom"], result["keyboardTop"])
+
+    def test_api35_row_under_the_insets_frame_fails(self):
+        window = "mInputShown=true\ntype=ime frame=[0,1019][1080,1920]\n"
+        with self.assertRaisesRegex(SystemExit, "above the keyboard"):
+            bounds.check(screen(1100, 1200), "", window, "pin-01", "Robot pin-01")
+
 
 if __name__ == "__main__":
     unittest.main()

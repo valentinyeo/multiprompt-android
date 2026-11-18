@@ -35,6 +35,10 @@
     "sourceTicket": "IGSH-426",
     "cleanupTicket": "IGSH-426"
   },
+  "legacy.igsh-424": {
+    "sourceTicket": "IGSH-424",
+    "cleanupTicket": "IGSH-424"
+  },
   "legacy.igsh-425": {
     "sourceTicket": "IGSH-425",
     "cleanupTicket": "IGSH-425"

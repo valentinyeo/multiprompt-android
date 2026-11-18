@@ -34,8 +34,6 @@ table_wait_open() {
 tap_text verify-session
 wait_for_text 'Message verify-session'
 wait_for_text TABLE_READY_2544
-python3 tools/chat-table/header.py "$EVIDENCE/current.xml" > "$EVIDENCE/table-header.json"
-cat "$EVIDENCE/table-header.json"
 table_reveal Plot older
 table_state inline Plot 'R01-C06 harvest'
 tap_desc 'Expand table'

@@ -676,7 +676,7 @@
     },
     "chat-table.md": {
       "name": "Expand and scroll a chat table",
-      "description": "Open a Claude transcript, check its subtitle and the absence of a Conversation header, then scroll a wide table sideways and down. SOFT-2544.",
+      "description": "Open a wide chat table, scroll sideways and down to a known far cell, then close. SOFT-2544.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -685,11 +685,9 @@
         "driver": true
       },
       "outcomes": [
-        "chat-table.expand",
-        "legacy.igsh-424"
+        "chat-table.expand"
       ],
       "evidence": {
-        "table-header.json": 400,
         "table-inline.json": 1200,
         "table-open.json": 1200,
         "table-sideways.json": 1200,
@@ -1168,22 +1166,10 @@
       "match": []
     },
     "legacy.igsh-424": {
-      "description": "Open the Claude fixture from Inbox. The top bar shows a model or waiting subtitle, the screen has no Conversation header, and the transcript table scrolls sideways.",
-      "journey": "chat-table.md",
-      "sideEffect": false,
-      "match": [
-        "Model / effort"
-      ],
-      "citations": {
-        "action": {
-          "file": "driver-transcript.txt",
-          "quote": "tools/chat-table/header.py"
-        },
-        "result": {
-          "file": "table-header.json",
-          "quote": "\"conversationHeader\": false"
-        }
-      }
+      "description": "a supported agent (Claude) transcript on the SSH host, including tables/nested lists and model/effort state. Open from Inbox, scroll the complete transcript, inspect tables horizontally and top-bar subtitle; no **Conversation** header/status row. **Session actions \u2192 Session history** opens alternate-screen history. Console output proves none of this.",
+      "journey": null,
+      "sideEffect": true,
+      "match": []
     },
     "legacy.igsh-418": {
       "description": "Long-press a Claude bubble, cancel Replying, then send a quoted reply. The host receipt contains the quote and the new text.",

@@ -13,12 +13,17 @@ def box(node):
 
 
 def ime_top(ime, window):
-    if not re.search(r"mInputShown=true", ime):
+    blob = ime + "\n" + window
+    if not re.search(r"mInputShown=true", blob):
         raise SystemExit("keyboard is hidden")
-    match = re.search(
+    match = None
+    for pattern in (
         r"(?i)inputmethod[\s\S]{0,1200}?mFrame=\[(\d+),(\d+)\]\[(\d+),(\d+)\]",
-        ime + "\n" + window,
-    )
+        r"(?i)type=ime frame=\[(\d+),(\d+)\]\[(\d+),(\d+)\]",
+    ):
+        match = re.search(pattern, blob)
+        if match is not None:
+            break
     if match is None:
         raise SystemExit("keyboard frame missing")
     top = int(match.group(2))
