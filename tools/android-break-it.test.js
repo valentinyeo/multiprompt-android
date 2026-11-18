@@ -85,6 +85,7 @@ test('the shared session-ready event runs all stress before drivers that never f
     fill() { printf 'FILL %s\\n' "$*"; }
     tap_desc() { printf 'ACTION %s\\n' "$*"; }
     shot() { :; }
+    select_node() { return 1; }
     sudo() { printf '{}\\n'; }
     break_it_draft() { break_it_started=true; printf 'FOUR_STRESSES\\n'; }
     break_it_stream_send() { printf 'STREAM_CHECKPOINT\\n'; }
@@ -100,7 +101,7 @@ test('the shared session-ready event runs all stress before drivers that never f
   assert.match(run.stdout, /ACTION Back\nWAIT Inbox\nTAP All/);
   const driver = fs.readFileSync(path.join(__dirname, '../.claude/skills/verify-multiprompt-android/scripts/drive.sh'), 'utf8');
   assert.match(driver, /shot sessions\nbreak_it_ready\n/);
-  assert.match(run.stdout, /TAP live-pi_verify-breakit-probe/);
+  assert.match(run.stdout, /ACTION Search sessions\nFILL Search all sessions live-pi_verify-breakit-probe\nWAIT 1 result across all splits\nACTION Robot live-pi_verify-breakit-probe\nWAIT BREAK_IT_READY/);
   const seed = fs.readFileSync(path.join(__dirname, '../.claude/skills/verify-multiprompt-android/scripts/fixture.sh'), 'utf8');
   assert.match(seed, /new-session -d -s live-pi_verify-breakit-probe[^\n]*'sleep infinity'/);
   assert.match(seed, /rename-window -t live-pi_verify-breakit-probe verify-breakit-probe/);

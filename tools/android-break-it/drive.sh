@@ -36,7 +36,7 @@ break_it_require_draft() {
 }
 break_it_draft() {
     [[ "${BREAK_IT_MODE:-}" == true && "$break_it_started" == false ]] || return 0
-    local label=$1 draft=${2//%s/ } chat=${1#Message } attempt state
+    local label=$1 draft=${2//%s/ } chat=${3:-${1#Message }} attempt state
     state="screen: $label"
     if [[ "$label" == Message\ * ]]; then state="exact unsent draft: $draft"; fi
     break_it_started=true
@@ -66,13 +66,12 @@ break_it_draft() {
         tap_desc Back
         wait_for_text Inbox
         tap_text All
-        tap_text verify-breakit-other
-        wait_for_text 'Message verify-breakit-other'
+        break_it_open_chat verify-breakit-other 'Message verify-breakit-other'
         shot break-it-other-chat
         tap_desc Back
         wait_for_text Inbox
         tap_text All
-        tap_text "$chat"
+        break_it_open_chat "$chat" "$draft"
         break_it_require_draft "$label" "$draft"
         break_it_checkpoint chat-switch "Opened verify-breakit-other and returned to $chat; retained exact draft: $draft"
     fi
@@ -95,14 +94,21 @@ break_it_screen() {
         break_it_draft "$1" ''
     fi
 }
+break_it_open_chat() {
+    if select_node desc 'Close session search' >/dev/null 2>&1; then tap_desc 'Close session search'; fi
+    tap_desc 'Search sessions'
+    fill 'Search all sessions' "$1"
+    wait_for_text '1 result across all splits'
+    tap_desc "Robot $1"
+    wait_for_text "$2"
+}
 break_it_ready() {
     [[ "${BREAK_IT_MODE:-}" == true && "$break_it_started" == false ]] || return 0
     setup_failure=1
-    tap_text live-pi_verify-breakit-probe
-    wait_for_text BREAK_IT_READY
+    break_it_open_chat live-pi_verify-breakit-probe BREAK_IT_READY
     setup_failure=0
     fill 'Message verify-breakit-probe' BREAK_IT_DRAFT_2679
-    break_it_draft 'Message verify-breakit-probe' BREAK_IT_DRAFT_2679
+    break_it_draft 'Message verify-breakit-probe' BREAK_IT_DRAFT_2679 live-pi_verify-breakit-probe
     break_it_active=stream-send
     printf '::group::Break-it 5/5 Send while a reply streams\n'
     fill 'Message verify-breakit-probe' BREAK_IT_STREAM
@@ -118,6 +124,7 @@ break_it_ready() {
     tap_desc Back
     wait_for_text Inbox
     tap_text All
+    if select_node desc 'Close session search' >/dev/null 2>&1; then tap_desc 'Close session search'; fi
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/breakit-fixture.py stop
 }
 break_it_stream_send() {
