@@ -1,0 +1,1 @@
+New shell sessions on servers disconnect at once

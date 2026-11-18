@@ -1,0 +1,1 @@
+Codex chat hides input and cannot queue messages

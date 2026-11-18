@@ -1,0 +1,1 @@
+Multiprompt Chat View: much smaller Stop button, icon only (wireframe first)

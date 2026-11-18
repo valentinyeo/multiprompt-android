@@ -1,0 +1,1 @@
+Multiprompt: three animated dots where the next Claude message will appear while the session is working, like Grok Bot

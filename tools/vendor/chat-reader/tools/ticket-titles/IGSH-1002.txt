@@ -1,0 +1,1 @@
+Multiprompt desktop: close unattached sessions with a key in Show all sessions

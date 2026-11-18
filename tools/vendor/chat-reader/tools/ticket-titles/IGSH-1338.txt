@@ -1,0 +1,1 @@
+Desktop: starred sessions get a yellow dot, not a star

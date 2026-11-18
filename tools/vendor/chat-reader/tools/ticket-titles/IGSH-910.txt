@@ -1,0 +1,1 @@
+Multiprompt desktop Chat View: remove the ETA countdown text from the header

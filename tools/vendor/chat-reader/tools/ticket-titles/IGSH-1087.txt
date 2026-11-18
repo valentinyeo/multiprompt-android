@@ -1,0 +1,1 @@
+Multiprompt desktop: show the VPS screen in the right pane (Computer view)

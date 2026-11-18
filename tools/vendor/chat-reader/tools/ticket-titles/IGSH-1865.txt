@@ -1,0 +1,1 @@
+Chats can list and message each other by name

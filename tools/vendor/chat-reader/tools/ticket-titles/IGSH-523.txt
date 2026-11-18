@@ -1,0 +1,1 @@
+Browser pane: let me close and reopen it when it is stuck and the page never loads

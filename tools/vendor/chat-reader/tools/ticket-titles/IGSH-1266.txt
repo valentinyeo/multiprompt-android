@@ -1,0 +1,1 @@
+Chat messages stay Queued forever: track each message by ID

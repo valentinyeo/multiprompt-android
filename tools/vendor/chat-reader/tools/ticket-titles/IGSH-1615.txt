@@ -1,0 +1,1 @@
+Finish pstack setup: AGENTS.md and a verify skill in every active repo

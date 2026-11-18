@@ -1,0 +1,1 @@
+Multiprompt desktop: click A or B options in Chat View instead of typing

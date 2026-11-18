@@ -1,0 +1,1 @@
+Multiprompt: a hung warning check cancels the whole release

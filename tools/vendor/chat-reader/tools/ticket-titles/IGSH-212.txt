@@ -1,0 +1,1 @@
+zsb: type sends multi-line text into chat composers (newlines fire as Enter)

@@ -1,0 +1,1 @@
+Desktop Chat View: smoother, slightly bolder body text, and let Valentin pick the spacing

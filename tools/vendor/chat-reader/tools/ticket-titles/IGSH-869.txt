@@ -1,0 +1,1 @@
+Multiprompt desktop: Chat View scroll-to-bottom button, thin scrollbar, faster scroll

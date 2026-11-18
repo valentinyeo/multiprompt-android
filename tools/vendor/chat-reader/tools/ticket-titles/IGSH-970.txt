@@ -1,0 +1,1 @@
+Multiprompt desktop: record every freeze so its cause can be found

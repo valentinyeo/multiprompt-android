@@ -1,0 +1,1 @@
+Deepgram key stays with the account, not the PC

@@ -1,0 +1,1 @@
+Workflow structure test stops pinning one ticket's branch

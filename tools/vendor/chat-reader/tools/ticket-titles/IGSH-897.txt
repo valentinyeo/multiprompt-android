@@ -1,0 +1,1 @@
+Multiprompt desktop: tiny dark gray Chat View scrollbar that shows only while scrolling, like Grok Bot

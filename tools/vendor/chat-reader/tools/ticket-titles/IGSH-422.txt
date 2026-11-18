@@ -1,0 +1,1 @@
+Sign in first: sign-in is part of setup on desktop and Android, and the account carries all shared state

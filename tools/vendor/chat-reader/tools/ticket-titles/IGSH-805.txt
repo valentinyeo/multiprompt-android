@@ -1,0 +1,1 @@
+Multiprompt: a black line appeared in the bottom chat bar

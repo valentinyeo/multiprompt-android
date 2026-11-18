@@ -1,0 +1,1 @@
+Live chat host stops the agent after 15 minutes of work

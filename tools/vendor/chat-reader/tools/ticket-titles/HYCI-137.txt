@@ -1,0 +1,1 @@
+Desktop account check loses its two-window starting point

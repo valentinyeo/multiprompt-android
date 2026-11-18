@@ -1,0 +1,1 @@
+Multiprompt: hover must not steal keyboard selection in Ctrl+K and the skill list

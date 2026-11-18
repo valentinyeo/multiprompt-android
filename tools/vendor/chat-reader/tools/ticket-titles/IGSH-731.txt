@@ -1,0 +1,1 @@
+Multiprompt: message box text has no edge smoothing

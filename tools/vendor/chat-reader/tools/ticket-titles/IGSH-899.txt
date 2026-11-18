@@ -1,0 +1,1 @@
+Auto-revert: reopen the ticket from the GitHub workflow, delete the 2-minute VPS poller

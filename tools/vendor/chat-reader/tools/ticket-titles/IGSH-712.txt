@@ -1,0 +1,1 @@
+Multiprompt: Ctrl+Tab to a chat whose browser was asleep paints the browser 50-70 ms late

@@ -1,0 +1,1 @@
+Multiprompt: Alt+Q to the browser puts focus in the web page, not the browser toolbar

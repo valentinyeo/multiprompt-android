@@ -1,0 +1,1 @@
+Multiprompt: inne tabs on Hetzner lose their session after restart

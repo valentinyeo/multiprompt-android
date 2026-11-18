@@ -1,0 +1,1 @@
+Ctrl+K: fold 59 duplicate commands into one each

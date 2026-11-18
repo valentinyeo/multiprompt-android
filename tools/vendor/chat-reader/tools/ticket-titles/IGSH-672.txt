@@ -1,0 +1,1 @@
+Multiprompt: own browser profile for the Inne workspace only (others untouched)

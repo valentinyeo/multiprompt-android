@@ -1,0 +1,1 @@
+Chat View: replies that start with words like Ready, Searching or Editing are hidden

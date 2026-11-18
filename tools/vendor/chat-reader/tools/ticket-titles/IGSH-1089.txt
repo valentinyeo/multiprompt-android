@@ -1,0 +1,1 @@
+Multiprompt desktop: show real color emojis in Chat View

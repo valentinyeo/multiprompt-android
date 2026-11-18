@@ -1,0 +1,1 @@
+Multiprompt sidebar: groups become plain headlines, no fill, no left bar, no chevron

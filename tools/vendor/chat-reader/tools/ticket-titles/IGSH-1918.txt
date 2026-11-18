@@ -1,0 +1,1 @@
+Send alerts over the shared server link, one ssh per server

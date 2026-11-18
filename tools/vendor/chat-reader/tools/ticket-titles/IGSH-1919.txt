@@ -1,0 +1,1 @@
+Messages with a /word to inne chats show Not sent

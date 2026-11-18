@@ -1,0 +1,1 @@
+Tab activity watcher uses 0.3 of a server core: rewrite as one process

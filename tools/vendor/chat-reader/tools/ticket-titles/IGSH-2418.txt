@@ -1,0 +1,1 @@
+Working dots show as soon as you send a message

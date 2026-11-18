@@ -1,0 +1,1 @@
+Multiprompt: remove the CX burn readout and the 44h figure from the usage display

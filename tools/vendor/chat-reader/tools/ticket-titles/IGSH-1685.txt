@@ -1,0 +1,1 @@
+App freezes after Alt+Tab while picking a bot picture

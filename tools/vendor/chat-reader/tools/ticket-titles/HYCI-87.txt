@@ -1,0 +1,1 @@
+Multiprompt checks: build the Windows app once per push

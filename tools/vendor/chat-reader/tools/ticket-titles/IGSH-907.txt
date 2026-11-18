@@ -1,0 +1,1 @@
+Multiprompt desktop Chat View: remove the UK AMBER capacity badge from the header

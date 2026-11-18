@@ -1,0 +1,1 @@
+Desktop: inbox shows newest session on top

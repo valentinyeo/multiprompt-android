@@ -1,0 +1,1 @@
+Messages you sent stay stuck under the newest bot reply

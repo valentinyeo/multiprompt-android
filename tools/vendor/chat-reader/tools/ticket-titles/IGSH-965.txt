@@ -1,0 +1,1 @@
+Multiprompt desktop: send on the far right, and send while dictating stops and sends at once

@@ -1,0 +1,1 @@
+Verify journeys fail at setup or cleanup on GitHub, not on the checked feature

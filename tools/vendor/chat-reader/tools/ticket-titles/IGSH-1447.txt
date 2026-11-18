@@ -1,0 +1,1 @@
+Ctrl+T repo picker says nothing chosen and opens no session

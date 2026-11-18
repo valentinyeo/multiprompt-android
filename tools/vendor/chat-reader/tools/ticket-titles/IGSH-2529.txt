@@ -1,0 +1,1 @@
+Text after a skill command vanishes from the chat bubble

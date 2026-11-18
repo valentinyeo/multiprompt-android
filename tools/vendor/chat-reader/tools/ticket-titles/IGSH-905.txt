@@ -1,0 +1,1 @@
+CI: keep Shift held during composer proof

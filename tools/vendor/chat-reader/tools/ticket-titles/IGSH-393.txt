@@ -1,0 +1,1 @@
+Chat View: drop a non-image file (PDF, log, zip) and send it to the server over ssh

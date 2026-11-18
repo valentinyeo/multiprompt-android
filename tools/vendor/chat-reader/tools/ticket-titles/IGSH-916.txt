@@ -1,0 +1,1 @@
+Chat width checks need reliable sample messages

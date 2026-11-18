@@ -1,0 +1,1 @@
+Multiprompt: runner sessions open empty and come back after closing

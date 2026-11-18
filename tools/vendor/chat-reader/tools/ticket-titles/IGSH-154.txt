@@ -1,0 +1,1 @@
+zsb: app.slack.com never renders in pane, and bridge hangs permanently after a click

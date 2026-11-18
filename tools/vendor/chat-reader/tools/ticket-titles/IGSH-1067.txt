@@ -1,0 +1,1 @@
+Multiprompt desktop: Chat View reloads chats nonstop and burns time

@@ -1,0 +1,1 @@
+Multiprompt: auto-revert check fails on master after a green release

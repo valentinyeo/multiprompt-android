@@ -1,0 +1,1 @@
+Desktop: set a workspace default bot colour in Ctrl+K

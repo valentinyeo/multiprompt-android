@@ -1,0 +1,1 @@
+Inbox icon next to the three dots in the chat header

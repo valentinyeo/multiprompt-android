@@ -1,0 +1,1 @@
+Multiprompt: Ctrl+Tab between sessions is slow when the browser pane is showing

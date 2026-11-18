@@ -1,0 +1,1 @@
+Multiprompt desktop Chat View: round mic when idle, timer and wave while dictating

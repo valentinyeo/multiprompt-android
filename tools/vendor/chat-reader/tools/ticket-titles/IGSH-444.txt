@@ -1,0 +1,1 @@
+Desktop: smooth (anti-aliased) edges on the inbox icon, the Send button and every other rounded shape

@@ -1,0 +1,1 @@
+Multiprompt desktop: text fragments show outside the floating title and message outlines

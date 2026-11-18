@@ -1,0 +1,1 @@
+Multiprompt: Ctrl+D dictation in the chat box, with a mic icon at the right end

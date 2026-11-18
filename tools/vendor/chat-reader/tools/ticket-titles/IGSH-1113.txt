@@ -1,0 +1,1 @@
+Unblock releases with empty historical notes

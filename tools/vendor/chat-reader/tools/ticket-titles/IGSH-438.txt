@@ -1,0 +1,1 @@
+Desktop Chat View: selecting and copying text is broken, right-click Copy does nothing

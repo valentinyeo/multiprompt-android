@@ -1,0 +1,1 @@
+Cut CI queue time so master checks run first

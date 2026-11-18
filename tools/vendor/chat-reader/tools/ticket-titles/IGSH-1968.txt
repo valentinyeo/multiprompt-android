@@ -1,0 +1,1 @@
+Ctrl+K stops listing 37 outdated commands

@@ -1,0 +1,1 @@
+Multiprompt: Chat View message stays queued when a local Claude session shows a grey suggested reply

@@ -1,0 +1,1 @@
+Multiprompt desktop: Ctrl+K palette and dialogs in the shared style

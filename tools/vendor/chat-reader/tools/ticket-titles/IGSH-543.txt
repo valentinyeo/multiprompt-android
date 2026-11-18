@@ -1,0 +1,1 @@
+Multiprompt: window is unresponsive on launch until everything loads, and stray Chrome sessions show on the taskbar

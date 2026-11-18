@@ -1,0 +1,1 @@
+Desktop: tabs drop and reconnect every 27 seconds after relaunch

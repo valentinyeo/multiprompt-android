@@ -1,0 +1,1 @@
+Ctrl+Shift+W deletes the current session

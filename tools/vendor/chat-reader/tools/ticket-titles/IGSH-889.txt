@@ -1,0 +1,1 @@
+Update card shows the same old notes on every release instead of what changed

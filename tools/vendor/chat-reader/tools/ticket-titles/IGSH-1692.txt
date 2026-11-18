@@ -1,0 +1,1 @@
+Live chat: message sent during a busy agent vanishes until taken

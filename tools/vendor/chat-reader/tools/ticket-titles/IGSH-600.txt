@@ -1,0 +1,1 @@
+Multiprompt: removing a server from the account sticks instead of coming back

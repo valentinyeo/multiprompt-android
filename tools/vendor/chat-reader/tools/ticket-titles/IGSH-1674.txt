@@ -1,0 +1,1 @@
+Live chat updates got twice as slow after slash commands

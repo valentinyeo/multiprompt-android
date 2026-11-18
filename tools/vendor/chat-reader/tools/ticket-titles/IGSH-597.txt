@@ -1,0 +1,1 @@
+Multiprompt: after renaming a tab with F2, typing does not reach the console

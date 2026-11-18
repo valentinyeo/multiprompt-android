@@ -1,0 +1,1 @@
+Update bot rules for current pull-request checks

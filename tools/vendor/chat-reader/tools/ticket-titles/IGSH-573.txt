@@ -1,0 +1,1 @@
+Multiprompt: links open in the desktop browser when the browser pane is off

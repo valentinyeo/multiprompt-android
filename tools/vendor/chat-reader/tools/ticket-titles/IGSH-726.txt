@@ -1,0 +1,1 @@
+Multiprompt: browser pane often does not show since the second browser profile

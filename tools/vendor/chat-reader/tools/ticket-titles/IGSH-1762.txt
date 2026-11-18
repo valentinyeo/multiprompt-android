@@ -1,0 +1,1 @@
+A live chat always opens as a chat

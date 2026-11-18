@@ -1,0 +1,1 @@
+Multiprompt desktop: browser pane stops taking normal typing

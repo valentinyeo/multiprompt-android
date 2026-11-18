@@ -1,0 +1,1 @@
+Multibot keeps the processor busy while idle

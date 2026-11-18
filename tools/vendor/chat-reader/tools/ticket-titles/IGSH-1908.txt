@@ -1,0 +1,1 @@
+Ctrl+K opens an old closed shell instead of the live chat

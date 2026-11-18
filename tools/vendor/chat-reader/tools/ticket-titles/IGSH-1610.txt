@@ -1,0 +1,1 @@
+Approving a new device fails when one server refuses this phone

@@ -1,0 +1,1 @@
+Multibot counts its idle work and checks it before every merge

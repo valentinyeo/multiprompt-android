@@ -1,0 +1,1 @@
+Desktop: a full-width session forces the shell view even when every session is set to Chat View

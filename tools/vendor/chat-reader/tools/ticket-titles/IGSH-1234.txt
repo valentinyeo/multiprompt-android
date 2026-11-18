@@ -1,0 +1,1 @@
+Press Ctrl to show jump numbers on sidebar chats

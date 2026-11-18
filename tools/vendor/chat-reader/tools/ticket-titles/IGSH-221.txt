@@ -1,0 +1,1 @@
+zsb: cdp cannot hold a session across calls, so Profiler/Tracing brackets around a reload are impossible

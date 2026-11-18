@@ -1,0 +1,1 @@
+Remove the disconnect warning and Reconnect button, reconnect on its own

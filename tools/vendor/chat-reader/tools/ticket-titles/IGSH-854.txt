@@ -1,0 +1,1 @@
+Multiprompt: the IGSH-816 CLEAN code tables pixel golden fails on some Windows runners

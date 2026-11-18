@@ -1,0 +1,1 @@
+Multiprompt: install-laptop1.sh stops when an old backup exe is locked, skip it instead

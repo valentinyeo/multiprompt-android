@@ -1,0 +1,1 @@
+App updates stop before they can publish

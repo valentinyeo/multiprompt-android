@@ -1,0 +1,1 @@
+Agent browser pane closes mid-task

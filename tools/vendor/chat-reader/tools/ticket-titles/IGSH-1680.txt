@@ -1,0 +1,1 @@
+Ctrl+T repo picker: typing "soft" finds software-factory even when the path does not start with it

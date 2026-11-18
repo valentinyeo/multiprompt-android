@@ -1,0 +1,1 @@
+Multiprompt sidebar: group line overlaps the selected session highlight

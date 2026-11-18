@@ -1,0 +1,1 @@
+Usage meter runs inside Multibot, not as a second hidden copy

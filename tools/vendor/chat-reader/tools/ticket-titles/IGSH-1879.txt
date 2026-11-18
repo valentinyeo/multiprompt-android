@@ -1,0 +1,1 @@
+Multiprompt desktop: rename a group the same way as a session

@@ -1,0 +1,1 @@
+Desktop: orange "locked session disconnected" flag keeps showing in the shell view

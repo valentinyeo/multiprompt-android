@@ -1,0 +1,1 @@
+Multiprompt sidebar: sessions outside a group get their own Recents group header

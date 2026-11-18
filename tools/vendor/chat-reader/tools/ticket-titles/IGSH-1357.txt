@@ -1,0 +1,1 @@
+Multiprompt desktop: carry each bot's face and colour in the shared layout

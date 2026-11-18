@@ -1,0 +1,1 @@
+Live chats open empty when the chat starts its own helper agents

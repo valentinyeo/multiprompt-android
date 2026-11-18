@@ -1,0 +1,1 @@
+Releases stop when the release check misses a master commit

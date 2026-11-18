@@ -1,0 +1,1 @@
+Multiprompt closes unexpectedly during active chat

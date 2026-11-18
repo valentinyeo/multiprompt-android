@@ -1,0 +1,1 @@
+New rooms no longer crash while opening

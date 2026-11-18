@@ -1,0 +1,1 @@
+Multiprompt update card: short plain list of what changed in each update

@@ -1,0 +1,1 @@
+Multiprompt: the skill list flickers while I type / and search

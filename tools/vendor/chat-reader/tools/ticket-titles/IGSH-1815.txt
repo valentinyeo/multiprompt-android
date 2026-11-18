@@ -1,0 +1,1 @@
+Desktop: chats open instantly, no loading screen

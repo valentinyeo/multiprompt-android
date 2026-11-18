@@ -1,0 +1,1 @@
+Multiprompt desktop: browser pane loses its rounded corners and shows its own window buttons

@@ -1,0 +1,1 @@
+Multiprompt desktop: smooth edges on round avatars, pills and icons

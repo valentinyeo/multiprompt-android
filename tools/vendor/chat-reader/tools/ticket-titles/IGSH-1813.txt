@@ -1,0 +1,1 @@
+Multiprompt: Claude replies in one block act as one message when replying

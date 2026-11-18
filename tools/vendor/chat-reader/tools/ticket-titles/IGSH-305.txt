@@ -1,0 +1,1 @@
+zsb: click inside cross-origin app iframe reports clicked but UI does not react

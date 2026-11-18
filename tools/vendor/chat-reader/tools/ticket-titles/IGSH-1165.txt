@@ -1,0 +1,1 @@
+Multiprompt desktop: make Alt+A browser open and close clearly under the speed limit

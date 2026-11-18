@@ -1,0 +1,1 @@
+Multiprompt: release newest green master commit every 30 min, never skip

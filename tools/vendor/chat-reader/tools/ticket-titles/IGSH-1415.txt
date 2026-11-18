@@ -1,0 +1,1 @@
+Live chat shows every message twice for a while

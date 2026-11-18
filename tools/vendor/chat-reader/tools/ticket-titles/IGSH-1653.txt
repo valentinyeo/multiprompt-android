@@ -1,0 +1,1 @@
+Agents can start a named Multibot session for him

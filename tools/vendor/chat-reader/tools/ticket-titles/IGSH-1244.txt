@@ -1,0 +1,1 @@
+Multiprompt: open session hard to see in sidebar

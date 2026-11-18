@@ -1,0 +1,1 @@
+Multiprompt desktop: gray, not blue, highlight on the selected session in the left bar

@@ -1,0 +1,1 @@
+New inne chats never start, messages show Not sent

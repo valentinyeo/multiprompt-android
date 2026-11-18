@@ -1,0 +1,1 @@
+Fix Windows test runner silence after successful chat tests

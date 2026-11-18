@@ -1,0 +1,1 @@
+Multiprompt desktop: chat layout shifts while loading, keep every element in place from first paint

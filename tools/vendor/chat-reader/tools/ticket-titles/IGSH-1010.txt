@@ -1,0 +1,1 @@
+Multiprompt chat: cancel a sent message before Claude Code receives it, and show delivery

@@ -1,0 +1,1 @@
+App window gets a visible light outline

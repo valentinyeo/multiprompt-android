@@ -1,0 +1,1 @@
+Desktop design: equal spacing for every pane, gray groups with one continuous line, group menu in Ctrl+K, rounded browser

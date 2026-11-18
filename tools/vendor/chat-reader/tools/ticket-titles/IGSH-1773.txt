@@ -1,0 +1,1 @@
+Ctrl+K: show each bot's own picture

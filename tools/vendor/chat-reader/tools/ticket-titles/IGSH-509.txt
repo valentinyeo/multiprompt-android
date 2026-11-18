@@ -1,0 +1,1 @@
+Desktop Chat View: Ctrl+Shift+S screenshot opens the Windows system menu in the top left

@@ -1,0 +1,1 @@
+Multiprompt: automerge looks at one pull request, no timer

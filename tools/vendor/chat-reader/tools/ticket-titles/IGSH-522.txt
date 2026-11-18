@@ -1,0 +1,1 @@
+Desktop: switching workspaces loses keyboard focus and does not restore the last focus position (0.28.789)

@@ -1,0 +1,1 @@
+Chat View on/off everywhere: one-time switch of all sessions, plus per-session Always Chat View / Always shell

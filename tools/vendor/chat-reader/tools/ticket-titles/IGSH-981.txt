@@ -1,0 +1,1 @@
+Keep chat timing checks free from measurement interference

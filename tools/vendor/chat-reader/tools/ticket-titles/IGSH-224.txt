@@ -1,0 +1,1 @@
+Per-workspace isolated browser profiles and independent bookmarks

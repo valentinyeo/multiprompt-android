@@ -1,0 +1,1 @@
+Multiprompt desktop: switching sessions is choppy and chats load slowly, worse with the browser open

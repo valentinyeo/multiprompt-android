@@ -1,0 +1,1 @@
+Multiprompt closes on its own while in the background

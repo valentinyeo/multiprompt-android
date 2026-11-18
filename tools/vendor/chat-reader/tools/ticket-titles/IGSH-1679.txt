@@ -1,0 +1,1 @@
+Rename a chat in place from its title, or with /rename

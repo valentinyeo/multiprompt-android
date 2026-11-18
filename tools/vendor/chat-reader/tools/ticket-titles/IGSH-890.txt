@@ -1,0 +1,1 @@
+Starred workspace sidebar lists sessions twice and keeps adding more

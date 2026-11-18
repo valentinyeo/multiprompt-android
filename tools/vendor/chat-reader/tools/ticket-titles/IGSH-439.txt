@@ -1,0 +1,1 @@
+Desktop: switching back to a workspace lands on the btop session instead of the session I was on

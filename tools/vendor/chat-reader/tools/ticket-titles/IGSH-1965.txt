@@ -1,0 +1,1 @@
+Ctrl+Shift+W quits the app; Ctrl+W closes browser tabs

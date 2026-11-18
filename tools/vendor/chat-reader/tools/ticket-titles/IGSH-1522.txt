@@ -1,0 +1,1 @@
+Live chat: slash commands that need a terminal do nothing

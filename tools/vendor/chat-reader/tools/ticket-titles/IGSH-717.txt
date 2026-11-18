@@ -1,0 +1,1 @@
+Multiprompt Chat View: select text in a message and press Enter to reply to that part

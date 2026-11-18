@@ -1,0 +1,1 @@
+Long chat checks count startup as an interruption

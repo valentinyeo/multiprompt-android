@@ -1,0 +1,1 @@
+Opening a chat shows only the newest reply for a long time

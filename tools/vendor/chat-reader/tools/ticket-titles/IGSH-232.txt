@@ -1,0 +1,1 @@
+zsb: cdp help invokes a CDP method instead of showing usage

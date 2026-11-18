@@ -1,0 +1,1 @@
+Multiprompt desktop: Chat View shows the raw terminal screen instead of chat for a second-server tab

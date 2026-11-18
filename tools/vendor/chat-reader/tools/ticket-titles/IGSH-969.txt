@@ -1,0 +1,1 @@
+Multiprompt desktop: accepted message stays dimmed as if still queued

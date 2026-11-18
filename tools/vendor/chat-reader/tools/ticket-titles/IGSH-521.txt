@@ -1,0 +1,1 @@
+Multiprompt 0.28.789: the window flickers heavily, find the cause and stop it

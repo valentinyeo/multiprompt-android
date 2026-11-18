@@ -1,0 +1,1 @@
+AI chat: message box sits outside the focus border (0.28.806)

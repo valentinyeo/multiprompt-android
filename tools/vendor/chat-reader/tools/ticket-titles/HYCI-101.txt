@@ -1,0 +1,1 @@
+Multiprompt releases fail since HYCI-87: exe version does not match tag

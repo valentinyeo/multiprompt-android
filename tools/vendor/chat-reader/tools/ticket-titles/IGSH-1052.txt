@@ -1,0 +1,1 @@
+Windows history reset check loses file access

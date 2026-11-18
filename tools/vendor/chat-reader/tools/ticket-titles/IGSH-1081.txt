@@ -1,0 +1,1 @@
+Multiprompt desktop: reattach a dropped tab from Ctrl+K

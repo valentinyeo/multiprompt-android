@@ -1,0 +1,1 @@
+Multiprompt: remove the Alt+Q focus ring around chat, browser and shell panes

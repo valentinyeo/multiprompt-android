@@ -1,0 +1,1 @@
+Chat View: the Ctrl+F find box types 1 instead of ! and cannot take accented letters

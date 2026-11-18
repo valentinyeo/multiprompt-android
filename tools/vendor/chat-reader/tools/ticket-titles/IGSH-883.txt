@@ -1,0 +1,1 @@
+Multiprompt desktop Chat View: remove the Read check marks under sent messages

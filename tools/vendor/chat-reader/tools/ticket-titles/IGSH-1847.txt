@@ -1,0 +1,1 @@
+Messages that failed to send look like normal sent messages

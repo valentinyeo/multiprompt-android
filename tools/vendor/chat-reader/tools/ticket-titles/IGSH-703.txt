@@ -1,0 +1,1 @@
+Telemetry card and token ladder dashboard: show reset time and pace per account; fix the stale dashboard link

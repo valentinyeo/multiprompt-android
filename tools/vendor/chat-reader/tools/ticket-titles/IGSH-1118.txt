@@ -1,0 +1,1 @@
+Multiprompt desktop: show full update notes with line breaks on the update card

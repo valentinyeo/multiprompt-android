@@ -1,0 +1,1 @@
+Multiprompt: count of new messages waiting below the fold

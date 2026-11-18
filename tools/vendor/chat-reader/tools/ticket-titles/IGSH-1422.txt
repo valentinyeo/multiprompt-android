@@ -1,0 +1,1 @@
+Desktop: more bot colours with previews in Ctrl+K, white included

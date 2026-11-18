@@ -1,0 +1,1 @@
+Multi Bot Desktop (MBD): remove the small + under the OTHER heading in the sidebar

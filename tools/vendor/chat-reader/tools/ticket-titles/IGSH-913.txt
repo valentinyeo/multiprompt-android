@@ -1,0 +1,1 @@
+Multiprompt CI: releases starve because every merge cancels the running master checks

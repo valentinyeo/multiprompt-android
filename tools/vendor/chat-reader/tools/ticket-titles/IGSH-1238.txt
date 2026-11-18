@@ -1,0 +1,1 @@
+Claude messages stay stuck after resync

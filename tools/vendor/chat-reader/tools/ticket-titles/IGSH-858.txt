@@ -1,0 +1,1 @@
+Multiprompt: the overlay that hides the minimize, maximize and close buttons overlaps weirdly

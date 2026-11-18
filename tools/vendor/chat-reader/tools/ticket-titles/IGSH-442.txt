@@ -1,0 +1,1 @@
+Desktop Chat View: a "Delivery unconfirmed" message must offer Send again and Remove, never just sit there

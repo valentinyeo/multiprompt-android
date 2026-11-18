@@ -1,0 +1,1 @@
+Ctrl+W closes the app; Ctrl+Shift+W deletes a chat

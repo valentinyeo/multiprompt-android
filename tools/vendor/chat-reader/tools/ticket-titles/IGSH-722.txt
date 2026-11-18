@@ -1,0 +1,1 @@
+Multiprompt Chat View: messages from other sessions show as raw tags in my own bubble

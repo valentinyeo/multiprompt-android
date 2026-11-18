@@ -1,0 +1,1 @@
+Check /clear works in live chats

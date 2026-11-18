@@ -1,0 +1,1 @@
+Multibot: agent messages to a busy chat end up as unsent drafts

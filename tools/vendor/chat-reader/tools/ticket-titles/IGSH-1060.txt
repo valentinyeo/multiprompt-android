@@ -1,0 +1,1 @@
+Multiprompt desktop: Alt+W link list opens behind the chat, old style

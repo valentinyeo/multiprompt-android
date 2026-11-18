@@ -1,0 +1,1 @@
+Multiprompt: pick a smaller AI telemetry card (Full, One line, Two bars, Dot)

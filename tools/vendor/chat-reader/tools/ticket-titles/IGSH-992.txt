@@ -1,0 +1,1 @@
+Multiprompt desktop Chat View: move focus between messages with the keyboard and open message actions with Enter

@@ -1,0 +1,1 @@
+Multiprompt reopens on the session he was on

@@ -1,0 +1,1 @@
+Multiprompt: chat bubbles get a thin outline and soft gradient like Grok Bot

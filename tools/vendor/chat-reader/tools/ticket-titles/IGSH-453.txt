@@ -1,0 +1,1 @@
+Desktop Chat View: body text too bold, bold words do not stand out

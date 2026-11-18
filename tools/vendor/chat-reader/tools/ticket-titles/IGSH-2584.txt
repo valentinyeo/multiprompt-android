@@ -1,0 +1,1 @@
+Slash commands fail on a server without the helper

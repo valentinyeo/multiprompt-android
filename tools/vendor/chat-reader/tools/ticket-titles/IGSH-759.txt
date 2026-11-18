@@ -1,0 +1,1 @@
+Multiprompt Chat View: hide the green tick activity lines, show only the messages

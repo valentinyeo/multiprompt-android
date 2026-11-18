@@ -1,0 +1,1 @@
+Desktop drops unsent messages from before a reset

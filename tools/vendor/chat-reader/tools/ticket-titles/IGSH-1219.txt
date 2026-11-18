@@ -1,0 +1,1 @@
+Multiprompt desktop: Alt+V reads the last AI reply, press again for older

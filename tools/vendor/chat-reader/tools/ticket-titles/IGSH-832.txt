@@ -1,0 +1,1 @@
+Multiprompt: select text, Enter sends it to the chat box

@@ -1,0 +1,1 @@
+Type gg in a chat to jump to the newest message

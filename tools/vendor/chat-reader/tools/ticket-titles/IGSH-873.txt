@@ -1,0 +1,1 @@
+Multiprompt: centered chat column with a max width, bubbles stop short of the far edge, like Grok Bot

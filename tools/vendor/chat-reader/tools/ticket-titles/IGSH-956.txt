@@ -1,0 +1,1 @@
+Multiprompt auto-release cannot tag master after workflow file changes

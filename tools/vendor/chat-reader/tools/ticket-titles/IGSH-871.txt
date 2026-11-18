@@ -1,0 +1,1 @@
+Multiprompt: new-message badge and a New line above unread replies in the desktop chat

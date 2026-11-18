@@ -1,0 +1,1 @@
+Multiprompt desktop: after about 11 quick sends the Chat View stops pressing Enter and drops messages

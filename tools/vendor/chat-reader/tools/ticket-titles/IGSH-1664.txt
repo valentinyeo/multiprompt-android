@@ -1,0 +1,1 @@
+Archive old workspaces so they leave the strip and Ctrl+K

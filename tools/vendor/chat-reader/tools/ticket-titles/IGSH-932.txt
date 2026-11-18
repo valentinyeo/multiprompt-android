@@ -1,0 +1,1 @@
+Multiprompt desktop sidebar: one label style, no label arrows, new tab is just a plus

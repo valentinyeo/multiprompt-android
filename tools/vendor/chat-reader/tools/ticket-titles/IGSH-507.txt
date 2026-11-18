@@ -1,0 +1,1 @@
+Chat bench A/B as a GitHub workflow job; check whether IGSH-453 slowed Chat View paint

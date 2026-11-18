@@ -1,0 +1,1 @@
+Workspace dropdown looks heavy and messy: make it calm

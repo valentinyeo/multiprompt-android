@@ -1,0 +1,1 @@
+Multiprompt desktop: remove the three big dictation buttons (Android only)

@@ -1,0 +1,1 @@
+Hide the empty Main workspace from the menu

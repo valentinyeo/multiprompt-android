@@ -1,0 +1,1 @@
+Sync 5: desktop syncs hosts, workspaces and session state between laptops

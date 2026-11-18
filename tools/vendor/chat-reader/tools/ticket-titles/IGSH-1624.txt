@@ -1,0 +1,1 @@
+Keep sent desktop messages plain in every delivery state

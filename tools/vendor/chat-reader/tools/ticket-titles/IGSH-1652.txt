@@ -1,0 +1,1 @@
+Old stuck text in the box gets glued to the next message

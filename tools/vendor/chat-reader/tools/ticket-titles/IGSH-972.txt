@@ -1,0 +1,1 @@
+Multiprompt: browser menu steals keys after Alt+Q

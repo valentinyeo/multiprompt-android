@@ -1,0 +1,1 @@
+Multiprompt: switching to the inne Chief of Staff tab makes the app choppy and spikes CPU

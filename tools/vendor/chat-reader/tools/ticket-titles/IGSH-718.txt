@@ -1,0 +1,1 @@
+Multiprompt Chat View: right-click menu with Reply and Copy icons; grey Stop and Send buttons

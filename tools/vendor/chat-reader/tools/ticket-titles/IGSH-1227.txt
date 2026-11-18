@@ -1,0 +1,1 @@
+Usage popup has a doubled outline and shadow

@@ -1,0 +1,1 @@
+New terminal in Ctrl+K does nothing

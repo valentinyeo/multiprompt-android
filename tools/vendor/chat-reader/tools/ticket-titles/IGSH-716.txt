@@ -1,0 +1,1 @@
+Multiprompt: after a restart the chat box sometimes has no focus and Alt+Q does nothing

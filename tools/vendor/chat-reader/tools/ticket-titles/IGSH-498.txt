@@ -1,0 +1,1 @@
+Chat View: drafts stay in their own session and the sidebar shows DRAFT

@@ -1,0 +1,1 @@
+Multibot chat: Claude cannot find its own browser pane

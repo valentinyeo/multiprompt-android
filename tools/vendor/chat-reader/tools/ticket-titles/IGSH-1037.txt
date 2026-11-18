@@ -1,0 +1,1 @@
+Stop merge conflicts on hand-edited shared lists

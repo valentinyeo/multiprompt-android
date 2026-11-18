@@ -1,0 +1,1 @@
+Ctrl+K deep clean: inventory every command with his real usage, explain zsb, regroup and re-sort (wireframe first)

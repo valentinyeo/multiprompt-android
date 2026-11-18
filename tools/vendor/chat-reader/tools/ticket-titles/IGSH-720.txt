@@ -1,0 +1,1 @@
+Multiprompt Chat View: typed text duplicates when messages arrive, and scrolling up jumps back down

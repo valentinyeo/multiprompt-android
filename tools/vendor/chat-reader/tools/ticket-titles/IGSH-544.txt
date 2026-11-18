@@ -1,0 +1,1 @@
+Multiprompt GitHub queue: fewer jobs per PR push (Release builds on PRs, double gitleaks, cancel old runs)

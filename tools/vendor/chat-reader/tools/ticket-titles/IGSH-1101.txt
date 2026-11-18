@@ -1,0 +1,1 @@
+Multiprompt desktop: Ctrl+K changelog makes the app slow

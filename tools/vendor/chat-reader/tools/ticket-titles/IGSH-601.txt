@@ -1,0 +1,1 @@
+Multiprompt: browser pane opens zoomed in after relaunch

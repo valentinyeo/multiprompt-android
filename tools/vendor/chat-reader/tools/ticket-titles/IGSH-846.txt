@@ -1,0 +1,1 @@
+Multiprompt: Escape cancels a dictation and throws it away

@@ -1,0 +1,1 @@
+Release checks: stability blocks releases, speed only warns

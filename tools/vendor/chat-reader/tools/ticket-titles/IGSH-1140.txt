@@ -1,0 +1,1 @@
+Multiprompt: master red, red-run check compares master with itself and blocks releases

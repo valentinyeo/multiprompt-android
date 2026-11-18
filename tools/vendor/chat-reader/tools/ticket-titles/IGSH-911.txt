@@ -1,0 +1,1 @@
+Multiprompt desktop Chat View: Ctrl+Enter sends the message

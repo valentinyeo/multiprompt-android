@@ -1,0 +1,1 @@
+Multiprompt desktop: Chat View misses replies and shows sent messages as unsent

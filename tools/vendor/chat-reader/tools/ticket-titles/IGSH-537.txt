@@ -1,0 +1,1 @@
+Chat View: links containing an underscore break and do not show or open correctly

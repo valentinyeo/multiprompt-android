@@ -1,0 +1,1 @@
+Desktop: restart renames sidebar tabs to GitHub and loses their order (v0.28.893)

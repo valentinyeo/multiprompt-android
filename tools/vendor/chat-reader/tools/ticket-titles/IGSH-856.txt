@@ -1,0 +1,1 @@
+Multiprompt: update downloaded but no Relaunch card, and Ctrl+K Relaunch does nothing

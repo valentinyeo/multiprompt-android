@@ -1,0 +1,1 @@
+A Windows check kills its child at ten seconds, silently

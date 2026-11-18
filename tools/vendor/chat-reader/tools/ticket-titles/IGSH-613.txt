@@ -1,0 +1,1 @@
+Multiprompt: every session browser keeps an ugly first tab data:text/html ZSPANE..., remove it

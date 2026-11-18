@@ -1,0 +1,1 @@
+Ctrl+K: sessions above workspaces, closed workspaces last

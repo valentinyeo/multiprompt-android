@@ -1,0 +1,1 @@
+Desktop: focus keeps jumping away from the AI chat typing box again

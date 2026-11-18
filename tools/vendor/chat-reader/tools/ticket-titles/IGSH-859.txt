@@ -1,0 +1,1 @@
+CI: stop the Windows job flood that delays releases

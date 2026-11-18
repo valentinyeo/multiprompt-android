@@ -1,0 +1,1 @@
+Multiprompt desktop: pin sessions to the top in the Starred workspace

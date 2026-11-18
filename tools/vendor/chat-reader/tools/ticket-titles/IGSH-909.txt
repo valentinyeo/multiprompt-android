@@ -1,0 +1,1 @@
+Multiprompt desktop Chat View composer: at most two buttons, send replaces stop while typing

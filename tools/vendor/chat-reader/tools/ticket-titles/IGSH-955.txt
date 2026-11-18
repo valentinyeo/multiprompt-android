@@ -1,0 +1,1 @@
+Multiprompt: pane-layout journey fails intermittently with Chat View composer never took focus in theme mid

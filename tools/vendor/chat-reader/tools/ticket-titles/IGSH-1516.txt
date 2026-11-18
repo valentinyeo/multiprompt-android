@@ -1,0 +1,1 @@
+Closed session comes back while the server is unreachable

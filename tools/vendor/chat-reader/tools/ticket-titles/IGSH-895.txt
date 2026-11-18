@@ -1,0 +1,1 @@
+Chat View: pasting text adds an extra line break

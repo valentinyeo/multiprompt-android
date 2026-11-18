@@ -1,0 +1,1 @@
+Chat View: a keyboard shortcut that inserts the URL of the browser tab I am looking at into the message box

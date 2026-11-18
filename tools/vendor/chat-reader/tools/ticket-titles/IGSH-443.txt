@@ -1,0 +1,1 @@
+Desktop: IBM Plex Sans is the only font for everything outside the shell, Nordwand Mono SemiBold in the shell

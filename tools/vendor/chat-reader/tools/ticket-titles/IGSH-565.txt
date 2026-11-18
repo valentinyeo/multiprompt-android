@@ -1,0 +1,1 @@
+Browser pane: old signed-in profile went to another workspace (IGSH-224, 0.28.812)

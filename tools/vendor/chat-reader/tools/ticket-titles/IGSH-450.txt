@@ -1,0 +1,1 @@
+Desktop: the shell view is gone after the latest releases

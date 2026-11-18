@@ -1,0 +1,1 @@
+Multiprompt: links in the browser pane cannot be clicked

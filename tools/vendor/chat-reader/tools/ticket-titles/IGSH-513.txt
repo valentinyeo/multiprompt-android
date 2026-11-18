@@ -1,0 +1,1 @@
+Multiprompt desktop: v0.28.786 fails chat bench header/composer check on every third tab and doubles idle CPU

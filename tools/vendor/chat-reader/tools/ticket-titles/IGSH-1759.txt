@@ -1,0 +1,1 @@
+New live chats start without a hidden terminal placeholder

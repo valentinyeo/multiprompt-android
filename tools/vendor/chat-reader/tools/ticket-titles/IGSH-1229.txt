@@ -1,0 +1,1 @@
+Chat shows messages under the wrong session

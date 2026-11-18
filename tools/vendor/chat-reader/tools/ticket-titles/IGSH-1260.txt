@@ -1,0 +1,1 @@
+Multi Bot Desktop (MBD): remember open sidebar sections and toggles

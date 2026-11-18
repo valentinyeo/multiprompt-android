@@ -1,0 +1,1 @@
+Desktop: prove real-size session switching measurements

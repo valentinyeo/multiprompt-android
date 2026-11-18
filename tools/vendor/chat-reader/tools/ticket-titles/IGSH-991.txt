@@ -1,0 +1,1 @@
+Multiprompt: Chat View stalls 1 second at a time in very long chats while a sent message waits for its echo

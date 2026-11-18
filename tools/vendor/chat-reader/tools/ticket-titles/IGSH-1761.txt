@@ -1,0 +1,1 @@
+Message box follows typing after a long paste
