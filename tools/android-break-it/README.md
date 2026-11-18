@@ -10,7 +10,7 @@ The shared session-list readiness event runs the checkpoints before the selected
 
 The emulator's numeric speed command uses kbps: `network speed 128:128` must report 128000 bit/s in both directions. The driver also checks the reported 150–300ms latency bounds.
 
-The stressed replay shares the hosted emulator job of the normal journey, so the emulator setup is paid once per journey and not once per checkpoint.
+The stressed replay shares the hosted emulator job of the normal journey, so the emulator setup is paid once per journey and not once per checkpoint. The two packages that job needs, `gdb` for the emulator crash tracer and `libpulse0` for the emulator audio library, come from the runner cache after the first job saves them, so a slow package mirror cannot add minutes to every journey job.
 
 The independent verifier reads the retained checkpoint evidence. A broken or missing checkpoint overrides a model PASS. This PR also schedules the stressed replay in its own verifier run, without claiming an Android parent repro for a tooling-only change.
 
