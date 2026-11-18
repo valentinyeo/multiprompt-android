@@ -65,8 +65,7 @@ class DesignKitTest {
         }
     }
 
-    private fun capture(tag: String): Bitmap {
-        val root = compose.onNodeWithTag(tag)
+    private fun capture(tag: String, root: androidx.compose.ui.test.SemanticsNodeInteraction = compose.onNodeWithTag(tag)): Bitmap {
         val view = (checkNotNull(root.fetchSemanticsNode().root) as ViewRootForTest).view.rootView
         val attachInfo = ReflectionHelpers.getField<Any>(view, "mAttachInfo")
         val accelerated = view.isHardwareAccelerated
@@ -94,6 +93,25 @@ class DesignKitTest {
 
     private fun assertPixel(bitmap: Bitmap, x: Int, y: Int, expected: Color, what: String) {
         assertEquals("$what at $x,$y", Integer.toHexString(expected.toArgb()), Integer.toHexString(bitmap.getPixel(x, y)))
+    }
+
+    @Test
+    fun deviceApprovalScreenUsesKitButtonPixelsAndActions() {
+        var approvals = 0
+        var denials = 0
+        compose.setContent {
+            MultipromptTheme {
+                DeviceApprovalPrompt(PendingDevice("device", "Laptop", "SHA256:compare-this"), false, null, { approvals++ }, { denials++ })
+            }
+        }
+        val approve = capture("device-approval-primary", compose.onNodeWithText("Approve"))
+        assertPixel(approve, approve.width / 2, approve.height - 4, Kit.Text, "screen primary fill")
+        val deny = capture("device-approval-secondary", compose.onNodeWithText("No"))
+        assertPixel(deny, deny.width / 2, deny.height - 4, Kit.Surface, "screen secondary fill")
+        compose.onNodeWithText("Approve").performClick()
+        compose.runOnIdle { assertEquals(1, approvals); assertEquals(0, denials) }
+        compose.onNodeWithText("No").performClick()
+        compose.runOnIdle { assertEquals(1, approvals); assertEquals(1, denials) }
     }
 
     @Test

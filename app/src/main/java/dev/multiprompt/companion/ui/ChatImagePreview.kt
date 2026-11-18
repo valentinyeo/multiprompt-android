@@ -14,7 +14,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -37,6 +36,7 @@ import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import coil3.compose.SubcomposeAsyncImage
 import coil3.compose.SubcomposeAsyncImageContent
+import androidx.compose.material3.minimumInteractiveComponentSize
 
 @Composable
 internal fun ChatImagePreviews(runs: List<InlineRun>) {
@@ -90,9 +90,7 @@ internal fun ChatImagePreviews(runs: List<InlineRun>) {
                             translationY = pan.y
                         }.transformable(transform),
                     )
-                    IconButton(onClick = { expanded = false }, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)) {
-                        Icon(Icons.Default.Close, "Close image", tint = Color.White)
-                    }
+                    KitRoundButton(onClick = { expanded = false }, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp).minimumInteractiveComponentSize(), icon = Icons.Default.Close, description = "Close image")
                 }
             }
         }

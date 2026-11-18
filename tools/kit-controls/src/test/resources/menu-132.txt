@@ -1,0 +1,17 @@
+DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                ) {
+                    listOf(
+                        AppSection.SESSIONS to "Sessions",
+                        AppSection.UPDATE to "Update",
+                    ).forEach { (destination, label) ->
+                        DropdownMenuItem(
+                            text = { Text(if (section == destination) "✓ $label" else label) },
+                            onClick = {
+                                menuExpanded = false
+                                onSelect(destination)
+                            },
+                        )
+                    }
+                }

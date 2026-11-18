@@ -139,7 +139,13 @@
       },
       "outcomes": [
         "chat-reactions.journey"
-      ]
+      ],
+      "evidence": {
+        "reaction-receipts.txt": 1500,
+        "reaction-transport.json": 1500,
+        "reactions-result.json": 3500,
+        "10-reactions-mixed.xml": 5000
+      }
     },
     "chat-resync.md": {
       "name": "Legacy resync",
@@ -222,7 +228,12 @@
       },
       "outcomes": [
         "host-changed-key.journey"
-      ]
+      ],
+      "evidence": {
+        "host-key-ui.json": 3000,
+        "host-key-auth.json": 2000,
+        "ssh-auth.txt": 1500
+      }
     },
     "hosts-retired.md": {
       "name": "Retired hosts",
@@ -250,7 +261,12 @@
       },
       "outcomes": [
         "hosts.journey"
-      ]
+      ],
+      "evidence": {
+        "hosts-ui.json": 4000,
+        "ssh-auth.txt": 1500,
+        "host-fingerprint.txt": 300
+      }
     },
     "launcher-icon.md": {
       "name": "Launcher icon",
@@ -483,7 +499,7 @@
     },
     "sessions.md": {
       "name": "Sessions",
-      "description": "authenticated tmux discovery and search.",
+      "description": "Default seed readback: 42 real tmux sessions and a large transcript, runtime-selected off-screen reader entry, and an exact search result for that same session. Does not assert all 42 rows render.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -493,7 +509,17 @@
       },
       "outcomes": [
         "inbox.search"
-      ]
+      ],
+      "evidence": {
+        "seed-counts.json": 1500,
+        "seed-check.json": 1500,
+        "seed-search.xml": 2000,
+        "seed-deep-target.xml": 1000,
+        "seed-deep-choice.json": 1000,
+        "row-long-press-actions.xml": 1500,
+        "start-agent-picker.xml": 1500,
+        "start-agent-back-to-folder.xml": 1000
+      }
     },
     "settings-navigation.md": {
       "name": "Settings navigation",
@@ -565,22 +591,28 @@
         "projection-proof.txt": 500
       }
     },
-    "snippets.md": {
-      "name": "Saved snippets",
-      "description": "save, restart, replace a draft with a saved snippet, send it, and delete it permanently.",
+    "device-approval.md": {
+      "name": "Approve a pending device",
+      "description": "Shipping Approve/No controls, real browser PKCE, HTTP decisions and independently verified SSH key installation/removal. Local account fixture; not live email OTP.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
         "inputs": {},
-        "prerequisites": [],
+        "prerequisites": [
+          "Local authenticated account fixture; live production email OTP is not exercised."
+        ],
         "driver": true
       },
       "outcomes": [
-        "snippets.save-reuse-delete"
+        "legacy.igsh-449"
       ],
       "evidence": {
-        "snippets-state.json": 3000,
-        "snippets-receipts.txt": 1000
+        "device-approve-ui.json": 2000,
+        "device-deny-ui.json": 2000,
+        "device-decisions-ui.json": 2000,
+        "device-approval-receipts.txt": 1500,
+        "device-approved-ssh.txt": 500,
+        "device-after-denial.txt": 1000
       }
     },
     "chat-search.md": {
@@ -605,6 +637,24 @@
         "search-no-match.json": 500,
         "search-closed.json": 500,
         "search-proof.txt": 200
+      }
+    },
+    "snippets.md": {
+      "name": "Saved snippets",
+      "description": "save, restart, replace a draft with a saved snippet, send it, and delete it permanently.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "snippets.save-reuse-delete"
+      ],
+      "evidence": {
+        "snippets-state.json": 3000,
+        "snippets-receipts.txt": 1000
       }
     },
     "claude-remote-control.md": {
@@ -1134,10 +1184,12 @@
       }
     },
     "legacy.igsh-449": {
-      "description": "OTP, a second pending device and trusted SSH access to every saved host. Sign in on the new device; on the approving phone compare **Approve this device?** and fingerprint, tap **Approve**, then connect from the new device.",
-      "journey": null,
+      "description": "Approve or deny a pending second device on the shipping screen; install/remove its key on the trusted fixture host and verify access from that device. The local account authority completes real OAuth/PKCE; production email OTP remains outside this UI proof.",
+      "journey": "device-approval.md",
       "sideEffect": true,
-      "match": []
+      "match": [
+        "DeviceApprovalPrompt|DeviceApproval\\.kt"
+      ]
     },
     "legacy.igsh-429": {
       "description": "a queued real app crash plus account-service receipt access. On a disposable debug install crash, relaunch, complete **Sign in**, and verify the stable report id server-side. Check startup/sign-in drain, including dismissed reports; the console never crashes the app.",

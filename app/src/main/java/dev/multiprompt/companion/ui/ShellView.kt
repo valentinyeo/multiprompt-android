@@ -18,7 +18,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -48,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import androidx.compose.material3.minimumInteractiveComponentSize
 
 internal fun defaultShellFontSize(bodyFontSize: TextUnit): TextUnit = bodyFontSize
 
@@ -219,8 +219,6 @@ internal fun ShellHistory(
                 )
             }
         }
-        FloatingActionButton(onClick = onJumpToLive, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)) {
-            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Jump to live")
-        }
+        KitRoundButton(onClick = onJumpToLive, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).minimumInteractiveComponentSize(), icon = Icons.Default.KeyboardArrowDown, description = "Jump to live")
     }
 }

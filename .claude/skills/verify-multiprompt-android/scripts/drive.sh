@@ -9,6 +9,9 @@ node "$scripts/../../../../.github/scripts/pstack-verifier/coverage.cjs" journey
 mkdir -p "$EVIDENCE"
 exec > >(tee -a "$EVIDENCE/driver-transcript.txt") 2>&1
 set -x
+if [[ "${PIN_SCROLL_PROOF:-}" != true ]]; then
+    sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/verify-seed.py check - < "$EVIDENCE/seed-counts.json" | tee "$EVIDENCE/seed-check.json"
+fi
 package=${VERIFY_PACKAGE:-dev.multiprompt.companion.debug}
 step=0
 product_checks=0
@@ -117,25 +120,46 @@ if [[ "$feature" == session-routing.md && "$package" == dev.multiprompt.companio
     done
     [[ "$recorder_pid" =~ ^[0-9]+$ ]]
 fi
+session_name() {
+    [[ -f "$EVIDENCE/seed-counts.json" ]] || return 1
+    jq -er --arg name "${1#Robot }" '.session_names | if index($name) != null then $name elif $name == "verify-session" and index("live-verify-session") != null then "live-verify-session" else empty end' "$EVIDENCE/seed-counts.json"
+}
 select_node() {
+    local mode=$1 value=$2 session=
+    if [[ "$mode" =~ ^(contains|text|desc)$ ]]; then
+        session=$(session_name "$value") || session=
+        if [[ -n "$session" && "$mode" == contains ]]; then mode=text; fi
+    fi
     dump_ui || return
-    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "$1" "$2"
+    if [[ -n "$session" ]] &&
+        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Inbox >/dev/null 2>&1; then
+        mode=desc
+        value="Robot $session"
+        tap_node "$mode" "$value" reveal || return
+    fi
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "$mode" "$value"
 }
 tap_node() {
-    local attempt action x1 y1 x2 y2 direction plan
-    for attempt in {1..18}; do
+    local attempt action x1 y1 x2 y2 direction plan session=
+    if [[ "$1" =~ ^(text|desc)$ ]]; then session=$(session_name "$2") || session=; fi
+    for attempt in {1..24}; do
         dump_ui || return
+        if [[ -n "$session" ]] &&
+            python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Inbox >/dev/null 2>&1; then
+            set -- desc "Robot $session" "${3:-tap}"
+        fi
         direction=forward
-        if (( attempt > 6 )); then direction=backward; fi
+        if (( attempt > 12 )); then direction=backward; fi
         plan=$(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "reach-$1" "$2" "$direction") || return
         read -r action x1 y1 x2 y2 <<< "$plan"
+        if [[ "$action" == tap && "${3:-tap}" == reveal ]]; then return; fi
         case "$action" in
             tap) adb shell input tap "$x1" "$y1"; return ;;
             swipe) adb shell input swipe "$x1" "$y1" "$x2" "$y2" 500 ;;
             *) return 1 ;;
         esac
     done
-    printf 'JOURNEY_ACTION_UNREACHABLE: %s: not reachable after 18 scrolls in the active container\n' "$2" >&2
+    printf 'JOURNEY_ACTION_UNREACHABLE: %s: not reachable after 24 scrolls in the active container\n' "$2" >&2
     return 1
 }
 tap_text() { tap_node text "$1"; }
@@ -1165,12 +1189,17 @@ if [[ "$feature" == robot-faces.md ]]; then
     shot robot-inbox
 fi
 sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
+if [[ "$feature" == device-approval.md ]]; then
+    source "$scripts/device-approval-drive.sh"
+    exit 0
+fi
 if [[ "$feature" == hosts.md ]]; then
     tap_desc 'Session list actions'
     tap_text Settings
     tap_text 'Host mapping'
     wait_for_text "Pinned $fingerprint"
     shot pinned-host
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" snapshot "" > "$EVIDENCE/hosts-ui.json"
     exit 0
 fi
 if [[ "$feature" == host-changed-key.md ]]; then
@@ -1183,7 +1212,9 @@ if [[ "$feature" == host-changed-key.md ]]; then
     printf '%s\n' "$accepted_before" > "$EVIDENCE/accepted-before-rotation.txt"
     old_pid=$(sudo cat "$FIXTURE/sshd.pid")
     [[ "$old_pid" =~ ^[0-9]+$ && "$old_pid" -gt 1 ]]
-    sudo kill "$old_pid"
+    mapfile -t old_connections < <(sudo ps -o pid= --ppid "$old_pid" | awk '{print $1}')
+    printf '%s\n' "${old_connections[@]}" > "$EVIDENCE/sshd-children-before-rotation.txt"
+    sudo kill "$old_pid" "${old_connections[@]}"
     for attempt in {1..30}; do
         if ! sudo kill -0 "$old_pid" 2>/dev/null; then break; fi
         sleep 1
@@ -1206,8 +1237,9 @@ PYROTATE
     [[ "$new_pid" =~ ^[0-9]+$ && "$new_pid" -gt 1 && "$new_pid" != "$old_pid" ]]
     sudo kill -0 "$new_pid"
     printf '%s\n' "$new_pid" > "$EVIDENCE/rotated-sshd-pid.txt"
-    wait_for_text 'SSH host key changed' || { refresh_inbox; wait_for_text 'SSH host key changed'; }
+    wait_for_text 'SSH host key changed'
     shot changed-host-key
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" snapshot "" > "$EVIDENCE/host-key-ui.json"
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "Now: ssh-ed25519 $rotated"
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "Saved: ssh-ed25519 $fingerprint"
     tap_text 'Not now'
@@ -1228,6 +1260,13 @@ PYROTATE
     accepted_after=$(sudo awk '/Accepted publickey/ {n++} END {print n+0}' "$FIXTURE/sshd.log")
     printf '%s\n' "$accepted_after" > "$EVIDENCE/accepted-after-rotation.txt"
     [[ "$accepted_after" == "$accepted_before" ]]
+    python3 - "$EVIDENCE" <<'PYAUTH'
+import json
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+(root / 'host-key-auth.json').write_text(json.dumps(dict(accepted_before_rotation=int((root / 'accepted-before-rotation.txt').read_text()), accepted_after_rotation=int((root / 'accepted-after-rotation.txt').read_text()), saved_fingerprint=(root / 'host-fingerprint.txt').read_text().strip(), presented_fingerprint=(root / 'rotated-fingerprint.txt').read_text().strip()), indent=2))
+PYAUTH
     printf 'CHANGED KEY DISMISSAL VERIFIED; no authentication after rotation\n'
     exit 0
 fi
@@ -1425,27 +1464,61 @@ PYORACLE
     exit 0
 fi
 if [[ "$feature" == sessions.md ]]; then
+    shot seed-deep-before
+    setup_failure=1
+    python3 tools/verify-seed.py target "$EVIDENCE" | tee "$EVIDENCE/seed-deep-choice.json"
+    setup_failure=0
+    deep_target=$(jq -er .name "$EVIDENCE/seed-deep-choice.json")
+    deep_description=$(jq -er .description "$EVIDENCE/seed-deep-choice.json")
+    wait_for_text "$deep_target"
+    tap_desc "$deep_description"
+    wait_for_text "$(jq -er .reader_label "$EVIDENCE/seed-deep-choice.json")"
+    wait_for_text "$(jq -er .ready_text "$EVIDENCE/seed-deep-choice.json")"
+    shot seed-deep-target
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/seed-deep-target.xml"
+    tap_desc Back
+    wait_for_text Inbox
     tap_desc 'Search sessions'
-    fill 'Search all sessions' verify-session
+    fill 'Search all sessions' "$deep_target"
     wait_for_text '1 result across all splits'
-    wait_for_text verify-session
+    wait_for_text "$deep_target"
     shot search-match
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains '1 result across all splits' >/dev/null
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" reach-desc "$deep_description" | grep -q '^tap '
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/seed-search.xml"
     tap_desc 'Close session search'
     wait_for_absence 'Search all sessions'
-    wait_for_text verify-session
+    wait_for_absence '1 result across all splits'
+    wait_for_text "$deep_target"
     shot search-cleared
     dump_ui
     if grep -F 'content-desc="Session actions"' "$EVIDENCE/current.xml"; then
         printf 'Inbox row still has a per-row menu button\n' >&2
         exit 1
     fi
-    read -r row_x row_y <<< "$(select_node text verify-session)"
+    read -r row_x row_y <<< "$(select_node desc "$deep_description")"
     adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 800
-    wait_for_text 'Mark unread'
+    wait_for_text 'Mark as unread'
     wait_for_text 'End tmux session'
     shot row-long-press-actions
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/row-long-press-actions.xml"
     adb shell input keyevent KEYCODE_BACK
     wait_for_absence 'End tmux session'
+    sudo -u verifyssh tmux list-sessions -F '#{session_name}' > "$EVIDENCE/sessions-before-agent-picker.txt"
+    tap_desc 'New session'
+    wait_for_text 'Use this folder'
+    adb shell input keyevent KEYCODE_BACK
+    tap_text 'Use this folder'
+    wait_for_text 'Claude Code'
+    wait_for_text Shell
+    shot start-agent-picker
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/start-agent-picker.xml"
+    tap_text Back
+    wait_for_text 'Use this folder'
+    shot start-agent-back-to-folder
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/start-agent-back-to-folder.xml"
+    sudo -u verifyssh tmux list-sessions -F '#{session_name}' > "$EVIDENCE/sessions-after-agent-picker.txt"
+    cmp "$EVIDENCE/sessions-before-agent-picker.txt" "$EVIDENCE/sessions-after-agent-picker.txt"
     exit 0
 fi
 tap_text verify-session

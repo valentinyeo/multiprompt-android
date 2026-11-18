@@ -59,6 +59,7 @@ jobs:
             tools/release-notes/ticket-titles.json
             .claude/skills/verify-multiprompt-android/scripts/drive.sh
             .github/workflows
+            .github/actions/android-proof
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -69,6 +70,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          overwrite: true
           name: verifier-tooling-proof
           path: ${{ runner.temp }}/tooling-proof.txt
           if-no-files-found: error
@@ -170,6 +172,7 @@ jobs:
         if: always() && needs.pick.outputs.no_product_change != 'true'
         uses: actions/upload-artifact@v4
         with:
+          overwrite: true
           name: verifier-feature-coverage
           path: ${{ runner.temp }}/feature-coverage.json
           if-no-files-found: error

@@ -11,6 +11,8 @@ Read [the feature index](features/README.md), then the selected recipe. Everythi
 
 [features/registry.json](features/registry.json) owns outcome IDs, recipe ownership, runner kinds and prerequisites. The generated index, picker catalog, driver eligibility and workflow choices all come from it. Run `node .github/scripts/pstack-verifier/coverage.cjs generate` when it changes; CI runs `check` and rejects drift.
 
+The picker schedules every registered debug journey required by changed outcome IDs. The three-journey limit applies only to optional model suggestions, not required coverage.
+
 For every product change, identify the changed outcome IDs. Add a new ID and journey for a new behavior. The picker reports `changed_outcomes`; deterministic source matches and the independent judge can add required IDs. An unknown product outcome fails closed. Tooling-only work can use the retained hosted Node test proof instead of claiming that an Android smoke test covered it.
 
 The second-AI verdict must include `coverage` entries for every changed ID. Each entry names its registered journey and quotes a real action from `driver-transcript.txt`, a resulting XML/JSON state, and independent receipt/server evidence where required. The gate checks these references in the downloaded head artifact after cleanup, requires a successful matching journey and exact `app-source-sha.txt`, then retains `verifier-feature-coverage`. Free-text `not_covered`, a green unrelated journey or smoke cannot satisfy this contract. For a feature, both sides may pass; a manufactured failing parent is not required.
@@ -19,6 +21,13 @@ The driver records that failure as the line PRODUCT_ASSERTION_FAILED; a parent t
 
 `features/coverage-baseline.json` lists the initial uncovered IDs, including dedicated, signed and manual routes outside the debug picker. The baseline is an inventory, not permission to change those features without proof. New uncovered IDs fail even if another gap disappears. Keep dedicated workflows and account prerequisites; never make them debug recipes just to obtain a green verdict.
 
+## Design-kit controls
+
+For button or menu migrations, run `tools/check.sh lint` on GitHub. It checks resolved Material symbols in debug, release and m3, including aliases and fully qualified calls. `KitControlDetectorTest` rejects the exact dialog removed in #136 (`c58a41b6`) and menu removed in #132 (`0cc8e05e`). `tools/kit-controls/history.test.py` verifies their provenance and forbids new baseline allowances. The shipping inventory is empty; diagnostic debug sources and tests are explicit exclusions. The hosted `kit-controls-proof` artifact also retains rejection of a new aliased dialog, qualified dialog and menu against the real Material dependency, not only test stubs. Only `KitSheet` in `DesignKit.kt` may call Material `ModalBottomSheet`.
+
+Do not count kit-component tests as screen proof. `DesignKitTest.deviceApprovalScreenUsesKitButtonPixelsAndActions` captures the actual approval screen's button fills and checks both callbacks. `DeviceApprovalPromptTest` checks busy, error and explicit-choice behavior. These are hosted screen regressions, not live account approval proof.
+
+Dispatch `hosts.md` and `host-changed-key.md` for trust-sheet changes. Inspect the fingerprint, Trust and connect, Not now and independent SSH receipts. Dispatch `sign-in.md` for the Sign in button. Dispatch `device-approval.md` for Approve/No. It uses the real browser callback and PKCE exchange against a local account fixture, then verifies both device keys with independent SSH clients. It does not prove production email OTP; keep that limitation visible. Run the existing reader/menu journeys for reader button changes. New kit components or colours still require the design approval in `CLAUDE.md`.
 ## Android control inventory
 
 [features/controls.json](features/controls.json) lists screens and individual controls from `app/src/main`, with stable IDs, plain labels and source `file:line` citations. Each control names an existing automated journey and its action/result, or has `journey: null` with a missing reason. [features/control-gaps.json](features/control-gaps.json) records the initial missing controls. This complements the outcome registry; it does not change the shared verifier.
@@ -60,7 +69,7 @@ Poll GitHub at most once a minute. If dispatch says the workflow must exist on t
 
 The job uses JDK 17, Android SDK, Gradle 9.5.1 and `assembleDebug`. SDK/emulator downloads have three bounded attempts before emulator launch; `sdk-install.txt` retains each attempt, and an exhausted download fails the job rather than skipping the journey. It starts a fresh API 35 (minSdk 26, targetSdk 36) x86_64/google_apis emulator with KVM and animations disabled, installs the debug APK and starts `dev.multiprompt.companion.debug/dev.multiprompt.companion.MainActivity`. Ready means `DOCTOR READY` in the job log, not just an emulator process. Each run has its own emulator, runner, keypair, SSH daemon and tmux server; never drive another run's device.
 
-The ephemeral SSH server is the runner at `10.0.2.2:2222`, user `verifyssh`, session `verify-session`. Both user and host keys are generated in the job. Password authentication is disabled. The console prints `VERIFY_READY_528` and records input, empty Enter and Interrupt in a receipt file. This is a real SSH/tmux boundary, not a mock or an app setter.
+The ephemeral SSH server is the runner at `10.0.2.2:2222`, user `verifyssh`, target `verify-session`; normal debug jobs seed 40 additional inbox sessions and `cl-long-chat` with 1,882 transcript rows (>18 MiB) once. Dedicated long-chat and signed pins proofs retain their own fixtures. Both user and host keys are generated in the job. Password authentication is disabled. The console prints `VERIFY_READY_528` and records input, empty Enter and Interrupt in a receipt file. This is a real SSH/tmux boundary, not a mock or an app setter.
 
 ## Doctor
 
@@ -89,13 +98,16 @@ Every journey requires the exact `EXPECTED_VERSION` text and `Version <version>,
 
 All SSH journeys first capture Sign in, choose **Use without account (debug)**, open **Session list actions → Hosts → Add host**, fill the real form, open **Import private key**, and select the adb-pushed `verify-key.pem` through Android's real document picker. They compare the displayed `ssh-ed25519 SHA256:…` against the job-generated host fingerprint before choosing **Trust and connect**. An accepted SSH authentication before that action fails the driver. `hosts-retired.md` is the exception: it saves a host at the retired address `45.151.123.11` (blocked on the runner with iptables), force-stops and relaunches, and requires the host card and any "unreachable" banner to be gone; it never trusts or connects.
 
-`host-changed-key.md` rotates only the recorded fixture sshd, then checks **Session list actions → Refresh → Not now**, repeat refresh and force-stop/relaunch. It requires the new fingerprint, unchanged original pin and no further authentication. Session list settings ([session-settings.md](features/session-settings.md)) is mapped but not dispatchable: saving a split switch needs account OTP and a pulled layout, which CI cannot reach.
+`host-changed-key.md` closes the recorded fixture sshd and its owned authenticated child connections before rotating the host key. Replacing only the listener leaves pooled SSH connections authenticated against the old key. The journey then checks **Session list actions → Refresh → Not now**, repeat refresh and force-stop/relaunch. It requires the new fingerprint, unchanged original pin and no further authentication. Session list settings ([session-settings.md](features/session-settings.md)) is mapped but not dispatchable: saving a split switch needs account OTP and a pulled layout, which CI cannot reach.
+
+The reaction fixture consumes the prompt and its trailing delivery marker as one transcript turn. A marker is not a second user message or an extra assistant reply. `tools/kit-controls/journeys.test.py` checks this framing and the SSH rotation ownership. Workspace split actions resolve the active horizontal viewport and search both directions; do not wait for an offscreen label before revealing it.
 
 ## Reader lifetime
 
 For changes to connection ownership, dispatch `chat-codex.md` and cover `reader.lifecycle`. Its SSH observer counts actual history queries and snapshot captures for Hax and Claude while visible, backgrounded, resumed and switched away. A missing positive control or extra hidden request fails. Retain the raw host log, count files, resumed XML and the receipt after closing the second reader. JVM tests cover multiple observers of the same session and silent reconnects; they do not replace the phone journey.
 
 ## Evidence
+Normal debug journeys check `seed-counts.json` against live tmux names and transcript bytes/rows before any action; missing, undersized or mismatched seeds fail setup. `sessions.md` records a runtime-selected reader and its exact one-result search in `seed-search.xml`; it does not assert that all 42 rows render. Find targets by exact name rather than assuming a single row.
 
 Use the pstack proof standard: real user path; action plus resulting state; independently checked side effects; no test-only setters. A final screenshot alone is not proof. The reader recipe records the draft and Send, menu actions and resulting output, plus runner-side receipts and tmux capture. Host setup records the document picker/import, comparison dialog, authenticated session list and pinned identity. Terminal proof requires both attached status and a real tmux client. Split settings cannot be proven by debug offline entry. Sign-in proves only browser handoff, never OTP completion.
 

@@ -27,6 +27,9 @@ class ScreenIdentityTest(unittest.TestCase):
                     images.verify_image(image, "inbox")
         print("ORIGINAL_WRONG_INBOX_REJECTED_OK")
 
+    def test_run_43981504471_reads_the_dark_inbox_pill_on_a_light_page(self):
+        images.verify_image(TOOLS / "fixtures/day-theme/43981504471-light-inbox.png", "inbox")
+
     def test_current_sign_in_requires_current_brand(self):
         image = TOOLS / "fixtures/day-theme/41167975441-after-dark-sign-in.png"
         self.assertEqual(
