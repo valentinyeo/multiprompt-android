@@ -74,13 +74,15 @@ break_it_draft() {
     break_it_active=network
     printf '::group::Break-it 4/5 Throttle network\n'
     break_it_network=true
-    adb emu network speed edge
+    adb emu network speed 128000:128000
     adb emu network delay 150:300
     adb emu network status | tee "$EVIDENCE/network-status.txt"
-    grep -q '150' "$EVIDENCE/network-status.txt"
-    grep -q '118400' "$EVIDENCE/network-status.txt"
+    grep -Eq 'download speed: +128000 bits/s' "$EVIDENCE/network-status.txt"
+    grep -Eq 'upload speed: +128000 bits/s' "$EVIDENCE/network-status.txt"
+    grep -Eq 'minimum latency: +150 ms' "$EVIDENCE/network-status.txt"
+    grep -Eq 'maximum latency: +300 ms' "$EVIDENCE/network-status.txt"
     break_it_require_draft "$label" "$draft"
-    break_it_checkpoint network "EDGE 118400 bits/s upload and 150:300ms delay applied before Send; the rest of the original journey must pass under this throttle. Draft: $draft"
+    break_it_checkpoint network "128000 bits/s upload/download and 150:300ms delay applied before Send; the rest of the original journey must pass under this throttle. Draft: $draft"
 }
 break_it_stream_send() {
     [[ "${BREAK_IT_MODE:-}" == true ]] || return 0

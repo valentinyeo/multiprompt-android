@@ -558,7 +558,7 @@ function judgeContext({ pr, diff, plan, toolingProof, features, smoke = false, p
   const journeyText = features.length
     ? (smoke ? `Only the smoke journey was driven because no journey fits this change. Reason: ${oneLine(pickReason, 300) || 'none given'}\n\n` : '') + features.map(journeyBlock).join('\n\n')
     : `No journey was driven. Reason: ${oneLine(pickReason, 300) || 'none given'}`;
-  return `${prContext(pr, diff, JUDGE_DIFF_CHARS)}\n\nRegistry:\n${coverageGate.catalog()}\n\nRequired changed outcomes: ${JSON.stringify(plan.outcomes)}\n\nHosted non-UI validation (node --test tools/feature-coverage.test.js tools/pstack-verifier.test.js):\n${toolingProof}\n\nBreak-it checkpoint evidence:\n${stressProof ? JSON.stringify(stressProof) : 'Not required for this change.'}\n\nJourney evidence:\n${journeyText}`;
+  return `${prContext(pr, diff, JUDGE_DIFF_CHARS)}\n\nRegistry:\n${coverageGate.catalog()}\n\nRequired changed outcomes: ${JSON.stringify(plan.outcomes)}\n\nHosted non-UI validation (verifier-tooling-proof, including tools/android-break-it.test.js and the existing verifier/workflow checks):\n${toolingProof}\n\nBreak-it checkpoint evidence:\n${stressProof ? JSON.stringify(stressProof) : 'Not required for this change.'}\n\nJourney evidence:\n${journeyText}`;
 }
 
 async function judge(env) {
@@ -605,7 +605,7 @@ async function judge(env) {
     directories = downloadEvidence(repo, runId, features, scratch, 'head');
     const toolingDir = path.join(scratch, 'tooling');
     gh(['run', 'download', runId, '-R', repo, '-n', 'verifier-tooling-proof', '-D', toolingDir]);
-    const toolingProof = readText(path.join(toolingDir, 'tooling-proof.txt'), 12_000);
+    const toolingProof = readText(path.join(toolingDir, 'tooling-proof.txt'), 36_000);
     if (!toolingProof?.trim()) throw new Error('NON_UI_PROOF_MISSING: retain verifier-tooling-proof/tooling-proof.txt from the hosted Node checks.');
     const parentDirectories = downloadEvidence(repo, runId, features, scratch, 'parent');
     for (const feature of features) {

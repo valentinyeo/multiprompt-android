@@ -127,6 +127,24 @@ test('retained landscape XML accepts the real draft and rejects the planted loss
   }
 });
 
+test('network stress requires the configured numeric rates and both latency bounds', t => {
+  const source = fs.readFileSync(path.join(__dirname, 'android-break-it/drive.sh'), 'utf8');
+  const start = source.indexOf('    break_it_active=network\n');
+  const block = source.slice(start, source.indexOf('\n}', start));
+  const status = 'Current network status:\n  download speed:     128000 bits/s\n  upload speed:       128000 bits/s\n  minimum latency:  150 ms\n  maximum latency:  300 ms\nOK\n';
+  for (const response of [status, status.replace('upload speed:       128000', 'upload speed:       473600'), status.replace('download speed:     128000', 'download speed:     0'), status.replace('150 ms', '0 ms'), status.replace('300 ms', '100 ms')]) {
+    const fixture = retained(t);
+    const script = `label=chat; draft=prompt
+      adb() { if [[ "$*" == 'emu network status' ]]; then printf '%s' "$STATUS"; fi; }
+      break_it_require_draft() { :; }
+      break_it_checkpoint() { printf 'NETWORK_CHECKPOINT_PASSED'; }
+      ${block}`;
+    const run = spawnSync('bash', ['-euo', 'pipefail', '-c', script], { env: { ...process.env, EVIDENCE: fixture.dir, STATUS: response }, encoding: 'utf8' });
+    assert.equal(run.status === 0, response === status, run.stderr);
+    assert.equal(run.stdout.includes('NETWORK_CHECKPOINT_PASSED'), response === status);
+  }
+});
+
 test('fresh character input does not crowd the named journey actions out of verifier evidence', t => {
   const fixture = retained(t);
   fs.writeFileSync(path.join(fixture.root, 'driver-transcript.txt'), "+ tap_text Pi\n" + '+ adb shell input text X\n'.repeat(200) + "+ tap_desc 'Send prompt'\n");
