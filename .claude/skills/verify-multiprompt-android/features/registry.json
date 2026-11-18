@@ -822,7 +822,7 @@
     },
     "reader-controls.md": {
       "name": "Reader rename and display controls",
-      "description": "Cancel, dismiss and save a rename with independent host receipts; toggle terminal details and sunlight. SOFT-2653.",
+      "description": "Rename and display, plus 40 reader More, key-validation, pinned-page, attachment and Computer controls with screenshots and independent SSH receipts. SOFT-2669.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -840,8 +840,8 @@
         "reader-controls-sunlight-on.json": 1500,
         "reader-controls-sunlight-off.json": 1500,
         "reader-controls-host.txt": 1000,
-        "reader-controls-window.txt": 200,
-        "reader-controls-proof.txt": 200
+        "reader-menu-proof.txt": 100,
+        "reader-menu-end-host.txt": 300
       }
     },
     "message-reply.md": {
@@ -1412,7 +1412,12 @@
       "journey": "reader-controls.md",
       "sideEffect": true,
       "match": [
-        "renameDialogVisible|renameDraft|ReaderMenuPage\\.DISPLAY|onTechnicalModeChanged|onSetAppTheme|terminal details|Sunlight mode"
+        "renameDialogVisible|renameDraft|ReaderMenuPage\\.DISPLAY|onTechnicalModeChanged|onSetAppTheme|terminal details|Sunlight mode",
+        "ReaderMenuPage\\.MORE|apiKeyDialogVisible|imageKeyDialogVisible|pinPageOpen|pinnedPage|computerTargetOpen|computerOpen|setComputerOpen",
+        "ComputerView\\.kt|DeepgramKeySheet\\.kt|ReaderInformationSheets\\.kt",
+        "label = \"(More|Computer|Snippets|Add file|Dictation API key|Screencast2 upload key|Estimate accuracy|Release notes)\"",
+        "voiceModeOn|label = \"Voice Mode\"|endDialogVisible|DestructiveConfirmationSheet",
+        "InboxOverflowMenu|Session list actions|AppMenu\\.kt[\\s\\S]*onDismissRequest"
       ]
     }
   }

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import importlib.util
+import json
 from pathlib import Path
 import struct
 import tempfile
@@ -75,6 +76,61 @@ class ControlUiTest(unittest.TestCase):
         ui.check(self.xml, self.png, 'rename-draft', 'changed')
         with self.assertRaises(AssertionError):
             ui.check(self.xml, self.png, 'rename-draft', 'old')
+
+    def test_surface_requires_visible_result_and_closed_previous_sheet(self):
+        self.write('<node text="Computer" bounds="[0,100][300,150]"/>'
+                   '<node content-desc="Computer actions" bounds="[300,100][360,160]"/>')
+        expected = dict(text=['Computer'], desc=['Computer actions'], absent=['Address and port'])
+        ui.check(self.xml, self.png, 'surface', json.dumps(expected))
+        for body in [
+            '<node text="Computer" bounds="[0,1300][300,1350]"/>',
+            '<node text="Computer" bounds="[0,100][300,150]" visible-to-user="false"/>',
+            '<node text="Computer" bounds="[0,100][300,150]"/><node text="Address and port"/>',
+        ]:
+            self.write(body + '<node content-desc="Computer actions" bounds="[300,100][360,160]"/>')
+            with self.assertRaises(AssertionError):
+                ui.check(self.xml, self.png, 'surface', json.dumps(expected))
+
+    def test_surface_checks_active_window_and_scroll_clipping(self):
+        self.xml.write_text('<hierarchy><node package="dev.multiprompt.companion.debug">'
+                            '<node text="Viewer address" bounds="[0,100][300,150]"/></node>'
+                            '<node><node text="Cancel" bounds="[0,100][300,150]"/></node></hierarchy>')
+        with self.assertRaises(AssertionError):
+            ui.check(self.xml, self.png, 'surface', '{"text":["Viewer address"]}')
+        self.write('<node scrollable="true" bounds="[0,100][500,300]">'
+                   '<node text="Viewer address" bounds="[0,290][300,350]"/></node>')
+        with self.assertRaises(AssertionError):
+            ui.check(self.xml, self.png, 'surface', '{"text":["Viewer address"]}')
+
+    def test_surface_requires_exact_editor_and_disabled_address(self):
+        for disabled in ['true', 'false']:
+            self.write('<node class="android.widget.EditText" text="127.0.0.1:6081" bounds="[0,100][500,150]"/>'
+                       f'<node enabled="{disabled}"><node text="127.0.0.1:6080" bounds="[0,200][500,250]"/></node>')
+            expected = '{"field":"127.0.0.1:6081","disabled":["127.0.0.1:6080"]}'
+            if disabled == 'true':
+                with self.assertRaises(AssertionError):
+                    ui.check(self.xml, self.png, 'surface', expected)
+            else:
+                ui.check(self.xml, self.png, 'surface', expected)
+                with self.assertRaises(AssertionError):
+                    ui.check(self.xml, self.png, 'surface', '{"field":"127.0.0.1:6080"}')
+        self.write('<node class="android.widget.EditText" text="127.0.0.1:6081" bounds="[0,100][500,150]"/>'
+                   '<node enabled="false"><node text="saved address" bounds="[0,200][500,250]"/></node>')
+        ui.check(self.xml, self.png, 'surface', '{"field":"127.0.0.1:6081","disabled":["saved address"]}')
+
+    def test_surface_checkmark_belongs_to_the_requested_row(self):
+        for marked in [False, True]:
+            checkmark = '<node text="✓" bounds="[300,100][350,150]"/>' if marked else ''
+            self.write('<node clickable="true"><node text="Voice Mode" bounds="[0,100][300,150]"/>'
+                       + checkmark + '</node><node clickable="true"><node text="✓" bounds="[300,200][350,250]"/></node>')
+            ui.check(self.xml, self.png, 'surface', json.dumps(dict(marked={'Voice Mode': marked})))
+            with self.assertRaises(AssertionError):
+                ui.check(self.xml, self.png, 'surface', json.dumps(dict(marked={'Voice Mode': not marked})))
+
+    def test_surface_supports_real_android_document_picker(self):
+        self.xml.write_text('<hierarchy><node package="com.google.android.documentsui">'
+                            '<node text="Recent" bounds="[0,100][300,150]"/></node></hierarchy>')
+        ui.check(self.xml, self.png, 'surface', '{"text":["Recent"],"absent":["Session actions"]}')
 
     def test_reader_rejects_open_sheet(self):
         self.xml.write_text('<hierarchy><node package="dev.multiprompt.companion.debug" text="verify-session" content-desc="Session actions"/></hierarchy>')

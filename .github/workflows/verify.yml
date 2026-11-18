@@ -162,7 +162,7 @@ jobs:
   verify:
     name: ${{ inputs.expect_shell_missing && 'original shell control' || inputs.expect_native_missing && 'original native-skill control' || 'verify' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: ${{ inputs.side == 'parent' && 50 || inputs.break_it && 55 || 35 }}
+    timeout-minutes: ${{ inputs.feature == 'reader-controls.md' && 50 || inputs.side == 'parent' && 50 || inputs.break_it && 55 || 35 }}
     env:
       EVIDENCE: ${{ github.workspace }}/verification-evidence
       VERIFY_FEATURE: ${{ inputs.feature || 'native-skills.md' }}
@@ -324,6 +324,11 @@ jobs:
         continue-on-error: ${{ inputs.side == 'parent' }}
         if: env.VERIFY_FEATURE == 'native-skills.md'
         run: python3 -B tools/menu-controls/ui.test.py
+      - name: Check reader control screenshot assertions
+        id: reader-control-oracle
+        continue-on-error: ${{ inputs.side == 'parent' }}
+        if: env.VERIFY_FEATURE == 'reader-controls.md'
+        run: python3 -B tools/control-journeys/ui.test.py
       - name: Check AI usage assertions
         id: ai-usage-oracle
         continue-on-error: ${{ inputs.side == 'parent' }}
@@ -456,7 +461,7 @@ jobs:
         run: .claude/skills/verify-multiprompt-android/scripts/fixture.sh
       - name: Install, doctor and drive the real app
         id: native-ui
-        timeout-minutes: ${{ inputs.side == 'parent' && 20 || inputs.break_it && 55 || 35 }}
+        timeout-minutes: ${{ inputs.feature == 'reader-controls.md' && 40 || inputs.side == 'parent' && 20 || inputs.break_it && 55 || 35 }}
         continue-on-error: ${{ inputs.side == 'parent' || github.event_name == 'workflow_dispatch' && (github.event.inputs.expect_native_missing == 'true' || github.event.inputs.expect_shell_missing == 'true' || github.event.inputs.expect_settings_missing == 'true' || github.event.inputs.expect_shared_missing == 'true') }}
         uses: ./.github/actions/android-proof
         with:
