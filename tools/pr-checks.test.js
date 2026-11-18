@@ -122,7 +122,76 @@ test('extra check failures and unknown graph entries fail closed', async () => {
   }
 });
 
-test('same-name passing run cannot hide another failing run', async () => {
+test('stale cancelled and failed runs do not block newer successes', async () => {
+  const { checkStatus } = await gate;
+  const pr = await green();
+  const stale = pr.statusCheckRollup.filter(check => ['pick journeys', 'pstack-verifier'].includes(check.name)).map(check => ({
+    ...check,
+    workflowName: 'pstack-verifier',
+    startedAt: '2026-11-18T01:00:00Z',
+    completedAt: '2026-11-18T03:00:00Z',
+    conclusion: check.name === 'pick journeys' ? 'CANCELLED' : 'FAILURE',
+  }));
+  for (const check of pr.statusCheckRollup) {
+    check.workflowName = 'pstack-verifier';
+    check.startedAt = '2026-11-18T02:00:00Z';
+  }
+  for (const statusCheckRollup of [stale.concat(pr.statusCheckRollup), pr.statusCheckRollup.concat(stale)]) {
+    assert.equal(checkStatus({ ...pr, statusCheckRollup }).ready, true);
+  }
+});
+
+test('newer failure cannot be hidden by older success', async () => {
+  const { checkStatus } = await gate;
+  const pr = await green();
+  const older = { ...pr.statusCheckRollup[0], startedAt: '2026-11-18T01:00:00Z' };
+  const newer = { ...older, startedAt: '2026-11-18T02:00:00Z', conclusion: 'FAILURE' };
+  for (const runs of [[older, newer], [newer, older]]) {
+    assert.throws(() => checkStatus({ ...pr, statusCheckRollup: runs.concat(pr.statusCheckRollup.slice(1)) }), /Checks not green: build/);
+  }
+});
+
+test('newer pending run waits instead of accepting older success or failure', async () => {
+  const { checkStatus } = await gate;
+  const pr = await green();
+  for (const conclusion of ['SUCCESS', 'FAILURE']) {
+    const older = { ...pr.statusCheckRollup[0], startedAt: '2026-11-18T01:00:00Z', conclusion };
+    const newer = { ...older, startedAt: '2026-11-18T02:00:00Z', status: 'IN_PROGRESS', conclusion: null };
+    for (const runs of [[older, newer], [newer, older]]) {
+      const status = checkStatus({ ...pr, statusCheckRollup: runs.concat(pr.statusCheckRollup.slice(1)) });
+      assert.equal(status.ready, false);
+      assert.match(status.message, /Waiting: missing \[\], pending 1/);
+    }
+  }
+});
+
+test('check recency falls back to completion time then later list entries', async () => {
+  const { checkStatus } = await gate;
+  const pr = await green();
+  const older = { ...pr.statusCheckRollup[0], completedAt: '2026-11-18T01:00:00Z', conclusion: 'FAILURE' };
+  const newer = { ...older, completedAt: '2026-11-18T02:00:00Z', conclusion: 'SUCCESS' };
+  for (const runs of [[older, newer], [newer, older]]) {
+    assert.equal(checkStatus({ ...pr, statusCheckRollup: runs.concat(pr.statusCheckRollup.slice(1)) }).ready, true);
+  }
+  for (const completedAt of [undefined, '2026-11-18T01:00:00Z']) {
+    pr.statusCheckRollup[0].completedAt = completedAt;
+    pr.statusCheckRollup[0].conclusion = 'FAILURE';
+    pr.statusCheckRollup.push({ ...pr.statusCheckRollup[0], conclusion: 'SUCCESS' });
+    assert.equal(checkStatus(pr).ready, true);
+    pr.statusCheckRollup.pop();
+  }
+});
+
+test('same-name checks from different workflows remain independent', async () => {
+  const { checkStatus } = await gate;
+  const pr = await green();
+  pr.statusCheckRollup[0].workflowName = 'Android tests';
+  pr.statusCheckRollup[0].startedAt = '2026-11-18T02:00:00Z';
+  pr.statusCheckRollup.push({ ...pr.statusCheckRollup[0], workflowName: 'Other workflow', startedAt: '2026-11-18T01:00:00Z', conclusion: 'FAILURE' });
+  assert.throws(() => checkStatus(pr), /Checks not green: build/);
+});
+
+test('later same-name failure without timestamps cannot be hidden', async () => {
   const { checkStatus } = await gate;
   const pr = await green();
   pr.statusCheckRollup.push({ ...pr.statusCheckRollup[0], conclusion: 'FAILURE' });

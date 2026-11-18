@@ -39,10 +39,6 @@
     "sourceTicket": "IGSH-425",
     "cleanupTicket": "IGSH-425"
   },
-  "legacy.igsh-413": {
-    "sourceTicket": "IGSH-413",
-    "cleanupTicket": "IGSH-413"
-  },
   "app-name.journey": {
     "sourceRecipe": "app-name.md",
     "cleanupTicket": "SOFT-2531"
