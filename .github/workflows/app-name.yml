@@ -1,6 +1,7 @@
 name: Android name and in-app update
 
 on:
+  workflow_call:
   pull_request:
     paths:
       - 'app/src/main/**'
