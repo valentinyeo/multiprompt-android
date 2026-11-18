@@ -123,6 +123,20 @@ PY
     fi
     exit 0
 fi
+tap_folder() {
+    local attempt direction plan action x1 y1 x2 y2
+    for attempt in {1..24}; do
+        dump_ui
+        direction=forward
+        if (( attempt > 12 )); then direction=backward; fi
+        plan=$(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" reach-text "$1" "$direction" horizontal) || return
+        read -r action x1 y1 x2 y2 <<< "$plan"
+        if [[ "$action" == tap ]]; then tap_text "$1"; return; fi
+        adb shell input swipe "$x1" "$y1" "$x2" "$y2" 500
+    done
+    printf 'Folder not reachable: %s\n' "$1" >&2
+    return 1
+}
 if [[ "$feature" == inbox-reminders.md ]]; then
     setup_failure=1
     adb shell settings put global http_proxy 127.0.0.1:9
@@ -134,17 +148,17 @@ if [[ "$feature" == inbox-reminders.md ]]; then
     ! grep -F 'FAILURES' "$EVIDENCE/folder-bar-seed.txt"
     setup_failure=0
     relaunch_app
-    tap_text 'Folder 12'
+    tap_folder 'Folder 12'
     inbox_control_state folder-bar-selected '{"selected":["Folder 12"]}'
     relaunch_app
     inbox_control_state folder-bar-reopened '{"folder":"Folder 12"}'
-    tap_text All
+    tap_folder All
     inbox_control_state folder-bar-all '{"folder":"All"}'
-    tap_text 'Folder 06'
+    tap_folder 'Folder 06'
     inbox_control_state folder-bar-middle '{"folder":"Folder 06"}'
     relaunch_app
     inbox_control_state folder-bar-middle-reopened '{"folder":"Folder 06"}'
-    tap_text All
+    tap_folder All
     printf 'FOLDER_BAR_SELECTED_FULLY_VISIBLE_OK\n' | tee "$EVIDENCE/folder-bar-proof.txt"
 fi
 switch_inbox_bucket() {
