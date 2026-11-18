@@ -6646,7 +6646,7 @@
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/VersionLabel.kt",
       "label": "Audited screen composition, labels and finite choice domains",
-      "sha256": "b616dbed2b5295b2c4f78584597728b18f02a76bb12e56d814c18c8690887d86"
+      "sha256": "351ad8b787ef48974312ee590674affc36188538a895e9bf8cb236c0f51ee5c0"
     },
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/WorkingDots.kt",
