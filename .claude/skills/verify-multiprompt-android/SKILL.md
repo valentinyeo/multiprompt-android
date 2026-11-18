@@ -11,7 +11,7 @@ Read [the feature index](features/README.md), then the selected recipe. Everythi
 
 [features/registry.json](features/registry.json) owns outcome IDs, recipe ownership, runner kinds and prerequisites. The generated index, picker catalog, driver eligibility and workflow choices all come from it. Run `node .github/scripts/pstack-verifier/coverage.cjs generate` when it changes; CI runs `check` and rejects drift.
 
-The picker schedules every registered debug journey required by changed outcome IDs. The three-journey limit applies only to optional model suggestions, not required coverage.
+The picker selects every registered debug or signed journey required by changed outcome IDs, recipes, or owned drive scripts before the model chooses. At most three journeys run; larger changes must split. A shared drive.sh change requires every PR-capable journey and therefore fails that limit. Registry runner.scripts records ownership of separate drivers. Signed candidates use the existing signing inputs on both parent and head.
 
 For every product change, identify the changed outcome IDs. Add a new ID and journey for a new behavior. The picker reports `changed_outcomes`; deterministic source matches and the independent judge can add required IDs. An unknown product outcome fails closed. Tooling-only work can use the retained hosted Node test proof instead of claiming that an Android smoke test covered it.
 
@@ -23,7 +23,7 @@ Verification checklist item 7 is the break-it pass. The same bug classification 
 
 The replay has a 20-minute limit. The verifier checks all five retained checkpoints, original journey completion, exact source SHA and the same APK hash, then cites `break-it/*.txt` in its verdict. Tooling-only changes do not claim an Android repair; product source cannot use the tooling classification.
 
-`features/coverage-baseline.json` lists the initial uncovered IDs, including dedicated, signed and manual routes outside the debug picker. The baseline is an inventory, not permission to change those features without proof. New uncovered IDs fail even if another gap disappears. Keep dedicated workflows and account prerequisites; never make them debug recipes just to obtain a green verdict.
+`features/coverage-baseline.json` lists the initial uncovered IDs, including dedicated and manual routes outside the PR picker and historical signed gaps now driven as candidates. The baseline is an inventory, not permission to change those features without proof. New uncovered IDs fail even if another gap disappears. Keep dedicated workflows and account prerequisites; never make them debug recipes just to obtain a green verdict.
 
 ## Design-kit controls
 
@@ -78,7 +78,7 @@ The `emulator-stability.yml` dispatch option is an equivalent entry point for te
 
 ## Launch
 
-`pstack-verifier.yml` owns pull-request journeys. It runs only debug journeys for changed registry outcomes and changed recipes on head and parent through `verify.yml`. It never pads the selection with smoke. Parent proof is reused across PRs only for the same base SHA, journey and driver inputs; missing or invalid proof triggers a fresh run. Tooling-only PRs still get the independent verdict from hosted Node and parent/head workflow-rule proof.
+`pstack-verifier.yml` owns pull-request journeys. It runs debug and signed candidate journeys for changed registry outcomes, recipes and owned drivers on head and parent through `verify.yml`. It never pads the selection with smoke. Parent proof is reused across PRs only for the same base SHA, journey and driver inputs; missing or invalid proof triggers a fresh run. Tooling-only PRs still get the independent verdict from hosted Node and parent/head workflow-rule proof.
 
 `verify.yml` supports calls and manual dispatch. The weekly `maintain-verification.yml` pass drives every registered automated feature. `android-full.yml` runs all six phone regressions, release-profile compilation and historical controls nightly. Dedicated top-fade, account, update and other periodic workflows retain their schedules without PR triggers. `release.yml` still blocks publication on the recorded robot-faces journey against the exact signed APK.
 

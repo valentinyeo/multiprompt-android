@@ -6,6 +6,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: message-projection-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   message-projection-replay:
     name: message projection replay (${{ matrix.fix }})

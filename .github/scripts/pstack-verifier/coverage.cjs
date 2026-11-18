@@ -7,6 +7,17 @@ const registry = require('../../../.claude/skills/verify-multiprompt-android/fea
 const baseline = require('../../../.claude/skills/verify-multiprompt-android/features/coverage-baseline.json');
 const REGISTRY_PATH = '.claude/skills/verify-multiprompt-android/features';
 const debugJourneys = Object.entries(registry.journeys).filter(([, journey]) => journey.runner.kind === 'debug').map(([name]) => name);
+const prJourneys = Object.entries(registry.journeys).filter(([, journey]) => ['debug', 'signed'].includes(journey.runner.kind)).map(([name]) => name);
+
+function changedJourneys(diff, files = []) {
+  const paths = new Set([
+    ...files.flatMap(file => [file.filename, file.previous_filename]).filter(Boolean),
+    ...[...String(diff).matchAll(/^diff --git a\/(\S+) b\/(\S+)$/gm)].flatMap(match => match.slice(1)),
+  ]);
+  return prJourneys.filter(name => paths.has(`${REGISTRY_PATH}/${name}`)
+    || paths.has('.claude/skills/verify-multiprompt-android/scripts/drive.sh')
+    || (registry.journeys[name].runner.scripts ?? []).some(script => paths.has(script)));
+}
 
 function changedProduct(diff) {
   return String(diff).split(/^diff --git /m).slice(1).filter(block => {
@@ -41,7 +52,7 @@ function featureErrors({ plan, coverage = [], directories = {}, conclusions = {}
     const outcome = registry.outcomes[id];
     const fail = reason => errors.push(`FEATURE_NOT_EXERCISED: ${id} changed but ${reason}. Add its action/result journey to features/registry.json; native-skills smoke is not coverage.`);
     const claim = coverage.find(item => item?.outcome === id);
-    if (!outcome?.journey || !debugJourneys.includes(outcome.journey)) {
+    if (!outcome?.journey || !prJourneys.includes(outcome.journey)) {
       fail('no automatic head journey covers it');
       continue;
     }
@@ -94,11 +105,12 @@ function validateRegistry(value = registry, oldGaps = baseline) {
     }
     const journey = value.journeys[outcome.journey];
     if (outcome.journey && !journey?.outcomes.includes(id)) errors.push(`Outcome ${id} must be owned by its journey`);
-    if (!journey || journey.runner.kind !== 'debug') gaps.push(id);
+    if (!journey || !['debug', 'signed'].includes(journey.runner.kind)) gaps.push(id);
   }
   for (const [name, journey] of Object.entries(value.journeys)) {
     if (!/^[\w-]+\.md$/.test(name) || !['debug', 'signed', 'dedicated', 'manual'].includes(journey.runner.kind)) errors.push(`Invalid journey ${name}`);
     if (!journey.outcomes.length || journey.outcomes.some(id => value.outcomes[id]?.journey !== name)) errors.push(`Journey ${name} must own registered outcomes`);
+    if (journey.runner.scripts && (!Array.isArray(journey.runner.scripts) || journey.runner.scripts.some(script => typeof script !== 'string' || !/^[\w./-]+\.(?:sh|py)$/.test(script) || script.split('/').includes('..')))) errors.push(`Journey ${name} scripts must list repository-relative driver paths`);
     const evidence = journey.evidence ?? {};
     if (typeof evidence !== 'object' || Array.isArray(evidence) || Object.keys(evidence).length > 8 ||
         Object.entries(evidence).some(([file, limit]) => !/^[\w-]+\.(?:txt|json|xml)$/.test(file) || !Number.isInteger(limit) || limit < 1 || limit > 6_000) ||
@@ -121,15 +133,15 @@ function renderIndex() {
     return `- [${journey.name}](${name}): ${journey.description}\n  - Outcomes: ${journey.outcomes.map(id => `\`${id}\``).join(', ')}. Runner: \`${runner.workflow}\` (${runner.kind}).${Object.keys(runner.inputs).length ? ` Inputs: \`${JSON.stringify(runner.inputs)}\`.` : ''}${runner.prerequisites.length ? ` Prerequisites: ${runner.prerequisites.join(' ')}` : ''}${journey.evidence ? ` Priority evidence: ${Object.entries(journey.evidence).map(([file, limit]) => `\`${file}\` (${limit} characters)`).join(', ')}.` : ''}`;
   });
   const gaps = Object.entries(baseline).map(([id, gap]) => `| \`${id}\` | ${gap.sourcePr ? `[#${gap.sourcePr}](https://github.com/valentinyeo/multiprompt-android/pull/${gap.sourcePr})` : gap.sourceTicket ?? gap.sourceRecipe} | ${gap.cleanupTicket} |`);
-  return `# multiprompt Android verification map\n\nGenerated from [registry.json](registry.json). Run \`node .github/scripts/pstack-verifier/coverage.cjs generate\` after editing the registry. CI rejects drift.\n\nRead [SKILL.md](../SKILL.md) before dispatching. Use a fresh GitHub-hosted emulator per journey. Never build or run Android locally. Debug SSH fixtures do not prove account OTP, live providers or signed-release behavior.\n\nA product change must name every changed outcome. The second-AI verifier requires the matching successful head journey, exact APK source SHA, action and result citations into the retained artifact, and independent side effects where required. Smoke alone cannot prove a product change. A new behavior needs a new outcome; extending an old recipe does not imply coverage.\n\n## Features\n\n${rows.join('\n')}\n\n## Initial coverage gaps\n\nThese IDs are an inventory, not exemptions for future changes. Untouched gaps do not block this migration. Changing one requires its own journey proof. New uncovered IDs fail the ratchet even if another gap was removed. Signed, dedicated and manual routes remain explicit; the debug picker must not select them.\n\n| Outcome | Existing case | Cleanup ticket |\n|---|---|---|\n${gaps.join('\n')}\n`;
+  return `# multiprompt Android verification map\n\nGenerated from [registry.json](registry.json). Run \`node .github/scripts/pstack-verifier/coverage.cjs generate\` after editing the registry. CI rejects drift.\n\nRead [SKILL.md](../SKILL.md) before dispatching. Use a fresh GitHub-hosted emulator per journey. Never build or run Android locally. Debug SSH fixtures do not prove account OTP, live providers or signed-release behavior.\n\nA product change must name every changed outcome. The second-AI verifier requires the matching successful head journey, exact APK source SHA, action and result citations into the retained artifact, and independent side effects where required. Smoke alone cannot prove a product change. A new behavior needs a new outcome; extending an old recipe does not imply coverage.\n\n## Features\n\n${rows.join('\n')}\n\n## Initial coverage gaps\n\nThese IDs are an inventory, not exemptions for future changes. Untouched gaps do not block this migration. Changing one requires its own journey proof. New uncovered IDs fail the ratchet even if another gap was removed. Signed routes run parent/head candidates with their registered inputs. Dedicated and manual routes remain outside the PR picker.\n\n| Outcome | Existing case | Cleanup ticket |\n|---|---|---|\n${gaps.join('\n')}\n`;
 }
 
 function renderWorkflow(source) {
   const options = Object.entries(registry.journeys).filter(([, journey]) => ['debug', 'signed'].includes(journey.runner.kind) && journey.runner.driver).map(([name]) => `          - ${name}`).join('\n');
-  return source.replace(/^      VERIFY_FEATURE: .*$/m, `      VERIFY_FEATURE: \${{ inputs.feature || '${registry.smoke}' }}`).replace(/(      feature:\n        description:[^\n]+\n        required: true\n        type: choice\n        options:\n)(?:          - [^\n]+\n)+/, `$1${options}\n`);
+  return source.replace(/^      VERIFY_FEATURE: .*$/m, `      VERIFY_FEATURE: \${{ inputs.driver_feature || inputs.feature || '${registry.smoke}' }}`).replace(/(      feature:\n        description:[^\n]+\n        required: true\n        type: choice\n        options:\n)(?:          - [^\n]+\n)+/, `$1${options}\n`);
 }
 
-module.exports = { registry, baseline, REGISTRY_PATH, debugJourneys, changedProduct, changedOutcomes, planChange, featureErrors, catalog, validateRegistry, ratchetErrors, renderIndex, renderWorkflow };
+module.exports = { registry, baseline, REGISTRY_PATH, debugJourneys, prJourneys, changedJourneys, changedProduct, changedOutcomes, planChange, featureErrors, catalog, validateRegistry, ratchetErrors, renderIndex, renderWorkflow };
 
 if (require.main === module) {
   if (process.argv[2] === 'journey') {

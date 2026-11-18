@@ -36,6 +36,7 @@ test('cache keys bind the base SHA, journey and complete driver inputs, not tick
   assert.equal(first, cacheKey(sha, 'hosts.md', root));
   assert.notEqual(first, cacheKey('b'.repeat(40), 'hosts.md', root));
   assert.notEqual(first, cacheKey(sha, 'terminal.md', root));
+  assert.notEqual(cacheKey(sha, 'session-pins.md', root), cacheKey(sha, 'session-favorites.md', root));
   file('tools/release-notes/ticket-titles.json', '{"IGSH-2687":"title"}');
   assert.equal(first, cacheKey(sha, 'hosts.md', root));
   file('tools/runtime.sh', 'changed');
