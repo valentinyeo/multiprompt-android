@@ -13,6 +13,7 @@ open_inbox_settings() {
     wait_for_text 'Session list settings'
 }
 if [[ "$feature" == settings-controls.md ]]; then
+    adb shell wm size 1080x1280
     open_inbox_settings
     inbox_control_state settings-top '{"text":["Session list settings","Sign in","Host mapping"],"absent":["Large"]}'
     tap_node text Large reveal
@@ -89,7 +90,6 @@ switch_inbox_bucket() {
 open_inbox_reminder() {
     tap_node desc 'Robot verify-session' reveal
     hold_text verify-session
-    wait_for_text 'Remind Me…'
     tap_text 'Remind Me…'
     wait_for_text 'Remind me'
 }
