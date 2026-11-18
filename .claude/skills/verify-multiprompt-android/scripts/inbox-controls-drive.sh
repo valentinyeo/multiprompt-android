@@ -67,7 +67,21 @@ if [[ "$feature" == settings-controls.md ]]; then
     wait_for_text 'App updates'
     inbox_control_state settings-update '{"text":["App updates","Check now"],"desc":["Open navigation"],"absent":["Session list settings"]}'
     sudo cat /home/verifyssh/commands.log > "$EVIDENCE/settings-refresh-before.txt"
-    tap_desc Refresh
+    refresh_deadline=$((SECONDS + 15))
+    refresh_tapped=0
+    while (( SECONDS < refresh_deadline )); do
+        dump_ui || true
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" desc Refresh >/dev/null 2>&1 && tap_desc Refresh; then
+            refresh_tapped=1
+            break
+        fi
+        if (( SECONDS >= refresh_deadline )); then break; fi
+        sleep 1
+    done
+    if [[ "$refresh_tapped" != 1 ]]; then
+        printf 'Timed out waiting for Refresh\n' >&2
+        exit 1
+    fi
     wait_for_text 'App updates'
     inbox_control_state settings-refreshed '{"text":["App updates"],"desc":["Open navigation"]}'
     sudo cat /home/verifyssh/commands.log > "$EVIDENCE/settings-refresh-after.txt"
