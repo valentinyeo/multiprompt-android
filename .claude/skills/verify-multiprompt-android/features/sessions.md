@@ -12,7 +12,7 @@ Inbox lists the real tmux sessions on saved trusted hosts, with output previews 
 - `sessions-badge`: new assistant message count, not just an unread dot; requires an agent transcript (not automated).
 - `sessions-settings`: **Session list actions → Settings** opens **Session list settings**; see [split switch journey](session-settings.md), blocked without OTP/layout.
 - `sessions-muted`: a tab with `muted: true` in the account layout never appears in any Inbox split, bucket, count or unread badge, yet stays in the workspace list and in Favorites, and a search finds it so its menu can Unmute it (not automated).
-- `sessions-new`: New session host/folder/mode picker (not automated).
+- `sessions-new`: With one trusted host, open New session, choose its home folder, reveal the start-agent sheet and use Back without creating a session (automated). Agent creation and other host/mode choices are not automated.
 
 ## How to get to it (user POV)
 
@@ -26,8 +26,10 @@ Preconditions: fresh fixture; use `feature=sessions.md`. The driver performs the
 - Capture the initial inbox XML, then choose the first name from `seed-counts.json` absent from that dump. Record its name, exact `Robot <name>` description, expected reader text and initial snapshot in `seed-deep-choice.json`. If every seeded name is present, fail setup with `SEED_DEEP_SETUP_FAILED`. Scroll/tap the chosen description, require its named composer and fixture reply, and retain `seed-deep-target.xml`. The long-chat target uses the generator's latest-reply marker; console targets use `VERIFY_READY_528`. Return to Inbox.
 - Open **Search sessions** and type the runtime-chosen session name, not the host label. Require `1 result across all splits` and the exact `Robot <name>` row, then retain `seed-search.xml` and the `search-match` PNG/XML pair. Query text alone is not a matching row.
 - Close search, require the search field and one-result count to disappear, and reveal the same chosen session again. Retain `search-cleared`.
-- This journey proves the 42-session SSH seed/readback, one runtime-selected reader and its exact search result. It does not claim every seeded row rendered, a long-chat soak, transcript performance or session-menu behavior. The failed full-inbox swipe sweep and all-rows assertion were removed.
+- This journey proves the 42-session SSH seed/readback, one runtime-selected reader and its exact search result. It does not claim every seeded row rendered, a long-chat soak, or transcript performance. The failed full-inbox swipe sweep and all-rows assertion were removed.
 - The driver types the session name and leaves the keyboard up. `search-keyboard.json` requires that exact `Robot <name>` row below the search field and above the keyboard frame from `dumpsys`. Closing search still requires the field and the one-result count to disappear. Inspect the XML as well as the screenshot: the typed query alone must not be mistaken for a matching card.
+- After the search is cleared the driver asserts the Inbox row has no per-row `Session actions` button, long-presses the runtime-chosen session row, waits for `Mark as unread` and `End tmux session`, takes `shot row-long-press-actions`, then presses back to close the menu. The row shows the name, a dim one-line preview and the time.
+- After closing the row menu, tap **New session → Use this folder**. Require **Claude Code** and **Shell** in the start-agent sheet and capture `start-agent-picker`. The shared action planner reveals the complete **Back** control, scrolling its container if needed. Tap **Back**, require **Use this folder** again, and capture `start-agent-back-to-folder`. Compare independent tmux session lists before and after; opening and leaving the picker must not create an agent.
 
 ## Gotchas
 

@@ -11,7 +11,7 @@ The native Sign in page follows the selected theme, including dark status icons 
 - `account-entry`: Sign in screen and browser handoff (automated).
 - `account-return`: OTP, state/PKCE callback and persistent user login (not automated).
 - `account-servers`: account-backed hosts after OTP and host-sync capability (not automated).
-- `account-device-approval`: **Approve this device? → Approve / No** on an existing signed-in device (not automated).
+- `account-device-approval`: **Approve this device? → Approve / No** with independently checked SSH key changes has a [local account-fixture journey](device-approval.md). Production email OTP and delivery remain unautomated.
 - `account-crash-upload`: pending reports upload on startup/sign-in; requires a queued crash and service receipt (not automated).
 - `account-sync-entry`: Sign in to sync from the session overflow menu (not automated).
 

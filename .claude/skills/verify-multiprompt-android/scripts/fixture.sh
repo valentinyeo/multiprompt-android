@@ -242,6 +242,20 @@ if [[ "${VERIFY_FEATURE:-}" == session-favorites.md ]]; then
         tmux has-session -t verify-keep
     '
 fi
+if [[ "${VERIFY_FEATURE:-}" == device-approval.md ]]; then
+    for name in pending-device denied-device; do
+        ssh-keygen -q -t ed25519 -N '' -C "$name" -f "$FIXTURE/$name"
+        ssh-keygen -lf "$FIXTURE/$name.pub" -E sha256 | awk '{print $2}' > "$EVIDENCE/$name-fingerprint.txt"
+        sudo install -m 644 -o verifyssh -g verifyssh "$FIXTURE/$name.pub" "/home/verifyssh/$name.pub"
+    done
+    sudo install -m 755 "$(dirname "$0")/device-approval.py" /home/verifyssh/device-approval.py
+    sudo -u verifyssh python3 /home/verifyssh/device-approval.py /home/verifyssh /home/verifyssh 8787 > "$EVIDENCE/device-approval-server.log" 2>&1 &
+    for attempt in {1..30}; do
+        if curl -fsS http://127.0.0.1:8787/ready > /dev/null; then break; fi
+        sleep 1
+    done
+    curl -fsS http://127.0.0.1:8787/ready > "$EVIDENCE/device-approval-ready.json"
+fi
 if [[ "${VERIFY_FEATURE:-}" == session-favorite-dot.md ]]; then
     sudo -u verifyssh tmux new-session -d -s verify-keep -x 100 -y 32 'python3 -u /home/verifyssh/console.py /home/verifyssh/keep-receipts.txt'
     sudo -u verifyssh tmux set-window-option -t verify-keep automatic-rename off

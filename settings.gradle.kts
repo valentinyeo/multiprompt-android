@@ -15,5 +15,5 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "multiprompt-companion"
-include(":app")
+include(":app", ":tools:kit-controls")
 

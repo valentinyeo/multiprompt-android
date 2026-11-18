@@ -3,7 +3,7 @@ import subprocess
 import sys
 import tempfile
 import xml.etree.ElementTree as ET
-from PIL import Image
+from PIL import Image, ImageOps
 from pathlib import Path
 
 
@@ -48,6 +48,11 @@ def verify_image(path, screen, display_name=None):
                     image.crop((0, int(image.height * .03), int(image.width * width_fraction), int(image.height * .13))).save(header.name)
                     result = subprocess.run(
                         ["tesseract", header.name, "stdout", "--psm", "6"], check=True, capture_output=True, text=True
+                    )
+                    text += " " + " ".join(re.findall(r"[a-z0-9]+", result.stdout.lower()))
+                    ImageOps.invert(Image.open(header.name).convert("RGB")).save(header.name)
+                    result = subprocess.run(
+                        ["tesseract", header.name, "stdout", "--psm", "7"], check=True, capture_output=True, text=True
                     )
                     text += " " + " ".join(re.findall(r"[a-z0-9]+", result.stdout.lower()))
                 missing = [label for label in labels if label not in text]
