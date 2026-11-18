@@ -565,7 +565,7 @@
       "screen": "Native chat",
       "label": "Retry",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:ChatHistoryView:KitSecondaryButton:6671d6e7a5f6ea0c:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:146",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:142",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -574,7 +574,7 @@
       "screen": "Native chat",
       "label": "Choose a model from terminal picker",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:ChatHistoryView:KitSecondaryButton:6f2359c00072d10e:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:151",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:147",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -583,7 +583,7 @@
       "screen": "Resend confirmation",
       "label": "Dismiss Native chat",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:ChatHistoryList:KitSheet:c111d81bd3aeb3d3:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:297",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:284",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -592,7 +592,7 @@
       "screen": "Resend confirmation",
       "label": "Cancel",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:ChatHistoryList:KitSecondaryButton:2564bd4f508637fd:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:300",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:287",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -601,7 +601,7 @@
       "screen": "Resend confirmation",
       "label": "Send again",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:ChatHistoryList:KitPrimaryButton:8063167e20cb06d9:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:301",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:288",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -609,8 +609,8 @@
       "id": "native-chat.scroll-native-chat",
       "screen": "Native chat",
       "label": "Scroll Native chat",
-      "site": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:ChatHistoryList:LazyColumn:089c94ad59671431:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:390",
+      "site": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:ChatHistoryList:LazyColumn:d802c44a63230125:1",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:374",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -619,7 +619,7 @@
       "screen": "Native chat",
       "label": "Edit",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:ChatHistoryList:KitSecondaryButton:14a09395620f660f:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:429",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:413",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -628,7 +628,7 @@
       "screen": "Native chat",
       "label": "Remove",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:ChatHistoryList:KitSecondaryButton:d5e3a0ba347eb568:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:434",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:418",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -637,7 +637,7 @@
       "screen": "Native chat",
       "label": "Send again",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:ChatHistoryList:KitSecondaryButton:3a451d684a797c54:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:435",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:419",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -6411,16 +6411,6 @@
       "callers": [
         "reader-transcript.scroll-reader-transcript"
       ]
-    },
-    {
-      "id": "forward.ChatHistoryList.ChatHistoryList.nestedScroll.1",
-      "site": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:ChatHistoryList:nestedScroll:67e516bc27744ade:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:391",
-      "reason": "Observes the existing chat-list scroll gesture to distinguish user scrolling from new-message layout; not a second user control.",
-      "callers": [
-        "native-chat.scroll-native-chat"
-      ],
-      "component": "ChatHistoryList"
     }
   ],
   "choice_sources": [
@@ -6462,7 +6452,7 @@
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt",
       "label": "Audited screen composition, labels and finite choice domains",
-      "sha256": "c7de99b5289573246f815d0ab679134bf8b1018dbbf144a4ba5e3e37b3482002"
+      "sha256": "797aa149d341ff995012ca4cc08af1d9e36a467bbddf6a58ffda655bb261e3d3"
     },
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/ChatImagePreview.kt",
