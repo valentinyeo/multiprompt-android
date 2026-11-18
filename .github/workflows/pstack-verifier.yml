@@ -45,6 +45,7 @@ jobs:
             .github/scripts
             .claude/skills/verify-multiprompt-android/features
             tools/android-break-it.test.js
+            app/src/main/assets/chat_history_reader.py
             tools/android-break-it
             tools/fixtures/android-break-it
             .claude/skills/verify-multiprompt-android/scripts/ui.py
