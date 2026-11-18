@@ -14,7 +14,7 @@ Each case contains an organic pull request, a small source diff, registered outc
 | maple | Construct clipboard data without installing it; pasted composers stay empty | FAIL |
 | birch | Drop the final character before submitting; independent host receipts lose it | FAIL |
 | willow | Replace the unique-row assertion with `True`; green summary contradicts duplicate XML | FAIL |
-| aspen | Change only the clipboard's human label; both copied values remain exact | PASS |
+| aspen | Extract clipboard data creation without changing its label, value or installation; both copied values remain exact | PASS |
 | elm | Rewrite the ready/disconnected branch without changing behavior; all reader actions remain exact | PASS |
 
 Every case must satisfy all three criteria on **both** families:

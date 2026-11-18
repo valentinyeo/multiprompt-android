@@ -1193,12 +1193,17 @@ if [[ "$feature" == robot-faces.md ]]; then
     shot robot-inbox
 fi
 sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
+if [[ "$feature" == device-approval.md ]]; then
+    source "$scripts/device-approval-drive.sh"
+    exit 0
+fi
 if [[ "$feature" == hosts.md ]]; then
     tap_desc 'Session list actions'
     tap_text Settings
     tap_text 'Host mapping'
     wait_for_text "Pinned $fingerprint"
     shot pinned-host
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" snapshot "" > "$EVIDENCE/hosts-ui.json"
     exit 0
 fi
 if [[ "$feature" == host-changed-key.md ]]; then
@@ -1211,7 +1216,9 @@ if [[ "$feature" == host-changed-key.md ]]; then
     printf '%s\n' "$accepted_before" > "$EVIDENCE/accepted-before-rotation.txt"
     old_pid=$(sudo cat "$FIXTURE/sshd.pid")
     [[ "$old_pid" =~ ^[0-9]+$ && "$old_pid" -gt 1 ]]
-    sudo kill "$old_pid"
+    mapfile -t old_connections < <(sudo ps -o pid= --ppid "$old_pid" | awk '{print $1}')
+    printf '%s\n' "${old_connections[@]}" > "$EVIDENCE/sshd-children-before-rotation.txt"
+    sudo kill "$old_pid" "${old_connections[@]}"
     for attempt in {1..30}; do
         if ! sudo kill -0 "$old_pid" 2>/dev/null; then break; fi
         sleep 1
@@ -1234,8 +1241,9 @@ PYROTATE
     [[ "$new_pid" =~ ^[0-9]+$ && "$new_pid" -gt 1 && "$new_pid" != "$old_pid" ]]
     sudo kill -0 "$new_pid"
     printf '%s\n' "$new_pid" > "$EVIDENCE/rotated-sshd-pid.txt"
-    wait_for_text 'SSH host key changed' || { refresh_inbox; wait_for_text 'SSH host key changed'; }
+    wait_for_text 'SSH host key changed'
     shot changed-host-key
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" snapshot "" > "$EVIDENCE/host-key-ui.json"
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "Now: ssh-ed25519 $rotated"
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "Saved: ssh-ed25519 $fingerprint"
     tap_text 'Not now'
@@ -1256,6 +1264,13 @@ PYROTATE
     accepted_after=$(sudo awk '/Accepted publickey/ {n++} END {print n+0}' "$FIXTURE/sshd.log")
     printf '%s\n' "$accepted_after" > "$EVIDENCE/accepted-after-rotation.txt"
     [[ "$accepted_after" == "$accepted_before" ]]
+    python3 - "$EVIDENCE" <<'PYAUTH'
+import json
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+(root / 'host-key-auth.json').write_text(json.dumps(dict(accepted_before_rotation=int((root / 'accepted-before-rotation.txt').read_text()), accepted_after_rotation=int((root / 'accepted-after-rotation.txt').read_text()), saved_fingerprint=(root / 'host-fingerprint.txt').read_text().strip(), presented_fingerprint=(root / 'rotated-fingerprint.txt').read_text().strip()), indent=2))
+PYAUTH
     printf 'CHANGED KEY DISMISSAL VERIFIED; no authentication after rotation\n'
     exit 0
 fi
@@ -1480,6 +1495,34 @@ if [[ "$feature" == sessions.md ]]; then
     wait_for_absence '1 result across all splits'
     wait_for_text "$deep_target"
     shot search-cleared
+    dump_ui
+    if grep -F 'content-desc="Session actions"' "$EVIDENCE/current.xml"; then
+        printf 'Inbox row still has a per-row menu button\n' >&2
+        exit 1
+    fi
+    read -r row_x row_y <<< "$(select_node desc "$deep_description")"
+    adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 800
+    wait_for_text 'Mark as unread'
+    wait_for_text 'End tmux session'
+    shot row-long-press-actions
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/row-long-press-actions.xml"
+    adb shell input keyevent KEYCODE_BACK
+    wait_for_absence 'End tmux session'
+    sudo -u verifyssh tmux list-sessions -F '#{session_name}' > "$EVIDENCE/sessions-before-agent-picker.txt"
+    tap_desc 'New session'
+    wait_for_text 'Use this folder'
+    adb shell input keyevent KEYCODE_BACK
+    tap_text 'Use this folder'
+    wait_for_text 'Claude Code'
+    wait_for_text Shell
+    shot start-agent-picker
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/start-agent-picker.xml"
+    tap_text Back
+    wait_for_text 'Use this folder'
+    shot start-agent-back-to-folder
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/start-agent-back-to-folder.xml"
+    sudo -u verifyssh tmux list-sessions -F '#{session_name}' > "$EVIDENCE/sessions-after-agent-picker.txt"
+    cmp "$EVIDENCE/sessions-before-agent-picker.txt" "$EVIDENCE/sessions-after-agent-picker.txt"
     exit 0
 fi
 tap_text verify-session

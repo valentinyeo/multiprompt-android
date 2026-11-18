@@ -7,6 +7,8 @@ gradle_run() {
 }
 
 source_checks() {
+  python3 -B tools/kit-controls/history.test.py
+  python3 -B tools/kit-controls/journeys.test.py
   node --test tools/ci/phone-routing.test.mjs tools/root-files.test.js tools/strip-comments.test.js tools/release-status.test.js tools/verify-published.test.mjs tools/workflow-inputs.test.js tools/release-proof.test.js tools/pr-checks.test.js tools/branch-protection.test.js tools/release-notes/notes.test.mjs tools/baseline-profile.test.mjs tools/pstack-verifier.test.js tools/pstack-verifier-eval.test.js tools/feature-coverage.test.js tools/android-break-it.test.js
   python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.test.py
   python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.py check
@@ -93,7 +95,8 @@ m3_unit_checks() {
 }
 
 lint_checks() {
-  gradle_run lintDebug
+  gradle_run :tools:kit-controls:test lintDebug lintRelease lintM3
+  bash tools/kit-controls/replay.sh
 }
 
 case "${1:-all}" in

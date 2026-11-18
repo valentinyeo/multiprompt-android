@@ -830,7 +830,10 @@ test('the real picker schedules clear-ranking code and recipe edits even when th
     const rankingDiff = path.join(directory, 'ranking.diff');
     fs.writeFileSync(rankingDiff, productDiff('skills/NativeSkills.kt', 'val rank = score(skill.name, skill.description, query)'));
     const historicalPlan = gate.planChange(read('tools/fixtures/feature-coverage/pr-381.diff'), []);
-    assert.throws(() => verifier.includeRequiredJourneys({ features: [], dropped: [], smoke: true }, historicalPlan), /Required outcomes need more than three journeys/);
+    const historicalPick = verifier.includeRequiredJourneys({ features: [], dropped: [], smoke: true }, historicalPlan);
+    assert.deepEqual(historicalPick.features, [...new Set(historicalPlan.outcomes.map(id => gate.registry.outcomes[id].journey))]);
+    assert.ok(historicalPick.features.length > verifier.MAX_JOURNEYS);
+    assert.equal(historicalPick.smoke, false);
     for (const diff of [rankingDiff, recipeDiff]) {
       for (const features of [[], ['native-skills.md', 'session-reader.md', 'terminal.md']]) {
         const output = path.join(directory, 'outputs');

@@ -46,6 +46,13 @@ PYHOST
             fi
         fi
     done
+    if [[ -f /home/verifyssh/device-approval.pid ]]; then
+        pid=$(sudo cat /home/verifyssh/device-approval.pid)
+        [[ "$pid" =~ ^[0-9]+$ && "$pid" -gt 1 ]]
+        sudo kill "$pid"
+        sudo cat /home/verifyssh/device-approval-receipts.jsonl > "$EVIDENCE/device-approval-receipts.txt"
+    fi
+    rm -f "$FIXTURE/pending-device" "$FIXTURE/pending-device.pub" "$FIXTURE/denied-device" "$FIXTURE/denied-device.pub" "$FIXTURE/device-known-hosts"
     rm -f "$FIXTURE/user-key" "$FIXTURE/user-key.pub" "$FIXTURE/host-key" "$FIXTURE/host-key.pub" "$FIXTURE/rotated-host-key" "$FIXTURE/rotated-host-key.pub"
 fi
 printf 'CLEANUP COMPLETE: evidence retained; status=%s\n' "$status"

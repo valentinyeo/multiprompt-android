@@ -34,6 +34,7 @@ import org.junit.Rule
 import org.junit.Test
 import kotlin.math.max
 import kotlin.math.min
+import androidx.compose.ui.test.isDisplayed
 
 class DayThemeTest {
     @get:Rule(order = 0) val notifications = GrantPermissionRule.grant(android.Manifest.permission.POST_NOTIFICATIONS)
@@ -132,7 +133,7 @@ class DayThemeTest {
         textNodes.fetchSemanticsNodes().forEachIndexed { index, node ->
             val layouts = mutableListOf<TextLayoutResult>()
             val interaction = textNodes[index]
-            if (node.boundsInRoot.width <= 0 || node.boundsInRoot.height <= 0) return@forEachIndexed
+            if (!interaction.isDisplayed() || node.boundsInRoot.width <= 0 || node.boundsInRoot.height <= 0) return@forEachIndexed
             interaction.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
             val bounds = node.boundsInRoot
             val position = node.positionOnScreen

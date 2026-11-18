@@ -157,7 +157,7 @@ test('required outcome journeys cannot be omitted by the model picker', () => {
   const selected = verifier.includeRequiredJourneys(picked, { outcomes: ['reader.send-enter-interrupt', 'chat.link-recovery'] });
   assert.deepEqual(selected.features, ['session-reader.md', 'chat-shared.md']);
   assert.equal(selected.smoke, false);
-  assert.throws(() => verifier.includeRequiredJourneys(picked, { outcomes: ['reader.send-enter-interrupt', 'chat.link-recovery', 'inbox.search', 'terminal.journey'] }), /more than three/);
+  assert.deepEqual(verifier.includeRequiredJourneys(picked, { outcomes: ['reader.send-enter-interrupt', 'chat.link-recovery', 'inbox.search', 'terminal.journey'] }).features, ['session-reader.md', 'chat-shared.md', 'sessions.md', 'terminal.md']);
 });
 
 test('the judge receives recovery UI and host receipts before large diagnostic files', () => {
@@ -785,6 +785,64 @@ test('a verdict wrapped in prose or a fence still parses, and a bad answer is as
   asked = 0;
   await assert.rejects(verifier.askParsed({ ask: async () => { asked += 1; throw Object.assign(new Error('cut'), { fatal: true }); }, parse }), /cut/);
   assert.equal(asked, 1);
+});
+
+test('SOFT-2536 schedules all five required journeys beyond the suggestion limit', () => {
+  const outcomes = ['sign-in.journey', 'host-changed-key.journey', 'chat-reactions.journey', 'claude.skills-model-effort', 'inbox.search'];
+  const plan = { product: true, outcomes };
+  const picked = { features: ['sign-in.md', 'host-changed-key.md', 'chat-reactions.md'], smoke: false };
+  const selected = verifier.includeRequiredJourneys(picked, plan);
+  const expected = [...picked.features, 'native-skills.md', 'sessions.md'];
+  assert.deepEqual(selected.features, expected);
+  assert.equal(selected.smoke, false);
+  assert.deepEqual(verifier.validateFeatures(selected.features, Infinity), { features: expected, dropped: [] });
+  const judge = read('.github/scripts/pstack-verifier/verifier.cjs').split('async function judge(')[1];
+  assert.match(judge, /validateFeatures\(requested, Infinity\)/);
+});
+
+test('required journeys replace a smoke fallback without inventing coverage for manual gaps', () => {
+  const picked = { features: [verifier.SMOKE_JOURNEY], smoke: true };
+  assert.deepEqual(verifier.includeRequiredJourneys(picked, { outcomes: ['sign-in.journey'] }).features, ['sign-in.md']);
+  assert.deepEqual(verifier.includeRequiredJourneys(picked, { outcomes: ['session-settings.journey'] }), picked);
+});
+
+test('PR392 native model and effort receipts reach the judge before diagnostic evidence fills its budget', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-native-proof-'));
+  try {
+    const fixture = path.join(root, 'tools/fixtures/feature-coverage/987d3f8e-native');
+    fs.cpSync(fixture, directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, 'driver-transcript.txt'), 'diagnostic line\n'.repeat(5000));
+    for (let index = 0; index < 30; index += 1) fs.writeFileSync(path.join(directory, `aux-${String(index).padStart(2, '0')}.txt`), 'diagnostic '.repeat(100));
+    const evidence = verifier.journeyEvidence(directory, 'native-skills.md');
+    assert.match(evidence, /--- native-result\.json\n[\s\S]*"model": "Sonnet 5\.5"/);
+    assert.match(evidence, /--- native-receipts\.txt\n[\s\S]*VERIFY_RECEIVED:\/model sonnet/);
+    assert.match(evidence, /VERIFY_RECEIVED:\/effort high/);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('journey builds reuse cached fixed-version dependencies during repository outages', () => {
+  const build = stepBlocks(read('.github/workflows/verify.yml')).find(step => /id: build-apk/.test(step));
+  assert.match(build, /gradle -p "\$app_source"/);
+  assert.doesNotMatch(build, /--refresh-dependencies/);
+});
+
+test('proof uploads survive the same-run retry that failed PR392 at c2f673c6', () => {
+  const requireReplayable = source => {
+    const lines = source.split('\n');
+    let found = 0;
+    lines.forEach((line, index) => {
+      if (!line.includes('uses: actions/upload-artifact@')) return;
+      found += 1;
+      let end = index + 1;
+      while (end < lines.length && !/^\s*- /.test(lines[end])) end += 1;
+      assert.match(lines.slice(index, end).join('\n'), /^\s+overwrite: true$/m, 'A repeated check must replace its own per-run artifact, not fail with HTTP 409');
+    });
+    assert.ok(found > 0);
+  };
+  for (const file of ['.github/workflows/pstack-verifier.yml', '.github/workflows/verify.yml', '.github/workflows/test.yml', '.github/workflows/account-journey.yml', '.github/actions/android-proof/action.yml']) requireReplayable(read(file));
+  assert.throws(() => requireReplayable('uses: actions/upload-artifact@v4\nwith:\n  name: verifier-tooling-proof\n  path: tooling-proof.txt\n'));
 });
 
 test('only a complete docs/tooling file list gets a no-product result', () => {

@@ -17,10 +17,6 @@ import androidx.compose.material.icons.filled.MarkChatUnread
 import androidx.compose.material.icons.filled.Reply
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Tag
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -35,20 +31,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -69,12 +62,10 @@ import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.platform.testTag
 import dev.multiprompt.companion.reader.ChatReactions
 import kotlin.math.abs
 
@@ -86,7 +77,6 @@ internal class ReplySwipeGate {
 internal val ReplySelectable = SemanticsPropertyKey<Boolean>("ReplySelectable")
 internal var SemanticsPropertyReceiver.replySelectable by ReplySelectable
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ReplyableBubble(
     isUser: Boolean,
@@ -182,10 +172,7 @@ internal fun ReplyableBubble(
         }
     }
     if (menuExpanded) {
-        ModalBottomSheet(
-            onDismissRequest = { menuExpanded = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        ) {
+        KitSheet(onDismiss = { menuExpanded = false }) {
             Column(
                 Modifier.fillMaxWidth().heightIn(min = (LocalConfiguration.current.screenHeightDp * 0.46f).dp)
                     .verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
@@ -193,29 +180,21 @@ internal fun ReplyableBubble(
             ) {
                 @Composable
                 fun group(content: @Composable () -> Unit) {
-                    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(16.dp))) {
-                        content()
-                    }
+                    KitListGroup { content() }
                 }
                 @Composable
                 fun action(label: String, icon: ImageVector, run: () -> Unit) {
-                    Row(
-                        Modifier.fillMaxWidth().clickable { menuExpanded = false; run() }.padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
-                        Text(label, style = MaterialTheme.typography.bodyLarge)
-                    }
+                    KitMenuRow(label = label, icon = icon, onClick = { menuExpanded = false; run() })
                 }
                 if (!isUser && onReaction != null) {
                     group {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                             ChatReactions.Emoji.entries.forEach { emoji ->
-                                TextButton(
+                                KitSecondaryButton(
+                                    text = emoji.text,
                                     onClick = { menuExpanded = false; onReaction(emoji) },
                                     modifier = Modifier.testTag("reaction-${emoji.name.lowercase()}"),
-                                ) { Text(emoji.text, fontSize = 28.sp) }
+                                )
                             }
                         }
                     }
@@ -313,9 +292,7 @@ internal fun ReplyQuoteBar(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        IconButton(onClick = onCancel, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.Close, contentDescription = "Cancel reply", tint = hint, modifier = Modifier.size(20.dp))
-        }
+        KitRoundButton(onClick = onCancel, modifier = Modifier.size(32.dp), icon = Icons.Default.Close, description = "Cancel reply")
     }
 }
 

@@ -2,6 +2,7 @@
 import datetime
 import json
 import os
+import re
 from pathlib import Path
 import sys
 import uuid
@@ -48,10 +49,18 @@ event("user", "VERIFY_READY_528", "initial")
 event("assistant", first, "msg_first")
 event("assistant", second, "msg_second")
 print("Claude Code\nVERIFY_READY_528\n" + first + "\n" + second + "\nReady\n❯ ", flush=True)
+pending = []
 for line in sys.stdin:
     text = line.rstrip("\r\n")
+    if not re.fullmatch(r"\[mp:[0-9a-f]{16}\]", text):
+        pending.append(text)
+        continue
+    assert pending, "Delivery marker arrived without a prompt"
+    prompt = "\n".join(pending)
     with receipts.open("a", encoding="utf-8") as output:
-        output.write("VERIFY_RECEIVED:" + text + "\n")
-    event("user", text, "reaction")
+        output.write("VERIFY_RECEIVED:" + prompt + "\n")
+    event("user", prompt + "\n" + text, "reaction")
+    pending.clear()
     event("assistant", "Reaction received.", "msg_receipt_" + str(uuid.uuid4()))
     print("Reaction received.\n❯ ", flush=True)
+assert not pending, "Prompt ended without its delivery marker"

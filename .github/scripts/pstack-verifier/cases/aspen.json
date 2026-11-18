@@ -1,13 +1,13 @@
 {
   "pr": {
     "number": 41,
-    "title": "Copy the chat ID from its menu",
+    "title": "Extract clipboard data creation without changing Copy chat ID",
     "body": "Done when\nTapping Copy chat ID then pasting puts the host ID into the composer; chats without an ID paste their tmux name.",
     "head": {
       "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
   },
-  "diff": "diff --git a/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt b/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt\n--- a/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt\n+++ b/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt\n@@ -4129,7 +4129,7 @@\n                                         onClick = {\n                                             menuExpanded = false\n                                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager\n-                                            clipboard.setPrimaryClip(ClipData.newPlainText(\"$displayName chat ID\", chatId))\n+                                            clipboard.setPrimaryClip(ClipData.newPlainText(\"Chat ID\", chatId))\n                                             android.widget.Toast.makeText(context, dev.multiprompt.companion.model.ChatId.COPIED, android.widget.Toast.LENGTH_SHORT).show()\n                                         },\n                                     )\n",
+  "diff": "diff --git a/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt b/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt\n--- a/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt\n+++ b/app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt\n@@ -4129,7 +4129,8 @@\n                                         onClick = {\n                                             menuExpanded = false\n                                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager\n-                                            clipboard.setPrimaryClip(ClipData.newPlainText(\"$displayName chat ID\", chatId))\n+                                            val clip = ClipData.newPlainText(\"$displayName chat ID\", chatId)\n+                                            clipboard.setPrimaryClip(clip)\n                                             android.widget.Toast.makeText(context, dev.multiprompt.companion.model.ChatId.COPIED, android.widget.Toast.LENGTH_SHORT).show()\n                                         },\n                                     )\n",
   "features": [
     "copy-chat-id.md"
   ],
