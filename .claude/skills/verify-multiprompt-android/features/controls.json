@@ -614,7 +614,7 @@
       "screen": "Native chat",
       "label": "Scroll Native chat",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:ChatHistoryList:LazyColumn:d802c44a63230125:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:375",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:374",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -623,7 +623,7 @@
       "screen": "Native chat",
       "label": "Edit",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:ChatHistoryList:KitSecondaryButton:14a09395620f660f:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:414",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:413",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -632,7 +632,7 @@
       "screen": "Native chat",
       "label": "Remove",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:ChatHistoryList:KitSecondaryButton:d5e3a0ba347eb568:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:419",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:418",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -641,7 +641,7 @@
       "screen": "Native chat",
       "label": "Send again",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:ChatHistoryList:KitSecondaryButton:3a451d684a797c54:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:420",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt:419",
       "journey": null,
       "missing": "No automated journey exercises this control and checks its result."
     },
@@ -6612,7 +6612,7 @@
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt",
       "label": "Audited screen composition, labels and finite choice domains",
-      "sha256": "c5b803d968574feaa73bbb87501339d1057cd5a524ab218b7eb7aa4114e9de36"
+      "sha256": "797aa149d341ff995012ca4cc08af1d9e36a467bbddf6a58ffda655bb261e3d3"
     },
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/ChatImagePreview.kt",
