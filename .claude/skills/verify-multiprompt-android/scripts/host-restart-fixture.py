@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import datetime
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,8 @@ import uuid
 
 HOME = Path('/home/verifyssh')
 SID = 'c001c001-2681-4000-8000-000000002681'
+NATIVE_BEFORE = 'c001c001-2681-4000-8000-000000000001'
+NATIVE_AFTER = 'c001c001-2681-4000-8000-000000000002'
 TMUX = 'live-verify-session'
 CWD = HOME / 'host-restart-work'
 READER = HOME / 'host-restart-reader.py'
@@ -35,15 +38,33 @@ def runtime():
     return runpy.run_path(str(READER), run_name='restart_fixture')
 
 
+def native_row(sid, role, text, identity):
+    path = HOME / '.claude/projects' / str(CWD).replace('/', '-') / (sid + '.jsonl')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    row = dict(type=role, uuid=identity, sessionId=sid,
+        timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00', 'Z'),
+        message=dict(role=role, id=identity, content=[dict(type='text', text=text)]))
+    with path.open('a') as output:
+        output.write(json.dumps(row) + '\n')
+
+
 def console():
     CWD.mkdir(exist_ok=True)
     os.chdir(CWD)
     assert cli('enable', 'claude', SID, '--tmux', TMUX, '--cwd', str(CWD))['status'] == 'enabled'
     reader = runtime()
-    reader['host_write'](reader['host_paths']('claude', SID)['state'], dict(display_history=True,
-        native_session=SID, nightly_day=time.strftime('%Y-%m-%d')))
-    reader['host_history_append']('claude', SID, dict(state=dict(display_history=True)),
-        dict(role='assistant', text='DESKTOP_CHAT_READY_2681'))
+    reader['host_write'](reader['host_paths']('claude', SID)['state'], dict(
+        native_session=NATIVE_BEFORE, nightly_day=time.strftime('%Y-%m-%d')))
+    for native in (SID, NATIVE_BEFORE):
+        native_row(native, 'user', 'CURRENT_CHAT_2681', 'initial-user-2681')
+        native_row(native, 'assistant', 'DESKTOP_CHAT_READY_2681', 'initial-reply-2681')
+    with reader['message_store_db'](TMUX) as db, db:
+        db.execute('INSERT OR IGNORE INTO message_chats(provider,sid) VALUES (?,?)', ('claude', SID))
+        for index in range(40):
+            token = f'old-message-2681-{index:04d}'
+            db.execute("INSERT INTO shared_messages VALUES (?,?,?,?,?,?,'accepted',NULL,?,0,?,'human')",
+                (token, 'claude', SID, f'OLD_INCOMING_2681_{index:04d}', index + 1,
+                 uuid.uuid4().hex, 'historical-acceptance', time.time() - 3600 + index))
     subprocess.run(['tmux', 'set-option', '-t', TMUX, '@mp_host_sid', SID], check=True)
     RECEIPTS.write_text('')
     print('Claude Code\nHOST_RESTART_READY_2681\nReady', flush=True)
@@ -64,6 +85,14 @@ def restart():
         time.sleep(.1)
     else:
         raise AssertionError('Fixture host did not stop')
+    state = reader['host_read'](paths['state'])
+    session = dict(state=state)
+    reader['host_fresh_archive']('claude', SID, TMUX, session)
+    for index in range(700):
+        reader['host_history_append']('claude', SID, session,
+            dict(role='tool', id=f'archive-tool-{index}', text='Archived tool step', detail='x' * 1024))
+    state['native_session'] = NATIVE_AFTER
+    reader['host_write'](paths['state'], state)
     assert cli('start', 'claude', SID)['status'] in ('started', 'already')
     for _ in range(100):
         owner = reader['host_read'](paths['owner']) or {}
@@ -86,13 +115,15 @@ def restart():
         except FileNotFoundError:
             pass
     assert disconnected, 'No phone history channel was open at the restart'
-    print(json.dumps(dict(old_pid=old, new_pid=owner['pid'], history_pids=disconnected, sid=SID, tmux=TMUX)), flush=True)
+    print(json.dumps(dict(old_pid=old, new_pid=owner['pid'], history_pids=disconnected, sid=SID,
+        native_before=NATIVE_BEFORE, native_after=NATIVE_AFTER, tmux=TMUX)), flush=True)
 
 
 def evidence():
     reader = runtime()
     history = reader['host_paths']('claude', SID)['history']
-    rows = [json.loads(line)['row'] for line in history.read_text().splitlines()]
+    all_rows = [json.loads(line)['row'] for line in history.read_text().splitlines()]
+    rows = [row for row in all_rows if row['role'] in ('user', 'assistant')]
     receipts = [json.loads(line) for line in RECEIPTS.read_text().splitlines()]
     paths = reader['host_paths']('claude', SID)
     state = reader['host_read'](paths['state'])
@@ -101,7 +132,10 @@ def evidence():
     with sqlite3.connect(reader['message_store_path']().as_uri() + '?mode=ro', uri=True) as db:
         messages = [dict(zip(('id', 'text', 'state', 'deadline', 'receipt'), row)) for row in
             db.execute('SELECT id,text,state,deadline,receipt FROM shared_messages WHERE sid=? ORDER BY position', (SID,))]
-    print(json.dumps(dict(sid=SID, tmux=TMUX, history=rows, receipts=receipts, messages=messages,
+    print(json.dumps(dict(sid=SID, tmux=TMUX, history=rows, history_bytes=history.stat().st_size,
+        archived_tools=sum(row['role'] == 'tool' for row in all_rows),
+        old_accepted=sum(row['state'] == 'accepted' and row['id'].startswith('old-message-2681-') for row in messages),
+        receipts=receipts, messages=messages[-3:],
         host_state=state, host_log=log, host_stderr=errors), indent=2))
 
 
@@ -111,7 +145,10 @@ def emit(event):
 
 def claude():
     assert Path.cwd() == CWD
-    emit(dict(type='system', subtype='init', session_id=SID, model='sonnet'))
+    option = '--resume' if '--resume' in sys.argv else '--session-id'
+    native = sys.argv[sys.argv.index(option) + 1]
+    assert native in (NATIVE_BEFORE, NATIVE_AFTER) and native != SID
+    emit(dict(type='system', subtype='init', session_id=native, model='sonnet'))
     for line in sys.stdin:
         request = json.loads(line)
         if request.get('type') == 'control_request':
@@ -121,10 +158,13 @@ def claude():
             text = content if isinstance(content, str) else ''.join(block.get('text', '') for block in content)
             reply = 'REPLY_' + text
             with RECEIPTS.open('a') as output:
-                output.write(json.dumps(dict(text=text, reply=reply, pid=os.getpid(), sid=SID)) + '\n')
-            emit(dict(type='assistant', uuid=str(uuid.uuid4()), session_id=SID,
-                message=dict(id='msg_' + uuid.uuid4().hex, role='assistant', content=[dict(type='text', text=reply)])))
-            emit(dict(type='result', subtype='success', stop_reason='end_turn', session_id=SID, usage={}))
+                output.write(json.dumps(dict(text=text, reply=reply, pid=os.getpid(), sid=SID, native_session=native)) + '\n')
+            native_row(native, 'user', text, request['uuid'])
+            answer_id = 'msg_' + uuid.uuid4().hex
+            native_row(native, 'assistant', reply, answer_id)
+            emit(dict(type='assistant', uuid=str(uuid.uuid4()), session_id=native,
+                message=dict(id=answer_id, role='assistant', content=[dict(type='text', text=reply)])))
+            emit(dict(type='result', subtype='success', stop_reason='end_turn', session_id=native, usage={}))
 
 
 if __name__ == '__main__':

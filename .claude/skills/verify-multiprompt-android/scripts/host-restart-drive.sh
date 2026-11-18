@@ -19,6 +19,10 @@ jq -e '.status == "sent" or .status == "queued"' "$EVIDENCE/host-restart-desktop
 host_restart_fixture evidence > "$EVIDENCE/host-restart-host.json"
 if ! wait_for_text REPLY_DESKTOP_AFTER_2681; then
     host_restart_fixture evidence > "$EVIDENCE/host-restart-host.json"
+    if ! jq -e '.old_accepted == 40 and .history_bytes > 524288 and .archived_tools == 700 and any(.history[]; .role == "assistant" and .text == "REPLY_DESKTOP_AFTER_2681")' "$EVIDENCE/host-restart-host.json"; then
+        setup_failure=1
+        exit 1
+    fi
     printf 'HOST_RESTART_REPLY_NOT_VISIBLE_2681\n'
     exit 1
 fi

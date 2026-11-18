@@ -41,6 +41,24 @@ class MessageProjectionTest {
         assertFalse("MESSAGE_PROJECTION_DUPLICATE: phone message produced two visible rows. Reconcile it in ChatHistory; do not append an independent echo. $phones", phones.any { it.value > 1 })
     }
 
+    @Test fun archivedRepliesStayLastWhenOlderAcceptedMessagesAreOutsideTheHistoryTail() {
+        val old = row(1).copy(text = "old incoming")
+        val current = row(2).copy(text = "current question")
+        val history = ChatHistory(sid = sid, inode = 8, rows = listOf(
+            user(2, current.id, current.text).copy(timestamp = "2026-11-13T11:00:02.123456"), reply(2),
+        ))
+        once(history.projectMessages(replica(listOf(old, current), emptyList())), listOf("current question", "answer 2"))
+    }
+
+    @Test fun newerAcceptedMessagesRemainVisibleUntilTheirHistoryArrives() {
+        val current = row(1).copy(text = "current question")
+        val newer = row(2).copy(text = "new incoming")
+        val history = ChatHistory(sid = sid, inode = 8, rows = listOf(
+            user(1, current.id, current.text).copy(timestamp = "2026-11-13T11:00:02.123456"), reply(1),
+        ))
+        once(history.projectMessages(replica(listOf(current, newer), emptyList())), listOf("current question", "answer 1", "new incoming"))
+    }
+
     @Test fun waitingPromptsBecomeJournalAndHostRowsWithoutAnIndependentEcho() {
         for (provider in listOf("claude", "codex", "pi", "hax", "cursor")) {
             val waiting = listOf(PendingPrompts.Entry(id(1), "same"), PendingPrompts.Entry(id(2), "same"))
