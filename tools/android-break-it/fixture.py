@@ -47,6 +47,7 @@ if sys.argv[1:] in (['seed'], ['release'], ['proof'], ['stop']):
     config = reader.host_read(paths['config'])
     config['command'] = [sys.executable, str(HOME / 'breakit-fixture.py')]
     reader.host_write(paths['config'], config)
+    reader.host_state_write('pi', SID, dict(provider='pi', sid=SID, display_history=True))
     reader.host_history_append('pi', SID, dict(state=dict(display_history=True)), dict(role='assistant', text='BREAK_IT_READY'))
     assert reader.host_cli(['start', 'pi', SID])['status'] in ('started', 'already')
 else:
