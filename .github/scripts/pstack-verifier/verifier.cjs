@@ -53,7 +53,7 @@ A journey is a scripted user path that a GitHub-hosted emulator drives against t
 
 Identify EVERY changed product outcome from the outcome catalog, including gaps with no journey. A new behavior must get a new registered outcome and a journey, not borrow an existing smoke outcome. Never omit a changed outcome because its journey is missing. For product code with no matching outcome use ["unmapped"], which blocks acceptance until the registry is extended. For a bug fix use change_kind: "bug". For a new or changed feature use change_kind: "product". For tooling-only changes use changed_outcomes: [] and change_kind: "tooling".
 
-Choose only debug or signed journeys for changed outcomes from the registry, or a recipe or owned drive script changed by this diff. Never add unrelated smoke or full-suite journeys. At most ${MAX_JOURNEYS} journeys can run; required journeys come first. Dedicated and manual routes cannot be driven by this picker. Use only the exact file names in the journey catalog. Never invent a name. Choose none when no journey exercises the change, for example a change to documentation, build files or code no journey reaches. Prefer fewer journeys that fit over padding the list.
+Choose only debug or signed journeys for changed outcomes from the registry, or a recipe or owned drive script changed by this diff. Never add unrelated smoke or full-suite journeys. At most ${MAX_JOURNEYS} journeys can run. Rank the bug-fix repro journeys added or changed by the PR first, then the most relevant regression guards. Directly edited recipes must run. When the required candidate set exceeds the cap, the remaining guards run in nightly android-full and are explicitly deferred in the verdict, not claimed as PR proof. Dedicated and manual routes cannot be driven by this picker. Use only the exact file names in the journey catalog. Never invent a name. Choose none when no journey exercises the change, for example a change to documentation, build files or code no journey reaches. Prefer fewer journeys that fit over padding the list.
 
 Answer with one JSON object and nothing else: {"features": ["file.md"], "changed_outcomes": ["outcome.id"], "change_kind": "product" | "tooling" | "bug", "reason": "one short sentence"}. When features is empty, reason says why nothing fits. When it is not empty, reason says what the journeys cover.`;
 
@@ -67,7 +67,7 @@ The parent side is the app before this change, built from the merge base of the 
 
 Judge whether the change does what the title and the Done-when lines say, and whether the evidence shows it. Verdicts:
 - PASS: the evidence shows every outcome the change promises, and you found no defect.
-- PASS+NOTES: all changed product outcomes are proven, but unrelated pre-existing gaps remain. Missing proof of a changed product outcome is FAIL, never a note.
+- PASS+NOTES: all product outcomes required in this PR are proven, but explicitly deferred nightly guards or unrelated pre-existing gaps remain. Missing proof of a required PR outcome is FAIL, never a note. Deferred nightly journeys are not required PR proof and must not be claimed as exercised.
 - FAIL: a journey contradicts the change, the diff has a defect that breaks a promised outcome, or the evidence shows a crash or a wrong result.
 
 A head journey that failed is already counted as FAIL by the pipeline. You still describe what the evidence shows. Do not claim anything the evidence does not show. If no journey was driven, say that the app was not driven and judge only from the diff.
@@ -99,15 +99,23 @@ function validateFeatures(raw, limit = MAX_JOURNEYS) {
   return { features, dropped };
 }
 
-function includeRequiredJourneys(picked, plan, diff = '', changed = coverageGate.changedJourneys(diff)) {
+function includeRequiredJourneys(picked, plan, diff = '', changed = coverageGate.changedJourneys(diff), recipes = coverageGate.changedRecipes(diff)) {
   const required = [...new Set([
     ...changed,
     ...plan.outcomes.map(id => coverageGate.registry.outcomes[id].journey),
     ...(!plan.product && BREAK_IT_TOOLS.test(diff) ? ['ai-switch.md'] : []),
   ].filter(name => ALLOWLIST.includes(name)))];
-  const { features } = validateFeatures(required, Infinity);
-  if (features.length > MAX_JOURNEYS) throw new Error(`Too many required journeys (${features.length}); split the change into pull requests with at most ${MAX_JOURNEYS} journeys each.`);
-  return { ...picked, features, dropped: (picked.dropped ?? []).filter(name => !features.includes(name)), smoke: false };
+  if (recipes.length > MAX_JOURNEYS) throw new Error(`Too many changed recipes (${recipes.length}); split the change so every edited recipe runs within the ${MAX_JOURNEYS}-journey cap.`);
+  const ranked = required.length > MAX_JOURNEYS
+    ? [...recipes, ...(picked.features ?? []).filter(name => required.includes(name)), ...required]
+    : required;
+  const { features } = validateFeatures(ranked);
+  const deferred = required.filter(name => !features.includes(name));
+  return { ...picked, features, deferred, dropped: (picked.dropped ?? []).filter(name => !required.includes(name)), smoke: false };
+}
+
+function scopePlan(plan, deferred) {
+  return { ...plan, outcomes: plan.outcomes.filter(id => !deferred.includes(coverageGate.registry.outcomes[id].journey)) };
 }
 
 function journeyRunners(features) {
@@ -119,6 +127,10 @@ function journeyRunners(features) {
       ...Object.fromEntries(['released_chat', 'pins_scroll', 'release_choices', 'released_robots'].map(flag => [flag, runner.inputs[flag] === true])),
     }];
   }));
+}
+
+async function nightly() {
+  setOutputs({ matrix: JSON.stringify({ include: Object.entries(journeyRunners(ALLOWLIST)).map(([journey, runner]) => ({ journey, ...runner })) }) });
 }
 
 function parseJson(text) {
@@ -196,8 +208,8 @@ function isBugFix({ title = '', body = '', changeKind = '', tickets = {} } = {})
   return ids.some(id => saysBug(tickets[id]));
 }
 
-function applyRules({ modelVerdict, features, conclusions, parents, notDrivenReason, smoke = false, featureProof, bugFix = false, stressProof, stressRequired = false }) {
-  const notes = [];
+function applyRules({ modelVerdict, features, conclusions, parents, notDrivenReason, smoke = false, featureProof, bugFix = false, stressProof, stressRequired = false, deferred = [] }) {
+  const notes = deferred.map(name => `Deferred to nightly android-full: ${name}. Not exercised by this PR.`);
   let verdict = VERDICTS.includes(modelVerdict) ? modelVerdict : 'FAIL';
   const journeys = features.map(feature => {
     const conclusion = conclusions?.[feature] ?? null;
@@ -212,7 +224,7 @@ function applyRules({ modelVerdict, features, conclusions, parents, notDrivenRea
   if (missing.length) {
     notes.push(`No parent result for ${missing.map(journey => journey.feature).join(', ')}, so there is no before and after comparison for it.`);
   }
-  if ((!features.length || smoke) && verdict === 'PASS') {
+  if ((!features.length || smoke || deferred.length) && verdict === 'PASS') {
     verdict = 'PASS+NOTES';
   }
   if (smoke && features.length) {
@@ -502,14 +514,15 @@ async function pick(env) {
   const diff = fetchDiff(repo, number);
   if (!/^diff --git /m.test(diff)) throw new Error('no patch text came back for the pull request');
   const changed = coverageGate.changedJourneys(diff, files);
-  const deterministic = includeRequiredJourneys({ features: [], dropped: [] }, coverageGate.planChange(diff, []), diff, changed);
-  const user = `Required journeys (already selected before your choice): ${JSON.stringify(deterministic.features)}\n\nJourney catalog (the only names you may choose):\n${journeyCatalog(env.ROOT ?? process.cwd())}\n\n${prContext(pr, diff, PICK_DIFF_CHARS)}`;
+  const recipes = coverageGate.changedRecipes(diff, files);
+  const deterministic = includeRequiredJourneys({ features: [], dropped: [] }, coverageGate.planChange(diff, []), diff, changed, recipes);
+  const user = `Directly edited recipes (must run): ${JSON.stringify(recipes)}\nRequired candidates (rank repro first, then relevant guards within the cap): ${JSON.stringify([...deterministic.features, ...deterministic.deferred])}\n\nJourney catalog (the only names you may choose):\n${journeyCatalog(env.ROOT ?? process.cwd())}\n\n${prContext(pr, diff, PICK_DIFF_CHARS)}`;
   const picked = await askParsed({ ask: () => callDeepSeek({ key, system: PICK_INSTRUCTIONS, user }), parse: parsePick });
   const plan = coverageGate.planChange(diff, picked.changedOutcomes);
   if (plan.product && picked.changeKind === 'tooling') throw new Error('FEATURE_UNMAPPED: product source changes cannot use tooling-only validation.');
-  const selected = includeRequiredJourneys(picked, plan, diff, changed);
+  const selected = includeRequiredJourneys(picked, plan, diff, changed, recipes);
   const reason = picked.reason || 'Journeys chosen for this change.';
-  console.log(`pstack-verifier pick: PR #${number} features=${JSON.stringify(selected.features)} smoke=${selected.smoke} dropped=${JSON.stringify(selected.dropped)} reason=${reason}`);
+  console.log(`pstack-verifier pick: PR #${number} features=${JSON.stringify(selected.features)} smoke=${selected.smoke} deferred=${JSON.stringify(selected.deferred)} dropped=${JSON.stringify(selected.dropped)} reason=${reason}`);
   setOutputs({ runners: JSON.stringify(journeyRunners(selected.features)), features: JSON.stringify(selected.features), smoke: selected.smoke ? 'yes' : 'no', reason, number, head_sha: head, merge_base: mergeBase, changed_outcomes: JSON.stringify(plan.outcomes), change_kind: selected.changeKind, break_it: isBugFix({ title: pr.title, body: pr.body, changeKind: selected.changeKind, tickets: loadTicketTitles() }) || BREAK_IT_TOOLS.test(diff) ? 'true' : 'false' });
 }
 
@@ -560,7 +573,7 @@ function readSideFiles(directory) {
   return out;
 }
 
-function judgeContext({ pr, diff, plan, toolingProof, features, smoke = false, pickReason, parents, parentConclusions, conclusions, directories, parentDirectories, stressProof }) {
+function judgeContext({ pr, diff, plan, deferred = [], toolingProof, features, smoke = false, pickReason, parents, parentConclusions, conclusions, directories, parentDirectories, stressProof }) {
   const side = (label, feature, text) => `--- ${label}, journey ${feature}\n${text}`;
   const journeyBlock = feature => [
     `=== Journey ${feature}`,
@@ -570,7 +583,7 @@ function judgeContext({ pr, diff, plan, toolingProof, features, smoke = false, p
   const journeyText = features.length
     ? (smoke ? `Only the smoke journey was driven because no journey fits this change. Reason: ${oneLine(pickReason, 300) || 'none given'}\n\n` : '') + features.map(journeyBlock).join('\n\n')
     : `No journey was driven. Reason: ${oneLine(pickReason, 300) || 'none given'}`;
-  return `${prContext(pr, diff, JUDGE_DIFF_CHARS)}\n\nRegistry:\n${coverageGate.catalog()}\n\nRequired changed outcomes: ${JSON.stringify(plan.outcomes)}\n\nHosted non-UI validation (verifier-tooling-proof, including tools/android-break-it.test.js and the existing verifier/workflow checks):\n${toolingProof}\n\nBreak-it checkpoint evidence:\n${stressProof ? JSON.stringify(stressProof) : 'Not required for this change.'}\n\nJourney evidence:\n${journeyText}`;
+  return `${prContext(pr, diff, JUDGE_DIFF_CHARS)}\n\nRegistry:\n${coverageGate.catalog()}\n\nRequired changed outcomes for this PR: ${JSON.stringify(plan.outcomes)}\n\nDeferred to nightly android-full (not exercised by this PR): ${JSON.stringify(deferred)}\n\nHosted non-UI validation (verifier-tooling-proof, including tools/android-break-it.test.js and the existing verifier/workflow checks):\n${toolingProof}\n\nBreak-it checkpoint evidence:\n${stressProof ? JSON.stringify(stressProof) : 'Not required for this change.'}\n\nJourney evidence:\n${journeyText}`;
 }
 
 async function judge(env) {
@@ -613,6 +626,7 @@ async function judge(env) {
   let featureProof;
   let directories;
   let model;
+  let deferred = [];
   try {
     directories = downloadEvidence(repo, runId, features, scratch, 'head');
     const toolingDir = path.join(scratch, 'tooling');
@@ -630,15 +644,22 @@ async function judge(env) {
     }
     const reported = JSON.parse(env.CHANGED_OUTCOMES || 'null');
     const plan = coverageGate.planChange(diff, reported);
-    content = judgeContext({ pr, diff, plan, toolingProof, features, smoke, pickReason: env.PICK_REASON, parents, parentConclusions, conclusions, directories, parentDirectories, stressProof });
+    const selected = includeRequiredJourneys({ features }, plan, diff);
+    content = judgeContext({ pr, diff, plan: scopePlan(plan, selected.deferred), deferred: selected.deferred, toolingProof, features, smoke, pickReason: env.PICK_REASON, parents, parentConclusions, conclusions, directories, parentDirectories, stressProof });
     model = await askParsed({ ask: () => callDeepSeek({ key, system: JUDGE_INSTRUCTIONS, user: content }), parse: parseVerdict });
     const finalPlan = coverageGate.planChange(diff, [...plan.outcomes, ...model.changedOutcomes]);
-    featureProof = coverageGate.featureErrors({ plan: finalPlan, coverage: model.coverage, directories, conclusions, sha });
-    fs.writeFileSync(path.resolve(env.COVERAGE_REPORT ?? 'feature-coverage.json'), JSON.stringify({ sha, plan: finalPlan, stressProof, ...featureProof }, null, 2));
+    const finalSelected = includeRequiredJourneys({ features }, finalPlan, diff);
+    deferred = finalSelected.deferred;
+    const requiredPlan = scopePlan(finalPlan, deferred);
+    featureProof = coverageGate.featureErrors({ plan: requiredPlan, coverage: model.coverage, directories, conclusions, sha });
+    for (const name of finalSelected.features) {
+      if (!features.includes(name)) featureProof.errors.push(`FEATURE_NOT_EXERCISED: required journey ${name} was not scheduled.`);
+    }
+    fs.writeFileSync(path.resolve(env.COVERAGE_REPORT ?? 'feature-coverage.json'), JSON.stringify({ sha, plan: finalPlan, requiredPlan, deferred, stressProof, ...featureProof }, null, 2));
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }
-  const ruled = applyRules({ modelVerdict: model.verdict, features, conclusions, parents, notDrivenReason: env.PICK_REASON, smoke, featureProof, bugFix, stressProof, stressRequired });
+  const ruled = applyRules({ modelVerdict: model.verdict, features, conclusions, parents, notDrivenReason: env.PICK_REASON, smoke, featureProof, bugFix, stressProof, stressRequired, deferred });
 
   const current = fetchPr(repo, number).head.sha;
   if (current !== sha) {
@@ -672,14 +693,14 @@ module.exports = {
   JUDGE_INSTRUCTIONS, judgeContext, ALLOWLIST, MODEL, ENDPOINT, MARKER_PREFIX, VERDICTS, MAX_JOURNEYS, SMOKE_JOURNEY, PRODUCT_ASSERTION,
   SIDES, RESULT_FILE, escapeText, validateFeatures, parseJson, askParsed, parsePick, parseVerdict, applyRules, parentResult, buildComment,
   saysBug, loadTicketTitles, isBugFix, noProductChange,
-  artifactName, readSideFiles, fetchMergeBase, findOwnComment, jobConclusions, callDeepSeek, doneWhen, journeyEvidence, journeyCatalog, requireKey, includeRequiredJourneys, journeyRunners,
+  artifactName, readSideFiles, fetchMergeBase, findOwnComment, jobConclusions, callDeepSeek, doneWhen, journeyEvidence, journeyCatalog, requireKey, includeRequiredJourneys, scopePlan, journeyRunners,
 };
 
 if (require.main === module) {
-  const commands = { pick, judge };
+  const commands = { pick, judge, nightly };
   const command = commands[process.argv[2]];
   if (!command) {
-    console.error('Usage: verifier.cjs pick|judge');
+    console.error('Usage: verifier.cjs pick|judge|nightly');
     process.exit(64);
   }
   command(process.env).catch(error => {
