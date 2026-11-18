@@ -44,8 +44,17 @@ def plan(root, mode, value, direction="forward", search_axis=None):
     def viewport(node):
         rect = screen
         for ancestor in chain(node):
-            if ancestor is not node and ancestor.get("scrollable") == "true":
+            if ancestor.get("scrollable") == "true":
                 rect = intersection(rect, bounds(ancestor))
+                for panel in nodes:
+                    if not enabled(panel) or not above(panel, ancestor):
+                        continue
+                    left, top, right, bottom = bounds(panel)
+                    if left <= rect[0] and right >= rect[2]:
+                        if top <= rect[1] < bottom:
+                            rect = rect[0], bottom, rect[2], rect[3]
+                        elif top < rect[3] <= bottom:
+                            rect = rect[0], rect[1], rect[2], top
         return rect
 
     def scroll(node, axis, forward):

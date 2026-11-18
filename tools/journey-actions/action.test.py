@@ -48,7 +48,7 @@ class ActionTest(unittest.TestCase):
         xml = (Path(__file__).parent / "fixtures/9cce26ad-hidden-favorites.xml").read_text()
         result = subprocess.run(['python3', str(SCRIPTS / 'ui.py'), str(Path(__file__).parent / 'fixtures/9cce26ad-hidden-favorites.xml'), 'reach-text', 'Favorites', 'forward', 'horizontal'], capture_output=True, text=True, check=True)
         self.assertEqual(result.stdout.strip(), 'swipe 845 1773 235 1773')
-        self.assertEqual(self.plan(xml, value='Favorites'), 'swipe 540 1536 540 384')
+        self.assertEqual(self.plan(xml, value='Favorites'), 'swipe 540 1402 540 540')
 
     def test_split_search_switches_direction_at_the_actual_strip_edge(self):
         source = (ROOT / 'tools/account-journey/drive.sh').read_text()
@@ -99,6 +99,16 @@ adb() {
         exec(compile(old, 'release-parent-journey-action', 'exec'), namespace)
         self.assertEqual(namespace['plan'](ET.fromstring(clipped), 'desc', 'Robot verify-session'), 'tap 540 62')
         print('RELEASE_ROBOT_REPLAY: 3e0b2df2 taps hidden row at 540 62; head scrolls below the header')
+
+    def test_nonclickable_foreground_edge_panels_bound_scroll_and_tap_area(self):
+        xml = window('<node scrollable="true" bounds="[0,0][1080,1920]">' + button(rect='[20,0][500,100]') + '</node><node bounds="[0,0][1080,250]" /><node bounds="[0,1600][1080,1920]" />')
+        self.assertEqual(self.plan(xml), 'swipe 540 520 540 1330')
+        bottom = xml.replace('[20,0][500,100]', '[20,1550][500,1700]')
+        self.assertEqual(self.plan(bottom), 'swipe 540 1330 540 520')
+        for attributes in ('drawing-order="-1"', 'enabled="false"', 'visible-to-user="false"'):
+            with self.subTest(attributes=attributes):
+                background = xml.replace('<node bounds="[0,0][1080,250]"', f'<node {attributes} bounds="[0,0][1080,250]"')
+                self.assertEqual(self.plan(background), 'tap 260 50')
 
     def test_complete_button_uses_clickable_ancestor(self):
         xml = window('<node clickable="true" bounds="[20,400][500,600]"><node text="Open live terminal" bounds="[50,450][300,500]" /></node>')
