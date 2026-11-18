@@ -89,3 +89,8 @@ test('expired, fork, in-flight and invalid artifacts fall back to a fresh base r
     assert.equal(fs.existsSync(directory), false);
   }
 }));
+
+test('an unavailable cache API falls back to driving the base', () => fixture(({ directory }) => {
+  assert.equal(restore({ repo: 'a/b', sha, feature: 'hosts.md', directory, runId: '10', key, run() { throw new Error('HTTP 503'); } }), false);
+  assert.equal(fs.existsSync(directory), false);
+}));
