@@ -952,7 +952,7 @@
     },
     "inbox-reminders.md": {
       "name": "Inbox buckets and reminders",
-      "description": "Refresh with independent SSH reads; switch inbox buckets and save every reminder preset and custom deadlines. SOFT-2670. Overflowing folder pills stay fully visible on selection and reopen; edges fade over the list.",
+      "description": "Refresh with independent SSH reads; switch inbox buckets and save every reminder preset and custom deadlines. SOFT-2670.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -964,18 +964,17 @@
         ]
       },
       "outcomes": [
-        "inbox.reminders",
-        "inbox.folder-bar"
+        "inbox.reminders"
       ],
       "evidence": {
         "inbox-refresh-host.txt": 2000,
         "bucket-unread-on.json": 500,
+        "reminder-scroll-bottom.json": 1000,
         "reminder-day2-time.json": 500,
         "reminder-custom-time.json": 500,
         "reminder-keyboard-time.json": 500,
-        "inbox-reminders-proof.txt": 200,
-        "folder-bar-reopened.json": 900,
-        "folder-bar-middle-reopened.json": 900
+        "reminder-keyboard-waiting.json": 1000,
+        "inbox-reminders-proof.txt": 200
       }
     },
     "screencast-account.md": {
@@ -998,6 +997,29 @@
         "screencast-picker.json": 2000,
         "screencast-selected.json": 2000,
         "screencast-account-receipts.txt": 1000
+      }
+    },
+    "folder-bar.md": {
+      "name": "Inbox folder bar",
+      "description": "Selected last/middle folders remain fully visible on selection and restart; overflow fades over a transparent bar. SOFT-2706.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/folder-bar-drive.sh"
+        ]
+      },
+      "outcomes": [
+        "inbox.folder-bar"
+      ],
+      "evidence": {
+        "folder-bar-reopened.json": 1800,
+        "folder-bar-middle-reopened.json": 1400,
+        "folder-bar-all.json": 1400,
+        "folder-bar-proof.txt": 200
       }
     }
   },
@@ -1583,7 +1605,7 @@
     },
     "inbox.folder-bar": {
       "description": "The selected inbox folder stays fully visible on open and change; overflow fades at transparent bar edges. SOFT-2706.",
-      "journey": "inbox-reminders.md",
+      "journey": "folder-bar.md",
       "sideEffect": false,
       "match": [
         "splitScrollState|displayedWorkspaceSplitIds|folder-bar|Modifier.findPin\\(state.selectedWorkspaceId"

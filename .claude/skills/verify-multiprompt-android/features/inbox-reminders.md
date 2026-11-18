@@ -4,14 +4,6 @@ Goal: cover 21 controls outside PR #418 for [SOFT-2670](https://app.hypertask.ai
 Dispatch `verify.yml` with `feature=inbox-reminders.md` on a fresh GitHub-hosted emulator.
 Use the shared disposable SSH fixture and its real `verify-session` row.
 
-## Folder bar regression (SOFT-2706)
-
-Before the reminder cases, block HTTP through an emulator-local closed proxy port and seed an offline debug account with nine folders against the already-trusted disposable host. No production account or data is used. Select **Folder 09**, restart the app, and assert the selected pill without first revealing it. Repeat selection and restart for **Folder 06**, then return to **All**.
-
-`folder-bar-reopened.json` and `folder-bar-middle-reopened.json` require the complete clickable pill and both text paddings inside the horizontal viewport, clear of the edge fades. Screenshot pixels at both rounded ends must match the solid selected fill. Every state keeps its numbered PNG/XML pair. The unchanged parent must fail a product assertion after restart, retaining the hidden selected folder and the old solid bar as the before screenshot.
-
-After the folder assertions, sign out through Settings and choose the debug guest path. This removes the temporary account's synthetic rows before the existing reminder cases. In the bug-fix break-it replay, use the same live reader fixture as the settings stress journey and finish in its reader with a non-empty draft. The shared stress driver checks rotation, background/return, another chat and slow networking on that same APK.
-
 ## Journey
 
 Each assertion saves a numbered PNG/XML pair and a JSON result through `tools/inbox-controls/ui.py`.

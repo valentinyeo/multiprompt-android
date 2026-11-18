@@ -204,26 +204,6 @@ test('settings-controls stress replay records the five checkpoints on the reader
   }
 });
 
-test('inbox stress gets the live reader fixture and enters its draft journey only in stress mode', t => {
-  const root = path.join(__dirname, '..');
-  const fixture = fs.readFileSync(path.join(root, '.claude/skills/verify-multiprompt-android/scripts/fixture.sh'), 'utf8');
-  const remap = fixture.match(/if \[\[ "\$\{VERIFY_FEATURE:-\}" == inbox-reminders\.md[^\n]+\n    VERIFY_FEATURE=ai-switch\.md\nfi/)[0];
-  const source = fs.readFileSync(path.join(root, '.claude/skills/verify-multiprompt-android/scripts/inbox-controls-drive.sh'), 'utf8');
-  const tail = source.slice(source.indexOf("printf 'INBOX_BUCKET_REMINDER_CONTROLS_OK"));
-  const stub = fs.mkdtempSync(path.join(os.tmpdir(), 'inbox-stress-'));
-  t.after(() => fs.rmSync(stub, { recursive: true, force: true }));
-  fs.writeFileSync(path.join(stub, 'ai-switch-drive.sh'), 'printf SOURCED\\n');
-  for (const mode of ['true', 'false']) {
-    const env = { ...process.env, BREAK_IT_MODE: mode, VERIFY_FEATURE: 'inbox-reminders.md', scripts: stub, EVIDENCE: stub };
-    const mapped = spawnSync('bash', ['-ec', `${remap}\nprintf '%s' "$VERIFY_FEATURE"`], { env, encoding: 'utf8' });
-    assert.equal(mapped.status, 0, mapped.stderr);
-    assert.equal(mapped.stdout, mode === 'true' ? 'ai-switch.md' : 'inbox-reminders.md');
-    const run = spawnSync('bash', ['-ec', `tap_desc() { :; }\ntap_text() { :; }\nwait_for_text() { :; }\n${tail}`], { env, encoding: 'utf8' });
-    assert.equal(run.status, 0, run.stderr);
-    assert.equal(run.stdout.includes('SOURCED'), mode === 'true');
-  }
-});
-
 test('verification tooling is not an Android repair merely because its ticket mentions bugs', () => {
   assert.equal(verifier.isBugFix({ title: 'IGSH-2658: stress checks', changeKind: 'tooling', tickets: { 'IGSH-2658': 'Agents try to break every Android bug fix' } }), false);
   assert.equal(verifier.isBugFix({ title: 'IGSH-2658: stress checks', changeKind: 'product', tickets: { 'IGSH-2658': 'Agents try to break every Android bug fix' } }), true);

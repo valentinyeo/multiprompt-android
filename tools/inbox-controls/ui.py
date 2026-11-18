@@ -57,6 +57,7 @@ def check(xml, screenshot, expected):
     for label in expected.get('selected', []):
         node = choice(label)
         assert node.get('selected') == 'true' or node.get('checked') == 'true', f'Choice not selected: {label}'
+    folder_geometry = None
     if label := expected.get('folder'):
         node = choice(label)
         assert node.get('selected') == 'true' or node.get('checked') == 'true', f'Folder not selected: {label}'
@@ -77,7 +78,11 @@ def check(xml, screenshot, expected):
         center = pixels.getpixel(((left + right) // 2, top + max(2, int(3 * density))))
         assert all(abs(a - b) <= 5 for point in [(left + int(3 * density), center_y), (right - int(3 * density), center_y)]
                    for a, b in zip(pixels.getpixel(point), center)), 'Selected pill is faded or clipped'
-    return dict(xml=Path(xml).name, screenshot=Path(screenshot).name, asserted=expected,
+        folder_geometry = dict(pill=bounds(node), text=bounds(matches(label)[0]), viewport=bounds(viewport),
+                               density=density, fade_clearance=[left - x1, x2 - right], fill_rgb=center,
+                               end_rgb=[pixels.getpixel((left + int(3 * density), center_y)),
+                                        pixels.getpixel((right - int(3 * density), center_y))])
+    return dict(xml=Path(xml).name, screenshot=Path(screenshot).name, asserted=expected, folder_geometry=folder_geometry,
                 texts=[n.get('text') for n in nodes if n.get('text') and visible(n)])
 
 

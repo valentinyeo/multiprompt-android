@@ -39,7 +39,9 @@ class InboxControlsTest(unittest.TestCase):
 
     def test_folder_pill_requires_full_padding_and_clear_fade_edges(self):
         self.folder()
-        self.check({'folder': 'Folder 12'})
+        result = self.check({'folder': 'Folder 12'})
+        self.assertEqual(result['folder_geometry']['pill'], [600, 1000, 960, 1096])
+        self.assertEqual(result['folder_geometry']['fade_clearance'], [576, 96])
         self.xml.write_text(self.xml.read_text().replace('selected="true"', 'selected="false" checked="true"'))
         self.check({'folder': 'Folder 12'})
         for pill, text in [('[600,1000][940,1096]', '[648,1020][912,1070]'),

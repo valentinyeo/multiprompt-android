@@ -55,7 +55,7 @@ fixture_session=verify-session
 if [[ "${VERIFY_FEATURE:-}" == reader-version.md ]] || [[ "${VERIFY_FEATURE:-}" == settings-controls.md && "${BREAK_IT_MODE:-}" == true ]]; then
     VERIFY_FEATURE=ai-switch.md
 fi
-if [[ "${VERIFY_FEATURE:-}" == inbox-reminders.md && "${BREAK_IT_MODE:-}" == true ]]; then
+if [[ "${VERIFY_FEATURE:-}" == folder-bar.md && "${BREAK_IT_MODE:-}" == true ]]; then
     VERIFY_FEATURE=ai-switch.md
 fi
 if [[ "${VERIFY_FEATURE:-}" == claude-remote-control.md ]]; then
