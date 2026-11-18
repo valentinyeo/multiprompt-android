@@ -100,6 +100,9 @@ break_it_open_chat() {
     fill 'Search all sessions' "$1"
     wait_for_text '1 result across all splits'
     tap_desc "Robot $1"
+    if wait_for_text "$2"; then return; fi
+    select_node text Inbox >/dev/null 2>&1 || return 1
+    tap_desc "Robot $1" || return
     wait_for_text "$2"
 }
 break_it_ready() {

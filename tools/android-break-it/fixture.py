@@ -61,7 +61,10 @@ else:
         emit(dict(type='agent_start'))
         emit(dict(type='message_start'))
         reply = text + '_REPLY'
-        emit(dict(type='message_update', assistantMessageEvent=dict(type='text_delta', contentIndex=0, delta=reply)))
+        for delta in reply if text == 'BREAK_IT_STREAM' else [reply]:
+            emit(dict(type='message_update', assistantMessageEvent=dict(type='text_delta', contentIndex=0, delta=delta)))
+            if text == 'BREAK_IT_STREAM':
+                time.sleep(0.2)
         if text == 'BREAK_IT_STREAM':
             for attempt in range(1200):
                 if (HOME / 'breakit-release-stream').exists():
