@@ -51,7 +51,7 @@ account_new_group() {
     wait_for_text 'New group'
 }
 account_rename_group() {
-    hold_text "$1"
+    hold_text "${1^^}"
     wait_for_text 'Rename group'
 }
 account_inbox_menu Settings
@@ -70,7 +70,7 @@ tap_desc Back
 wait_for_text Inbox
 tap_text Workshop
 tap_node desc 'Robot verify-session' reveal
-account_control_state account-workshop '{"text":["Inbox","Original","Other"],"desc":["Robot verify-session","Robot pin-00"],"selected":["Workshop"]}'
+account_control_state account-workshop '{"text":["Inbox","ORIGINAL","OTHER"],"desc":["Robot verify-session","Robot pin-00"],"selected":["Workshop"]}'
 account_layout_receipt account-initial '{"tabs":{"verify-session":{"workspace":"Workshop","group":"Original"},"pin-00":{"workspace":"Workshop","group":"Other"}}}'
 if [[ "$feature" == workspace-controls.md ]]; then
     account_inbox_menu 'New workspace'
@@ -174,42 +174,42 @@ fi
 account_open_group
 account_control_state group-move-open '{"text":["Move to group","Original","Other","New group","No group","Cancel"]}'
 tap_text Cancel
-account_control_state group-move-cancel '{"text":["Original","Other"],"absent":["No group","Cancel"]}'
+account_control_state group-move-cancel '{"text":["ORIGINAL","OTHER"],"absent":["No group","Cancel"]}'
 account_open_group
 adb shell input keyevent KEYCODE_BACK
-account_control_state group-move-dismiss '{"text":["Original","Other"],"absent":["No group"]}'
+account_control_state group-move-dismiss '{"text":["ORIGINAL","OTHER"],"absent":["No group"]}'
 account_new_group
 fill Name Discarded
 account_control_state group-new-draft '{"text":["New group","Discarded","Create"]}'
 tap_text Cancel
-account_control_state group-new-cancel '{"text":["Original","Other"],"absent":["New group","Discarded"]}'
+account_control_state group-new-cancel '{"text":["ORIGINAL","OTHER"],"absent":["New group","Discarded"]}'
 account_new_group
 adb shell input keyevent KEYCODE_BACK
-account_control_state group-new-dismiss '{"text":["Original","Other"],"absent":["New group"]}'
+account_control_state group-new-dismiss '{"text":["ORIGINAL","OTHER"],"absent":["New group"]}'
 account_layout_receipt group-unchanged '{"tabs":{"verify-session":{"group":"Original"},"pin-00":{"group":"Other"}},"no_group":["Discarded"]}'
 account_new_group
 fill Name Focus
 tap_text Create
 wait_for_absence 'New group'
 wait_for_text Focus
-account_control_state group-created '{"text":["Focus","Other"],"absent":["Original","New group"]}'
+account_control_state group-created '{"text":["FOCUS","OTHER"],"absent":["ORIGINAL","New group"]}'
 account_layout_receipt group-created '{"tabs":{"verify-session":{"group":"Focus"},"pin-00":{"group":"Other"}}}'
 account_rename_group Focus
 account_control_state group-rename-open '{"text":["Rename group","Focus","Ungroup","Rename","Cancel"]}'
 fill Name Cancelled
 account_control_state group-rename-draft '{"text":["Rename group","Cancelled"]}'
 tap_text Cancel
-account_control_state group-rename-cancel '{"text":["Focus","Other"],"absent":["Rename group","Cancelled"]}'
+account_control_state group-rename-cancel '{"text":["FOCUS","OTHER"],"absent":["Rename group","Cancelled"]}'
 account_rename_group Focus
 adb shell input keyevent KEYCODE_BACK
-account_control_state group-rename-dismiss '{"text":["Focus","Other"],"absent":["Rename group"]}'
+account_control_state group-rename-dismiss '{"text":["FOCUS","OTHER"],"absent":["Rename group"]}'
 account_layout_receipt group-rename-unchanged '{"tabs":{"verify-session":{"group":"Focus"}},"no_group":["Cancelled"]}'
 account_rename_group Focus
 fill Name Renamed
 tap_text Rename
 wait_for_absence 'Rename group'
 wait_for_text Renamed
-account_control_state group-renamed '{"text":["Renamed","Other"],"absent":["Focus","Rename group"]}'
+account_control_state group-renamed '{"text":["RENAMED","OTHER"],"absent":["FOCUS","Rename group"]}'
 account_layout_receipt group-renamed '{"tabs":{"verify-session":{"group":"Renamed"}}}'
 account_rename_group Renamed
 fill Name Keyboard
@@ -217,25 +217,25 @@ tap_node field Name
 adb shell input keyevent KEYCODE_ENTER
 wait_for_absence 'Rename group'
 wait_for_text Keyboard
-account_control_state group-keyboard-renamed '{"text":["Keyboard","Other"],"absent":["Renamed","Rename group"]}'
+account_control_state group-keyboard-renamed '{"text":["KEYBOARD","OTHER"],"absent":["RENAMED","Rename group"]}'
 account_layout_receipt group-keyboard-renamed '{"tabs":{"verify-session":{"group":"Keyboard"}}}'
 account_open_group
 tap_text Other
 wait_for_absence 'No group'
-account_control_state group-existing-moved '{"text":["Other"],"absent":["Keyboard","Move to group"]}'
+account_control_state group-existing-moved '{"text":["OTHER"],"absent":["KEYBOARD","Move to group"]}'
 account_layout_receipt group-existing-moved '{"tabs":{"verify-session":{"group":"Other"},"pin-00":{"group":"Other"}}}'
 account_open_group
 tap_text 'No group'
 wait_for_absence 'No group'
-account_control_state group-removed '{"text":["Other"],"desc":["Robot verify-session","Robot pin-00"],"absent":["Move to group"]}'
+account_control_state group-removed '{"text":["OTHER"],"desc":["Robot verify-session","Robot pin-00"],"absent":["Move to group"]}'
 account_layout_receipt group-removed '{"tabs":{"verify-session":{"group":""},"pin-00":{"group":"Other"}}}'
 account_rename_group Other
 tap_text Ungroup
 wait_for_absence 'Rename group'
-account_control_state group-ungrouped '{"text":["Inbox"],"desc":["Robot verify-session","Robot pin-00"],"absent":["Other","Rename group"]}'
+account_control_state group-ungrouped '{"text":["Inbox"],"desc":["Robot verify-session","Robot pin-00"],"absent":["OTHER","Rename group"]}'
 account_layout_receipt group-ungrouped '{"tabs":{"verify-session":{"group":""},"pin-00":{"group":""}},"no_group":["Original","Focus","Renamed","Keyboard","Other"]}'
 relaunch_app
 tap_text Workshop
 tap_node desc 'Robot verify-session' reveal
-account_control_state group-retained '{"text":["Inbox"],"desc":["Robot verify-session","Robot pin-00"],"absent":["Original","Focus","Renamed","Keyboard","Other"]}'
+account_control_state group-retained '{"text":["Inbox"],"desc":["Robot verify-session","Robot pin-00"],"absent":["ORIGINAL","FOCUS","RENAMED","KEYBOARD","OTHER"]}'
 printf 'GROUP_CONTROLS_OK\n' | tee "$EVIDENCE/group-controls-proof.txt"
