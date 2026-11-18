@@ -110,8 +110,12 @@
       "label": "Refresh",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt:InboxOverflowMenu:KitMenuRow:2f19dcef2650ad9b:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt:86",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Tap Session list actions then Refresh",
+        "result": "Inbox and verify-session return without the menu in inbox-refreshed.json; new list-sessions in independent inbox-refresh-host.txt"
+      }
     },
     {
       "id": "inbox-menu.ai-usage",
@@ -975,8 +979,12 @@
       "label": "Dismiss Host mapping",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/HostMappingDialog.kt:HostMappingDialog:KitSheet:90073eaacdef9f43:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/HostMappingDialog.kt:23",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "settings-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
+        "action": "Tap Done in host mapping",
+        "result": "settings returns without Desktop tmux hosts in mapping-dismissed.json"
+      }
     },
     {
       "id": "host-mapping.system-back",
@@ -984,8 +992,12 @@
       "label": "System Back",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/HostMappingDialog.kt:HostMappingDialog:BackHandler:b4e7bde7e6055229:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/HostMappingDialog.kt:24",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "settings-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
+        "action": "Press Android Back from the host list",
+        "result": "settings returns without Desktop tmux hosts in mapping-system-back.json"
+      }
     },
     {
       "id": "host-mapping.scroll-host-mapping",
@@ -993,8 +1005,12 @@
       "label": "Scroll Host mapping",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/HostMappingDialog.kt:HostMappingDialog:verticalScroll:74f9c94015fb4c77:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/HostMappingDialog.kt:25",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "settings-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
+        "action": "Scroll the short host mapping viewport to Done",
+        "result": "Done is revealed and the first host row leaves the viewport in mapping-scroll-bottom.json"
+      }
     },
     {
       "id": "host-mapping.choose-account-host-slot",
@@ -1054,8 +1070,12 @@
       "label": "Back",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/HostMappingDialog.kt:HostMappingDialog:KitSecondaryButton:0836e21c1568f2a1:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/HostMappingDialog.kt:50",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "settings-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
+        "action": "Choose host slot 1 and tap Back",
+        "result": "the three-slot list replaces Automatic in mapping-back.json"
+      }
     },
     {
       "id": "chat-markdown-and-tables.scroll-horizontally",
@@ -1342,8 +1362,12 @@
       "label": "Open navigation",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:Header:KitRoundButton:9c100ce2bd162372:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:741",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "settings-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
+        "action": "Tap Open navigation on Update",
+        "result": "Sessions and \u2713 Update are visible in update-menu.json"
+      }
     },
     {
       "id": "update-navigation.dismiss-update-navigation",
@@ -1351,8 +1375,12 @@
       "label": "Dismiss Update navigation",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:Header:KitMenu:214d21932409161f:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:742",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "settings-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
+        "action": "Press Android Back from the update menu",
+        "result": "App updates remains without menu choices in update-menu-dismissed.json"
+      }
     },
     {
       "id": "update-navigation.sessions",
@@ -1360,8 +1388,12 @@
       "label": "Sessions",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:Header:KitMenuRow:5533979afe5bd648:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:750",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "settings-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
+        "action": "Tap Sessions in the update menu",
+        "result": "Inbox returns without App updates in update-sessions.json"
+      }
     },
     {
       "id": "update-navigation.update",
@@ -1369,8 +1401,12 @@
       "label": "Update",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:Header:KitMenuRow:5533979afe5bd648:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:750",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "settings-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
+        "action": "Tap \u2713 Update in the update menu",
+        "result": "App updates remains without the menu in update-selected.json"
+      }
     },
     {
       "id": "inline-update-banner.later",
@@ -1782,8 +1818,12 @@
       "label": "Back",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitRoundButton:18f27475ac65937e:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1484",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "settings-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
+        "action": "Tap Back in settings",
+        "result": "Inbox returns without Session list settings in settings-back.json"
+      }
     },
     {
       "id": "session-list-settings.version-open-release-notes",
@@ -1791,8 +1831,12 @@
       "label": "Version, open release notes",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:VersionLabel:431a2ea7cf5120f6:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1486",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "settings-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
+        "action": "Tap the settings version description",
+        "result": "App updates replaces settings in settings-version.json"
+      }
     },
     {
       "id": "session-list-settings.scroll-session-list-settings",
@@ -1800,8 +1844,12 @@
       "label": "Scroll Session list settings",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:verticalScroll:74f9c94015fb4c77:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1494",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "settings-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
+        "action": "Scroll settings to reveal Large",
+        "result": "Theme, Default Reader font size and Large are visible; Sign in leaves the viewport in settings-scrolled.json"
+      }
     },
     {
       "id": "session-list-settings.switch-renew-login",
@@ -1848,8 +1896,12 @@
       "label": "Dictation key",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitListRow:1001a37e824c7815:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1503",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "settings-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
+        "action": "Tap Dictation key",
+        "result": "Deepgram dictation, Save key and Cancel are visible in settings-dictation.json"
+      }
     },
     {
       "id": "session-list-settings.update",
@@ -1857,8 +1909,12 @@
       "label": "Update",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitListRow:21837e3fb14e66e0:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1518",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "settings-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
+        "action": "Tap Update in settings",
+        "result": "App updates and Check now replace settings in settings-update.json"
+      }
     },
     {
       "id": "session-list-settings.show-frequent-split",
@@ -2001,8 +2057,12 @@
       "label": "System theme",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSegmented:724bdae26fc7f66e:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1612",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "settings-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
+        "action": "Tap System",
+        "result": "The exact choice is selected in settings-theme-System.json; final System and Normal survive restart in settings-retained.json"
+      }
     },
     {
       "id": "session-list-settings.dark-theme",
@@ -2010,8 +2070,12 @@
       "label": "Dark theme",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSegmented:724bdae26fc7f66e:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1612",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "settings-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
+        "action": "Tap Dark",
+        "result": "The exact choice is selected in settings-theme-Dark.json; final System and Normal survive restart in settings-retained.json"
+      }
     },
     {
       "id": "session-list-settings.sunlight-theme",
@@ -2019,8 +2083,12 @@
       "label": "Sunlight theme",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSegmented:724bdae26fc7f66e:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1612",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "settings-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
+        "action": "Tap Sunlight",
+        "result": "The exact choice is selected in settings-theme-Sunlight.json; final System and Normal survive restart in settings-retained.json"
+      }
     },
     {
       "id": "session-list-settings.small-font",
@@ -2028,8 +2096,12 @@
       "label": "Small font",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSegmented:bfc1409308d8a085:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1619",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "settings-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
+        "action": "Tap Small",
+        "result": "The exact choice is selected in settings-font-Small.json; final System and Normal survive restart in settings-retained.json"
+      }
     },
     {
       "id": "session-list-settings.normal-font",
@@ -2037,8 +2109,12 @@
       "label": "Normal font",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSegmented:bfc1409308d8a085:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1619",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "settings-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
+        "action": "Tap Normal",
+        "result": "The exact choice is selected in settings-font-Normal.json; final System and Normal survive restart in settings-retained.json"
+      }
     },
     {
       "id": "session-list-settings.large-font",
@@ -2046,8 +2122,12 @@
       "label": "Large font",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSegmented:bfc1409308d8a085:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1619",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "settings-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/settings-controls.md",
+        "action": "Tap Large",
+        "result": "The exact choice is selected in settings-font-Large.json; final System and Normal survive restart in settings-retained.json"
+      }
     },
     {
       "id": "settings-crash-report.view-report",
@@ -2298,8 +2378,12 @@
       "label": "Switch session bucket",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitTitlePill:056ae78f1f336c97:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1971",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Tap Switch session bucket",
+        "result": "Inbox, Waiting, Archive and Unread only appear in bucket-open.json"
+      }
     },
     {
       "id": "inbox-bucket-menu.dismiss-inbox-bucket-menu",
@@ -2307,8 +2391,12 @@
       "label": "Dismiss Inbox bucket menu",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenu:5f3edbca4ad59534:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1980",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Press Android Back from the bucket menu",
+        "result": "Inbox remains without Archive or Unread only in bucket-dismissed.json"
+      }
     },
     {
       "id": "inbox-bucket-menu.inbox",
@@ -2316,8 +2404,12 @@
       "label": "Inbox",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:e02cbca560deedd3:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1989",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Tap Inbox in the bucket menu",
+        "result": "Inbox replaces Archive in bucket-inbox.json"
+      }
     },
     {
       "id": "inbox-bucket-menu.waiting",
@@ -2325,8 +2417,12 @@
       "label": "Waiting",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:e02cbca560deedd3:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1989",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Tap Waiting in the bucket menu",
+        "result": "Waiting replaces Inbox without verify-session in bucket-waiting.json"
+      }
     },
     {
       "id": "inbox-bucket-menu.archive",
@@ -2334,8 +2430,12 @@
       "label": "Archive",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:e02cbca560deedd3:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1989",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Tap Archive in the bucket menu",
+        "result": "Archive replaces Waiting without verify-session in bucket-archive.json"
+      }
     },
     {
       "id": "inbox-bucket-menu.unread-only",
@@ -2343,8 +2443,12 @@
       "label": "Unread only",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:53939500ee0da96e:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1997",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Tap Unread only on and off",
+        "result": "Inbox \u00b7 Unread appears in bucket-unread-on.json and disappears in bucket-unread-off.json"
+      }
     },
     {
       "id": "inbox.search-sessions-close-session-search",
@@ -2601,8 +2705,12 @@
       "label": "Dismiss Reminder (Inbox and reader)",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReminderDialog:KitSheet:90073eaacdef9f43:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2342",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Press Android Back from Remind me",
+        "result": "Inbox and the unchanged verify-session return in reminder-dismissed.json"
+      }
     },
     {
       "id": "reminder-inbox-and-reader.scroll-reminder-inbox-and-reader",
@@ -2610,8 +2718,12 @@
       "label": "Scroll Reminder (Inbox and reader)",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReminderDialog:verticalScroll:74f9c94015fb4c77:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2352",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Scroll the short reminder viewport to Custom time",
+        "result": "Custom time is revealed and In 30 minutes leaves the viewport in reminder-scroll-bottom.json"
+      }
     },
     {
       "id": "reminder-inbox-and-reader.later-today",
@@ -2619,8 +2731,12 @@
       "label": "Later today",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReminderDialog:KitListRow:329b72fcbcda47d8:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2357",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Tap Later today",
+        "result": "Waiting contains verify-session in reminder-later-waiting.json; the saved deadline matches the Android clock and timezone in reminder-later-time.json"
+      }
     },
     {
       "id": "reminder-inbox-and-reader.in-30-minutes",
@@ -2628,8 +2744,12 @@
       "label": "In 30 minutes",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReminderDialog:KitListRow:329b72fcbcda47d8:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2357",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Tap In 30 minutes",
+        "result": "Waiting contains verify-session in reminder-1800-waiting.json; the saved deadline matches the Android clock and timezone in reminder-1800-time.json"
+      }
     },
     {
       "id": "reminder-inbox-and-reader.in-1-hour",
@@ -2637,8 +2757,12 @@
       "label": "In 1 hour",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReminderDialog:KitListRow:329b72fcbcda47d8:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2357",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Tap In 1 hour",
+        "result": "Waiting contains verify-session in reminder-3600-waiting.json; the saved deadline matches the Android clock and timezone in reminder-3600-time.json"
+      }
     },
     {
       "id": "reminder-inbox-and-reader.in-2-hours",
@@ -2646,8 +2770,12 @@
       "label": "In 2 hours",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReminderDialog:KitListRow:329b72fcbcda47d8:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2357",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Tap In 2 hours",
+        "result": "Waiting contains verify-session in reminder-7200-waiting.json; the saved deadline matches the Android clock and timezone in reminder-7200-time.json"
+      }
     },
     {
       "id": "reminder-inbox-and-reader.in-5-hours",
@@ -2655,8 +2783,12 @@
       "label": "In 5 hours",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReminderDialog:KitListRow:329b72fcbcda47d8:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2357",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Tap In 5 hours",
+        "result": "Waiting contains verify-session in reminder-18000-waiting.json; the saved deadline matches the Android clock and timezone in reminder-18000-time.json"
+      }
     },
     {
       "id": "reminder-inbox-and-reader.tomorrow-at-9-am",
@@ -2664,8 +2796,12 @@
       "label": "Tomorrow at 9 AM",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReminderDialog:KitListRow:329b72fcbcda47d8:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2357",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Tap Tomorrow \u00b7 9:00 AM",
+        "result": "Waiting contains verify-session in reminder-day1-waiting.json; the saved deadline matches the Android clock and timezone in reminder-day1-time.json"
+      }
     },
     {
       "id": "reminder-inbox-and-reader.in-2-days-at-9-am",
@@ -2673,8 +2809,12 @@
       "label": "In 2 days at 9 AM",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReminderDialog:KitListRow:329b72fcbcda47d8:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2357",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Tap In 2 days \u00b7 9:00 AM",
+        "result": "Waiting contains verify-session in reminder-day2-waiting.json; the saved deadline matches the Android clock and timezone in reminder-day2-time.json"
+      }
     },
     {
       "id": "reminder-inbox-and-reader.custom-reminder-time",
@@ -2682,8 +2822,12 @@
       "label": "Custom reminder time",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReminderDialog:OutlinedTextField:3226eedb7fb30e4d:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2360",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Fill Custom time with in 3 hours",
+        "result": "The exact draft and Set reminder appear in reminder-custom-draft.json"
+      }
     },
     {
       "id": "reminder-inbox-and-reader.keyboard-done",
@@ -2691,8 +2835,12 @@
       "label": "Keyboard Done",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReminderDialog:KeyboardActions:be9164f6b5f76f7f:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2373",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Enter in 4 hours and press keyboard Done",
+        "result": "Waiting contains verify-session in reminder-keyboard-waiting.json; saved four-hour deadline matches the Android clock in reminder-keyboard-time.json"
+      }
     },
     {
       "id": "reminder-inbox-and-reader.cancel",
@@ -2700,8 +2848,12 @@
       "label": "Cancel",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReminderDialog:KitSecondaryButton:78a475eb26440a71:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2376",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Tap Cancel in Remind me",
+        "result": "Inbox and the unchanged verify-session return in reminder-cancelled.json"
+      }
     },
     {
       "id": "reminder-inbox-and-reader.set-reminder",
@@ -2709,8 +2861,12 @@
       "label": "Set reminder",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ReminderDialog:KitPrimaryButton:45f22cfb42f06030:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2377",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Fill in 3 hours and tap Set reminder",
+        "result": "Waiting contains verify-session in reminder-custom-waiting.json; saved three-hour deadline matches the Android clock in reminder-custom-time.json"
+      }
     },
     {
       "id": "inbox-session-actions.open-session",
@@ -2838,8 +2994,12 @@
       "label": "Remind Me\u2026",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:SessionCard:KitMenuRow:9ef47acdfd388b08:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2690",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "inbox-reminders.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/inbox-reminders.md",
+        "action": "Long-press verify-session and tap Remind Me\u2026",
+        "result": "Remind me, session name, presets and buttons appear in reminder-open.json"
+      }
     },
     {
       "id": "inbox-session-actions.select-bots",

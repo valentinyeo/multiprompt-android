@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+import importlib.util
+from pathlib import Path
+import struct
+import tempfile
+import unittest
+from xml.sax.saxutils import escape
+
+spec = importlib.util.spec_from_file_location('inbox_ui', Path(__file__).with_name('ui.py'))
+ui = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(ui)
+
+
+class InboxControlsTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.xml = self.root / 'screen.xml'
+        self.png = self.root / 'screen.png'
+        self.png.write_bytes(b'\x89PNG\r\n\x1a\n' + b'\0' * 8 + struct.pack('>II', 1080, 1280) + b'\0')
+        self.preferences = self.root / 'preferences.xml'
+
+    def node(self, text, attrs='', bounds='[20,200][900,260]'):
+        return f'<node package="dev.multiprompt.companion.debug" text="{escape(text)}" bounds="{bounds}" {attrs}/>'
+
+    def screen(self, body):
+        self.xml.write_text('<hierarchy>' + body + '</hierarchy>')
+
+    def check(self, expected):
+        return ui.check(self.xml, self.png, expected)
+
+    def test_selected_choices_require_actual_selection(self):
+        self.screen('<node clickable="true" selected="true">' + self.node('Large') + '</node>')
+        self.check({'selected': ['Large']})
+        self.screen('<node clickable="true" selected="false">' + self.node('Large') + '</node>')
+        with self.assertRaisesRegex(AssertionError, 'not selected'):
+            self.check({'selected': ['Large']})
+        with self.assertRaisesRegex(AssertionError, 'Missing'):
+            self.check({'selected': ['Small']})
+
+    def test_rows_must_be_fully_inside_the_screenshot_and_scroll_viewport(self):
+        for bounds in ['[20,1200][900,1400]', '[20,-20][900,40]', '[0,0][0,0]']:
+            self.screen(self.node('Custom time', bounds=bounds))
+            with self.assertRaisesRegex(AssertionError, 'Missing visible'):
+                self.check({'text': ['Custom time']})
+        self.screen('<node scrollable="true" bounds="[0,300][1080,900]">' + self.node('Custom time') + '</node>')
+        with self.assertRaisesRegex(AssertionError, 'Missing visible'):
+            self.check({'text': ['Custom time']})
+
+    def test_scroll_requires_both_revealed_and_departed_rows(self):
+        expected = {'text': ['Custom time'], 'absent': ['In 30 minutes']}
+        self.screen(self.node('Custom time'))
+        self.check(expected)
+        self.screen(self.node('Custom time') + self.node('In 30 minutes'))
+        with self.assertRaisesRegex(AssertionError, 'Unexpected'):
+            self.check(expected)
+        self.screen(self.node('In 30 minutes'))
+        with self.assertRaisesRegex(AssertionError, 'Missing'):
+            self.check(expected)
+
+    def test_dismissal_requires_the_destination_and_no_sheet(self):
+        expected = {'text': ['Inbox'], 'absent': ['Remind me']}
+        self.screen(self.node('Inbox'))
+        self.check(expected)
+        for body in [self.node('Remind me'), self.node('Inbox') + self.node('Remind me')]:
+            self.screen(body)
+            with self.assertRaises(AssertionError):
+                self.check(expected)
+
+    def test_screenshot_and_app_identity_are_required(self):
+        self.screen(self.node('Inbox'))
+        self.png.write_bytes(b'not a screenshot')
+        with self.assertRaisesRegex(AssertionError, 'Missing screenshot'):
+            self.check({'text': ['Inbox']})
+        self.setUp()
+        self.screen(self.node('Inbox').replace('dev.multiprompt.companion.debug', 'com.android.launcher'))
+        with self.assertRaisesRegex(AssertionError, 'Missing app'):
+            self.check({'text': ['Inbox']})
+
+    def saved(self, due, session='verify-session'):
+        self.preferences.write_text(f'<map><long name="archive_until::host::{session}" value="{due}"/></map>')
+
+    def test_relative_deadlines_reject_wrong_duration_and_session(self):
+        for duration in [1800, 3600, 7200, 10800, 14400, 18000]:
+            self.saved(100000 + duration)
+            ui.reminder(self.preferences, '100000', '100030', 'UTC', str(duration))
+            self.saved(100000 + duration - 1)
+            with self.assertRaisesRegex(AssertionError, 'Wrong relative'):
+                ui.reminder(self.preferences, '100000', '100030', 'UTC', str(duration))
+        self.saved(101800, 'other-session')
+        with self.assertRaisesRegex(AssertionError, 'Missing'):
+            ui.reminder(self.preferences, '100000', '100030', 'UTC', '1800')
+
+    def test_calendar_deadlines_reject_wrong_day_and_hour(self):
+        from datetime import datetime, timezone
+        before = int(datetime(2026, 11, 20, 10, tzinfo=timezone.utc).timestamp())
+        for preset, due in [('later', before + 7 * 3600), ('day1', before + 23 * 3600), ('day2', before + 47 * 3600)]:
+            self.saved(due)
+            ui.reminder(self.preferences, str(before), str(before + 30), 'UTC', preset)
+            self.saved(due + 3600)
+            with self.assertRaisesRegex(AssertionError, 'Wrong calendar'):
+                ui.reminder(self.preferences, str(before), str(before + 30), 'UTC', preset)
+
+    def test_later_today_uses_evening_then_next_morning(self):
+        from datetime import datetime, timezone
+        for hour, offset in [(18, 3), (22, 11)]:
+            before = int(datetime(2026, 11, 20, hour, tzinfo=timezone.utc).timestamp())
+            self.saved(before + offset * 3600)
+            ui.reminder(self.preferences, str(before), str(before + 30), 'UTC', 'later')
+
+
+if __name__ == '__main__':
+    unittest.main()

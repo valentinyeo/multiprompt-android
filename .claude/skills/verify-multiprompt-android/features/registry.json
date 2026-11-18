@@ -846,6 +846,54 @@
         "reply-receipts.txt": 800,
         "reply-proof.txt": 80
       }
+    },
+    "settings-controls.md": {
+      "name": "Settings, host mapping and update navigation",
+      "description": "Choose and retain themes and font sizes; navigate settings, host mapping and update menus. SOFT-2670.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "settings.controls"
+      ],
+      "evidence": {
+        "settings-scrolled.json": 1000,
+        "settings-retained.json": 1000,
+        "mapping-scroll-bottom.json": 1000,
+        "mapping-dismissed.json": 1000,
+        "update-menu.json": 1000,
+        "update-sessions.json": 1000,
+        "settings-version.json": 1000,
+        "settings-controls-proof.txt": 200
+      }
+    },
+    "inbox-reminders.md": {
+      "name": "Inbox buckets and reminders",
+      "description": "Refresh with independent SSH reads; switch inbox buckets and save every reminder preset and custom deadlines. SOFT-2670.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "inbox.reminders"
+      ],
+      "evidence": {
+        "inbox-refresh-host.txt": 2000,
+        "bucket-unread-on.json": 500,
+        "reminder-scroll-bottom.json": 1000,
+        "reminder-day2-time.json": 500,
+        "reminder-custom-time.json": 500,
+        "reminder-keyboard-time.json": 500,
+        "reminder-keyboard-waiting.json": 1000,
+        "inbox-reminders-proof.txt": 200
+      }
     }
   },
   "outcomes": {
@@ -1383,6 +1431,22 @@
       "sideEffect": true,
       "match": [
         "renameDialogVisible|renameDraft|ReaderMenuPage\\.DISPLAY|onTechnicalModeChanged|onSetAppTheme|terminal details|Sunlight mode"
+      ]
+    },
+    "settings.controls": {
+      "description": "Choose and retain themes and font sizes; navigate settings, host mapping and update menus. SOFT-2670.",
+      "journey": "settings-controls.md",
+      "sideEffect": false,
+      "match": [
+        "settingsPage|SettingsPage|Session list settings|Default Reader font size|KitSegmented|HostMappingDialog|Desktop tmux hosts|Open navigation|AppSection.UPDATE to \"Update\"|Dictation key|VersionLabel"
+      ]
+    },
+    "inbox.reminders": {
+      "description": "Refresh with independent SSH reads; switch inbox buckets and save every reminder preset and custom deadlines. SOFT-2670.",
+      "journey": "inbox-reminders.md",
+      "sideEffect": true,
+      "match": [
+        "ReminderDialog|reminderPromptSession|ReminderTimeParser|Switch session bucket|bucketMenuExpanded|Unread only|inbox-reminders|InboxOverflowMenu"
       ]
     }
   }
