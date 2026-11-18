@@ -14,9 +14,10 @@ const record = { version: 1, repo: 'o/r', pr: 42, sha, base, mergeBase: base, pa
 const run = { id: 10, status: 'completed', conclusion: 'success', path: '.github/workflows/pstack-verifier.yml', event: 'pull_request', head_sha: sha, head_repository: { full_name: 'o/r' } };
 const comment = { id: 123, user: { login: 'github-actions[bot]' }, html_url: 'https://github.com/o/r/pull/42#issuecomment-123', body: `pstack-verifier: PASS+NOTES @ ${sha}\n\nNot covered:\n- real OTP\n\nRun: https://github.com/o/r/actions/runs/10\n\n<!-- pstack-verifier:v1 sha=${sha} -->` };
 
-test('only a successful independent verdict for the same patch on a newer base is reusable', () => {
+test('only a successful independent verdict for the same patch is reusable, including a same-base rebase', () => {
   for (const verdict of ['PASS', 'PASS+NOTES']) assert.equal(reusable({ ...record, verdict }, current, run), true);
-  for (const change of [{ version: 0 }, { pr: 43 }, { sha: current.sha }, { sha: 'bad' }, { mergeBase: current.mergeBase }, { patchId: 'f'.repeat(40) }, { verdict: 'FAIL' }, { verdict: '' }, { runId: 12 }]) {
+  assert.equal(reusable(record, { ...current, base: record.base, mergeBase: record.mergeBase }, run), true);
+  for (const change of [{ version: 0 }, { pr: 43 }, { sha: current.sha }, { sha: 'bad' }, { base: 'bad' }, { patchId: 'f'.repeat(40) }, { verdict: 'FAIL' }, { verdict: '' }, { runId: 12 }]) {
     assert.equal(reusable({ ...record, ...change }, current, run), false, JSON.stringify(change));
   }
   for (const change of [{ id: 20 }, { conclusion: 'failure' }, { conclusion: 'cancelled' }, { status: 'in_progress' }, { path: 'other.yml' }, { event: 'push' }, { head_sha: current.sha }, { head_repository: { full_name: 'fork/r' } }]) {
@@ -132,6 +133,17 @@ if (args[0] === 'run') {
   result = command('publish');
   assert.equal(result.status, 0, result.stderr);
   assert.match(fs.readFileSync(sent, 'utf8'), new RegExp(`^pstack-verifier: PASS @ ${f.nextHead}`));
+  const sameBaseSha = f.git('commit-tree', f.git('rev-parse', f.nextHead + '^{tree}'), '-p', f.nextBase, '-m', 'another rebased head');
+  state.record = { ...old, sha: sameBaseSha, base: f.nextBase, mergeBase: f.nextBase };
+  state.run = { ...prior, head_sha: sameBaseSha };
+  state.comments = [{ ...original, body: original.body.replaceAll(f.head, sameBaseSha) }];
+  assert.equal(command('probe').status, 0);
+  assert.match(fs.readFileSync(output, 'utf8'), /reused=true\n/);
+  assert.equal(command('publish').status, 0);
+  assert.ok(fs.readFileSync(sent, 'utf8').includes(`Reused PASS+NOTES verdict sha ${sameBaseSha}`));
+  state.record = old;
+  state.run = prior;
+  state.comments = [original];
   state.artifacts = [];
   result = command('probe');
   assert.equal(result.status, 0, result.stderr);

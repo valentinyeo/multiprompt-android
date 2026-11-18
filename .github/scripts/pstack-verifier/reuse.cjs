@@ -20,7 +20,7 @@ function reusable(record, current, run) {
   return record?.version === 1 && record.repo === current.repo && record.pr === current.pr
     && [record.sha, record.base, record.mergeBase, record.patchId].every(value => shaPattern.test(value ?? ''))
     && ['PASS', 'PASS+NOTES'].includes(record.verdict)
-    && record.sha !== current.sha && record.mergeBase !== current.mergeBase
+    && record.sha !== current.sha
     && record.patchId === current.patchId
     && run.id === record.runId && run.id !== current.runId
     && run.conclusion === 'success' && run.status === 'completed'
