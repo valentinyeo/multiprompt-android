@@ -21,6 +21,45 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  journey-plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Plan every PR-capable journey, including deferred guards
+        id: plan
+        run: node .github/scripts/pstack-verifier/verifier.cjs nightly
+
+  nightly-journeys:
+    name: nightly ${{ matrix.journey }}
+    needs: journey-plan
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.journey-plan.outputs.matrix) }}
+    uses: ./.github/workflows/verify.yml
+    with:
+      feature: ${{ matrix.journey }}
+      driver_feature: ${{ matrix.feature }}
+      candidate: ${{ matrix.candidate }}
+      released_chat: ${{ matrix.released_chat }}
+      released_robots: ${{ matrix.released_robots }}
+      release_choices: ${{ matrix.release_choices }}
+      pins_scroll: ${{ matrix.pins_scroll }}
+      app_ref: ${{ github.sha }}
+    secrets:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
   baseline-profile:
     name: baseline-profile
     runs-on: ubuntu-24.04
