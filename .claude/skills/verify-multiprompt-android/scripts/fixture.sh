@@ -114,6 +114,11 @@ elif [[ "${VERIFY_FEATURE:-}" == chat-working.md ]]; then
     sudo install -m 755 tools/working-dots/console.py /home/verifyssh/working-console.py
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/working-console.py'
+elif [[ "${VERIFY_FEATURE:-}" == bot-look.md || "${VERIFY_FEATURE:-}" == reader-controls.md ]]; then
+    sudo -u verifyssh touch /home/verifyssh/receipts.txt
+    sudo install -m 755 "$(dirname "$0")/skills-console.py" /home/verifyssh/skills-console.py
+    sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
+    sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/skills-console.py /home/verifyssh/receipts.txt'
 elif [[ "${VERIFY_FEATURE:-}" == terminal.md ]]; then
     sudo install -m 755 "$(dirname "$0")/terminal-console.py" /home/verifyssh/terminal-console.py
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'python3 -u /home/verifyssh/terminal-console.py /home/verifyssh/receipts.txt'

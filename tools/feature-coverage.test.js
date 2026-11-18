@@ -893,3 +893,25 @@ test('clear ranking citations require retained head ranking, action and exact in
     assert.equal(gate.featureErrors({ ...args, conclusions: { 'native-skills.md': 'success' } }).errors.length, 1);
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
+
+test('Bot look and reader menu changes schedule their registered verify.yml journeys on PRs', () => {
+  for (const [file, text, journey] of [
+    ['java/dev/multiprompt/companion/ui/BotLookSheet.kt', 'contentDescription = "Face ${index + 1}"', 'bot-look.md'],
+    ['java/dev/multiprompt/companion/ui/MultipromptApp.kt', 'label = "Bot look"', 'bot-look.md'],
+    ['java/dev/multiprompt/companion/ui/MultipromptApp.kt', 'renameDraft = it', 'reader-controls.md'],
+    ['java/dev/multiprompt/companion/ui/MultipromptApp.kt', 'onTechnicalModeChanged(!technicalMode)', 'reader-controls.md'],
+    ['java/dev/multiprompt/companion/ui/MultipromptApp.kt', 'label = "Sunlight mode on"', 'reader-controls.md'],
+  ]) {
+    const diff = productDiff(file, text);
+    const plan = gate.planChange(diff, []);
+    const selected = verifier.includeRequiredJourneys({ features: [], dropped: [], smoke: true }, plan, diff);
+    assert.ok(selected.features.includes(journey), text);
+    assert.equal(gate.registry.journeys[journey].runner.workflow, 'verify.yml');
+  }
+  const diff = ['bot-look.md', 'reader-controls.md'].map(name => {
+    const recipe = `${gate.REGISTRY_PATH}/${name}`;
+    return `diff --git a/${recipe} b/${recipe}\n--- a/${recipe}\n+++ b/${recipe}\n@@ -1 +1 @@\n-old\n+Extended menu journey\n`;
+  }).join('');
+  const selected = verifier.includeRequiredJourneys({ features: [], dropped: [], smoke: true }, { outcomes: [] }, diff);
+  assert.deepEqual(selected.features.sort(), ['bot-look.md', 'reader-controls.md']);
+});

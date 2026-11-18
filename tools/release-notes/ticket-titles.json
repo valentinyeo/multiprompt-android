@@ -125,5 +125,6 @@
   "IGSH-2638": "Phone tests cover every menu control",
   "IGSH-2545": "Android phone test finds and sends clear",
   "IGSH-2652": "The verifier fails planted bugs and passes clean builds",
-  "IGSH-2658": "Agents try to break every Android bug fix"
+  "IGSH-2658": "Agents try to break every Android bug fix",
+  "IGSH-2653": "Phone tests cover 40 more controls"
 }

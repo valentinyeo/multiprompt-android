@@ -761,6 +761,51 @@
         "clear-selected-host.txt": 200,
         "clear-proof.txt": 200
       }
+    },
+    "bot-look.md": {
+      "name": "Bot look choices",
+      "description": "Choose all faces and colours, scroll, dismiss and retain the local appearance after restart. SOFT-2653.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "bot.look"
+      ],
+      "evidence": {
+        "bot-look-top.json": 1000,
+        "bot-look-bottom.json": 1500,
+        "bot-look-retained-face.json": 1500,
+        "bot-look-retained-auto.json": 1500,
+        "bot-look-proof.txt": 200
+      }
+    },
+    "reader-controls.md": {
+      "name": "Reader rename and display controls",
+      "description": "Cancel, dismiss and save a rename with independent host receipts; toggle terminal details and sunlight. SOFT-2653.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "reader.controls"
+      ],
+      "evidence": {
+        "reader-controls-renamed.json": 1500,
+        "reader-controls-details-on.json": 1500,
+        "reader-controls-details-off.json": 1500,
+        "reader-controls-sunlight-on.json": 1500,
+        "reader-controls-sunlight-off.json": 1500,
+        "reader-controls-host.txt": 1000,
+        "reader-controls-window.txt": 200,
+        "reader-controls-proof.txt": 200
+      }
     }
   },
   "outcomes": {
@@ -1241,6 +1286,23 @@
       "match": [
         "ChatPollGate",
         "ReaderStreamPump"
+      ]
+    },
+    "bot.look": {
+      "description": "Choose all faces and colours, scroll, dismiss and retain the local appearance after restart. SOFT-2653.",
+      "journey": "bot-look.md",
+      "sideEffect": false,
+      "match": [
+        "BotLookSheet\\.kt",
+        "label = \"Bot look\""
+      ]
+    },
+    "reader.controls": {
+      "description": "Cancel, dismiss and save a rename with independent host receipts; toggle terminal details and sunlight. SOFT-2653.",
+      "journey": "reader-controls.md",
+      "sideEffect": true,
+      "match": [
+        "renameDialogVisible|renameDraft|ReaderMenuPage\\.DISPLAY|onTechnicalModeChanged|onSetAppTheme|terminal details|Sunlight mode"
       ]
     }
   }
