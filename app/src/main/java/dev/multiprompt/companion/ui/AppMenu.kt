@@ -101,7 +101,7 @@ internal fun InboxOverflowMenu(
             KitMenuRow(
                 label = BuildConfig.VERSION_NAME,
                 modifier = Modifier.testTag("app-version").semantics {
-                    contentDescription = "Version ${BuildConfig.VERSION_NAME}, open release notes"
+                    contentDescription = versionReleaseNotesDescription(BuildConfig.VERSION_NAME)
                 },
                 onClick = { expanded = false; onReleaseNotes() },
             )

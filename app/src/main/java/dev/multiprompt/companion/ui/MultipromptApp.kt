@@ -2872,6 +2872,7 @@ internal fun ReaderTopBar(
                         )
                     }
                 }
+                VersionLabel(onClick = onReleaseNotes)
                 Box {
                     KitRoundButton(onClick = onMenuClick, modifier = Modifier.minimumInteractiveComponentSize().size(ReaderControlSize), icon = Icons.Default.MoreVert, description = "Session actions")
                     menuContent()
