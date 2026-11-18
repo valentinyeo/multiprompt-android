@@ -41,7 +41,8 @@ def check(xml, screenshot, expected):
         found = matches(label)
         assert len(found) == 1, f'Missing or ambiguous choice: {label}'
         node = found[0]
-        while node.get('clickable') != 'true' and node in parents:
+        while (node.get('clickable') != 'true' and node.get('checkable') != 'true'
+               and node.get('selected') != 'true' and node in parents):
             node = parents[node]
         return node
 

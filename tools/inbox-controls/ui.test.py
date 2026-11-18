@@ -39,6 +39,16 @@ class InboxControlsTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'Missing'):
             self.check({'selected': ['Small']})
 
+    def test_retained_phone_selection_does_not_require_clickability(self):
+        fixture = Path(__file__).parent / 'fixtures/9b263b15-sunlight'
+        ui.check(fixture.with_suffix('.xml'), fixture.with_suffix('.png'), {'selected': ['Sunlight', 'Normal']})
+        for label in ['System', 'Dark', 'Small', 'Large']:
+            with self.assertRaisesRegex(AssertionError, 'not selected'):
+                ui.check(fixture.with_suffix('.xml'), fixture.with_suffix('.png'), {'selected': [label]})
+        self.xml.write_text(fixture.with_suffix('.xml').read_text().replace('checked="true"', 'checked="false"'))
+        with self.assertRaisesRegex(AssertionError, 'not selected'):
+            ui.check(self.xml, fixture.with_suffix('.png'), {'selected': ['Sunlight']})
+
     def test_rows_must_be_fully_inside_the_screenshot_and_scroll_viewport(self):
         for bounds in ['[20,1200][900,1400]', '[20,-20][900,40]', '[0,0][0,0]']:
             self.screen(self.node('Custom time', bounds=bounds))
@@ -80,6 +90,24 @@ class InboxControlsTest(unittest.TestCase):
 
     def saved(self, due, session='verify-session'):
         self.preferences.write_text(f'<map><long name="archive_until::host::{session}" value="{due}"/></map>')
+
+    def test_both_new_journeys_install_the_existing_host_command_logger(self):
+        import os
+        import subprocess
+        source = (Path(__file__).resolve().parents[2] / '.claude/skills/verify-multiprompt-android/scripts/fixture.sh').read_text()
+        start = source.index('if [[', source.index('authorized_keys'))
+        block = source[start:source.index('\nfi', start) + 3]
+        (self.root / 'user-key.pub').write_text('disposable-public-key\n')
+        logger = self.root / 'ssh-command'
+        for feature in ['settings-controls.md', 'inbox-reminders.md', 'session-routing.md', 'hosts.md']:
+            logger.unlink(missing_ok=True)
+            shell = 'sudo() { if [[ "$1" == tee ]]; then cat >/dev/null; fi; };\n' + block
+            result = subprocess.run(['bash', '-ec', shell], env={**os.environ, 'VERIFY_FEATURE': feature, 'FIXTURE': str(self.root)}, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(logger.exists(), feature != 'hosts.md', feature)
+            if logger.exists():
+                self.assertIn('SSH_ORIGINAL_COMMAND', logger.read_text())
+                self.assertIn('>> /home/verifyssh/commands.log', logger.read_text())
 
     def test_relative_deadlines_reject_wrong_duration_and_session(self):
         for duration in [1800, 3600, 7200, 10800, 14400, 18000]:

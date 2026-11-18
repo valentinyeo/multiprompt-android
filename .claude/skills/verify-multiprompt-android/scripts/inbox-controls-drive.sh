@@ -31,7 +31,7 @@ if [[ "$feature" == settings-controls.md ]]; then
     inbox_control_state settings-back '{"text":["Inbox"],"desc":["Session list actions"],"absent":["Session list settings"]}'
     relaunch_app
     open_inbox_settings
-    tap_node text Normal reveal
+    tap_node text Large reveal
     inbox_control_state settings-retained '{"text":["Theme","Default Reader font size"],"selected":["System","Normal"]}'
     tap_desc Back
     open_inbox_settings
