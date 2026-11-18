@@ -35,6 +35,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
@@ -278,6 +282,15 @@ internal fun ChatHistoryList(
     var openHold by remember(listState) { mutableStateOf(unreadMessageKey != null || unreadSinceEpochSeconds != null) }
     val nearTop by rememberUpdatedState(onNearTop)
     var pendingJump by remember { mutableStateOf<ReplyJump?>(null) }
+    var pinnedToBottom by remember(listState) { mutableStateOf(!listState.canScrollBackward) }
+    val userScroll = remember(listState) {
+        object : NestedScrollConnection {
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (consumed.y != 0f) pinnedToBottom = !listState.canScrollBackward
+                return Offset.Zero
+            }
+        }
+    }
     var highlightedKey by remember { mutableStateOf<String?>(null) }
     var confirmResend by remember { mutableStateOf<ChatHistoryMessage?>(null) }
     confirmResend?.let { target ->
@@ -317,22 +330,23 @@ internal fun ChatHistoryList(
             highlightedKey = null
         }
     }
-    val atBottom = !listState.canScrollBackward && pendingJump == null
     val anchorPosition = ChatOpenAnchor.listIndex(presentation.messages, firstUnreadKey, questions.size, showDots)
     val holdingForUnread = openHold && anchorPosition != null
     val newest = messages.lastOrNull()
-    LaunchedEffect(newest?.key, newest?.text, newest?.pending, questions) {
-        if (atBottom && !holdingForUnread && findQuery.isBlank()) listState.scrollToItem(0)
+    LaunchedEffect(newest?.key, newest?.text, newest?.pending, questions, showDots, pinnedToBottom) {
+        if (pinnedToBottom && pendingJump == null && !holdingForUnread && findQuery.isBlank()) listState.scrollToItem(0)
     }
     LaunchedEffect(activeFind?.message, activeFind?.start, activeFind?.end, showDots, questions.size) {
         val hit = activeFind ?: return@LaunchedEffect
         if (findQuery.isBlank()) return@LaunchedEffect
+        pinnedToBottom = false
         openHold = false
         val listIndex = (if (showDots) 1 else 0) + questions.size + (presentation.messages.lastIndex - hit.message)
         if (listIndex >= 0) listState.scrollToItem(listIndex)
     }
     LaunchedEffect(followRequest) {
         if (followRequest > 0) {
+            pinnedToBottom = true
             openHold = false
             listState.scrollToItem(0)
         }
@@ -343,6 +357,7 @@ internal fun ChatHistoryList(
     LaunchedEffect(openHold, anchorPosition, pendingJump != null, findQuery.isNotBlank()) {
         if (!openHold || pendingJump != null || findQuery.isNotBlank()) return@LaunchedEffect
         val position = anchorPosition ?: return@LaunchedEffect
+        pinnedToBottom = false
         listState.scrollToItem(position)
         val info = listState.layoutInfo
         val item = info.visibleItemsInfo.firstOrNull { it.index == position }
@@ -373,7 +388,7 @@ internal fun ChatHistoryList(
     DisposableEffect(Unit) { onDispose { nearTop(false) } }
     val fontSize = (14f * fontScale).sp
     LazyColumn(
-        modifier = modifier.fillMaxSize().testTag("chat-history"),
+        modifier = modifier.fillMaxSize().nestedScroll(userScroll).testTag("chat-history"),
         state = listState,
         reverseLayout = true,
         verticalArrangement = Arrangement.spacedBy(if (LocalReaderStyle.current) ReaderMessageSpacing else 10.dp),
@@ -396,9 +411,9 @@ internal fun ChatHistoryList(
                 if (LocalReaderStyle.current && previous != null && previous.role != message.role) Spacer(Modifier.height(10.dp))
                 val messageIndex = presentation.messages.lastIndex - index
                 HistoryBubble(if (message.role == "user") ChatMention.visible(message.text) else message.text, message.role, message.pending, fontScale, sunlight, replyGate, onReply, skills,
-                    messageId = message.requestId, sessionName = sessionName, onMarkUnread = { openHold = false; onMarkUnread(message.key) },
+                    messageId = message.requestId, sessionName = sessionName, onMarkUnread = { pinnedToBottom = false; openHold = false; onMarkUnread(message.key) },
                     key = message.key, highlighted = highlightedKey == message.key,
-                    onJump = { pendingJump = ReplyJump(message, it) },
+                    onJump = { pinnedToBottom = false; pendingJump = ReplyJump(message, it) },
                     reactions = presentation.badges[message.key].orEmpty(),
                     onReaction = if (agent == AgentKind.CLAUDE && message.role == "assistant" && onReaction != null) {
                         { emoji -> onReaction(message, emoji) }

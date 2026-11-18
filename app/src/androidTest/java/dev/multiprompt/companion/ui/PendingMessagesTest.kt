@@ -10,6 +10,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import java.io.File
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -176,6 +179,34 @@ class PendingMessagesTest {
             working.value = false
         }
         compose.onNodeWithText("Received /model opus. Claude Opus 5.5 high").assertIsDisplayed()
+    }
+
+    @Test fun readingOlderRepliesStaysPutUntilJumpingToNewest() {
+        val messages = mutableStateOf((1..40).map { index ->
+            ChatHistoryMessage("reply-$index", "assistant", "Older reply $index", "", index.toLong(), index.toLong())
+        })
+        val list = LazyListState()
+        val follow = mutableStateOf(0)
+        compose.setContent {
+            MultipromptTheme(readerStyle = true) {
+                ChatHistoryList(messages.value, listState = list, followRequest = follow.value, modifier = Modifier.height(240.dp))
+            }
+        }
+        compose.onNodeWithTag("chat-history").performTouchInput { swipeDown() }
+        compose.waitForIdle()
+        val anchor = messages.value.asReversed()[list.firstVisibleItemIndex].text
+        val before = compose.onNodeWithText(anchor).getUnclippedBoundsInRoot()
+        compose.runOnIdle {
+            messages.value += ChatHistoryMessage("new-reply", "assistant", "Newest reply", "", 41, 41)
+        }
+        assertEquals(before, compose.onNodeWithText(anchor).getUnclippedBoundsInRoot())
+        compose.onNodeWithText("Newest reply").assertDoesNotExist()
+        compose.runOnIdle { follow.value++ }
+        compose.onNodeWithText("Newest reply").assertIsDisplayed()
+        compose.runOnIdle {
+            messages.value += ChatHistoryMessage("next-reply", "assistant", "Following again", "", 42, 42)
+        }
+        compose.onNodeWithText("Following again").assertIsDisplayed()
     }
 
     @Test fun aLeftoverRetryShowsNoButtons() {
