@@ -127,5 +127,6 @@
   "IGSH-2652": "The verifier fails planted bugs and passes clean builds",
   "IGSH-2658": "Agents try to break every Android bug fix",
   "IGSH-2653": "Phone tests cover 40 more controls",
+  "IGSH-2669": "Phone tests cover 40 more controls, batch 3",
   "IGSH-2670": "Phone tests cover 40 more controls, batch 4"
 }
