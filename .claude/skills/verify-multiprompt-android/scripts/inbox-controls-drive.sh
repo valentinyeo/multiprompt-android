@@ -52,6 +52,7 @@ if [[ "$feature" == settings-controls.md ]]; then
     wait_for_absence 'Desktop tmux hosts'
     inbox_control_state mapping-system-back '{"text":["Session list settings","Host mapping"],"absent":["Desktop tmux hosts"]}'
     adb shell wm size 1080x720
+    open_inbox_settings
     tap_text 'Host mapping'
     wait_for_text 'Desktop tmux hosts'
     inbox_control_state mapping-scroll-top '{"text":["Desktop tmux hosts","0 · Hetzner: Not mapped"],"absent":["Done"]}'
@@ -59,8 +60,9 @@ if [[ "$feature" == settings-controls.md ]]; then
     inbox_control_state mapping-scroll-bottom '{"text":["Done"],"absent":["0 · Hetzner: Not mapped"]}'
     tap_text Done
     wait_for_absence 'Desktop tmux hosts'
-    adb shell wm size reset
     inbox_control_state mapping-dismissed '{"text":["Session list settings","Host mapping"],"absent":["Desktop tmux hosts"]}'
+    adb shell wm size reset
+    open_inbox_settings
     tap_text Update
     wait_for_text 'App updates'
     inbox_control_state settings-update '{"text":["App updates","Check now"],"desc":["Open navigation"],"absent":["Session list settings"]}'

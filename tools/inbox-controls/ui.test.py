@@ -109,6 +109,20 @@ class InboxControlsTest(unittest.TestCase):
                 self.assertIn('SSH_ORIGINAL_COMMAND', logger.read_text())
                 self.assertIn('>> /home/verifyssh/commands.log', logger.read_text())
 
+    def test_mapping_navigation_reopens_settings_after_activity_resize(self):
+        import re
+        import subprocess
+        source = (Path(__file__).resolve().parents[2] / '.claude/skills/verify-multiprompt-android/scripts/inbox-controls-drive.sh').read_text()
+        for size, target in [('1080x720', "'Host mapping'"), ('reset', 'Update')]:
+            fragment = re.search(r'adb shell wm size ' + size + r'\n.*?tap_text ' + re.escape(target), source, re.S).group()
+            shell = '''screen=Settings
+adb() { screen=Inbox; }
+open_inbox_settings() { [[ "$screen" == Inbox ]]; screen=Settings; }
+tap_text() { [[ "$screen" == Settings ]]; }
+''' + fragment
+            result = subprocess.run(['bash', '-ec', shell], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_relative_deadlines_reject_wrong_duration_and_session(self):
         for duration in [1800, 3600, 7200, 10800, 14400, 18000]:
             self.saved(100000 + duration)
