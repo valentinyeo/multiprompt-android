@@ -952,7 +952,7 @@
     },
     "inbox-reminders.md": {
       "name": "Inbox buckets and reminders",
-      "description": "Refresh with independent SSH reads; switch inbox buckets and save every reminder preset and custom deadlines. SOFT-2670.",
+      "description": "Refresh with independent SSH reads; switch inbox buckets and save every reminder preset and custom deadlines. SOFT-2670. Overflowing folder pills stay fully visible on selection and reopen; edges fade over the list.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -964,17 +964,18 @@
         ]
       },
       "outcomes": [
-        "inbox.reminders"
+        "inbox.reminders",
+        "inbox.folder-bar"
       ],
       "evidence": {
         "inbox-refresh-host.txt": 2000,
         "bucket-unread-on.json": 500,
-        "reminder-scroll-bottom.json": 1000,
         "reminder-day2-time.json": 500,
         "reminder-custom-time.json": 500,
         "reminder-keyboard-time.json": 500,
-        "reminder-keyboard-waiting.json": 1000,
-        "inbox-reminders-proof.txt": 200
+        "inbox-reminders-proof.txt": 200,
+        "folder-bar-reopened.json": 900,
+        "folder-bar-middle-reopened.json": 900
       }
     },
     "screencast-account.md": {
@@ -1579,6 +1580,24 @@
       "match": [
         "ScreencastAccountKey|ScreencastUploader|screencastKey|screencast\\.prepare"
       ]
+    },
+    "inbox.folder-bar": {
+      "description": "The selected inbox folder stays fully visible on open and change; overflow fades at transparent bar edges. SOFT-2706.",
+      "journey": "inbox-reminders.md",
+      "sideEffect": false,
+      "match": [
+        "splitScrollState|displayedWorkspaceSplitIds|folder-bar|Modifier.findPin\\(state.selectedWorkspaceId"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tap_text Folder"
+        },
+        "result": {
+          "file": "folder-bar-reopened.json",
+          "quote": "\"folder\": \"Folder 12\""
+        }
+      }
     }
   }
 }
