@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import xml.etree.ElementTree as ET
 from PIL import Image
 from scroll import displacement
@@ -106,12 +107,42 @@ for attempt in range(10):
     assert not any(n.get('content-desc') == 'Cancel reply' for n in root.iter('node'))
 (back_x, back_y, back_right, back_bottom) = find(root, desc='Back')
 adb('shell', 'input', 'tap', str((back_x + back_right) // 2), str((back_y + back_bottom) // 2))
-adb('shell', 'uiautomator', 'dump', '/sdcard/gestures.xml')
-inbox = ET.fromstring(adb('exec-out', 'cat', '/sdcard/gestures.xml'))
-assert any(n.get('text') == 'Inbox' for n in inbox.iter('node')), 'Back no longer opens inbox'
-assert any(n.get('text') == 'verify-other' for n in inbox.iter('node')), 'Second session missing'
+
+
+def reveal(description):
+    ui = Path(__file__).resolve().parents[2] / '.claude/skills/verify-multiprompt-android/scripts/ui.py'
+    xml = out / 'gestures.xml'
+    for attempt in range(24):
+        adb('shell', 'uiautomator', 'dump', '/sdcard/gestures.xml')
+        data = adb('exec-out', 'cat', '/sdcard/gestures.xml')
+        xml.write_bytes(data)
+        direction = 'backward' if attempt >= 12 else 'forward'
+        plan = subprocess.run([sys.executable, str(ui), str(xml), 'reach-desc', description, direction], capture_output=True, text=True)
+        if plan.returncode != 0:
+            raise AssertionError((plan.stderr or plan.stdout).strip())
+        action, *points = plan.stdout.split()
+        if action == 'tap':
+            return ET.fromstring(data)
+        if action != 'swipe' or len(points) != 4:
+            raise AssertionError(plan.stdout)
+        adb('shell', 'input', 'swipe', *points, '500')
+    raise AssertionError('JOURNEY_ACTION_UNREACHABLE: ' + description)
+
+
+if os.environ.get('VERIFY_FEATURE') == 'session-summaries.md':
+    adb('shell', 'uiautomator', 'dump', '/sdcard/gestures.xml')
+    inbox = ET.fromstring(adb('exec-out', 'cat', '/sdcard/gestures.xml'))
+    assert any(n.get('text') == 'Inbox' for n in inbox.iter('node')), 'Back no longer opens inbox'
+    assert any(n.get('text') == 'verify-other' for n in inbox.iter('node')), 'Second session missing'
+else:
+    inbox = reveal('Robot cl-long-chat')
+    assert any(n.get('text') == 'Inbox' for n in inbox.iter('node')), 'Back no longer opens inbox'
+    assert any(n.get('content-desc') == 'Robot cl-long-chat' for n in inbox.iter('node')), 'Seeded long chat missing'
+    reveal('Robot verify-session')
 screenshot('gestures-inbox')
 result = dict(status='passed', replies=10, sessionChanges=0, codeLeftShift=left_shift,
               codeRightShift=right_shift, backToInbox=True, secondSession=True)
+if os.environ.get('VERIFY_FEATURE') != 'session-summaries.md':
+    result['seededDescriptions'] = ['Robot cl-long-chat', 'Robot verify-session']
 (out / 'gesture-result.json').write_text(json.dumps(result, indent=2))
 print('RELEASED_SESSION_GESTURES_PROVEN', json.dumps(result))

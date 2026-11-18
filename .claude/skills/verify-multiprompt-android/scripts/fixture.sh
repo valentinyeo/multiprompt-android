@@ -238,7 +238,7 @@ if [[ "${VERIFY_FEATURE:-}" == copy-chat-id.md ]]; then
 fi
 sudo -u verifyssh tmux display-message -p '#{pid}' > "$FIXTURE/tmux.pid"
 sudo -u verifyssh tmux capture-pane -pt "$fixture_session" > "$EVIDENCE/fixture-start.txt"
-if [[ "${VERIFY_FEATURE:-}" == session-routing.md || "${VERIFY_FEATURE:-}" == session-gestures.md ]]; then
+if [[ "${VERIFY_FEATURE:-}" == session-routing.md ]]; then
     sudo -u verifyssh tmux new-session -d -s verify-other -x 100 -y 32 'python3 -u /home/verifyssh/console.py /home/verifyssh/other-receipts.txt'
     sudo -u verifyssh tmux set-window-option -t verify-other automatic-rename off
     sudo -u verifyssh tmux rename-window -t verify-other verify-other
@@ -285,13 +285,11 @@ if [[ "${BREAK_IT_MODE:-}" == true ]]; then
     sudo -u verifyssh tmux set-window-option -t verify-breakit-other automatic-rename off
     sudo -u verifyssh tmux rename-window -t verify-breakit-other verify-breakit-other
 fi
-if [[ "${VERIFY_FEATURE:-}" != long-chat.md && "${PIN_SCROLL_PROOF:-}" != true ]]; then
-    sudo install -m 755 "$(dirname "$0")/seed.sh" /home/verifyssh/seed.sh
-    sudo install -m 755 tools/long-chat/fixture.py /home/verifyssh/long-chat-fixture.py
-    sudo install -m 644 tools/verify-seed.py /home/verifyssh/verify-seed.py
-    sudo -u verifyssh mkdir -p /home/verifyssh/long-chat-bin
-    sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/long-chat-bin/claude
-    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh bash /home/verifyssh/seed.sh "$fixture_session"
-    sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/verify-seed.py record > "$EVIDENCE/seed-counts.json"
-fi
+sudo install -m 755 "$(dirname "$0")/seed.sh" /home/verifyssh/seed.sh
+sudo install -m 755 tools/long-chat/fixture.py /home/verifyssh/long-chat-fixture.py
+sudo install -m 644 tools/verify-seed.py /home/verifyssh/verify-seed.py
+sudo -u verifyssh mkdir -p /home/verifyssh/long-chat-bin
+sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/long-chat-bin/claude
+sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh bash /home/verifyssh/seed.sh "$fixture_session"
+sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/verify-seed.py record > "$EVIDENCE/seed-counts.json"
 printf 'SSH FIXTURE READY\n'

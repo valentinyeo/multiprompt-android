@@ -9,9 +9,7 @@ node "$scripts/../../../../.github/scripts/pstack-verifier/coverage.cjs" journey
 mkdir -p "$EVIDENCE"
 exec > >(tee -a "$EVIDENCE/driver-transcript.txt") 2>&1
 set -x
-if [[ "${PIN_SCROLL_PROOF:-}" != true ]]; then
-    sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/verify-seed.py check - < "$EVIDENCE/seed-counts.json" | tee "$EVIDENCE/seed-check.json"
-fi
+sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/verify-seed.py check - < "$EVIDENCE/seed-counts.json" | tee "$EVIDENCE/seed-check.json"
 package=${VERIFY_PACKAGE:-dev.multiprompt.companion.debug}
 step=0
 product_checks=0
@@ -1802,7 +1800,15 @@ if [[ "$feature" == chat-working.md ]]; then
     python3 tools/working-dots/drive.py
     exit 0
 fi
-if [[ "$feature" == session-gestures.md || "$feature" == session-summaries.md ]]; then
+if [[ "$feature" == session-gestures.md ]]; then
+    tap_desc 'Robot verify-session'
+    wait_for_text 'Message verify-session'
+    wait_for_text CODE_START
+    wait_for_text GESTURE_REPLY_TARGET
+    python3 tools/session-gestures/drive.py
+    exit 0
+fi
+if [[ "$feature" == session-summaries.md ]]; then
     wait_for_text GESTURE_REPLY_TARGET
     python3 tools/session-gestures/drive.py
     exit 0

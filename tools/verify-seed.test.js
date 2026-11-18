@@ -165,10 +165,10 @@ tap_node text verify-session
   }
 });
 
-test('default setup seeds once without changing dedicated long-chat and pins fixtures', () => {
+test('long-chat, pins and gestures use the shared seed once', () => {
   const fixture = readFileSync(path.join(scripts, 'fixture.sh'), 'utf8');
-  const setup = fixture.slice(fixture.indexOf('if [[ "${VERIFY_FEATURE:-}" != long-chat.md'));
-  for (const [feature, pins, expected] of [['sessions.md', 'false', 1], ['long-chat.md', 'false', 0], ['session-favorites.md', 'true', 0]]) {
+  const setup = fixture.slice(fixture.indexOf('sudo install -m 755 "$(dirname "$0")/seed.sh"'));
+  for (const [feature, pins] of [['sessions.md', 'false'], ['long-chat.md', 'false'], ['session-favorites.md', 'true'], ['session-gestures.md', 'false']]) {
     const directory = mkdtempSync(path.join(tmpdir(), 'seed-setup-'));
     try {
       const result = spawnSync('bash', ['-euc', `
@@ -178,8 +178,8 @@ ${setup}
 `], { encoding: 'utf8', env: { ...process.env, VERIFY_FEATURE: feature, PIN_SCROLL_PROOF: pins, EVIDENCE: directory } });
       assert.equal(result.status, 0, result.stderr);
       const commands = existsSync(path.join(directory, 'commands')) ? readFileSync(path.join(directory, 'commands'), 'utf8') : '';
-      assert.equal((commands.match(/bash \/home\/verifyssh\/seed.sh/g) || []).length, expected);
-      assert.equal(existsSync(path.join(directory, 'seed-counts.json')), expected === 1);
+      assert.equal((commands.match(/bash \/home\/verifyssh\/seed.sh/g) || []).length, 1);
+      assert.equal(existsSync(path.join(directory, 'seed-counts.json')), true);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
