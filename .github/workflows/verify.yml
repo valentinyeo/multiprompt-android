@@ -145,6 +145,7 @@ on:
           - message-reply.md
           - settings-controls.md
           - inbox-reminders.md
+          - host-restart.md
       expect_settings_missing:
         description: Require signed Android 301 to reject the settings navigation journey
         type: boolean

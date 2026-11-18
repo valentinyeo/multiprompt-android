@@ -102,6 +102,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `settings.controls`. Runner: `verify.yml` (debug). Priority evidence: `settings-theme-Sunlight.json` (800 characters), `settings-theme-Dark.json` (800 characters), `settings-font-Small.json` (800 characters), `settings-font-Large.json` (800 characters), `settings-retained.json` (1000 characters), `settings-refresh-host.txt` (2000 characters), `mapping-scroll-bottom.json` (1000 characters), `settings-version.json` (1000 characters).
 - [Inbox buckets and reminders](inbox-reminders.md): Refresh with independent SSH reads; switch inbox buckets and save every reminder preset and custom deadlines. SOFT-2670.
   - Outcomes: `inbox.reminders`. Runner: `verify.yml` (debug). Priority evidence: `inbox-refresh-host.txt` (2000 characters), `bucket-unread-on.json` (500 characters), `reminder-scroll-bottom.json` (1000 characters), `reminder-day2-time.json` (500 characters), `reminder-custom-time.json` (500 characters), `reminder-keyboard-time.json` (500 characters), `reminder-keyboard-waiting.json` (1000 characters), `inbox-reminders-proof.txt` (200 characters).
+- [Replies after a chat host restart](host-restart.md): Restart a desktop-hosted chat mid-conversation and require desktop and phone replies without reopening it. SOFT-2681.
+  - Outcomes: `reader.host-restart`. Runner: `verify.yml` (debug). Priority evidence: `host-restart-state.json` (2500 characters), `host-restart-host.json` (4000 characters), `host-restart-process.json` (1000 characters).
 
 ## Initial coverage gaps
 

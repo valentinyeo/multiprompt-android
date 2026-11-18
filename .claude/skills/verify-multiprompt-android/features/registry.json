@@ -894,6 +894,25 @@
         "reminder-keyboard-waiting.json": 1000,
         "inbox-reminders-proof.txt": 200
       }
+    },
+    "host-restart.md": {
+      "name": "Replies after a chat host restart",
+      "description": "Restart a desktop-hosted chat mid-conversation and require desktop and phone replies without reopening it. SOFT-2681.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "reader.host-restart"
+      ],
+      "evidence": {
+        "host-restart-state.json": 2500,
+        "host-restart-host.json": 4000,
+        "host-restart-process.json": 1000
+      }
     }
   },
   "outcomes": {
@@ -1455,6 +1474,29 @@
         "ReminderDialog|reminderPromptSession|ReminderTimeParser|Switch session bucket|bucketMenuExpanded|Unread only|inbox-reminders|InboxOverflowMenu",
         "AppMenu\\.kt[\\s\\S]*(?:onRefresh|label = \"Refresh\")|Custom time|Later today|In 30 minutes|In [125] hours?|Tomorrow.*9:00 AM|In 2 days|Remind me|Remind Me|onArchiveUntil|submitCustom|presets\\.forEach|unreadOnly|SessionBucket"
       ]
+    },
+    "reader.host-restart": {
+      "description": "A desktop-hosted chat catches up and keeps showing replies after its agent host process restarts, without reopening the phone reader.",
+      "journey": "host-restart.md",
+      "sideEffect": true,
+      "match": [
+        "reader/ChatHistoryConnection\\.kt",
+        "reader/ChatHistoryProtocol\\.kt"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "+ wait_for_text REPLY_DESKTOP_AFTER_2681"
+        },
+        "result": {
+          "file": "host-restart-state.json",
+          "quote": "REPLY_DESKTOP_AFTER_2681"
+        },
+        "sideEffect": {
+          "file": "host-restart-host.json",
+          "quote": "\"reply\": \"REPLY_DESKTOP_AFTER_2681\""
+        }
+      }
     }
   }
 }

@@ -52,7 +52,9 @@ sudo /usr/sbin/sshd -t -f "$FIXTURE/sshd_config"
 sudo /usr/sbin/sshd -f "$FIXTURE/sshd_config" -E "$FIXTURE/sshd.log"
 sudo install -m 755 "$(dirname "$0")/console.py" /home/verifyssh/console.py
 fixture_session=verify-session
-if [[ "${VERIFY_FEATURE:-}" == claude-remote-control.md ]]; then
+if [[ "${VERIFY_FEATURE:-}" == host-restart.md ]]; then
+    source "$(dirname "$0")/host-restart-setup.sh"
+elif [[ "${VERIFY_FEATURE:-}" == claude-remote-control.md ]]; then
     source "$(dirname "$0")/remote-control-setup.sh"
 elif [[ "${VERIFY_FEATURE:-}" == ai-switch.md ]]; then
     fixture_session=live-verify-session
