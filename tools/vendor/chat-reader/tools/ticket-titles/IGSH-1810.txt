@@ -1,1 +1,0 @@
-Chat: waiting messages look faded until the bot reads them

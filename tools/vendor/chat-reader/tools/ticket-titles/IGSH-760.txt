@@ -1,1 +1,0 @@
-Multiprompt: the message box flickers while he types

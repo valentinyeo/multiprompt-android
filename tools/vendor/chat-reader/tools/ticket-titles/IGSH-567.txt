@@ -1,1 +1,0 @@
-Chat View: pending message bubbles cannot be selected and copied

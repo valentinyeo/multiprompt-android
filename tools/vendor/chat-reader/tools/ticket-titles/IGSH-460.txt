@@ -1,1 +1,0 @@
-Chat View: a message shown as queued never reaches the session (lost when two are queued)

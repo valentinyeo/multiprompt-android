@@ -1,1 +1,0 @@
-Multibot: a mentioned chat gets your message and answers first

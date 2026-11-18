@@ -1,1 +1,0 @@
-Multiprompt: starts not maximized again, must always open full screen

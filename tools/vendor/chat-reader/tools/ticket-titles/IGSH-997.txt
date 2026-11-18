@@ -1,1 +1,0 @@
-Multiprompt: show each plan’s usage pace

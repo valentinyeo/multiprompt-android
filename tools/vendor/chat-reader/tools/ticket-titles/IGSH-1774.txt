@@ -1,1 +1,0 @@
-Workspace menu: clicking a workspace does not switch to it

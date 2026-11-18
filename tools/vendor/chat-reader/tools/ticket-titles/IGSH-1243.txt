@@ -1,1 +1,0 @@
-Changelog shows every release, with a ticket link per line

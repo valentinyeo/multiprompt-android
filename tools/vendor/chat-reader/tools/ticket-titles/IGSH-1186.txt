@@ -1,1 +1,0 @@
-Multiprompt desktop: Ctrl+1 jumps to the first session in any workspace

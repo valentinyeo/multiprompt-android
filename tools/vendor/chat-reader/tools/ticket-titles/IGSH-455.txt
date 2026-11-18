@@ -1,1 +1,0 @@
-Chat View: a file sent to the server is sometimes cut off and its path never appears

@@ -1,1 +1,0 @@
-Chat View: messages use about 90% of a narrow chat column

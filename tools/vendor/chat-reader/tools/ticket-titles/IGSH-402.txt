@@ -1,1 +1,0 @@
-Chat View: text the agent writes after a tool step shows up before that step

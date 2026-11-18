@@ -1,1 +1,0 @@
-Desktop auto-update: check for a new version on startup and while running, download, install, restart

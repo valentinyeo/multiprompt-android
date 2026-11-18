@@ -1,1 +1,0 @@
-Multiprompt: sidebar bottom and title bar feel cluttered

@@ -1,1 +1,0 @@
-Multiprompt updates fail before reaching your desktop

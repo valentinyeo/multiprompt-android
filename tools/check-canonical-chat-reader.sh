@@ -7,6 +7,7 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/src"
 cp -R tools/vendor/chat-reader/tools "$tmp/tools"
+tar -xzf "$tmp/tools/ticket-titles.tar.gz" -C "$tmp"
 cp app/src/main/assets/chat_history_reader.py "$tmp/src/chat_history_reader.py"
 cp -R app/src/main/assets/chat_connectors "$tmp/src/chat_connectors"
 cp app/src/main/assets/mp_send.py app/src/main/assets/multibot_feedback.py "$tmp/src/"

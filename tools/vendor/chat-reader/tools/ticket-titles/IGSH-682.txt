@@ -1,1 +1,0 @@
-Chat View and shell: same queued messages and same draft text, both ways

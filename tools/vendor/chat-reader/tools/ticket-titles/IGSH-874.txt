@@ -1,1 +1,0 @@
-Desktop chat view makes Ctrl+Tab session switching very slow

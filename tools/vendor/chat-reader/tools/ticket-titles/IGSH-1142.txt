@@ -1,1 +1,0 @@
-Multiprompt: master red, pane-layout composer never takes focus

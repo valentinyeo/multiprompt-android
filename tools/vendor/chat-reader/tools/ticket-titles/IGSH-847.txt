@@ -1,1 +1,0 @@
-Multiprompt CLI: agents can launch connected sidebar sessions

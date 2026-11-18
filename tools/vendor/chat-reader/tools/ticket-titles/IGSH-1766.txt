@@ -1,1 +1,0 @@
-Messages sent while a chat is busy settle into the history

@@ -1,1 +1,0 @@
-Alt+A does not open the browser in a chat tab

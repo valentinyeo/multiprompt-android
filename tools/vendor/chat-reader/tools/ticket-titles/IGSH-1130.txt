@@ -1,1 +1,0 @@
-Multiprompt: sessions running as the inne user cannot use the browser pane

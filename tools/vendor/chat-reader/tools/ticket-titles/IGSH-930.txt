@@ -1,1 +1,0 @@
-Multiprompt: messages from other agents never fill my chat message box

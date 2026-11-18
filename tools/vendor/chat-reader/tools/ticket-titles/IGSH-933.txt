@@ -1,1 +1,0 @@
-Multiprompt desktop Chat View: chat scrolls behind a floating title and message box

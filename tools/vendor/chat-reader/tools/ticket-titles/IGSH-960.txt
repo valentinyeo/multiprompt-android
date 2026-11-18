@@ -1,1 +1,0 @@
-Multiprompt: sent text comes back into the message box

@@ -1,1 +1,0 @@
-Android: send crash reports to the server so agents can read and fix them

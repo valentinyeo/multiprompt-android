@@ -1,1 +1,0 @@
-Android: full-screen Session list settings with split switches, synced with desktop

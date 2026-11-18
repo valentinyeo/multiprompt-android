@@ -1,1 +1,0 @@
-Ctrl+T starts a chat in folders with no project files

@@ -1,1 +1,0 @@
-Multiprompt: emoji reactions on Claude messages, sent as a short quoted line

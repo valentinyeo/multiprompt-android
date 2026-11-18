@@ -1,1 +1,0 @@
-Multiprompt: my sent message shows in the chat with a delay

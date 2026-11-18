@@ -1,1 +1,0 @@
-Chat sync audit: raw_markup drift

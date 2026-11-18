@@ -1,1 +1,0 @@
-Desktop session switching is still slow and spikes the CPU

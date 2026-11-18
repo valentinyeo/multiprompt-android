@@ -1,1 +1,0 @@
-Chat checks reject harmless text styling

@@ -1,1 +1,0 @@
-Permission answers: use our answer option rows (desktop)

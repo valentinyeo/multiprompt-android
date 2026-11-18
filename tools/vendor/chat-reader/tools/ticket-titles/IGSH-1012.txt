@@ -1,1 +1,0 @@
-Multiprompt chat: hide the session reply to a thumbs up

@@ -1,1 +1,0 @@
-Multiprompt dictation: read the Deepgram key from the saved user variable, not the launcher's environment

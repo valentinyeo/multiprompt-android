@@ -1,1 +1,0 @@
-Multiprompt: chat bench fails on every release, so nothing can be installed on the laptop

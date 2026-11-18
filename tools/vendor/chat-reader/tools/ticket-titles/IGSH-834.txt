@@ -1,1 +1,0 @@
-Fast lane: green merges and releases itself in both apps

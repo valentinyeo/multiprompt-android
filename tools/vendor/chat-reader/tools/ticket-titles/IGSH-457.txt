@@ -1,1 +1,0 @@
-Desktop: Starred workspace on Alt+1 that mirrors the inbox Starred split

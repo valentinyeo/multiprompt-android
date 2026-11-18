@@ -1,1 +1,0 @@
-App freezes after it sits in the background and never recovers

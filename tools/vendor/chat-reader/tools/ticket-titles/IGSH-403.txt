@@ -1,1 +1,0 @@
-Chat View: clicking a link with accented letters (Krakow with an accent) opens the wrong address

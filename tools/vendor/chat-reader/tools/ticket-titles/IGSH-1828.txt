@@ -1,1 +1,0 @@
-Cancel message does not take back a message the bot already got

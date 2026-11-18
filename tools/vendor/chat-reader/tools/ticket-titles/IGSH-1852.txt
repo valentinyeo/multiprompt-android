@@ -1,1 +1,0 @@
-Ctrl+T chats still ask approval in bypass mode

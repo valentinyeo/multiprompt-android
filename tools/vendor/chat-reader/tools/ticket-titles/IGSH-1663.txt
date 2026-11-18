@@ -1,1 +1,0 @@
-Hide the inbox button while the inbox is open

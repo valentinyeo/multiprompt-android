@@ -1,1 +1,0 @@
-Other workspace must ask for the repo on every new session

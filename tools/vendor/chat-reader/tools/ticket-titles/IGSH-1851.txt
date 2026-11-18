@@ -1,1 +1,0 @@
-Chat history reader crashes with 'tmux control closed' when a hosted chat's tmux session is gone

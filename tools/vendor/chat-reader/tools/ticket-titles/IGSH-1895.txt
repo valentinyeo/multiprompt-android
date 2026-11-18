@@ -1,1 +1,0 @@
-Close all panes leaves Chrome running, and show Multibot memory in telemetry

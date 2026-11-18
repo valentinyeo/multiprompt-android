@@ -1,1 +1,0 @@
-Show Rooms in the sidebar only when there are rooms

@@ -1,1 +1,0 @@
-[INFRA] Repair releases with empty update notes

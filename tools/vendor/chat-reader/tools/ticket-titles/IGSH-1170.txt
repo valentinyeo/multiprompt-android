@@ -1,1 +1,0 @@
-Multiprompt freezes and I have to close it to keep working

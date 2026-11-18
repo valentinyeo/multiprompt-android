@@ -1,1 +1,0 @@
-Multibot signs in to servers with its own key, no 1Password

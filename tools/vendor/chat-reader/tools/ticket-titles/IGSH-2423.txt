@@ -1,1 +1,0 @@
-Skill command messages stay visible in the chat

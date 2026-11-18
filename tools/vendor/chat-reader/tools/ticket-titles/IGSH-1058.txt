@@ -1,1 +1,0 @@
-Chat sync audit: pending_but_delivered drift

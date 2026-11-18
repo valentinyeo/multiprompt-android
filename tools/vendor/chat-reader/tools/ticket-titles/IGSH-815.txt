@@ -1,1 +1,0 @@
-Multiprompt Chat View: show every message of a session

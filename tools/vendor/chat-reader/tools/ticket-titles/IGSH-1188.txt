@@ -1,1 +1,0 @@
-Multiprompt desktop: in Ctrl+K, sessions look like commands

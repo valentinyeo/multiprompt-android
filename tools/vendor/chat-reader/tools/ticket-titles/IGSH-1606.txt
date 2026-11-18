@@ -1,1 +1,0 @@
-Chat view: show hidden agent steps on demand behind one grey line

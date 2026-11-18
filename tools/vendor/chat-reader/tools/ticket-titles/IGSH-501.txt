@@ -1,1 +1,0 @@
-Multiprompt: tabs lose their server link and never reconnect (blank shell view, chat stuck on Waiting for connection)

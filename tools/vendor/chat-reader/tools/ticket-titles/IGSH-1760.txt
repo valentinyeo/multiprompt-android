@@ -1,1 +1,0 @@
-Clicking a session never starts renaming it

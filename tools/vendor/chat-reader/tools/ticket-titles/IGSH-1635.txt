@@ -1,1 +1,0 @@
-Desktop keeps its key after signing in again

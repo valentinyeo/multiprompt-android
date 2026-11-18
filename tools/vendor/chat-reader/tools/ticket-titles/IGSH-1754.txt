@@ -1,1 +1,0 @@
-Desktop chat: show when the last batch of messages started

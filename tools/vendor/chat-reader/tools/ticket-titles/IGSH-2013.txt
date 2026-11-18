@@ -1,1 +1,0 @@
-Chats start their own visible helper chats

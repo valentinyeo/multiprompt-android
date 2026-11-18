@@ -1,1 +1,0 @@
-Multiprompt desktop: update card says what each update changes, no generic lines

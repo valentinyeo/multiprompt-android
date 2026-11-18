@@ -1,1 +1,0 @@
-Multiprompt: show queued messages dimmed instead of the Queued in Claude caption

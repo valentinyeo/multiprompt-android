@@ -1,1 +1,0 @@
-Desktop updates stuck: release run fails with invalid tag

@@ -1,1 +1,0 @@
-Browser opens by itself when a chat shows its browser slot

@@ -1,1 +1,0 @@
-Chat View: remove the black box around the top session pill

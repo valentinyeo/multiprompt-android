@@ -1,1 +1,0 @@
-Chat View: remove the dictation status text and the model and context line from the header

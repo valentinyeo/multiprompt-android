@@ -1,1 +1,0 @@
-Multiprompt CLI: close, rebind, rename and move terminal tabs

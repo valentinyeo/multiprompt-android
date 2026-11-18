@@ -1,1 +1,0 @@
-Desktop: robot dots share one spot, star dot only when needed

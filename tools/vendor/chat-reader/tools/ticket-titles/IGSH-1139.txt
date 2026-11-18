@@ -1,1 +1,0 @@
-Master checks reject manual starts

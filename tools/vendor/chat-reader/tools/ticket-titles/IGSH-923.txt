@@ -1,1 +1,0 @@
-Multiprompt: new skills show in the / list right away, like Claude Code

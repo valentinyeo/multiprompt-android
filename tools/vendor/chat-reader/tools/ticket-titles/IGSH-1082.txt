@@ -1,1 +1,0 @@
-Multiprompt desktop: show which workspace I am in

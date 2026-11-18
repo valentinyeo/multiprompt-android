@@ -1,1 +1,0 @@
-Multiprompt opens instantly: show the last session from cache, load everything else after

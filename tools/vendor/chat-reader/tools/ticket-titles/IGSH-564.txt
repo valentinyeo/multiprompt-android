@@ -1,1 +1,0 @@
-Chat View: messages to a busy session stay on Waiting to send (IGSH-460 regression)

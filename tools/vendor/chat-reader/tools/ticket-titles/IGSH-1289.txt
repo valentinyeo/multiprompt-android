@@ -1,1 +1,0 @@
-Chat opens instantly on startup and buffers sends while connecting

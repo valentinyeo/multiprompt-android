@@ -1,1 +1,0 @@
-Chat View: format blue messages from other agents like normal output

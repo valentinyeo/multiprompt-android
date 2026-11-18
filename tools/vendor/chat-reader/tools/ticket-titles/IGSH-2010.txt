@@ -1,1 +1,0 @@
-Chat view freezes Multibot for 5 seconds

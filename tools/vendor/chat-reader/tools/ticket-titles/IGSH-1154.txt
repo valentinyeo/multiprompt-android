@@ -1,1 +1,0 @@
-Chat view falls behind the session and never catches up

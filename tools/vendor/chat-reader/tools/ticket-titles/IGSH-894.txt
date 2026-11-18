@@ -1,1 +1,0 @@
-Browser bridge broken in the standard Chrome profile: red icon, screenshots cannot be sent

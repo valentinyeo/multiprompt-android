@@ -1,1 +1,0 @@
-Chat View falls behind the terminal for a tab on the second server
