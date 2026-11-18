@@ -33,6 +33,49 @@ class ActionTest(unittest.TestCase):
     def plan(self, xml, mode="text", value="Open live terminal", direction="forward"):
         return action.plan(ET.fromstring(xml), mode, value, direction)
 
+    def test_missing_split_searches_the_horizontal_viewport_in_both_directions(self):
+        xml = (Path(__file__).parent / "fixtures/46978da4-hidden-split.xml").read_text()
+        backward = self.plan(xml, value="Runners", direction="backward").split()
+        forward = self.plan(xml, value="Runners", direction="forward").split()
+        self.assertEqual(backward[0], "swipe")
+        self.assertEqual(backward[1:], [forward[3], forward[4], forward[1], forward[2]])
+        x1, y1, x2, y2 = map(int, backward[1:])
+        self.assertTrue(32 < x1 < x2 < 1048)
+        self.assertEqual(y1, y2)
+        self.assertTrue(1710 < y1 < 1836)
+
+    def test_hidden_favorites_scrolls_split_strip_not_session_list(self):
+        xml = (Path(__file__).parent / "fixtures/9cce26ad-hidden-favorites.xml").read_text()
+        result = subprocess.run(['python3', str(SCRIPTS / 'ui.py'), str(Path(__file__).parent / 'fixtures/9cce26ad-hidden-favorites.xml'), 'reach-text', 'Favorites', 'forward', 'horizontal'], capture_output=True, text=True, check=True)
+        self.assertEqual(result.stdout.strip(), 'swipe 845 1773 235 1773')
+        self.assertEqual(self.plan(xml, value='Favorites'), 'swipe 540 1536 540 384')
+
+    def test_split_search_switches_direction_at_the_actual_strip_edge(self):
+        source = (ROOT / 'tools/account-journey/drive.sh').read_text()
+        helper = 'tap_split() {' + source.split('tap_split() {', 1)[1].split('\n}', 1)[0] + '\n}'
+        fixtures = Path(__file__).parent / 'fixtures'
+        with tempfile.TemporaryDirectory() as directory:
+            shell = '''set -euo pipefail
+EVIDENCE="$1"
+here="$2/tools/account-journey"
+snapshot="$3"
+revealed="$4"
+dump_ui() { cp "$snapshot" "$EVIDENCE/current.xml"; }
+shot() { :; }
+adb() {
+    printf '%s\\n' "$*" >> "$EVIDENCE/actions"
+    if [[ "$3" == swipe && "$4" -gt "$6" ]]; then snapshot="$revealed"; fi
+}
+''' + helper + '\ntap_split Favorites\n'
+            result = subprocess.run(['bash', '-c', shell, 'split-edge', directory, str(ROOT), str(fixtures / '9cce26ad-hidden-favorites.xml'), str(fixtures / 'ccd4df11-favorites-revealed.xml')], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            actions = (Path(directory) / 'actions').read_text().splitlines()
+            self.assertEqual(len(actions), 3, actions)
+            backward, forward = [row.split() for row in actions[:2]]
+            self.assertLess(int(backward[3]), int(backward[5]))
+            self.assertGreater(int(forward[3]), int(forward[5]))
+            self.assertTrue(actions[-1].startswith('shell input tap '), actions)
+
     def test_terminal_typing_area_is_reachable_without_a_clickable_text_node(self):
         xml = window('<node content-desc="Show keyboard" bounds="[900,40][1000,140]" /><node class="android.widget.HorizontalScrollView" scrollable="true" bounds="[0,1000][1080,1100]"><node content-desc="Esc key" bounds="[10,1010][100,1090]" /></node>')
         self.assertEqual(self.plan(xml, mode='terminal', value=''), 'tap 505 575')

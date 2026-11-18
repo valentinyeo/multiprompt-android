@@ -44,26 +44,39 @@ tap_text() {
 }
 wait_gone() {
     local deadline=$(( $(date +%s) + ${2:-60} ))
-    while has_text "$1" 0 "${3:-has}"; do
+    while true; do
+        dump_ui || return 1
+        if ! python3 "$here/ui.py" "$EVIDENCE/current.xml" "${3:-has}" "$1"; then return 0; fi
         if (( $(date +%s) > deadline )); then printf 'Still showing %s\n' "$1"; shot "failure-still-${1// /-}"; return 1; fi
         sleep 0.3
     done
 }
 tap_split() {
-    local point x y
-    for _ in 1 2 3 4; do
+    local point x y x2 y2 action attempt viewport previous='' direction=backward
+    local selector="$here/../../.claude/skills/verify-multiprompt-android/scripts/ui.py"
+    for attempt in {1..12}; do
         dump_ui
-        if point=$(python3 "$here/ui.py" "$EVIDENCE/current.xml" tap "$1"); then
-            read -r x y <<< "$point"
+        viewport=$(python3 - "$EVIDENCE/current.xml" <<'PYSTRIP'
+import sys
+import xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+strips = [node for node in root.iter('node') if node.get('class') == 'android.widget.HorizontalScrollView' and node.get('scrollable') == 'true']
+assert len(strips) <= 1, 'Ambiguous split strip'
+print(ET.tostring(strips[0], encoding='unicode') if strips else '')
+PYSTRIP
+        )
+        if [[ -n "$previous" && "$viewport" == "$previous" ]]; then
+            if [[ "$direction" == backward ]]; then direction=forward; else direction=backward; fi
+        fi
+        previous=$viewport
+        point=$(python3 "$selector" "$EVIDENCE/current.xml" reach-text "$1" "$direction" horizontal) || continue
+        read -r action x y x2 y2 <<< "$point"
+        if [[ "$action" == tap ]]; then
             adb shell input tap "$x" "$y"
             return 0
         fi
-        local row=0 label
-        for label in Runners Notes Work All; do
-            if point=$(python3 "$here/ui.py" "$EVIDENCE/current.xml" tap "$label"); then read -r x row <<< "$point"; break; fi
-        done
-        (( row > 0 )) || continue
-        adb shell input swipe 900 "$row" 200 "$row" 300
+        [[ "$action" == swipe ]] || return 1
+        adb shell input swipe "$x" "$y" "$x2" "$y2" 300
     done
     printf 'Split %s not reachable\n' "$1"
     shot "failure-split-$1"
@@ -190,11 +203,16 @@ JS
 fi
 
 layout "$admin" list | tee "$EVIDENCE/cli-list.txt"
+wait_text runner-1 10 hasi
 start=$(now)
 layout "$admin" move --to Runners --create --match 'runner-*' | tee "$EVIDENCE/cli-move.txt"
-wait_text Runners 30
+wait_gone runner-1 10 hasi
 section_seconds=$(python3 -c "print(round($(now) - $start, 2))")
-tap_text Runners
+cp "$EVIDENCE/current.xml" "$EVIDENCE/android-move-observed.xml"
+start=$(now)
+tap_split Runners
+section_navigation_seconds=$(python3 -c "print(round($(now) - $start, 2))")
+wait_text Runners 30 selected
 wait_text runner-1 10 hasi
 wait_text runner-2 10 hasi
 wait_text runner-3 10 hasi
@@ -252,5 +270,5 @@ shot android-favorite-added-back
 node "$here/favorites.mjs" http://127.0.0.1:8787 "$admin" read runner-1 true "$EVIDENCE/favorites-set.json" ghost-fav | tee "$EVIDENCE/favorites-added-back.json"
 printf 'favorites-parity ok\n'
 
-printf '{"section_seconds": %s, "open_seconds": %s}\n' "$section_seconds" "$open_seconds" | tee "$EVIDENCE/result.json"
+printf '{"section_seconds": %s, "section_navigation_seconds": %s, "open_seconds": %s}\n' "$section_seconds" "$section_navigation_seconds" "$open_seconds" | tee "$EVIDENCE/result.json"
 python3 -c "import sys; sys.exit(0 if $section_seconds <= 10 and $open_seconds <= 10 else 1)"

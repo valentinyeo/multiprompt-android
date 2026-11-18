@@ -83,16 +83,26 @@ function escapeText(value) {
     .replace(/\]\(/g, '] (');
 }
 
-function validateFeatures(raw) {
+function validateFeatures(raw, limit = MAX_JOURNEYS) {
   const requested = Array.isArray(raw) ? raw.map(item => String(item ?? '').trim()) : [];
   const features = [];
   const dropped = [];
   for (const name of requested) {
     if (features.includes(name) || dropped.includes(name)) continue;
-    if (ALLOWLIST.includes(name) && features.length < MAX_JOURNEYS) features.push(name);
+    if (ALLOWLIST.includes(name) && features.length < limit) features.push(name);
     else dropped.push(name);
   }
   return { features, dropped };
+}
+
+function includeRequiredJourneys(picked, plan, diff = '') {
+  const required = [...new Set([
+    ...plan.outcomes.map(id => coverageGate.registry.outcomes[id].journey),
+    ...ALLOWLIST.filter(name => diff.includes(`b/${coverageGate.REGISTRY_PATH}/${name}\n`)),
+  ].filter(name => ALLOWLIST.includes(name)))];
+  if (!required.length) return picked;
+  const { features } = validateFeatures([...required, ...(picked.smoke ? [] : picked.features)], Math.max(MAX_JOURNEYS, required.length));
+  return { ...picked, features, dropped: (picked.dropped ?? []).filter(name => !features.includes(name)), smoke: false };
 }
 
 function parseJson(text) {
@@ -416,17 +426,6 @@ function journeyEvidence(directory, feature) {
   return parts.join('\n');
 }
 
-function includeRequiredJourneys(picked, plan, diff = '') {
-  const required = [...new Set([
-    ...plan.outcomes.map(id => coverageGate.registry.outcomes[id].journey),
-    ...ALLOWLIST.filter(name => diff.includes(`b/${coverageGate.REGISTRY_PATH}/${name}\n`)),
-  ].filter(name => ALLOWLIST.includes(name)))];
-  if (required.length > MAX_JOURNEYS) throw new Error('Required outcomes need more than three journeys; split the change.');
-  if (!required.length) return picked;
-  const selected = validateFeatures([...required, ...picked.features]);
-  return { ...picked, features: selected.features, dropped: [...picked.dropped, ...selected.dropped], smoke: false };
-}
-
 function setOutputs(values) {
   const text = Object.entries(values).map(([key, value]) => `${key}=${String(value).replace(/[\r\n]+/g, ' ')}\n`).join('');
   if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, text);
@@ -562,7 +561,7 @@ async function judge(env) {
   } catch {
     throw new Error('FEATURES is not JSON');
   }
-  const { features } = validateFeatures(requested);
+  const { features } = validateFeatures(requested, Infinity);
   const smoke = env.SMOKE === 'yes';
 
   const pr = fetchPr(repo, number);

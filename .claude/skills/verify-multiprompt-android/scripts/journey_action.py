@@ -23,7 +23,7 @@ def intersection(a, b):
     return max(a[0], b[0]), max(a[1], b[1]), min(a[2], b[2]), min(a[3], b[3])
 
 
-def plan(root, mode, value, direction="forward"):
+def plan(root, mode, value, direction="forward", search_axis=None):
     parents = {child: parent for parent in root.iter() for child in parent}
     windows = [n for n in root if n.tag == "node" and n.get("visible-to-user") != "false"]
     if not windows:
@@ -114,10 +114,19 @@ def plan(root, mode, value, direction="forward"):
     if len(matches) > 1:
         raise Unreachable("ambiguous enabled label in active window")
     if not matches:
+        if search_axis:
+            scrolls = [n for n in nodes if n.get("scrollable") == "true" and enabled(n)
+                       and (n.get("class") == "android.widget.HorizontalScrollView") == (search_axis == "horizontal")]
+            if len(scrolls) != 1:
+                raise Unreachable("label missing or disabled; no unique active scroll container on requested axis")
+            return scroll(scrolls[0], search_axis, direction == "forward")
         scrolls = [n for n in nodes if n.get("scrollable") == "true" and n.get("class") != "android.widget.HorizontalScrollView" and enabled(n)]
-        if len(scrolls) != 1:
-            raise Unreachable("label missing or disabled; no unique active vertical scroll container")
-        return scroll(scrolls[0], "vertical", direction == "forward")
+        if len(scrolls) == 1:
+            return scroll(scrolls[0], "vertical", direction == "forward")
+        horizontal = [n for n in nodes if n.get("scrollable") == "true" and n.get("class") == "android.widget.HorizontalScrollView" and enabled(n)]
+        if not scrolls and len(horizontal) == 1:
+            return scroll(horizontal[0], "horizontal", direction == "forward")
+        raise Unreachable("label missing or disabled; no unique active scroll container")
     label = matches[0]
     target = next((n for n in chain(label) if n.get("clickable") == "true"), label)
     if target is label and label.get("clickable") != "true" and mode not in ("field", "editor") and any(n.get("package", "").startswith("dev.multiprompt.companion") for n in chain(label)):

@@ -1,18 +1,12 @@
 package dev.multiprompt.companion.ui
 
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TextField as M3TextField
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField as M3OutlinedTextField
-import androidx.compose.material3.Button as M3Button
-import androidx.compose.material3.FilledTonalButton as M3FilledTonalButton
-import androidx.compose.material3.OutlinedButton as M3OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
@@ -21,38 +15,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 
 val ControlShape: Shape = RoundedCornerShape(4.dp)
-
-@Composable
-fun Button(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
-    content: @Composable RowScope.() -> Unit,
-) = M3Button(onClick, modifier, enabled, shape = chromeShape(ControlShape), contentPadding = contentPadding, content = content)
-
-@Composable
-fun FilledTonalButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
-    content: @Composable RowScope.() -> Unit,
-) = M3FilledTonalButton(onClick, modifier, enabled, shape = chromeShape(ControlShape), contentPadding = contentPadding, content = content)
-
-@Composable
-fun OutlinedButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
-    content: @Composable RowScope.() -> Unit,
-) = M3OutlinedButton(onClick, modifier, enabled, shape = if (LocalMaterial3.current) RoundedCornerShape(percent = 50) else ControlShape,
-    border = if (LocalMaterial3.current) {
-        androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-    } else ButtonDefaults.outlinedButtonBorder(enabled),
-    colors = if (LocalMaterial3.current) ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant) else ButtonDefaults.outlinedButtonColors(),
-    contentPadding = contentPadding, content = content)
 
 @Composable
 fun OutlinedTextField(
