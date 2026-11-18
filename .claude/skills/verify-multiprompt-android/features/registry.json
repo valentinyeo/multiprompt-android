@@ -802,6 +802,24 @@
         "bot-look-proof.txt": 200
       }
     },
+    "reader-version.md": {
+      "name": "Chat version label",
+      "description": "Open a chat, check the version label beside Session actions, tap it, and open App updates.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "legacy.igsh-426"
+      ],
+      "evidence": {
+        "reader-version.json": 400,
+        "reader-updates.json": 400
+      }
+    },
     "reader-controls.md": {
       "name": "Reader rename and display controls",
       "description": "Rename and display, plus 40 reader More, key-validation, pinned-page, attachment and Computer controls with screenshots and independent SSH receipts. SOFT-2669.",
@@ -1316,10 +1334,22 @@
       "match": []
     },
     "legacy.igsh-426": {
-      "description": "prefix checks Sign in's exact version only. No credential blocks local-screen layout inspection; navigation/bounds proof is unimplemented. Inspect the label on Inbox, reader, shell, Hosts, editor and Settings; tap for **Update**. Workspaces need OTP. Sign in's label is bottom-centred, not beside three dots.",
-      "journey": null,
-      "sideEffect": true,
-      "match": []
+      "description": "The chat top bar shows the installed version beside Session actions. Its description is Version <version>, open release notes. Tapping it opens App updates. Inbox, settings and the live shell keep their own labels.",
+      "journey": "reader-version.md",
+      "sideEffect": false,
+      "match": [
+        "versionReleaseNotesDescription"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "reader version label tap"
+        },
+        "result": {
+          "file": "reader-updates.json",
+          "quote": "App updates"
+        }
+      }
     },
     "legacy.igsh-424": {
       "description": "a supported agent (Claude) transcript on the SSH host, including tables/nested lists and model/effort state. Open from Inbox, scroll the complete transcript, inspect tables horizontally and top-bar subtitle; no **Conversation** header/status row. **Session actions \u2192 Session history** opens alternate-screen history. Console output proves none of this.",

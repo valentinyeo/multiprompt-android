@@ -52,6 +52,9 @@ sudo /usr/sbin/sshd -t -f "$FIXTURE/sshd_config"
 sudo /usr/sbin/sshd -f "$FIXTURE/sshd_config" -E "$FIXTURE/sshd.log"
 sudo install -m 755 "$(dirname "$0")/console.py" /home/verifyssh/console.py
 fixture_session=verify-session
+if [[ "${VERIFY_FEATURE:-}" == reader-version.md ]] || [[ "${VERIFY_FEATURE:-}" == settings-controls.md && "${BREAK_IT_MODE:-}" == true ]]; then
+    VERIFY_FEATURE=ai-switch.md
+fi
 if [[ "${VERIFY_FEATURE:-}" == claude-remote-control.md ]]; then
     source "$(dirname "$0")/remote-control-setup.sh"
 elif [[ "${VERIFY_FEATURE:-}" == ai-switch.md ]]; then

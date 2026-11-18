@@ -19,6 +19,7 @@ All taps resolve an enabled text or description through the shared reachability 
 ## Evidence and limits
 
 `settings-controls-proof.txt` is written only after every assertion passes.
+A bug-fix replay then presses Back, opens `verify-session`, and runs the switch-and-stream path from `ai-switch.md`, the same continuation `reader-version.md` uses. The first draft records rotate, background, chat-switch and network. `break_it_stream_send` records the follow-up admitted before the streamed reply finished.
 The registry makes this journey required for settings, host mapping and update-menu changes, and for edits to this recipe.
 Inspect the PNGs, XML, JSON and driver transcript at the exact head APK source SHA after cleanup.
 Settings and mapping change local navigation or preferences. Header Refresh reads the SSH host; `settings-refresh-host.txt` retains post-action command excerpts, with full before/after logs alongside it. Theme and font selection captures receive priority in the verifier evidence. No control writes to the host.
