@@ -150,6 +150,11 @@ elif [[ "${VERIFY_FEATURE:-}" == chat-reactions.md ]]; then
 elif [[ "${VERIFY_FEATURE:-}" == chat-cancel.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true ]]
     sudo install -m 755 "$(dirname "$0")/cancel-console.py" /home/verifyssh/cancel-console.py
+    sudo install -m 644 "$(dirname "$0")/cancel-proof.py" /home/verifyssh/cancel-proof.py
+    sudo install -m 644 app/src/main/assets/chat_history_reader.py /home/verifyssh/cancel-reader.py
+    for provider in claude codex; do
+        sudo install -m 644 "app/src/main/assets/chat_connectors/$provider.py" "/home/verifyssh/cancel-$provider.py"
+    done
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
     sudo -u verifyssh env GITHUB_ACTIONS="$GITHUB_ACTIONS" HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'env GITHUB_ACTIONS=true HOME=/home/verifyssh /home/verifyssh/claude -u /home/verifyssh/cancel-console.py /home/verifyssh/receipts.txt'
 elif [[ "${VERIFY_FEATURE:-}" == chat-queued.md || "${VERIFY_FEATURE:-}" == chat-shared.md ]]; then
