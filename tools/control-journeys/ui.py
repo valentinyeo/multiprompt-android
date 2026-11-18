@@ -61,6 +61,14 @@ def check(xml, screenshot, phase, value=''):
         if 'field' in expected:
             fields = [n for n in nodes if n.get('class') == 'android.widget.EditText' and shown(n)]
             assert len(fields) == 1 and fields[0].get('text') == expected['field'], 'Wrong editor value'
+        for label, marked in expected.get('marked', {}).items():
+            matches = [n for n in nodes if n.get('text') == label and shown(n)]
+            assert len(matches) == 1, f'Missing marked row: {label}'
+            node = matches[0]
+            while node.get('clickable') != 'true' and node in parents:
+                node = parents[node]
+            assert node.get('clickable') == 'true', f'Missing row action: {label}'
+            assert any(n.get('text') == '✓' for n in node.iter('node')) == marked, f'Wrong checkmark: {label}'
         for label in expected.get('disabled', []):
             matches = [n for n in nodes if n.get('text') == label and shown(n)]
             assert len(matches) == 1, f'Missing disabled row: {label}'

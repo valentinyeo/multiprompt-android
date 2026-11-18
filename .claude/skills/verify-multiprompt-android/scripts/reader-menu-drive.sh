@@ -90,20 +90,10 @@ wait_for_text 'Message VERIFY_RENAMED_2653'
 menu_surface pin-retained '{"text":["example.com/igsh-2669","Open","Remove"],"desc":["Session actions"]}'
 tap_text Open
 wait_for_text Page
-menu_surface page-open '{"text":["Page"],"desc":["Back to chat","Page actions"],"absent":["Session actions"]}'
-tap_desc 'Page actions'
-menu_surface page-menu '{"text":["Open in browser","Close page"]}'
+menu_surface page-open '{"text":["Page"],"desc":["Session actions"]}'
 adb shell input keyevent KEYCODE_BACK
-wait_for_absence 'Close page'
-menu_surface page-dismiss '{"text":["Page"],"desc":["Page actions"],"absent":["Close page"]}'
-tap_desc 'Back to chat'
-menu_reader page-back
-tap_text Open
-wait_for_text Page
-tap_desc 'Page actions'
-tap_text 'Close page'
 wait_for_absence Page
-menu_reader page-close
+menu_reader page-back
 tap_text Remove
 wait_for_absence example.com
 menu_surface pin-removed '{"desc":["Session actions"],"absent":["example.com/igsh-2669","Open","Remove"]}'
@@ -166,6 +156,34 @@ open_computer_menu
 tap_text 'Hide computer'
 menu_reader computer-hide
 grep -E '"GET /[^ ]* HTTP/[0-9.]+"' "$EVIDENCE/reader-menu-viewer-host.txt"
+open_control_menu 'Voice Mode'
+wait_for_absence 'Search in chat'
+menu_reader voice-enabled
+tap_desc 'Session actions'
+tap_node text 'Voice Mode' reveal
+menu_surface voice-on '{"text":["Voice Mode"],"marked":{"Voice Mode":true}}'
+tap_text 'Voice Mode'
+wait_for_absence 'Search in chat'
+tap_desc 'Session actions'
+tap_node text 'Voice Mode' reveal
+menu_surface voice-off '{"text":["Voice Mode"],"marked":{"Voice Mode":false}}'
+adb shell input keyevent KEYCODE_BACK
+sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/reader-menu-before-end.txt"
+open_control_menu 'End tmux session'
+wait_for_text 'End VERIFY_RENAMED_2653 completely?'
+menu_surface end-open '{"text":["End VERIFY_RENAMED_2653 completely?","Cancel","End session"]}'
+tap_text Cancel
+wait_for_absence 'End session'
+menu_reader end-cancel
+open_control_menu 'End tmux session'
+wait_for_text 'End VERIFY_RENAMED_2653 completely?'
+adb shell input keyevent KEYCODE_BACK
+wait_for_absence 'End session'
+menu_reader end-dismiss
+sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/reader-menu-after-end.txt"
+cmp "$EVIDENCE/reader-menu-before-end.txt" "$EVIDENCE/reader-menu-after-end.txt"
+sudo -u verifyssh tmux display-message -p -t '=verify-session:' '#{session_name}|#{window_name}' > "$EVIDENCE/reader-menu-end-host.txt"
+grep -Fx 'verify-session|VERIFY_RENAMED_2653' "$EVIDENCE/reader-menu-end-host.txt"
 open_more
 tap_text 'Release notes'
 wait_for_text 'App updates'

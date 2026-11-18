@@ -43,11 +43,11 @@ of the previous sheet. `controls.json` lists all 40 action/result pairs.
 9. Open Pin a page…, fill `https://example.com/igsh-2669`, cancel and reopen.
    Require the address is empty. Dismiss, reopen, fill again and tap Pin page.
    Require the page card, restart the app and require that same card persists.
-10. Tap Open on the card. Require Page and Page actions. Open Page actions,
-    require both rows and dismiss with Android Back. Tap Back to chat. Reopen the
-    card and choose Page actions → Close page. Both routes restore the reader.
-    Remove the card and require its address, Open and Remove are gone.
-    External page content and browser handoff are not claimed.
+10. Tap Open on the card. Require Page inside the reader, then Android Back
+    returns to the transcript. Remove the card and require its address, Open and
+    Remove are gone. The existing reader toolbar obscures Page actions and Back
+    to chat on both parent and head in run 44221494739. Those four controls stay
+    uncovered. External page content and browser handoff are not claimed.
 11. Open Attach → Snippets, require Save current text, then tap the Snippets back
     row. Require Add image and Add file. Tap Add file and require Android's real
     Recent document picker; Android Back restores the reader without sending.
@@ -62,7 +62,13 @@ of the previous sheet. `controls.json` lists all 40 action/result pairs.
     A disposable host HTTP listener independently records requests through the
     new SSH tunnel in `reader-menu-viewer-host.txt`. It is not a remote desktop;
     control, keyboard, sleep/wake and successful VNC rendering remain uncovered.
-14. Open More → Release notes. Require App updates and no reader actions.
+14. Toggle Voice Mode on, reopen Session actions and require its row checkmark.
+    Toggle off, reopen and require no checkmark on that row.
+15. Open End tmux session and require the confirmation title and both buttons.
+    Cancel, reopen, then dismiss with Android Back. Both return to the reader.
+    Compare host receipts before and after, and independently require the same
+    live tmux session and window in `reader-menu-end-host.txt`.
+16. Open More → Release notes. Require App updates and no reader actions.
 
 Retain `READER_RENAME_DISPLAY_CONTROLS_OK` in `reader-controls-proof.txt` and
 `READER_MENU_40_CONTROLS_OK` in `reader-menu-proof.txt`. Inspect the JSON, XML,

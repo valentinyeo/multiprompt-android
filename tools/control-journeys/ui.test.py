@@ -105,17 +105,27 @@ class ControlUiTest(unittest.TestCase):
     def test_surface_requires_exact_editor_and_disabled_address(self):
         for disabled in ['true', 'false']:
             self.write('<node class="android.widget.EditText" text="127.0.0.1:6081" bounds="[0,100][500,150]"/>'
-                       f'<node enabled="{disabled}"><node text="127.0.0.1:6081" bounds="[0,200][500,250]"/></node>')
-            expected = '{"field":"127.0.0.1:6081","disabled":["127.0.0.1:6081"]}'
+                       f'<node enabled="{disabled}"><node text="127.0.0.1:6080" bounds="[0,200][500,250]"/></node>')
+            expected = '{"field":"127.0.0.1:6081","disabled":["127.0.0.1:6080"]}'
             if disabled == 'true':
                 with self.assertRaises(AssertionError):
                     ui.check(self.xml, self.png, 'surface', expected)
             else:
+                ui.check(self.xml, self.png, 'surface', expected)
                 with self.assertRaises(AssertionError):
                     ui.check(self.xml, self.png, 'surface', '{"field":"127.0.0.1:6080"}')
         self.write('<node class="android.widget.EditText" text="127.0.0.1:6081" bounds="[0,100][500,150]"/>'
                    '<node enabled="false"><node text="saved address" bounds="[0,200][500,250]"/></node>')
         ui.check(self.xml, self.png, 'surface', '{"field":"127.0.0.1:6081","disabled":["saved address"]}')
+
+    def test_surface_checkmark_belongs_to_the_requested_row(self):
+        for marked in [False, True]:
+            checkmark = '<node text="✓" bounds="[300,100][350,150]"/>' if marked else ''
+            self.write('<node clickable="true"><node text="Voice Mode" bounds="[0,100][300,150]"/>'
+                       + checkmark + '</node><node clickable="true"><node text="✓" bounds="[300,200][350,250]"/></node>')
+            ui.check(self.xml, self.png, 'surface', json.dumps(dict(marked={'Voice Mode': marked})))
+            with self.assertRaises(AssertionError):
+                ui.check(self.xml, self.png, 'surface', json.dumps(dict(marked={'Voice Mode': not marked})))
 
     def test_surface_supports_real_android_document_picker(self):
         self.xml.write_text('<hierarchy><node package="com.google.android.documentsui">'

@@ -868,12 +868,8 @@
       "label": "Back to chat",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:PagePane:KitRoundButton:35f04a446b5c7646:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:374",
-      "journey": "reader-controls.md",
-      "proof": {
-        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
-        "action": "Tap Back to chat from the pinned page",
-        "result": "reader-menu-page-back.json shows the reader without Page actions"
-      }
+      "journey": null,
+      "missing": "No automated journey exercises this control and checks its result."
     },
     {
       "id": "pinned-page.page-actions",
@@ -881,12 +877,8 @@
       "label": "Page actions",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:PagePane:KitRoundButton:a8f1bad4cde5cc38:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:383",
-      "journey": "reader-controls.md",
-      "proof": {
-        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
-        "action": "Tap Page actions",
-        "result": "reader-menu-page-menu.json shows Open in browser and Close page"
-      }
+      "journey": null,
+      "missing": "No automated journey exercises this control and checks its result."
     },
     {
       "id": "pinned-page.dismiss-pinned-page",
@@ -894,12 +886,8 @@
       "label": "Dismiss Pinned page",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:PagePane:KitMenu:17ad8667c8498a24:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:384",
-      "journey": "reader-controls.md",
-      "proof": {
-        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
-        "action": "Press Android Back from Page actions",
-        "result": "reader-menu-page-dismiss.json shows Page actions but no Close page row"
-      }
+      "journey": null,
+      "missing": "No automated journey exercises this control and checks its result."
     },
     {
       "id": "pinned-page.open-in-browser",
@@ -916,12 +904,8 @@
       "label": "Close page",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:PagePane:KitMenuRow:f2cb9dd70b529e94:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/ComputerView.kt:386",
-      "journey": "reader-controls.md",
-      "proof": {
-        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
-        "action": "Tap Close page",
-        "result": "reader-menu-page-close.json shows the reader without Page actions"
-      }
+      "journey": null,
+      "missing": "No automated journey exercises this control and checks its result."
     },
     {
       "id": "pinned-page.pinned-web-page",
@@ -2633,8 +2617,12 @@
       "label": "Dismiss End session confirmation (Inbox and reader)",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:DestructiveConfirmationSheet:KitSheet:90073eaacdef9f43:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2299",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Press Android Back from the end-session confirmation",
+        "result": "reader-menu-end-dismiss.json shows the reader; unchanged host receipts and reader-menu-end-host.txt prove no session ended"
+      }
     },
     {
       "id": "end-session-confirmation-inbox-and-reader.scroll-end-session-confirmation-inbox-and-reader",
@@ -2651,8 +2639,12 @@
       "label": "Cancel",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:DestructiveConfirmationSheet:KitSecondaryButton:a00488b6231e7715:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2306",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Cancel in the end-session confirmation",
+        "result": "reader-menu-end-cancel.json shows the reader; unchanged host receipts and reader-menu-end-host.txt prove the tmux session remains"
+      }
     },
     {
       "id": "end-session-confirmation-inbox-and-reader.end-session",
@@ -3539,8 +3531,12 @@
       "label": "Voice Mode",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:e4bcca726192ba1f:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:3944",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap Voice Mode on and off, reopening Session actions after each change",
+        "result": "reader-menu-voice-on.json and reader-menu-voice-off.json assert the row checkmark toggles"
+      }
     },
     {
       "id": "session-actions.mark-read",
@@ -3723,8 +3719,12 @@
       "label": "End tmux session",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:d751ec6fd3bc94f9:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4092",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "reader-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
+        "action": "Tap End tmux session",
+        "result": "reader-menu-end-open.json shows the confirmation title, Cancel and End session"
+      }
     },
     {
       "id": "session-actions.delete",
@@ -4029,7 +4029,7 @@
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/reader-controls.md",
         "action": "Tap Open on the pinned page card",
-        "result": "reader-menu-page-open.json shows Page and Page actions instead of Session actions"
+        "result": "reader-menu-page-open.json shows Page inside the reader; Android Back returns to the transcript in reader-menu-page-back.json"
       }
     },
     {
