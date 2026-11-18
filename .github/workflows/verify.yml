@@ -119,6 +119,7 @@ on:
           - skill-pills.md
           - chat-table.md
           - clear-ranking.md
+          - signed-out-sync.md
           - bot-look.md
           - reader-controls.md
           - message-reply.md

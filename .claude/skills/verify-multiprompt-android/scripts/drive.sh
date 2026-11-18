@@ -983,6 +983,11 @@ if [[ "$feature" == chat-table.md ]]; then
     exit 0
 fi
 
+if [[ "$feature" == signed-out-sync.md ]]; then
+    source "$scripts/signed-out-sync-drive.sh"
+    exit 0
+fi
+
 if [[ "$feature" == message-reply.md ]]; then
     source "$scripts/message-reply-drive.sh"
     exit 0
