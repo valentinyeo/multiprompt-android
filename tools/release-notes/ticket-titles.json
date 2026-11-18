@@ -124,5 +124,6 @@
   "IGSH-2544": "Android phone test expands and scrolls tables",
   "IGSH-2638": "Phone tests cover every menu control",
   "IGSH-2545": "Android phone test finds and sends clear",
-  "IGSH-2652": "The verifier fails planted bugs and passes clean builds"
+  "IGSH-2652": "The verifier fails planted bugs and passes clean builds",
+  "IGSH-2653": "Phone tests cover 40 more controls"
 }
