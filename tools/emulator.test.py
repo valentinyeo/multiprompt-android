@@ -173,7 +173,7 @@ printf 'gdb\\nlibpulse0\\n' > "$PROOF_STATE"
 set -u
 echo "apt-get $*" >> "$PROOF_CALLS"
 for arg in "$@"; do
-  case "$arg" in *Dir::Cache::archives=*) dir=${arg#*archives=} ; mkdir -p "$dir"; : > "$dir/fetched.deb" ;; esac
+  case "$arg" in *Dir::Cache::archives=*) dir=${arg#*archives=} ; mkdir -p "$dir/partial"; : > "$dir/lock"; : > "$dir/fetched.deb" ;; esac
 done
 ''')
             for name in ('dpkg-query', 'dpkg', 'apt-get'):
@@ -186,10 +186,11 @@ done
                 (debs / 'gdb.deb').write_text('deb')
             env = dict(os.environ, HOME=tmp, PROOF_STATE=str(state), PROOF_CALLS=str(calls), PATH=f'{path}:{os.environ["PATH"]}')
             result = subprocess.run(['bash', str(script), 'gdb', 'libpulse0'], env=env, capture_output=True, text=True)
-            return result, calls.read_text(), (path / 'state').read_text()
+            leftovers = sorted(item.name for item in debs.glob('*')) if debs.exists() else []
+            return result, calls.read_text(), (path / 'state').read_text(), leftovers
 
     def test_cached_emulator_packages_install_without_apt(self):
-        result, calls, state = self.run_packages(cached=True)
+        result, calls, state, _ = self.run_packages(cached=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('ANDROID_PROOF_PACKAGES_FROM_CACHE', result.stdout)
         self.assertIn('dpkg', calls)
@@ -197,19 +198,20 @@ done
         self.assertIn('ANDROID_PROOF_PACKAGES_INSTALLED=2/2', result.stdout)
 
     def test_installed_emulator_packages_skip_every_installer(self):
-        result, calls, _ = self.run_packages(cached=False, already=['gdb', 'libpulse0'])
+        result, calls, _, _ = self.run_packages(cached=False, already=['gdb', 'libpulse0'])
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('ANDROID_PROOF_PACKAGES_ALREADY_INSTALLED', result.stdout)
         self.assertNotIn('dpkg', calls)
         self.assertNotIn('apt-get', calls)
 
     def test_empty_package_cache_downloads_once_then_installs(self):
-        result, calls, _ = self.run_packages(cached=False)
+        result, calls, _, leftovers = self.run_packages(cached=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('apt-get update -qq', calls)
         self.assertIn('--download-only', calls)
         self.assertEqual(calls.count('apt-get install -y --download-only'), 1)
         self.assertIn('ANDROID_PROOF_PACKAGES_INSTALLED=2/2', result.stdout)
+        self.assertEqual(leftovers, ['fetched.deb'])
 
     def test_unusable_package_cache_falls_back_to_the_installed_apt_path(self):
         with tempfile.TemporaryDirectory() as tmp:

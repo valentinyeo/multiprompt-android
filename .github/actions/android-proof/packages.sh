@@ -29,6 +29,8 @@ if install_from_cache; then
 else
   sudo apt-get update -qq
   sudo apt-get install -y --download-only -o Dir::Cache::archives="$cache" "${packages[@]}"
+  sudo rm -rf "$cache/partial" "$cache/lock"
+  sudo chmod -R a+rX "$cache"
   install_from_cache || sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
 fi
 count=$(installed_count)
