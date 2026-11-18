@@ -4,6 +4,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const STRESSES = ['rotate', 'background', 'chat-switch', 'network', 'stream-send'];
 
+const NO_CHAT = new Set(['sign-in.md', 'launcher-icon.md', 'hosts-retired.md']);
+
+function requiredStresses(journey) {
+  return NO_CHAT.has(journey) ? STRESSES.filter(stress => !['chat-switch', 'stream-send'].includes(stress)) : STRESSES;
+}
+
 function inspect(directory, journey, sha) {
   const errors = [];
   const evidence = [];
@@ -13,10 +19,14 @@ function inspect(directory, journey, sha) {
     const report = JSON.parse(fs.readFileSync(path.join(root, 'result.json'), 'utf8'));
     const baselineSha = fs.readFileSync(path.join(directory, 'app-apk-sha256.txt'), 'utf8').split(/\s+/)[0];
     if (report.journey !== journey || report.sourceSha !== sha || report.apkSha256 !== baselineSha || !/^[a-f0-9]{64}$/.test(baselineSha)) fail('stress APK does not match the normal head journey');
-    if (report.baselinePassed !== true || report.driverExit !== 0 || report.elapsedSeconds > 1200 || !(report.elapsedSeconds > 0)) fail('normal journey or stressed replay did not pass within 20 minutes');
+    if (report.baselinePassed !== true) fail('normal journey did not pass');
+    if (report.driverExit === 124 || report.elapsedSeconds > 1200) fail('stressed replay exceeded 20 minutes');
+    else if (report.driverExit !== 0) fail(`stressed driver failed with exit ${report.driverExit}`);
+    if (!(report.elapsedSeconds > 0)) fail('stressed replay duration is missing or invalid');
+    if (report.inspectorExit != null && report.inspectorExit !== 0) fail(`checkpoint inspector failed with exit ${report.inspectorExit}; see break-it/inspector.json`);
     const transcript = fs.readFileSync(path.join(root, 'driver-transcript.txt'), 'utf8');
     if (!/^DRIVER EXIT: 0$/m.test(transcript) || /^DRIVER EXIT: [1-9]/m.test(transcript)) fail('stressed journey did not finish successfully');
-    for (const stress of STRESSES) {
+    for (const stress of requiredStresses(journey)) {
       try {
         const checkpoint = JSON.parse(fs.readFileSync(path.join(root, `${stress}.json`), 'utf8'));
         const png = fs.readFileSync(path.join(root, `${stress}.png`));
@@ -34,4 +44,4 @@ function inspect(directory, journey, sha) {
   return { errors, evidence };
 }
 
-module.exports = { STRESSES, inspect };
+module.exports = { STRESSES, requiredStresses, inspect };

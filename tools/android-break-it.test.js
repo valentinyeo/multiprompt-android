@@ -35,6 +35,74 @@ test('all five retained stress checkpoints pass and are cited', t => {
   for (const stress of ['rotate', 'background', 'chat-switch', 'network', 'stream-send']) assert.ok(result.evidence.some(line => line.includes(`break-it/${stress}.txt`)));
 });
 
+test('inspector rejection is not reported as a driver failure or timeout', t => {
+  const fixture = retained(t);
+  const file = path.join(fixture.dir, 'result.json');
+  fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file)), inspectorExit: 1 }));
+  const result = fixture.inspect();
+  assert.ok(result.errors.some(line => line.includes('checkpoint inspector failed with exit 1')));
+  assert.ok(result.errors.every(line => !/20 minutes|driver failed/.test(line)));
+});
+
+test('the replay recorder preserves driver success when the inspector rejects checkpoints', t => {
+  const fixture = retained(t);
+  const apkFile = path.join(fixture.root, 'app.apk');
+  fs.writeFileSync(apkFile, 'same APK');
+  fs.writeFileSync(path.join(fixture.root, 'app-source-sha.txt'), sha);
+  const source = fs.readFileSync(path.join(__dirname, 'android-break-it/run.sh'), 'utf8');
+  const recorder = source.slice(source.indexOf('write_result() {'), source.indexOf('\nrecord() {'));
+  const script = `root="$EVIDENCE"; VERIFY_FEATURE=ai-switch.md; VERIFY_APK="$root/app.apk"; started=$SECONDS; phase=inspector\n${recorder}\nwrite_result 1`;
+  const run = spawnSync('bash', ['-euo', 'pipefail', '-c', script], { env: { ...process.env, EVIDENCE: fixture.root }, encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stderr);
+  const report = JSON.parse(fs.readFileSync(path.join(fixture.dir, 'result.json')));
+  assert.equal(report.driverExit, 0);
+  assert.equal(report.inspectorExit, 1);
+});
+
+test('journeys without a host still require every reachable screen checkpoint', t => {
+  assert.deepEqual(proof.requiredStresses('chat-search.md'), proof.STRESSES);
+  assert.deepEqual(proof.requiredStresses('native-skills.md'), proof.STRESSES);
+  assert.deepEqual(proof.requiredStresses('new-driver.md'), proof.STRESSES);
+  for (const journey of ['sign-in.md', 'launcher-icon.md', 'hosts-retired.md']) {
+    const fixture = retained(t);
+    const file = path.join(fixture.dir, 'result.json');
+    fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file)), journey }));
+    for (const stress of ['chat-switch', 'stream-send']) {
+      for (const ext of ['json', 'png', 'xml', 'txt']) fs.rmSync(path.join(fixture.dir, `${stress}.${ext}`));
+    }
+    assert.deepEqual(proof.inspect(fixture.root, journey, sha).errors, []);
+    fs.rmSync(path.join(fixture.dir, 'rotate.xml'));
+    assert.match(proof.inspect(fixture.root, journey, sha).errors.join('\n'), /rotate checkpoint missing/);
+  }
+});
+
+test('the shared session-ready event runs all stress before drivers that never fill a message', t => {
+  const fixture = retained(t);
+  const script = `
+    source tools/android-break-it/drive.sh
+    tap_text() { printf 'TAP %s\\n' "$*"; }
+    wait_for_text() { printf 'WAIT %s\\n' "$*"; }
+    fill() { printf 'FILL %s\\n' "$*"; }
+    tap_desc() { printf 'ACTION %s\\n' "$*"; }
+    shot() { :; }
+    sudo() { printf '{}\\n'; }
+    break_it_draft() { break_it_started=true; printf 'FOUR_STRESSES\\n'; }
+    break_it_stream_send() { printf 'STREAM_CHECKPOINT\\n'; }
+    break_it_ready
+    break_it_ready
+  `;
+  const run = spawnSync('bash', ['-euo', 'pipefail', '-c', script], { cwd: path.join(__dirname, '..'), env: { ...process.env, EVIDENCE: fixture.dir, BREAK_IT_MODE: 'true' }, encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stdout.match(/FOUR_STRESSES/g)?.length, 1);
+  assert.equal(run.stdout.match(/STREAM_CHECKPOINT/g)?.length, 1);
+  assert.match(run.stdout, /FILL Message verify-breakit-probe BREAK_IT_DRAFT_2679/);
+  assert.match(run.stdout, /WAIT BREAK_IT_FOLLOWUP_REPLY/);
+  assert.match(run.stdout, /ACTION Back\nWAIT Inbox\nTAP All/);
+  const driver = fs.readFileSync(path.join(__dirname, '../.claude/skills/verify-multiprompt-android/scripts/drive.sh'), 'utf8');
+  assert.match(driver, /shot sessions\nbreak_it_ready\n/);
+  assert.doesNotMatch(driver.slice(driver.indexOf('fill() {'), driver.indexOf('\nsource ', driver.indexOf('fill() {'))), /break_it_/);
+});
+
 test('a missing, failed or unevidenced stress cannot pass', t => {
   for (const stress of proof.STRESSES) {
     for (const extension of ['json', 'png', 'xml', 'txt']) {
