@@ -157,6 +157,7 @@ on:
           - inbox-reminders.md
           - screencast-account.md
           - host-restart.md
+          - folder-bar.md
       expect_settings_missing:
         description: Require signed Android 301 to reject the settings navigation journey
         type: boolean

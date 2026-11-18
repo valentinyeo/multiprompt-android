@@ -30,6 +30,39 @@ class InboxControlsTest(unittest.TestCase):
     def check(self, expected):
         return ui.check(self.xml, self.png, expected)
 
+    def folder(self, pill='[600,1000][960,1096]', text='[648,1020][912,1070]', selected='true'):
+        from PIL import Image
+        Image.new('RGB', (1080, 1280), 'white').save(self.png)
+        self.screen('<node scrollable="true" bounds="[24,980][1056,1120]">'
+                    f'<node clickable="true" selected="{selected}" bounds="{pill}">'
+                    + self.node('Folder 12', bounds=text) + '</node></node>')
+
+    def test_folder_pill_requires_full_padding_and_clear_fade_edges(self):
+        self.folder()
+        result = self.check({'folder': 'Folder 12'})
+        self.assertEqual(result['folder_geometry']['pill'], [600, 1000, 960, 1096])
+        self.assertEqual(result['folder_geometry']['fade_clearance'], [576, 96])
+        self.xml.write_text(self.xml.read_text().replace('selected="true"', 'selected="false" checked="true"'))
+        self.check({'folder': 'Folder 12'})
+        for pill, text in [('[600,1000][940,1096]', '[648,1020][912,1070]'),
+                           ('[30,1000][390,1096]', '[78,1020][342,1070]')]:
+            self.folder(pill, text)
+            with self.assertRaisesRegex(AssertionError, 'clipped|fade'):
+                self.check({'folder': 'Folder 12'})
+        self.folder(selected='false')
+        with self.assertRaisesRegex(AssertionError, 'not selected'):
+            self.check({'folder': 'Folder 12'})
+        self.folder()
+        from PIL import Image
+        image = Image.open(self.png)
+        image.putpixel((606, 1048), (128, 128, 128))
+        image.save(self.png)
+        with self.assertRaisesRegex(AssertionError, 'faded or clipped'):
+            self.check({'folder': 'Folder 12'})
+        self.screen('')
+        with self.assertRaises(AssertionError):
+            self.check({'folder': 'Folder 12'})
+
     def test_selected_choices_require_actual_selection(self):
         self.screen('<node clickable="true" selected="true">' + self.node('Large') + '</node>')
         self.check({'selected': ['Large']})

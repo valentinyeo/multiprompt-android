@@ -162,6 +162,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -1329,11 +1333,6 @@ internal fun SessionsScreen(
         if (searchVisible) searchFocusRequester.requestFocus()
     }
     LaunchedEffect(signedIn) { onRefreshRooms() }
-    LaunchedEffect(state.allSplitOnRight, state.workspaceSplitIds) {
-        snapshotFlow { splitScrollState.maxValue }.collect { maximum ->
-            splitScrollState.scrollTo(if (state.allSplitOnRight) maximum else 0)
-        }
-    }
     renamePromptSession?.let { session ->
         KitSheet(onDismiss = {
             renamePromptSession = null
@@ -2135,11 +2134,23 @@ internal fun SessionsScreen(
             if (!LocalMaterial3.current) {
                 FloatingBottomBar {
                     Row(
-                        Modifier.padding(horizontal = ReaderScreenPadding, vertical = 8.dp)
-                            .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
-                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                            .horizontalScroll(splitScrollState).padding(horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        Modifier.padding(horizontal = Kit.ScreenEdge, vertical = Kit.ControlGap)
+                            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                            .drawWithContent {
+                                drawContent()
+                                val edge = Kit.ScreenEdge.toPx()
+                                drawRect(
+                                    Brush.horizontalGradient(
+                                        0f to Kit.Text.copy(alpha = 0f),
+                                        (edge / size.width) to Kit.Text,
+                                        (1f - edge / size.width) to Kit.Text,
+                                        1f to Kit.Text.copy(alpha = 0f),
+                                    ),
+                                    blendMode = BlendMode.DstIn,
+                                )
+                            }
+                            .horizontalScroll(splitScrollState),
+                        horizontalArrangement = Arrangement.spacedBy(Kit.ControlGap),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         displayedWorkspaceSplitIds.forEach { id ->
@@ -2149,10 +2160,14 @@ internal fun SessionsScreen(
                                 FREQUENT_SPLIT_ID -> "Frequent"
                                 else -> state.workspaces.firstOrNull { it.id == id }?.name.orEmpty()
                             }
-                            if (state.selectedWorkspaceId == id) {
-                                KitPrimaryButton(name, onClick = { onSelectWorkspace(id) }, modifier = Modifier.semantics { selected = true })
-                            } else {
-                                KitSecondaryButton(name, onClick = { onSelectWorkspace(id) }, modifier = Modifier.semantics { selected = false })
+                            key(id, displayedWorkspaceSplitIds) {
+                                Box(Modifier.findPin(state.selectedWorkspaceId == id).padding(horizontal = Kit.ScreenEdge)) {
+                                    if (state.selectedWorkspaceId == id) {
+                                        KitPrimaryButton(name, onClick = { onSelectWorkspace(id) }, modifier = Modifier.semantics { selected = true })
+                                    } else {
+                                        KitSecondaryButton(name, onClick = { onSelectWorkspace(id) }, modifier = Modifier.semantics { selected = false })
+                                    }
+                                }
                             }
                         }
                     }

@@ -299,7 +299,7 @@ class SessionListSettingsTest {
         openSettings()
         compose.onNodeWithContentDescription(label).performClick()
         closeSettings()
-        compose.onNodeWithText(split).assertIsDisplayed()
+        compose.onNodeWithText(split).performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertEquals(true, fixture.model.state.value.accountLayout!!.settings!![key]) }
     }
 
