@@ -23,7 +23,7 @@ def intersection(a, b):
     return max(a[0], b[0]), max(a[1], b[1]), min(a[2], b[2]), min(a[3], b[3])
 
 
-def plan(root, mode, value, direction="forward", search_axis=None):
+def plan(root, mode, value, direction="forward", search_axis=None, row_label=None):
     parents = {child: parent for parent in root.iter() for child in parent}
     windows = [n for n in root if n.tag == "node" and n.get("visible-to-user") != "false"]
     if not windows:
@@ -96,8 +96,21 @@ def plan(root, mode, value, direction="forward", search_axis=None):
         x, y = (area[0] + area[2]) // 2, (area[1] + area[3]) // 2
         return tap((x, y, x + 1, y + 1), set())
 
+    search_nodes = nodes
+    if row_label:
+        anchors = [n for n in nodes if n.get("text") == row_label and enabled(n)]
+        if len(anchors) > 1:
+            raise Unreachable("ambiguous row label in active window")
+        search_nodes = []
+        if anchors:
+            anchor = anchors[0]
+            rect = bounds(anchor)
+            center_y = (rect[1] + rect[3]) // 2
+            scope = next((n for n in chain(anchor) if n.get("scrollable") == "true"), window)
+            search_nodes = [n for n in scope.iter("node") if bounds(n)[1] <= center_y < bounds(n)[3]]
+
     matches = []
-    for node in nodes:
+    for node in search_nodes:
         if mode == "text" and node.get("text") == value:
             matches.append(node)
         elif mode == "desc" and node.get("content-desc") == value:
